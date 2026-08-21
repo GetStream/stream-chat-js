@@ -1,3 +1,13 @@
+## [10.0.0-rc.5](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.4...v10.0.0-rc.5) (2026-08-20)
+
+### ⚠ BREAKING CHANGES
+
+* **i18n:** share the translation runtime as stream-chat/i18n (#1830)
+
+### Features
+
+* **i18n:** share the translation runtime as stream-chat/i18n ([#1830](https://github.com/GetStream/stream-chat-js/issues/1830)) ([40cf062](https://github.com/GetStream/stream-chat-js/commit/40cf0629cbe033a8d8c9615fd886cb7d20dd29bc)), closes [GetStream/stream-chat-react#3271](https://github.com/GetStream/stream-chat-react/issues/3271) [GetStream/stream-chat-react-native#3777](https://github.com/GetStream/stream-chat-react-native/issues/3777)
+
 ## [10.0.0-rc.4](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.3...v10.0.0-rc.4) (2026-08-19)
 
 ### Features

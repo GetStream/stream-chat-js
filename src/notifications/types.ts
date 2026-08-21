@@ -18,11 +18,58 @@ export type NotificationAction = {
 
 export type NotificationOrigin = { emitter: string; context?: Record<string, unknown> };
 
+/**
+ * Every notification type emitted by `stream-chat` itself.
+ *
+ * Format is `domain:entity:operation:result`:
+ *   - `domain` — where it happened: `api`, `validation`, `permission`, `network`, `auth`, `system`
+ *   - `entity` — what was operated on: `attachment`, `poll`, `message`, `command`, `location`
+ *   - `operation` — what was attempted, lowerCamelCase: `upload`, `create`, `castVote`, `jumpToLatest`
+ *   - `result` — what happened: `failed`, `blocked`, `invalid`, `missing`, `limit`, `success`,
+ *     or a short hyphenated state such as `in-progress` / `not-ready`
+ *
+ * **These values are public API.** UI SDKs key their translation tables on them, so renaming one is
+ * a breaking change. Emit them through this map rather than writing the literal inline, so the whole
+ * set stays greppable from one place and a typo is a compile error.
+ *
+ * Consumers translating notifications should switch on {@link Notification.type} rather than matching
+ * on {@link Notification.message}, which is untranslated English intended as a developer-facing
+ * fallback.
+ */
+export const CORE_NOTIFICATION_TYPE = {
+  attachmentFileMissing: 'validation:attachment:file:missing',
+  attachmentIdMissing: 'validation:attachment:id:missing',
+  attachmentUploadBlocked: 'validation:attachment:upload:blocked',
+  attachmentUploadFailed: 'api:attachment:upload:failed',
+  attachmentUploadInProgress: 'validation:attachment:upload:in-progress',
+  /** Carries `metadata.reason` (`'editing' | 'quoted_message'`), which the message depends on. */
+  commandDisabled: 'validation:command:disabled',
+  commandNotReady: 'validation:command:not-ready',
+  locationCreateFailed: 'api:location:create:failed',
+  /** Jumping to a specific message failed. */
+  messageJumpFailed: 'api:message:jump:failed',
+  /** Jumping to the latest message failed. */
+  messageJumpToLatestFailed: 'api:message:jumpToLatest:failed',
+  pollCastVoteLimit: 'validation:poll:castVote:limit',
+  pollCreateFailed: 'api:poll:create:failed',
+} as const;
+
+/** A notification type emitted by `stream-chat` itself. See {@link CORE_NOTIFICATION_TYPE}. */
+export type CoreNotificationType =
+  (typeof CORE_NOTIFICATION_TYPE)[keyof typeof CORE_NOTIFICATION_TYPE];
+
 /** Represents a single notification message */
 export type Notification = {
   /** Unique identifier for the notification */
   id: string;
-  /** The notification message text */
+  /**
+   * Untranslated English text describing what happened.
+   *
+   * This is a **developer-facing fallback, not display copy.** It is not localized and its exact
+   * wording is not part of the public contract — it can be reworded in a minor release. Anything
+   * user-facing should resolve {@link Notification.type} to its own copy and fall back to this string
+   * only for an identifier it does not recognize.
+   */
   message: string;
   /** Timestamp when notification was created */
   createdAt: number;
@@ -36,49 +83,14 @@ export type Notification = {
   /** The severity level of the notification (defaults to `undefined` unless explicitly provided). */
   severity?: NotificationSeverity;
   /**
-   * Optional code that can be used to group the notifications of the same type, e.g. attachment-upload-blocked.
-   * Format: domain:entity:operation:result
-   *   domain: where the error occurred (api, validation, permission, etc)
-   *   entity: what was being operated on (poll, attachment, message, etc)
-   *   operation: what was being attempted (create, upload, validate, etc)
-   *   result: what happened (failed, blocked, invalid, etc)
+   * Stable identifier for what this notification is about, used to group notifications of the same
+   * kind and — for UI SDKs — to resolve a translation without matching on the English `message`.
    *
-   *   Poll related errors
-   *   'api:poll:create:failed'           // API call to create poll failed
-   *   'validation:poll:create:invalid'   // Poll creation validation failed
-   *
-   *   Attachment related errors
-   *   'validation:attachment:file:missing'     // Required file is missing
-   *   'permission:attachment:upload:blocked'   // Upload blocked due to permissions
-   *   'api:attachment:upload:failed'          // API upload call failed
-   *   'validation:attachment:type:unsupported' // Unsupported file type
-   *   'validation:attachment:size:exceeded'    // File size too large
-   *   'validation:attachment:count:exceeded'   // Too many attachments
-   *
-   *   MessageRequest related errors
-   *   'api:message:send:failed'          // MessageRequest send failed
-   *   'validation:message:content:empty' // MessageRequest content validation failed
-   *
-   *   Channel related errors
-   *   'api:channel:join:failed'          // Channel join failed
-   *   'permission:channel:access:denied' // Channel access denied
-   *
-   *   Authentication related errors
-   *   'auth:token:expired'               // Auth token expired
-   *   'auth:token:invalid'               // Invalid auth token
-   *
-   *   Network related errors
-   *   'network:request:timeout'          // Request timed out
-   *   'network:request:failed'           // Network request failed
-   *
-   *    Rate limiting
-   *   'rate:limit:exceeded'              // Rate limit exceeded
-   *
-   *   System errors
-   *   'system:internal:error'            // Internal system error
-   *   'system:resource:unavailable';     // System resource unavailable
+   * Values emitted by `stream-chat` are enumerated in {@link CORE_NOTIFICATION_TYPE}; those are the
+   * ones that autocomplete. The type stays open so SDKs and integrators can emit their own
+   * identifiers following the same `domain:entity:operation:result` convention.
    */
-  type?: string;
+  type?: CoreNotificationType | (string & {});
   /** Optional auto-dismiss duration in milliseconds. The timeout starts when NotificationManager.startTimeout() is called. */
   duration?: number;
   /** Optional metadata to attach to the notification */

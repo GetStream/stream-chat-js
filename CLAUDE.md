@@ -6,7 +6,7 @@ Companion docs that apply to all agents: `AGENTS.md` (general agent rules) and `
 
 ## Toolchain
 
-- Node version is pinned in `.nvmrc` (use `nvm use`). `engines.node` requires `>=18`.
+- Node version is pinned in `.nvmrc` (use `nvm use`). `engines.node` requires `>=22.18.0` — the release that unflagged type stripping, which the `.mts` build scripts need. Node 22.12 is a different milestone (`require(esm)`) and is **not** enough to run them.
 - Package manager is **Yarn 4 (Berry)**, version pinned via `packageManager` in `package.json` and `yarnPath` in `.yarnrc.yml` (binary committed under `.yarn/releases/`). Any globally installed `yarn` launcher delegates to it. No Corepack setup needed.
 - `.yarnrc.yml` enables hardening: `enableHardenedMode: true`, `enableScripts: false`, `npmMinimalAgeGate: 3d`. Lifecycle scripts are blocked by default — only packages allowlisted in `package.json#dependenciesMeta` (currently `esbuild`, `husky`) may run install scripts. If a new dep needs lifecycle scripts, add it to `dependenciesMeta` rather than relaxing the global setting.
 - Clean installs (CI and local sanity checks): `yarn install --immutable`.
@@ -19,6 +19,7 @@ Companion docs that apply to all agents: `AGENTS.md` (general agent rules) and `
 | Build (types + bundles)                 | `yarn build`                             |
 | Watch dev build                         | `yarn start`                             |
 | Typecheck only                          | `yarn types`                             |
+| Typecheck the build scripts only        | `yarn types:scripts`                     |
 | Lint (prettier + eslint, zero warnings) | `yarn lint`                              |
 | Auto-fix lint/format                    | `yarn lint-fix`                          |
 | Unit tests (Vitest)                     | `yarn test` (alias for `yarn test-unit`) |
@@ -34,16 +35,26 @@ Single test runs use Vitest's CLI directly: `yarn test-unit path/to/file.test.ts
 `yarn build` runs two things concurrently:
 
 1. `tsc` — emits **declarations only** (`emitDeclarationOnly: true`) to `dist/types`. `rootDir` is `src/`.
-2. `scripts/bundle.mjs` (esbuild) — produces three bundles:
-   - `dist/cjs/index.node.js` (Node CJS, externalizes deps + Node builtins)
-   - `dist/cjs/index.browser.js` (browser CJS)
-   - `dist/esm/index.mjs` (browser ESM)
+2. `scripts/bundle.mts` (esbuild) — produces bundles for **three entry points**:
+   - `index` (the root): `dist/cjs/index.node.js` (Node CJS, externalizes deps + Node builtins), `dist/cjs/index.browser.js` (browser CJS), `dist/esm/index.mjs` (browser ESM)
+   - `i18n` (`stream-chat/i18n`): the same three variants, `i18n.node.js` / `i18n.browser.js` / `i18n.mjs`
+   - `i18n-codegen` (`stream-chat/i18n/codegen`), built from `codegen/i18n/`: **ESM only, Node only** — one artifact, `dist/esm/i18n-codegen.mjs`. No browser variant because it reads the filesystem; no CJS variant because nothing needs one (it is invoked by a build script, never bundled, never loaded by a test runner). The CJS flavours of the other two entries exist for React Native's Jest, which loads the _runtime_ in CJS; the generator never enters that path.
 
-`package.json#exports` routes consumers to the right bundle by condition: `node` → node-cjs, `browser`/`react-native` → browser-cjs (require) or esm (import), default → esm. There is **no `package.json#browser` field** — it used to zero Node-only deps (`crypto`, `https`, `jsonwebtoken`, `ws`, `zlib`) for browser/RN builds, but the SDK no longer imports any of them (`src/index.ts` is platform-agnostic: global `WebSocket`, global `FormData`, global `atob`). `scripts/bundle.mjs` keeps a `browserIgnoreModules` hook, currently an empty array, for the day that changes. Prefer a platform global or a browser-safe dep over reintroducing a Node-only one.
+   After building, `assertBundleBoundaries` reads esbuild's `metafile` and fails the build if an entry reached something it must not (see the i18n section). Adding a new entry point without declaring its boundary in `ENTRY_BOUNDARIES` is itself an error.
+
+`package.json#exports` routes consumers to the right bundle by condition: `node` → node-cjs, `browser`/`react-native` → browser-cjs (require) or esm (import), default → esm. The `react-native` + `require` branch must stay pointed at CJS — React Native's Jest runs CJS with `customConditions: ["react-native"]` and does not transform `node_modules`, so an `.mjs` there is a syntax error across every RN suite that touches the module. `typesVersions` mirrors the subpaths for consumers still on `moduleResolution: "node"`. There is **no `package.json#browser` field** — it used to zero Node-only deps (`crypto`, `https`, `jsonwebtoken`, `ws`, `zlib`) for browser/RN builds, but the SDK no longer imports any of them (`src/index.ts` is platform-agnostic: global `WebSocket`, global `FormData`, global `atob`). `scripts/bundle.mts` keeps a `browserIgnoreModules` hook, currently an empty array, for the day that changes. Prefer a platform global or a browser-safe dep over reintroducing a Node-only one.
 
 esbuild `define` injects two compile-time constants: `process.env.PKG_VERSION` (read from `package.json`) and `process.env.CLIENT_BUNDLE` (one of `node-cjs`, `browser-cjs`, `browser-esm`). Both are consumed by `StreamChat.getUserAgent()` to produce a bundle-aware UA string. **`tsc`-only code paths do not get this substitution** — these env vars only resolve in the esbuild bundles, so don't gate runtime logic on them in code that callers might import directly via `src/`.
 
 `postinstall` installs husky hooks; `prepare` runs `yarn run build` (so consumers installing from a git ref get a built package).
+
+**The build scripts are `.mts`, run by `node` with no loader** — Node strips the types itself, which is unflagged from **22.18.0** (and 24.3.0 on the 24 line; 23.6.0 on the 23 line). `engines.node` is set to that floor deliberately, because `prepare` runs `yarn build`: a **git-ref** install has to be able to execute these scripts. Registry installs never run the build — they get the prebuilt `dist/`.
+
+Three separate things cover `scripts/`, and each was scoped to miss it at some point:
+
+- **Types:** `tsconfig.scripts.json`, run by `yarn types:scripts` and folded into `yarn types`. Without it `.mts` annotations are stripped but never checked, which is worse than the JSDoc `@type` comments they replaced.
+- **Format:** the `yarn prettier` glob had to gain `mts` — it listed `js,mjs,ts` only, so every `.mts` in the repo silently escaped the format gate.
+- **Lint:** `eslint.config.mjs`'s rule blocks list `scripts/**/*.mts` alongside `src/**` and `codegen/**`. Turning this on found `generate-filter-types.mts` importing `yaml` while nothing declared it — it resolved only because `lint-staged` happens to depend on it. `.lintstagedrc.json` has its **own** globs, which also omitted `mts`; both are widened, and note the eslint entry runs with `--max-warnings 0`, so a file matching no config block fails the hook with "no matching configuration was supplied" rather than passing silently.
 
 ## Architecture
 
@@ -70,6 +81,8 @@ This is a single-package SDK with **no monorepo**. The public surface is everyth
   - `pagination/` — `BasePaginator` (cursor-or-offset, debounced, exposes `state: StateStore<PaginatorState>`), plus `FilterBuilder` and `ReminderPaginator`.
   - `reminders/` — `Reminder`, `ReminderManager`, `ReminderTimer` (scheduled-offset reminders with debounced refresh).
   - `search/` — `BaseSearchSource` + concrete `MessageSearchSource`, `ChannelSearchSource`, `UserSearchSource` orchestrated by `SearchController`.
+  - `i18n/` — the translation layer shared by the React and React Native SDKs. **Not exported from `src/index.ts`** — see the i18n section below.
+  - the build-time translation-catalog generator is **not here** — it lives at `codegen/i18n/`, outside `src/` entirely, so the runtime layer physically cannot reach `node:fs`. See the i18n section.
 - Top-level subsystem files: `poll`, `poll_manager`, `thread`, `thread_manager`, `moderation`, `campaign`, `segment`, `permissions`.
 - **`types.ts` (~5k lines) + `custom_types.ts` + `types.utility.ts`** — public type surface. **Custom data is extended via module augmentation on the `Custom*Data` interfaces in `custom_types.ts`** (generics were removed in v9; see README). When adding a field that callers may want to extend, expose it through a `Custom*Data` interface rather than reintroducing a generic.
 
@@ -123,6 +136,67 @@ The canonical flow is:
 
 Aliases to be aware of: `setUser` → `connectUser`, `disconnect` → `disconnectUser`. Both are deprecated but still present; new code should use the long names. Server-side use (no `window`, or `secret` provided) prints a warning unless `options.allowServerSideConnect: true` is set.
 
+## i18n
+
+`src/i18n/` holds the translation runtime shared by `stream-chat-react` and
+`stream-chat-react-native` — one `Streami18n`, one set of formatters, one date layer. Before this, both
+SDKs carried ~1,300 lines of near-duplicate runtime plus a duplicated codegen. See
+`specs/i18n-to-core/` for the initiative and `v9-to-v10-migration-guide-i18n.md` for the consumer delta.
+
+**Three entry points, and the boundaries between them are enforced by the build.** `src/index.ts` must
+**never** `export * from './i18n'` — that is the one reflex to resist. `scripts/bundle.mts` asserts from
+esbuild's metafile that the root bundle cannot reach `src/i18n/`, `i18next` or `dayjs`, and that
+`src/i18n/` cannot reach the Node-only `codegen/`. Both leaks fail invisibly (everything works, the
+bundle is just bigger), which is why they are machine-checked. `dist/esm/index.mjs` is expected to stay
+byte-identical when only i18n changes.
+
+**The generator lives at `codegen/i18n/`, outside `src/`.** It is Node-only build tooling that reads the
+filesystem — the one thing the SDK's own source must never do — so it is not library source, even though
+it _is_ published (two other repos import `stream-chat/i18n/codegen` from their build scripts). Being
+outside the library tsconfig is what makes the boundary type-enforced: an import from `src/i18n/` fails
+at `tsc` before the metafile assertion ever runs, though the error is an oblique TS6059 "not under
+rootDir" rather than something self-explanatory.
+
+Three things are scoped to `src/` by default and had to be widened for it — check all three if you ever
+add another directory beside it, because each fails silently:
+
+- `tsconfig.codegen.json` emits its declarations to `dist/types/i18n-codegen/`, where `exports` and
+  `typesVersions` point. `rootDir` must stay `./codegen/i18n` or that path shifts.
+- `yarn types` runs **both** projects; `yarn build` runs both `tsc` invocations.
+- `eslint.config.mjs` rule blocks list `codegen/**/*.{js,ts}` alongside `src/**/*.{js,ts}`. Without it
+  the generator inherits no rules at all.
+
+- **`stream-chat/i18n`** — `Streami18n`, three formatters, `getDateString`, catalog-generic type helpers,
+  `TranslationBuilder`, generated `LANGUAGE_NAMES`.
+- **`stream-chat/i18n/codegen`** — the catalog generator. `typescript` is **injected** via config, never
+  imported, so core does not depend on the compiler.
+
+Things that will bite:
+
+- **Core ships no catalog.** Each UI SDK generates its own `keys.ts` from its `t()` call sites, so the
+  type helpers are generic over it (`StreamTFunctionFor<Catalog, Bundled>`). `Bundled` **must** default
+  to `never`; defaulting to `string` silently disables all key checking.
+- **`runtimeDefaults` is a constructor option**, not an import — the catalog belongs to the UI layer. It
+  is layered under _every_ language, which is what stops a partial dictionary from knocking out formatter
+  keys. That is guarantee G1 in `test/unit/i18n/Streami18nGuarantees.test.ts`, which is the acceptance
+  contract for this module: three behavioural guarantees, each written against a real bug.
+- **The layering itself lives in `TranslationStore`**, not in `Streami18n` — it needs neither i18next nor
+  dayjs, so it is tested directly (`test/unit/i18n/TranslationStore.test.ts`) rather than only through an
+  initialized instance. The store holds flat dictionaries; `Streami18n` adapts them to i18next's nested
+  `resources` shape, so nothing in the store has to know about namespaces.
+- **No module-scope side effects.** Every `Dayjs.extend` goes through `ensureDayjsPlugins()`. This is
+  what makes `sideEffects: false` accurate — do not reintroduce a top-level `extend` or locale import.
+- **`durationFormatter` must use the date library's `.duration()`**, not parse the value as a timestamp.
+  Parsing reads `600000` as ten minutes past the epoch and renders "57 years ago". This is why
+  `DateTimeParser` is the _module_, not a parse function.
+- **i18next post-processing is global.** A `TranslationTopic` is invoked for every key and must pass
+  through calls it does not recognize, or it silently rewrites unrelated copy.
+- **Vitest forces `TZ=UTC`** (`vite.config.ts`). Date assertions are timezone-sensitive; without it a
+  local run disagrees with CI by the host's offset.
+- Notification identity lives in `src/notifications/types.ts` (`CORE_NOTIFICATION_TYPE`). Emit through
+  the map, never a raw literal — a test enforces both that and the reverse (every declared identifier
+  must actually be emitted, so a dead one cannot linger).
+
 ## Conventions to preserve
 
 - ESLint uses the flat config (`eslint.config.mjs`); `yarn eslint` runs with `--max-warnings 0`. The pre-commit hook (`.husky/pre-commit` → `lint-staged`) enforces this on staged files. Don't disable rules broadly — scope and justify any `eslint-disable`.
@@ -163,7 +237,14 @@ Release branches (`.releaserc.json`):
 
 - `master` → `latest` dist-tag (current major: v9).
 - `release-v8` → `v8` dist-tag, locked to `8.x` range.
-- `rc` → prerelease channel.
+- `release-v10` → `rc` dist-tag, `prerelease: "rc"`. **This is the branch v10 prereleases are cut
+  from** — not a branch literally named `rc`. `release.yml` is `workflow_dispatch` and releases from
+  whatever branch you dispatch it on, gated by
+  `startsWith(github.ref_name, 'release')`, so a v10 change has to land on `release-v10` before it can
+  reach npm. The `rc` name survives only as a legacy allowance in that gate.
+
+Unlike the React and React Native repos, the PR workflows here (`lint`, `unit`, `type`, `size`) carry
+**no branch filter**, so a PR into `release-v10` is fully gated with no workflow change needed.
 
 ## Things to double-check before claiming done
 
