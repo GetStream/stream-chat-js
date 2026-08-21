@@ -372,6 +372,7 @@ export class Channel extends ChannelApi {
     this.messageReceiptsTracker.registerSubscriptions();
 
     this.cooldownTimer = new CooldownTimer({ channel: this });
+    this.cooldownTimer.registerSubscriptions();
 
     this.messageOperations = new MessageOperations({
       ingest: (m) => {
@@ -1036,12 +1037,6 @@ export class Channel extends ChannelApi {
     this.state.syncStateFromChannelData(this.data, previousData);
     // If the capabiltities are changed, we trigger the `capabilities.changed` event.
     if (capabilitiesChanged) {
-      // `canSkipCooldown` is derived from `own_capabilities` and stored, so it has to be recomputed here.
-      // This channel drives its cooldown timer — `query()` and the `channel.updated` handler refresh it the
-      // same way — and this was the one route that announced a capability change without doing so, leaving
-      // a granted or revoked `skip-slow-mode` unobserved. The timer's own `capabilities.changed`
-      // subscription does not cover it: nothing registers the timer's subscriptions.
-      this.cooldownTimer.refresh();
       this.getClient().dispatchEvent({
         type: 'capabilities.changed',
         cid: this.cid,
@@ -2184,7 +2179,6 @@ export class Channel extends ChannelApi {
     this.data = channel;
     this.state.syncStateFromChannelData(this.data, previousData);
     this.offlineMode = false;
-    this.cooldownTimer.refresh();
 
     if (areCapabilitiesChanged) {
       this.getClient().dispatchEvent({
@@ -2715,9 +2709,6 @@ export class Channel extends ChannelApi {
           // 1. the message is mine
           // 2. the message is a thread reply from any user
           const preventUnreadCountUpdate = ownMessage || isThreadMessage;
-          if (ownMessage) {
-            this.cooldownTimer.refresh();
-          }
           if (preventUnreadCountUpdate) break;
 
           // The own unread count IS `read[ownUserId].unread_messages` (see
@@ -2922,7 +2913,6 @@ export class Channel extends ChannelApi {
           };
           channel.data = newChannelData;
           channel.state.syncStateFromChannelData(channel.data, previousChannelData);
-          this.cooldownTimer.refresh();
         }
         break;
       case 'reaction.new':
@@ -3210,7 +3200,7 @@ export class Channel extends ChannelApi {
     // A deleted channel (or one the user was removed from) must not be re-watched — see #2599.
     this.watchStatus = ChannelWatchStatus.NotWatching;
     this.pendingDisposal = true;
-    this.cooldownTimer.clearTimeout();
+    this.cooldownTimer.unregisterSubscriptions();
     // Release the store-backed paginators so the message store no longer pins this removed channel
     // (and its whole message graph) through its subscriber registry. The channel is being discarded
     // here (pending disposal + deleted from activeChannels, never reused), mirroring Thread teardown.
