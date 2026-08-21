@@ -35,6 +35,7 @@ import type {
   GetManyMessagesResponse,
   GetMessageResponse,
   GetOGResponse,
+  GetPinnedMessagesResponse,
   GetReactionsResponse,
   GetRepliesResponse,
   GetThreadResponse,
@@ -1002,6 +1003,65 @@ export class ChatApi {
     );
 
     decoders['GetManyMessagesResponse']?.(response.body);
+
+    return { ...response.body, metadata: response.metadata };
+  }
+
+  async getPinnedMessages(
+    request: {
+      type: string;
+      id: string;
+      limit?: number;
+      offset?: number;
+      id_gte?: string;
+      id_gt?: string;
+      id_lte?: string;
+      id_lt?: string;
+      pinned_at_after_or_equal?: Date;
+      pinned_at_after?: Date;
+      pinned_at_before_or_equal?: Date;
+      pinned_at_before?: Date;
+      id_around?: string;
+      pinned_at_around?: Date;
+      sort?: Array<SortParamRequest>;
+      member_custom_include?: Array<string>;
+    },
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<GetPinnedMessagesResponse>> {
+    const queryParams = {
+      limit: request?.limit,
+      offset: request?.offset,
+      id_gte: request?.id_gte,
+      id_gt: request?.id_gt,
+      id_lte: request?.id_lte,
+      id_lt: request?.id_lt,
+      pinned_at_after_or_equal: request?.pinned_at_after_or_equal,
+      pinned_at_after: request?.pinned_at_after,
+      pinned_at_before_or_equal: request?.pinned_at_before_or_equal,
+      pinned_at_before: request?.pinned_at_before,
+      id_around: request?.id_around,
+      pinned_at_around: request?.pinned_at_around,
+      sort: request?.sort,
+      member_custom_include: request?.member_custom_include,
+    };
+    const pathParams = {
+      type: request?.type,
+      id: request?.id,
+    };
+
+    const response = await this.apiClient.sendRequest<
+      StreamResponse<GetPinnedMessagesResponse>
+    >(
+      'GET',
+      '/api/v2/chat/channels/{type}/{id}/pinned_messages',
+      pathParams,
+      queryParams,
+      undefined,
+      undefined,
+      requestOptions,
+    );
+
+    decoders['GetPinnedMessagesResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }

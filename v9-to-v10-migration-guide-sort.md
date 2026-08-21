@@ -9,7 +9,7 @@
 - The `normalizeQuerySort` helper is gone (no longer exported). Callers were the only normalizers in v9 — in v10 the SDK passes the array straight through to the API.
 - All `*SortBase` types (`ChannelSortBase`, `BannedUsersSortBase`, `SearchMessageSortBase`, `PollSortBase`, `VoteSortBase`, `DraftSortBase`, `PinnedMessagesSortBase`, `ReactionSortBase`, `ThreadSortBase`, `QueryMessageHistorySortBase`) are removed.
 - The `Sort<T>` generic mapping type is removed. The `QuerySort` union type is removed.
-- Sort type aliases that still exist (`ChannelSort`, `UserSort`, `MemberSort`, `BannedUsersSort`, `ReactionSort`, `PinnedMessagesSort`, `SearchMessageSort`, `DraftSort`, `PollSort`, `VoteSort`, `ThreadSort`, `ReminderSort`) all collapse to the same `Gen_SortParamRequest[]` type — they're convenience aliases, not field-typed shapes.
+- **All twelve sort aliases are removed after `10.0.0-rc.4`** (`ChannelSort`, `UserSort`, `MemberSort`, `BannedUsersSort`, `ReactionSort`, `PinnedMessagesSort`, `SearchMessageSort`, `DraftSort`, `PollSort`, `VoteSort`, `ThreadSort`, `ReminderSort`). Every one of them was exactly `SortParamRequest[]` — a name, carrying no per-endpoint field typing. Use `SortParamRequest[]` directly. See [The sort aliases are gone](#the-sort-aliases-are-gone).
 - Removed sort types with no replacement: `SortParam`, `CampaignSort`, `QueryMessageHistorySort`, `ReviewQueueSort`, `QueryModerationConfigsSort`, `QueryModerationRulesSort`, `PredefinedFilterSort`, `PredefinedFilterSortParam`. Their carrier methods either moved to the generated API (and now accept `SortParamRequest[]` inline via the request type) or were removed with the rest of server-side functionality. If you were typing a local variable as one of these, retype it as `SortParamRequest[]`.
 
 ## The shape change
@@ -65,6 +65,28 @@ export interface SortParamRequest {
 ```
 
 Multi-key sort objects are no longer expressible — each `{ field, direction }` entry has exactly one field, and field order is the array order.
+
+## The sort aliases are gone
+
+> Applies to integrations pinned to the `rc` dist-tag as well as to v9 upgrades. These twelve names still shipped in `10.0.0-rc.4`.
+
+`ChannelSort`, `UserSort`, `MemberSort`, `BannedUsersSort`, `ReactionSort`, `PinnedMessagesSort`, `SearchMessageSort`, `DraftSort`, `PollSort`, `VoteSort`, `ThreadSort` and `ReminderSort` were **all defined as exactly `SortParamRequest[]`** — twelve names for one type. Unlike the `*Filters` aliases (which resolve to per-endpoint `Filters<{...}>` shapes with their own declared operators, and are kept), a sort alias narrowed nothing: it could not tell you which fields a given endpoint sorts by, and it did not stop you passing a field the endpoint rejects.
+
+The migration is a find/replace, and it is safe to do blindly because every one resolved to the same type:
+
+```ts
+// before
+import type { ChannelSort, UserSort } from 'stream-chat';
+const sort: ChannelSort = [{ field: 'last_message_at', direction: -1 }];
+
+// after
+import type { SortParamRequest } from 'stream-chat';
+const sort: SortParamRequest[] = [{ field: 'last_message_at', direction: -1 }];
+```
+
+Watch the array brackets — the alias _was_ the array, so `ChannelSort` becomes `SortParamRequest[]`, not `SortParamRequest`. In an import specifier list you still import the bare `SortParamRequest`.
+
+No runtime behaviour changes: these were type-only aliases and the values you pass are unchanged.
 
 ## Where `sort` lives now
 

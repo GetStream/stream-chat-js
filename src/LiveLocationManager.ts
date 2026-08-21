@@ -2,10 +2,11 @@
  * RULES:
  *
  * 1. one loc-sharing message per channel per user
- * 2. live location is intended to be per device
- * but created_by_device_id has currently no checks,
- * and user can update the location from another device
- * thus making location sharing based on user and channel
+ * 2. live location is intended to be per device, but `created_by_device_id` is set once
+ * when the share is created and cannot be reassigned — `UpdateLiveLocationRequest` has no
+ * device field at all, by design. Any of the user's devices can therefore push coordinate
+ * updates to the same share, which makes location sharing effectively per user and
+ * channel rather than per device.
  */
 
 import { withCancellation } from './utils/concurrency';
@@ -190,8 +191,6 @@ export class LiveLocationManager extends WithSubscriptions {
           if (location.latitude === latitude && location.longitude === longitude)
             continue;
           const promise = this.client.updateLiveLocation({
-            // TODO: this is missing from the OAPI spec
-            // created_by_device_id: location.created_by_device_id,
             message_id: messageId,
             latitude,
             longitude,

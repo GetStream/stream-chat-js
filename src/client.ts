@@ -23,8 +23,7 @@ import { normalizeUploadFile } from './upload-utils';
 import type {
   APIResponse,
   AppIdentifier,
-  BanUserOptions,
-  ChannelData,
+  ChannelInput,
   ChannelMute,
   ChannelOptions,
   ChannelResponse,
@@ -37,15 +36,10 @@ import type {
   EventHandler,
   EventType,
   FileUploadInput,
-  FlagMessageResponse,
-  FlagUserResponse,
   GetThreadOptions,
   LocalMessage,
-  MuteUserOptions,
-  MuteUserResponse,
   OwnUserResponse,
   PartializeAllBut,
-  PartialThreadUpdate,
   QueryChannelsRequest,
   QueryChannelsResponse,
   QueryReactionsRequestWithId,
@@ -1219,21 +1213,6 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Queries user bans.
-   *
-   * @param ...args - `[request, requestOptions]`. The optional `request.payload` accepts
-   *   MongoDB-style filter conditions, sort directions
-   *   (e.g. `[{ field: 'created_at', direction: 1 }]`), and options such as `limit`, `offset`,
-   *   and `exclude_expired_bans`. `requestOptions` carries per-request options such as an abort
-   *   `signal` and is never serialized into the request.
-   * @returns The ban query response.
-   */
-  async queryBannedUsers(...args: Parameters<ChatApi['queryBannedUsers']>) {
-    // Return a list of user bans
-    return await super.queryBannedUsers(...args);
-  }
-
-  /**
    * Queries channels and returns the full API response including top-level metadata such as
    * `predefined_filter`.
    *
@@ -1529,12 +1508,12 @@ export class StreamChat extends ChatApi {
    * @param custom - Custom data to attach to the channel (optional, defaults to `{}`).
    * @returns The channel object; initialize it using `channel.watch()`.
    */
-  channel(channelType: string, channelId?: string | null, custom?: ChannelData): Channel;
-  channel(channelType: string, custom?: ChannelData): Channel;
+  channel(channelType: string, channelId?: string | null, custom?: ChannelInput): Channel;
+  channel(channelType: string, custom?: ChannelInput): Channel;
   channel(
     channelType: string,
-    channelIdOrCustom?: string | ChannelData | null,
-    custom: ChannelData = {},
+    channelIdOrCustom?: string | ChannelInput | null,
+    custom: ChannelInput = {},
   ) {
     if (!this.userId) {
       throw Error('Call connectUser or connectAnonymousUser before creating a channel');
@@ -1581,7 +1560,7 @@ export class StreamChat extends ChatApi {
    * @param custom - Custom data to attach to the channel.
    * @returns The channel object; initialize it using `channel.watch()`.
    */
-  getChannelByMembers = (channelType: string, custom: ChannelData) => {
+  getChannelByMembers = (channelType: string, custom: ChannelInput) => {
     // Check if the channel already exists.
     // Only allow 1 channel object per cid
     const memberIds = (custom.members ?? []).map((member) =>
@@ -1645,7 +1624,7 @@ export class StreamChat extends ChatApi {
    * @param custom - Custom data to attach to the channel.
    * @returns The channel object; initialize it using `channel.watch()`.
    */
-  getChannelById = (channelType: string, channelId: string, custom: ChannelData) => {
+  getChannelById = (channelType: string, channelId: string, custom: ChannelInput) => {
     if (typeof channelId === 'string' && ~channelId.indexOf(':')) {
       throw Error(`Invalid channel id ${channelId}, can't contain the : character`);
     }
@@ -1681,20 +1660,6 @@ export class StreamChat extends ChatApi {
   };
 
   /**
-   * Bans a user from all channels.
-   *
-   * @param targetUserId - The user to ban.
-   * @param options - Ban options (optional).
-   * @returns The server response.
-   */
-  async banUser(targetUserId: string, options?: BanUserOptions) {
-    return await this.api.post<APIResponse>(this.baseURL + '/moderation/ban', {
-      target_user_id: targetUserId,
-      ...options,
-    });
-  }
-
-  /**
    * Revoke a global ban for a user.
    *
    * @param targetUserId - The user to unban.
@@ -1708,33 +1673,6 @@ export class StreamChat extends ChatApi {
     });
   }
 
-  /**
-   * Shadow bans a user from all channels.
-   *
-   * @param targetUserId - The user to shadow ban.
-   * @param options - Ban options (optional).
-   * @returns The server response.
-   */
-  async shadowBan(targetUserId: string, options?: BanUserOptions) {
-    return await this.banUser(targetUserId, {
-      shadow: true,
-      ...options,
-    });
-  }
-
-  /**
-   * Revoke a global shadow ban for a user.
-   *
-   * @param targetUserId - The user to remove the shadow ban for.
-   * @param options - Unban options (optional).
-   * @returns The server response.
-   */
-  async removeShadowBan(targetUserId: string, options?: UnBanUserOptions) {
-    return await this.unbanUser(targetUserId, {
-      shadow: true,
-      ...options,
-    });
-  }
   async blockUser(blockedUserId: string, requestOptions?: StreamRequestOptions) {
     const result = await this.blockUsers(
       {
@@ -1776,32 +1714,6 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Mutes a user.
-   *
-   * @param targetId - The user to mute.
-   * @param options - UserMuteResponse options (optional, defaults to `{}`).
-   * @returns The server response.
-   */
-  async muteUser(targetId: string, options: MuteUserOptions = {}) {
-    return await this.api.post<MuteUserResponse>(this.baseURL + '/moderation/mute', {
-      target_id: targetId,
-      ...options,
-    });
-  }
-
-  /**
-   * Unmutes a user.
-   *
-   * @param targetId - The user to unmute.
-   * @returns The server response.
-   */
-  async unmuteUser(targetId: string) {
-    return await this.api.post<APIResponse>(this.baseURL + '/moderation/unmute', {
-      target_id: targetId,
-    });
-  }
-
-  /**
    * Checks whether a user is muted. Can be used after `connectUser()` is called.
    *
    * @param targetId - The user ID to check.
@@ -1816,75 +1728,6 @@ export class StreamChat extends ChatApi {
       if (this.mutedUsers[i].target?.id === targetId) return true;
     }
     return false;
-  }
-
-  /**
-   * Flag a message.
-   *
-   * @param targetMessageId - The message to flag.
-   * @param options - Flag options (optional, defaults to `{}`).
-   * @param options.reason - Reason for flagging (optional).
-   * @returns The server response.
-   */
-  async flagMessage(targetMessageId: string, options: { reason?: string } = {}) {
-    return await this.api.post<FlagMessageResponse>(this.baseURL + '/moderation/flag', {
-      target_message_id: targetMessageId,
-      ...options,
-    });
-  }
-
-  /**
-   * Flag a user.
-   *
-   * @param targetId - The user to flag.
-   * @param options - Flag options (optional, defaults to `{}`).
-   * @param options.reason - Reason for flagging (optional).
-   * @returns The server response.
-   */
-  async flagUser(targetId: string, options: { reason?: string } = {}) {
-    return await this.api.post<FlagUserResponse>(this.baseURL + '/moderation/flag', {
-      target_user_id: targetId,
-      ...options,
-    });
-  }
-
-  /**
-   * Unflag a message.
-   *
-   * @param targetMessageId - The message to unflag.
-   * @returns The server response.
-   */
-  async unflagMessage(targetMessageId: string) {
-    return await this.api.post<FlagMessageResponse>(this.baseURL + '/moderation/unflag', {
-      target_message_id: targetMessageId,
-    });
-  }
-
-  /**
-   * Unflag a user.
-   *
-   * @param targetId - The user to unflag.
-   * @returns The server response.
-   */
-  async unflagUser(targetId: string) {
-    return await this.api.post<FlagUserResponse>(this.baseURL + '/moderation/unflag', {
-      target_user_id: targetId,
-    });
-  }
-
-  /**
-   * Unblocks a message blocked by automod.
-   *
-   * @param targetMessageId - The message to unblock.
-   * @returns The server response.
-   */
-  async unblockMessage(targetMessageId: string) {
-    return await this.api.post<APIResponse>(
-      this.baseURL + '/moderation/unblock_message',
-      {
-        target_message_id: targetMessageId,
-      },
-    );
   }
 
   /**
@@ -2172,56 +2015,6 @@ export class StreamChat extends ChatApi {
     );
 
     return new Thread({ client: this, threadData: response.thread });
-  }
-
-  /**
-   * Updates the given thread.
-   *
-   * @param messageId - The ID of the thread message which needs to be updated.
-   * @param partialThreadObject - Should contain `set` or `unset` params for any of the thread's non-reserved fields.
-   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
-   *   into the request (optional).
-   * @returns The updated thread.
-   */
-  async partialUpdateThread(
-    messageId: string,
-    partialThreadObject: PartialThreadUpdate,
-    requestOptions?: StreamRequestOptions,
-  ) {
-    if (!messageId) {
-      throw Error('Please specify the message id when calling partialUpdateThread');
-    }
-
-    // check for reserved fields from ThreadResponse type within partialThreadObject's set and unset.
-    // Throw error if any of the reserved field is found.
-    const reservedThreadFields = [
-      'created_at',
-      'id',
-      'last_message_at',
-      'type',
-      'updated_at',
-      'user',
-      'reply_count',
-      'participants',
-      'channel',
-      'custom',
-    ];
-
-    for (const key in { ...partialThreadObject.set, ...partialThreadObject.unset }) {
-      if (reservedThreadFields.includes(key)) {
-        throw Error(
-          `You cannot set ${key} field on Thread object. ${key} is reserved for server-side use. Please omit ${key} from your set object.`,
-        );
-      }
-    }
-
-    return await this.updateThreadPartial(
-      {
-        message_id: messageId,
-        ...partialThreadObject,
-      },
-      requestOptions,
-    );
   }
 
   getUserAgent = (): string => {

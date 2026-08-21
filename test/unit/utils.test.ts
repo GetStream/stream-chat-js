@@ -22,7 +22,7 @@ import {
 import type {
   ChannelFilters,
   ChannelOwnCapability,
-  ChannelSort,
+  SortParamRequest,
   ReactionResponse,
 } from '../../src';
 import { StreamChat, Channel } from '../../src';

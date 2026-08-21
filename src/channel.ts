@@ -19,10 +19,9 @@ import type { StreamChat } from './client';
 import { chatLoggerSystem } from './logger';
 import type {
   AIState,
-  APIResponse,
   BanUserOptions,
-  ChannelData,
   ChannelGetOrCreateRequest,
+  ChannelInput,
   ChannelMemberResponse,
   ChannelResponse,
   ChannelStateResponseFields,
@@ -34,18 +33,14 @@ import type {
   EventPayload,
   EventType,
   FileUploadInput,
-  GetRepliesAPIResponse,
   LocalMessage,
   MarkReadRequest,
   MarkReadResponse,
-  MessagePaginationOptions,
+  MessagePaginationParams,
   MessageRequest,
   MessageResponse,
   MessageSetType,
-  PinnedMessagePaginationOptions,
-  PinnedMessagesSort,
   QueryMembersPayload,
-  ReactionAPIResponse,
   ReactionRequest,
   SendMessageOptions,
   SendReactionRequest,
@@ -58,7 +53,6 @@ import type {
   UpdateMessageOptions,
   UserResponse,
 } from './types';
-import type { RoleName } from './permissions';
 import { StateStore } from './store';
 import type {
   ChannelMemberRequest as Gen_ChannelMemberRequest,
@@ -146,7 +140,7 @@ export type ChannelInstanceConfig = {
 export class Channel extends ChannelApi {
   _client: StreamChat;
   data: Partial<ChannelResponse> | undefined;
-  _data: ChannelData;
+  _data: ChannelInput;
   cid: string;
   /**  */
   listeners: Map<EventType, Set<EventHandler>>;
@@ -194,7 +188,7 @@ export class Channel extends ChannelApi {
     client: StreamChat,
     type: string,
     id: string | undefined,
-    data: ChannelData,
+    data: ChannelInput,
   ) {
     const validTypeRe = /^[\w_-]+$/;
     const validIDRe = /^[\w!_-]+$/;
@@ -560,18 +554,6 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Queries messages.
-   *
-   * @param ...args - `[request, requestOptions]`. The optional `request.payload` accepts
-   *   MongoDB-style filters and additional options such as `user_id`. `requestOptions` carries
-   *   per-request options such as an abort `signal` and is never serialized into the request.
-   * @returns The search messages response.
-   */
-  async search(...args: Parameters<ChatApi['search']>) {
-    return await this.getClient().search(...args);
-  }
-
-  /**
    * Queries members.
    *
    * @param request - The query members request payload (optional). The inner `payload` accepts
@@ -632,7 +614,7 @@ export class Channel extends ChannelApi {
       if (offlineDb) {
         // The optimistic reaction row is written by the local-update layer
         // (`applyReactionLocally`); here we only queue the request for replay.
-        return await offlineDb.queueTask<ReactionAPIResponse>({
+        return await offlineDb.queueTask<Awaited<ReturnType<ChatApi['sendReaction']>>>({
           task: {
             channelId: this.id as string,
             channelType: this.type,
@@ -664,7 +646,7 @@ export class Channel extends ChannelApi {
       if (offlineDb) {
         // The optimistic reaction-row removal is handled by the local-update layer
         // (`applyReactionLocally`); here we only queue the request for replay.
-        return await offlineDb.queueTask<ReactionAPIResponse>({
+        return await offlineDb.queueTask<Awaited<ReturnType<ChatApi['deleteReaction']>>>({
           task: {
             channelId: this.id as string,
             channelType: this.type,
@@ -934,28 +916,6 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Sets member roles in a channel.
-   *
-   * @param roles - List of role assignments.
-   * @param message - Message object for channel members notification (optional).
-   * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
-   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
-   *   into the request (optional).
-   * @returns The server response.
-   */
-  async assignRoles(
-    roles: { channel_role: RoleName; user_id: string }[],
-    message?: MessageRequest,
-    options: ChannelUpdateOptions = {},
-    requestOptions?: StreamRequestOptions,
-  ) {
-    return await this.update(
-      { assign_roles: roles, message, ...options },
-      requestOptions,
-    );
-  }
-
-  /**
    * Invite members to the channel.
    *
    * @param members - An array of members to invite to the channel.
@@ -1152,9 +1112,6 @@ export class Channel extends ChannelApi {
     requestOptions?: StreamRequestOptions,
   ) {
     this._checkInitialized();
-    if (!messageId) {
-      throw Error(`Message ID is missing`);
-    }
     return this.getClient().runMessageAction(
       {
         id: messageId,
@@ -1507,59 +1464,6 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * List the message replies for a parent message.
-   *
-   * The recommended way of working with threads is to use the `Thread` class.
-   *
-   * @param ...args - `[request, requestOptions]`. `request` holds the parent message ID, pagination
-   *   params, and optional sort directions for `created_at`; `requestOptions` carries per-request
-   *   options such as an abort `signal` and is never serialized into the request.
-   * @returns A response with a list of messages.
-   */
-  async getReplies(...args: Parameters<ChatApi['getReplies']>) {
-    const data = await this.getClient().getReplies(...args);
-
-    // Thread reply state is owned by the Thread object (Thread.messagePaginator); the returned
-    // replies are consumed there. The channel message list is owned by channel.messagePaginator.
-    return data;
-  }
-
-  // TODO: find out v2 equivalent
-  /**
-   * List pinned messages of the channel.
-   *
-   * @param options - Pagination params, e.g. `{ limit: 10, id_lte: 10 }`.
-   * @param sort - Defines sorting direction of pinned messages (optional, defaults to `[]`).
-   * @returns A response with a list of messages.
-   */
-  async getPinnedMessages(
-    options: PinnedMessagePaginationOptions,
-    sort: PinnedMessagesSort = [],
-  ) {
-    return await this.getClient().api.get<GetRepliesAPIResponse>(
-      this._channelURL() + '/pinned_messages',
-      {
-        payload: {
-          ...options,
-          sort,
-        },
-      },
-    );
-  }
-
-  /**
-   * List the reactions; supports pagination.
-   *
-   * @param ...args - `[request, requestOptions]`. `request` holds the target message ID and
-   *   pagination options (`limit`, `offset`); `requestOptions` carries per-request options such as
-   *   an abort `signal` and is never serialized into the request.
-   * @returns The server response.
-   */
-  getReactions(...args: Parameters<ChatApi['getReactions']>) {
-    return this.getClient().getReactions(...args);
-  }
-
-  /**
    * Retrieves a list of messages by ID.
    *
    * @param messageIds - The IDs of the messages to retrieve from this channel.
@@ -1796,7 +1700,7 @@ export class Channel extends ChannelApi {
     const isLatestMessageSet =
       messageSetToAddToIfDoesNotExist === 'latest' &&
       !options?.messages?.id_around &&
-      !(options?.messages as MessagePaginationOptions | undefined)?.created_at_around;
+      !(options?.messages as MessagePaginationParams | undefined)?.created_at_around;
 
     this.getClient().polls.hydratePollCache(state.messages, true);
     this.getClient().reminders.hydrateState(state.messages);
@@ -1853,12 +1757,12 @@ export class Channel extends ChannelApi {
    * @param options - Ban options.
    * @returns The server response.
    */
-  async banUser(targetUserId: string, options: BanUserOptions) {
+  async banUser(targetUserId: string, options: Omit<BanUserOptions, 'channel_cid'>) {
     this._checkInitialized();
-    return await this.getClient().banUser(targetUserId, {
+    return await this.getClient().moderation.ban({
       ...options,
-      type: this.type,
-      id: this.id,
+      target_user_id: targetUserId,
+      channel_cid: this.cid,
     });
   }
 
@@ -1900,36 +1804,6 @@ export class Channel extends ChannelApi {
     this._checkInitialized();
     return await this.getClient().unbanUser(targetUserId, {
       ...options,
-      type: this.type,
-      id: this.id,
-    });
-  }
-
-  /**
-   * Shadow bans a user from a channel.
-   *
-   * @param targetUserId - The user to shadow ban.
-   * @param options - Ban options.
-   * @returns The server response.
-   */
-  async shadowBan(targetUserId: string, options: BanUserOptions) {
-    this._checkInitialized();
-    return await this.getClient().shadowBan(targetUserId, {
-      ...options,
-      type: this.type,
-      id: this.id,
-    });
-  }
-
-  /**
-   * Removes the shadow ban for a user on a channel.
-   *
-   * @param targetUserId - The user to remove the shadow ban for.
-   * @returns The server response.
-   */
-  async removeShadowBan(targetUserId: string) {
-    this._checkInitialized();
-    return await this.getClient().removeShadowBan(targetUserId, {
       type: this.type,
       id: this.id,
     });
@@ -1996,15 +1870,17 @@ export class Channel extends ChannelApi {
     try {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
-        return (await offlineDb.queueTask<APIResponse>({
-          task: {
-            channelId: this.id as string,
-            channelType: this.type,
-            threadId: request?.parent_id,
-            payload: args,
-            type: 'delete-draft',
+        return (await offlineDb.queueTask<Awaited<ReturnType<ChannelApi['deleteDraft']>>>(
+          {
+            task: {
+              channelId: this.id as string,
+              channelType: this.type,
+              threadId: request?.parent_id,
+              payload: args,
+              type: 'delete-draft',
+            },
           },
-        })) as Awaited<ReturnType<ChannelApi['deleteDraft']>>;
+        )) as Awaited<ReturnType<ChannelApi['deleteDraft']>>;
       }
     } catch (error) {
       offlineDbLogger
@@ -2648,20 +2524,6 @@ export class Channel extends ChannelApi {
     [allSet, targetSet].forEach((set) =>
       set?.forEach((handleEvent) => handleEvent(event)),
     );
-  };
-
-  /**
-   * Returns the channel url.
-   *
-   * @returns The channel url.
-   */
-  _channelURL = () => {
-    if (!this.id) {
-      throw new Error('channel id is not defined');
-    }
-    return `${this.getClient().baseURL}/channels/${encodeURIComponent(
-      this.type,
-    )}/${encodeURIComponent(this.id)}`;
   };
 
   _checkInitialized() {

@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createPollCompositionValidationMiddleware } from '../../../../../src/messageComposer/middleware/pollComposer/composition';
 import { MessageComposer } from '../../../../../src/messageComposer/messageComposer';
 import { PollComposer } from '../../../../../src/messageComposer/pollComposer';
-import { VotingVisibility } from '../../../../../src/types';
 import type { Middleware, MiddlewareStatus } from '../../../../../src/middleware';
 import type { PollComposerCompositionMiddlewareValueState } from '../../../../../src/messageComposer/middleware/pollComposer/types';
 import type { MiddlewareHandler } from '../../../../../src/middleware';
@@ -51,7 +50,7 @@ describe('PollComposerCompositionMiddleware', () => {
         max_votes_allowed: '',
         id: 'test-id',
         user_id: 'user-id',
-        voting_visibility: VotingVisibility.public,
+        voting_visibility: 'public',
         allow_answers: false,
         allow_user_suggested_options: false,
         description: '',
@@ -86,7 +85,7 @@ describe('PollComposerCompositionMiddleware', () => {
         max_votes_allowed: '',
         id: 'test-id',
         user_id: 'user-id',
-        voting_visibility: VotingVisibility.public,
+        voting_visibility: 'public',
         allow_answers: false,
         allow_user_suggested_options: false,
         description: '',

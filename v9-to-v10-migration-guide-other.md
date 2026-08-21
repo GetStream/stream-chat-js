@@ -323,7 +323,7 @@ Field-name typos in a typed filter are now compile errors. If you were relying o
 
 ### Filter aliases now derive from the request types
 
-`ChannelFilters`, `MessageFilters`, `ReactionFilters`, `ThreadFilters`, `UserFilters` still exist as convenience aliases but derive from the constrained request types. The three remaining hand-written poll/reminder filter types are now migrated the same way:
+`ChannelFilters`, `MessageFilters`, `ReactionFilters`, `ThreadFilters`, `UserFilters` still exist as convenience aliases but derive from the constrained request types. (The _sort_ aliases did not survive — unlike a filter alias, which resolves to a per-endpoint `Filters<{...}>` carrying that endpoint's declared operators, every sort alias was the same `SortParamRequest[]`. See the [sort guide](./v9-to-v10-migration-guide-sort.md#the-sort-aliases-are-gone).) The three remaining hand-written poll/reminder filter types are now migrated the same way:
 
 | Alias               | Now derives from                               |
 | ------------------- | ---------------------------------------------- |
@@ -589,7 +589,7 @@ The following v9 helper types are removed from the public surface. They mostly s
 
 `Readable<T>`, `KnownKeys<T>`, `PartializeKeys`, `UnknownType`, `MessageResponseBase`, `LocalMessageBase`, `FormatMessageResponse`, `ChannelAPIResponse` variants, `QueryChannelsAPIResponse`, `QueryReactionsOptions`/`QueryReactionsAPIResponse`, `TranslateResponse`, `ModerationResult`, `AutomodDetails`, `FlagsResponse`, `MessageFlagsResponse`, `FlagReport(s)Response`, `ReviewFlagReportResponse`, `BannedUsersResponse`, `FutureChannelBan(s)Response`, `HookEvent(s)Response`, `CheckPush/SQS/SNSResponse`, `CommandResponse` family, `ExportChannel*`/`ExportUsers*` types, push-preference types (`ChatLevelPushPreference`, `CallLevelPushPreference`, `PushPreferenceLevel`, `ChatPreferences`, `PushPreference`).
 
-For any of these that survive as a generated shape, the replacement is the generator's `Gen_*` re-export (re-exported through `./types` or `./gen/models`). For the type utilities (`Readable`, `KnownKeys`, `PartializeKeys`, `UnknownType`) there is no replacement — inline the built-in equivalent or drop the constraint.
+For any of these that survive as a generated shape, the replacement is the generator's `Gen_*` re-export (re-exported through `./types` or `./gen/models`). The `APIResponse`-based aliases that outlived v9 (`SearchAPIResponse`, `SendFileAPIResponse`, `UpdateChannelAPIResponse`, `UsersAPIResponse`, `ReactionAPIResponse`, `TaskResponse`, `GetRepliesAPIResponse`, `Flag`, `FlagDetails`) are removed after `10.0.0-rc.4` — see [the `APIResponse` envelope](./v9-to-v10-migration-guide-type-renames.md#the-apiresponse-envelope). For the type utilities (`Readable`, `KnownKeys`, `PartializeKeys`, `UnknownType`) there is no replacement — inline the built-in equivalent or drop the constraint.
 
 > **Larger topic** — the `types.ts` cleanup (~4.6k lines removed, most hand-rolled response/request types replaced by generated shapes) is large enough that a per-type cheat sheet ("`FormatMessageResponse` → …", "`FlagReportsResponse` → …", …) may deserve its own guide. Flag me if you want one written.
 

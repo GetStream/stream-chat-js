@@ -2,11 +2,10 @@ import { BaseSearchSource, type SearchQueryOptions } from './BaseSearchSource';
 import type {
   ChannelFilters,
   ChannelOptions,
-  ChannelSort,
   MessageFilters,
   MessageResponse,
-  SearchMessageSort,
   SearchPayload,
+  SortParamRequest,
 } from '../types';
 import type { StreamChat } from '../client';
 import type { SearchSourceOptions } from './types';
@@ -59,10 +58,10 @@ export type MessageSearchSourceOptions = SearchSourceOptions & {
   messageSearchChannelFilters?: ChannelFilters;
   /** Static base filters for the message search itself. */
   messageSearchFilters?: MessageFilters;
-  messageSearchSort?: SearchMessageSort;
+  messageSearchSort?: SortParamRequest[];
   /** Static base filters for the follow-up query that hydrates unknown channels. */
   channelQueryFilters?: ChannelFilters;
-  channelQuerySort?: ChannelSort;
+  channelQuerySort?: SortParamRequest[];
   channelQueryOptions?: Omit<ChannelOptions, 'limit' | 'offset'>;
 };
 
@@ -74,10 +73,10 @@ export class MessageSearchSource<
 
   messageSearchChannelFilters: SearchPayload['filter_conditions'] | undefined;
   messageSearchFilters: MessageFilters | undefined;
-  messageSearchSort: SearchMessageSort | undefined;
+  messageSearchSort: SortParamRequest[] | undefined;
 
   channelQueryFilters: ChannelFilters | undefined;
-  channelQuerySort: ChannelSort | undefined;
+  channelQuerySort: SortParamRequest[] | undefined;
   channelQueryOptions: Omit<ChannelOptions, 'limit' | 'offset'> | undefined;
 
   messageSearchChannelFilterBuilder: FilterBuilder<

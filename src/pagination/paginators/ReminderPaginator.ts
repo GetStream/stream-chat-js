@@ -8,7 +8,7 @@ import type {
   QueryRemindersRequest,
   ReminderFilters,
   ReminderResponseData,
-  ReminderSort,
+  SortParamRequest,
 } from '../../types';
 import type { StreamChat } from '../../client';
 import { StoreBackedItemIndex } from '../../entityStore/StoreBackedItemIndex';
@@ -21,7 +21,7 @@ const getReminderId = (reminder: ReminderResponseData) => reminder.message_id;
 // Fallback order for interval placement when no explicit sort is set. Order is not a pinned contract
 // (ReminderManager stores reminders in a message_id-keyed Map), but interval storage needs a total
 // order, so default to a deterministic one.
-const DEFAULT_SORT: ReminderSort = [{ direction: 1, field: 'created_at' }];
+const DEFAULT_SORT: SortParamRequest[] = [{ direction: 1, field: 'created_at' }];
 
 export class ReminderPaginator extends BasePaginator<
   ReminderResponseData,
@@ -29,13 +29,13 @@ export class ReminderPaginator extends BasePaginator<
 > {
   private client: StreamChat;
   protected _filters: ReminderFilters | undefined;
-  protected _sort: ReminderSort | undefined;
+  protected _sort: SortParamRequest[] | undefined;
 
   get filters(): ReminderFilters | undefined {
     return this._filters;
   }
 
-  get sort(): ReminderSort | undefined {
+  get sort(): SortParamRequest[] | undefined {
     return this._sort;
   }
 
@@ -44,7 +44,7 @@ export class ReminderPaginator extends BasePaginator<
     this.resetState();
   }
 
-  set sort(sort: ReminderSort | undefined) {
+  set sort(sort: SortParamRequest[] | undefined) {
     this._sort = sort;
     this.sortComparator = this.buildSortComparator();
     this.resetState();

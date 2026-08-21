@@ -3,18 +3,17 @@ import type {
   ChannelMemberResponse,
   ChannelOptions,
   ChannelResponse,
-  ChannelSort,
   ChannelStateResponseFields,
   DraftResponse,
   GetApplicationResponse,
   LocalMessage,
   MessageResponse,
-  PollResponse_old,
+  PollResponseData,
   QueryChannelsRequest,
   ReactionFilters,
   ReactionResponse,
-  ReactionSort,
   ReadStateResponse,
+  SortParamRequest,
 } from '../types';
 import type { Channel } from '../channel';
 import type { StreamChat } from '../client';
@@ -48,7 +47,7 @@ export type DBUpsertCidsForQueryType = {
   /** Whether to immediately execute the operation. */
   execute?: boolean;
   /** Optional sorting applied to the channels. */
-  sort?: ChannelSort;
+  sort?: SortParamRequest[];
 };
 
 /**
@@ -92,7 +91,7 @@ export type DBUpsertUserSyncStatusType = {
  */
 export type DBUpsertPollType = {
   /** Poll data to be stored. */
-  poll: PollResponse_old;
+  poll: PollResponseData;
   /** Whether to immediately execute the operation. */
   execute?: boolean;
 };
@@ -216,7 +215,7 @@ export type DBGetReactionsType = {
   /** Optional filter to apply to reactions. */
   filters?: ReactionFilters;
   /** Optional sorting for reactions. */
-  sort?: ReactionSort;
+  sort?: SortParamRequest[];
   /** Optional maximum number of reactions to return. */
   limit?: number;
 };

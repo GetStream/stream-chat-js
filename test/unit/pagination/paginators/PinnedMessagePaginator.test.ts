@@ -46,6 +46,10 @@ describe('PinnedMessagePaginator', () => {
     await paginator.executeQuery();
 
     expect(getPinnedMessages).toHaveBeenCalledTimes(1);
+    // sort travels inside the request object (generated ChannelApi signature), not as a 2nd arg
+    expect(getPinnedMessages).toHaveBeenCalledWith(
+      expect.objectContaining({ sort: [{ direction: 1, field: 'pinned_at' }] }),
+    );
     expect(paginator.items?.map((m) => m.id)).toEqual(['a', 'b', 'c']);
   });
 

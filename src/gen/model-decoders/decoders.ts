@@ -943,6 +943,13 @@ decoders['GetMessageResponse'] = (input?: { [key: string]: any }) => {
   return decode(typeMappings, input);
 };
 
+decoders['GetPinnedMessagesResponse'] = (input?: { [key: string]: any }) => {
+  const typeMappings: TypeMapping = {
+    messages: { type: 'MessageResponse', isSingle: false },
+  };
+  return decode(typeMappings, input);
+};
+
 decoders['GetReactionsResponse'] = (input?: { [key: string]: any }) => {
   const typeMappings: TypeMapping = {
     reactions: { type: 'ReactionResponse', isSingle: false },

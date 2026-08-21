@@ -5,9 +5,9 @@ import type {
   Channel,
   Event,
   MessageResponse,
-  ReactionAPIResponse,
   ReactionGroupResponse,
   ReactionResponse,
+  SendReactionResponse,
 } from '../../src';
 import { generateUUIDv4 as uuidv4 } from '../../src/utils';
 import { MockOfflineDB } from './offline-support/MockOfflineDB';
@@ -84,7 +84,7 @@ const ownReactionTypes = (paginator: Channel['messagePaginator'], id: string) =>
   (paginator.getItem(id)?.own_reactions ?? []).map((reaction) => reaction.type);
 
 const apiReactionResponse = (message: MessageResponse) =>
-  ({ duration: '0.0ms', message, reaction: {} }) as unknown as ReactionAPIResponse;
+  ({ duration: '0.0ms', message, reaction: {} }) as unknown as SendReactionResponse;
 
 const networkError = () => new Error('network down');
 
