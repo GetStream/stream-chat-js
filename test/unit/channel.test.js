@@ -3993,7 +3993,7 @@ describe('Channel.reload', () => {
 		expect(channel.messagePaginator.items.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
 
 		// The fold + reconcile now lives in query() → seedFirstPageSync (shared with the channel-list
-		// re-hydrate and React's recoverState); reload() is just watch() with the full-window limit.
+		// re-hydrate and connection recovery); reload() is just watch() with the full-window limit.
 		// query() snapshots the loaded ids BEFORE this fetch, so a brand-new message that lands via WS
 		// DURING it (below) — absent from the server page — must survive. This exercises the whole
 		// snapshot-before-await + reconcile chain end to end, not the paginator in isolation.

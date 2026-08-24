@@ -15,15 +15,13 @@ import type {
 import { getChannel } from './pagination/utility.queryChannel';
 import type { Channel } from './channel';
 import { ChannelWatchStatus } from './channel_state';
-import { chatLoggerSystem } from './logger';
+import { runDetached } from './utils';
 
 export type ChannelManagerEventHandlerContext = {
   channelManager: ChannelManager;
 };
 
 type EventHandlerContext = ChannelManagerEventHandlerContext;
-
-const logger = chatLoggerSystem.getLogger('channel');
 
 type SupportedEventType = EventType | (string & {});
 
@@ -159,10 +157,8 @@ const restoreInterruptedWatch = (channel: Channel, client: StreamChat) => {
   // Takes the client as an argument rather than calling `channel.getClient()`, which THROWS for a
   // channel pending disposal — the guard above makes that unreachable today, but a throw here would
   // reject the whole event handler, so it is not a hazard worth leaving one edit away.
-  getChannel({ channel, client }).catch((error) => {
-    logger
-      .withExtraTags('restoreInterruptedWatch', channel.cid)
-      .warn('Failed to restore an interrupted channel watch.', { error });
+  runDetached(getChannel({ channel, client }), {
+    context: `restoreInterruptedWatch(${channel.cid})`,
   });
 };
 

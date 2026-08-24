@@ -485,10 +485,6 @@ export class StreamChat extends ChatApi {
     }
 
     this.offlineDb = offlineDBInstance;
-    // Recovery of the active channel has to run after pending-task replay and sync, which is what the
-    // DB's sync-status edge signals. The DB arrives after the client was constructed, so this is the
-    // first moment that trigger can be wired up.
-    this.connectionRecovery.attachOfflineDb(offlineDBInstance);
   }
 
   getAuthType() {
@@ -1172,7 +1168,7 @@ export class StreamChat extends ChatApi {
     }
 
     // Current user removed from a channel: evict it like channel.deleted so
-    // recoverState won't re-watch it and no further events reach it (#2599).
+    // connection recovery won't re-watch it and no further events reach it (#2599).
     // Type-agnostic. We skip deleteAllChannelReference (unlike deletion) since
     // the channel still exists for its remaining members.
     if (event.type === 'notification.removed_from_channel' && event.cid) {
@@ -1268,29 +1264,23 @@ export class StreamChat extends ChatApi {
   };
 
   /**
-   * Settles the connect promises after a reconnect.
+   * Settles the connect promises after a successful reconnect, so the `await this.wsPromise` gates
+   * spread across the client stop resolving against a superseded (possibly rejected) attempt.
    *
-   * Recovery itself is owned by {@link ConnectionRecoveryManager}, which is subscribed to the
-   * connection lifecycle and so covers every reconnect path — including
-   * `closeConnection()` → `openConnection()` (mobile backgrounding), which never reaches this method:
-   * `StableWSConnection._reconnect()` is its only caller. That is also why `connection.recovered` is
-   * now dispatched by the manager rather than here.
+   * Called by `StableWSConnection._reconnect()`. Recovery itself is owned by
+   * {@link ConnectionRecoveryManager}, which subscribes to the connection lifecycle and so covers
+   * every reconnect path — including `closeConnection()` → `openConnection()` (mobile backgrounding),
+   * which never reaches `_reconnect()` at all.
    *
-   * What used to live here was a single
-   * `queryChannelsAndHydrate({ cid: { $in: Object.keys(activeChannels) }, limit: 30 })`. It has been
-   * removed: it substituted its own query shape for the ones the application's channel lists actually
-   * use, and silently recovered no more than thirty channels regardless of how many were loaded.
+   * @internal
    */
-  recoverState = () => {
+  _settleConnectPromises = () => {
     logger
-      .withExtraTags('recoverState')
+      .withExtraTags('_settleConnectPromises')
       .info(`Connection re-established with connection ID ${this._getConnectionID()}.`);
 
     this.wsPromise = Promise.resolve();
     this.setUserPromise = Promise.resolve();
-
-    // Still returns a promise: `StableWSConnection._reconnect()` awaits this, and it is public API.
-    return Promise.resolve();
   };
 
   /**

@@ -1872,7 +1872,7 @@ export class Channel extends ChannelApi {
    * This is intentionally thin: it only re-issues `watch()` with a limit sized to the loaded window
    * (`items.length`, so the whole loaded window is refreshed — not the smaller channel-list page). The
    * actual fold + destructive reconciliation happens inside `query()` → `seedFirstPageSync`
-   * (the same path the channel-list re-hydrate and React's `recoverState` use), driven by the loaded-id
+   * (the same path the channel-list re-hydrate and connection recovery use), driven by the loaded-id
    * snapshot `query()` captures before its await. Owning that single path is what lets the SDK stop
    * passing the reconciliation window/snapshot itself.
    *

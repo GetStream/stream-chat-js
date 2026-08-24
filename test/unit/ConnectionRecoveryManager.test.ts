@@ -103,6 +103,19 @@ describe('ConnectionRecoveryManager', () => {
       expect(reload).toHaveBeenCalledTimes(1);
     });
 
+    it('reloads exactly once per reconnect (offline support off)', async () => {
+      // Mirror of the offline-on case: with no offline DB there is no sync edge, so the direct call
+      // is the only path. Settle before re-asserting — a late duplicate would satisfy a bare count.
+      const { reload } = activeChannel('active');
+      vi.spyOn(client.channelManager, 'recover').mockResolvedValue([]);
+
+      online();
+      await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      expect(reload).toHaveBeenCalledTimes(1);
+    });
+
     it('does not stop at the first channel that fails', async () => {
       const { reload: failing } = activeChannel('failing');
       const { reload: healthy } = activeChannel('healthy');
@@ -254,6 +267,23 @@ describe('ConnectionRecoveryManager', () => {
       online();
 
       await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+    });
+
+    it('reloads exactly once per reconnect, and stays at once', async () => {
+      // Exactly one of the two paths in `registerSubscriptions` may run: binding the sync-status
+      // subscription is what hands active-channel recovery to the edge, so the direct call must be
+      // skipped. Asserting only "was called" would not catch a double, and neither would asserting
+      // the count immediately — a duplicate arriving late would still satisfy it. So settle first,
+      // then re-assert.
+      await attachDb();
+      const { reload } = activeChannel('active');
+      vi.spyOn(client.channelManager, 'recover').mockResolvedValue([]);
+
+      online();
+      await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      expect(reload).toHaveBeenCalledTimes(1);
     });
 
     it('recovers again on a second reconnect', async () => {

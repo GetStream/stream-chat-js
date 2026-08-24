@@ -190,7 +190,7 @@ export type SeedFirstPageOptions = {
    * {@link MessageIntervalPaginator.mergeNewestPage} — merge in place, reconcile offline hard-deletes,
    * re-derive the tail cursor, rebuild on a disjoint window, and skip when jumped away from the head —
    * instead of a plain first-page ingest. Lets callers (channel.reload, the channel-list hydrate,
-   * React's `recoverState`) share one reconciling seed path. Left false for the differently-sorted
+   * connection recovery) share one reconciling seed path. Left false for the differently-sorted
    * pinned list, and a no-op on a cold open (nothing loaded to fold).
    */
   reconcile?: boolean;

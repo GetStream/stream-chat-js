@@ -1,7 +1,7 @@
 import { WithSubscriptions } from './utils/WithSubscriptions';
 import { chatLoggerSystem } from './logger';
+import { runDetached } from './utils';
 import type { StreamChat } from './client';
-import type { AbstractOfflineDB } from './offline-support/offline_support_api';
 import type { Channel } from './channel';
 import type { Unsubscribe } from './store';
 
@@ -26,7 +26,7 @@ const logger = chatLoggerSystem.getLogger('client');
  * refreshed pages come back demand-driven, when an event proves them relevant (see
  * `restoreInterruptedWatch` in `ChannelManager`).
  *
- * This replaces the old `client.recoverState()` bulk query
+ * This replaces the removed `client.recoverState()` bulk query
  * (`cid: { $in: activeChannels }, limit: 30`), which invented its own query shape unrelated to any
  * list's filters and silently dropped everything past the thirtieth channel.
  *
@@ -58,21 +58,10 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
   private isRecovering = false;
   /** Undone by `unregisterSubscriptions`, so re-registering does not stack listeners. */
   private unsubscribeSyncStatus?: Unsubscribe;
-  private unsubscribeOfflineDbInit?: Unsubscribe;
 
   constructor({ client }: { client: StreamChat }) {
     super();
     this.client = client;
-  }
-
-  /**
-   * Whether the offline DB is attached AND finished initializing. Until it is, the sync-status edge
-   * will never fire, so active-channel recovery has to stay on `connection.changed` — an offline DB
-   * whose `init()` failed must not silently cost us recovery altogether.
-   */
-  private get usesSyncStatusTrigger() {
-    const { offlineDb } = this.client;
-    return !!offlineDb && offlineDb.state.getLatestValue().initialized;
   }
 
   public registerSubscriptions = () => {
@@ -82,11 +71,18 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
           if (!event.online) return;
 
           // The lists always recover off this event; their own deferral handles offline ordering.
-          this.recoverChannelLists();
+          runDetached(this.recoverChannelLists(), { context: 'recoverChannelLists' });
 
-          // Active channels recover off the sync-status edge whenever there is one to wait for.
-          if (!this.usesSyncStatusTrigger) {
-            this.recoverActiveChannels();
+          // Active channels recover off the offline sync-status edge whenever there is one — it is the
+          // only signal guaranteed to be post-replay-post-sync. Exactly ONE of these two paths runs
+          // per reconnect: binding the subscription is what makes the edge the driver, so the same
+          // call reports which path applies. Deliberately not split into a separate predicate — two
+          // independent reads of "is there an edge?" could disagree with each other.
+          const syncEdgeDrivesActiveChannels = this.ensureSyncStatusSubscription();
+          if (!syncEdgeDrivesActiveChannels) {
+            runDetached(this.recoverActiveChannels(), {
+              context: 'recoverActiveChannels',
+            });
           }
         }).unsubscribe,
       );
@@ -94,8 +90,6 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
       this.addUnsubscribeFunction(() => {
         this.unsubscribeSyncStatus?.();
         this.unsubscribeSyncStatus = undefined;
-        this.unsubscribeOfflineDbInit?.();
-        this.unsubscribeOfflineDbInit = undefined;
       });
     }
 
@@ -104,31 +98,34 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
   };
 
   /**
-   * Called by `client.setOfflineDBApi`, because the offline DB is attached after the client (and this
-   * manager) already exist, and initialized later still. Watches `initialized` rather than assuming,
-   * so the sync-status listener is registered at the first moment it can produce an edge.
+   * Bind to the offline DB's sync-status edge, if there is one to bind to yet.
+   *
+   * Resolved off `this.client` rather than injected: the DB is already reachable there, it is simply
+   * attached after this manager is constructed (and initialized later still), so the binding has to be
+   * deferred rather than handed in. Doing it from the `connection.changed` handler is safe even when
+   * this manager's listener runs before the sync manager's: `OfflineDBSyncManager` awaits
+   * `syncAndExecutePendingTasks()` before publishing, so the edge cannot land in the same synchronous
+   * dispatch that registers us.
+   *
+   * An offline DB whose `init()` never succeeded publishes no edge, so it must not be treated as the
+   * trigger — hence the `initialized` check, which also means a later successful init is picked up on
+   * the next reconnect.
+   *
+   * @returns whether the sync-status edge is now driving active-channel recovery.
    */
-  public attachOfflineDb = (offlineDb: AbstractOfflineDB) => {
-    this.unsubscribeOfflineDbInit?.();
-    this.unsubscribeOfflineDbInit = offlineDb.state.subscribeWithSelector(
-      (nextValue) => ({ initialized: nextValue.initialized }),
-      ({ initialized }) => {
-        if (!initialized) return;
-        this.subscribeSyncStatus(offlineDb);
-      },
-    );
-  };
+  private ensureSyncStatusSubscription = (): boolean => {
+    if (this.unsubscribeSyncStatus) return true;
 
-  private subscribeSyncStatus = (offlineDb: AbstractOfflineDB) => {
-    // Guard against a re-initialization publishing `initialized: true` twice.
-    if (this.unsubscribeSyncStatus) return;
+    const { offlineDb } = this.client;
+    if (!offlineDb?.state.getLatestValue().initialized) return false;
 
     const { unsubscribe } = offlineDb.syncManager.onSyncStatusChange((status) => {
       // `false` is only published when going offline; there is nothing to recover then.
       if (!status) return;
-      this.recoverActiveChannels();
+      runDetached(this.recoverActiveChannels(), { context: 'recoverActiveChannels' });
     });
     this.unsubscribeSyncStatus = unsubscribe;
+    return true;
   };
 
   /**
@@ -169,8 +166,8 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
 
     this.isRecovering = false;
 
-    // `connection.recovered` means "recovery finished". Dispatched from here rather than from
-    // `recoverState()` so it fires on EVERY reconnect path — `recoverState()` is only ever called by
+    // `connection.recovered` means "recovery finished". Dispatched from here so it fires on EVERY
+    // reconnect path — the removed `recoverState()` was only ever called by
     // `StableWSConnection._reconnect()`, so a `closeConnection()` → `openConnection()` cycle (mobile
     // backgrounding) never produced it. Consumers keying post-recovery work off this event — the UI
     // SDKs' mark-read-on-catch-up among them — need it after the reload above, not before.
@@ -178,8 +175,7 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
   };
 
   /**
-   * Run a full recovery now, without waiting for a connection event. This is what `recoverState()`
-   * delegates to.
+   * Run a full recovery now, without waiting for a connection event.
    */
   public recover = async () => {
     if (this.isRecovering) {

@@ -453,9 +453,7 @@ export class StableWSConnection {
 
     try {
       await this._connect();
-      logger.withExtraTags('_reconnect').debug('Waiting for the recover callback.');
-      await this.client.recoverState();
-      logger.withExtraTags('_reconnect').debug('Finished the recover callback.');
+      this.client._settleConnectPromises();
 
       this.consecutiveFailures = 0;
     } catch (error: any) {
