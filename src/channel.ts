@@ -1694,6 +1694,18 @@ export class Channel extends ChannelApi {
   }
 
   /**
+   * The error thrown by the most recent {@link Channel.reload}, or `undefined` when it succeeded.
+   * Store-backed and reactive — subscribe via
+   * `useStateStore(channel.state, (s) => ({ lastReloadError: s.lastReloadError }))`.
+   *
+   * Read-only on purpose: it is owned by `reload()`, which clears it on entry and records a failure
+   * before rethrowing.
+   */
+  get lastReloadError() {
+    return this.state.getLatestValue().lastReloadError;
+  }
+
+  /**
    * Whether this client holds a server-side watch on the channel, and if not, whether it should be
    * restored — see {@link ChannelWatchStatus}. Store-backed and reactive: subscribe via
    * `useStateStore(channel.state, (s) => ({ watchStatus: s.watchStatus }))`.
@@ -1871,6 +1883,11 @@ export class Channel extends ChannelApi {
   async reload() {
     if (this._reloading || (!this.initialized && !this.offlineMode)) return;
     this._reloading = true;
+    // Clear before the attempt, so a successful reload dismisses whatever the previous failure
+    // surfaced (mirrors BasePaginator clearing `lastQueryError` before each query).
+    if (this.lastReloadError) {
+      this.state.partialNext({ lastReloadError: undefined });
+    }
     try {
       const paginator = this.messagePaginator;
       const headItems = paginator.headItems;
@@ -1888,6 +1905,9 @@ export class Channel extends ChannelApi {
         },
         { coalesce: true },
       );
+    } catch (error) {
+      this.state.partialNext({ lastReloadError: error as Error });
+      throw error;
     } finally {
       this._reloading = false;
     }

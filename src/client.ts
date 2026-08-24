@@ -64,6 +64,7 @@ import { DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import { PollManager } from './poll_manager';
 import { EntityStore } from './entityStore/EntityStore';
 import { ChannelManager } from './ChannelManager';
+import { ConnectionRecoveryManager } from './ConnectionRecoveryManager';
 import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
 import { ReminderManager } from './reminders';
@@ -141,6 +142,14 @@ export class StreamChat extends ChatApi {
    */
   channelManager: ChannelManager;
   /**
+   * Owns connection recovery: on reconnect it re-runs each loaded channel list's own first-page query
+   * and reloads each active channel, then dispatches `connection.recovered`. Instantiated with the
+   * client and subscribed for its lifetime.
+   *
+   * Turn it off with the `recoverStateOnReconnect` option if the application recovers state itself.
+   */
+  connectionRecovery: ConnectionRecoveryManager;
+  /**
    * Client-global, normalized store holding one canonical copy of each message. The channel main
    * list and thread reply paginators read/write message content through it, so a message held in
    * more than one of them stays consistent without copy-to-copy fan-out.
@@ -158,13 +167,13 @@ export class StreamChat extends ChatApi {
   key: string;
   listeners: Map<EventType, Set<EventHandler>>;
   /**
-   * When network is recovered, we re-query the active channels on client. But in single query, you can recover
-   * only 30 channels. So its not guaranteed that all the channels in activeChannels object have updated state.
-   * Thus in UI sdks, state recovery is managed by components themselves, they don't rely on js client for this.
+   * Whether the client recovers its own state when the connection comes back (default `true`).
    *
-   * `recoverStateOnReconnect` parameter can be used in such cases, to disable state recovery within js client.
-   * When false, user/consumer of this client will need to make sure all the channels present on UI by
-   * manually calling queryChannels endpoint.
+   * When enabled, {@link ConnectionRecoveryManager} re-runs each loaded channel list's own first-page
+   * query and reloads each active channel, then dispatches `connection.recovered`.
+   *
+   * Set it to `false` only if the application recovers state itself — nothing will then be re-queried
+   * or re-watched on reconnect, and it becomes the consumer's job to refresh whatever is on screen.
    */
   recoverStateOnReconnect?: boolean;
   /**
@@ -339,6 +348,11 @@ export class StreamChat extends ChatApi {
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
     this.channelManager = new ChannelManager({ client: this });
+    this.connectionRecovery = new ConnectionRecoveryManager({ client: this });
+    // Subscribed here rather than by the consumer: recovery is not an opt-in feature, it is what the
+    // client owes anything reading its state after a reconnect. `recoverStateOnReconnect` is the
+    // opt-out, checked at recovery time.
+    this.connectionRecovery.registerSubscriptions();
     this.reminders = new ReminderManager({ client: this });
     this.messageDeliveryReporter = new MessageDeliveryReporter({ client: this });
     this.messageComposerCache = new FixedSizeQueueCache<string, MessageComposer>(64);
@@ -471,6 +485,10 @@ export class StreamChat extends ChatApi {
     }
 
     this.offlineDb = offlineDBInstance;
+    // Recovery of the active channel has to run after pending-task replay and sync, which is what the
+    // DB's sync-status edge signals. The DB arrives after the client was constructed, so this is the
+    // first moment that trigger can be wired up.
+    this.connectionRecovery.attachOfflineDb(offlineDBInstance);
   }
 
   getAuthType() {
@@ -1249,37 +1267,30 @@ export class StreamChat extends ChatApi {
     );
   };
 
-  recoverState = async () => {
+  /**
+   * Settles the connect promises after a reconnect.
+   *
+   * Recovery itself is owned by {@link ConnectionRecoveryManager}, which is subscribed to the
+   * connection lifecycle and so covers every reconnect path — including
+   * `closeConnection()` → `openConnection()` (mobile backgrounding), which never reaches this method:
+   * `StableWSConnection._reconnect()` is its only caller. That is also why `connection.recovered` is
+   * now dispatched by the manager rather than here.
+   *
+   * What used to live here was a single
+   * `queryChannelsAndHydrate({ cid: { $in: Object.keys(activeChannels) }, limit: 30 })`. It has been
+   * removed: it substituted its own query shape for the ones the application's channel lists actually
+   * use, and silently recovered no more than thirty channels regardless of how many were loaded.
+   */
+  recoverState = () => {
     logger
       .withExtraTags('recoverState')
-      .info(`Starting state recovery with connection ID ${this._getConnectionID()}.`);
-
-    const cids = Object.keys(this.activeChannels);
-    if (cids.length && this.recoverStateOnReconnect) {
-      logger
-        .withExtraTags('recoverState')
-        .info(`Starting the query for ${cids.length} channel(s).`);
-
-      await this.queryChannelsAndHydrate({
-        filter_conditions: {
-          cid: { $in: cids },
-        },
-        limit: 30,
-        sort: [{ field: 'last_message_at', direction: -1 }],
-      });
-
-      logger.withExtraTags('recoverState').info('Finished querying channels.');
-      this.dispatchEvent({
-        type: 'connection.recovered',
-      });
-    } else {
-      this.dispatchEvent({
-        type: 'connection.recovered',
-      });
-    }
+      .info(`Connection re-established with connection ID ${this._getConnectionID()}.`);
 
     this.wsPromise = Promise.resolve();
     this.setUserPromise = Promise.resolve();
+
+    // Still returns a promise: `StableWSConnection._reconnect()` awaits this, and it is public API.
+    return Promise.resolve();
   };
 
   /**

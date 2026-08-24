@@ -4058,6 +4058,55 @@ describe('Channel.reload', () => {
 
 		expect(watchSpy).toHaveBeenCalledTimes(1);
 	});
+
+	// A reload is no longer necessarily issued by the code that renders the channel: connection
+	// recovery runs it inside a `Promise.allSettled`, which absorbs rejections. Publishing the failure
+	// on the channel is what keeps a failed refresh visible to a UI ("could not load messages for this
+	// channel") without that UI having to own the call.
+	describe('lastReloadError', () => {
+		it('is undefined until a reload fails', () => {
+			expect(channel.lastReloadError).toBeUndefined();
+		});
+
+		it('records the failure and still rethrows', async () => {
+			seedLatestWindow(channel, [msg('m1', 1)]);
+			const failure = new Error('watch failed');
+			vi.spyOn(channel, 'watch').mockRejectedValue(failure);
+
+			await expect(channel.reload()).rejects.toThrow('watch failed');
+
+			expect(channel.lastReloadError).toBe(failure);
+			// Reactive, so a UI can subscribe rather than poll.
+			expect(channel.state.getLatestValue().lastReloadError).toBe(failure);
+		});
+
+		it('clears on the next successful reload', async () => {
+			seedLatestWindow(channel, [msg('m1', 1)]);
+			vi.spyOn(channel, 'watch').mockRejectedValueOnce(new Error('watch failed'));
+			await expect(channel.reload()).rejects.toThrow();
+			expect(channel.lastReloadError).toBeDefined();
+
+			channel.watch.mockResolvedValue({ messages: [msg('m1', 1)] });
+			await channel.reload();
+
+			expect(channel.lastReloadError).toBeUndefined();
+		});
+
+		it('releases the re-entrancy guard when a reload fails', async () => {
+			// Without the `finally`, one failure would wedge `reload()` for the channel's lifetime — no
+			// later reconnect could ever refresh it again.
+			seedLatestWindow(channel, [msg('m1', 1)]);
+			const watchSpy = vi
+				.spyOn(channel, 'watch')
+				.mockRejectedValueOnce(new Error('watch failed'));
+			await expect(channel.reload()).rejects.toThrow();
+
+			watchSpy.mockResolvedValue({ messages: [msg('m1', 1)] });
+			await channel.reload();
+
+			expect(watchSpy).toHaveBeenCalledTimes(2);
+		});
+	});
 });
 describe('Channel active flag (mark-read stays UI-driven)', () => {
 	let client;

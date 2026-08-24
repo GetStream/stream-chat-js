@@ -144,6 +144,16 @@ export type ChannelLifecycleState = {
    * {@link Channel.pendingDisposal}: the instance is never revived.
    */
   pendingDisposal: boolean;
+  /**
+   * The error from the most recent {@link Channel.reload}, or `undefined` when the last one
+   * succeeded. Mirrors `BasePaginator`'s `lastQueryError` one level up: cleared when a reload starts
+   * and set when it throws, so a UI can surface "could not refresh this channel" without owning the
+   * call. `reload()` still rethrows, so callers that await it are unaffected.
+   *
+   * This exists because the reload is no longer issued by the UI: `ConnectionRecoveryManager` runs it
+   * on reconnect inside a `Promise.allSettled`, which would otherwise swallow the failure silently.
+   */
+  lastReloadError?: Error;
 };
 
 /**
@@ -219,6 +229,7 @@ export class ChannelState extends StateStore<ChannelStateData> {
       initialized: false,
       offlineMode: false,
       pendingDisposal: false,
+      lastReloadError: undefined,
       active: false,
       aiState: AIStates.Idle,
     });

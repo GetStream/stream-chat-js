@@ -196,13 +196,13 @@ export type StreamChatOptions = {
    */
   persistUserOnConnectionFailure?: boolean;
   /**
-   * When network is recovered, we re-query the active channels on client. But in single query, you can recover
-   * only 30 channels. So its not guaranteed that all the channels in activeChannels object have updated state.
-   * Thus in UI sdks, state recovery is managed by components themselves, they don't rely on js client for this.
+   * Whether the client recovers its own state when the connection comes back (default `true`).
    *
-   * `recoverStateOnReconnect` parameter can be used in such cases, to disable state recovery within js client.
-   * When false, user/consumer of this client will need to make sure all the channels present on UI by
-   * manually calling queryChannels endpoint.
+   * When enabled, `ConnectionRecoveryManager` re-runs each loaded channel list's own first-page query
+   * and reloads each active channel, then dispatches `connection.recovered`.
+   *
+   * Set it to `false` only if the application recovers state itself — nothing will then be re-queried
+   * or re-watched on reconnect, and it becomes the consumer's job to refresh whatever is on screen.
    */
   recoverStateOnReconnect?: boolean;
   warmUp?: boolean;
