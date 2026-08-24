@@ -1916,8 +1916,6 @@ describe('OfflineSupportApi', () => {
           });
         });
 
-        // regression #1676: a thread read echoes `event.thread`. `handleRead` is cid-keyed,
-        // so persisting one would store unread_messages: 0 for the whole channel.
         describe('thread reads', () => {
           const threadEvent = (type: string) =>
             ({

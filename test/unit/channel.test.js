@@ -991,9 +991,7 @@ describe('Channel _handleChannelEvent', function () {
 				initialReadState.last_delivered_message_id,
 			);
 		});
-		// regression #1676: `markRead({ thread_id })` echoes a `message.read` carrying
-		// `event.thread`. It concerns the thread only — `Thread.subscribeRepliesRead` picks
-		// it up off the client event bus — so no channel read state may move.
+		// Tests against this issue: https://github.com/GetStream/stream-chat-js/issues/1676
 		it('should not touch channel read state for a thread read', () => {
 			channel.state.unreadCount = initialCountUnread;
 			channel.state.read[user.id] = initialReadState;
@@ -1016,9 +1014,6 @@ describe('Channel _handleChannelEvent', function () {
 			expect(onMessageRead).not.toHaveBeenCalled();
 		});
 
-		// The guard is not scoped to the connected user: another user reading a thread reply
-		// says nothing about the channel messages around it either, so their channel read
-		// marker (what "seen by" indicators render from) must not advance.
 		it('should not touch channel read state for another user’s thread read', () => {
 			const anotherUser = { id: 'another-user' };
 			channel.state.unreadCount = initialCountUnread;
