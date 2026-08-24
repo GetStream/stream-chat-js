@@ -1050,6 +1050,10 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     }
 
     if (type === 'message.read' || type === 'notification.mark_read') {
+      // We make sure not to update channel reads (which is what's stored in
+      // the offline DB in any case) whenever we receive a read event for a
+      // a thread specifically.
+      if (event.thread) return [];
       return this.handleRead({ event, unreadMessages: 0, execute });
     }
 

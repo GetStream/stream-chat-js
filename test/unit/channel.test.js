@@ -991,6 +991,91 @@ describe('Channel _handleChannelEvent', function () {
 				initialReadState.last_delivered_message_id,
 			);
 		});
+		// Tests against this issue: https://github.com/GetStream/stream-chat-js/issues/1676
+		it('should not touch channel read state for a thread read', () => {
+			channel.state.unreadCount = initialCountUnread;
+			channel.state.read[user.id] = initialReadState;
+			const onMessageRead = vi.spyOn(channel.messageReceiptsTracker, 'onMessageRead');
+			const event = {
+				...messageReadEvent,
+				thread: { parent_message_id: 'parent-message-id' },
+			};
+
+			channel._handleChannelEvent(event);
+
+			expect(channel.state.unreadCount).toBe(initialCountUnread);
+			expect(new Date(channel.state.read[user.id].last_read).getTime()).toBe(
+				new Date(initialReadState.last_read).getTime(),
+			);
+			expect(channel.state.read[user.id].last_read_message_id).toBe(
+				initialReadState.last_read_message_id,
+			);
+			expect(channel.state.read[user.id].unread_messages).toBe(initialCountUnread);
+			expect(onMessageRead).not.toHaveBeenCalled();
+		});
+
+		it('should not touch channel read state for another user’s thread read', () => {
+			const anotherUser = { id: 'another-user' };
+			channel.state.unreadCount = initialCountUnread;
+			channel.state.read[anotherUser.id] = initialReadState;
+			const onMessageRead = vi.spyOn(channel.messageReceiptsTracker, 'onMessageRead');
+			const event = {
+				...messageReadEvent,
+				user: anotherUser,
+				thread: { parent_message_id: 'parent-message-id' },
+			};
+
+			channel._handleChannelEvent(event);
+
+			expect(channel.state.unreadCount).toBe(initialCountUnread);
+			expect(new Date(channel.state.read[anotherUser.id].last_read).getTime()).toBe(
+				new Date(initialReadState.last_read).getTime(),
+			);
+			expect(channel.state.read[anotherUser.id].last_read_message_id).toBe(
+				initialReadState.last_read_message_id,
+			);
+			expect(channel.state.read[anotherUser.id].unread_messages).toBe(initialCountUnread);
+			expect(onMessageRead).not.toHaveBeenCalled();
+		});
+
+		// Skipping the case also skips the delivery sync at its tail. Pinned because it is a
+		// deliberate behaviour change, not an oversight: the next `message.new` /
+		// `message.delivered` / channel query supersedes the report anyway.
+		it('should not sync delivery report candidates on a thread read', () => {
+			const syncDeliveredCandidates = vi.spyOn(client, 'syncDeliveredCandidates');
+			const event = {
+				...messageReadEvent,
+				thread: { parent_message_id: 'parent-message-id' },
+			};
+
+			channel._handleChannelEvent(event);
+
+			expect(syncDeliveredCandidates).not.toHaveBeenCalled();
+		});
+
+		// The stored fields above are only half of it: `countUnread()` re-derives the count from
+		// `read[user].last_read`, so an advanced cursor reproduces the reported 0 even with
+		// `unreadCount` guarded. This pins the value the integrator actually reads.
+		it('should keep lastRead() and countUnread() consistent after a thread read', () => {
+			// An unread channel message sent after the current user's last channel read but before
+			// the thread read - it must keep counting as unread once the thread is read.
+			channel.state.addMessagesSorted([
+				generateMsg({ date: new Date(1800).toISOString(), user: otherUser }),
+			]);
+			channel.state.read[user.id] = {
+				...initialReadState,
+				last_read: new Date(initialReadState.last_read),
+			};
+			const event = {
+				...messageReadEvent,
+				thread: { parent_message_id: 'parent-message-id' },
+			};
+
+			channel._handleChannelEvent(event);
+
+			expect(channel.lastRead().getTime()).toBe(1500);
+			expect(channel.countUnread(channel.lastRead())).toBe(1);
+		});
 	});
 
 	describe('message.delivered', () => {

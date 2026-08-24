@@ -2007,6 +2007,10 @@ export class Channel {
       // delivery-report network sync below is skipped for it.
       case 'message.read_locally':
       case 'message.read':
+        // Thread read events are handled indiscriminately within the reactive `thread` object, we can
+        // skip them here in order to ensure the channel does not get read incidentally when it should
+        // not.
+        if (event.thread) break;
         if (event.user?.id && event.created_at) {
           const previousReadState = channelState.read[event.user.id];
           channelState.read[event.user.id] = {

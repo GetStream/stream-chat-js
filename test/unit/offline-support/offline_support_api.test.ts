@@ -1915,6 +1915,35 @@ describe('OfflineSupportApi', () => {
             expect(result).toEqual([]);
           });
         });
+
+        describe('thread reads', () => {
+          const threadEvent = (type: string) =>
+            ({
+              ...dummyEvent,
+              type,
+              thread: { parent_message_id: 'parent-message-id' },
+            }) as unknown as Event;
+
+          it('is a no-op for message.read carrying a thread', async () => {
+            const event = threadEvent('message.read');
+
+            const result = await offlineDb.handleEvent({ event });
+
+            expect(offlineDb.handleRead).not.toHaveBeenCalled();
+            expect(result).toEqual([]);
+          });
+
+          // `handleRead` writes `unread_messages: 0` for this event type too, so a
+          // thread-scoped `notification.mark_read` would zero the whole channel just the same.
+          it('is a no-op for notification.mark_read carrying a thread', async () => {
+            const event = threadEvent('notification.mark_read');
+
+            const result = await offlineDb.handleEvent({ event });
+
+            expect(offlineDb.handleRead).not.toHaveBeenCalled();
+            expect(result).toEqual([]);
+          });
+        });
       });
     });
 
