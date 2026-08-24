@@ -649,6 +649,62 @@ describe('Threads 2.0', () => {
           // r4 (arrived AFTER the snapshot) → not in the snapshot → kept.
           expect(repliesOf(thread).map((reply) => reply.id)).to.eql(['r1', 'r2', 'r4']);
         });
+
+        it('preserves a failed (unsent) reply across a rebuild', async () => {
+          // The failed reply is read out of the reply PAGINATOR, not out of `failedRepliesMap`. That
+          // map is only written by `upsertReplyLocally`, whose callers are this thread's own
+          // subscriptions and the offline-DB path keyed on `ThreadManager.threadsById` — so for a
+          // thread constructed directly and never registered (what the React Native SDK does via
+          // `threadsById[id] ?? new Thread(...)`) it is always empty, and relying on it would drop the
+          // user's unsent reply on every reconnect.
+          const r1 = makeReply({ id: 'r1', created_at: '2020-01-01T00:00:01.000Z' });
+          const thread = createTestThread({ latest_replies: [r1], reply_count: 1 });
+          expect(thread.hasSubscriptions).to.equal(false);
+
+          // A reply the user sent while offline, which failed. It only exists locally, and like any
+          // just-attempted send it is the newest thing in the thread.
+          const failed = formatMessage(
+            makeReply({ id: 'failed-1', created_at: '2021-06-01T00:00:09.000Z' }),
+          );
+          failed.status = 'failed';
+          thread.messagePaginator.ingestItem(failed);
+          expect(repliesOf(thread).map((reply) => reply.id)).to.contain('failed-1');
+
+          // Server page is disjoint from the loaded window, which forces a rebuild — the one case the
+          // reconcile's provenance guard does not cover.
+          const far1 = makeReply({ id: 'far1', created_at: '2021-06-01T00:00:01.000Z' });
+          const far2 = makeReply({ id: 'far2', created_at: '2021-06-01T00:00:02.000Z' });
+          const hydrationThread = createTestThread({
+            latest_replies: [far1, far2],
+            reply_count: 2,
+          });
+          sinon.stub(client, 'getThreadAndHydrate').resolves(hydrationThread);
+
+          await thread.reload();
+
+          expect(repliesOf(thread).map((reply) => reply.id)).to.contain('failed-1');
+        });
+
+        it('publishes a reload failure on state.lastReloadError and rethrows it', async () => {
+          // Connection recovery runs `reload()` inside `Promise.allSettled`, so the throw never
+          // reaches a UI. Mirrors `channel.state.lastReloadError`.
+          const thread = createTestThread({ latest_replies: [], reply_count: 0 });
+          const failure = new Error('thread reload failed');
+          const stub = sinon.stub(client, 'getThreadAndHydrate').rejects(failure);
+
+          await expect(thread.reload()).rejects.toThrow(failure);
+          expect(thread.state.getLatestValue().lastReloadError).to.equal(failure);
+          // Not left mid-flight — otherwise the isLoading guard would swallow every later reload.
+          expect(thread.state.getLatestValue().isLoading).to.equal(false);
+
+          // A later success clears it, so a stale banner cannot outlive the failure it described.
+          stub.restore();
+          sinon
+            .stub(client, 'getThreadAndHydrate')
+            .resolves(createTestThread({ latest_replies: [], reply_count: 0 }));
+          await thread.reload();
+          expect(thread.state.getLatestValue().lastReloadError).to.equal(undefined);
+        });
       });
 
       describe('deleteReplyLocally', () => {

@@ -1897,14 +1897,21 @@ export class Channel extends ChannelApi {
       await this.watch({ messages: { limit: requestedLimit } });
       this.offlineMode = false;
 
-      paginator.batch(
-        () => {
-          for (const failed of failedBefore) {
-            if (!paginator.getItem(failed.id)) paginator.ingestItem(failed);
-          }
-        },
-        { coalesce: true },
-      );
+      if (failedBefore.length) {
+        // Membership is checked against the visible window, NOT `getItem`: that reads the item index,
+        // which can still hold a message the rebuild dropped from the loaded window — so an
+        // index-based guard skips the reingest on exactly the disjoint set rebuild that needs it,
+        // and the user's unsent message silently disappears from the list.
+        const visible = new Set((paginator.items ?? []).map((message) => message.id));
+        paginator.batch(
+          () => {
+            for (const failed of failedBefore) {
+              if (!visible.has(failed.id)) paginator.ingestItem(failed);
+            }
+          },
+          { coalesce: true },
+        );
+      }
     } catch (error) {
       this.state.partialNext({ lastReloadError: error as Error });
       throw error;

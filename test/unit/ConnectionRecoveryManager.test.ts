@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ChannelWatchStatus, type Channel, type StreamChat } from '../../src';
+import {
+  ChannelWatchStatus,
+  Thread,
+  type Channel,
+  type MessageResponse,
+  type StreamChat,
+} from '../../src';
+import { generateMsg } from './test-utils/generateMessage';
 // @ts-expect-error - untyped test helper
 import { getClientWithUser } from './test-utils/getClient';
 import { MockOfflineDB } from './offline-support/MockOfflineDB';
@@ -27,6 +34,39 @@ describe('ConnectionRecoveryManager', () => {
     return { channel, reload };
   };
 
+  /** Builds a thread the way a UI SDK does, without activating or adopting it. */
+  const buildThread = (id: string) => {
+    const channel = client.channel('messaging', `channel-for-${id}`);
+    channel.initialized = true;
+    const thread = new Thread({
+      client,
+      channel,
+      parentMessage: channel.state.formatMessage(
+        generateMsg({ id, cid: channel.cid }) as MessageResponse,
+      ),
+    });
+    const reload = vi.spyOn(thread, 'reload').mockResolvedValue(undefined);
+    return { thread, reload, channel };
+  };
+
+  /** Mirrors what the UI SDKs do once a thread's replies have loaded: put it in the manager's list. */
+  const adopt = (thread: Thread) =>
+    client.threads.state.next((current) => ({
+      ...current,
+      threads: [thread, ...current.threads],
+    }));
+
+  /**
+   * A thread a consumer is displaying: adopted into the manager (so it is reachable through
+   * `threadsById`) and activated (so recovery selects it out of everything else in the list).
+   */
+  const activeThread = (id: string) => {
+    const built = buildThread(id);
+    adopt(built.thread);
+    built.thread.activate();
+    return built;
+  };
+
   beforeEach(() => {
     client = getClientWithUser({ id: 'me' }) as StreamChat;
   });
@@ -45,6 +85,79 @@ describe('ConnectionRecoveryManager', () => {
       online();
       await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
       expect(recoverLists).toHaveBeenCalledTimes(1);
+    });
+
+    it('reloads the thread a consumer is displaying, not every thread in the list', async () => {
+      const { reload } = activeThread('open-thread');
+      // Also in the list, but nobody is reading it: reloading every paged-in thread on reconnect
+      // would be a burst of `getThreadAndHydrate` calls for rows on a screen, which is exactly what
+      // the `active` filter exists to prevent. `ThreadManager.reload()` refreshes the list itself.
+      const idle = buildThread('idle-thread');
+      adopt(idle.thread);
+      vi.spyOn(client.channelManager, 'recover').mockResolvedValue([]);
+
+      online();
+      await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+      expect(idle.reload).not.toHaveBeenCalled();
+    });
+
+    it('KNOWN GAP: skips an active thread that has not been adopted into the manager', async () => {
+      // Not desired behaviour — a pin on an accepted trade-off. Recovery finds threads through
+      // `threadsById`, i.e. the thread LIST, and a thread opened from a message list only lands there
+      // once the UI SDK adopts it (after its replies load). A reconnect inside that window misses it,
+      // as does one after `ThreadManager.reload()` evicts it. Fixing this means giving `ThreadManager`
+      // a real off-list registry (its commented-out `threadCache`); when that lands, this test should
+      // be inverted rather than deleted.
+      const { thread, reload } = buildThread('active-but-unadopted');
+      thread.activate();
+      expect(client.threads.threadsById[thread.id]).toBeUndefined();
+      const { reload: channelReload } = activeChannel('still-open');
+      vi.spyOn(client.channelManager, 'recover').mockResolvedValue([]);
+
+      online();
+      // Anchored on a reload that provably happens in the same pass.
+      await vi.waitFor(() => expect(channelReload).toHaveBeenCalledTimes(1));
+      expect(reload).not.toHaveBeenCalled();
+    });
+
+    it('leaves a thread nobody is displaying alone', async () => {
+      const { thread, reload } = activeThread('closed-thread');
+      // Closing the thread screen deactivates it; recovery must then skip it entirely.
+      thread.deactivate();
+      const { reload: channelReload } = activeChannel('still-open');
+      vi.spyOn(client.channelManager, 'recover').mockResolvedValue([]);
+
+      online();
+      // Anchored on a reload that provably happens in the same pass, so the negative cannot pass
+      // merely by being asserted before anything ran.
+      await vi.waitFor(() => expect(channelReload).toHaveBeenCalledTimes(1));
+      expect(reload).not.toHaveBeenCalled();
+    });
+
+    it('skips a thread whose channel is being torn down', async () => {
+      const { thread, reload, channel } = activeThread('doomed-thread');
+      channel.pendingDisposal = true;
+      const { reload: channelReload } = activeChannel('still-open');
+      vi.spyOn(client.channelManager, 'recover').mockResolvedValue([]);
+
+      online();
+      await vi.waitFor(() => expect(channelReload).toHaveBeenCalledTimes(1));
+      expect(reload).not.toHaveBeenCalled();
+      expect(thread.state.getLatestValue().active).toBe(true);
+    });
+
+    it('one thread failing does not stop the channels or the other threads', async () => {
+      const { reload: failing } = activeThread('failing-thread');
+      failing.mockRejectedValue(new Error('thread reload failed'));
+      const { reload: healthy } = activeThread('healthy-thread');
+      const { reload: channelReload } = activeChannel('active');
+      vi.spyOn(client.channelManager, 'recover').mockResolvedValue([]);
+
+      online();
+      await vi.waitFor(() => {
+        expect(healthy).toHaveBeenCalledTimes(1);
+        expect(channelReload).toHaveBeenCalledTimes(1);
+      });
     });
 
     it('leaves channels nobody is reading alone', async () => {

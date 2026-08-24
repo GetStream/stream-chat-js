@@ -4025,8 +4025,10 @@ describe('Channel.reload', () => {
 	it('preserves a failed (unsent) message that a disjoint rebuild would otherwise drop', async () => {
 		seedLatestWindow(channel, [
 			msg('m1', 1),
-			msg('failed', 2, { status: 'failed' }),
 			msg('m3', 3),
+			// A just-attempted send that failed is the NEWEST thing in the channel — position it that
+			// way, or the scenario is not one that can actually occur.
+			msg('failed', 10, { status: 'failed' }),
 		]);
 		// A page that shares no id with the loaded window is disjoint, so the fold rebuilds and discards
 		// local-only messages — reload must re-ingest the failed one so it is not lost.
@@ -4039,7 +4041,7 @@ describe('Channel.reload', () => {
 
 		await channel.reload();
 
-		expect(channel.messagePaginator.getItem('failed')).toBeDefined();
+		expect(channel.messagePaginator.items.map((m) => m.id)).toContain('failed');
 	});
 
 	it('ignores a re-entrant reload while one is already in flight', async () => {

@@ -3,6 +3,7 @@ import { chatLoggerSystem } from './logger';
 import { runDetached } from './utils';
 import type { StreamChat } from './client';
 import type { Channel } from './channel';
+import type { Thread } from './thread';
 import type { Unsubscribe } from './store';
 
 const logger = chatLoggerSystem.getLogger('client');
@@ -11,7 +12,7 @@ const logger = chatLoggerSystem.getLogger('client');
  * Owns connection recovery: after the socket comes back, brings the surfaces the app is actually
  * consuming back in line with the server.
  *
- * Recovery is deliberately narrow — two things, and nothing else:
+ * Recovery is deliberately narrow — three things, and nothing else:
  *
  * 1. **Every loaded channel list re-runs its own first-page query** (`ChannelManager.recover`). Since
  *    `queryChannels` watches by default, that also re-establishes the watches for the channels on
@@ -19,6 +20,10 @@ const logger = chatLoggerSystem.getLogger('client');
  * 2. **Every active channel reloads itself** (`Channel.reload`), because a list page carries far fewer
  *    messages per channel than an open channel's loaded window, so the open channel cannot be served
  *    by the list query.
+ * 3. **Every active thread reloads its replies** (`Thread.reload`), because none of the above touches
+ *    them: a channel reload refreshes the main message list, and `ThreadManager`'s own recovery
+ *    refreshes the thread *list*, reusing thread instances without rehydrating them unless something
+ *    separately marked them stale — which only `user.watching.stop` does, never a reconnect.
  *
  * It is explicitly **not** a sweep over `client.activeChannels`. Watches are a bounded server
  * resource, and after any scrolling that cache holds far more channels than a query returns — so
@@ -146,6 +151,50 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
     return channels;
   }
 
+  /**
+   * The threads this recovery reloads: the ones a consumer has declared it is displaying.
+   *
+   * Threads need their own pass because nothing else brings an open thread's replies back — a
+   * channel reload refreshes the main message list, `ChannelManager.recover()` refreshes the channel
+   * lists*, and `ThreadManager`'s own recovery refreshes the thread *list*, reusing existing
+   * instances without rehydrating them unless they were separately marked stale (which only
+   * `user.watching.stop` does, never a reconnect).
+   *
+   * `active` is the filter that matters: `threadsById` holds every thread the list has paged in,
+   * which is not what should be re-fetched on a reconnect — only what someone is actually reading.
+   * Guarded on the owning channel the same way active channels are: a thread whose channel is being
+   * torn down has nothing to recover into.
+   *
+   * NOTE: `threadsById` is the thread LIST, not a thread cache. A thread opened from a message list
+   * is constructed directly (`threadsById[id] ?? new Thread(...)`) and only reaches the list because
+   * the UI SDKs adopt it there — prepended, once its replies have loaded — which is a workaround, not
+   * a contract. Two consequences, both accepted for now and both narrow:
+   *
+   * - A reconnect landing before that adoption misses the thread. Self-limiting: the UI SDKs re-issue
+   *   the load while the reply list is still unloaded, so a thread that failed to load gets adopted on
+   *   the retry.
+   * - `ThreadManager.reload()` rebuilds `state.threads` purely from the query response, so an adopted
+   *   thread absent from that response is evicted while still active. It cannot bite within the
+   *   reconnect that caused it: this getter is read before `connection.recovered` is dispatched, and
+   *   that event is what triggers the UI SDKs' list reload. It would take a LATER reconnect, after an
+   *   eviction, to miss the thread.
+   *
+   * The fix is a real off-list registry — see the commented-out `threadCache` in `ThreadManager` — at
+   * which point this getter reads from that instead, with no change to the `active` filter.
+   */
+  private get recoverableActiveThreads(): Thread[] {
+    const threads: Thread[] = [];
+    for (const thread of Object.values(this.client.threads.threadsById)) {
+      if (!thread) continue;
+      // Read off state rather than a getter: `Thread` has no `active` accessor the way `Channel`
+      // does, and adding one just for this would grow the public surface for a single internal read.
+      const { active } = thread.state.getLatestValue();
+      if (!active || thread.channel.pendingDisposal) continue;
+      threads.push(thread);
+    }
+    return threads;
+  }
+
   private recoverChannelLists = async () => {
     if (!this.client.recoverStateOnReconnect) return;
     await this.client.channelManager.recover();
@@ -155,14 +204,22 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
     if (!this.client.recoverStateOnReconnect) return;
 
     const channels = this.recoverableActiveChannels;
+    const threads = this.recoverableActiveThreads;
     this.isRecovering = true;
     logger
       .withExtraTags('connectionRecovery')
-      .info(`Recovering ${channels.length} active channel(s).`);
+      .info(
+        `Recovering ${channels.length} active channel(s) and ${threads.length} active thread(s).`,
+      );
 
-    // allSettled: one channel failing must not stop the others. Each failure is published on
-    // `channel.state.lastReloadError` by `reload()` itself, so it is not lost here.
-    await Promise.allSettled(channels.map((channel) => channel.reload()));
+    // allSettled: one channel or thread failing must not stop the others. Each failure is published
+    // on `channel.state.lastReloadError` / `thread.state.lastReloadError` by `reload()` itself, so it
+    // is not lost here. Channels and threads are independent requests, so they run together rather
+    // than in sequence.
+    await Promise.allSettled([
+      ...channels.map((channel) => channel.reload()),
+      ...threads.map((thread) => thread.reload()),
+    ]);
 
     this.isRecovering = false;
 
