@@ -1935,21 +1935,15 @@ describe('OfflineSupportApi', () => {
             expect(result).toEqual([]);
           });
 
-          // The carve-out covers `message.read` only, mirroring `Channel._handleChannelEvent`.
-          // `notification.mark_read` has no `thread` check in its in-memory counterpart
-          // (`StreamChat._handleClientEvent`), so guarding it here alone would let the DB and
-          // the in-memory state disagree across a restart.
-          it('still persists notification.mark_read carrying a thread', async () => {
+          // `handleRead` writes `unread_messages: 0` for this event type too, so a
+          // thread-scoped `notification.mark_read` would zero the whole channel just the same.
+          it('is a no-op for notification.mark_read carrying a thread', async () => {
             const event = threadEvent('notification.mark_read');
 
             const result = await offlineDb.handleEvent({ event });
 
-            expect(offlineDb.handleRead).toHaveBeenCalledWith({
-              event,
-              unreadMessages: 0,
-              execute: true,
-            });
-            expect(result).toEqual(['read']);
+            expect(offlineDb.handleRead).not.toHaveBeenCalled();
+            expect(result).toEqual([]);
           });
         });
       });
