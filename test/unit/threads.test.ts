@@ -585,12 +585,12 @@ describe('Threads 2.0', () => {
       });
 
       describe('reload', () => {
-        it('sizes getThread reply_limit to the loaded reply count, falling back to pageSize when unloaded', async () => {
+        it('sizes getThread reply_limit to the loaded window, but never below a page', async () => {
           const stub = sinon.stub(client, 'getThread').resolves({
             thread: generateThreadResponse(channelResponse, parentMessageResponse),
           });
 
-          // Unloaded (minimal) thread → falls back to pageSize.
+          // Unloaded (minimal) thread → a page.
           const minimalThread = createMinimalThread();
           expect(minimalThread.messagePaginator.state.getLatestValue().items).to.be
             .undefined;
@@ -599,19 +599,51 @@ describe('Threads 2.0', () => {
             minimalThread.messagePaginator.pageSize,
           );
 
-          // Loaded thread → sized to the loaded reply count (so the whole loaded window reconciles),
-          // NOT the paginator pageSize.
-          const loadedThread = createTestThread({
+          // Loaded window LARGER than a page → sized to it, so the whole window reconciles.
+          const pageSize = minimalThread.messagePaginator.pageSize;
+          const wide = createTestThread({
             latest_replies: Array.from(
-              { length: 7 },
+              { length: pageSize + 7 },
               () =>
                 generateMsg({ parent_id: parentMessageResponse.id }) as MessageResponse,
             ),
-            reply_count: 20,
+            reply_count: pageSize + 20,
           });
-          await loadedThread.reload();
-          expect(stub.secondCall.args[0]?.reply_limit).to.equal(7);
-          expect(loadedThread.messagePaginator.pageSize).to.not.equal(7);
+          await wide.reload();
+          expect(stub.secondCall.args[0]?.reply_limit).to.equal(pageSize + 7);
+
+          // ⚠️ Loaded window SMALLER than a page → still a page. Regression guard: a thread created in
+          // the current session holds exactly one reply (the one just sent), and sizing the request to
+          // that asks the server for one reply — so replies added while offline can never be
+          // discovered, and the single reply that comes back is disjoint from the loaded window, so
+          // the fold rebuilds and drops the user's own reply too.
+          const narrow = createTestThread({
+            latest_replies: [
+              generateMsg({ parent_id: parentMessageResponse.id }) as MessageResponse,
+            ],
+            reply_count: 40,
+          });
+          await narrow.reload();
+          expect(stub.thirdCall.args[0]?.reply_limit).to.equal(pageSize);
+        });
+
+        it('falls back to the server default when the paginator has no page size', async () => {
+          // `pageSize` is optional on the paginator config. Guarding it matters: `Math.max(n,
+          // undefined)` is NaN, and a zero page size would ask for no replies at all.
+          const stub = sinon.stub(client, 'getThread').resolves({
+            thread: generateThreadResponse(channelResponse, parentMessageResponse),
+          });
+          const thread = createTestThread({
+            latest_replies: [],
+            reply_count: 0,
+          });
+          thread.messagePaginator.updateConfig({ pageSize: undefined });
+
+          await thread.reload();
+
+          const limit = stub.firstCall.args[0]?.reply_limit;
+          expect(limit).to.equal(undefined);
+          expect(Number.isNaN(limit as number)).to.equal(false);
         });
 
         it('removes a reply hard-deleted while offline and keeps one that arrived during the fetch', async () => {

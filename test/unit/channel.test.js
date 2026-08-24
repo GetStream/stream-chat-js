@@ -4011,7 +4011,22 @@ describe('Channel.reload', () => {
 		expect(channel.messagePaginator.items.map((m) => m.id)).toEqual(['m1', 'm2', 'm4']);
 	});
 
-	it('requests the full loaded window (items.length), not the channel-list page size', async () => {
+	it('requests the full loaded window when it is larger than a page', async () => {
+		const wide = channel.messagePaginator.pageSize + 7;
+		const loaded = Array.from({ length: wide }, (_, i) => msg(`m${i}`, i));
+		seedLatestWindow(channel, loaded);
+		const watchSpy = vi.spyOn(channel, 'watch').mockResolvedValue({ messages: loaded });
+
+		await channel.reload();
+
+		// Larger than pageSize, so the whole loaded window refreshes rather than just a page.
+		expect(watchSpy).toHaveBeenCalledWith({ messages: { limit: wide } });
+	});
+
+	it('requests at least a page when the loaded window is smaller, so new messages are discoverable', async () => {
+		// Regression guard. Sizing the request to the loaded count alone means asking the server for
+		// exactly what we already hold: messages that arrived while offline can never come back, and
+		// the returned page is disjoint from the loaded window so the fold rebuilds and drops the rest.
 		seedLatestWindow(channel, [msg('m1', 1), msg('m2', 2), msg('m3', 3)]);
 		const watchSpy = vi
 			.spyOn(channel, 'watch')
@@ -4019,7 +4034,9 @@ describe('Channel.reload', () => {
 
 		await channel.reload();
 
-		expect(watchSpy).toHaveBeenCalledWith({ messages: { limit: 3 } });
+		expect(watchSpy).toHaveBeenCalledWith({
+			messages: { limit: channel.messagePaginator.pageSize },
+		});
 	});
 
 	it('preserves a failed (unsent) message that a disjoint rebuild would otherwise drop', async () => {

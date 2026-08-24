@@ -1891,7 +1891,8 @@ export class Channel extends ChannelApi {
     try {
       const paginator = this.messagePaginator;
       const headItems = paginator.headItems;
-      const requestedLimit = headItems.length || paginator.pageSize;
+      const requestedLimit =
+        Math.max(headItems.length, paginator.pageSize ?? 0) || undefined;
       const failedBefore = headItems.filter((message) => message.status === 'failed');
 
       await this.watch({ messages: { limit: requestedLimit } });
