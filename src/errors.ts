@@ -42,6 +42,21 @@ export function isAPIError(error: Error): error is APIError {
   return (error as APIError).code !== undefined;
 }
 
+/**
+ * Whether the server answered "this does not exist" — a definitive, expected answer rather than a
+ * failure. Distinct from a network error: the request succeeded, the resource simply is not there.
+ * Use it to avoid surfacing an error state for something a caller can legitimately ask about before
+ * it exists (a thread on a parent that has no replies yet, say).
+ *
+ * Resolved through {@link APIErrorCodes} rather than comparing the numeric code, so the table stays
+ * the single place the mapping lives.
+ */
+export function isDoesNotExistError(error: Error): boolean {
+  return (
+    isAPIError(error) && APIErrorCodes[`${error.code}`]?.name === 'DoesNotExistError'
+  );
+}
+
 export function isErrorRetryable(error: APIError) {
   if (!error.code) return false;
   const err = APIErrorCodes[`${error.code}`];

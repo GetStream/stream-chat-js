@@ -20,7 +20,7 @@ import type {
   ThreadStateResponse,
   UserResponse,
 } from './types';
-import { isEphemeral } from './errors';
+import { isDoesNotExistError, isEphemeral } from './errors';
 import type {
   Channel,
   DeleteMessageWithStateUpdateParams,
@@ -502,6 +502,15 @@ export class Thread extends WithSubscriptions {
         );
       }
     } catch (error) {
+      const notFound =
+        isDoesNotExistError(error as Error) ||
+        (error as { status?: number })?.status === 404;
+      const neverExisted = notFound && this.state.getLatestValue().replyCount === 0;
+      // Do not throw an error if we haven't created the thread yet, the tiebreaker
+      // being whether the parent message has any replies or not. A thread with all hard
+      // deleted replies will simply not throw.
+      if (neverExisted) return;
+
       this.state.partialNext({ lastReloadError: error as Error });
       throw error;
     } finally {

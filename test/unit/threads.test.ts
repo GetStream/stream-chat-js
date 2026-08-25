@@ -712,6 +712,81 @@ describe('Threads 2.0', () => {
           expect(repliesOf(thread).map((r) => r.id)).to.eql(activeBefore);
         });
 
+        it('does not publish lastReloadError when the thread does not exist yet', async () => {
+          // Opening a parent that has no replies means there is no server-side thread, so `getThread`
+          // answers DoesNotExist (16). That is an expected answer, not a failed refresh: publishing it
+          // raises the consumer's error state (the RN SDK ORs it into `ChannelContext.error`) just for
+          // opening a brand-new thread.
+          const thread = createTestThread({ latest_replies: [], reply_count: 0 });
+          const notFound = Object.assign(
+            new Error('Request failed with status code 404'),
+            {
+              code: 16,
+              StatusCode: 404,
+            },
+          );
+          sinon.stub(client, 'getThreadAndHydrate').rejects(notFound);
+
+          // Resolves rather than rejecting: nothing to reload is not a failure, and rethrowing would
+          // make every caller log "reload failed" on a brand-new thread.
+          await expect(thread.reload()).resolves.toBeUndefined();
+
+          expect(thread.state.getLatestValue().lastReloadError).to.equal(undefined);
+        });
+
+        it('treats a bare 404 as not-found even without the Stream code', async () => {
+          // The guard must not hinge on the API choosing code 16 — a 404 from `getThread` means the
+          // thread is not there whatever the body says.
+          const thread = createTestThread({ latest_replies: [], reply_count: 0 });
+          const notFound = Object.assign(
+            new Error('Request failed with status code 404'),
+            {
+              status: 404,
+            },
+          );
+          sinon.stub(client, 'getThreadAndHydrate').rejects(notFound);
+
+          await expect(thread.reload()).resolves.toBeUndefined();
+
+          expect(thread.state.getLatestValue().lastReloadError).to.equal(undefined);
+        });
+
+        it('publishes lastReloadError when a thread we HAD comes back not-found', async () => {
+          // Deleted while we were offline: the `message.deleted` event was missed, so `deletedAt` is
+          // still null and the 404 is the only signal we get. `replyCount > 0` says we had something,
+          // so this is a real failure to refresh, not a thread that never existed.
+          const thread = createTestThread({
+            latest_replies: [makeReply({ created_at: '2020-01-01T00:00:01.000Z' })],
+            // `replyCount` is read off the PARENT message, not the thread response's own count.
+            parentMessageOverrides: { reply_count: 4 },
+          });
+          expect(thread.state.getLatestValue().replyCount).to.equal(4);
+          expect(thread.state.getLatestValue().deletedAt).to.equal(null);
+          const notFound = Object.assign(
+            new Error('Request failed with status code 404'),
+            {
+              code: 16,
+              StatusCode: 404,
+              status: 404,
+            },
+          );
+          sinon.stub(client, 'getThreadAndHydrate').rejects(notFound);
+
+          await expect(thread.reload()).rejects.toThrow(notFound);
+
+          expect(thread.state.getLatestValue().lastReloadError).to.equal(notFound);
+        });
+
+        it('still publishes lastReloadError for a real failure', async () => {
+          const thread = createTestThread({ latest_replies: [], reply_count: 0 });
+          const failure = Object.assign(new Error('boom'), { code: 9, StatusCode: 500 });
+          sinon.stub(client, 'getThreadAndHydrate').rejects(failure);
+
+          await expect(thread.reload()).rejects.toThrow(failure);
+
+          expect(thread.state.getLatestValue().lastReloadError).to.equal(failure);
+        });
+
         it('falls back to the server default when the paginator has no page size', async () => {
           // `pageSize` is optional on the paginator config. Guarding it matters: `Math.max(n,
           // undefined)` is NaN, and a zero page size would ask for no replies at all.
