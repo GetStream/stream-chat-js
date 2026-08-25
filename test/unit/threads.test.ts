@@ -428,11 +428,17 @@ describe('Threads 2.0', () => {
         it('retains failed replies after hydration', () => {
           const thread = createTestThread();
           const hydrationThread = createTestThread({
-            latest_replies: [makeReply()],
+            latest_replies: [makeReply({ created_at: '2020-01-01T00:00:01.000Z' })],
             reply_count: 1,
           });
 
-          const failedMessage = makeReply({ status: 'failed' });
+          // Pinned, failed reply NEWEST: `makeReply()` reads `created_at` from the clock, so implicit
+          // timestamps landed in random order and an older-than-window reply sits below it, not in
+          // view — ~50% flaky. A just-attempted send is the newest thing anyway.
+          const failedMessage = makeReply({
+            created_at: '2020-01-01T00:00:09.000Z',
+            status: 'failed',
+          });
           thread.upsertReplyLocally({ message: failedMessage });
 
           thread.hydrateState(hydrationThread);
@@ -625,6 +631,85 @@ describe('Threads 2.0', () => {
           });
           await narrow.reload();
           expect(stub.thirdCall.args[0]?.reply_limit).to.equal(pageSize);
+        });
+
+        it('merges the fetched page into a thread whose only reply was ingested live', async () => {
+          // A thread created this session has an EMPTY first reply page, so nothing anchors its
+          // window and the sent reply lands in a LOGICAL head. `mergeNewestPage` used to require an
+          // ANCHORED head, silently discarding every reply the server returned on reconnect — and
+          // re-entering never healed it, since the instance is reused with `items` already defined.
+          const thread = createMinimalThread();
+          expect(thread.messagePaginator.state.getLatestValue().items).to.be.undefined;
+
+          // The sent reply — live-ingested, no page behind it.
+          const mine = formatMessage(
+            makeReply({ id: 'mine', created_at: '2020-01-01T00:00:01.000Z' }),
+          );
+          thread.messagePaginator.ingestItem(mine);
+          expect(repliesOf(thread).map((r) => r.id)).to.eql(['mine']);
+
+          // Two replies from someone else while offline; the server returns all three.
+          const peer1 = makeReply({
+            id: 'peer1',
+            created_at: '2020-01-01T00:00:02.000Z',
+          });
+          const peer2 = makeReply({
+            id: 'peer2',
+            created_at: '2020-01-01T00:00:03.000Z',
+          });
+          sinon.stub(client, 'getThreadAndHydrate').resolves(
+            createTestThread({
+              latest_replies: [
+                makeReply({ id: 'mine', created_at: '2020-01-01T00:00:01.000Z' }),
+                peer1,
+                peer2,
+              ],
+              reply_count: 3,
+            }),
+          );
+
+          await thread.reload();
+
+          expect(repliesOf(thread).map((r) => r.id)).to.eql(['mine', 'peer1', 'peer2']);
+        });
+
+        it('anchors the fetched page without yanking the view when the caller has jumped away', async () => {
+          // Same rule as the jumped-away branch: anchor for later, never switch the active window
+          // out from under someone reading an older island.
+          const thread = createMinimalThread();
+          const mine = formatMessage(
+            makeReply({ id: 'mine', created_at: '2020-01-01T00:00:05.000Z' }),
+          );
+          thread.messagePaginator.ingestItem(mine);
+
+          // Simulate a jump: an older, separately-anchored island that is the active window.
+          const older = [
+            makeReply({ id: 'old1', created_at: '2019-01-01T00:00:01.000Z' }),
+            makeReply({ id: 'old2', created_at: '2019-01-01T00:00:02.000Z' }),
+          ].map((r) => formatMessage(r));
+          const jumped = thread.messagePaginator.ingestPage({
+            page: older,
+            isHead: false,
+            setActive: true,
+          });
+          expect(jumped).to.not.equal(undefined);
+          const activeBefore = repliesOf(thread).map((r) => r.id);
+          expect(activeBefore).to.eql(['old1', 'old2']);
+
+          sinon.stub(client, 'getThreadAndHydrate').resolves(
+            createTestThread({
+              latest_replies: [
+                makeReply({ id: 'mine', created_at: '2020-01-01T00:00:05.000Z' }),
+                makeReply({ id: 'peer1', created_at: '2020-01-01T00:00:06.000Z' }),
+              ],
+              reply_count: 2,
+            }),
+          );
+
+          await thread.reload();
+
+          // Still reading the old island — not relocated to the newest page.
+          expect(repliesOf(thread).map((r) => r.id)).to.eql(activeBefore);
         });
 
         it('falls back to the server default when the paginator has no page size', async () => {

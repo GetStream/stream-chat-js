@@ -519,6 +519,51 @@ describe('MessagePaginator', () => {
       expect(paginator.items?.map((message) => message.id)).toEqual(['m1', 'm2']);
     });
 
+    it('loads and anchors the real head when only live content is loaded', async () => {
+      const paginator = new MessagePaginator({
+        channel,
+        itemIndex,
+        parentMessageId: 'parent-1',
+      });
+      // Only live-ingested content: a logical head, nothing anchored (a thread created this session).
+      paginator.ingestItem(
+        createMessage({
+          id: 'mine',
+          cid: 'channel-id',
+          parent_id: 'parent-1',
+          created_at: '2020-01-05T00:00:00.000Z',
+        }),
+      );
+      (channel as unknown as { getClient: () => unknown }).getClient = () => ({
+        user: undefined,
+        getReplies: channel.getReplies,
+      });
+      (channel.getReplies as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        messages: [
+          createMessage({
+            id: 'mine',
+            cid: 'channel-id',
+            parent_id: 'parent-1',
+            created_at: '2020-01-05T00:00:00.000Z',
+          }),
+          createMessage({
+            id: 'peer',
+            cid: 'channel-id',
+            parent_id: 'parent-1',
+            created_at: '2020-01-06T00:00:00.000Z',
+          }),
+        ],
+      });
+
+      const result = await paginator.jumpToTheLatestMessage();
+
+      // One headward query anchors the real head, so scroll-to-bottom out of an un-anchored window
+      // lands on the true newest messages rather than the lone live item. Self-correcting.
+      expect(result).toBe(true);
+      expect(channel.getReplies).toHaveBeenCalledTimes(1);
+      expect(paginator.items?.map((i) => i.id)).toEqual(['mine', 'peer']);
+    });
+
     it('succeeds when a headward query hits the dataset edge (empty) - "all loaded" case', async () => {
       const paginator = new MessagePaginator({
         channel,
@@ -1809,6 +1854,69 @@ describe('MessagePaginator', () => {
       // m6 not merged; the loaded window is unchanged.
       expect(paginator.items?.map((message) => message.id)).toEqual(['m4', 'm5']);
       expect(paginator.getItem('m6')).toBeUndefined();
+    });
+
+    it('anchors a newest page beside a middle island without welding it or stealing the view', () => {
+      // The branch's entry condition in its riskiest shape: only a middle island loaded, plus a live
+      // arrival — logical head, no anchored head. Must not weld across the gap or move the reader.
+      const paginator = new MessagePaginator({
+        channel,
+        itemIndex,
+        parentMessageId: 'parent-1',
+      });
+      paginator.ingestPage({
+        page: [m('m4', '04'), m('m5', '05')],
+        isHead: false,
+        isTail: false,
+        setActive: true,
+      });
+      // Arrived live while the reader sits on the middle island → logical head.
+      paginator.ingestItem(m('live', '20', { parent_id: 'parent-1' }));
+
+      paginator.mergeNewestPage([m('m30', '30'), m('m31', '31')]);
+
+      // Reader stays put; the page is anchored as its own island for their return, not welded in.
+      expect(paginator.items?.map((message) => message.id)).toEqual(['m4', 'm5']);
+      expect(paginator.getItem('m30')).toBeDefined();
+    });
+
+    it('never strands a live item that is older than the fetched page', () => {
+      const paginator = new MessagePaginator({
+        channel,
+        itemIndex,
+        parentMessageId: 'parent-1',
+      });
+      // Unsent local message, older than anything the server has.
+      paginator.ingestItem(m('local-old', '01', { parent_id: 'parent-1' }));
+      // Newest page, short — so it reads as "reached the start" — and all newer than local-old.
+      paginator.mergeNewestPage([m('s1', '05'), m('s2', '06')]);
+
+      // The worry was that anchoring a SHORT page (which looks like "reached the channel start")
+      // while holding an older live item would strand it: invisible, with "load older" switched off
+      // so it could never be reached. It does not — the item stays indexed and the tail stays open.
+      // The worry: a short page reads as "reached the start", so an older live item could be dropped
+      // from view AND cut off by "load older" being disabled. It is not — still indexed, tail open.
+      expect(paginator.items?.map((i) => i.id)).toEqual(['s1', 's2']);
+      expect(paginator.getItem('local-old')).toBeDefined();
+      expect(paginator.state.getLatestValue().hasMoreTail).toBe(true);
+    });
+
+    it('keeps a live item that arrived during the fetch, alongside the anchored page', () => {
+      const paginator = new MessagePaginator({
+        channel,
+        itemIndex,
+        parentMessageId: 'parent-1',
+      });
+      // Two live items: one the page also has, one that arrived DURING the fetch (newer).
+      paginator.ingestItem(m('mine', '05', { parent_id: 'parent-1' }));
+      paginator.ingestItem(m('during-fetch', '30', { parent_id: 'parent-1' }));
+
+      paginator.mergeNewestPage([m('mine', '05'), m('s2', '06')]);
+
+      // The fold absorbs the shared item and keeps the newer one above the page rather than losing
+      // it. `hasMoreHead` false because the head is now anchored.
+      expect(paginator.items?.map((i) => i.id)).toEqual(['mine', 's2', 'during-fetch']);
+      expect(paginator.state.getLatestValue().hasMoreHead).toBe(false);
     });
 
     it('is a no-op when nothing is loaded', () => {

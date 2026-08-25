@@ -4061,6 +4061,32 @@ describe('Channel.reload', () => {
 		expect(channel.messagePaginator.items.map((m) => m.id)).toContain('failed');
 	});
 
+	it('merges the fetched page into a channel whose only message was ingested live', async () => {
+		// The thread defect from the channel side: a brand-new channel has an EMPTY first page, so the
+		// sent message lands in a LOGICAL head and `reload()` used to discard the server's page whole.
+		// `reload()` bails unless the channel is initialized; a real one is by the time it renders.
+		channel.initialized = true;
+		const mine = msg('mine', 1);
+		channel.messagePaginator.ingestItem(channel.state.formatMessage(mine));
+		expect(channel.messagePaginator.items.map((m) => m.id)).toEqual(['mine']);
+
+		// Mock the transport, not `watch`: mocking `watch` skips `seedFirstPageSync`, so no fold runs.
+		vi.spyOn(channel, 'getOrCreate').mockImplementation(async () =>
+			generateChannel({
+				channel: { id: channel.id, type: channel.type },
+				messages: [mine, msg('peer1', 2), msg('peer2', 3)],
+			}),
+		);
+
+		await channel.reload();
+
+		expect(channel.messagePaginator.items.map((m) => m.id)).toEqual([
+			'mine',
+			'peer1',
+			'peer2',
+		]);
+	});
+
 	it('ignores a re-entrant reload while one is already in flight', async () => {
 		seedLatestWindow(channel, [msg('m1', 1)]);
 		let resolveWatch;
