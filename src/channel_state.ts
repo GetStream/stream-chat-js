@@ -145,15 +145,20 @@ export type ChannelLifecycleState = {
    */
   pendingDisposal: boolean;
   /**
-   * The error from the most recent {@link Channel.reload}, or `undefined` when the last one
-   * succeeded. Mirrors `BasePaginator`'s `lastQueryError` one level up: cleared when a reload starts
-   * and set when it throws, so a UI can surface "could not refresh this channel" without owning the
-   * call. `reload()` still rethrows, so callers that await it are unaffected.
+   * The error from the most recent attempt to load this channel's message window
+   * ({@link Channel.watch}, and so {@link Channel.reload} too), or `undefined` when the last one
+   * succeeded. Mirrors `BasePaginator`'s `lastQueryError` one level up: cleared when an attempt
+   * starts and set when it throws, so a UI can surface "could not load this channel" by reading
+   * state instead of holding a latch of its own. `watch()` still rethrows, so callers that await it
+   * are unaffected.
    *
-   * This exists because the reload is no longer issued by the UI: `ConnectionRecoveryManager` runs it
-   * on reconnect inside a `Promise.allSettled`, which would otherwise swallow the failure silently.
+   * Store-backed because the two failures a UI cares about reach it differently and neither is
+   * catchable at the call site: the reconnect reload is issued by `ConnectionRecoveryManager` inside
+   * a `Promise.allSettled`, and an open-while-offline `watch()` throws at mount, long before
+   * anything that could later prove it stale. Recording it here is what lets it be *invalidated* by
+   * the next attempt rather than guessed at.
    */
-  lastReloadError?: Error;
+  lastLoadError?: Error;
 };
 
 /**
@@ -229,7 +234,7 @@ export class ChannelState extends StateStore<ChannelStateData> {
       initialized: false,
       offlineMode: false,
       pendingDisposal: false,
-      lastReloadError: undefined,
+      lastLoadError: undefined,
       active: false,
       aiState: AIStates.Idle,
     });

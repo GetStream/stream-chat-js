@@ -59,10 +59,10 @@ export type ThreadState = {
   isStateStale: boolean;
   /**
    * The error thrown by the most recent {@link Thread.reload}, or `undefined` when it succeeded.
-   * Mirrors `channel.state.lastReloadError`: connection recovery runs reloads inside
+   * Mirrors `channel.state.lastLoadError`: connection recovery runs reloads inside
    * `Promise.allSettled`, so a failure has to be published rather than only thrown.
    */
-  lastReloadError?: Error;
+  lastLoadError?: Error;
   /**
    * Thread is identified by and has a one-to-one relation with its parent message.
    * We use parent message id as a thread id.
@@ -457,7 +457,7 @@ export class Thread extends WithSubscriptions {
    * reconcile's provenance guard never prunes a non-server message); only a disjoint rebuild can drop
    * them, so any that actually fell out are re-ingested below.
    *
-   * Publishes a failure on `state.lastReloadError` **and** rethrows: recovery runs this inside a
+   * Publishes a failure on `state.lastLoadError` **and** rethrows: recovery runs this inside a
    * `Promise.allSettled`, so a consumer that wants to surface the failure has to read it from state.
    */
   public reload = async () => {
@@ -467,7 +467,7 @@ export class Thread extends WithSubscriptions {
 
     // Cleared before the attempt, so a successful reload dismisses whatever the previous failure
     // surfaced (mirrors `Channel.reload` and `BasePaginator`'s `lastQueryError`).
-    this.state.partialNext({ isLoading: true, lastReloadError: undefined });
+    this.state.partialNext({ isLoading: true, lastLoadError: undefined });
 
     try {
       const loadedReplies = this.messagePaginator.items ?? [];
@@ -511,7 +511,7 @@ export class Thread extends WithSubscriptions {
       // deleted replies will simply not throw.
       if (neverExisted) return;
 
-      this.state.partialNext({ lastReloadError: error as Error });
+      this.state.partialNext({ lastLoadError: error as Error });
       throw error;
     } finally {
       this.state.partialNext({ isLoading: false });

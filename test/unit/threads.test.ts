@@ -712,7 +712,7 @@ describe('Threads 2.0', () => {
           expect(repliesOf(thread).map((r) => r.id)).to.eql(activeBefore);
         });
 
-        it('does not publish lastReloadError when the thread does not exist yet', async () => {
+        it('does not publish lastLoadError when the thread does not exist yet', async () => {
           // Opening a parent that has no replies means there is no server-side thread, so `getThread`
           // answers DoesNotExist (16). That is an expected answer, not a failed refresh: publishing it
           // raises the consumer's error state (the RN SDK ORs it into `ChannelContext.error`) just for
@@ -731,7 +731,7 @@ describe('Threads 2.0', () => {
           // make every caller log "reload failed" on a brand-new thread.
           await expect(thread.reload()).resolves.toBeUndefined();
 
-          expect(thread.state.getLatestValue().lastReloadError).to.equal(undefined);
+          expect(thread.state.getLatestValue().lastLoadError).to.equal(undefined);
         });
 
         it('treats a bare 404 as not-found even without the Stream code', async () => {
@@ -748,10 +748,10 @@ describe('Threads 2.0', () => {
 
           await expect(thread.reload()).resolves.toBeUndefined();
 
-          expect(thread.state.getLatestValue().lastReloadError).to.equal(undefined);
+          expect(thread.state.getLatestValue().lastLoadError).to.equal(undefined);
         });
 
-        it('publishes lastReloadError when a thread we HAD comes back not-found', async () => {
+        it('publishes lastLoadError when a thread we HAD comes back not-found', async () => {
           // Deleted while we were offline: the `message.deleted` event was missed, so `deletedAt` is
           // still null and the 404 is the only signal we get. `replyCount > 0` says we had something,
           // so this is a real failure to refresh, not a thread that never existed.
@@ -774,17 +774,17 @@ describe('Threads 2.0', () => {
 
           await expect(thread.reload()).rejects.toThrow(notFound);
 
-          expect(thread.state.getLatestValue().lastReloadError).to.equal(notFound);
+          expect(thread.state.getLatestValue().lastLoadError).to.equal(notFound);
         });
 
-        it('still publishes lastReloadError for a real failure', async () => {
+        it('still publishes lastLoadError for a real failure', async () => {
           const thread = createTestThread({ latest_replies: [], reply_count: 0 });
           const failure = Object.assign(new Error('boom'), { code: 9, StatusCode: 500 });
           sinon.stub(client, 'getThreadAndHydrate').rejects(failure);
 
           await expect(thread.reload()).rejects.toThrow(failure);
 
-          expect(thread.state.getLatestValue().lastReloadError).to.equal(failure);
+          expect(thread.state.getLatestValue().lastLoadError).to.equal(failure);
         });
 
         it('falls back to the server default when the paginator has no page size', async () => {
@@ -877,15 +877,15 @@ describe('Threads 2.0', () => {
           expect(repliesOf(thread).map((reply) => reply.id)).to.contain('failed-1');
         });
 
-        it('publishes a reload failure on state.lastReloadError and rethrows it', async () => {
+        it('publishes a reload failure on state.lastLoadError and rethrows it', async () => {
           // Connection recovery runs `reload()` inside `Promise.allSettled`, so the throw never
-          // reaches a UI. Mirrors `channel.state.lastReloadError`.
+          // reaches a UI. Mirrors `channel.state.lastLoadError`.
           const thread = createTestThread({ latest_replies: [], reply_count: 0 });
           const failure = new Error('thread reload failed');
           const stub = sinon.stub(client, 'getThreadAndHydrate').rejects(failure);
 
           await expect(thread.reload()).rejects.toThrow(failure);
-          expect(thread.state.getLatestValue().lastReloadError).to.equal(failure);
+          expect(thread.state.getLatestValue().lastLoadError).to.equal(failure);
           // Not left mid-flight — otherwise the isLoading guard would swallow every later reload.
           expect(thread.state.getLatestValue().isLoading).to.equal(false);
 
@@ -895,7 +895,7 @@ describe('Threads 2.0', () => {
             .stub(client, 'getThreadAndHydrate')
             .resolves(createTestThread({ latest_replies: [], reply_count: 0 }));
           await thread.reload();
-          expect(thread.state.getLatestValue().lastReloadError).to.equal(undefined);
+          expect(thread.state.getLatestValue().lastLoadError).to.equal(undefined);
         });
       });
 

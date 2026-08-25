@@ -1694,15 +1694,18 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * The error thrown by the most recent {@link Channel.reload}, or `undefined` when it succeeded.
-   * Store-backed and reactive — subscribe via
-   * `useStateStore(channel.state, (s) => ({ lastReloadError: s.lastReloadError }))`.
+   * The error thrown by the most recent attempt to load this channel's message window, or
+   * `undefined` when it succeeded. Store-backed and reactive — subscribe via
+   * `useStateStore(channel.state, (s) => ({ lastLoadError: s.lastLoadError }))`.
    *
-   * Read-only on purpose: it is owned by `reload()`, which clears it on entry and records a failure
-   * before rethrowing.
+   * Read-only on purpose: it is owned by `watch()`, which clears it before it awaits anything and
+   * records a failure before rethrowing. `reload()` goes through `watch()`, so a failed reconnect
+   * reload lands here too — as does the open-while-offline case, where the mount-time `watch()` is
+   * what throws. Nothing else clears it: a load error is invalidated by the next load, not by a
+   * connection event.
    */
-  get lastReloadError() {
-    return this.state.getLatestValue().lastReloadError;
+  get lastLoadError() {
+    return this.state.getLatestValue().lastLoadError;
   }
 
   /**
@@ -1835,6 +1838,10 @@ export class Channel extends ChannelApi {
    * @returns The server response.
    */
   async watch(options?: ChannelGetOrCreateRequest) {
+    if (this.lastLoadError) {
+      this.state.partialNext({ lastLoadError: undefined });
+    }
+
     const defaultOptions = {
       state: true,
       watch: true,
@@ -1849,7 +1856,13 @@ export class Channel extends ChannelApi {
     }
 
     const combined = { ...defaultOptions, ...options };
-    const state = await this.query(combined, 'latest');
+    let state;
+    try {
+      state = await this.query(combined, 'latest');
+    } catch (error) {
+      this.state.partialNext({ lastLoadError: error as Error });
+      throw error;
+    }
     this.initialized = true;
     const previousData = this.data;
     this.data = state.channel;
@@ -1883,11 +1896,6 @@ export class Channel extends ChannelApi {
   async reload() {
     if (this._reloading || (!this.initialized && !this.offlineMode)) return;
     this._reloading = true;
-    // Clear before the attempt, so a successful reload dismisses whatever the previous failure
-    // surfaced (mirrors BasePaginator clearing `lastQueryError` before each query).
-    if (this.lastReloadError) {
-      this.state.partialNext({ lastReloadError: undefined });
-    }
     try {
       const paginator = this.messagePaginator;
       const headItems = paginator.headItems;
@@ -1913,9 +1921,6 @@ export class Channel extends ChannelApi {
           { coalesce: true },
         );
       }
-    } catch (error) {
-      this.state.partialNext({ lastReloadError: error as Error });
-      throw error;
     } finally {
       this._reloading = false;
     }

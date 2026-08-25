@@ -213,7 +213,7 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
       );
 
     // allSettled: one channel or thread failing must not stop the others. Each failure is published
-    // on `channel.state.lastReloadError` / `thread.state.lastReloadError` by `reload()` itself, so it
+    // on `channel.state.lastLoadError` / `thread.state.lastLoadError` by the reload itself, so it
     // is not lost here. Channels and threads are independent requests, so they run together rather
     // than in sequence.
     await Promise.allSettled([
