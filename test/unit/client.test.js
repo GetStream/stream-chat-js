@@ -1267,15 +1267,15 @@ describe('message deletion', () => {
 			vi.resetAllMocks();
 		});
 
-		it('routes soft delete through offlineDb.softDeleteMessage and queues the task', async () => {
+		// The offline-DB row is NOT written here: the optimistic layer owns it
+		// (`MessageOperationStatePolicy`), so this method only queues the request. Writing it here ran
+		// ahead of the state it mirrors, and a custom `deleteMessageRequest` skipped it entirely.
+		it('queues a soft delete without touching the offline-DB row', async () => {
 			const request = { id: messageId };
 
 			await client.deleteMessage(request);
 
-			expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledTimes(1);
-			expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledWith({
-				id: messageId,
-			});
+			expect(client.offlineDb.softDeleteMessage).not.toHaveBeenCalled();
 			expect(client.offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
@@ -1289,15 +1289,12 @@ describe('message deletion', () => {
 			expect(_deleteMessageSpy).not.toHaveBeenCalled();
 		});
 
-		it('routes hard delete through offlineDb.hardDeleteMessage and queues the task', async () => {
+		it('queues a hard delete without touching the offline-DB row', async () => {
 			const request = { id: messageId, hard: true };
 
 			await client.deleteMessage(request);
 
-			expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledTimes(1);
-			expect(client.offlineDb.hardDeleteMessage).toHaveBeenCalledWith({
-				id: messageId,
-			});
+			expect(client.offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
 			expect(client.offlineDb.softDeleteMessage).not.toHaveBeenCalled();
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
@@ -1311,19 +1308,6 @@ describe('message deletion', () => {
 			expect(_deleteMessageSpy).not.toHaveBeenCalled();
 		});
 
-		it('forwards delete_for_me to offlineDb.softDeleteMessage', async () => {
-			const request = { id: messageId, delete_for_me: true };
-
-			await client.deleteMessage(request);
-
-			expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledTimes(1);
-			expect(client.offlineDb.softDeleteMessage).toHaveBeenCalledWith({
-				id: messageId,
-				deleteForMe: true,
-			});
-			expect(client.offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
-		});
-
 		it('falls back to _deleteMessage if offlineDb is not set', async () => {
 			client.offlineDb = undefined;
 			const request = { id: messageId };
@@ -1334,14 +1318,13 @@ describe('message deletion', () => {
 			expect(_deleteMessageSpy).toHaveBeenCalledWith(request);
 		});
 
-		it('logs and falls back to _deleteMessage if offline delete throws', async () => {
-			client.offlineDb.softDeleteMessage.mockRejectedValue(new Error('Offline failure'));
+		it('logs and falls back to _deleteMessage if offline queueing throws', async () => {
+			queueTaskSpy.mockRejectedValue(new Error('Offline failure'));
 			const request = { id: messageId };
 
 			await client.deleteMessage(request);
 
 			expect(loggerSpy).toHaveBeenCalledTimes(1);
-			expect(queueTaskSpy).not.toHaveBeenCalled();
 			expect(_deleteMessageSpy).toHaveBeenCalledTimes(1);
 			expect(_deleteMessageSpy).toHaveBeenCalledWith(request);
 		});

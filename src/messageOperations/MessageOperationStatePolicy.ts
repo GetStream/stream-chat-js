@@ -76,27 +76,29 @@ export class MessageOperationStatePolicy {
     const previous = this.ctx.get(localMessage.id);
 
     if (kind === 'delete') {
+      const deleteForMe = (params.options as DeleteMessageOptions | undefined)
+        ?.delete_for_me;
+
       if (isHardDelete(params.options)) {
         this.ctx.remove(localMessage.id);
-        // No `purge` here: `client.deleteMessage` already hard-deletes the row before it queues the
-        // request, so the offline DB is correct even when we never reach the server.
+        this.ctx.purge(localMessage.id);
         return { previous };
       }
 
       // Nothing holds this message, so there is nothing to optimistically hide — and ingesting would
-      // insert a phantom "Message deleted" row for something that was never on screen. The server
-      // response still reconciles normally below.
+      // insert a phantom "Message deleted" row for something that was never on screen. Nothing is
+      // written to the offline DB either: it mirrors local state, so it must not be told about state
+      // that does not exist. The server response still reconciles normally below.
       if (!previous) return {};
 
       const applied: LocalMessage = {
         ...localMessage,
         deleted_at: new Date(),
         type: 'deleted',
-        ...((params.options as DeleteMessageOptions | undefined)?.delete_for_me
-          ? { deleted_for_me: true }
-          : {}),
+        ...(deleteForMe ? { deleted_for_me: true } : {}),
       };
       this.ctx.ingest(applied);
+      this.ctx.persist(applied);
       return { applied, previous };
     }
 
@@ -276,8 +278,8 @@ export class MessageOperationStatePolicy {
     if (optimistic?.applied && this.ctx.get(messageId) !== optimistic.applied) return;
 
     this.ctx.ingest(previous);
-    // Undoes the row `client.deleteMessage` soft-deleted before queueing: the upsert rewrites `type`
-    // and `deletedAt` from the restored message.
+    // Undoes the row the optimistic step soft-deleted: the upsert rewrites `type` and `deletedAt` from
+    // the restored message.
     this.ctx.persist(previous);
   }
 }

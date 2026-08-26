@@ -654,6 +654,72 @@ describe('MessageOperations — optimistic lifecycle', () => {
       expect(purged).toContain('m1');
     });
 
+    /**
+     * The offline-DB row is the optimistic layer's to write, not `client.deleteMessage`'s. It used to be
+     * deleted by the request method before the task was even queued — which put a second uncoordinated
+     * writer on the DB, ran ahead of the state the DB mirrors, and was skipped entirely whenever a
+     * custom `deleteMessageRequest` replaced `client.deleteMessage`.
+     */
+    it('mirrors the deleted message into the offline DB from the optimistic step', async () => {
+      // Asserted on the write that happened BEFORE the response, which is the whole point: the row
+      // used to be written by `client.deleteMessage` ahead of the state it mirrors.
+      const seed = makeLocalMessage({ id: 'm1', status: 'received' });
+      const { ops, persisted } = harness({ seed });
+      let duringRequest: LocalMessage | undefined;
+
+      await ops.delete({ localMessage: seed }, async () => {
+        duringRequest = persisted[0];
+        return { message: makeMessageResponse({ id: 'm1' }) };
+      });
+
+      expect(duringRequest?.type).toBe('deleted');
+      expect(duringRequest?.deleted_at).toBeInstanceOf(Date);
+    });
+
+    it('carries delete_for_me into the mirrored row', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received' });
+      const { ops, persisted } = harness({ seed });
+
+      await ops.delete({ localMessage: seed, options: { delete_for_me: true } });
+
+      expect(persisted[0].deleted_for_me).toBe(true);
+    });
+
+    it('purges the offline-DB row for a hard delete rather than mirroring it', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received' });
+      const { ops, purged } = harness({ seed });
+
+      await ops.delete({ localMessage: seed, options: { hard: true } });
+
+      expect(purged).toContain('m1');
+    });
+
+    it('still writes the row when a custom request handler replaces client.deleteMessage', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received' });
+      const { ops, persisted } = harness({ seed });
+
+      await ops.delete({ localMessage: seed }, async () => ({
+        message: makeMessageResponse({ id: 'm1', type: 'deleted' }),
+      }));
+
+      expect(persisted[0].type).toBe('deleted');
+    });
+
+    it('writes nothing to the offline DB for a message local state does not hold', async () => {
+      // The DB mirrors local state, so it must not be told about state that does not exist — and a
+      // definitive failure would have nothing to restore that row from. Sampled DURING the request,
+      // since the success path legitimately persists the server's copy afterwards.
+      const { ops, persisted } = harness();
+      let duringRequest: number | undefined;
+
+      await ops.delete({ localMessage: makeLocalMessage({ id: 'm1' }) }, async () => {
+        duringRequest = persisted.length;
+        return { message: makeMessageResponse({ id: 'm1' }) };
+      });
+
+      expect(duringRequest).toBe(0);
+    });
+
     it('reverts the delete when the request fails definitively', async () => {
       const seed = makeLocalMessage({ id: 'm1', status: 'received', text: 'still here' });
       const { lastPersisted, ops, store } = harness({ seed });

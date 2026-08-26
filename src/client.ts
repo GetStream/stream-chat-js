@@ -2037,14 +2037,6 @@ export class StreamChat extends ChatApi {
     const [request] = args;
     try {
       if (this.offlineDb) {
-        if (request.hard) {
-          await this.offlineDb.hardDeleteMessage({ id: request.id });
-        } else {
-          await this.offlineDb.softDeleteMessage({
-            id: request.id,
-            deleteForMe: request.delete_for_me,
-          });
-        }
         return await this.offlineDb.queueTask<
           Awaited<ReturnType<ChatApi['deleteMessage']>>
         >({
