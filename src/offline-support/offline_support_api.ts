@@ -11,6 +11,7 @@ import type {
 } from '../types';
 
 import type {
+  ExecuteBatchDBQueriesType,
   OfflineDBApi,
   OfflineDBState,
   PendingTask,
@@ -567,62 +568,110 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   ) => {
     const channelFromEvent = (event as Extract<WSEvent, { channel?: any }>).channel;
     const cid = (event as Extract<WSEvent, { cid?: any }>).cid || channelFromEvent?.cid;
-    const type = event.type;
 
     if (!cid) {
       return await createQueries(execute);
     }
-    // We want to upsert the channel data if we either:
-    // - Have forceUpdate set to true
-    // - The channel does not yet exist in the DB
-    // If a channel is not present in the db, we first fetch the channel data from the channel object.
-    // This can happen for example when a message.new event is received for a channel that is not in the db due to a channel being hidden.
-    const shouldUpsertChannelData = forceUpdate || !(await this.channelExists({ cid }));
-    if (shouldUpsertChannelData) {
-      const event_ = event as Extract<WSEvent, { channel_type?: any }>;
 
-      let channelData = channelFromEvent;
-      if (!channelData && event_.channel_type && event_.channel_id) {
-        const channelFromState = this.client.channel(
-          event_.channel_type,
-          event_.channel_id,
-        );
-        if (channelFromState.initialized && !channelFromState.pendingDisposal) {
-          channelData = channelFromState.data as unknown as ChannelResponse;
-        }
+    // Fast path: assume the channel row is there — which it is for all but a handful of situations
+    // (an event arriving before the first query persisted the channel, or after a `resetDB`) — and pay
+    // for the guard only when the write actually fails. Every statement these callbacks build is an
+    // upsert, so re-running them behind the guard is idempotent.
+    //
+    // Worth the inversion because this runs on EVERY live WS event: the probe it replaces is a native
+    // round-trip, which on device costs about as much as the write it was protecting.
+    //
+    // Only available when we are the ones executing. An `execute: false` caller is collecting queries
+    // for someone else's batch, so there is no failure here for us to catch and the channel row has to
+    // be secured up front. `forceUpdate` skips it too — that caller wants the channel data written
+    // regardless of whether a row already exists.
+    if (execute && !forceUpdate) {
+      try {
+        return await createQueries(true);
+      } catch (error) {
+        // A missing channel row is the only failure this guard can repair; anything else is a genuine
+        // error and must not be retried.
+        if (await this.channelExists({ cid })) throw error;
       }
-      if (channelData) {
-        const channelQuery = await this.upsertChannelData({
-          channel: channelData,
-          execute: false,
-        });
-        if (channelQuery) {
-          const createdQueries = await createQueries(false);
-          const newQueries = [...channelQuery, ...createdQueries];
-          if (execute) {
-            await this.executeSqlBatch(newQueries);
-          }
-          return newQueries;
-        } else {
-          logger
-            .withExtraTags('queriesWithChannelGuard')
-            .warn(
-              `Could not create channel queries on a "${type}" event for an initialized channel that is not in the database. Skipping the event.`,
-              { event },
-            );
-          return [];
-        }
-      } else {
-        logger
-          .withExtraTags('queriesWithChannelGuard')
-          .warn(
-            `Received a "${type}" event for a non-initialized channel that is not in the database. Skipping the event.`,
-            { event },
-          );
-        return [];
+      return await this.queriesBehindChannelGuard({
+        createQueries,
+        event,
+        execute: true,
+      });
+    }
+
+    if (!forceUpdate && (await this.channelExists({ cid }))) {
+      return await createQueries(execute);
+    }
+
+    return await this.queriesBehindChannelGuard({ createQueries, event, execute });
+  };
+
+  /**
+   * Prepends the channel row to `createQueries`' output so the queries cannot fail on the `cid`
+   * foreign key, sourcing the channel from the event and falling back to the in-memory channel.
+   *
+   * Skips the write entirely when neither can supply it: without a channel row the queries would fail
+   * anyway, and dropping the event is what the caller expects.
+   */
+  private queriesBehindChannelGuard = async ({
+    createQueries,
+    event,
+    execute,
+  }: {
+    createQueries: (executeOverride?: boolean) => Promise<PrepareBatchDBQueries[]>;
+    event: Extract<
+      Event,
+      { channel?: any; cid?: any; channel_type?: any; channel_id?: any }
+    >;
+    execute: boolean;
+  }) => {
+    const type = event.type;
+    const channelFromEvent = (event as Extract<WSEvent, { channel?: any }>).channel;
+    const event_ = event as Extract<WSEvent, { channel_type?: any }>;
+
+    let channelData = channelFromEvent;
+    if (!channelData && event_.channel_type && event_.channel_id) {
+      const channelFromState = this.client.channel(
+        event_.channel_type,
+        event_.channel_id,
+      );
+      if (channelFromState.initialized && !channelFromState.pendingDisposal) {
+        channelData = channelFromState.data as unknown as ChannelResponse;
       }
     }
-    return await createQueries(execute);
+
+    if (!channelData) {
+      logger
+        .withExtraTags('queriesWithChannelGuard')
+        .warn(
+          `Received a "${type}" event for a non-initialized channel that is not in the database. Skipping the event.`,
+          { event },
+        );
+      return [];
+    }
+
+    const channelQuery = await this.upsertChannelData({
+      channel: channelData,
+      execute: false,
+    });
+
+    if (!channelQuery) {
+      logger
+        .withExtraTags('queriesWithChannelGuard')
+        .warn(
+          `Could not create channel queries on a "${type}" event for an initialized channel that is not in the database. Skipping the event.`,
+          { event },
+        );
+      return [];
+    }
+
+    const createdQueries = await createQueries(false);
+    const newQueries = [...channelQuery, ...createdQueries];
+    if (execute) {
+      await this.executeSqlBatch(newQueries);
+    }
+    return newQueries;
   };
 
   /**
@@ -791,6 +840,120 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     }
 
     return queries;
+  };
+
+  /**
+   * Upsert a single message, first making sure its channel row exists so the insert cannot fail on the
+   * foreign key.
+   *
+   * Concrete on purpose — it composes {@link channelExists}, {@link upsertChannelData} and
+   * {@link upsertMessages}, so every implementation inherits it and no custom offline DB has to
+   * implement anything new (same reasoning as {@link hardDeleteMessages}).
+   *
+   * The guard matters because the message-operations engine writes optimistically, and the very first
+   * message in a freshly created channel can reach here before that channel has ever been persisted.
+   * `upsertMessages` alone is used rather than `updateMessage` because `updateMessage` is an
+   * UPDATE — it no-ops when the row does not exist yet, which is exactly the write-ahead case.
+   *
+   * @param payload.message - The message to persist. Its `cid` decides which channel row is guarded.
+   * @param payload.execute - Whether to immediately execute the operation (optional, defaults to `true`).
+   */
+  public upsertMessageWithChannelGuard = async ({
+    message,
+    execute = true,
+  }: {
+    message: LocalMessage;
+    execute?: boolean;
+  }): Promise<ExecuteBatchDBQueriesType> => {
+    const { cid } = message;
+    if (!cid) return [];
+
+    const messages = [message] as unknown as MessageResponse[];
+
+    // Same inversion as `queriesWithChannelGuard`: attempt the write, and only reach for the channel
+    // row when it actually fails. This runs on every optimistic message write, and the probe it
+    // replaces is a native round-trip costing a meaningful fraction of the write itself.
+    if (execute) {
+      try {
+        return await this.upsertMessages({ messages, execute: true });
+      } catch (error) {
+        if (await this.channelExists({ cid })) throw error;
+      }
+      return await this.upsertMessageBehindChannelGuard({ cid, messages, execute: true });
+    }
+
+    if (await this.channelExists({ cid })) {
+      return await this.upsertMessages({ messages, execute: false });
+    }
+
+    return await this.upsertMessageBehindChannelGuard({ cid, messages, execute });
+  };
+
+  /**
+   * Writes the channel row ahead of the messages so the insert cannot fail on the `cid` foreign key.
+   * Skips the write when there is nothing to build a channel row from — the message stays correct in
+   * memory either way, and an insert that cannot resolve its foreign key is not worth attempting.
+   */
+  private upsertMessageBehindChannelGuard = async ({
+    cid,
+    execute,
+    messages,
+  }: {
+    cid: string;
+    execute: boolean;
+    messages: MessageResponse[];
+  }): Promise<ExecuteBatchDBQueriesType> => {
+    const channel = this.client.activeChannels[cid];
+    if (!channel?.initialized || channel.pendingDisposal) {
+      logger
+        .withExtraTags('upsertMessageWithChannelGuard', cid)
+        .warn('Skipping message persistence: the channel is not in the database.');
+      return [];
+    }
+
+    const queries: ExecuteBatchDBQueriesType = [
+      ...(await this.upsertChannelData({
+        channel: channel.data as ChannelResponse,
+        execute: false,
+      })),
+      ...(await this.upsertMessages({ messages, execute: false })),
+    ];
+
+    if (execute) {
+      await this.executeSqlBatch(queries);
+    }
+
+    return queries;
+  };
+
+  /**
+   * The messages of a channel that are still in a local `failed` state, i.e. composed by this user but
+   * never accepted by the server.
+   *
+   * Concrete, composed from the existing {@link getChannels} primitive, so it adds nothing to
+   * {@link OfflineDBApi} that a custom offline DB would have to implement.
+   *
+   * This is the buffer that lets a failed message survive. v9 recovered such messages by diffing a
+   * second, lagging copy of the message list (the React SDK state) against `channel.state`; with a
+   * single reactive source of truth the persisted row is the only place that memory can be
+   * re-populated from — see `Channel.reload`.
+   *
+   * @param payload.cid - The channel whose failed messages to read.
+   */
+  public getFailedMessages = async ({
+    cid,
+  }: {
+    cid: string;
+  }): Promise<LocalMessage[]> => {
+    const { initialized, userId } = this.state.getLatestValue();
+    if (!initialized || !userId) return [];
+
+    const channels = await this.getChannels({ cids: [cid], userId });
+    const messages = channels?.[0]?.messages ?? [];
+
+    return messages
+      .map((message) => formatMessage(message))
+      .filter((message) => message.status === 'failed');
   };
 
   /**

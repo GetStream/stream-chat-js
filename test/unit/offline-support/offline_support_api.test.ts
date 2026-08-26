@@ -9,6 +9,7 @@ import {
   ChannelMemberResponse,
   ChannelResponse,
   ChannelStateResponseFields,
+  LocalMessage,
   MessageResponse,
   OfflineDBSyncManager,
   OfflineError,
@@ -331,6 +332,18 @@ describe('OfflineSupportApi', () => {
         createQueries = vi.fn(async () => [{ sql: 'MOCK_QUERY', args: [] }]);
       });
 
+      /**
+       * The guard is LAZY: it attempts the write first and only repairs the channel row when that
+       * attempt fails. So a `createQueries` that fails when asked to EXECUTE and succeeds when only
+       * building queries is what a foreign-key violation looks like from the guard's point of view,
+       * and it is what makes the guard engage at all.
+       */
+      const failsOnExecute = () =>
+        vi.fn(async (shouldExecute?: boolean) => {
+          if (shouldExecute) throw new Error('FOREIGN KEY constraint failed');
+          return [{ sql: 'MOCK_QUERY', args: [] }];
+        });
+
       it('returns createQueries result when no cid is present', async () => {
         const event: Event = { type: 'message.new' };
         const result = await offlineDb.queriesWithChannelGuard({ event }, createQueries);
@@ -346,6 +359,7 @@ describe('OfflineSupportApi', () => {
           channel: { id: '123', type: 'messaging' } as any,
         };
 
+        createQueries = failsOnExecute();
         offlineDb.channelExists.mockResolvedValue(false);
         offlineDb.upsertChannelData.mockResolvedValue([{ sql: 'UPSERT', args: [] }]);
         const clientChannelSpy = vi.spyOn(client, 'channel');
@@ -387,6 +401,7 @@ describe('OfflineSupportApi', () => {
           channel_id: '123',
         };
 
+        createQueries = failsOnExecute();
         offlineDb.channelExists.mockResolvedValue(false);
         offlineDb.upsertChannelData.mockResolvedValue([{ sql: 'UPSERT', args: [] }]);
 
@@ -415,6 +430,7 @@ describe('OfflineSupportApi', () => {
           channel_id: '123',
         };
 
+        createQueries = failsOnExecute();
         offlineDb.channelExists.mockResolvedValue(false);
 
         const sinkSpy = vi.fn();
@@ -446,9 +462,30 @@ describe('OfflineSupportApi', () => {
 
         const result = await offlineDb.queriesWithChannelGuard({ event }, createQueries);
 
-        expect(offlineDb.channelExists).toHaveBeenCalledWith({ cid: 'channel:123' });
+        // The point of the lazy guard: on the overwhelmingly common path the existence probe — a
+        // native round-trip costing a meaningful fraction of the write itself — is never issued.
+        expect(offlineDb.channelExists).not.toHaveBeenCalled();
         expect(createQueries).toHaveBeenCalledWith(true);
         expect(result).toEqual([{ sql: 'MOCK_QUERY', args: [] }]);
+      });
+
+      it('rethrows a write failure that is not a missing channel row, without retrying', async () => {
+        const event: Event = {
+          type: 'message.new',
+          cid: 'channel:123',
+          channel: { id: '123', type: 'messaging' } as any,
+        };
+
+        createQueries = failsOnExecute();
+        // The channel row is there, so the failure is genuine and repairing nothing would help.
+        offlineDb.channelExists.mockResolvedValue(true);
+
+        await expect(
+          offlineDb.queriesWithChannelGuard({ event }, createQueries),
+        ).rejects.toThrow('FOREIGN KEY constraint failed');
+        expect(offlineDb.upsertChannelData).not.toHaveBeenCalled();
+        // Exactly one attempt: a broken statement must not be run twice.
+        expect(createQueries).toHaveBeenCalledTimes(1);
       });
 
       it('does not execute queries when execute is false', async () => {
@@ -474,6 +511,7 @@ describe('OfflineSupportApi', () => {
       });
 
       it('should reject if channelExists throws', async () => {
+        createQueries = failsOnExecute();
         offlineDb.channelExists.mockRejectedValue(new Error('DB failure'));
         const event: Event = {
           type: 'message.new',
@@ -488,6 +526,7 @@ describe('OfflineSupportApi', () => {
       });
 
       it('should reject if upsertChannelData throws when channelExists returns false', async () => {
+        createQueries = failsOnExecute();
         offlineDb.channelExists.mockResolvedValue(false);
         offlineDb.upsertChannelData.mockRejectedValue(new Error('Upsert failed'));
 
@@ -969,6 +1008,179 @@ describe('OfflineSupportApi', () => {
           expect(offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
           expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
           expect(result).toEqual([]);
+        });
+      });
+
+      describe('upsertMessageWithChannelGuard', () => {
+        beforeEach(() => {
+          offlineDb.upsertMessages.mockResolvedValue([['UPSERT message']]);
+          offlineDb.upsertChannelData.mockResolvedValue([['UPSERT channel']]);
+          offlineDb.executeSqlBatch.mockResolvedValue(undefined);
+        });
+
+        afterEach(() => {
+          vi.resetAllMocks();
+        });
+
+        const message = {
+          cid: 'messaging:c1',
+          id: 'm1',
+          status: 'failed',
+        } as LocalMessage;
+
+        /** What a foreign-key violation looks like: the direct write fails, building queries does not. */
+        const failWriteSucceedBuild = () => {
+          offlineDb.upsertMessages.mockImplementation(
+            async ({ execute }: { execute?: boolean }) => {
+              if (execute) throw new Error('FOREIGN KEY constraint failed');
+              return [['UPSERT message']];
+            },
+          );
+        };
+
+        it('writes the message directly, without probing for the channel row', async () => {
+          const result = await offlineDb.upsertMessageWithChannelGuard({ message });
+
+          // The lazy guard's whole point: no existence probe on the common path.
+          expect(offlineDb.channelExists).not.toHaveBeenCalled();
+          expect(offlineDb.upsertChannelData).not.toHaveBeenCalled();
+          expect(offlineDb.upsertMessages).toHaveBeenCalledWith({
+            messages: [message],
+            execute: true,
+          });
+          expect(result).toEqual([['UPSERT message']]);
+        });
+
+        it('creates the missing channel row and retries, in one batch', async () => {
+          failWriteSucceedBuild();
+          offlineDb.channelExists.mockResolvedValue(false);
+          client.activeChannels['messaging:c1'] = {
+            data: { cid: 'messaging:c1' },
+            initialized: true,
+            pendingDisposal: false,
+          } as never;
+
+          const result = await offlineDb.upsertMessageWithChannelGuard({ message });
+
+          // Ordering matters: the message insert would otherwise violate the foreign key again.
+          expect(result).toEqual([['UPSERT channel'], ['UPSERT message']]);
+          expect(offlineDb.executeSqlBatch).toHaveBeenCalledTimes(1);
+        });
+
+        it('rethrows a failure that is not a missing channel row, without retrying', async () => {
+          failWriteSucceedBuild();
+          offlineDb.channelExists.mockResolvedValue(true);
+
+          await expect(
+            offlineDb.upsertMessageWithChannelGuard({ message }),
+          ).rejects.toThrow('FOREIGN KEY constraint failed');
+          // A write that fails for some other reason must not be run a second time.
+          expect(offlineDb.upsertChannelData).not.toHaveBeenCalled();
+        });
+
+        it('skips the write when there is no channel row and nothing to build one from', async () => {
+          failWriteSucceedBuild();
+          offlineDb.channelExists.mockResolvedValue(false);
+          delete client.activeChannels['messaging:c1'];
+
+          const result = await offlineDb.upsertMessageWithChannelGuard({ message });
+
+          expect(offlineDb.upsertChannelData).not.toHaveBeenCalled();
+          expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+          expect(result).toEqual([]);
+        });
+
+        it('probes up front when execute is false, since there is no failure to catch', async () => {
+          offlineDb.channelExists.mockResolvedValue(true);
+
+          const result = await offlineDb.upsertMessageWithChannelGuard({
+            message,
+            execute: false,
+          });
+
+          expect(offlineDb.executeSqlBatch).not.toHaveBeenCalled();
+          expect(result).toEqual([['UPSERT message']]);
+        });
+
+        it('skips a message with no cid rather than guessing a channel', async () => {
+          const result = await offlineDb.upsertMessageWithChannelGuard({
+            message: { id: 'm1', status: 'failed' } as LocalMessage,
+          });
+
+          expect(offlineDb.channelExists).not.toHaveBeenCalled();
+          expect(offlineDb.upsertMessages).not.toHaveBeenCalled();
+          expect(result).toEqual([]);
+        });
+      });
+
+      describe('getFailedMessages', () => {
+        afterEach(() => {
+          vi.resetAllMocks();
+        });
+
+        it('returns only the locally failed messages of the channel', async () => {
+          offlineDb.state.partialNext({ initialized: true, userId: 'user-1' });
+          offlineDb.getChannels.mockResolvedValue([
+            {
+              messages: [
+                { id: 'sent', status: 'received', updated_at: new Date().toISOString() },
+                { id: 'unsent', status: 'failed', updated_at: new Date().toISOString() },
+                // No status at all — a plain server message, which must not be mistaken for unsent.
+                { id: 'plain', updated_at: new Date().toISOString() },
+              ],
+            },
+          ]);
+
+          const result = await offlineDb.getFailedMessages({ cid: 'messaging:c1' });
+
+          expect(offlineDb.getChannels).toHaveBeenCalledWith({
+            cids: ['messaging:c1'],
+            userId: 'user-1',
+          });
+          expect(result.map((message) => message.id)).toEqual(['unsent']);
+        });
+
+        it('formats the rows it returns', async () => {
+          offlineDb.state.partialNext({ initialized: true, userId: 'user-1' });
+          offlineDb.getChannels.mockResolvedValue([
+            {
+              messages: [
+                {
+                  created_at: '2024-01-01T00:00:00.000Z',
+                  id: 'unsent',
+                  status: 'failed',
+                  updated_at: '2024-01-01T00:00:00.000Z',
+                },
+              ],
+            },
+          ]);
+
+          const [failed] = await offlineDb.getFailedMessages({ cid: 'messaging:c1' });
+
+          // The paginator compares `updated_at` as a Date, so a raw storable row cannot be re-ingested.
+          expect(failed.created_at).toBeInstanceOf(Date);
+          expect(failed.updated_at).toBeInstanceOf(Date);
+        });
+
+        it('returns nothing when the channel is not in the database', async () => {
+          offlineDb.state.partialNext({ initialized: true, userId: 'user-1' });
+          offlineDb.getChannels.mockResolvedValue([]);
+
+          expect(await offlineDb.getFailedMessages({ cid: 'messaging:c1' })).toEqual([]);
+        });
+
+        it('does not query before the database is initialized', async () => {
+          offlineDb.state.partialNext({ initialized: false, userId: 'user-1' });
+
+          expect(await offlineDb.getFailedMessages({ cid: 'messaging:c1' })).toEqual([]);
+          expect(offlineDb.getChannels).not.toHaveBeenCalled();
+        });
+
+        it('does not query without a user', async () => {
+          offlineDb.state.partialNext({ initialized: true, userId: undefined });
+
+          expect(await offlineDb.getFailedMessages({ cid: 'messaging:c1' })).toEqual([]);
+          expect(offlineDb.getChannels).not.toHaveBeenCalled();
         });
       });
 

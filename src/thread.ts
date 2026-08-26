@@ -30,7 +30,10 @@ import type {
 import type { StreamChat } from './client';
 import type { CustomThreadData } from './custom_types';
 import { MessageComposer } from './messageComposer';
-import { MessageOperations } from './messageOperations';
+import {
+  createMessageOperationsPersistence,
+  MessageOperations,
+} from './messageOperations';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 import { MessagePaginator } from './pagination';
 import type { MergeNewestPageOptions } from './pagination';
@@ -268,11 +271,40 @@ export class Thread extends WithSubscriptions {
     });
 
     this.messageOperations = new MessageOperations({
+      ...createMessageOperationsPersistence({
+        getCid: () => this.channel.cid,
+        getClient: () => this.channel.getClient(),
+      }),
       ingest: (m) => {
-        this.messagePaginator.ingestItem(m);
-        this.channel.getClient().messageStore.flushSubscribers(m.id);
+        const store = this.channel.getClient().messageStore;
+        // See the matching comment in `Channel`: the reply paginator's filter demands
+        // `parent_id === this.id`, so an operation on this thread's PARENT message — edited or deleted
+        // from inside the open thread, which is how the UI SDKs route it — is not something the reply
+        // paginator can hold. The store reaches it (a subscribed thread seeds its parent there) and
+        // fans the change out to the channel list too.
+        if (this.messagePaginator.matchesFilter(m)) {
+          this.messagePaginator.ingestItem(m);
+        } else if (store.has(m.id)) {
+          store.upsert(m);
+        }
+        store.flushSubscribers(m.id);
       },
-      get: (id) => this.messagePaginator.getItem(id),
+      // Mirrors `ingest`'s routing: a message this paginator does not hold can still be held by the
+      // client-global store (a thread parent, a message displayed by another collection), and the
+      // policy uses this both for its freshness comparison and to decide whether there is anything to
+      // update optimistically at all. Reading only the paginator would make those two disagree.
+      get: (id) =>
+        this.messagePaginator.getItem(id) ??
+        this.channel.getClient().messageStore.get(id),
+      remove: (id) => {
+        this.messagePaginator.removeItem({ id });
+        // A reply with `show_in_channel` is held by the channel list as well, so removing it from the
+        // reply paginator alone leaves a ghost there until the `message.deleted` event arrives. Both
+        // calls are no-ops when the paginator does not hold the id, which is the same reason the SDK's
+        // own `removeMessage` removes from the channel unconditionally.
+        this.channel.messagePaginator.removeItem({ id });
+        this.channel.pinnedMessagesPaginator.removeItem({ id });
+      },
       normalizeOutgoingMessage: (m) => ({
         ...m,
         parent_id: this.id,

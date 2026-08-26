@@ -6,7 +6,10 @@ import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
 import type { ReadStoreReconcileMeta } from './messageDelivery';
 import { MessagePaginator, PinnedMessagePaginator } from './pagination/paginators';
-import { MessageOperations } from './messageOperations';
+import {
+  createMessageOperationsPersistence,
+  MessageOperations,
+} from './messageOperations';
 import {
   channelHasReadEvents,
   formatMessage,
@@ -375,11 +378,37 @@ export class Channel extends ChannelApi {
     this.cooldownTimer.registerSubscriptions();
 
     this.messageOperations = new MessageOperations({
+      ...createMessageOperationsPersistence({
+        getCid: () => this.cid,
+        getClient: () => this.getClient(),
+      }),
       ingest: (m) => {
-        this.messagePaginator.ingestItem(m);
-        this.getClient().messageStore.flushSubscribers(m.id);
+        const store = this.getClient().messageStore;
+        // The paginator is the entry point whenever it can hold the message — it owns interval
+        // placement, and its "no longer matches the filter" branch correctly evicts a message that
+        // stopped matching. But its filter is `{ cid, parent_id? }`, so an operation aimed at a message
+        // this paginator does not accept (most importantly a THREAD PARENT edited or deleted from
+        // inside the open thread, which the reply paginator rejects for having no `parent_id`) would
+        // otherwise be silently dropped. Falling back to the client-global store reaches the message
+        // wherever it is held and fans out to every collection holding it — the same reason
+        // `applyReactionLocally` addresses purely by id.
+        if (this.messagePaginator.matchesFilter(m)) {
+          this.messagePaginator.ingestItem(m);
+        } else if (store.has(m.id)) {
+          store.upsert(m);
+        }
+        store.flushSubscribers(m.id);
       },
-      get: (id) => this.messagePaginator.getItem(id),
+      // Mirrors `ingest`'s routing: a message this paginator does not hold can still be held by the
+      // client-global store (a thread parent, a message displayed by another collection), and the
+      // policy uses this both for its freshness comparison and to decide whether there is anything to
+      // update optimistically at all. Reading only the paginator would make those two disagree.
+      get: (id) =>
+        this.messagePaginator.getItem(id) ?? this.getClient().messageStore.get(id),
+      remove: (id) => {
+        this.messagePaginator.removeItem({ id });
+        this.pinnedMessagesPaginator.removeItem({ id });
+      },
       handlers: () => {
         const { requestHandlers } = this.configState.getLatestValue();
         const deleteMessageRequest = requestHandlers?.deleteMessageRequest;
@@ -1866,7 +1895,11 @@ export class Channel extends ChannelApi {
    *
    * Preserves failed (unsent) messages: an overlap merge keeps them (the reconcile's provenance guard
    * never prunes a non-server message); only a disjoint rebuild can drop them, so any that actually
-   * fell out are re-ingested below.
+   * fell out are re-ingested below. The offline DB is consulted alongside the in-memory window, because
+   * a failed message can be absent from memory and still be the user's unsent work — a cold boot starts
+   * with an empty paginator, and an eviction can drop it mid-session. v9 got this from a second, lagging
+   * copy of the list (the React SDK's own state); with one reactive source of truth the persisted row is
+   * that buffer.
    */
   async reload() {
     if (this._reloading || (!this.initialized && !this.offlineMode)) return;
@@ -1876,7 +1909,19 @@ export class Channel extends ChannelApi {
       const headItems = paginator.headItems;
       const requestedLimit =
         Math.max(headItems.length, paginator.pageSize ?? 0) || undefined;
-      const failedBefore = headItems.filter((message) => message.status === 'failed');
+      const offlineDb = this.getClient().offlineDb;
+      const failedInMemory = headItems.filter((message) => message.status === 'failed');
+      // Read before the await, so this cannot pick up a message that failed DURING the reload — that
+      // one is already in the paginator and does not need re-ingesting.
+      const failedInDb = offlineDb
+        ? await offlineDb.getFailedMessages({ cid: this.cid })
+        : [];
+      const failedById = new Map<string, LocalMessage>();
+      for (const message of [...failedInDb, ...failedInMemory]) {
+        // In-memory wins on a collision: it is at least as fresh as the row it was mirrored from.
+        failedById.set(message.id, message);
+      }
+      const failedBefore = [...failedById.values()];
 
       await this.watch({ messages: { limit: requestedLimit } });
       this.offlineMode = false;
