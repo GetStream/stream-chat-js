@@ -6,6 +6,8 @@ export const generateMsg = (
 ): MessageResponse => {
   const date = msg?.date ?? new Date();
   return {
+    cid: 'messaging:general',
+    pinned: false,
     id: uuidv4(),
     text: uuidv4(),
     html: '<p>x</p>\n',

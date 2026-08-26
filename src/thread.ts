@@ -4,7 +4,6 @@ import {
   formatMessage,
   localMessageToNewMessagePayload,
 } from './utils';
-import { applyReactionLocally } from './entityStore';
 import type {
   DraftResponse,
   EventType,
@@ -20,7 +19,7 @@ import type {
   ThreadStateResponse,
   UserResponse,
 } from './types';
-import { isDoesNotExistError, isEphemeral } from './errors';
+import { isDoesNotExistError } from './errors';
 import type {
   Channel,
   DeleteMessageWithStateUpdateParams,
@@ -31,7 +30,9 @@ import type { StreamChat } from './client';
 import type { CustomThreadData } from './custom_types';
 import { MessageComposer } from './messageComposer';
 import {
+  addReactionOptimistically,
   createMessageOperationsPersistence,
+  deleteReactionOptimistically,
   MessageOperations,
 } from './messageOperations';
 import { WithSubscriptions } from './utils/WithSubscriptions';
@@ -1095,10 +1096,10 @@ export class Thread extends WithSubscriptions {
   }
 
   /**
-   * Adds a reaction to a reply with an optimistic local state update, mirroring
-   * {@link Channel.addReactionWithLocalUpdate}. The optimistic message is applied to THIS thread's
-   * paginator (so pure replies get optimism the channel paginator can't give); the request routes
-   * through the parent channel since reactions are channel-level.
+   * Adds a reaction to a reply with an optimistic local state update — see
+   * {@link addReactionOptimistically}, which `Channel` shares. The request routes through the parent
+   * channel because reactions are channel-level, while the local write is addressed by message id and
+   * so reaches a pure reply no channel collection holds.
    */
   async addReactionWithLocalUpdate({
     messageId,
@@ -1109,35 +1110,17 @@ export class Thread extends WithSubscriptions {
     reaction: ReactionRequest;
     options?: Pick<SendReactionRequest, 'enforce_unique' | 'skip_push'>;
   }) {
-    const client = this.channel.getClient();
-    const undo = applyReactionLocally(client, {
-      enforceUnique: options?.enforce_unique ?? false,
+    await addReactionOptimistically({
+      channel: this.channel,
       messageId,
+      options,
       reaction,
     });
-
-    try {
-      const response = await this.channel.sendReaction({
-        id: messageId,
-        reaction,
-        ...options,
-      });
-      // reconcile the server copy only if we still hold it — a bare upsert of an unheld id would
-      // orphan it (the store's refcount GC only reclaims held ids).
-      if (response?.message && client.messageStore.has(response.message.id)) {
-        client.messageStore.upsert(formatMessage(response.message));
-      }
-    } catch (error) {
-      if (undo && (!client.offlineDb || !isEphemeral(error as Error))) {
-        undo();
-      }
-      throw error;
-    }
   }
 
   /**
-   * Removes the current user's reaction from a reply with an optimistic local state update,
-   * mirroring {@link Thread.addReactionWithLocalUpdate}.
+   * Removes the current user's reaction from a reply with an optimistic local state update — see
+   * {@link deleteReactionOptimistically}, which `Channel` shares.
    */
   async deleteReactionWithLocalUpdate({
     messageId,
@@ -1146,26 +1129,7 @@ export class Thread extends WithSubscriptions {
     messageId: string;
     type: string;
   }) {
-    const client = this.channel.getClient();
-    const undo = applyReactionLocally(client, {
-      messageId,
-      reaction: { type },
-      removed: true,
-    });
-
-    try {
-      const response = await this.channel.deleteReaction({ id: messageId, type });
-      // reconcile the server copy only if we still hold it — a bare upsert of an unheld id would
-      // orphan it (the store's refcount GC only reclaims held ids).
-      if (response?.message && client.messageStore.has(response.message.id)) {
-        client.messageStore.upsert(formatMessage(response.message));
-      }
-    } catch (error) {
-      if (undo && (!client.offlineDb || !isEphemeral(error as Error))) {
-        undo();
-      }
-      throw error;
-    }
+    await deleteReactionOptimistically({ channel: this.channel, messageId, type });
   }
 
   public markRead = async ({ force = false }: { force?: boolean } = {}) => {

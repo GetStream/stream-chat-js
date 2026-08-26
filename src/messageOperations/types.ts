@@ -65,12 +65,12 @@ export type MessageOperationsContext = {
   /** Removes a message's offline-DB row (the hard-delete counterpart of {@link persist}). */
   purge: (id: string) => void;
   /**
-   * Whether a failed request was QUEUED for replay rather than definitively rejected — i.e. there is an
-   * offline DB and the error is {@link isEphemeral}. A queued mutation is pending, not failed, so the
-   * optimistic state stays exactly as it is: no `failed` status, no error, no revert. This is the same
-   * predicate `Channel.addReactionWithLocalUpdate` uses to decide not to undo.
+   * Whether this message's mutation is sitting in the offline queue waiting to be replayed — read from
+   * the queue, not inferred from the error ({@link isQueuedForReplay}). A queued mutation is pending,
+   * not failed, so the optimistic state stays exactly as it is: no `failed` status, no error, no revert.
+   * Reactions run the same predicate, which is what keeps the two from drifting.
    */
-  isQueued: (error: unknown) => boolean;
+  isQueued: (messageId: string) => Promise<boolean>;
 
   normalizeOutgoingMessage?: (m: MessageRequest) => MessageRequest;
 

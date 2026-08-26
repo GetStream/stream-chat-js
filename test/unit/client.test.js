@@ -753,6 +753,10 @@ describe('message update', () => {
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 			expect(queueTaskSpy).toHaveBeenCalledWith({
 				task: {
+					// Derived from the message's `cid` by `getPendingTaskChannelData`, so a queued task
+					// always carries the channel it belongs to.
+					channelId: 'general',
+					channelType: 'messaging',
 					messageId: 'msg-123',
 					payload: [request],
 					type: 'update-message',
@@ -779,6 +783,10 @@ describe('message update', () => {
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 			expect(queueTaskSpy).toHaveBeenCalledWith({
 				task: {
+					// Derived from the message's `cid` by `getPendingTaskChannelData`, so a queued task
+					// always carries the channel it belongs to.
+					channelId: 'general',
+					channelType: 'messaging',
 					messageId: 'msg-123',
 					payload: [request],
 					type: 'update-message',

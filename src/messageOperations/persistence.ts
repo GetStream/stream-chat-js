@@ -1,4 +1,4 @@
-import { isEphemeral } from '../errors';
+import { isQueuedForReplay } from './optimistic';
 import type { StreamChat } from '../client';
 import type { LocalMessage } from '../types';
 
@@ -32,13 +32,5 @@ export const createMessageOperationsPersistence = ({
       method: 'messageOperations:purge',
     });
   },
-  isQueued: (error: unknown) => {
-    const { offlineDb } = getClient();
-    // Without an offline DB there is no queue, so nothing was deferred and every failure is final.
-    // `initialized` matters as much as existence: an offline DB whose `init()` never succeeded cannot
-    // persist a pending task, so reporting its failures as "queued" would suppress the failed state for
-    // a mutation that is actually lost.
-    if (!offlineDb?.state.getLatestValue().initialized) return false;
-    return isEphemeral(error as Error);
-  },
+  isQueued: (messageId: string) => isQueuedForReplay(getClient(), messageId),
 });

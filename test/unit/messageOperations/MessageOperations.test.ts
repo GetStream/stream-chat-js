@@ -516,12 +516,20 @@ describe('MessageOperations — optimistic lifecycle', () => {
   describe('update', () => {
     it('applies and persists the edit, preserving the existing status', async () => {
       const seed = makeLocalMessage({ id: 'm1', status: 'received', text: 'before' });
-      const { lastPersisted, ops, store } = harness({ seed });
+      const { lastPersisted, ops, persisted, store } = harness({ seed });
 
-      await ops.update({ localMessage: { ...seed, text: 'after' } });
+      // The echo has to carry the edited text. The harness default does not, so whether the edit
+      // survived came down to the optimistic write and the mocked response landing in the same
+      // millisecond — a real server echoes what it stored.
+      await ops.update({ localMessage: { ...seed, text: 'after' } }, async () => ({
+        message: makeMessageResponse({ id: 'm1', text: 'after' }),
+      }));
 
+      // Status preservation is asserted on the optimistic write specifically: the server echo supplies
+      // `received` of its own, so reading the final state could pass without preservation happening.
+      expect(persisted[0].text).toBe('after');
+      expect(persisted[0].status).toBe('received');
       expect(store.get('m1')?.text).toBe('after');
-      expect(store.get('m1')?.status).toBe('received');
       expect(lastPersisted()?.text).toBe('after');
     });
 

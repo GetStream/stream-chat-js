@@ -13,7 +13,7 @@ export type MessageOperationStatePolicyContext = {
   remove: (id: string) => void;
   persist: (m: LocalMessage) => void;
   purge: (id: string) => void;
-  isQueued: (error: unknown) => boolean;
+  isQueued: (messageId: string) => Promise<boolean>;
 };
 
 /**
@@ -191,7 +191,7 @@ export class MessageOperationStatePolicy {
     this.ctx.persist(formatted);
   }
 
-  failure<K extends OperationKind>({
+  async failure<K extends OperationKind>({
     error,
     kind,
     localMessage,
@@ -224,7 +224,8 @@ export class MessageOperationStatePolicy {
     // `failed` even when its task is queued, because the retry affordance is the only way the user can
     // get that message out — this is the v9 behaviour, and treating a queued send as merely "pending"
     // would leave it spinning forever.
-    const queued = kind !== 'send' && kind !== 'retry' && this.ctx.isQueued(error);
+    const queued =
+      kind !== 'send' && kind !== 'retry' && (await this.ctx.isQueued(messageId));
 
     if (kind === 'delete') {
       if (!queued) this.revertDelete({ messageId, optimistic, options });

@@ -169,7 +169,7 @@ export class MessageOperations {
         options: params.options,
       });
     } catch (e) {
-      this.policy.failure({
+      await this.policy.failure({
         error: e,
         kind,
         localMessage: params.localMessage,

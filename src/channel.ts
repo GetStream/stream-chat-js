@@ -1,13 +1,13 @@
 import { ChannelState, ChannelWatchStatus } from './channel_state';
 import { CooldownTimer } from './CooldownTimer';
-import { isEphemeral } from './errors';
-import { applyReactionLocally } from './entityStore';
 import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
 import type { ReadStoreReconcileMeta } from './messageDelivery';
 import { MessagePaginator, PinnedMessagePaginator } from './pagination/paginators';
 import {
+  addReactionOptimistically,
   createMessageOperationsPersistence,
+  deleteReactionOptimistically,
   MessageOperations,
 } from './messageOperations';
 import {
@@ -759,10 +759,7 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Adds a reaction with an optimistic local state update: the reaction is applied to the cached
-   * message immediately ({@link applyReactionLocally}), then the request is
-   * fired via {@link Channel.sendReaction} (which owns the offline-DB write + queue). The
-   * server-authoritative counts reconcile on the response; the message is rolled back on failure.
+   * Adds a reaction with an optimistic local state update - see {@link addReactionOptimistically}.
    */
   async addReactionWithLocalUpdate({
     messageId,
@@ -773,31 +770,12 @@ export class Channel extends ChannelApi {
     reaction: ReactionRequest;
     options?: Pick<SendReactionRequest, 'enforce_unique' | 'skip_push'>;
   }) {
-    const client = this.getClient();
-    const undo = applyReactionLocally(client, {
-      enforceUnique: options?.enforce_unique ?? false,
-      messageId,
-      reaction,
-    });
-
-    try {
-      const response = await this.sendReaction({ id: messageId, reaction, ...options });
-      // reconcile the server copy only if we still hold it — a bare upsert of an unheld id would
-      // orphan it (the store's refcount GC only reclaims held ids).
-      if (response?.message && client.messageStore.has(response.message.id)) {
-        client.messageStore.upsert(formatMessage(response.message));
-      }
-    } catch (error) {
-      if (undo && (!client.offlineDb || !isEphemeral(error as Error))) {
-        undo();
-      }
-      throw error;
-    }
+    await addReactionOptimistically({ channel: this, messageId, options, reaction });
   }
 
   /**
-   * Removes the current user's reaction with an optimistic local state update, mirroring
-   * {@link Channel.addReactionWithLocalUpdate}.
+   * Removes the current user's reaction with an optimistic local state update - see
+   * {@link deleteReactionOptimistically}.
    */
   async deleteReactionWithLocalUpdate({
     messageId,
@@ -806,26 +784,7 @@ export class Channel extends ChannelApi {
     messageId: string;
     type: string;
   }) {
-    const client = this.getClient();
-    const undo = applyReactionLocally(client, {
-      messageId,
-      reaction: { type },
-      removed: true,
-    });
-
-    try {
-      const response = await this.deleteReaction({ id: messageId, type });
-      // reconcile the server copy only if we still hold it — a bare upsert of an unheld id would
-      // orphan it (the store's refcount GC only reclaims held ids).
-      if (response?.message && client.messageStore.has(response.message.id)) {
-        client.messageStore.upsert(formatMessage(response.message));
-      }
-    } catch (error) {
-      if (undo && (!client.offlineDb || !isEphemeral(error as Error))) {
-        undo();
-      }
-      throw error;
-    }
+    await deleteReactionOptimistically({ channel: this, messageId, type });
   }
 
   /**

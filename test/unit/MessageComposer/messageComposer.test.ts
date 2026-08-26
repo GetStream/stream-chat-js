@@ -1623,6 +1623,8 @@ describe('MessageComposer', () => {
         messageComposer.textComposer.setText('Hello');
         const composed = await messageComposer.compose();
         const serverMessage = generateMsg({
+          // The echo carries the channel, like a real response — the paginator matches on `{ cid }`.
+          cid: mockChannel.cid,
           id: composed!.localMessage.id,
           updated_at: new Date(
             composed!.localMessage.updated_at.getTime() + 100,
@@ -1730,6 +1732,7 @@ describe('MessageComposer', () => {
           options: composed!.sendOptions,
           sendMessageRequestFn: async () => ({
             message: generateMsg({
+              cid: mockChannel.cid,
               id: messageId,
               updated_at: serverUpdatedAt.toISOString(),
             }),

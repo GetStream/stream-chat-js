@@ -4,6 +4,8 @@ import type { Channel, LocalMessage, MessageResponse } from '../../../src';
 import { generateUUIDv4 as uuidv4 } from '../../../src/utils';
 import { generateChannel } from '../test-utils/generateChannel';
 import { generateMsg } from '../test-utils/generateMessage';
+import { MockOfflineDB } from '../offline-support/MockOfflineDB';
+import type { PendingTask, StableWSConnection } from '../../../src';
 
 /**
  * Where an optimistic edit/delete LANDS, as opposed to what it does once it gets there
@@ -226,6 +228,93 @@ describe('optimistic edit/delete routing', () => {
       });
 
       expect(channel.messagePaginator.getItem(message.id)).toBeUndefined();
+    });
+  });
+
+  /**
+   * Whether a failed mutation settles as `failed` or is left pending, driven end to end rather than by an
+   * injected `isQueued` (which is what `MessageOperations.test.ts` does).
+   *
+   * The distinction only exists because the OFFLINE QUEUE can refuse a task the error's shape says is
+   * perfectly retryable: `handleAddPendingTask` drops an `update-message` whose payload still points at a
+   * local attachment URL, because nothing could ever replay it. Inferring "retryable error + offline DB ⇒
+   * queued" therefore left such an edit looking pending forever, with nothing coming to finish it.
+   */
+  describe('a failed edit, queued or not', () => {
+    /**
+     * A `MockOfflineDB` with a real in-memory pending-task table: the SQL layer is faked, the queue
+     * semantics are not. `queueTask` and `handleAddPendingTask` are inherited, so the decision under test
+     * is the production one.
+     */
+    const enableOfflineDb = () => {
+      const db = new MockOfflineDB({ client });
+      client.setOfflineDBApi(db);
+      db.state.partialNext({ initialized: true, userId: CURRENT_USER.id });
+
+      const pendingTasks: PendingTask[] = [];
+      db.addPendingTask.mockImplementation(async (task: PendingTask) => {
+        pendingTasks.push(task);
+        return [];
+      });
+      db.getPendingTasks.mockImplementation(async (conditions?: { messageId?: string }) =>
+        pendingTasks.filter(
+          (task) => !conditions?.messageId || task.messageId === conditions.messageId,
+        ),
+      );
+      db.channelExists.mockResolvedValue(true);
+      db.upsertMessages.mockResolvedValue([]);
+      db.updateMessage.mockResolvedValue([]);
+
+      // Offline: `queueTask` short-circuits before any HTTP, and the direct attempt that
+      // `client.updateMessage` falls through to fails too.
+      client.wsConnection = { isHealthy: false } as StableWSConnection;
+      vi.spyOn(client, '_updateMessage').mockRejectedValue(
+        Object.assign(new Error('network down'), { code: 9 }),
+      );
+
+      return { db, pendingTasks };
+    };
+
+    const editMessageWithAttachment = async (asset_url: string) => {
+      const message = generateMsg({
+        attachments: [{ asset_url, type: 'file' }],
+        cid: channel.cid,
+        id: uuidv4(),
+        text: 'before',
+      }) as MessageResponse;
+      seedChannel(channel, message);
+
+      await expect(
+        channel.updateMessageWithLocalUpdate({
+          localMessage: { ...formatMessage(message), text: 'after' } as LocalMessage,
+        }),
+      ).rejects.toThrow();
+
+      return channel.messagePaginator.getItem(message.id);
+    };
+
+    it('settles FAILED when the queue refused the task, however retryable the error looked', async () => {
+      const { pendingTasks } = enableOfflineDb();
+
+      // A local URI is exactly what `isMessageUpdateReplayable` refuses.
+      const edited = await editMessageWithAttachment('file:///tmp/local.pdf');
+
+      expect(pendingTasks).toHaveLength(0);
+      expect(edited?.status).toBe('failed');
+      expect(edited?.error).toBeDefined();
+      // The edit itself survives — reverting would destroy text the user typed.
+      expect(edited?.text).toBe('after');
+    });
+
+    it('stays pending when the task WAS queued, with no failed state on the message', async () => {
+      const { pendingTasks } = enableOfflineDb();
+
+      const edited = await editMessageWithAttachment('https://example.com/remote.pdf');
+
+      expect(pendingTasks.map((task) => task.type)).toEqual(['update-message']);
+      expect(edited?.status).not.toBe('failed');
+      expect(edited?.error).toBeUndefined();
+      expect(edited?.text).toBe('after');
     });
   });
 });
