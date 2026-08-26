@@ -194,3 +194,20 @@ function autoCompleteOp(value: any, query: any): boolean {
     return value.some((v) => typeof v === 'string' && matchOneString(v));
   return false;
 }
+
+const LOGICAL_FILTER_OPERATORS = ['$and', '$or', '$nor'] as const;
+
+/**
+ * Whether a filter constrains `field`, at the top level or inside a logical operator. Nothing else is
+ * recursed into: the same key elsewhere (`{ custom: { hidden: … } }`) is a different field.
+ */
+export const filterConstrainsField = (filters: unknown, field: string): boolean => {
+  if (!filters || typeof filters !== 'object') return false;
+  if (Array.isArray(filters))
+    return filters.some((entry) => filterConstrainsField(entry, field));
+  const node = filters as Record<string, unknown>;
+  if (field in node) return true;
+  return LOGICAL_FILTER_OPERATORS.some((operator) =>
+    filterConstrainsField(node[operator], field),
+  );
+};

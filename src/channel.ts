@@ -2487,16 +2487,17 @@ export class Channel extends ChannelApi {
    * `state.unreadCount` derives from — so channel-wide resets (`channel.truncated`, "all channels
    * read") must route through here rather than writing a count of their own.
    */
-  _setOwnUnreadCount(unreadCount: number) {
-    if (this.pendingDisposal) return;
+  /** @returns whether the count actually changed, so callers can react only to the channels it did. */
+  _setOwnUnreadCount(unreadCount: number): boolean {
+    if (this.pendingDisposal) return false;
 
     const userId = this.getClient().userId;
-    if (!userId) return;
+    if (!userId) return false;
 
     const currentUserReadState = this.state.read[userId];
     // only reconcile an existing read entry; never fabricate one just to store a count
     if (!currentUserReadState || currentUserReadState.unread_messages === unreadCount) {
-      return;
+      return false;
     }
 
     this._upsertReadState(
@@ -2504,6 +2505,8 @@ export class Channel extends ChannelApi {
       () => ({ ...currentUserReadState, unread_messages: unreadCount }),
       { changedUserIds: [userId] },
     );
+
+    return true;
   }
 
   _handleChannelEvent(event: Event) {
@@ -2536,13 +2539,18 @@ export class Channel extends ChannelApi {
       case 'ai_indicator.stop':
         channelState.partialNext({ aiState: AIStates.Stop });
         break;
-      // `message.read_locally` is the client-only event dispatched by `markReadLocally()` when read
-      // events are disabled (e.g. livestreams with `isLocalUnreadCountEnabled`). It reuses the exact
-      // `message.read` state logic so the read-state update lives in one place — only the
-      // delivery-report network sync below is skipped for it.
+      // `notification.mark_read` is the only read signal for a channel the user is not watching, since
+      // `message.read` goes to watchers only. `message.read_locally` is the local stand-in when read
+      // events are disabled (livestreams). Both reuse the `message.read` logic, minus its delivery sync.
+      case 'notification.mark_read':
       case 'message.read_locally':
       case 'message.read':
-        if (event.user?.id && event.created_at) {
+        if (
+          event.user?.id &&
+          event.created_at &&
+          // the same event announces a thread read, which says nothing about the channel
+          !(event.type === 'notification.mark_read' && event.thread_id)
+        ) {
           const eventUser = event.user;
           const readAtDate = new Date(event.created_at);
           const toDate = (value?: string | Date) =>

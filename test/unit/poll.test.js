@@ -618,7 +618,7 @@ describe('Poll', () => {
 				vote_count: originalState.vote_count - 1,
 				vote_counts_by_option,
 			},
-			poll_vote: { ...removedVote, user_id: client.userID },
+			poll_vote: { ...removedVote, user_id: client.userId },
 		});
 
 		expect(poll.data.ownVotesByOptionId).to.eql({
@@ -664,7 +664,7 @@ describe('Poll', () => {
 		poll.handleVoteRemoved({
 			type: 'poll.vote_removed',
 			poll: { ...pollResponse },
-			poll_vote: { ...removedAnswer, user_id: client.userID },
+			poll_vote: { ...removedAnswer, user_id: client.userId },
 		});
 
 		expect(poll.data.ownVotesByOptionId).to.eql(originalState.ownVotesByOptionId);

@@ -1,32 +1,22 @@
 import { generateUUIDv4 } from './utils';
-import type {
-  ChannelResponse,
-  Event,
-  EventType,
-  MessageResponse,
-  ReactionResponse,
-  UserResponse,
-} from './types';
+import type { Event, EventType } from './types';
+import type { KeysOfUnion, ValueOfUnion } from './types.utility';
 import type { Unsubscribe } from './store';
 
 /**
- * Flat routing view of an event, as seen by pipeline handlers. The public `Event` type is now a
- * discriminated union (each WS event exposes only its own fields) and also admits bare custom-event
- * name strings — neither is convenient for the generic routers here, which only read a bounded set of
- * common optional fields. Dispatched event *values* are always objects, so the pipeline casts to
- * this view at the boundary (see `processOne`).
+ * Flat routing view of an event: every field any event can carry, all optional, on one object.
+ *
+ * Handlers route without narrowing, which `Event` does not allow — it is a discriminated union whose
+ * `{ type: '*' } & CustomEvent` member has none of the channel fields, and it admits bare custom-event
+ * strings (hence the `unknown` hop in `processOne`). Derived from that union, so a new generated field
+ * is routable without widening anything by hand.
  */
+type EventObject = Extract<Event, object>;
+
 export type PipelineEvent = {
   type: EventType | (string & {});
-  channel?: ChannelResponse;
-  channel_id?: string;
-  channel_type?: string;
-  cid?: string;
-  created_at?: string | Date;
-  hard_delete?: boolean;
-  message?: MessageResponse;
-  reaction?: ReactionResponse;
-  user?: UserResponse;
+} & {
+  [Key in KeysOfUnion<EventObject>]?: ValueOfUnion<EventObject, Key>;
 };
 
 type MatchById = { id: string | RegExp; regexMatch?: boolean };

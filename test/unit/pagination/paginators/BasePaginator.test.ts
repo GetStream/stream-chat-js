@@ -3671,6 +3671,93 @@ describe('BasePaginator', () => {
       });
     });
 
+    /**
+     * `offset` addresses a position in the server's result set. An item that leaves the loaded window
+     * because it stopped matching the query is gone from that result set too, so the offset has to
+     * follow it down - otherwise the next page starts too far and skips whatever moved up.
+     */
+    describe('offset over a mutable result set', () => {
+      beforeEach(() => {
+        itemIndex.clear();
+      });
+
+      const loadedPaginator = () => {
+        const paginator = new Paginator({ itemIndex });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+        paginator.ingestPage({ page: [item3, item2, item1], setActive: true });
+        paginator.state.partialNext({ offset: 3 });
+        return paginator;
+      };
+
+      it('shrinks when a loaded item is removed', () => {
+        const paginator = loadedPaginator();
+
+        paginator.removeItem({ item: item2 });
+
+        expect(paginator.items).toHaveLength(2);
+        expect(paginator.offset).toBe(2);
+      });
+
+      it('is left alone when the removal finds nothing', () => {
+        const paginator = loadedPaginator();
+
+        paginator.removeItem({ id: 'missing' });
+
+        expect(paginator.offset).toBe(3);
+      });
+
+      it('shrinks when an ingested item no longer matches the filter', () => {
+        const paginator = loadedPaginator();
+        // @ts-expect-error accessing protected property
+        paginator.buildMatchFilters = () => ({ name: { $ne: 'renamed' } });
+
+        expect(paginator.ingestItem({ ...item2, name: 'renamed' })).toBe(true);
+
+        expect(paginator.items).toHaveLength(2);
+        expect(paginator.offset).toBe(2);
+      });
+
+      it('is left alone by the remove-and-reinsert of an item that still matches', () => {
+        const paginator = loadedPaginator();
+
+        expect(paginator.ingestItem({ ...item2, name: 'renamed' })).toBe(true);
+
+        expect(paginator.items).toHaveLength(3);
+        expect(paginator.offset).toBe(3);
+      });
+
+      it('does not grow when an item arrives through an event', () => {
+        const paginator = loadedPaginator();
+
+        paginator.ingestItem({ ...item1, id: 'id4', age: 101.5 });
+
+        // an offset that is too small only re-requests an item already held, one that is too large
+        // drops it for good - so insertions are deliberately not mirrored
+        expect(paginator.items).toHaveLength(4);
+        expect(paginator.offset).toBe(3);
+      });
+
+      it('does not go below zero', () => {
+        const paginator = loadedPaginator();
+        paginator.state.partialNext({ offset: 0 });
+
+        paginator.removeItem({ item: item2 });
+
+        expect(paginator.offset).toBe(0);
+      });
+
+      it('is left alone under cursor pagination', () => {
+        const paginator = loadedPaginator();
+        paginator.state.partialNext({ cursor: { tailward: 'next', headward: null } });
+
+        paginator.removeItem({ item: item2 });
+
+        expect(paginator.offset).toBe(3);
+      });
+    });
+
     describe('setItems', () => {
       it('overrides all the items in the state with provided value', () => {
         const paginator = new Paginator();

@@ -20,7 +20,7 @@ describe('create draft flow', () => {
 		const offlineDb = new MockOfflineDB({ client });
 
 		client.setOfflineDBApi(offlineDb);
-		await client.offlineDb.init(client.userID);
+		await client.offlineDb.init(client.userId);
 
 		channel = client.channel('messaging', 'test');
 
@@ -96,7 +96,7 @@ describe('delete draft flow', () => {
 		const offlineDb = new MockOfflineDB({ client });
 
 		client.setOfflineDBApi(offlineDb);
-		await client.offlineDb.init(client.userID);
+		await client.offlineDb.init(client.userId);
 
 		channel = client.channel('messaging', 'test');
 

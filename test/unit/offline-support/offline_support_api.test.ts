@@ -47,7 +47,7 @@ describe('OfflineSupportApi', () => {
       expect(client.offlineDb).toBeDefined();
       const { initialized, userId } = client.offlineDb!.state.getLatestValue() ?? {};
       expect(initialized).toBe(false);
-      expect(userId).toBe(client.userID);
+      expect(userId).toBe(client.userId);
     });
 
     it('should not set client.offlineDb if it has already been set', async () => {
@@ -67,7 +67,7 @@ describe('OfflineSupportApi', () => {
         .spyOn(client.offlineDb!, 'initializeDB')
         .mockResolvedValue(true);
       const initSyncManagerSpy = vi.spyOn(client.offlineDb?.syncManager!, 'init');
-      await client.offlineDb!.init(client.userID as unknown as string);
+      await client.offlineDb!.init(client.userId as unknown as string);
 
       expect(initializeDBSpy).toHaveBeenCalledOnce();
       expect(initSyncManagerSpy).toHaveBeenCalledOnce();
@@ -75,7 +75,7 @@ describe('OfflineSupportApi', () => {
       const { initialized, userId } = client.offlineDb?.state.getLatestValue() ?? {};
 
       expect(initialized).toBe(true);
-      expect(userId).toBe(client.userID);
+      expect(userId).toBe(client.userId);
     });
 
     it('should handle offlineDb.initializeDB failing', async () => {
@@ -84,7 +84,7 @@ describe('OfflineSupportApi', () => {
         .spyOn(client.offlineDb!, 'initializeDB')
         .mockResolvedValue(false);
       const initSyncManagerSpy = vi.spyOn(client.offlineDb?.syncManager!, 'init');
-      await client.offlineDb!.init(client.userID as unknown as string);
+      await client.offlineDb!.init(client.userId as unknown as string);
 
       expect(initializeDBSpy).toHaveBeenCalledOnce();
       expect(initSyncManagerSpy).not.toHaveBeenCalled();
@@ -92,7 +92,7 @@ describe('OfflineSupportApi', () => {
       const { initialized, userId } = client.offlineDb?.state.getLatestValue() ?? {};
 
       expect(initialized).toBe(false);
-      expect(userId).toBe(client.userID);
+      expect(userId).toBe(client.userId);
     });
 
     it('should gracefully handle the state on exceptions during initialization', async () => {
@@ -103,7 +103,7 @@ describe('OfflineSupportApi', () => {
       const initSyncManagerSpy = vi
         .spyOn(client.offlineDb?.syncManager!, 'init')
         .mockRejectedValue(new Error('Sync manager init failed.'));
-      await client.offlineDb!.init(client.userID as unknown as string);
+      await client.offlineDb!.init(client.userId as unknown as string);
 
       expect(initializeDBSpy).toHaveBeenCalledOnce();
       expect(initSyncManagerSpy).toHaveBeenCalledOnce();
@@ -120,9 +120,9 @@ describe('OfflineSupportApi', () => {
         .spyOn(client.offlineDb!, 'initializeDB')
         .mockResolvedValue(true);
       const initSyncManagerSpy = vi.spyOn(client.offlineDb?.syncManager!, 'init');
-      await client.offlineDb!.init(client.userID as unknown as string);
-      await client.offlineDb!.init(client.userID as unknown as string);
-      await client.offlineDb!.init(client.userID as unknown as string);
+      await client.offlineDb!.init(client.userId as unknown as string);
+      await client.offlineDb!.init(client.userId as unknown as string);
+      await client.offlineDb!.init(client.userId as unknown as string);
 
       expect(initializeDBSpy).toHaveBeenCalledOnce();
       expect(initSyncManagerSpy).toHaveBeenCalledOnce();
@@ -130,7 +130,7 @@ describe('OfflineSupportApi', () => {
       const { initialized, userId } = client.offlineDb?.state.getLatestValue() ?? {};
 
       expect(initialized).toBe(true);
-      expect(userId).toBe(client.userID);
+      expect(userId).toBe(client.userId);
     });
 
     it('should reinitialize if the userId changes', async () => {
@@ -139,7 +139,7 @@ describe('OfflineSupportApi', () => {
         .spyOn(client.offlineDb!, 'initializeDB')
         .mockResolvedValue(true);
       const initSyncManagerSpy = vi.spyOn(client.offlineDb?.syncManager!, 'init');
-      await client.offlineDb!.init(client.userID as unknown as string);
+      await client.offlineDb!.init(client.userId as unknown as string);
       await client.offlineDb!.init('user123');
 
       expect(initializeDBSpy).toHaveBeenCalledTimes(2);
@@ -292,7 +292,7 @@ describe('OfflineSupportApi', () => {
     beforeEach(async () => {
       offlineDb = new MockOfflineDB({ client });
       vi.spyOn(offlineDb!, 'initializeDB').mockResolvedValue(true);
-      await offlineDb.init(client.userID as unknown as string);
+      await offlineDb.init(client.userId as unknown as string);
     });
 
     afterEach(() => {

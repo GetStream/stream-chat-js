@@ -44,7 +44,7 @@ describe('stream-io/message-composer-middleware/text-composition', () => {
 
   beforeEach(() => {
     client = {
-      userID: 'currentUser',
+      userId: 'currentUser',
       user: { id: 'currentUser' },
     } as any;
 
@@ -460,7 +460,7 @@ describe('stream-io/message-composer-middleware/draft-text-composition', () => {
 
   beforeEach(() => {
     client = {
-      userID: 'currentUser',
+      userId: 'currentUser',
       user: { id: 'currentUser' },
     } as any;
 

@@ -380,7 +380,7 @@ describe('stream-io/message-composer-middleware/draft-own-state', () => {
 
   beforeEach(() => {
     client = {
-      userID: 'currentUser',
+      userId: 'currentUser',
       user: { id: 'currentUser' },
     } as any;
 

@@ -658,7 +658,7 @@ describe('message update', () => {
 		const offlineDb = new MockOfflineDB({ client });
 
 		client.setOfflineDBApi(offlineDb);
-		await client.offlineDb.init(client.userID);
+		await client.offlineDb.init(client.userId);
 
 		loggerSpy = vi.fn();
 		chatLoggerSystem.configureLoggers({
@@ -1111,7 +1111,7 @@ describe('StreamChat.queryReactions', () => {
 		const offlineDb = new MockOfflineDB({ client });
 
 		client.setOfflineDBApi(offlineDb);
-		await client.offlineDb.init(client.userID);
+		await client.offlineDb.init(client.userId);
 
 		dispatchSpy = vi.spyOn(client, 'dispatchEvent');
 		postStub = vi.spyOn(client, 'queryReactions').mockResolvedValueOnce(postResponse);
@@ -1234,7 +1234,7 @@ describe('message deletion', () => {
 		const offlineDb = new MockOfflineDB({ client });
 
 		client.setOfflineDBApi(offlineDb);
-		await client.offlineDb.init(client.userID);
+		await client.offlineDb.init(client.userId);
 
 		loggerSpy = vi.fn();
 		chatLoggerSystem.configureLoggers({
@@ -1671,7 +1671,7 @@ describe('dispatchEvent: offlineDb.executeQuerySafely', () => {
 	beforeEach(async () => {
 		client = await getClientWithUser({ id: 'user-abc' });
 		const offlineDb = new MockOfflineDB({ client });
-		await offlineDb.init(client.userID);
+		await offlineDb.init(client.userId);
 		client.setOfflineDBApi(offlineDb);
 
 		executeQuerySafelySpy = vi.spyOn(offlineDb, 'executeQuerySafely');

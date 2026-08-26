@@ -45,7 +45,7 @@ describe('stream-io/message-composer-middleware/command-injection', () => {
 
   beforeEach(() => {
     client = {
-      userID: 'currentUser',
+      userId: 'currentUser',
       user: { id: 'currentUser' },
     } as any;
 
@@ -215,7 +215,7 @@ describe('stream-io/message-composer-middleware/draft-command-injection', () => 
 
   beforeEach(() => {
     client = {
-      userID: 'currentUser',
+      userId: 'currentUser',
       user: { id: 'currentUser' },
     } as any;
 

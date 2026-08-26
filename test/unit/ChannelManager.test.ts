@@ -1184,7 +1184,7 @@ describe('ChannelManager', () => {
     it('a message.new in an archived channel does not add it to a list the backend filtered to { archived: false }', async () => {
       const archived = makeChannel('messaging:archived-1');
       archived.state.membership = {
-        user: { id: client.userID as string },
+        user: { id: client.userId as string },
         archived_at: '2025-09-03T12:19:39.101089Z',
       };
       client.activeChannels[archived.cid] = archived;
@@ -1903,6 +1903,241 @@ describe('ChannelManager', () => {
       expect(primary.items?.map((c) => c.cid)).toEqual(['messaging:201']);
       // A channel that matches only the catch-all lands in the fallback.
       expect(fallback.items?.map((c) => c.cid)).toEqual(['team:202']);
+    });
+  });
+  // A channel becoming read has to leave an unread list, and the offset has to follow it.
+  describe('read state events', () => {
+    const seedUnread = (channel: Channel, unreadMessages = 1) => {
+      channel.state.read = {
+        [client.userId as string]: {
+          last_read: new Date(0),
+          unread_messages: unreadMessages,
+          user: { id: client.userId as string },
+        },
+      };
+    };
+
+    const loadedUnreadList = (channel: Channel) => {
+      client.activeChannels[channel.cid] = channel;
+      const paginator = new ChannelPaginator({ client, filters: { has_unread: true } });
+      paginator.setItems({ valueOrFactory: [channel], isFirstPage: true });
+      const channelManager = new ChannelManager({ client, paginators: [paginator] });
+      channelManager.registerSubscriptions();
+      return { channelManager, paginator };
+    };
+
+    const markReadEvent = (channel: Channel, payload = {}) => ({
+      channel_id: channel.id,
+      channel_type: channel.type,
+      cid: channel.cid,
+      created_at: new Date(),
+      type: 'notification.mark_read' as const,
+      user: { id: client.userId as string },
+      ...payload,
+    });
+
+    it('drops a channel the user read elsewhere, and shrinks the offset with it', async () => {
+      const channel = makeChannel('messaging:300');
+      seedUnread(channel);
+      const { paginator } = loadedUnreadList(channel);
+
+      expect(paginator.items).toHaveLength(1);
+      expect(paginator.offset).toBe(1);
+
+      client.dispatchEvent(markReadEvent(channel));
+
+      await vi.waitFor(() => {
+        expect(paginator.items).toHaveLength(0);
+        expect(paginator.offset).toBe(0);
+      });
+    });
+
+    it('puts a channel back when it is marked unread again', async () => {
+      const channel = makeChannel('messaging:301');
+      seedUnread(channel, 0);
+      client.activeChannels[channel.cid] = channel;
+      const paginator = new ChannelPaginator({ client, filters: { has_unread: true } });
+      paginator.setItems({ valueOrFactory: [], isFirstPage: true });
+      new ChannelManager({ client, paginators: [paginator] }).registerSubscriptions();
+
+      seedUnread(channel, 1);
+      client.dispatchEvent(
+        markReadEvent(channel, { type: 'notification.mark_unread' as const }),
+      );
+
+      await vi.waitFor(() => {
+        expect(paginator.items?.map((c) => c.cid)).toEqual([channel.cid]);
+      });
+    });
+
+    it('ignores a read receipt from another member', async () => {
+      const channel = makeChannel('messaging:302');
+      seedUnread(channel);
+      const { paginator } = loadedUnreadList(channel);
+      const ingest = vi.spyOn(paginator, 'ingestItem');
+
+      client.dispatchEvent({
+        channel_id: channel.id,
+        channel_type: channel.type,
+        cid: channel.cid,
+        created_at: new Date(),
+        type: 'message.read',
+        user: { id: 'somebody-else' },
+      });
+
+      await vi.waitFor(() => {
+        expect(ingest).not.toHaveBeenCalled();
+        expect(paginator.items).toHaveLength(1);
+      });
+    });
+
+    it('ignores a thread being read', async () => {
+      const channel = makeChannel('messaging:303');
+      seedUnread(channel);
+      const { paginator } = loadedUnreadList(channel);
+
+      client.dispatchEvent(markReadEvent(channel, { thread_id: 'thread-1' }));
+
+      await vi.waitFor(() => {
+        expect(paginator.items).toHaveLength(1);
+        expect(paginator.offset).toBe(1);
+      });
+    });
+
+    it('does nothing when the event names no channel', async () => {
+      const channel = makeChannel('messaging:308');
+      seedUnread(channel);
+      const { paginator } = loadedUnreadList(channel);
+      const ingest = vi.spyOn(paginator, 'ingestItem');
+      const remove = vi.spyOn(paginator, 'removeItem');
+
+      // a mark-all-read; without a target there is nothing to route, so the list is left as it is and
+      // reconciles on the next event naming a channel, or the next query
+      seedUnread(channel, 0);
+      client.dispatchEvent({
+        created_at: new Date(),
+        type: 'notification.mark_read',
+        unread_channels: 0,
+        user: { id: client.userId as string },
+      });
+
+      await vi.waitFor(() => {
+        expect(ingest).not.toHaveBeenCalled();
+        expect(remove).not.toHaveBeenCalled();
+        expect(paginator.items).toHaveLength(1);
+      });
+    });
+
+    it('drops every channel the client marked read, not only the one the event names', async () => {
+      const named = makeChannel('messaging:310');
+      const other = makeChannel('messaging:311');
+      seedUnread(named);
+      seedUnread(other);
+      client.activeChannels[named.cid] = named;
+      client.activeChannels[other.cid] = other;
+
+      // the client reconciles the lists it owns, so this one is registered on `client.channelManager`
+      const paginator = new ChannelPaginator({ client, filters: { has_unread: true } });
+      paginator.setItems({ valueOrFactory: [named, other], isFirstPage: true });
+      client.channelManager.insertPaginator({ paginator });
+      client.channelManager.registerSubscriptions();
+
+      // `unread_channels: 0` makes the client zero every active channel, so both stop matching
+      client.dispatchEvent(markReadEvent(named, { unread_channels: 0 }));
+
+      await vi.waitFor(() => {
+        expect(paginator.items).toHaveLength(0);
+        expect(paginator.offset).toBe(0);
+      });
+    });
+
+    it('drops channels a mark-all-read leaves read, though it names none', async () => {
+      const channel = makeChannel('messaging:312');
+      seedUnread(channel);
+      client.activeChannels[channel.cid] = channel;
+
+      const paginator = new ChannelPaginator({ client, filters: { has_unread: true } });
+      paginator.setItems({ valueOrFactory: [channel], isFirstPage: true });
+      client.channelManager.insertPaginator({ paginator });
+      client.channelManager.registerSubscriptions();
+
+      client.dispatchEvent({
+        created_at: new Date(),
+        type: 'notification.mark_read',
+        unread_channels: 0,
+        user: { id: client.userId as string },
+      });
+
+      await vi.waitFor(() => {
+        expect(paginator.items).toHaveLength(0);
+        expect(paginator.offset).toBe(0);
+      });
+    });
+
+    it('skips lists that neither filter nor sort on read state', async () => {
+      const channel = makeChannel('messaging:313');
+      seedUnread(channel);
+      client.activeChannels[channel.cid] = channel;
+
+      const plainList = new ChannelPaginator({ client, filters: { type: 'messaging' } });
+      plainList.setItems({ valueOrFactory: [channel], isFirstPage: true });
+      new ChannelManager({ client, paginators: [plainList] }).registerSubscriptions();
+
+      const ingest = vi.spyOn(plainList, 'ingestItem');
+      const remove = vi.spyOn(plainList, 'removeItem');
+
+      client.dispatchEvent(markReadEvent(channel));
+
+      await vi.waitFor(() => {
+        // nothing here is derived from read state, so the read never reaches this list
+        expect(ingest).not.toHaveBeenCalled();
+        expect(remove).not.toHaveBeenCalled();
+        expect(plainList.items?.map((c) => c.cid)).toEqual([channel.cid]);
+      });
+    });
+
+    it('still routes to a list that only sorts on read state', async () => {
+      const channel = makeChannel('messaging:314');
+      seedUnread(channel);
+      client.activeChannels[channel.cid] = channel;
+
+      const sortedList = new ChannelPaginator({
+        client,
+        filters: { type: 'messaging' },
+        sort: [{ direction: -1, field: 'unread_count' }],
+      });
+      sortedList.setItems({ valueOrFactory: [channel], isFirstPage: true });
+      new ChannelManager({ client, paginators: [sortedList] }).registerSubscriptions();
+
+      const ingest = vi.spyOn(sortedList, 'ingestItem');
+
+      client.dispatchEvent(markReadEvent(channel));
+
+      // still matches, but its sort key changed, so it has to be re-placed
+      await vi.waitFor(() => {
+        expect(ingest).toHaveBeenCalledOnce();
+      });
+    });
+
+    it('does not fetch a channel this client never loaded', async () => {
+      const channel = makeChannel('messaging:305');
+      seedUnread(channel);
+      const { paginator } = loadedUnreadList(channel);
+      delete client.activeChannels['messaging:306'];
+
+      client.dispatchEvent({
+        channel_id: '306',
+        channel_type: 'messaging',
+        cid: 'messaging:306',
+        created_at: new Date(),
+        type: 'notification.mark_read',
+        user: { id: client.userId as string },
+      });
+
+      await vi.waitFor(() => {
+        expect(mockGetChannel).not.toHaveBeenCalled();
+        expect(paginator.items).toHaveLength(1);
+      });
     });
   });
 });

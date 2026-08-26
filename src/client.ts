@@ -1129,12 +1129,13 @@ export class StreamChat extends ChatApi {
     }
 
     if (event.type === 'notification.mark_read' && event.unread_channels === 0) {
-      const activeChannelKeys = Object.keys(this.activeChannels);
-      activeChannelKeys.forEach((activeChannelKey) =>
+      Object.values(this.activeChannels).forEach((channel) => {
         // resets `read[userId].unread_messages`, which is what the unread badge reads, so it does
         // not stay stale.
-        this.activeChannels[activeChannelKey]._setOwnUnreadCount(0),
-      );
+        if (!channel._setOwnUnreadCount(0)) return;
+        // the event may name no channel (mark-all-read), but here we know which ones changed
+        this.channelManager.dropFromUnmatchedLists(channel);
+      });
     }
 
     if (

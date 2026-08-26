@@ -2219,8 +2219,10 @@ describe('AttachmentManager', () => {
       const ensureLocalUploadAttachment = (attachmentManager as any)
         .ensureLocalUploadAttachment;
 
-      // Set a fileUploadFilter that blocks all files
-      attachmentManager.fileUploadFilter = () => false;
+      // Block all files
+      attachmentManager.composer.updateConfig({
+        attachments: { fileUploadFilter: () => false },
+      });
 
       const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
       const result = await ensureLocalUploadAttachment({
@@ -2244,7 +2246,9 @@ describe('AttachmentManager', () => {
         'fileToLocalUploadAttachment',
       );
 
-      attachmentManager.fileUploadFilter = () => true;
+      attachmentManager.composer.updateConfig({
+        attachments: { fileUploadFilter: () => true },
+      });
 
       const file = new File([''], 'test.jpg', { type: 'image/jpeg' });
       await ensureLocalUploadAttachment({
@@ -2264,8 +2268,10 @@ describe('AttachmentManager', () => {
       const ensureLocalUploadAttachment = (attachmentManager as any)
         .ensureLocalUploadAttachment;
 
-      // Set a fileUploadFilter that allows all files
-      attachmentManager.fileUploadFilter = () => true;
+      // Allow all files
+      attachmentManager.composer.updateConfig({
+        attachments: { fileUploadFilter: () => true },
+      });
 
       const expectedAttachment = {
         type: 'image',
@@ -2298,8 +2304,10 @@ describe('AttachmentManager', () => {
       const ensureLocalUploadAttachment = (attachmentManager as any)
         .ensureLocalUploadAttachment;
 
-      // Set a fileUploadFilter that allows all files
-      attachmentManager.fileUploadFilter = () => true;
+      // Allow all files
+      attachmentManager.composer.updateConfig({
+        attachments: { fileUploadFilter: () => true },
+      });
 
       // Create an attachment with an ID
       const originalId = 'original-test-id';

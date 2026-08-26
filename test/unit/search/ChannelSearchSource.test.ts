@@ -182,7 +182,7 @@ describe('ChannelSearchSource', () => {
     expect(result).toBe(channels);
   });
 
-  it('works without client.userID', async () => {
+  it('works without client.userId', async () => {
     searchSource.client.user = undefined;
     const spyBuildFilters = vi
       .spyOn(searchSource.filterBuilder, 'buildFilters')

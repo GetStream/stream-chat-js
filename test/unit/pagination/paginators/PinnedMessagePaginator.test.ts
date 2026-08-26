@@ -29,7 +29,7 @@ const makeChannel = (getPinnedMessages = vi.fn()) =>
     cid: CID,
     getClient: () => ({
       notifications: { addError: vi.fn() },
-      userID: 'me',
+      userId: 'me',
     }),
     getPinnedMessages,
   }) as unknown as import('../../../../src/channel').Channel;

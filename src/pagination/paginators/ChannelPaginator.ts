@@ -14,7 +14,7 @@ import { chatLoggerSystem } from '../../logger';
 import type { FilterBuilderOptions } from '../FilterBuilder';
 import { FilterBuilder } from '../FilterBuilder';
 import { makeComparator } from '../sortCompiler';
-import { itemMatchesFilter } from '../filterCompiler';
+import { filterConstrainsField, itemMatchesFilter } from '../filterCompiler';
 import { StoreBackedItemIndex } from '../../entityStore/StoreBackedItemIndex';
 import { generateUUIDv4 } from '../../utils';
 import type { StreamChat } from '../../client';
@@ -452,32 +452,12 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   matchesFilter(channel: Channel): boolean {
     const filters = this.buildMatchFilters();
 
-    const LOGICAL_FILTER_OPERATORS = ['$and', '$or', '$nor'] as const;
-
-    /**
-     * Whether a filter constrains `hidden` anywhere — at the top level or nested inside a logical
-     * operator, both of which the filter compiler evaluates. A filter that mentions `hidden` at all opts
-     * out of the "exclude hidden channels" default (see `ChannelPaginator.matchesFilter`), so
-     * `{ $or: [{ hidden: true }, …] }` is not silently overruled by it.
-     *
-     * Recursion is limited to logical operators on purpose: a `hidden` key anywhere else (e.g. inside
-     * `{ custom: { hidden: … } }`) is a different field, not a constraint on the channel's hidden state.
-     */
-    const filterConstrainsHidden = (filters: unknown): boolean => {
-      if (!filters || typeof filters !== 'object') return false;
-      if (Array.isArray(filters)) return filters.some(filterConstrainsHidden);
-      const node = filters as Record<string, unknown>;
-      if ('hidden' in node) return true;
-      return LOGICAL_FILTER_OPERATORS.some((operator) =>
-        filterConstrainsHidden(node[operator]),
-      );
-    };
     // Mirror `queryChannels`, which excludes hidden channels unless the filter asks for them —
     // otherwise a channel hidden while the list is open keeps matching and stays visible until the next
     // query. Applied here rather than as a synthetic `hidden: false` filter entry so the default also
     // holds for a paginator whose filter resolvers were replaced (`setFilterResolvers`), which would
     // otherwise leave `hidden` unresolvable and reject every channel.
-    if (channel.data?.hidden && !filterConstrainsHidden(filters)) return false;
+    if (channel.data?.hidden && !filterConstrainsField(filters, 'hidden')) return false;
     return itemMatchesFilter<Channel>(channel, filters, {
       resolvers: this._filterFieldToDataResolvers,
     });
