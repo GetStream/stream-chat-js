@@ -377,10 +377,7 @@ export class Channel extends ChannelApi {
     this.cooldownTimer.registerSubscriptions();
 
     this.messageOperations = new MessageOperations({
-      ...createMessageOperationsPersistence({
-        getCid: () => this.cid,
-        getClient: () => this.getClient(),
-      }),
+      ...createMessageOperationsPersistence({ channel: this }),
       ingest: (m) => {
         const store = this.getClient().messageStore;
         // The paginator is the entry point whenever it can hold the message — it owns interval
@@ -680,6 +677,7 @@ export class Channel extends ChannelApi {
     const messageId = request.message?.id;
 
     return await queueOrRun({
+      channel: this,
       client: this.getClient(),
       // Nothing to key a queue entry on without a message id, so it runs but is not queued.
       queue: !!messageId,
@@ -907,6 +905,7 @@ export class Channel extends ChannelApi {
     // The optimistic reaction row is written by the local-update layer (`applyReactionLocally`); here
     // we only queue the request for replay.
     return await queueOrRun({
+      channel: this,
       client: this.getClient(),
       task: {
         channelId: this.id as string,
@@ -929,6 +928,7 @@ export class Channel extends ChannelApi {
     // The optimistic reaction-row removal is handled by the local-update layer
     // (`applyReactionLocally`); here we only queue the request for replay.
     return await queueOrRun({
+      channel: this,
       client: this.getClient(),
       task: {
         channelId: this.id as string,
@@ -2278,6 +2278,7 @@ export class Channel extends ChannelApi {
     const [request] = args;
 
     return await queueOrRun({
+      channel: this,
       client: this.getClient(),
       task: {
         channelId: this.id as string,
@@ -2301,6 +2302,7 @@ export class Channel extends ChannelApi {
     const [request] = args;
 
     return await queueOrRun({
+      channel: this,
       client: this.getClient(),
       task: {
         channelId: this.id as string,

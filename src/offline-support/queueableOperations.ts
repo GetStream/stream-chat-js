@@ -21,8 +21,14 @@ export type QueueableOperation<T extends QueueableType> = {
    * saying only which operation it wants.
    */
   logFailureAs: { message: string; method: string };
-  /** Performs the request. Used both for a first attempt and for a replay. */
+  /**
+   * Performs the request. Used both for a first attempt and for a replay.
+   *
+   * `channel` is the instance the CALLER already holds, when there is one. A first attempt comes from a
+   * `Channel` method and must run on that exact object; only a replay has to look one up.
+   */
   run: (params: {
+    channel?: Channel;
     client: StreamChat;
     task: PendingTaskOf<T>;
   }) => Promise<QueueableResult<T>>;
@@ -39,10 +45,20 @@ export type QueueableOperation<T extends QueueableType> = {
 };
 
 /**
- * A task's channel. Every channel-scoped operation carries `channelType`/`channelId`, and a task that
- * somehow reached the queue without them cannot be replayed at all.
+ * The channel an operation runs on: the caller's own instance when it has one, and otherwise resolved
+ * from the task.
+ *
+ * Preferring the caller's instance is not an optimisation. `client.channel()` returns the cached
+ * instance only while it is in `activeChannels` and not `pendingDisposal` — otherwise it CONSTRUCTS a
+ * new `Channel`, which builds paginators and a composer and registers subscriptions. A first attempt
+ * always has the real instance in hand, so it should never risk that.
+ *
+ * A replay has no instance, so it resolves from the task. Every channel-scoped operation carries
+ * `channelType`/`channelId`; a task that reached the queue without them cannot be replayed at all.
  */
-const channelOf = (client: StreamChat, task: PendingTask): Channel => {
+const channelOf = (client: StreamChat, task: PendingTask, channel?: Channel): Channel => {
+  if (channel) return channel;
+
   const { channelId, channelType } = task;
   if (!channelType || !channelId) {
     throw new Error(
@@ -66,14 +82,16 @@ export const QUEUEABLE_OPERATIONS: {
       message: 'Creating the draft in the offline database failed.',
       method: 'createDraft',
     },
-    run: ({ client, task }) => channelOf(client, task)._createDraft(...task.payload),
+    run: ({ channel, client, task }) =>
+      channelOf(client, task, channel)._createDraft(...task.payload),
   },
   'delete-draft': {
     logFailureAs: {
       message: 'Deleting the draft from the offline database failed.',
       method: 'deleteDraft',
     },
-    run: ({ client, task }) => channelOf(client, task)._deleteDraft(...task.payload),
+    run: ({ channel, client, task }) =>
+      channelOf(client, task, channel)._deleteDraft(...task.payload),
   },
   'delete-message': {
     logFailureAs: { message: 'Deleting the message failed.', method: 'deleteMessage' },
@@ -81,7 +99,8 @@ export const QUEUEABLE_OPERATIONS: {
   },
   'delete-reaction': {
     logFailureAs: { message: 'Deleting the reaction failed.', method: 'deleteReaction' },
-    run: ({ client, task }) => channelOf(client, task)._deleteReaction(...task.payload),
+    run: ({ channel, client, task }) =>
+      channelOf(client, task, channel)._deleteReaction(...task.payload),
   },
   'send-message': {
     logFailureAs: { message: 'Sending the message failed.', method: 'sendMessage' },
@@ -102,11 +121,13 @@ export const QUEUEABLE_OPERATIONS: {
       }
       channelOf(client, task).messagePaginator.trackLastMessage(formatMessage(message));
     },
-    run: ({ client, task }) => channelOf(client, task)._sendMessage(...task.payload),
+    run: ({ channel, client, task }) =>
+      channelOf(client, task, channel)._sendMessage(...task.payload),
   },
   'send-reaction': {
     logFailureAs: { message: 'Sending the reaction failed.', method: 'sendReaction' },
-    run: ({ client, task }) => channelOf(client, task)._sendReaction(...task.payload),
+    run: ({ channel, client, task }) =>
+      channelOf(client, task, channel)._sendReaction(...task.payload),
   },
   'update-message': {
     logFailureAs: { message: 'Updating the message failed.', method: 'updateMessage' },
@@ -133,16 +154,20 @@ export const QUEUEABLE_OPERATIONS: {
  *
  * @internal
  *
+ * @param params.channel - The channel instance the caller already holds, so a first attempt runs on
+ *   that exact object rather than one `client.channel()` might reconstruct.
  * @param params.client - Resolves the operation, and carries the offline DB when one is registered.
  * @param params.queue - Whether this task can be queued at all. `false` for a send with no message id,
  *   which there is nothing to key a queue entry on — it still runs, just not through the queue.
  * @param params.task - Which operation to run, and the arguments to run it with.
  */
 export const queueOrRun = async <T extends QueueableType>({
+  channel,
   client,
   queue = true,
   task,
 }: {
+  channel?: Channel;
   client: StreamChat;
   queue?: boolean;
   task: PendingTaskOf<T>;
@@ -164,7 +189,7 @@ export const queueOrRun = async <T extends QueueableType>({
     }
   }
 
-  return await runQueueableOperation({ client, task });
+  return await runQueueableOperation({ channel, client, task });
 };
 
 /**
@@ -173,9 +198,11 @@ export const queueOrRun = async <T extends QueueableType>({
  * @internal
  */
 export const runQueueableOperation = async <T extends QueueableType>({
+  channel,
   client,
   task,
 }: {
+  channel?: Channel;
   client: StreamChat;
   task: PendingTaskOf<T>;
 }): Promise<QueueableResult<T>> => {
@@ -187,5 +214,5 @@ export const runQueueableOperation = async <T extends QueueableType>({
     );
   }
 
-  return await operation.run({ client, task });
+  return await operation.run({ channel, client, task });
 };

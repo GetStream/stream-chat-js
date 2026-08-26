@@ -272,10 +272,7 @@ export class Thread extends WithSubscriptions {
     });
 
     this.messageOperations = new MessageOperations({
-      ...createMessageOperationsPersistence({
-        getCid: () => this.channel.cid,
-        getClient: () => this.channel.getClient(),
-      }),
+      ...createMessageOperationsPersistence({ channel: this.channel }),
       ingest: (m) => {
         const store = this.channel.getClient().messageStore;
         // See the matching comment in `Channel`: the reply paginator's filter demands

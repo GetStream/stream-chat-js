@@ -1,5 +1,5 @@
 import { isQueuedForReplay } from './optimistic';
-import type { StreamChat } from '../client';
+import type { Channel } from '../channel';
 import type { LocalMessage } from '../types';
 
 /**
@@ -10,27 +10,29 @@ import type { LocalMessage } from '../types';
  * detaches the query rather than awaiting it: local state is the source of truth, so an operation must
  * never fail — or be delayed — because a mirror write did. Same shape `applyReactionLocally` uses.
  *
- * `getCid` is read lazily rather than captured: these hooks are built in the `Channel` constructor,
- * and a channel created before its server data arrives gets its `cid` later.
+ * @param params.channel - The channel these writes belong to. A `Thread` passes its parent channel,
+ *   since a reply's row is stored against the channel like any other message.
  */
 export const createMessageOperationsPersistence = ({
-  getCid,
-  getClient,
+  channel,
 }: {
-  getCid: () => string;
-  getClient: () => StreamChat;
+  channel: Channel;
 }) => ({
   persist: (message: LocalMessage) => {
-    const cid = getCid();
-    getClient().offlineDb?.executeQuerySafely(
-      (db) => db.upsertMessageWithChannelGuard({ message: { ...message, cid } }),
-      { method: 'messageOperations:persist' },
-    );
+    channel
+      .getClient()
+      .offlineDb?.executeQuerySafely(
+        (db) =>
+          db.upsertMessageWithChannelGuard({ message: { ...message, cid: channel.cid } }),
+        { method: 'messageOperations:persist' },
+      );
   },
   purge: (id: string) => {
-    getClient().offlineDb?.executeQuerySafely((db) => db.hardDeleteMessage({ id }), {
-      method: 'messageOperations:purge',
-    });
+    channel
+      .getClient()
+      .offlineDb?.executeQuerySafely((db) => db.hardDeleteMessage({ id }), {
+        method: 'messageOperations:purge',
+      });
   },
-  isQueued: (messageId: string) => isQueuedForReplay(getClient(), messageId),
+  isQueued: (messageId: string) => isQueuedForReplay(channel.getClient(), messageId),
 });
