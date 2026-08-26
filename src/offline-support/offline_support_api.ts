@@ -15,7 +15,9 @@ import type {
   OfflineDBApi,
   OfflineDBState,
   PendingTask,
+  PendingTaskOf,
   PrepareBatchDBQueries,
+  QueueableType,
 } from './types';
 import { OfflineError } from './types';
 import { isEphemeral } from '../errors';
@@ -32,6 +34,8 @@ import {
   runDetached,
 } from '../utils';
 import { isMessageUpdateReplayable } from './util';
+import { QUEUEABLE_OPERATIONS, runQueueableOperation } from './queueableOperations';
+import type { QueueableOperation } from './queueableOperations';
 
 const logger = chatLoggerSystem.getLogger('offline-db');
 import type { WSEvent } from '../gen/models';
@@ -1552,58 +1556,28 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * @param isPendingTask - a control value telling us if it's an actual pending task being executed
    * or delayed execution
    */
-  private executeTask = async (
-    { task }: { task: PendingTask },
+  /**
+   * Replays one queued operation, through the {@link QUEUEABLE_OPERATIONS} registry rather than a
+   * per-type branch here — the same registry a first attempt resolves through, so the two cannot
+   * describe different requests.
+   *
+   * @param task - the task to run.
+   * @param isPendingTask - whether this is a replay rather than a first attempt. A first attempt has an
+   *   optimistic layer above it that settles local state; a replay does not, so some operations have to
+   *   settle it themselves (see `onReplay`).
+   */
+  private executeTask = async <T extends QueueableType>(
+    { task }: { task: PendingTaskOf<T> },
     isPendingTask = false,
   ) => {
-    if (task.type === 'update-message') {
-      return await this.client._updateMessage(...task.payload);
+    const result = await runQueueableOperation({ client: this.client, task });
+
+    if (isPendingTask) {
+      const operation = QUEUEABLE_OPERATIONS[task.type] as QueueableOperation<T>;
+      operation.onReplay?.({ client: this.client, result, task });
     }
 
-    if (task.type === 'delete-message') {
-      return await this.client._deleteMessage(...task.payload);
-    }
-
-    const { channelType, channelId } = task;
-
-    if (channelType && channelId) {
-      const channel = this.client.channel(channelType, channelId);
-
-      if (task.type === 'send-reaction') {
-        return await channel._sendReaction(...task.payload);
-      }
-
-      if (task.type === 'delete-reaction') {
-        return await channel._deleteReaction(...task.payload);
-      }
-
-      if (task.type === 'create-draft') {
-        return await channel._createDraft(...task.payload);
-      }
-
-      if (task.type === 'delete-draft') {
-        return await channel._deleteDraft(...task.payload);
-      }
-
-      if (task.type === 'send-message') {
-        const newMessageResponse = await channel._sendMessage(...task.payload);
-        const newMessage = newMessageResponse?.message;
-        if (isPendingTask && newMessage) {
-          if (newMessage?.parent_id) {
-            this.client.threads.threadsById[newMessage.parent_id]?.upsertReplyLocally({
-              message: newMessage,
-              timestampChanged: true,
-            });
-          }
-          channel.messagePaginator.trackLastMessage(formatMessage(newMessage));
-        }
-        return newMessageResponse;
-      }
-    }
-
-    throw new Error(
-      `Tried to execute invalid pending task type (${task.type}) while synchronizing the database.`,
-    );
+    return result;
   };
 
   /**

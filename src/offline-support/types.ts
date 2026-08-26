@@ -420,43 +420,69 @@ export type PendingTaskTypes = {
   deleteDraft: 'delete-draft';
 };
 
-// TODO: Please rethink the definition of PendingTasks as it seems awkward
+/**
+ * Every operation the offline queue can replay, declared as the method that performs it.
+ *
+ * This map is the single definition of what a queueable operation IS. `PendingTask`'s payload union is
+ * derived from it, and `QUEUEABLE_OPERATIONS` has to supply a resolver for each key — so a new task
+ * type is a compile error until both its signature and its resolver exist, rather than a runtime
+ * "Tried to execute invalid pending task type" the first time somebody queues one.
+ *
+ * The `_`-prefixed forms deliberately: the public `sendMessage` / `updateMessage` / … queue, so
+ * resolving to those would make a replay queue itself again instead of hitting the server.
+ *
+ * @internal
+ */
+export type QueueableOperationSignatures = {
+  'create-draft': Channel['_createDraft'];
+  'delete-draft': Channel['_deleteDraft'];
+  'delete-message': StreamChat['_deleteMessage'];
+  'delete-reaction': Channel['_deleteReaction'];
+  'send-message': Channel['_sendMessage'];
+  'send-reaction': Channel['_sendReaction'];
+  'update-message': StreamChat['_updateMessage'];
+};
+
+export type QueueableType = keyof QueueableOperationSignatures;
+
+/**
+ * The argument list of a queueable operation — what a task carries as its `payload`.
+ *
+ * @internal
+ */
+export type QueueablePayload<T extends QueueableType> = Parameters<
+  QueueableOperationSignatures[T]
+>;
+
+/**
+ * What a queueable operation resolves with.
+ *
+ * @internal
+ */
+export type QueueableResult<T extends QueueableType> = Awaited<
+  ReturnType<QueueableOperationSignatures[T]>
+>;
+
+/**
+ * A queued request: which operation, and the arguments to replay it with. The payload is the argument
+ * list of the method named in {@link QueueableOperationSignatures}, so the two cannot drift.
+ */
 export type PendingTask = {
   channelId?: string;
   channelType?: string;
   messageId?: string;
   id?: number;
   threadId?: string;
-} & (
-  | {
-      payload: Parameters<Channel['sendReaction']>;
-      type: PendingTaskTypes['sendReaction'];
-    }
-  | {
-      payload: Parameters<StreamChat['updateMessage']>;
-      type: PendingTaskTypes['updateMessage'];
-    }
-  | {
-      payload: Parameters<StreamChat['deleteMessage']>;
-      type: PendingTaskTypes['deleteMessage'];
-    }
-  | {
-      payload: Parameters<Channel['deleteReaction']>;
-      type: PendingTaskTypes['deleteReaction'];
-    }
-  | {
-      payload: Parameters<Channel['sendMessage']>;
-      type: PendingTaskTypes['sendMessage'];
-    }
-  | {
-      payload: Parameters<Channel['createDraft']>;
-      type: PendingTaskTypes['createDraft'];
-    }
-  | {
-      payload: Parameters<Channel['deleteDraft']>;
-      type: PendingTaskTypes['deleteDraft'];
-    }
-);
+} & {
+  [T in QueueableType]: { payload: QueueablePayload<T>; type: T };
+}[QueueableType];
+
+/**
+ * A task narrowed to one operation.
+ *
+ * @internal
+ */
+export type PendingTaskOf<T extends QueueableType> = Extract<PendingTask, { type: T }>;
 
 export type OfflineErrorType = 'connection:lost';
 

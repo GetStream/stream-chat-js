@@ -1,5 +1,6 @@
 import { ChannelState, ChannelWatchStatus } from './channel_state';
 import { CooldownTimer } from './CooldownTimer';
+import { queueOrRun } from './offline-support/queueableOperations';
 import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
 import type { ReadStoreReconcileMeta } from './messageDelivery';
@@ -42,7 +43,6 @@ import type {
   ChannelStateResponseFields,
   ChannelUpdateOptions,
   Command,
-  CreateDraftResponse,
   DeleteMessageOptions,
   Event,
   EventHandler,
@@ -85,7 +85,6 @@ import type { ChatApi } from './gen/chat/ChatApi';
 import { ChannelApi } from './gen/chat/ChannelApi';
 
 const logger = chatLoggerSystem.getLogger('channel');
-const offlineDbLogger = chatLoggerSystem.getLogger('offline-db');
 
 // todo: move to dedicated file
 export type SendMessageWithStateUpdateParams = {
@@ -678,26 +677,20 @@ export class Channel extends ChannelApi {
    */
   override async sendMessage(...args: Parameters<ChannelApi['sendMessage']>) {
     const [request] = args;
-    try {
-      const offlineDb = this.getClient().offlineDb;
-      const messageId = request.message?.id;
-      if (offlineDb && messageId) {
-        return await offlineDb.queueTask<Awaited<ReturnType<ChatApi['sendMessage']>>>({
-          task: {
-            channelId: this.id as string,
-            channelType: this.type,
-            messageId,
-            payload: args,
-            type: 'send-message',
-          },
-        });
-      }
-    } catch (error) {
-      offlineDbLogger
-        .withExtraTags('sendMessage', this.cid)
-        .error('Sending the message failed.', { error });
-    }
-    return await this._sendMessage(...args);
+    const messageId = request.message?.id;
+
+    return await queueOrRun({
+      client: this.getClient(),
+      // Nothing to key a queue entry on without a message id, so it runs but is not queued.
+      queue: !!messageId,
+      task: {
+        channelId: this.id as string,
+        channelType: this.type,
+        messageId,
+        payload: args,
+        type: 'send-message',
+      },
+    });
   }
 
   /**
@@ -911,28 +904,18 @@ export class Channel extends ChannelApi {
   async sendReaction(...args: Parameters<ChatApi['sendReaction']>) {
     const [{ id: messageId }] = args;
 
-    try {
-      const offlineDb = this.getClient().offlineDb;
-      if (offlineDb) {
-        // The optimistic reaction row is written by the local-update layer
-        // (`applyReactionLocally`); here we only queue the request for replay.
-        return await offlineDb.queueTask<Awaited<ReturnType<ChatApi['sendReaction']>>>({
-          task: {
-            channelId: this.id as string,
-            channelType: this.type,
-            messageId,
-            payload: args,
-            type: 'send-reaction',
-          },
-        });
-      }
-    } catch (error) {
-      offlineDbLogger
-        .withExtraTags('sendReaction', this.cid)
-        .error('Sending the reaction failed.', { error });
-    }
-
-    return this._sendReaction(...args);
+    // The optimistic reaction row is written by the local-update layer (`applyReactionLocally`); here
+    // we only queue the request for replay.
+    return await queueOrRun({
+      client: this.getClient(),
+      task: {
+        channelId: this.id as string,
+        channelType: this.type,
+        messageId,
+        payload: args,
+        type: 'send-reaction',
+      },
+    });
   }
 
   _sendReaction(...args: Parameters<ChatApi['sendReaction']>) {
@@ -943,28 +926,18 @@ export class Channel extends ChannelApi {
     this._checkInitialized();
     const [request] = args;
 
-    try {
-      const offlineDb = this.getClient().offlineDb;
-      if (offlineDb) {
-        // The optimistic reaction-row removal is handled by the local-update layer
-        // (`applyReactionLocally`); here we only queue the request for replay.
-        return await offlineDb.queueTask<Awaited<ReturnType<ChatApi['deleteReaction']>>>({
-          task: {
-            channelId: this.id as string,
-            channelType: this.type,
-            messageId: request.id,
-            payload: args,
-            type: 'delete-reaction',
-          },
-        });
-      }
-    } catch (error) {
-      offlineDbLogger
-        .withExtraTags('deleteReaction', this.cid)
-        .error('Deleting the reaction failed.', { error });
-    }
-
-    return await this._deleteReaction(...args);
+    // The optimistic reaction-row removal is handled by the local-update layer
+    // (`applyReactionLocally`); here we only queue the request for replay.
+    return await queueOrRun({
+      client: this.getClient(),
+      task: {
+        channelId: this.id as string,
+        channelType: this.type,
+        messageId: request.id,
+        payload: args,
+        type: 'delete-reaction',
+      },
+    });
   }
 
   /**
@@ -2303,26 +2276,17 @@ export class Channel extends ChannelApi {
    */
   override async createDraft(...args: Parameters<ChannelApi['createDraft']>) {
     const [request] = args;
-    try {
-      const offlineDb = this.getClient().offlineDb;
-      if (offlineDb) {
-        return (await offlineDb.queueTask<CreateDraftResponse>({
-          task: {
-            channelId: this.id as string,
-            channelType: this.type,
-            threadId: request.message?.parent_id,
-            payload: args,
-            type: 'create-draft',
-          },
-        })) as Awaited<ReturnType<ChannelApi['createDraft']>>;
-      }
-    } catch (error) {
-      offlineDbLogger
-        .withExtraTags('createDraft', this.cid)
-        .error('Creating the draft in the offline database failed.', { error });
-    }
 
-    return this._createDraft(...args);
+    return await queueOrRun({
+      client: this.getClient(),
+      task: {
+        channelId: this.id as string,
+        channelType: this.type,
+        threadId: request.message?.parent_id,
+        payload: args,
+        type: 'create-draft',
+      },
+    });
   }
 
   async _deleteDraft(...args: Parameters<ChannelApi['deleteDraft']>) {
@@ -2335,28 +2299,17 @@ export class Channel extends ChannelApi {
    */
   override async deleteDraft(...args: Parameters<ChannelApi['deleteDraft']>) {
     const [request] = args;
-    try {
-      const offlineDb = this.getClient().offlineDb;
-      if (offlineDb) {
-        return (await offlineDb.queueTask<Awaited<ReturnType<ChannelApi['deleteDraft']>>>(
-          {
-            task: {
-              channelId: this.id as string,
-              channelType: this.type,
-              threadId: request?.parent_id,
-              payload: args,
-              type: 'delete-draft',
-            },
-          },
-        )) as Awaited<ReturnType<ChannelApi['deleteDraft']>>;
-      }
-    } catch (error) {
-      offlineDbLogger
-        .withExtraTags('deleteDraft', this.cid)
-        .error('Deleting the draft from the offline database failed.', { error });
-    }
 
-    return this._deleteDraft(...args);
+    return await queueOrRun({
+      client: this.getClient(),
+      task: {
+        channelId: this.id as string,
+        channelType: this.type,
+        threadId: request?.parent_id,
+        payload: args,
+        type: 'delete-draft',
+      },
+    });
   }
 
   /**
