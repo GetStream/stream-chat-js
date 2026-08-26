@@ -146,7 +146,8 @@ export class StreamChat extends ChatApi {
    * and reloads each active channel, then dispatches `connection.recovered`. Instantiated with the
    * client and subscribed for its lifetime.
    *
-   * Turn it off with the `recoverStateOnReconnect` option if the application recovers state itself.
+   * Turn it off through the declarative configuration if the application recovers state itself:
+   * `client.config.set({ client: { connectionRecovery: { enabled: false } } })`.
    */
   connectionRecovery: ConnectionRecoveryManager;
   /**
@@ -166,16 +167,6 @@ export class StreamChat extends ChatApi {
   clientId?: string;
   key: string;
   listeners: Map<EventType, Set<EventHandler>>;
-  /**
-   * Whether the client recovers its own state when the connection comes back (default `true`).
-   *
-   * When enabled, {@link ConnectionRecoveryManager} re-runs each loaded channel list's own first-page
-   * query and reloads each active channel, then dispatches `connection.recovered`.
-   *
-   * Set it to `false` only if the application recovers state itself — nothing will then be re-queried
-   * or re-watched on reconnect, and it becomes the consumer's job to refresh whatever is on screen.
-   */
-  recoverStateOnReconnect?: boolean;
   /**
    * If true, we will not clean up threads when channel state is in initializing state.
    * The main use case for SDKs who do independent state recovery for channels.
@@ -300,7 +291,6 @@ export class StreamChat extends ChatApi {
 
     this.options = {
       warmUp: false,
-      recoverStateOnReconnect: true,
       disableCache: false,
       isLocalUnreadCountEnabled: false,
       wsUrlParams: new URLSearchParams({}),
@@ -341,7 +331,6 @@ export class StreamChat extends ChatApi {
 
     this.defaultWSTimeout = 15 * 1000;
 
-    this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
     this.messageStore = new EntityStore<LocalMessage>({
       getEntityId: (message) => message.id,
     });
@@ -402,6 +391,7 @@ export class StreamChat extends ChatApi {
   private initializeManagerConfig() {
     const config = this.config.getConfig('client');
 
+    this.connectionRecovery.initializeConfig(config?.connectionRecovery);
     this.reminders.initializeConfig(config?.reminders);
     this.threads.initializeConfig(config?.threads);
     this.messageDeliveryReporter.initializeConfig(config?.messageDelivery);

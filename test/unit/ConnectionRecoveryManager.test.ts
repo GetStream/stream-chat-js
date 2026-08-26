@@ -282,9 +282,11 @@ describe('ConnectionRecoveryManager', () => {
     });
   });
 
-  describe('recoverStateOnReconnect: false', () => {
+  describe('connectionRecovery.enabled: false', () => {
     it('recovers nothing', async () => {
-      client.recoverStateOnReconnect = false;
+      // The kill switch is declarative configuration now, read when a recovery actually runs — so it
+      // is honoured from the next reconnect without the manager being re-wired.
+      client.config.set({ client: { connectionRecovery: { enabled: false } } });
       const { reload } = activeChannel('active');
       const recoverLists = vi
         .spyOn(client.channelManager, 'recover')

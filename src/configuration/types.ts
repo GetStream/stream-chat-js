@@ -15,6 +15,7 @@ import type { ReminderManagerConfig } from '../reminders/ReminderManager';
 import type { NotificationManagerConfig } from '../notifications/types';
 import type { MessageDeliveryReporterConfig } from '../messageDelivery/MessageDeliveryReporter';
 import type { ThreadManagerConfig } from '../thread_manager';
+import type { ConnectionRecoveryManagerConfig } from '../ConnectionRecoveryManager';
 import type { MessageOperationsConfig } from '../messageOperations/MessageOperations';
 import type { DeclarativePaginatorConfig as ImportedDeclarativePaginatorConfig } from '../pagination/paginators/BasePaginator';
 import type { DeepPartial } from '../types.utility';
@@ -136,6 +137,7 @@ export type ClientDeclarativeConfig = {
    * Nested rather than top-level keys: each of these managers has exactly one parent — the client — so
    * there is nothing to say once and reuse, which is what a top-level key buys (**DEC-25**).
    */
+  connectionRecovery?: Partial<ConnectionRecoveryManagerConfig>;
   messageDelivery?: Partial<MessageDeliveryReporterConfig>;
   threads?: Partial<ThreadManagerConfig>;
   notifications?: DeepPartial<NotificationManagerConfig>;

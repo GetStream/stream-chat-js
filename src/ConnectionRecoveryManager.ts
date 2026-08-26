@@ -1,12 +1,28 @@
 import { WithSubscriptions } from './utils/WithSubscriptions';
 import { chatLoggerSystem } from './logger';
 import { runDetached } from './utils';
+import { ConfigController } from './configuration/ConfigController';
+import { deepFreezeConfig } from './configuration/utils/deepFreezeConfig';
 import type { StreamChat } from './client';
 import type { Channel } from './channel';
 import type { Thread } from './thread';
-import type { Unsubscribe } from './store';
+import type { StateStore, Unsubscribe } from './store';
 
 const logger = chatLoggerSystem.getLogger('client');
+
+export type ConnectionRecoveryManagerConfig = {
+  /**
+   * Whether the client recovers its own state when the connection comes back.
+   *
+   * Set it to `false` only if the application recovers state itself — nothing is then re-queried or
+   * re-watched on reconnect, and refreshing whatever is on screen becomes the consumer's job.
+   * Read when a recovery actually runs, so flipping it takes effect from the next reconnect.
+   */
+  enabled: boolean;
+};
+
+export const DEFAULT_CONNECTION_RECOVERY_MANAGER_CONFIG: ConnectionRecoveryManagerConfig =
+  deepFreezeConfig({ enabled: true });
 
 /**
  * Owns connection recovery: after the socket comes back, brings the surfaces the app is actually
@@ -59,6 +75,8 @@ const logger = chatLoggerSystem.getLogger('client');
  */
 export class ConnectionRecoveryManager extends WithSubscriptions {
   client: StreamChat;
+  /** The shared configuration machinery — see {@link ConfigController}. */
+  private readonly configController: ConfigController<ConnectionRecoveryManagerConfig>;
   /** Set while a recovery is in flight; only used to keep the logs readable. */
   private isRecovering = false;
   /** Undone by `unregisterSubscriptions`, so re-registering does not stack listeners. */
@@ -66,7 +84,37 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
 
   constructor({ client }: { client: StreamChat }) {
     super();
+    this.configController = new ConfigController<ConnectionRecoveryManagerConfig>({
+      defaults: DEFAULT_CONNECTION_RECOVERY_MANAGER_CONFIG,
+    });
     this.client = client;
+  }
+
+  /**
+   * Resolved configuration, as a store — the shape every configurable class exposes
+   * (`configState` / `config` / `updateConfig`).
+   */
+  get configState(): StateStore<ConnectionRecoveryManagerConfig> {
+    return this.configController.state;
+  }
+
+  /** The current resolved configuration. `Readonly` — change it through {@link updateConfig}. */
+  public get config(): Readonly<ConnectionRecoveryManagerConfig> {
+    return this.configState.getLatestValue();
+  }
+
+  /** Merges a partial configuration into the resolved config and notifies subscribers. */
+  public updateConfig(config: Partial<ConnectionRecoveryManagerConfig>) {
+    this.configController.patch(config);
+  }
+
+  /**
+   * Rebuilds the resolved configuration from package defaults plus the declarative slice — the
+   * derivation entry point every configurable entity exposes, so the client routes a slice here and
+   * knows nothing about this manager's defaults or merge semantics.
+   */
+  public initializeConfig(config?: Partial<ConnectionRecoveryManagerConfig>) {
+    this.configController.initialize(config);
   }
 
   public registerSubscriptions = () => {
@@ -196,12 +244,12 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
   }
 
   private recoverChannelLists = async () => {
-    if (!this.client.recoverStateOnReconnect) return;
+    if (!this.config.enabled) return;
     await this.client.channelManager.recover();
   };
 
   private recoverActiveChannels = async () => {
-    if (!this.client.recoverStateOnReconnect) return;
+    if (!this.config.enabled) return;
 
     const channels = this.recoverableActiveChannels;
     const threads = this.recoverableActiveThreads;

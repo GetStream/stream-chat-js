@@ -195,16 +195,6 @@ export type StreamChatOptions = {
    * persist even if connectUser call fails.
    */
   persistUserOnConnectionFailure?: boolean;
-  /**
-   * Whether the client recovers its own state when the connection comes back (default `true`).
-   *
-   * When enabled, `ConnectionRecoveryManager` re-runs each loaded channel list's own first-page query
-   * and reloads each active channel, then dispatches `connection.recovered`.
-   *
-   * Set it to `false` only if the application recovers state itself — nothing will then be re-queried
-   * or re-watched on reconnect, and it becomes the consumer's job to refresh whatever is on screen.
-   */
-  recoverStateOnReconnect?: boolean;
   warmUp?: boolean;
   /**
    * Sets the instance of `StableWSConnection` on the chat client. Intended purely for testing and
