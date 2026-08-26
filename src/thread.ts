@@ -803,7 +803,7 @@ export class Thread extends WithSubscriptions {
               enforceUnique: eventType === 'reaction.updated',
               reaction,
               removed: eventType === 'reaction.deleted',
-              userId: this.client.userID,
+              userId: this.client.userId,
             });
             this.updateParentMessageLocally({ message: { ...message, own_reactions } });
           }

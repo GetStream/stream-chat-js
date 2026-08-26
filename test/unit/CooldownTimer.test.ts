@@ -166,7 +166,7 @@ describe('CooldownTimer', () => {
       generateMsg({
         created_at: lastOwnMessageAt,
         updated_at: lastOwnMessageAt,
-        user: { id: client.userID as string },
+        user: { id: client.userId as string },
       }),
     );
 
@@ -203,7 +203,7 @@ describe('CooldownTimer', () => {
       generateMsg({
         created_at: now,
         updated_at: now,
-        user: { id: client.userID as string },
+        user: { id: client.userId as string },
       }),
     );
 
@@ -218,7 +218,7 @@ describe('CooldownTimer', () => {
       generateMsg({
         created_at: now,
         updated_at: now,
-        user: { id: client.userID as string },
+        user: { id: client.userId as string },
       }),
     );
 
@@ -233,7 +233,7 @@ describe('CooldownTimer', () => {
       generateMsg({
         created_at: now,
         updated_at: now,
-        user: { id: client.userID as string },
+        user: { id: client.userId as string },
       }),
     );
 
@@ -266,7 +266,7 @@ describe('CooldownTimer', () => {
       generateMsg({
         created_at: lastOwnMessageAt,
         updated_at: lastOwnMessageAt,
-        user: { id: client.userID as string },
+        user: { id: client.userId as string },
       }),
     );
 
@@ -293,7 +293,7 @@ describe('CooldownTimer', () => {
       generateMsg({
         created_at: now,
         updated_at: now,
-        user: { id: client.userID as string },
+        user: { id: client.userId as string },
       }),
     );
 
@@ -317,7 +317,7 @@ describe('CooldownTimer', () => {
       generateMsg({
         created_at: lastOwnMessageAt,
         updated_at: lastOwnMessageAt,
-        user: { id: client.userID as string },
+        user: { id: client.userId as string },
       }),
     );
 
@@ -352,7 +352,7 @@ describe('CooldownTimer', () => {
       generateMsg({
         created_at: lastOwnMessageAt,
         updated_at: lastOwnMessageAt,
-        user: { id: client.userID as string },
+        user: { id: client.userId as string },
       }),
     );
 
@@ -387,7 +387,7 @@ describe('CooldownTimer', () => {
       generateMsg({
         created_at: lastOwnMessageAt,
         updated_at: lastOwnMessageAt,
-        user: { id: client.userID as string },
+        user: { id: client.userId as string },
       }),
     );
 
@@ -420,12 +420,12 @@ describe('CooldownTimer', () => {
 
     channel._handleChannelEvent({
       type: 'message.new',
-      user: { id: client.userID as string },
+      user: { id: client.userId as string },
       message: generateMsg({
         cid: channel.cid, // must match the paginator filter so message.new ingests into an interval
         created_at: now,
         updated_at: now,
-        user: { id: client.userID as string },
+        user: { id: client.userId as string },
       }),
     } as Event);
 

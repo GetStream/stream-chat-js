@@ -12,6 +12,7 @@ import type {
   LabeledEventHandler,
   PipelineEvent,
 } from './EventHandlerPipeline';
+import { filterConstrainsField } from './pagination/filterCompiler';
 import { getChannel } from './pagination/utility.queryChannel';
 import type { Channel } from './channel';
 
@@ -227,6 +228,50 @@ const messageNewHandler: LabeledEventHandler<EventHandlerContext> = {
   id: 'ChannelManager:default-handler:message.new',
 };
 
+/**
+ * Sort fields `channelSortPathResolver` resolves from read state. `SortParamRequest.field` is an open
+ * string, so there is no type enumerating them.
+ */
+const READ_STATE_SORT_FIELDS: string[] = ['has_unread', 'unread_count'];
+
+/**
+ * Whether a read can change this list at all: its membership (`has_unread` filter) or its order
+ * (`has_unread` / `unread_count` sort). Unread badges read `channel.state` directly, so nothing else
+ * about the list depends on it.
+ */
+const dependsOnReadState = (paginator: ChannelPaginator) =>
+  paginator.effectiveSort.some(
+    ({ field }) => !!field && READ_STATE_SORT_FIELDS.includes(field),
+  ) || filterConstrainsField(paginator.buildMatchFilters(), 'has_unread');
+
+/**
+ * Re-routes a channel whose read state changed. `message.read` only reaches watchers, so
+ * `notification.mark_*` is the only signal for channels the user is not watching.
+ *
+ * Never fetches, unlike `updateLists`: a read cannot make an unknown channel belong to a list, and
+ * these events are far too frequent to query on.
+ */
+const readStateChangedHandler: LabeledEventHandler<EventHandlerContext> = {
+  handle: ({ event, ctx: { channelManager } }) => {
+    const { client } = channelManager;
+    // another member's read receipt says nothing about this user's unread state
+    if (event.type === 'message.read' && event.user?.id !== client.userId) return;
+
+    // a thread read says nothing about the channel's own read state
+    if (event.thread_id) return;
+
+    // a mark-all-read names no channel, so there is no target to route
+    const channel = getCachedChannelFromEvent(event, client.activeChannels);
+    if (!channel) return;
+
+    // hot path: `message.read` fires on every channel the user opens
+    if (!channelManager.paginators.some(dependsOnReadState)) return;
+
+    channelManager.ingestChannel(channel);
+  },
+  id: 'ChannelManager:default-handler:read-state-changed',
+};
+
 const notificationAddedToChannelHandler: LabeledEventHandler<EventHandlerContext> = {
   handle: updateLists,
   id: 'ChannelManager:default-handler:notification.added_to_channel',
@@ -351,8 +396,12 @@ export class ChannelManager extends WithSubscriptions {
     'channel.visible': [channelVisibleHandler],
     'member.updated': [memberUpdatedHandler],
     'message.new': [messageNewHandler],
+    'message.read': [readStateChangedHandler],
+    'message.read_locally': [readStateChangedHandler],
     'notification.added_to_channel': [notificationAddedToChannelHandler],
     'notification.channel_mutes_updated': [notificationChannelMutesUpdatedHandler],
+    'notification.mark_read': [readStateChangedHandler],
+    'notification.mark_unread': [readStateChangedHandler],
     'notification.message_new': [notificationMessageNewHandler],
     'notification.removed_from_channel': [notificationRemovedFromChannelHandler],
     'user.presence.changed': [userPresenceChangedHandler],
@@ -463,6 +512,20 @@ export class ChannelManager extends WithSubscriptions {
         // Not a match, or matched but not the selected owner — enforce exclusivity.
         paginator.removeItem({ item: channel });
       }
+    });
+  }
+
+  /**
+   * Drops a channel from the lists whose filters it no longer matches, adding it nowhere.
+   *
+   * For state the client changes without an event naming the channel — zeroing every unread count on a
+   * global read. Removal-only: the backend rejects `has_unread: false`, so becoming read can never make
+   * a channel belong to a list, and `ingestChannel` would pull unloaded channels into matching ones.
+   */
+  dropFromUnmatchedLists(channel: Channel) {
+    this.paginators.forEach((paginator) => {
+      if (paginator.matchesFilter(channel)) return;
+      paginator.removeItem({ item: channel });
     });
   }
 

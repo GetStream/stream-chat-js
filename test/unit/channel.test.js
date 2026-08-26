@@ -1049,7 +1049,7 @@ describe('Channel _handleChannelEvent', function () {
 				unread_messages: 2,
 			};
 
-			const message = generateMsg({ user: { id: client.userID } });
+			const message = generateMsg({ user: { id: client.userId } });
 
 			const events = [
 				'message.read',
@@ -2045,6 +2045,52 @@ describe('Channel _handleChannelEvent', function () {
 			expect(new Date(changes[0].next.last_read).getTime()).toBe(
 				new Date(messageReadEvent.created_at).getTime(),
 			);
+		});
+	});
+
+	describe('notification.mark_read', () => {
+		let markReadEvent;
+
+		beforeEach(() => {
+			channel.state.read[user.id] = {
+				last_read: new Date(1500).toISOString(),
+				last_read_message_id: '6',
+				first_unread_message_id: 'first-unread-msg-id',
+				user,
+				unread_messages: 100,
+			};
+			markReadEvent = {
+				type: 'notification.mark_read',
+				created_at: new Date(2000).toISOString(),
+				cid: channel.cid,
+				channel_type: channel.type,
+				channel_id: channel.id,
+				user,
+				last_read_message_id: '6b1006ad-7a6d-49d1-82d9-5ee5e8167e49',
+				unread_channels: 3,
+			};
+		});
+
+		// the only read signal for a channel the user is not watching, which is most of a long list
+		it('should reset the unread count of a channel read elsewhere', () => {
+			channel._handleChannelEvent(markReadEvent);
+
+			expect(channel.state.read[user.id].unread_messages).toBe(0);
+			expect(channel.state.unreadCount).toBe(0);
+			expect(new Date(channel.state.read[user.id].last_read).getTime()).toBe(
+				new Date(markReadEvent.created_at).getTime(),
+			);
+			expect(channel.state.read[user.id].last_read_message_id).toBe(
+				markReadEvent.last_read_message_id,
+			);
+			expect(channel.state.read[user.id].first_unread_message_id).toBeUndefined();
+		});
+
+		it('should leave the channel read state untouched when a thread was read', () => {
+			channel._handleChannelEvent({ ...markReadEvent, thread_id: 'thread-1' });
+
+			expect(channel.state.read[user.id].unread_messages).toBe(100);
+			expect(new Date(channel.state.read[user.id].last_read).getTime()).toBe(1500);
 		});
 	});
 
@@ -3455,7 +3501,7 @@ describe('send reaction flow', () => {
 		const offlineDb = new MockOfflineDB({ client });
 
 		client.setOfflineDBApi(offlineDb);
-		await client.offlineDb.init(client.userID);
+		await client.offlineDb.init(client.userId);
 
 		channel = client.channel('messaging', 'test');
 
@@ -3578,7 +3624,7 @@ describe('delete reaction flow', () => {
 		const offlineDb = new MockOfflineDB({ client });
 
 		client.setOfflineDBApi(offlineDb);
-		await client.offlineDb.init(client.userID);
+		await client.offlineDb.init(client.userId);
 
 		channel = client.channel('messaging', 'test');
 		// trick the channel into being initialized
@@ -3700,7 +3746,7 @@ describe('message sending flow', () => {
 		const offlineDb = new MockOfflineDB({ client });
 
 		client.setOfflineDBApi(offlineDb);
-		await client.offlineDb.init(client.userID);
+		await client.offlineDb.init(client.userId);
 
 		channel = client.channel('messaging', 'test');
 

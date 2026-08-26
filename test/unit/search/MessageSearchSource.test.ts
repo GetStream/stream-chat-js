@@ -205,7 +205,7 @@ describe('MessageSearchSource', () => {
     });
   });
 
-  it('returns empty items when client.userID is missing', async () => {
+  it('returns empty items when client.userId is missing', async () => {
     searchSource['client'].user = undefined;
     // @ts-expect-error protected access
     const result = await searchSource.query('test');

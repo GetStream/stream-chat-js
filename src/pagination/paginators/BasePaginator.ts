@@ -2226,6 +2226,8 @@ export abstract class BasePaginator<T, Q> {
 
     // 3. If it no longer matches the filter, we’re done (it has been removed above).
     if (!this.matchesFilter(ingestedItem)) {
+      // left the result set, not just this list
+      this.shrinkOffsetAfterRemoval(removedItemCoordinates);
       // Throttled: the removal above deferred its emit — publish the (settled) window once.
       // Suspended (coalescing batch): removeItemAtCoordinates recorded it; batch() emits once on exit.
       if (!this.isWindowPublishSuspended && this.isStateThrottled && itemHasBeenRemoved)
@@ -2482,6 +2484,22 @@ export abstract class BasePaginator<T, Q> {
   }
 
   /**
+   * Keeps `offset` addressing the same position in the *server's* result set after an item left the
+   * loaded window.
+   */
+  protected shrinkOffsetAfterRemoval(coordinates?: ItemCoordinates) {
+    // cursor pagination does not address items by position, so nothing can drift
+    if (this.isCursorPagination) return;
+    // not part of the loaded window, so no page ever counted it
+    if ((coordinates?.state?.currentIndex ?? -1) < 0) return;
+
+    const { offset } = this.state.getLatestValue();
+    if (typeof offset !== 'number') return;
+
+    this.state.partialNext({ offset: Math.max(0, offset - 1) });
+  }
+
+  /**
    * Meaning of location values
    * - currentIndex === -1 could not be found
    * - insertionIndex === -1 insertion index was no intended to be determined
@@ -2501,6 +2519,7 @@ export abstract class BasePaginator<T, Q> {
       if (!coords.state && !coords.interval) return noAction;
       const result = this.removeItemAtCoordinates(coords);
       this._itemIndex.remove(this.getItemId(item));
+      this.shrinkOffsetAfterRemoval(result);
       // Throttled: removeItemAtCoordinates deferred its emit — publish the (settled) window once.
       if (!this.isWindowPublishSuspended && this.isStateThrottled)
         this.scheduleWindowPublish();

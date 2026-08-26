@@ -127,7 +127,7 @@ describe('connection', function () {
 		client._user = user;
 		client.options.enableInsights = true;
 		client.userAgent = 'agent';
-		client.clientID = 'clientID';
+		client.clientId = 'clientID';
 		client.insightMetrics = new InsightMetrics();
 		client.dispatchEvent = () => null;
 		client.recoverState = () => null;

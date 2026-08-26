@@ -19,8 +19,8 @@ const CURRENT_USER = { id: 'me' };
 const connect = () => {
   const client = new StreamChat('apiKey');
   client.user = CURRENT_USER;
-  // `userID` is now a read-only getter derived from `client.user`, so setting `client.user` above
-  // is sufficient; assigning `client.userID` directly throws.
+  // `userId` is now a read-only getter derived from `client.user`, so setting `client.user` above
+  // is sufficient; assigning `client.userId` directly throws.
   return client;
 };
 

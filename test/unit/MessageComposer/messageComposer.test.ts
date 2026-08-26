@@ -2476,12 +2476,12 @@ describe('MessageComposer', () => {
     });
 
     describe('subscribeMessageComposerSetupStateChange', () => {
-      it('calls setupFunction with { composer } when client setMessageComposerSetupFunction is invoked', () => {
+      it('calls setupFunction with { composer } when the client registers one', () => {
         const { messageComposer, mockClient } = setup();
         const setupFn = vi.fn();
 
         messageComposer.registerSubscriptions();
-        mockClient.setMessageComposerSetupFunction(setupFn);
+        mockClient.config.setSetupFunction('messageComposer', setupFn);
 
         expect(setupFn).toHaveBeenCalledWith({ composer: messageComposer });
       });
@@ -2493,10 +2493,10 @@ describe('MessageComposer', () => {
         const setup2 = vi.fn();
 
         messageComposer.registerSubscriptions();
-        mockClient.setMessageComposerSetupFunction(setup1);
+        mockClient.config.setSetupFunction('messageComposer', setup1);
         expect(tearDown1).not.toHaveBeenCalled();
 
-        mockClient.setMessageComposerSetupFunction(setup2);
+        mockClient.config.setSetupFunction('messageComposer', setup2);
         expect(tearDown1).toHaveBeenCalledOnce();
         expect(setup2).toHaveBeenCalledWith({ composer: messageComposer });
       });

@@ -1131,7 +1131,7 @@ describe('MessagePaginator', () => {
 
     beforeEach(() => {
       (channel as unknown as { getClient: () => unknown }).getClient = () => ({
-        userID: currentUserId,
+        userId: currentUserId,
         getReplies: channel.getReplies,
       });
     });

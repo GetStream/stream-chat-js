@@ -841,7 +841,7 @@ describe('ChannelPaginator', () => {
     it('stores the new items in the offlineDB', async () => {
       client.setOfflineDBApi(new MockOfflineDB({ client }));
       (client.offlineDb!.initializeDB as unknown as MockInstance).mockReturnValue(true);
-      await client.offlineDb!.init(client.userID as string);
+      await client.offlineDb!.init(client.userId as string);
       (
         client.offlineDb?.upsertCidsForQuery as unknown as MockInstance
       ).mockImplementation(() => Promise.resolve(true));
@@ -936,7 +936,7 @@ describe('ChannelPaginator', () => {
       offlineDb = new MockOfflineDB({ client });
       client.setOfflineDBApi(offlineDb);
       (client.offlineDb!.initializeDB as unknown as MockInstance).mockReturnValue(true);
-      await client.offlineDb!.init(client.userID as string);
+      await client.offlineDb!.init(client.userId as string);
       client.offlineDb!.syncManager.syncStatus = syncStatus;
       upsertCidsForQuery = client.offlineDb!
         .upsertCidsForQuery as unknown as MockInstance;
@@ -971,7 +971,7 @@ describe('ChannelPaginator', () => {
       await paginator.toTail();
 
       expect(getChannelsForQuery).toHaveBeenCalledWith({
-        userId: client.userID,
+        userId: client.userId,
         options: expect.objectContaining({
           filter_conditions: { type: 'type' },
           sort: [{ field: 'last_message_at', direction: -1 }],
@@ -1646,6 +1646,74 @@ describe('ChannelPaginator', () => {
         'type:plainB',
         'type:plainA',
       ]);
+    });
+  });
+  // Every channel the user reads leaves `has_unread: true` server-side, so the result set shrinks under
+  // the query and the next page has to start that many positions earlier (Zendesk 82913).
+  describe('pagination over a result set that shrinks', () => {
+    const CHANNEL_COUNT = 30;
+    const PAGE_SIZE = 10;
+
+    const buildInbox = () =>
+      Array.from({ length: CHANNEL_COUNT }, (_, index) => {
+        const channel = new Channel(
+          client,
+          'messaging',
+          `channel-${String(index).padStart(2, '0')}`,
+          {},
+        );
+        setLastMessageAt(channel, new Date(CHANNEL_COUNT - index));
+        channel.state.read = {
+          [user.id]: { last_read: new Date(0), unread_messages: 1, user },
+        };
+        return channel;
+      });
+
+    const isUnread = (channel: Channel) =>
+      channel.state.read[user.id].unread_messages > 0;
+
+    it('returns every unread channel while the user reads each page', async () => {
+      const inbox = buildInbox();
+      const offsets: number[] = [];
+      const everReturned = new Set<string>();
+
+      const paginator = new ChannelPaginator({
+        client,
+        filters: { has_unread: true },
+        sort: [{ direction: -1, field: 'last_message_at' }],
+        paginatorOptions: {
+          pageSize: PAGE_SIZE,
+          // stands in for the backend: honours both `has_unread` and `offset`
+          doRequest: async (queryShape) => {
+            const offset = queryShape?.offset ?? 0;
+            const page = inbox
+              .filter(isUnread)
+              .slice(offset, offset + (queryShape?.limit ?? PAGE_SIZE));
+            offsets.push(offset);
+            page.forEach((channel) => everReturned.add(channel.cid));
+            return { items: page };
+          },
+        },
+      });
+
+      await paginator.toTail({ reset: 'yes' });
+
+      let previouslyReturned = -1;
+      while (paginator.hasMoreTail && everReturned.size !== previouslyReturned) {
+        previouslyReturned = everReturned.size;
+        // the user works through every loaded channel
+        (paginator.items ?? []).slice().forEach((channel) => {
+          channel.state.read[user.id].unread_messages = 0;
+          paginator.ingestItem(channel);
+        });
+        await paginator.toTail();
+      }
+
+      // the result set shrank by exactly the page that was read, so every page starts at its head
+      expect(offsets).toEqual([0, 0, 0, 0]);
+      expect(everReturned.size).toBe(CHANNEL_COUNT);
+      expect(paginator.items).toHaveLength(0);
+      expect(paginator.hasMoreTail).toBe(false);
     });
   });
 });

@@ -1400,7 +1400,7 @@ export class MessageIntervalPaginator extends BasePaginator<
       enforceUnique,
       reaction,
       removed,
-      userId: this.channel.getClient().userID,
+      userId: this.channel.getClient().userId,
     });
     this.ingestItem({ ...formatted, own_reactions });
   };

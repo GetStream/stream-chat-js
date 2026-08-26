@@ -664,7 +664,7 @@ describe('stream-io/message-composer-middleware/draft-data-validation', () => {
 
   beforeEach(() => {
     client = {
-      userID: 'currentUser',
+      userId: 'currentUser',
       user: { id: 'currentUser' },
     } as any;
 

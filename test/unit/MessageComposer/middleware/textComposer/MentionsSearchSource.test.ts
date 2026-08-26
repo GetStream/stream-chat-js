@@ -115,7 +115,7 @@ describe('MentionsSearchSource', () => {
     ];
 
     client = {
-      userID: 'currentUser',
+      userId: 'currentUser',
       userId: 'currentUser',
       searchRoles: vi.fn().mockImplementation(async ({ query }: { query: string }) => ({
         roles: [

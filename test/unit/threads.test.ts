@@ -682,7 +682,7 @@ describe('Threads 2.0', () => {
         });
       });
 
-      describe('markAsRead', () => {
+      describe('markRead', () => {
         let stubbedChannelMarkRead: sinon.SinonStub<
           Parameters<Channel['markRead']>,
           ReturnType<Channel['markRead']>
@@ -696,7 +696,7 @@ describe('Threads 2.0', () => {
           const thread = createTestThread();
           expect(thread.ownUnreadCount).to.equal(0);
 
-          await thread.markAsRead();
+          await thread.markRead();
 
           expect(stubbedChannelMarkRead.notCalled).to.be.true;
         });
@@ -713,6 +713,23 @@ describe('Threads 2.0', () => {
           });
 
           expect(thread.ownUnreadCount).to.equal(42);
+
+          await thread.markRead();
+
+          expect(stubbedChannelMarkRead.calledOnceWith({ thread_id: thread.id })).to.be
+            .true;
+        });
+
+        it('is still reachable through the deprecated markAsRead alias', async () => {
+          const thread = createTestThread({
+            read: [
+              {
+                last_read: new Date().toISOString(),
+                user: { id: TEST_USER_ID },
+                unread_messages: 42,
+              },
+            ],
+          });
 
           await thread.markAsRead();
 

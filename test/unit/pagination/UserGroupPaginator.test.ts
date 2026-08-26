@@ -24,8 +24,8 @@ describe('UserGroupPaginator', () => {
   it('starts as a forward-only paginator', () => {
     const paginator = new UserGroupPaginator(client);
 
-    expect(paginator.hasNext).toBe(true);
-    expect(paginator.hasPrev).toBe(false);
+    expect(paginator.hasMoreTail).toBe(true);
+    expect(paginator.hasMoreHead).toBe(false);
     expect(paginator.items).toBeUndefined();
     expect(paginator.cursor).toEqual({ tailward: undefined, headward: null });
   });
@@ -59,18 +59,18 @@ describe('UserGroupPaginator', () => {
 
     const paginator = new UserGroupPaginator(client, { pageSize: 2 });
 
-    await paginator.next();
+    await paginator.toTail();
 
     expect(querySpy).toHaveBeenNthCalledWith(1, { limit: 2 });
     expect(paginator.items).toEqual(firstPage);
-    expect(paginator.hasNext).toBe(true);
-    expect(paginator.hasPrev).toBe(false);
+    expect(paginator.hasMoreTail).toBe(true);
+    expect(paginator.hasMoreHead).toBe(false);
     expect(JSON.parse(paginator.cursor?.tailward ?? '{}')).toEqual({
       created_at_gt: firstPage[1].created_at.toISOString(),
       id_gt: firstPage[1].id,
     });
 
-    await paginator.next();
+    await paginator.toTail();
 
     expect(querySpy).toHaveBeenNthCalledWith(2, {
       limit: 2,
@@ -78,8 +78,8 @@ describe('UserGroupPaginator', () => {
       id_gt: firstPage[1].id,
     });
     expect(paginator.items).toEqual([...firstPage, ...secondPage]);
-    expect(paginator.hasNext).toBe(false);
-    expect(paginator.hasPrev).toBe(false);
+    expect(paginator.hasMoreTail).toBe(false);
+    expect(paginator.hasMoreHead).toBe(false);
     // forward-only: headward stays exhausted, tailward exhausted after the short page
     expect(paginator.cursor?.headward).toBeNull();
     expect(paginator.cursor?.tailward == null).toBe(true);
@@ -93,14 +93,14 @@ describe('UserGroupPaginator', () => {
 
     const paginator = new UserGroupPaginator(client, { pageSize: 1 });
 
-    await paginator.next();
+    await paginator.toTail();
 
     paginator.teamId = 'engineering';
 
     expect(paginator.items).toBeUndefined();
     expect(paginator.cursor).toEqual({ tailward: undefined, headward: null });
-    expect(paginator.hasNext).toBe(true);
-    expect(paginator.hasPrev).toBe(false);
+    expect(paginator.hasMoreTail).toBe(true);
+    expect(paginator.hasMoreHead).toBe(false);
   });
 
   it('ignores malformed stored cursors and retries from the first page options', async () => {
@@ -114,7 +114,7 @@ describe('UserGroupPaginator', () => {
       cursor: { tailward: '{not-json', headward: null },
     });
 
-    await paginator.next();
+    await paginator.toTail();
 
     expect(querySpy).toHaveBeenCalledWith({ limit: 1 });
   });
@@ -123,9 +123,9 @@ describe('UserGroupPaginator', () => {
     const querySpy = vi.spyOn(client, 'listUserGroups');
     const paginator = new UserGroupPaginator(client);
 
-    await paginator.prev();
+    await paginator.toHead();
 
     expect(querySpy).not.toHaveBeenCalled();
-    expect(paginator.hasPrev).toBe(false);
+    expect(paginator.hasMoreHead).toBe(false);
   });
 });

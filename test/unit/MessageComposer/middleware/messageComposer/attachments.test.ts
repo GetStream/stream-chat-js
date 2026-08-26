@@ -46,7 +46,7 @@ describe('stream-io/message-composer-middleware/attachments', () => {
 
   beforeEach(() => {
     client = {
-      userID: 'currentUser',
+      userId: 'currentUser',
       user: { id: 'currentUser' },
       notifications: {
         addWarning: vi.fn(),
@@ -387,7 +387,7 @@ describe('stream-io/message-composer-middleware/draft-attachments', () => {
 
   beforeEach(() => {
     client = {
-      userID: 'currentUser',
+      userId: 'currentUser',
       user: { id: 'currentUser' },
     } as any;
 
