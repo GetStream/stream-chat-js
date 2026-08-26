@@ -868,22 +868,6 @@ describe('Threads 2.0', () => {
           expect(repliesOf(thread).map((reply) => reply.id)).to.contain('failed-1');
         });
 
-        it('clears a previous reply-window error before it awaits anything', async () => {
-          // The thread twin of `Channel.watch()`'s clear-before-attempt, and above the first await
-          // for the same reason: a recovery reaches here inside the dispatch that flips a UI's own
-          // online flag, so a stale error is never rendered over replies about to refresh.
-          const thread = createTestThread({ latest_replies: [], reply_count: 0 });
-          thread.messagePaginator.state.partialNext({
-            lastQueryError: new Error('load older failed'),
-          });
-
-          // Never settles, so only a clear that ran BEFORE the await can be observed.
-          sinon.stub(client, 'getThreadAndHydrate').returns(new Promise(() => {}));
-          void thread.reload();
-
-          expect(thread.messagePaginator.lastQueryError).to.equal(undefined);
-        });
-
         it('rethrows a reload failure and releases isLoading', async () => {
           const thread = createTestThread({ latest_replies: [], reply_count: 0 });
           const failure = new Error('thread reload failed');

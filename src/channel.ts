@@ -1823,10 +1823,6 @@ export class Channel extends ChannelApi {
    * @returns The server response.
    */
   async watch(options?: ChannelGetOrCreateRequest) {
-    if (this.messagePaginator.lastQueryError) {
-      this.messagePaginator.state.partialNext({ lastQueryError: undefined });
-    }
-
     const defaultOptions = {
       state: true,
       watch: true,

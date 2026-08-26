@@ -4123,22 +4123,6 @@ describe('Channel.reload', () => {
 			await expect(channel.reload()).rejects.toThrow('watch failed');
 		});
 
-		it('clears the message-window error before it awaits anything', async () => {
-			// Above the first await on purpose: a reconnect reload gets here inside the synchronous
-			// `connection.changed` dispatch, so a UI that flips its own online flag on that same event
-			// never renders the stale error over content that is about to refresh.
-			seedLatestWindow(channel, [msg('m1', 1)]);
-			channel.messagePaginator.state.partialNext({
-				lastQueryError: new Error('load older failed'),
-			});
-
-			// Never settles, so only a clear that ran BEFORE the await can be observed.
-			vi.spyOn(channel, 'getOrCreate').mockReturnValue(new Promise(() => {}));
-			channel.watch();
-
-			expect(channel.messagePaginator.lastQueryError).toBeUndefined();
-		});
-
 		it('releases the re-entrancy guard when a reload fails', async () => {
 			// Without the `finally`, one failure would wedge `reload()` for the channel's lifetime — no
 			// later reconnect could ever refresh it again.

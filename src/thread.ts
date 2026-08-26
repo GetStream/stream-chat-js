@@ -458,9 +458,6 @@ export class Thread extends WithSubscriptions {
       return;
     }
 
-    if (this.messagePaginator.lastQueryError) {
-      this.messagePaginator.state.partialNext({ lastQueryError: undefined });
-    }
     this.state.partialNext({ isLoading: true });
 
     try {
