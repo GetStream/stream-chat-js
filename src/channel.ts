@@ -1886,10 +1886,8 @@ export class Channel extends ChannelApi {
       this.offlineMode = false;
 
       if (failedBefore.length) {
-        // Membership is checked against the visible window, NOT `getItem`: that reads the item index,
-        // which can still hold a message the rebuild dropped from the loaded window — so an
-        // index-based guard skips the reingest on exactly the disjoint set rebuild that needs it,
-        // and the user's unsent message silently disappears from the list.
+        // Make sure the messages that failed to be sent before the watch() request are
+        // reingested after the watch() query.
         const visible = new Set((paginator.items ?? []).map((message) => message.id));
         paginator.batch(
           () => {
