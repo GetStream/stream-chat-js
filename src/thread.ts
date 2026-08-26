@@ -58,12 +58,6 @@ export type ThreadState = {
   isLoading: boolean;
   isStateStale: boolean;
   /**
-   * The error thrown by the most recent {@link Thread.reload}, or `undefined` when it succeeded.
-   * Mirrors `channel.state.lastLoadError`: connection recovery runs reloads inside
-   * `Promise.allSettled`, so a failure has to be published rather than only thrown.
-   */
-  lastLoadError?: Error;
-  /**
    * Thread is identified by and has a one-to-one relation with its parent message.
    * We use parent message id as a thread id.
    */
@@ -457,17 +451,17 @@ export class Thread extends WithSubscriptions {
    * reconcile's provenance guard never prunes a non-server message); only a disjoint rebuild can drop
    * them, so any that actually fell out are re-ingested below.
    *
-   * Publishes a failure on `state.lastLoadError` **and** rethrows: recovery runs this inside a
-   * `Promise.allSettled`, so a consumer that wants to surface the failure has to read it from state.
+   * Rethrows, except for a not-found answer on a thread that never had replies (see the catch).
    */
   public reload = async () => {
     if (this.state.getLatestValue().isLoading) {
       return;
     }
 
-    // Cleared before the attempt, so a successful reload dismisses whatever the previous failure
-    // surfaced (mirrors `Channel.reload` and `BasePaginator`'s `lastQueryError`).
-    this.state.partialNext({ isLoading: true, lastLoadError: undefined });
+    if (this.messagePaginator.lastQueryError) {
+      this.messagePaginator.state.partialNext({ lastQueryError: undefined });
+    }
+    this.state.partialNext({ isLoading: true });
 
     try {
       const loadedReplies = this.messagePaginator.items ?? [];
@@ -511,7 +505,6 @@ export class Thread extends WithSubscriptions {
       // deleted replies will simply not throw.
       if (neverExisted) return;
 
-      this.state.partialNext({ lastLoadError: error as Error });
       throw error;
     } finally {
       this.state.partialNext({ isLoading: false });

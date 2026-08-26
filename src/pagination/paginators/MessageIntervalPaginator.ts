@@ -528,6 +528,13 @@ export class MessageIntervalPaginator extends BasePaginator<
     const isJump = this.isJumpQueryShape(queryShape);
 
     if (options?.reconcile && !isJump && typeof this.items !== 'undefined') {
+      // The page came back, so whatever the last query failure was, it is no longer the truth. The
+      // branch below inherits this from `postQueryReconcile`, which this one deliberately skips —
+      // without it a failed "load older" would keep a UI's error surface latched through an
+      // otherwise successful reconnect refresh.
+      if (this.state.getLatestValue().lastQueryError) {
+        this.state.partialNext({ lastQueryError: undefined });
+      }
       this.mergeNewestPage(messages, {
         candidateIds: options.candidateIds,
         requestedLimit: requestedPageSize,
@@ -730,18 +737,18 @@ export class MessageIntervalPaginator extends BasePaginator<
       const anchored = this.ingestPage({ page, isHead: true, setActive: false });
       if (!anchored || !takeOverView) return;
 
-      const hasMoreTailFromLogical = !this.pageReachedChannelStart(page, options);
-      anchored.hasMoreTail = hasMoreTailFromLogical;
-      anchored.isTail = !hasMoreTailFromLogical;
+      const hasMoreTail = !this.pageReachedChannelStart(page, options);
+      anchored.hasMoreTail = hasMoreTail;
+      anchored.isTail = !hasMoreTail;
 
       this.setActiveInterval(anchored, { updateState: false });
       this.state.partialNext({
         items: this.intervalToItems(anchored),
         hasMoreHead: false,
-        hasMoreTail: hasMoreTailFromLogical,
+        hasMoreTail,
         cursor: {
           headward: null,
-          tailward: hasMoreTailFromLogical ? (anchored.itemIds[0] ?? null) : null,
+          tailward: hasMoreTail ? (anchored.itemIds[0] ?? null) : null,
         },
       });
       return;

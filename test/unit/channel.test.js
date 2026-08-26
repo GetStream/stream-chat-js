@@ -4104,74 +4104,39 @@ describe('Channel.reload', () => {
 		expect(watchSpy).toHaveBeenCalledTimes(1);
 	});
 
-	// Neither failure a UI cares about is catchable where it happens: the reconnect reload is issued by
-	// `ConnectionRecoveryManager` inside a `Promise.allSettled`, and the mount-time `watch()` of a
-	// channel opened with no connection throws before anything holds a handle on it. Both are recorded
-	// on the channel so a UI can read "could not load this channel" instead of latching a flag of its
-	// own that nothing can later invalidate.
-	describe('lastLoadError', () => {
-		it('is undefined until a load fails', () => {
-			expect(channel.lastLoadError).toBeUndefined();
-		});
-
+	// `watch()` and `reload()` both reject rather than recording anything: a load failure is the
+	// caller's to handle, and the one caller that cannot handle it — `ConnectionRecoveryManager`,
+	// which reloads inside a `Promise.allSettled` — deliberately does not surface it.
+	describe('load failures', () => {
 		// The case the UI SDKs used to hold local state for: opening a channel while offline. No reload
 		// is involved — `watch()` itself is what throws.
-		it('records a failed watch() and still rethrows', async () => {
-			const failure = new Error('watch failed');
-			vi.spyOn(channel, 'getOrCreate').mockRejectedValue(failure);
+		it('rethrows a failed watch()', async () => {
+			vi.spyOn(channel, 'getOrCreate').mockRejectedValue(new Error('watch failed'));
 
 			await expect(channel.watch()).rejects.toThrow('watch failed');
-
-			expect(channel.lastLoadError).toBe(failure);
-			// Reactive, so a UI can subscribe rather than poll.
-			expect(channel.state.getLatestValue().lastLoadError).toBe(failure);
 		});
 
-		it('records a failed reload and still rethrows', async () => {
+		it('rethrows a failed reload()', async () => {
 			seedLatestWindow(channel, [msg('m1', 1)]);
-			const failure = new Error('watch failed');
-			vi.spyOn(channel, 'getOrCreate').mockRejectedValue(failure);
+			vi.spyOn(channel, 'getOrCreate').mockRejectedValue(new Error('watch failed'));
 
 			await expect(channel.reload()).rejects.toThrow('watch failed');
-
-			expect(channel.lastLoadError).toBe(failure);
 		});
 
-		it('clears on the next successful load', async () => {
+		it('clears the message-window error before it awaits anything', async () => {
+			// Above the first await on purpose: a reconnect reload gets here inside the synchronous
+			// `connection.changed` dispatch, so a UI that flips its own online flag on that same event
+			// never renders the stale error over content that is about to refresh.
 			seedLatestWindow(channel, [msg('m1', 1)]);
-			const getOrCreate = vi
-				.spyOn(channel, 'getOrCreate')
-				.mockRejectedValueOnce(new Error('watch failed'));
-			await expect(channel.reload()).rejects.toThrow();
-			expect(channel.lastLoadError).toBeDefined();
+			channel.messagePaginator.state.partialNext({
+				lastQueryError: new Error('load older failed'),
+			});
 
-			getOrCreate.mockResolvedValue(
-				generateChannel({
-					channel: { id: channel.id, type: channel.type },
-					messages: [msg('m1', 1)],
-				}),
-			);
-			await channel.reload();
-
-			expect(channel.lastLoadError).toBeUndefined();
-		});
-
-		// The clear sits ABOVE watch()'s first await, so it is observable before the request settles.
-		// That is what lets it land in the same synchronous dispatch as the connection event that
-		// triggered the reload, which is what keeps a UI from flashing the error (see the
-		// ConnectionRecoveryManager suite for the end-to-end version).
-		it('clears before it awaits anything, not when the request comes back', async () => {
-			const getOrCreate = vi
-				.spyOn(channel, 'getOrCreate')
-				.mockRejectedValueOnce(new Error('watch failed'));
-			await expect(channel.watch()).rejects.toThrow();
-			expect(channel.lastLoadError).toBeDefined();
-
-			// Never settles, so only a clear that happened before the await can be seen.
-			getOrCreate.mockReturnValue(new Promise(() => {}));
+			// Never settles, so only a clear that ran BEFORE the await can be observed.
+			vi.spyOn(channel, 'getOrCreate').mockReturnValue(new Promise(() => {}));
 			channel.watch();
 
-			expect(channel.lastLoadError).toBeUndefined();
+			expect(channel.messagePaginator.lastQueryError).toBeUndefined();
 		});
 
 		it('releases the re-entrancy guard when a reload fails', async () => {

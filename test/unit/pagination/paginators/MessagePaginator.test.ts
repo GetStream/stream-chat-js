@@ -2948,6 +2948,26 @@ describe('MessagePaginator', () => {
     const ids = (paginator: MessagePaginator) =>
       paginator.items?.map((message) => message.id);
 
+    it('clears a previous query error when a reconciling seed lands', () => {
+      // This branch returns before `postQueryReconcile`, which is the only other thing that resets
+      // `lastQueryError`. Without a clear here a failed "load older" stays latched through an
+      // otherwise successful reconnect refresh, and any UI reading the paginator keeps its error up.
+      const paginator = loadHead([msg('m1', 1), msg('m2', 2)]);
+      paginator.state.partialNext({ lastQueryError: new Error('load older failed') });
+
+      paginator.seedFirstPageSync(
+        [msg('m1', 1), msg('m2', 2), msg('m3', 3)],
+        25,
+        undefined,
+        {
+          reconcile: true,
+        },
+      );
+
+      expect(paginator.lastQueryError).toBeUndefined();
+      expect(ids(paginator)).toEqual(['m1', 'm2', 'm3']);
+    });
+
     it('REPRO(interval): reconnect re-establishes hasMoreTail over a stale "complete" INTERVAL (offline DB)', () => {
       const paginator = makePaginator();
       // Offline-DB window persisted as "complete" — the INTERVAL itself has isTail=true / hasMoreTail

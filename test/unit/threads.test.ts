@@ -712,11 +712,10 @@ describe('Threads 2.0', () => {
           expect(repliesOf(thread).map((r) => r.id)).to.eql(activeBefore);
         });
 
-        it('does not publish lastLoadError when the thread does not exist yet', async () => {
+        it('resolves quietly when the thread does not exist yet', async () => {
           // Opening a parent that has no replies means there is no server-side thread, so `getThread`
-          // answers DoesNotExist (16). That is an expected answer, not a failed refresh: publishing it
-          // raises the consumer's error state (the RN SDK ORs it into `ChannelContext.error`) just for
-          // opening a brand-new thread.
+          // answers DoesNotExist (16). That is an expected answer, not a failed refresh: rethrowing it
+          // would make every caller report a failure just for opening a brand-new thread.
           const thread = createTestThread({ latest_replies: [], reply_count: 0 });
           const notFound = Object.assign(
             new Error('Request failed with status code 404'),
@@ -730,8 +729,6 @@ describe('Threads 2.0', () => {
           // Resolves rather than rejecting: nothing to reload is not a failure, and rethrowing would
           // make every caller log "reload failed" on a brand-new thread.
           await expect(thread.reload()).resolves.toBeUndefined();
-
-          expect(thread.state.getLatestValue().lastLoadError).to.equal(undefined);
         });
 
         it('treats a bare 404 as not-found even without the Stream code', async () => {
@@ -747,11 +744,9 @@ describe('Threads 2.0', () => {
           sinon.stub(client, 'getThreadAndHydrate').rejects(notFound);
 
           await expect(thread.reload()).resolves.toBeUndefined();
-
-          expect(thread.state.getLatestValue().lastLoadError).to.equal(undefined);
         });
 
-        it('publishes lastLoadError when a thread we HAD comes back not-found', async () => {
+        it('rethrows when a thread we HAD comes back not-found', async () => {
           // Deleted while we were offline: the `message.deleted` event was missed, so `deletedAt` is
           // still null and the 404 is the only signal we get. `replyCount > 0` says we had something,
           // so this is a real failure to refresh, not a thread that never existed.
@@ -773,18 +768,14 @@ describe('Threads 2.0', () => {
           sinon.stub(client, 'getThreadAndHydrate').rejects(notFound);
 
           await expect(thread.reload()).rejects.toThrow(notFound);
-
-          expect(thread.state.getLatestValue().lastLoadError).to.equal(notFound);
         });
 
-        it('still publishes lastLoadError for a real failure', async () => {
+        it('still rethrows a real failure', async () => {
           const thread = createTestThread({ latest_replies: [], reply_count: 0 });
           const failure = Object.assign(new Error('boom'), { code: 9, StatusCode: 500 });
           sinon.stub(client, 'getThreadAndHydrate').rejects(failure);
 
           await expect(thread.reload()).rejects.toThrow(failure);
-
-          expect(thread.state.getLatestValue().lastLoadError).to.equal(failure);
         });
 
         it('falls back to the server default when the paginator has no page size', async () => {
@@ -877,25 +868,38 @@ describe('Threads 2.0', () => {
           expect(repliesOf(thread).map((reply) => reply.id)).to.contain('failed-1');
         });
 
-        it('publishes a reload failure on state.lastLoadError and rethrows it', async () => {
-          // Connection recovery runs `reload()` inside `Promise.allSettled`, so the throw never
-          // reaches a UI. Mirrors `channel.state.lastLoadError`.
+        it('clears a previous reply-window error before it awaits anything', async () => {
+          // The thread twin of `Channel.watch()`'s clear-before-attempt, and above the first await
+          // for the same reason: a recovery reaches here inside the dispatch that flips a UI's own
+          // online flag, so a stale error is never rendered over replies about to refresh.
+          const thread = createTestThread({ latest_replies: [], reply_count: 0 });
+          thread.messagePaginator.state.partialNext({
+            lastQueryError: new Error('load older failed'),
+          });
+
+          // Never settles, so only a clear that ran BEFORE the await can be observed.
+          sinon.stub(client, 'getThreadAndHydrate').returns(new Promise(() => {}));
+          void thread.reload();
+
+          expect(thread.messagePaginator.lastQueryError).to.equal(undefined);
+        });
+
+        it('rethrows a reload failure and releases isLoading', async () => {
           const thread = createTestThread({ latest_replies: [], reply_count: 0 });
           const failure = new Error('thread reload failed');
           const stub = sinon.stub(client, 'getThreadAndHydrate').rejects(failure);
 
           await expect(thread.reload()).rejects.toThrow(failure);
-          expect(thread.state.getLatestValue().lastLoadError).to.equal(failure);
           // Not left mid-flight — otherwise the isLoading guard would swallow every later reload.
           expect(thread.state.getLatestValue().isLoading).to.equal(false);
 
-          // A later success clears it, so a stale banner cannot outlive the failure it described.
+          // Which is exactly what a later reload proves: it must reach the client again.
           stub.restore();
-          sinon
+          const succeeding = sinon
             .stub(client, 'getThreadAndHydrate')
             .resolves(createTestThread({ latest_replies: [], reply_count: 0 }));
           await thread.reload();
-          expect(thread.state.getLatestValue().lastLoadError).to.equal(undefined);
+          expect(succeeding.calledOnce).to.equal(true);
         });
       });
 

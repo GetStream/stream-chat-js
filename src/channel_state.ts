@@ -144,21 +144,6 @@ export type ChannelLifecycleState = {
    * {@link Channel.pendingDisposal}: the instance is never revived.
    */
   pendingDisposal: boolean;
-  /**
-   * The error from the most recent attempt to load this channel's message window
-   * ({@link Channel.watch}, and so {@link Channel.reload} too), or `undefined` when the last one
-   * succeeded. Mirrors `BasePaginator`'s `lastQueryError` one level up: cleared when an attempt
-   * starts and set when it throws, so a UI can surface "could not load this channel" by reading
-   * state instead of holding a latch of its own. `watch()` still rethrows, so callers that await it
-   * are unaffected.
-   *
-   * Store-backed because the two failures a UI cares about reach it differently and neither is
-   * catchable at the call site: the reconnect reload is issued by `ConnectionRecoveryManager` inside
-   * a `Promise.allSettled`, and an open-while-offline `watch()` throws at mount, long before
-   * anything that could later prove it stale. Recording it here is what lets it be *invalidated* by
-   * the next attempt rather than guessed at.
-   */
-  lastLoadError?: Error;
 };
 
 /**
@@ -234,7 +219,6 @@ export class ChannelState extends StateStore<ChannelStateData> {
       initialized: false,
       offlineMode: false,
       pendingDisposal: false,
-      lastLoadError: undefined,
       active: false,
       aiState: AIStates.Idle,
     });

@@ -212,10 +212,10 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
         `Recovering ${channels.length} active channel(s) and ${threads.length} active thread(s).`,
       );
 
-    // allSettled: one channel or thread failing must not stop the others. Each failure is published
-    // on `channel.state.lastLoadError` / `thread.state.lastLoadError` by the reload itself, so it
-    // is not lost here. Channels and threads are independent requests, so they run together rather
-    // than in sequence.
+    // allSettled: one channel or thread failing must not stop the others. A failed refresh is not
+    // surfaced anywhere — the loaded window simply stays as it was until the next reconnect, or until
+    // a query the consumer itself issues records its own `lastQueryError` on the paginator. Channels
+    // and threads are independent requests, so they run together rather than in sequence.
     await Promise.allSettled([
       ...channels.map((channel) => channel.reload()),
       ...threads.map((thread) => thread.reload()),

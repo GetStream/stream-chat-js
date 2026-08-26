@@ -349,9 +349,6 @@ export class StreamChat extends ChatApi {
     this.polls = new PollManager({ client: this });
     this.channelManager = new ChannelManager({ client: this });
     this.connectionRecovery = new ConnectionRecoveryManager({ client: this });
-    // Subscribed here rather than by the consumer: recovery is not an opt-in feature, it is what the
-    // client owes anything reading its state after a reconnect. `recoverStateOnReconnect` is the
-    // opt-out, checked at recovery time.
     this.connectionRecovery.registerSubscriptions();
     this.reminders = new ReminderManager({ client: this });
     this.messageDeliveryReporter = new MessageDeliveryReporter({ client: this });

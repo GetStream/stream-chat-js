@@ -298,38 +298,6 @@ describe('ConnectionRecoveryManager', () => {
     });
   });
 
-  /**
-   * Nothing clears a load error on a connection event — a failure is invalidated by the next load
-   * attempt, exactly as v9's `resyncChannel` did on its first line and as `BasePaginator` does for
-   * `lastQueryError`. What makes that enough is WHERE the clear sits: `watch()` does it above its
-   * first `await`, so on reconnect it runs inside this dispatch rather than a microtask later. A UI
-   * that masks the error behind its own "online" flag flips that flag on this same event, so the two
-   * land in one render and the error is never shown.
-   */
-  describe('a latched load error', () => {
-    it('is dropped within the connection.changed dispatch, before the reload settles', async () => {
-      const channel = client.channel('messaging', 'active');
-      channel.initialized = true;
-      channel.activate();
-      vi.spyOn(client.channelManager, 'recover').mockResolvedValue([]);
-
-      // A real failure, recorded by the real watch() — not written into state by hand.
-      const getOrCreate = vi
-        .spyOn(channel, 'getOrCreate')
-        .mockRejectedValueOnce(new Error('opened while offline'));
-      await expect(channel.watch()).rejects.toThrow();
-      expect(channel.lastLoadError).toBeDefined();
-
-      // The re-attempt never comes back, so nothing about its outcome can be what clears this.
-      getOrCreate.mockReturnValue(new Promise(() => undefined));
-
-      online();
-
-      // No await: asserted in the same tick the event was dispatched in.
-      expect(channel.lastLoadError).toBeUndefined();
-    });
-  });
-
   describe('offline support: ordering', () => {
     let db: MockOfflineDB;
 

@@ -1694,21 +1694,6 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * The error thrown by the most recent attempt to load this channel's message window, or
-   * `undefined` when it succeeded. Store-backed and reactive — subscribe via
-   * `useStateStore(channel.state, (s) => ({ lastLoadError: s.lastLoadError }))`.
-   *
-   * Read-only on purpose: it is owned by `watch()`, which clears it before it awaits anything and
-   * records a failure before rethrowing. `reload()` goes through `watch()`, so a failed reconnect
-   * reload lands here too — as does the open-while-offline case, where the mount-time `watch()` is
-   * what throws. Nothing else clears it: a load error is invalidated by the next load, not by a
-   * connection event.
-   */
-  get lastLoadError() {
-    return this.state.getLatestValue().lastLoadError;
-  }
-
-  /**
    * Whether this client holds a server-side watch on the channel, and if not, whether it should be
    * restored — see {@link ChannelWatchStatus}. Store-backed and reactive: subscribe via
    * `useStateStore(channel.state, (s) => ({ watchStatus: s.watchStatus }))`.
@@ -1838,8 +1823,8 @@ export class Channel extends ChannelApi {
    * @returns The server response.
    */
   async watch(options?: ChannelGetOrCreateRequest) {
-    if (this.lastLoadError) {
-      this.state.partialNext({ lastLoadError: undefined });
+    if (this.messagePaginator.lastQueryError) {
+      this.messagePaginator.state.partialNext({ lastQueryError: undefined });
     }
 
     const defaultOptions = {
@@ -1856,13 +1841,7 @@ export class Channel extends ChannelApi {
     }
 
     const combined = { ...defaultOptions, ...options };
-    let state;
-    try {
-      state = await this.query(combined, 'latest');
-    } catch (error) {
-      this.state.partialNext({ lastLoadError: error as Error });
-      throw error;
-    }
+    const state = await this.query(combined, 'latest');
     this.initialized = true;
     const previousData = this.data;
     this.data = state.channel;
