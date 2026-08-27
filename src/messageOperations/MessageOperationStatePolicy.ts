@@ -5,6 +5,7 @@ import type {
   StreamAPIError,
 } from '../types';
 import { formatMessage } from '../utils';
+import type { QueueableType } from '../offline-support';
 import type { MessageOperationSpec, OperationKind, OperationParams } from './types';
 
 export type MessageOperationStatePolicyContext = {
@@ -13,7 +14,7 @@ export type MessageOperationStatePolicyContext = {
   remove: (id: string) => void;
   persist: (m: LocalMessage) => void;
   purge: (id: string) => void;
-  isQueued: (messageId: string) => Promise<boolean>;
+  isQueued: (messageId: string, types: readonly QueueableType[]) => Promise<boolean>;
 };
 
 /**
@@ -236,7 +237,11 @@ export class MessageOperationStatePolicy {
     // get that message out — this is the v9 behaviour, and treating a queued send as merely "pending"
     // would leave it spinning forever.
     const queued =
-      kind !== 'send' && kind !== 'retry' && (await this.ctx.isQueued(messageId));
+      kind !== 'send' &&
+      kind !== 'retry' &&
+      (await this.ctx.isQueued(messageId, [
+        kind === 'delete' ? 'delete-message' : 'update-message',
+      ]));
 
     if (kind === 'delete') {
       if (!queued) this.revertDelete({ messageId, optimistic, options });

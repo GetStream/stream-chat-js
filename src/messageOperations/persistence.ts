@@ -1,6 +1,7 @@
 import { isQueuedForReplay } from './optimistic';
 import type { Channel } from '../channel';
 import type { LocalMessage } from '../types';
+import type { QueueableType } from '../offline-support';
 
 /**
  * The offline-DB half of {@link MessageOperationsContext}, built once and shared by `Channel` and
@@ -34,5 +35,6 @@ export const createMessageOperationsPersistence = ({
         method: 'messageOperations:purge',
       });
   },
-  isQueued: (messageId: string) => isQueuedForReplay(channel.getClient(), messageId),
+  isQueued: (messageId: string, types: readonly QueueableType[]) =>
+    isQueuedForReplay(channel.getClient(), messageId, types),
 });

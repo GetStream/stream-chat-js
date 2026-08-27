@@ -8,6 +8,7 @@ import type {
   UpdateMessageAPIResponse,
   UpdateMessageOptions,
 } from '../types';
+import type { QueueableType } from '../offline-support/types';
 
 export type OperationKind = 'send' | 'retry' | 'update' | 'delete';
 
@@ -70,7 +71,7 @@ export type MessageOperationsContext = {
    * not failed, so the optimistic state stays exactly as it is: no `failed` status, no error, no revert.
    * Reactions run the same predicate, which is what keeps the two from drifting.
    */
-  isQueued: (messageId: string) => Promise<boolean>;
+  isQueued: (messageId: string, types: readonly QueueableType[]) => Promise<boolean>;
 
   normalizeOutgoingMessage?: (m: MessageRequest) => MessageRequest;
 

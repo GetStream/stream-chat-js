@@ -392,6 +392,37 @@ describe('optimistic edit/delete routing', () => {
       expect(edited?.text).toBe('after');
     });
 
+    // Every task type shares the `messageId` column, so "is anything queued for this message" is not
+    // the same question as "is THIS operation queued". A reaction the user made moments earlier must
+    // not disguise a refused edit as pending.
+    it('is not fooled by an unrelated task queued against the same message', async () => {
+      const { pendingTasks } = enableOfflineDb();
+      const messageId = uuidv4();
+      const message = generateMsg({
+        attachments: [{ asset_url: 'file:///tmp/local.pdf', type: 'file' }],
+        cid: channel.cid,
+        id: messageId,
+        text: 'before',
+      }) as MessageResponse;
+      seedChannel(channel, message);
+
+      pendingTasks.push({
+        messageId,
+        payload: [{ id: messageId, reaction: { type: 'love' } }],
+        type: 'send-reaction',
+      } as unknown as PendingTask);
+
+      await expect(
+        channel.updateMessageWithLocalUpdate({
+          localMessage: { ...formatMessage(message), text: 'after' } as LocalMessage,
+        }),
+      ).rejects.toThrow();
+
+      // The local attachment URI means the queue refused the edit, so nothing will ever replay it.
+      expect(pendingTasks.map((task) => task.type)).toEqual(['send-reaction']);
+      expect(channel.messagePaginator.getItem(messageId)?.status).toBe('failed');
+    });
+
     it('stays pending when the task WAS queued, with no failed state on the message', async () => {
       const { pendingTasks } = enableOfflineDb();
 

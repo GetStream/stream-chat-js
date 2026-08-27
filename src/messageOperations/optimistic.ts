@@ -3,6 +3,7 @@ import { isEphemeral } from '../errors';
 import { formatMessage } from '../utils';
 import type { Channel } from '../channel';
 import type { StreamChat } from '../client';
+import type { QueueableType } from '../offline-support';
 import type {
   LocalMessage,
   MessageResponse,
@@ -30,7 +31,10 @@ import type {
  *   await client.pinMessage(messageId, expiration);
  * } catch (error) {
  *   // Queued for replay is pending, not failed — there is nothing to roll back.
- *   if (!(await isQueuedForReplay(client, messageId))) undo?.();
+ *   // Naming the operation's OWN task types: every task carries the same `messageId`, so asking
+ *   // "is anything queued for this message" would let an unrelated one answer for you. An operation
+ *   // that is not queueable at all skips this and always rolls back.
+ *   if (!(await isQueuedForReplay(client, messageId, ['pin-message' as QueueableType]))) undo?.();
  *   throw error;
  * }
  * ```
@@ -141,6 +145,7 @@ export const applyMessageChangeLocally = (
 export const isQueuedForReplay = async (
   client: StreamChat,
   messageId: string,
+  types: readonly QueueableType[],
 ): Promise<boolean> => {
   const { offlineDb } = client;
   // No queue at all, so nothing can be pending. `initialized` matters as much as existence: a DB whose
@@ -150,7 +155,8 @@ export const isQueuedForReplay = async (
   // Optional-chained: `getPendingTasks` is part of the `OfflineDBApi` an integrator can implement, so
   // this must not assume a well-formed return.
   const pending = await offlineDb.getPendingTasks({ messageId });
-  return !!pending?.length;
+
+  return pending?.some((task) => types.includes(task.type));
 };
 
 /**
@@ -208,7 +214,7 @@ export const addReactionOptimistically = async ({
     reconcileHeldMessage(channel, response?.message);
   } catch (error) {
     // Queued for replay is pending, not failed — there is nothing to roll back.
-    if (!(await isQueuedForReplay(client, messageId))) undo?.();
+    if (!(await isQueuedForReplay(client, messageId, ['send-reaction']))) undo?.();
     throw error;
   }
 };
@@ -237,7 +243,7 @@ export const deleteReactionOptimistically = async ({
     const response = await channel.deleteReaction({ id: messageId, type });
     reconcileHeldMessage(channel, response?.message);
   } catch (error) {
-    if (!(await isQueuedForReplay(client, messageId))) undo?.();
+    if (!(await isQueuedForReplay(client, messageId, ['delete-reaction']))) undo?.();
     throw error;
   }
 };
