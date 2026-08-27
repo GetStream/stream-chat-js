@@ -156,7 +156,7 @@ export const isQueuedForReplay = async (
   // this must not assume a well-formed return.
   const pending = await offlineDb.getPendingTasks({ messageId });
 
-  return pending?.some((task) => types.includes(task.type));
+  return !!pending?.some((task) => types.includes(task.type));
 };
 
 /**

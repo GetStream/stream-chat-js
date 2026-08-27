@@ -165,6 +165,11 @@ export class MessageOperationStatePolicy {
         this.ctx.purge(messageId);
         return;
       }
+      // Mirrors the `!previous` guard in `optimistic`: a message local state does not hold must not be
+      // re-inserted as a "Message deleted" row it never displayed. Read live rather than from the
+      // optimistic snapshot, so a copy that arrived while the request was open is still marked.
+      if (!this.ctx.get(messageId)) return;
+
       this.ctx.ingest(formatted);
       this.ctx.persist(formatted);
       return;
@@ -189,18 +194,12 @@ export class MessageOperationStatePolicy {
       serverNewer ||
       (existingIsOurOptimisticSend && serverSameOrNewer);
 
-    if (applyServerCopy) {
-      this.ctx.ingest(formatted);
-    }
+    if (!applyServerCopy) return;
 
-    if (kind === 'update') {
-      // Persist only what we actually applied, so the row can never disagree with memory.
-      if (applyServerCopy) this.ctx.persist(formatted);
-      return;
-    }
-
-    // Unconditional for send/retry: the optimistic step wrote a pessimistic `failed` row, so skipping
-    // this would leave a delivered message hydrating as failed after a restart.
+    this.ctx.ingest(formatted);
+    // Persist only what was actually applied, so the row can never disagree with memory. For
+    // send/retry this is also what supersedes the pessimistic `failed` write-ahead — and when the copy
+    // is declined it is because a fresher one already landed, whose own path wrote the row.
     this.ctx.persist(formatted);
   }
 

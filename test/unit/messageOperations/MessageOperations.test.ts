@@ -394,6 +394,10 @@ describe('MessageOperations', () => {
     });
 
     const localMessage = makeLocalMessage({ id: 'm1', status: 'received' });
+    // Only a message local state holds can be deleted; an empty store would exercise the phantom-row
+    // path `success` deliberately refuses.
+    store.set(localMessage.id, localMessage);
+
     await ops.delete({ localMessage });
 
     expect(defaultsDelete).toHaveBeenCalledWith('m1', undefined);
@@ -416,6 +420,7 @@ describe('MessageOperations', () => {
     });
 
     const localMessage = makeLocalMessage({ id: 'm1', status: 'received' });
+    store.set(localMessage.id, localMessage);
 
     await ops.delete({ localMessage }, async () => ({
       message: makeMessageResponse({
@@ -844,6 +849,35 @@ describe('MessageOperations — optimistic lifecycle', () => {
     });
   });
 
+  describe('delete', () => {
+    // `optimistic` deliberately writes nothing when local state holds no copy — ingesting would insert
+    // a "Message deleted" row for something that was never on screen. `success` then ingested the
+    // server's copy unconditionally, putting the phantom row back. The guard only appeared to hold
+    // offline, where the request fails and `success` never runs.
+    it('does not insert a deleted row for a message nothing was displaying', async () => {
+      const { ops, persisted, store } = harness();
+
+      await ops.delete({ localMessage: makeLocalMessage({ id: 'm1' }) }, async () => ({
+        message: makeMessageResponse({ id: 'm1', type: 'deleted' }),
+      }));
+
+      expect(store.has('m1')).toBe(false);
+      expect(persisted).toHaveLength(0);
+    });
+
+    it('still applies the server copy for a message it does hold', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received' });
+      const { lastPersisted, ops, store } = harness({ seed });
+
+      await ops.delete({ localMessage: seed }, async () => ({
+        message: makeMessageResponse({ id: 'm1', type: 'deleted' }),
+      }));
+
+      expect(store.get('m1')?.type).toBe('deleted');
+      expect(lastPersisted()?.type).toBe('deleted');
+    });
+  });
+
   describe('send', () => {
     it('writes the message ahead as failed, then supersedes it with the received copy', async () => {
       const { ops, persisted } = harness();
@@ -875,6 +909,40 @@ describe('MessageOperations — optimistic lifecycle', () => {
 
       expect(store.get('m1')?.status).toBe('received');
       expect(lastPersisted()?.status).toBe('received');
+    });
+
+    // The DB mirrors memory. When a fresher copy (a `message.new` echo) has already landed, the
+    // response is too stale to apply — and equally too stale to write to the row.
+    it('does not persist a server copy it declined to apply', async () => {
+      const { ops, persisted, store } = harness();
+      const localMessage = makeLocalMessage({
+        id: 'm1',
+        status: 'sending',
+        updated_at: new Date(Date.now() + 60_000),
+      });
+
+      await ops.send({ localMessage }, async () => {
+        // The echo lands while the request is open, and is newer than the response.
+        store.set(
+          'm1',
+          makeLocalMessage({
+            id: 'm1',
+            status: 'received',
+            text: 'from the echo',
+            updated_at: new Date(Date.now() + 120_000),
+          }),
+        );
+        return {
+          message: makeMessageResponse({
+            id: 'm1',
+            updated_at: new Date().toISOString(),
+          }),
+        };
+      });
+
+      expect(store.get('m1')?.text).toBe('from the echo');
+      // Only the pessimistic write-ahead should have been written; the declined copy must not follow it.
+      expect(persisted.map((m) => m.status)).toEqual(['failed']);
     });
 
     it('persists the failed state when the send fails', async () => {

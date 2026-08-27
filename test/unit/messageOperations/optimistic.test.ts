@@ -206,6 +206,6 @@ describe('isQueuedForReplay', () => {
   it('tolerates an implementation that returns nothing', async () => {
     await expect(
       isQueuedForReplay(clientWith(undefined), 'm1', ['update-message']),
-    ).resolves.toBeFalsy();
+    ).resolves.toBe(false);
   });
 });
