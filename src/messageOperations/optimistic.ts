@@ -16,10 +16,12 @@ import type {
  * The four message operations `MessageOperations` already owns (send, retry, update, delete) run
  * through {@link MessageOperationStatePolicy}. Anything ELSE — pinning, a poll vote, an integrator's
  * own endpoint — is not a message REQUEST (no `localMessage`, no `sending → received | failed`), so it
- * does not belong in that class. It writes itself, using these two:
+ * does not belong in that class. It writes itself, using these two — from inside `Channel` or
+ * `Thread`, where the accessor is in scope (it is built where `MessageOperations` is constructed and
+ * is not exposed as a field):
  *
  * ```ts
- * const undo = applyMessageChangeLocally(channel.messageState, {
+ * const undo = applyMessageChangeLocally(accessor, {
  *   messageId,
  *   produce: (m) => m && { ...m, pinned: true, pinned_at: new Date() },
  * });
@@ -42,21 +44,22 @@ import type {
  */
 
 /**
- * What a {@link MessageProducer} returns to say "this operation takes the message out of local state"
+ * What a {@link MessageChangeProducer} returns to say "this operation takes the message out of local state"
  * — a hard delete. Distinct from `undefined`, which means "nothing to do".
  */
 export const REMOVE_MESSAGE = Symbol('REMOVE_MESSAGE');
 
 export type MessageChange = LocalMessage | typeof REMOVE_MESSAGE | undefined;
 
-/** An operation's local-state shape: given the copy we hold, what should be there instead. */
-export type MessageProducer = (current: LocalMessage | undefined) => MessageChange;
+/** The change an operation wants made: given the copy currently held, what should be there instead. */
+export type MessageChangeProducer = (current: LocalMessage | undefined) => MessageChange;
 
 /**
- * Where an optimistic operation reads and writes local state. `Channel` and `Thread` each expose one
- * as `messageState`, routed paginator-first with the client-global message store as the fallback.
+ * How an optimistic operation reaches the message it is changing: the read, the write and the removal,
+ * nothing else. `Channel` and `Thread` each build one where they construct their `MessageOperations`,
+ * routed paginator-first with the client-global message store as the fallback.
  */
-export type MessageLocalState = {
+export type LocalMessageAccessor = {
   get: (id: string) => LocalMessage | undefined;
   ingest: (message: LocalMessage) => void;
   remove: (id: string) => void;
@@ -80,16 +83,16 @@ export type RevertLocalChange = () => boolean;
  * the read, the write, the "has anything else written since" guard, working out what the inverse of the
  * write is — is here.
  *
- * Writes go through `state.ingest` / `state.remove` rather than a bare store upsert, so a change that
+ * Writes go through `accessor.ingest` / `accessor.remove` rather than a bare store upsert, so a change that
  * affects COLLECTION MEMBERSHIP works and not just a content change: a store upsert replaces the
  * message wherever it is already held but never consults a collection's filter, so flipping `pinned`
  * could never make it appear in a list it now belongs to.
  */
 export const applyMessageChangeLocally = (
-  state: MessageLocalState,
-  { messageId, produce }: { messageId: string; produce: MessageProducer },
+  accessor: LocalMessageAccessor,
+  { messageId, produce }: { messageId: string; produce: MessageChangeProducer },
 ): RevertLocalChange | undefined => {
-  const previous = state.get(messageId);
+  const previous = accessor.get(messageId);
   const next = produce(previous);
 
   // Nothing to apply — e.g. an optimistic soft delete of a message no collection holds, where
@@ -99,24 +102,24 @@ export const applyMessageChangeLocally = (
   if (next === REMOVE_MESSAGE) {
     if (!previous) return;
 
-    state.remove(messageId);
+    accessor.remove(messageId);
 
     return () => {
       // No identity guard: the message is not in local state, so there is no current copy to compare
       // against and the snapshot is unambiguously what belongs there.
-      state.ingest(previous);
+      accessor.ingest(previous);
       return true;
     };
   }
 
-  state.ingest(next);
+  accessor.ingest(next);
 
   return () => {
     // A fresher truth (a WS event, another operation) landed while the request was in flight.
-    if (state.get(messageId) !== next) return false;
+    if (accessor.get(messageId) !== next) return false;
 
-    if (previous) state.ingest(previous);
-    else state.remove(messageId);
+    if (previous) accessor.ingest(previous);
+    else accessor.remove(messageId);
 
     return true;
   };

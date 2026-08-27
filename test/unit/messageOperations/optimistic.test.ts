@@ -7,7 +7,7 @@ import {
 import type { StreamChat } from '../../../src/client';
 import type {
   LocalMessageChange,
-  MessageLocalState,
+  LocalMessageAccessor,
 } from '../../../src/messageOperations/optimistic';
 import type { LocalMessage } from '../../../src/types';
 
@@ -25,7 +25,7 @@ const makeState = (seed?: LocalMessage) => {
   const store = new Map<string, LocalMessage>();
   if (seed) store.set(seed.id, seed);
 
-  const state: MessageLocalState = {
+  const state: LocalMessageAccessor = {
     get: (id) => store.get(id),
     ingest: (m) => {
       store.set(m.id, m);

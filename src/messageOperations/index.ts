@@ -10,8 +10,8 @@ export {
 } from './optimistic';
 export type {
   MessageChange,
-  MessageLocalState,
-  MessageProducer,
+  LocalMessageAccessor,
+  MessageChangeProducer,
   RevertLocalChange,
 } from './optimistic';
 export type { OptimisticOutcome } from './MessageOperationStatePolicy';
