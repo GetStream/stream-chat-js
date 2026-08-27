@@ -190,7 +190,7 @@ export type SeedFirstPageOptions = {
    * {@link MessageIntervalPaginator.mergeNewestPage} — merge in place, reconcile offline hard-deletes,
    * re-derive the tail cursor, rebuild on a disjoint window, and skip when jumped away from the head —
    * instead of a plain first-page ingest. Lets callers (channel.reload, the channel-list hydrate,
-   * React's `recoverState`) share one reconciling seed path. Left false for the differently-sorted
+   * connection recovery) share one reconciling seed path. Left false for the differently-sorted
    * pinned list, and a no-op on a cold open (nothing loaded to fold).
    */
   reconcile?: boolean;
@@ -528,6 +528,13 @@ export class MessageIntervalPaginator extends BasePaginator<
     const isJump = this.isJumpQueryShape(queryShape);
 
     if (options?.reconcile && !isJump && typeof this.items !== 'undefined') {
+      // The page came back, so whatever the last query failure was, it is no longer the truth. The
+      // branch below inherits this from `postQueryReconcile`, which this one deliberately skips —
+      // without it a failed "load older" would keep a UI's error surface latched through an
+      // otherwise successful reconnect refresh.
+      if (this.state.getLatestValue().lastQueryError) {
+        this.state.partialNext({ lastQueryError: undefined });
+      }
       this.mergeNewestPage(messages, {
         candidateIds: options.candidateIds,
         requestedLimit: requestedPageSize,
@@ -706,7 +713,46 @@ export class MessageIntervalPaginator extends BasePaginator<
    */
   mergeNewestPage = (page: LocalMessage[], options?: MergeNewestPageOptions) => {
     const headInterval = this.itemIntervals[0] as Interval | undefined;
-    if (!headInterval?.isHead) return;
+    if (!headInterval?.isHead) {
+      // Live content no page has anchored yet, the first query came back empty and the reply the
+      // user then sent went to the logical head (a thread/channel creation for example). Returning would
+      // discard the fetched page, so the window could never catch up. We anchor it, so `ingestPage` folds
+      // overlapping logical intervals in, absorbing those items.
+      //
+      // It's narrow on purpose, `liveHeadLogical` rather than `itemIntervals[0]`, which is only the head
+      // by convention and could be a logical tail and no anchored head, whose presence would mean
+      // this window is anchored with an older island merely in view. Keeps both neighbouring no-op
+      // contracts, so nothing loaded has no logical head (seeding is `postQueryReconcile`'s job).
+      const logicalHead = this.liveHeadLogical;
+      const hasAnchoredHead = this.itemIntervals.some(
+        (interval) => !isLogicalInterval(interval) && interval.isHead,
+      );
+      if (!logicalHead || hasAnchoredHead || !page?.length) return;
+
+      // Take over the view only if the reader is on the live content being absorbed, so if they jumped
+      // to another interval, anchor for their return and leave them there (the rule the jumped away
+      // branch below enforces).
+      const takeOverView = this.isActiveInterval(logicalHead);
+
+      const anchored = this.ingestPage({ page, isHead: true, setActive: false });
+      if (!anchored || !takeOverView) return;
+
+      const hasMoreTail = !this.pageReachedChannelStart(page, options);
+      anchored.hasMoreTail = hasMoreTail;
+      anchored.isTail = !hasMoreTail;
+
+      this.setActiveInterval(anchored, { updateState: false });
+      this.state.partialNext({
+        items: this.intervalToItems(anchored),
+        hasMoreHead: false,
+        hasMoreTail,
+        cursor: {
+          headward: null,
+          tailward: hasMoreTail ? (anchored.itemIds[0] ?? null) : null,
+        },
+      });
+      return;
+    }
     // Captured BEFORE the merge overwrites state — inputs for the below-window reached-start probe
     // (overlap branch only): did we believe we were at the channel start, and how much was loaded.
     const wasAtChannelStart = !this.state.getLatestValue().hasMoreTail;

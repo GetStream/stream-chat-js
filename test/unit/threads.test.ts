@@ -428,11 +428,17 @@ describe('Threads 2.0', () => {
         it('retains failed replies after hydration', () => {
           const thread = createTestThread();
           const hydrationThread = createTestThread({
-            latest_replies: [makeReply()],
+            latest_replies: [makeReply({ created_at: '2020-01-01T00:00:01.000Z' })],
             reply_count: 1,
           });
 
-          const failedMessage = makeReply({ status: 'failed' });
+          // Pinned, failed reply NEWEST: `makeReply()` reads `created_at` from the clock, so implicit
+          // timestamps landed in random order and an older-than-window reply sits below it, not in
+          // view — ~50% flaky. A just-attempted send is the newest thing anyway.
+          const failedMessage = makeReply({
+            created_at: '2020-01-01T00:00:09.000Z',
+            status: 'failed',
+          });
           thread.upsertReplyLocally({ message: failedMessage });
 
           thread.hydrateState(hydrationThread);
@@ -585,12 +591,12 @@ describe('Threads 2.0', () => {
       });
 
       describe('reload', () => {
-        it('sizes getThread reply_limit to the loaded reply count, falling back to pageSize when unloaded', async () => {
+        it('sizes getThread reply_limit to the loaded window, but never below a page', async () => {
           const stub = sinon.stub(client, 'getThread').resolves({
             thread: generateThreadResponse(channelResponse, parentMessageResponse),
           });
 
-          // Unloaded (minimal) thread → falls back to pageSize.
+          // Unloaded (minimal) thread → a page.
           const minimalThread = createMinimalThread();
           expect(minimalThread.messagePaginator.state.getLatestValue().items).to.be
             .undefined;
@@ -599,19 +605,196 @@ describe('Threads 2.0', () => {
             minimalThread.messagePaginator.pageSize,
           );
 
-          // Loaded thread → sized to the loaded reply count (so the whole loaded window reconciles),
-          // NOT the paginator pageSize.
-          const loadedThread = createTestThread({
+          // Loaded window LARGER than a page → sized to it, so the whole window reconciles.
+          const pageSize = minimalThread.messagePaginator.pageSize;
+          const wide = createTestThread({
             latest_replies: Array.from(
-              { length: 7 },
+              { length: pageSize + 7 },
               () =>
                 generateMsg({ parent_id: parentMessageResponse.id }) as MessageResponse,
             ),
-            reply_count: 20,
+            reply_count: pageSize + 20,
           });
-          await loadedThread.reload();
-          expect(stub.secondCall.args[0]?.reply_limit).to.equal(7);
-          expect(loadedThread.messagePaginator.pageSize).to.not.equal(7);
+          await wide.reload();
+          expect(stub.secondCall.args[0]?.reply_limit).to.equal(pageSize + 7);
+
+          // ⚠️ Loaded window SMALLER than a page → still a page. Regression guard: a thread created in
+          // the current session holds exactly one reply (the one just sent), and sizing the request to
+          // that asks the server for one reply — so replies added while offline can never be
+          // discovered, and the single reply that comes back is disjoint from the loaded window, so
+          // the fold rebuilds and drops the user's own reply too.
+          const narrow = createTestThread({
+            latest_replies: [
+              generateMsg({ parent_id: parentMessageResponse.id }) as MessageResponse,
+            ],
+            reply_count: 40,
+          });
+          await narrow.reload();
+          expect(stub.thirdCall.args[0]?.reply_limit).to.equal(pageSize);
+        });
+
+        it('merges the fetched page into a thread whose only reply was ingested live', async () => {
+          // A thread created this session has an EMPTY first reply page, so nothing anchors its
+          // window and the sent reply lands in a LOGICAL head. `mergeNewestPage` used to require an
+          // ANCHORED head, silently discarding every reply the server returned on reconnect — and
+          // re-entering never healed it, since the instance is reused with `items` already defined.
+          const thread = createMinimalThread();
+          expect(thread.messagePaginator.state.getLatestValue().items).to.be.undefined;
+
+          // The sent reply — live-ingested, no page behind it.
+          const mine = formatMessage(
+            makeReply({ id: 'mine', created_at: '2020-01-01T00:00:01.000Z' }),
+          );
+          thread.messagePaginator.ingestItem(mine);
+          expect(repliesOf(thread).map((r) => r.id)).to.eql(['mine']);
+
+          // Two replies from someone else while offline; the server returns all three.
+          const peer1 = makeReply({
+            id: 'peer1',
+            created_at: '2020-01-01T00:00:02.000Z',
+          });
+          const peer2 = makeReply({
+            id: 'peer2',
+            created_at: '2020-01-01T00:00:03.000Z',
+          });
+          sinon.stub(client, 'getThreadAndHydrate').resolves(
+            createTestThread({
+              latest_replies: [
+                makeReply({ id: 'mine', created_at: '2020-01-01T00:00:01.000Z' }),
+                peer1,
+                peer2,
+              ],
+              reply_count: 3,
+            }),
+          );
+
+          await thread.reload();
+
+          expect(repliesOf(thread).map((r) => r.id)).to.eql(['mine', 'peer1', 'peer2']);
+        });
+
+        it('anchors the fetched page without yanking the view when the caller has jumped away', async () => {
+          // Same rule as the jumped-away branch: anchor for later, never switch the active window
+          // out from under someone reading an older island.
+          const thread = createMinimalThread();
+          const mine = formatMessage(
+            makeReply({ id: 'mine', created_at: '2020-01-01T00:00:05.000Z' }),
+          );
+          thread.messagePaginator.ingestItem(mine);
+
+          // Simulate a jump: an older, separately-anchored island that is the active window.
+          const older = [
+            makeReply({ id: 'old1', created_at: '2019-01-01T00:00:01.000Z' }),
+            makeReply({ id: 'old2', created_at: '2019-01-01T00:00:02.000Z' }),
+          ].map((r) => formatMessage(r));
+          const jumped = thread.messagePaginator.ingestPage({
+            page: older,
+            isHead: false,
+            setActive: true,
+          });
+          expect(jumped).to.not.equal(undefined);
+          const activeBefore = repliesOf(thread).map((r) => r.id);
+          expect(activeBefore).to.eql(['old1', 'old2']);
+
+          sinon.stub(client, 'getThreadAndHydrate').resolves(
+            createTestThread({
+              latest_replies: [
+                makeReply({ id: 'mine', created_at: '2020-01-01T00:00:05.000Z' }),
+                makeReply({ id: 'peer1', created_at: '2020-01-01T00:00:06.000Z' }),
+              ],
+              reply_count: 2,
+            }),
+          );
+
+          await thread.reload();
+
+          // Still reading the old island — not relocated to the newest page.
+          expect(repliesOf(thread).map((r) => r.id)).to.eql(activeBefore);
+        });
+
+        it('resolves quietly when the thread does not exist yet', async () => {
+          // Opening a parent that has no replies means there is no server-side thread, so `getThread`
+          // answers DoesNotExist (16). That is an expected answer, not a failed refresh: rethrowing it
+          // would make every caller report a failure just for opening a brand-new thread.
+          const thread = createTestThread({ latest_replies: [], reply_count: 0 });
+          const notFound = Object.assign(
+            new Error('Request failed with status code 404'),
+            {
+              code: 16,
+              StatusCode: 404,
+            },
+          );
+          sinon.stub(client, 'getThreadAndHydrate').rejects(notFound);
+
+          // Resolves rather than rejecting: nothing to reload is not a failure, and rethrowing would
+          // make every caller log "reload failed" on a brand-new thread.
+          await expect(thread.reload()).resolves.toBeUndefined();
+        });
+
+        it('treats a bare 404 as not-found even without the Stream code', async () => {
+          // The guard must not hinge on the API choosing code 16 — a 404 from `getThread` means the
+          // thread is not there whatever the body says.
+          const thread = createTestThread({ latest_replies: [], reply_count: 0 });
+          const notFound = Object.assign(
+            new Error('Request failed with status code 404'),
+            {
+              status: 404,
+            },
+          );
+          sinon.stub(client, 'getThreadAndHydrate').rejects(notFound);
+
+          await expect(thread.reload()).resolves.toBeUndefined();
+        });
+
+        it('rethrows when a thread we HAD comes back not-found', async () => {
+          // Deleted while we were offline: the `message.deleted` event was missed, so `deletedAt` is
+          // still null and the 404 is the only signal we get. `replyCount > 0` says we had something,
+          // so this is a real failure to refresh, not a thread that never existed.
+          const thread = createTestThread({
+            latest_replies: [makeReply({ created_at: '2020-01-01T00:00:01.000Z' })],
+            // `replyCount` is read off the PARENT message, not the thread response's own count.
+            parentMessageOverrides: { reply_count: 4 },
+          });
+          expect(thread.state.getLatestValue().replyCount).to.equal(4);
+          expect(thread.state.getLatestValue().deletedAt).to.equal(null);
+          const notFound = Object.assign(
+            new Error('Request failed with status code 404'),
+            {
+              code: 16,
+              StatusCode: 404,
+              status: 404,
+            },
+          );
+          sinon.stub(client, 'getThreadAndHydrate').rejects(notFound);
+
+          await expect(thread.reload()).rejects.toThrow(notFound);
+        });
+
+        it('still rethrows a real failure', async () => {
+          const thread = createTestThread({ latest_replies: [], reply_count: 0 });
+          const failure = Object.assign(new Error('boom'), { code: 9, StatusCode: 500 });
+          sinon.stub(client, 'getThreadAndHydrate').rejects(failure);
+
+          await expect(thread.reload()).rejects.toThrow(failure);
+        });
+
+        it('falls back to the server default when the paginator has no page size', async () => {
+          // `pageSize` is optional on the paginator config. Guarding it matters: `Math.max(n,
+          // undefined)` is NaN, and a zero page size would ask for no replies at all.
+          const stub = sinon.stub(client, 'getThread').resolves({
+            thread: generateThreadResponse(channelResponse, parentMessageResponse),
+          });
+          const thread = createTestThread({
+            latest_replies: [],
+            reply_count: 0,
+          });
+          thread.messagePaginator.updateConfig({ pageSize: undefined });
+
+          await thread.reload();
+
+          const limit = stub.firstCall.args[0]?.reply_limit;
+          expect(limit).to.equal(undefined);
+          expect(Number.isNaN(limit as number)).to.equal(false);
         });
 
         it('removes a reply hard-deleted while offline and keeps one that arrived during the fetch', async () => {
@@ -648,6 +831,59 @@ describe('Threads 2.0', () => {
           // r3 (in the pre-fetch snapshot, absent from the server page) → hard-delete, removed.
           // r4 (arrived AFTER the snapshot) → not in the snapshot → kept.
           expect(repliesOf(thread).map((reply) => reply.id)).to.eql(['r1', 'r2', 'r4']);
+        });
+
+        it('preserves a failed (unsent) reply across a rebuild', async () => {
+          // The failed reply is read out of the reply PAGINATOR, not out of `failedRepliesMap`. That
+          // map is only written by `upsertReplyLocally`, whose callers are this thread's own
+          // subscriptions and the offline-DB path keyed on `ThreadManager.threadsById` — so for a
+          // thread constructed directly and never registered (what the React Native SDK does via
+          // `threadsById[id] ?? new Thread(...)`) it is always empty, and relying on it would drop the
+          // user's unsent reply on every reconnect.
+          const r1 = makeReply({ id: 'r1', created_at: '2020-01-01T00:00:01.000Z' });
+          const thread = createTestThread({ latest_replies: [r1], reply_count: 1 });
+          expect(thread.hasSubscriptions).to.equal(false);
+
+          // A reply the user sent while offline, which failed. It only exists locally, and like any
+          // just-attempted send it is the newest thing in the thread.
+          const failed = formatMessage(
+            makeReply({ id: 'failed-1', created_at: '2021-06-01T00:00:09.000Z' }),
+          );
+          failed.status = 'failed';
+          thread.messagePaginator.ingestItem(failed);
+          expect(repliesOf(thread).map((reply) => reply.id)).to.contain('failed-1');
+
+          // Server page is disjoint from the loaded window, which forces a rebuild — the one case the
+          // reconcile's provenance guard does not cover.
+          const far1 = makeReply({ id: 'far1', created_at: '2021-06-01T00:00:01.000Z' });
+          const far2 = makeReply({ id: 'far2', created_at: '2021-06-01T00:00:02.000Z' });
+          const hydrationThread = createTestThread({
+            latest_replies: [far1, far2],
+            reply_count: 2,
+          });
+          sinon.stub(client, 'getThreadAndHydrate').resolves(hydrationThread);
+
+          await thread.reload();
+
+          expect(repliesOf(thread).map((reply) => reply.id)).to.contain('failed-1');
+        });
+
+        it('rethrows a reload failure and releases isLoading', async () => {
+          const thread = createTestThread({ latest_replies: [], reply_count: 0 });
+          const failure = new Error('thread reload failed');
+          const stub = sinon.stub(client, 'getThreadAndHydrate').rejects(failure);
+
+          await expect(thread.reload()).rejects.toThrow(failure);
+          // Not left mid-flight — otherwise the isLoading guard would swallow every later reload.
+          expect(thread.state.getLatestValue().isLoading).to.equal(false);
+
+          // Which is exactly what a later reload proves: it must reach the client again.
+          stub.restore();
+          const succeeding = sinon
+            .stub(client, 'getThreadAndHydrate')
+            .resolves(createTestThread({ latest_replies: [], reply_count: 0 }));
+          await thread.reload();
+          expect(succeeding.calledOnce).to.equal(true);
         });
       });
 

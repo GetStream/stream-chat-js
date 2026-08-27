@@ -64,6 +64,7 @@ import { DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import { PollManager } from './poll_manager';
 import { EntityStore } from './entityStore/EntityStore';
 import { ChannelManager } from './ChannelManager';
+import { ConnectionRecoveryManager } from './ConnectionRecoveryManager';
 import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
 import { ReminderManager } from './reminders';
@@ -141,6 +142,15 @@ export class StreamChat extends ChatApi {
    */
   channelManager: ChannelManager;
   /**
+   * Owns connection recovery: on reconnect it re-runs each loaded channel list's own first-page query
+   * and reloads each active channel, then dispatches `connection.recovered`. Instantiated with the
+   * client and subscribed for its lifetime.
+   *
+   * Turn it off through the declarative configuration if the application recovers state itself:
+   * `client.config.set({ client: { connectionRecovery: { enabled: false } } })`.
+   */
+  connectionRecovery: ConnectionRecoveryManager;
+  /**
    * Client-global, normalized store holding one canonical copy of each message. The channel main
    * list and thread reply paginators read/write message content through it, so a message held in
    * more than one of them stays consistent without copy-to-copy fan-out.
@@ -157,16 +167,6 @@ export class StreamChat extends ChatApi {
   clientId?: string;
   key: string;
   listeners: Map<EventType, Set<EventHandler>>;
-  /**
-   * When network is recovered, we re-query the active channels on client. But in single query, you can recover
-   * only 30 channels. So its not guaranteed that all the channels in activeChannels object have updated state.
-   * Thus in UI sdks, state recovery is managed by components themselves, they don't rely on js client for this.
-   *
-   * `recoverStateOnReconnect` parameter can be used in such cases, to disable state recovery within js client.
-   * When false, user/consumer of this client will need to make sure all the channels present on UI by
-   * manually calling queryChannels endpoint.
-   */
-  recoverStateOnReconnect?: boolean;
   /**
    * If true, we will not clean up threads when channel state is in initializing state.
    * The main use case for SDKs who do independent state recovery for channels.
@@ -291,7 +291,6 @@ export class StreamChat extends ChatApi {
 
     this.options = {
       warmUp: false,
-      recoverStateOnReconnect: true,
       disableCache: false,
       isLocalUnreadCountEnabled: false,
       wsUrlParams: new URLSearchParams({}),
@@ -332,13 +331,14 @@ export class StreamChat extends ChatApi {
 
     this.defaultWSTimeout = 15 * 1000;
 
-    this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
     this.messageStore = new EntityStore<LocalMessage>({
       getEntityId: (message) => message.id,
     });
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
     this.channelManager = new ChannelManager({ client: this });
+    this.connectionRecovery = new ConnectionRecoveryManager({ client: this });
+    this.connectionRecovery.registerSubscriptions();
     this.reminders = new ReminderManager({ client: this });
     this.messageDeliveryReporter = new MessageDeliveryReporter({ client: this });
     this.messageComposerCache = new FixedSizeQueueCache<string, MessageComposer>(64);
@@ -391,6 +391,7 @@ export class StreamChat extends ChatApi {
   private initializeManagerConfig() {
     const config = this.config.getConfig('client');
 
+    this.connectionRecovery.initializeConfig(config?.connectionRecovery);
     this.reminders.initializeConfig(config?.reminders);
     this.threads.initializeConfig(config?.threads);
     this.messageDeliveryReporter.initializeConfig(config?.messageDelivery);
@@ -1155,7 +1156,7 @@ export class StreamChat extends ChatApi {
     }
 
     // Current user removed from a channel: evict it like channel.deleted so
-    // recoverState won't re-watch it and no further events reach it (#2599).
+    // connection recovery won't re-watch it and no further events reach it (#2599).
     // Type-agnostic. We skip deleteAllChannelReference (unlike deletion) since
     // the channel still exists for its remaining members.
     if (event.type === 'notification.removed_from_channel' && event.cid) {
@@ -1250,34 +1251,21 @@ export class StreamChat extends ChatApi {
     );
   };
 
-  recoverState = async () => {
+  /**
+   * Settles the connect promises after a successful reconnect, so the `await this.wsPromise` gates
+   * spread across the client stop resolving against a superseded (possibly rejected) attempt.
+   *
+   * Called by `StableWSConnection._reconnect()`. Recovery itself is owned by
+   * {@link ConnectionRecoveryManager}, which subscribes to the connection lifecycle and so covers
+   * every reconnect path — including `closeConnection()` → `openConnection()` (mobile backgrounding),
+   * which never reaches `_reconnect()` at all.
+   *
+   * @internal
+   */
+  _settleConnectPromises = () => {
     logger
-      .withExtraTags('recoverState')
-      .info(`Starting state recovery with connection ID ${this._getConnectionID()}.`);
-
-    const cids = Object.keys(this.activeChannels);
-    if (cids.length && this.recoverStateOnReconnect) {
-      logger
-        .withExtraTags('recoverState')
-        .info(`Starting the query for ${cids.length} channel(s).`);
-
-      await this.queryChannelsAndHydrate({
-        filter_conditions: {
-          cid: { $in: cids },
-        },
-        limit: 30,
-        sort: [{ field: 'last_message_at', direction: -1 }],
-      });
-
-      logger.withExtraTags('recoverState').info('Finished querying channels.');
-      this.dispatchEvent({
-        type: 'connection.recovered',
-      });
-    } else {
-      this.dispatchEvent({
-        type: 'connection.recovered',
-      });
-    }
+      .withExtraTags('_settleConnectPromises')
+      .info(`Connection re-established with connection ID ${this._getConnectionID()}.`);
 
     this.wsPromise = Promise.resolve();
     this.setUserPromise = Promise.resolve();

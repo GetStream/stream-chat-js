@@ -108,4 +108,5 @@ export {
 } from './utils';
 export { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';
 export * from './ChannelManager';
+export * from './ConnectionRecoveryManager';
 export * from './EventHandlerPipeline';

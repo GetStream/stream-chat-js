@@ -4,6 +4,7 @@ import {
   type Channel,
   ChannelPaginator,
   ChannelResponse,
+  ChannelWatchStatus,
   EventTypes,
   type StreamChat,
 } from '../../src';
@@ -1071,6 +1072,159 @@ describe('ChannelManager', () => {
       const p1 = channelManager.ensurePipeline('channel.updated');
       const p2 = channelManager.ensurePipeline('channel.updated');
       expect(p1).toBe(p2);
+    });
+  });
+
+  describe('recover', () => {
+    /**
+     * The channel-list half of connection recovery. Each list re-asserts its OWN query rather than
+     * some substitute, and non-destructively: the point is that a reconnect never blanks a list.
+     */
+    it('re-runs each loaded list as a non-destructive first-page refresh', async () => {
+      const paginator = new ChannelPaginator({ client });
+      // `isInitialized` means "has queried"; fake that without a network round trip.
+      vi.spyOn(paginator, 'isInitialized', 'get').mockReturnValue(true);
+      const toTail = vi.spyOn(paginator, 'toTail').mockResolvedValue(undefined);
+      const channelManager = new ChannelManager({ client, paginators: [paginator] });
+
+      await channelManager.recover();
+
+      expect(toTail).toHaveBeenCalledTimes(1);
+      expect(toTail).toHaveBeenCalledWith({ keepPreviousItems: true, reset: 'yes' });
+    });
+
+    it('does not pass `silent`, which would disable the in-flight guard', async () => {
+      // `silent` suppresses the `isLoading` transition, and `isLoading` is the only thing stopping a
+      // second overlapping query from being issued for the same list (`canExecuteQuery`).
+      const paginator = new ChannelPaginator({ client });
+      vi.spyOn(paginator, 'isInitialized', 'get').mockReturnValue(true);
+      const toTail = vi.spyOn(paginator, 'toTail').mockResolvedValue(undefined);
+
+      await new ChannelManager({ client, paginators: [paginator] }).recover();
+
+      expect(toTail.mock.calls[0][0]).not.to.have.property('silent');
+    });
+
+    it('skips a list that has never queried, so it cannot race its own first query', async () => {
+      const paginator = new ChannelPaginator({ client });
+      expect(paginator.isInitialized).to.equal(false);
+      const toTail = vi.spyOn(paginator, 'toTail').mockResolvedValue(undefined);
+
+      await new ChannelManager({ client, paginators: [paginator] }).recover();
+
+      expect(toTail).not.toHaveBeenCalled();
+    });
+
+    it('does not stop at the first list that fails', async () => {
+      const failing = new ChannelPaginator({ client });
+      const healthy = new ChannelPaginator({ client });
+      [failing, healthy].forEach((p) =>
+        vi.spyOn(p, 'isInitialized', 'get').mockReturnValue(true),
+      );
+      vi.spyOn(failing, 'toTail').mockRejectedValue(new Error('nope'));
+      const healthyToTail = vi.spyOn(healthy, 'toTail').mockResolvedValue(undefined);
+
+      await new ChannelManager({ client, paginators: [failing, healthy] }).recover();
+
+      expect(healthyToTail).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('restoring an interrupted watch', () => {
+    /**
+     * Recovery re-watches page 1 of each list plus the active channel. Everything else stays
+     * `WasWatching` — pages 2+ of a scrolled list, channels visited and navigated away from, channels
+     * matching no mounted list. Those still receive member-level events, which relocate the row but
+     * carry no message body, so the preview would sit frozen until the channel was opened. Re-watching
+     * on the event that proves relevance is what closes that, with no eager sweep.
+     */
+    const routeEventFor = (channel: Channel) => {
+      client.activeChannels[channel.cid] = channel;
+      const paginator = new ChannelPaginator({ client });
+      const channelManager = new ChannelManager({ client, paginators: [paginator] });
+      channelManager.registerSubscriptions();
+      // `ingestItem` runs inside the same handler, immediately BEFORE the re-watch would fire. It is
+      // therefore the anchor a negative assertion needs: waiting on it proves the handler has reached
+      // the decision point, so "not called" means "decided not to" rather than "not yet".
+      return { channelManager, ingestItem: vi.spyOn(paginator, 'ingestItem') };
+    };
+
+    it('re-watches a channel whose watch was interrupted', async () => {
+      const ch = makeChannel('messaging:interrupted');
+      ch.watchStatus = ChannelWatchStatus.WasWatching;
+      routeEventFor(ch);
+
+      client.dispatchEvent({ type: 'message.new', cid: ch.cid });
+
+      await vi.waitFor(() =>
+        expect(mockGetChannel).toHaveBeenCalledWith(
+          expect.objectContaining({ channel: ch }),
+        ),
+      );
+    });
+
+    it('leaves a channel that was never watched, or deliberately unwatched, alone', async () => {
+      // This is what keeps it narrower than v9's unconditional re-watch: only a watch we previously
+      // HELD is restored, so the client's watch count can never exceed what it already had.
+      const ch = makeChannel('messaging:not-watching');
+      expect(ch.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
+      const { ingestItem } = routeEventFor(ch);
+
+      client.dispatchEvent({ type: 'message.new', cid: ch.cid });
+
+      await vi.waitFor(() => expect(ingestItem).toHaveBeenCalledWith(ch));
+      expect(mockGetChannel).not.toHaveBeenCalled();
+    });
+
+    it('never re-watches a channel pending disposal', async () => {
+      const ch = makeChannel('messaging:disposing');
+      ch.watchStatus = ChannelWatchStatus.WasWatching;
+      const { ingestItem } = routeEventFor(ch);
+      ch.pendingDisposal = true;
+
+      client.dispatchEvent({ type: 'message.new', cid: ch.cid });
+
+      await vi.waitFor(() => expect(ingestItem).toHaveBeenCalledWith(ch));
+      expect(mockGetChannel).not.toHaveBeenCalled();
+    });
+
+    it('does not re-watch a channel that is being hidden', async () => {
+      const ch = makeChannel('messaging:hidden');
+      ch.watchStatus = ChannelWatchStatus.WasWatching;
+      client.activeChannels[ch.cid] = ch;
+      const paginator = new ChannelPaginator({ client });
+      // A hidden channel drops OUT of a list that does not filter for hidden, so `removeItem` — not
+      // `ingestItem` — is the anchor proving the handler reached the re-watch decision.
+      const removeItem = vi.spyOn(paginator, 'removeItem');
+      new ChannelManager({ client, paginators: [paginator] }).registerSubscriptions();
+
+      client.dispatchEvent({ type: 'channel.hidden', cid: ch.cid });
+
+      await vi.waitFor(() =>
+        expect(removeItem).toHaveBeenCalledWith(expect.objectContaining({ item: ch })),
+      );
+      expect(mockGetChannel).not.toHaveBeenCalled();
+    });
+
+    it('places the channel in the list without waiting for the watch to resolve', async () => {
+      // The row has to relocate off the event itself; the watch (and the state it hydrates) lands
+      // whenever it lands.
+      const ch = makeChannel('messaging:ordering');
+      ch.watchStatus = ChannelWatchStatus.WasWatching;
+      let resolveWatch: () => void = () => {};
+      (mockGetChannel as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(
+        () => new Promise<void>((resolve) => (resolveWatch = resolve)),
+      );
+      client.activeChannels[ch.cid] = ch;
+      const paginator = new ChannelPaginator({ client });
+      const ingestItem = vi.spyOn(paginator, 'ingestItem');
+      const channelManager = new ChannelManager({ client, paginators: [paginator] });
+      channelManager.registerSubscriptions();
+
+      client.dispatchEvent({ type: 'message.new', cid: ch.cid });
+
+      await vi.waitFor(() => expect(ingestItem).toHaveBeenCalledWith(ch));
+      resolveWatch();
     });
   });
 

@@ -130,7 +130,6 @@ describe('connection', function () {
 		client.clientId = 'clientID';
 		client.insightMetrics = new InsightMetrics();
 		client.dispatchEvent = () => null;
-		client.recoverState = () => null;
 		return client;
 	};
 

@@ -63,7 +63,6 @@ describe('StreamChat construction', () => {
     it('treats an omitted options argument as an empty options object', () => {
       const client = new StreamChat(API_KEY);
       expect(client.options.warmUp).to.equal(false);
-      expect(client.options.recoverStateOnReconnect).to.equal(true);
       expect(client.options.disableCache).to.equal(false);
     });
   });
@@ -73,7 +72,10 @@ describe('StreamChat construction', () => {
       const client = new StreamChat(API_KEY);
 
       expect(client.listeners).to.be.instanceOf(Map);
-      expect(client.listeners.size).to.equal(0);
+      // The only listener a freshly constructed client registers is the connection-recovery
+      // subscription, which is wired up in the constructor because recovery is not opt-in
+      // (`client.connectionRecovery` config is the opt-out, read when a recovery actually runs).
+      expect([...client.listeners.keys()]).to.deep.equal(['connection.changed']);
       expect(client.mutedChannels).to.deep.equal([]);
       expect(client.mutedUsers).to.deep.equal([]);
       expect(client.activeChannels).to.deep.equal({});
@@ -113,23 +115,24 @@ describe('StreamChat construction', () => {
       const client = new StreamChat(API_KEY);
 
       expect(client.options.warmUp).to.equal(false);
-      expect(client.options.recoverStateOnReconnect).to.equal(true);
       expect(client.options.disableCache).to.equal(false);
       expect(client.options.wsUrlParams).to.be.instanceOf(URLSearchParams);
-      expect(client.recoverStateOnReconnect).to.equal(true);
+      // Recovery is on by default, and now says so through its own configuration rather than a
+      // client option.
+      expect(client.connectionRecovery.config.enabled).to.equal(true);
     });
 
     it('honors user-provided overrides', () => {
       const client = new StreamChat(API_KEY, {
         warmUp: true,
         disableCache: true,
-        recoverStateOnReconnect: false,
+        config: { client: { connectionRecovery: { enabled: false } } },
       });
 
       expect(client.options.warmUp).to.equal(true);
       expect(client.options.disableCache).to.equal(true);
-      expect(client.options.recoverStateOnReconnect).to.equal(false);
-      expect(client.recoverStateOnReconnect).to.equal(false);
+      // Seeded from `options.config` before the managers are wired, so it applies from construction.
+      expect(client.connectionRecovery.config.enabled).to.equal(false);
     });
 
     it('passes persistUserOnConnectionFailure through to the client', () => {

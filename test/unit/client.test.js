@@ -1815,8 +1815,8 @@ describe('X-Stream-Client header', () => {
 // `notification.removed_from_channel` event. Previously the client only evicted
 // channels from `activeChannels` on deletion, so a removed-from channel lingered:
 // later `message.new` / `notification.message_new` events were still delivered to
-// it, and on reconnect `recoverState()` re-watched it (because it re-watches every
-// cid still in `activeChannels`), re-promoting it in downstream lists.
+// it, and connection recovery refreshed it, re-promoting it in downstream lists.
+// Eviction is what keeps it out of both paths.
 describe('activeChannels eviction when the current user is removed (#2599)', () => {
 	let client;
 	const currentUserId = 'current-user';
@@ -1888,21 +1888,21 @@ describe('activeChannels eviction when the current user is removed (#2599)', () 
 		expect(client.activeChannels[channel.cid]).to.be.undefined;
 	});
 
-	it('does not re-watch the evicted channel on recoverState', async () => {
+	it('does not reload the evicted channel on connection recovery', async () => {
 		const removed = client.channel('messaging', 'removed');
 		const kept = client.channel('messaging', 'kept');
-		const queryChannelsStub = vi
-			.spyOn(client, 'queryChannels')
-			.mockResolvedValue({ channels: [] });
+		// Recovery only reloads channels a consumer declared it is reading.
+		removed.activate();
+		kept.activate();
+		const removedReload = vi.spyOn(removed, 'reload').mockResolvedValue(undefined);
+		const keptReload = vi.spyOn(kept, 'reload').mockResolvedValue(undefined);
 
 		client.dispatchEvent(removedFromChannelEvent(removed));
 
-		await client.recoverState();
+		await client.connectionRecovery.recover();
 
-		expect(queryChannelsStub).toHaveBeenCalledTimes(1);
-		const [options] = queryChannelsStub.mock.calls[0];
-		expect(options.filter_conditions.cid.$in).to.contain(kept.cid);
-		expect(options.filter_conditions.cid.$in).not.to.contain(removed.cid);
+		expect(keptReload).toHaveBeenCalledTimes(1);
+		expect(removedReload).not.toHaveBeenCalled();
 	});
 
 	it('does not evict when another user is removed (member.removed for a different user)', () => {

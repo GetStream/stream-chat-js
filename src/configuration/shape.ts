@@ -9,6 +9,7 @@ import type { DeclarativePaginatorConfig } from '../pagination/paginators/BasePa
 import type { MessageOperationsConfig } from '../messageOperations/MessageOperations';
 import type { MessageDeliveryReporterConfig } from '../messageDelivery/MessageDeliveryReporter';
 import type { ThreadManagerConfig } from '../thread_manager';
+import type { ConnectionRecoveryManagerConfig } from '../ConnectionRecoveryManager';
 import type { LiveLocationManagerConfig } from '../LiveLocationManager';
 import type { SearchControllerConfig } from '../search/SearchController';
 import type { NotificationManagerConfig } from '../notifications/types';
@@ -437,7 +438,25 @@ const REMINDER_FIELDS: Record<keyof ReminderManagerConfig, ConfigNode> = {
   },
 };
 
+const CONNECTION_RECOVERY_FIELDS: Record<
+  keyof ConnectionRecoveryManagerConfig,
+  ConfigNode
+> = {
+  enabled: {
+    description:
+      'Whether the client recovers its own state on reconnect. Turn it off only if the application re-queries and re-watches everything on screen itself.',
+    kind: 'value',
+    type: 'boolean',
+  },
+};
+
 const CLIENT_FIELDS: Record<keyof ClientDeclarativeConfig, ConfigNode> = {
+  connectionRecovery: {
+    description:
+      'Bringing the channels, lists and threads you are reading back in line after a reconnect.',
+    fields: CONNECTION_RECOVERY_FIELDS,
+    kind: 'group',
+  },
   messageDelivery: {
     description: 'Delivery and read receipt reporting.',
     fields: MESSAGE_DELIVERY_FIELDS,

@@ -20,7 +20,7 @@ import type {
   ThreadStateResponse,
   UserResponse,
 } from './types';
-import { isEphemeral } from './errors';
+import { isDoesNotExistError, isEphemeral } from './errors';
 import type {
   Channel,
   DeleteMessageWithStateUpdateParams,
@@ -114,6 +114,8 @@ export class Thread extends WithSubscriptions {
 
   private client: StreamChat;
   private failedRepliesMap: Map<string, LocalMessage> = new Map();
+  /** How many consumers have called `activate()` without a matching `deactivate()`. */
+  private _activeRefCount = 0;
 
   constructor({
     client,
@@ -408,14 +410,49 @@ export class Thread extends WithSubscriptions {
     return ownUnreadCountSelector(this.client.userId)(this.state.getLatestValue());
   }
 
+  /**
+   * Declares that a consumer is displaying this thread (mirrors `channel.activate()`).
+   *
+   * `active` is also what {@link ConnectionRecoveryManager} filters on to decide which threads to
+   * reload on reconnect, so an unbalanced `deactivate()` now costs more than a missed auto-read —
+   * hence the refcount, matching `channel.activate()`. A thread held by more than one mount stays
+   * active until the last holder releases it.
+   */
   public activate = () => {
-    this.state.partialNext({ active: true });
+    this._activeRefCount += 1;
+    if (this._activeRefCount === 1) {
+      this.state.partialNext({ active: true });
+    }
   };
 
+  /**
+   * Declares that a consumer has stopped displaying this thread (mirrors `channel.deactivate()`).
+   * Only flips `active` back to `false` once the last holder deactivates.
+   */
   public deactivate = () => {
-    this.state.partialNext({ active: false });
+    if (this._activeRefCount === 0) return;
+    this._activeRefCount -= 1;
+    if (this._activeRefCount === 0) {
+      this.state.partialNext({ active: false });
+    }
   };
 
+  /**
+   * Re-queries this thread's replies, sized to the loaded window, and reconciles them in place — the
+   * thread analogue of {@link Channel.reload}, and what connection recovery calls for every active
+   * thread.
+   *
+   * Preserves failed (unsent) replies. They are read out of the reply paginator rather than out of
+   * `failedRepliesMap`, because that map is only written by `upsertReplyLocally`, whose callers are
+   * this thread's own subscriptions and the offline-DB path keyed on `ThreadManager.threadsById` —
+   * neither of which covers a thread constructed directly and never registered (the common path in
+   * the React Native SDK, which resolves `threadsById[id] ?? new Thread(...)`). Reading the paginator
+   * is true for managed and unmanaged threads alike. An overlap merge keeps them anyway (the
+   * reconcile's provenance guard never prunes a non-server message); only a disjoint rebuild can drop
+   * them, so any that actually fell out are re-ingested below.
+   *
+   * Rethrows, except for a not-found answer on a thread that never had replies (see the catch).
+   */
   public reload = async () => {
     if (this.state.getLatestValue().isLoading) {
       return;
@@ -424,11 +461,12 @@ export class Thread extends WithSubscriptions {
     this.state.partialNext({ isLoading: true });
 
     try {
-      const loadedReplyCount = this.messagePaginator.items?.length ?? 0;
-      const requestedReplyLimit = loadedReplyCount || this.messagePaginator.pageSize;
-      const reconcileCandidateIds = new Set(
-        (this.messagePaginator.items ?? []).map((reply) => reply.id),
-      );
+      const loadedReplies = this.messagePaginator.items ?? [];
+      const loadedReplyCount = loadedReplies.length;
+      const requestedReplyLimit =
+        Math.max(loadedReplyCount, this.messagePaginator.pageSize ?? 0) || undefined;
+      const reconcileCandidateIds = new Set(loadedReplies.map((reply) => reply.id));
+      const failedBefore = loadedReplies.filter((reply) => reply.status === 'failed');
       const thread = await this.client.getThreadAndHydrate(this.id, {
         watch: true,
         reply_limit: requestedReplyLimit,
@@ -439,6 +477,32 @@ export class Thread extends WithSubscriptions {
           candidateIds: reconcileCandidateIds,
         },
       });
+
+      if (failedBefore.length) {
+        // Membership is checked against the visible window, NOT `getItem`: that reads the item
+        // index, which can still hold a message the rebuild dropped from the loaded window — so an
+        // index-based guard skips the re-ingest on exactly the path that needs it.
+        const visible = new Set((this.messagePaginator.items ?? []).map((r) => r.id));
+        this.messagePaginator.batch(
+          () => {
+            for (const failed of failedBefore) {
+              if (!visible.has(failed.id)) this.messagePaginator.ingestItem(failed);
+            }
+          },
+          { coalesce: true },
+        );
+      }
+    } catch (error) {
+      const notFound =
+        isDoesNotExistError(error as Error) ||
+        (error as { status?: number })?.status === 404;
+      const neverExisted = notFound && this.state.getLatestValue().replyCount === 0;
+      // Do not throw an error if we haven't created the thread yet, the tiebreaker
+      // being whether the parent message has any replies or not. A thread with all hard
+      // deleted replies will simply not throw.
+      if (neverExisted) return;
+
+      throw error;
     } finally {
       this.state.partialNext({ isLoading: false });
     }

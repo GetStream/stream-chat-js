@@ -4039,7 +4039,7 @@ describe('Channel.reload', () => {
 		expect(channel.messagePaginator.items.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
 
 		// The fold + reconcile now lives in query() → seedFirstPageSync (shared with the channel-list
-		// re-hydrate and React's recoverState); reload() is just watch() with the full-window limit.
+		// re-hydrate and connection recovery); reload() is just watch() with the full-window limit.
 		// query() snapshots the loaded ids BEFORE this fetch, so a brand-new message that lands via WS
 		// DURING it (below) — absent from the server page — must survive. This exercises the whole
 		// snapshot-before-await + reconcile chain end to end, not the paginator in isolation.
@@ -4057,7 +4057,22 @@ describe('Channel.reload', () => {
 		expect(channel.messagePaginator.items.map((m) => m.id)).toEqual(['m1', 'm2', 'm4']);
 	});
 
-	it('requests the full loaded window (items.length), not the channel-list page size', async () => {
+	it('requests the full loaded window when it is larger than a page', async () => {
+		const wide = channel.messagePaginator.pageSize + 7;
+		const loaded = Array.from({ length: wide }, (_, i) => msg(`m${i}`, i));
+		seedLatestWindow(channel, loaded);
+		const watchSpy = vi.spyOn(channel, 'watch').mockResolvedValue({ messages: loaded });
+
+		await channel.reload();
+
+		// Larger than pageSize, so the whole loaded window refreshes rather than just a page.
+		expect(watchSpy).toHaveBeenCalledWith({ messages: { limit: wide } });
+	});
+
+	it('requests at least a page when the loaded window is smaller, so new messages are discoverable', async () => {
+		// Regression guard. Sizing the request to the loaded count alone means asking the server for
+		// exactly what we already hold: messages that arrived while offline can never come back, and
+		// the returned page is disjoint from the loaded window so the fold rebuilds and drops the rest.
 		seedLatestWindow(channel, [msg('m1', 1), msg('m2', 2), msg('m3', 3)]);
 		const watchSpy = vi
 			.spyOn(channel, 'watch')
@@ -4065,14 +4080,18 @@ describe('Channel.reload', () => {
 
 		await channel.reload();
 
-		expect(watchSpy).toHaveBeenCalledWith({ messages: { limit: 3 } });
+		expect(watchSpy).toHaveBeenCalledWith({
+			messages: { limit: channel.messagePaginator.pageSize },
+		});
 	});
 
 	it('preserves a failed (unsent) message that a disjoint rebuild would otherwise drop', async () => {
 		seedLatestWindow(channel, [
 			msg('m1', 1),
-			msg('failed', 2, { status: 'failed' }),
 			msg('m3', 3),
+			// A just-attempted send that failed is the NEWEST thing in the channel — position it that
+			// way, or the scenario is not one that can actually occur.
+			msg('failed', 10, { status: 'failed' }),
 		]);
 		// A page that shares no id with the loaded window is disjoint, so the fold rebuilds and discards
 		// local-only messages — reload must re-ingest the failed one so it is not lost.
@@ -4085,7 +4104,33 @@ describe('Channel.reload', () => {
 
 		await channel.reload();
 
-		expect(channel.messagePaginator.getItem('failed')).toBeDefined();
+		expect(channel.messagePaginator.items.map((m) => m.id)).toContain('failed');
+	});
+
+	it('merges the fetched page into a channel whose only message was ingested live', async () => {
+		// The thread defect from the channel side: a brand-new channel has an EMPTY first page, so the
+		// sent message lands in a LOGICAL head and `reload()` used to discard the server's page whole.
+		// `reload()` bails unless the channel is initialized; a real one is by the time it renders.
+		channel.initialized = true;
+		const mine = msg('mine', 1);
+		channel.messagePaginator.ingestItem(channel.state.formatMessage(mine));
+		expect(channel.messagePaginator.items.map((m) => m.id)).toEqual(['mine']);
+
+		// Mock the transport, not `watch`: mocking `watch` skips `seedFirstPageSync`, so no fold runs.
+		vi.spyOn(channel, 'getOrCreate').mockImplementation(async () =>
+			generateChannel({
+				channel: { id: channel.id, type: channel.type },
+				messages: [mine, msg('peer1', 2), msg('peer2', 3)],
+			}),
+		);
+
+		await channel.reload();
+
+		expect(channel.messagePaginator.items.map((m) => m.id)).toEqual([
+			'mine',
+			'peer1',
+			'peer2',
+		]);
 	});
 
 	it('ignores a re-entrant reload while one is already in flight', async () => {
@@ -4103,6 +4148,41 @@ describe('Channel.reload', () => {
 		await inFlight;
 
 		expect(watchSpy).toHaveBeenCalledTimes(1);
+	});
+
+	// `watch()` and `reload()` both reject rather than recording anything: a load failure is the
+	// caller's to handle, and the one caller that cannot handle it — `ConnectionRecoveryManager`,
+	// which reloads inside a `Promise.allSettled` — deliberately does not surface it.
+	describe('load failures', () => {
+		// The case the UI SDKs used to hold local state for: opening a channel while offline. No reload
+		// is involved — `watch()` itself is what throws.
+		it('rethrows a failed watch()', async () => {
+			vi.spyOn(channel, 'getOrCreate').mockRejectedValue(new Error('watch failed'));
+
+			await expect(channel.watch()).rejects.toThrow('watch failed');
+		});
+
+		it('rethrows a failed reload()', async () => {
+			seedLatestWindow(channel, [msg('m1', 1)]);
+			vi.spyOn(channel, 'getOrCreate').mockRejectedValue(new Error('watch failed'));
+
+			await expect(channel.reload()).rejects.toThrow('watch failed');
+		});
+
+		it('releases the re-entrancy guard when a reload fails', async () => {
+			// Without the `finally`, one failure would wedge `reload()` for the channel's lifetime — no
+			// later reconnect could ever refresh it again.
+			seedLatestWindow(channel, [msg('m1', 1)]);
+			const watchSpy = vi
+				.spyOn(channel, 'watch')
+				.mockRejectedValueOnce(new Error('watch failed'));
+			await expect(channel.reload()).rejects.toThrow();
+
+			watchSpy.mockResolvedValue({ messages: [msg('m1', 1)] });
+			await channel.reload();
+
+			expect(watchSpy).toHaveBeenCalledTimes(2);
+		});
 	});
 });
 describe('Channel active flag (mark-read stays UI-driven)', () => {

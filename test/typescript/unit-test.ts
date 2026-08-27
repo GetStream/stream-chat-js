@@ -182,7 +182,6 @@ const event: Event = {
   online: true,
 };
 voidReturn = client.dispatchEvent(event);
-voidPromise = client.recoverState();
 
 const channels: Promise<Channel[]> = client.queryChannels({}, {}, {});
 channels.then((response) => {

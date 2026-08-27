@@ -1860,7 +1860,7 @@ export class Channel extends ChannelApi {
    * This is intentionally thin: it only re-issues `watch()` with a limit sized to the loaded window
    * (`items.length`, so the whole loaded window is refreshed — not the smaller channel-list page). The
    * actual fold + destructive reconciliation happens inside `query()` → `seedFirstPageSync`
-   * (the same path the channel-list re-hydrate and React's `recoverState` use), driven by the loaded-id
+   * (the same path the channel-list re-hydrate and connection recovery use), driven by the loaded-id
    * snapshot `query()` captures before its await. Owning that single path is what lets the SDK stop
    * passing the reconciliation window/snapshot itself.
    *
@@ -1874,20 +1874,26 @@ export class Channel extends ChannelApi {
     try {
       const paginator = this.messagePaginator;
       const headItems = paginator.headItems;
-      const requestedLimit = headItems.length || paginator.pageSize;
+      const requestedLimit =
+        Math.max(headItems.length, paginator.pageSize ?? 0) || undefined;
       const failedBefore = headItems.filter((message) => message.status === 'failed');
 
       await this.watch({ messages: { limit: requestedLimit } });
       this.offlineMode = false;
 
-      paginator.batch(
-        () => {
-          for (const failed of failedBefore) {
-            if (!paginator.getItem(failed.id)) paginator.ingestItem(failed);
-          }
-        },
-        { coalesce: true },
-      );
+      if (failedBefore.length) {
+        // Make sure the messages that failed to be sent before the watch() request are
+        // reingested after the watch() query.
+        const visible = new Set((paginator.items ?? []).map((message) => message.id));
+        paginator.batch(
+          () => {
+            for (const failed of failedBefore) {
+              if (!visible.has(failed.id)) paginator.ingestItem(failed);
+            }
+          },
+          { coalesce: true },
+        );
+      }
     } finally {
       this._reloading = false;
     }

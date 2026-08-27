@@ -195,16 +195,6 @@ export type StreamChatOptions = {
    * persist even if connectUser call fails.
    */
   persistUserOnConnectionFailure?: boolean;
-  /**
-   * When network is recovered, we re-query the active channels on client. But in single query, you can recover
-   * only 30 channels. So its not guaranteed that all the channels in activeChannels object have updated state.
-   * Thus in UI sdks, state recovery is managed by components themselves, they don't rely on js client for this.
-   *
-   * `recoverStateOnReconnect` parameter can be used in such cases, to disable state recovery within js client.
-   * When false, user/consumer of this client will need to make sure all the channels present on UI by
-   * manually calling queryChannels endpoint.
-   */
-  recoverStateOnReconnect?: boolean;
   warmUp?: boolean;
   /**
    * Sets the instance of `StableWSConnection` on the chat client. Intended purely for testing and

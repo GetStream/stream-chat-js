@@ -15,6 +15,8 @@ import type {
 import { filterConstrainsField } from './pagination/filterCompiler';
 import { getChannel } from './pagination/utility.queryChannel';
 import type { Channel } from './channel';
+import { ChannelWatchStatus } from './channel_state';
+import { runDetached } from './utils';
 
 export type ChannelManagerEventHandlerContext = {
   channelManager: ChannelManager;
@@ -135,6 +137,32 @@ export const ignoreEventsForUnknownChannels: EventHandlerPipelineHandler<
   if (!channel) return { action: 'stop' };
 };
 
+/**
+ * Restore a watch this client held and lost to a dropped socket.
+ *
+ * The server keys watches by connection ID, so a reconnect ends every watch the previous connection
+ * held. Reconnect recovery re-watches the first page of each list plus the active channel; everything
+ * else stays `WasWatching` — pages 2+ of a scrolled list, channels visited and navigated away from,
+ * channels matching no mounted list. Such a channel still receives member-level events (e.g.
+ * `notification.message_new`), which relocate its row but carry no message body, so its preview would
+ * sit frozen until the channel was opened. Re-watching it the moment an event proves it relevant is
+ * what closes that gap, without ever eagerly re-watching the whole cache.
+ *
+ * The request is idempotent, so a successful watch flips the status to `Watching`, and `getChannel`
+ * dedupes concurrent watches for the same cid, so a burst of events cannot produce a burst of requests.
+ */
+const restoreInterruptedWatch = (channel: Channel, client: StreamChat) => {
+  if (channel.pendingDisposal) return;
+  if (channel.watchStatus !== ChannelWatchStatus.WasWatching) return;
+
+  // Takes the client as an argument rather than calling `channel.getClient()`, which THROWS for a
+  // channel pending disposal — the guard above makes that unreachable today, but a throw here would
+  // reject the whole event handler, so it is not a hazard worth leaving one edit away.
+  runDetached(getChannel({ channel, client }), {
+    context: `restoreInterruptedWatch(${channel.cid})`,
+  });
+};
+
 const updateLists: EventHandlerPipelineHandler<EventHandlerContext> = async ({
   event,
   ctx: { channelManager },
@@ -184,6 +212,13 @@ const updateLists: EventHandlerPipelineHandler<EventHandlerContext> = async ({
     // (`paginator.boost`) for integrators to opt into for specific channels (VIP/mention/deep-link).
     paginator.ingestItem(channel);
   });
+
+  // AFTER routing, and not awaited: the row relocates immediately off the event, and the watch (plus
+  // the state it hydrates) lands whenever it lands. `channel.hidden` is excluded — a channel being
+  // hidden is the one routed event that must not resurrect a watch.
+  if (event.type !== 'channel.hidden') {
+    restoreInterruptedWatch(channel, channelManager.client);
+  }
 };
 
 // we have to make sure that client.activeChannels is always up-to-date
@@ -783,5 +818,36 @@ export class ChannelManager extends WithSubscriptions {
       this.paginators.map(async (paginator) => {
         await paginator.reload();
       }),
+    );
+
+  /**
+   * Re-run every loaded list's own first-page query — the channel-list half of connection recovery,
+   * driven by {@link ConnectionRecoveryManager}.
+   *
+   * Each list re-asserts its *own* `filters` / `sort` / `pageSize` rather than some substitute query,
+   * and because `client.queryChannels` watches by default, that page's channels are re-watched as a
+   * side effect. Channels below the first page are deliberately not touched — see
+   * `restoreInterruptedWatch` for how they come back.
+   *
+   * `{ keepPreviousItems: true, reset: 'yes' }` is the non-destructive refresh: `reset` restarts the
+   * window at page 1, while `keepPreviousItems` merges the fetched page into the loaded list instead
+   * of replacing it and keeps the item index populated — the latter is what stops a concurrent
+   * offline-replay ingest from rebuilding the list out of a cleared index. Notably NOT `silent`: the
+   * `isLoading` transition it would suppress is the in-flight guard that keeps a second overlapping
+   * query from being issued.
+   *
+   * Distinct from {@link ChannelManager.reload}, which is a destructive `reset` that blanks each list
+   * to its loading state.
+   *
+   * Paginators that were never queried are skipped: they run their own first query when they mount,
+   * and querying them here would race it.
+   */
+  recover = async () =>
+    await Promise.allSettled(
+      this.paginators
+        .filter((paginator) => paginator.isInitialized)
+        .map(async (paginator) => {
+          await paginator.toTail({ keepPreviousItems: true, reset: 'yes' });
+        }),
     );
 }
