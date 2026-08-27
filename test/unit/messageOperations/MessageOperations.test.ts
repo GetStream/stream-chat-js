@@ -856,6 +856,27 @@ describe('MessageOperations — optimistic lifecycle', () => {
       expect(persisted[persisted.length - 1].status).toBe('received');
     });
 
+    // The send twin of the edit case above. The optimistic step does not stamp `updated_at`, but it
+    // spreads the composed message, and the composer stamped it from the CLIENT clock. So the
+    // timestamp comparison here is also cross-clock: a device running fast would drop the server copy
+    // and leave the message `sending`, while the unconditional persist below wrote `received` — memory
+    // and the offline-DB row disagreeing about the same message.
+    it('applies the server copy on a send even when the client clock runs ahead', async () => {
+      const { lastPersisted, ops, store } = harness();
+      const localMessage = makeLocalMessage({
+        id: 'm1',
+        status: 'sending',
+        updated_at: new Date(Date.now() + 60_000),
+      });
+
+      await ops.send({ localMessage }, async () => ({
+        message: makeMessageResponse({ id: 'm1', updated_at: new Date().toISOString() }),
+      }));
+
+      expect(store.get('m1')?.status).toBe('received');
+      expect(lastPersisted()?.status).toBe('received');
+    });
+
     it('persists the failed state when the send fails', async () => {
       const { lastPersisted, ops, store } = harness();
       const localMessage = makeLocalMessage({ id: 'm1' });

@@ -172,11 +172,12 @@ export class MessageOperationStatePolicy {
 
     const existing = this.ctx.get(messageId);
 
-    const nothingWroteSinceOptimisticEdit =
-      kind === 'update' && !!optimistic?.applied && existing === optimistic.applied;
+    const nothingWroteSinceOptimistic =
+      !!optimistic?.applied && existing === optimistic.applied;
 
-    // Only reached when something else did write and then both copies are server-derived, so
-    // comparing their timestamps is comparing one clock against itself.
+    // Reached only when something else did write since the optimistic step. For an edit both copies
+    // are then server derived, so comparing their timestamps compares one clock against itself. For a
+    // send the copy that landed is a `message.new` WS event, which is server derived too.
     const serverNewer =
       !existing || formatted.updated_at.getTime() > existing.updated_at.getTime();
     const serverSameOrNewer =
@@ -184,7 +185,7 @@ export class MessageOperationStatePolicy {
     const existingIsOurOptimisticSend = existing?.status === 'sending';
 
     const applyServerCopy =
-      nothingWroteSinceOptimisticEdit ||
+      nothingWroteSinceOptimistic ||
       serverNewer ||
       (existingIsOurOptimisticSend && serverSameOrNewer);
 
