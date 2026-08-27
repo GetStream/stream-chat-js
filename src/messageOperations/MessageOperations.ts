@@ -166,6 +166,7 @@ export class MessageOperations {
         kind,
         messageFromResponse: response?.message,
         messageId,
+        optimistic,
         options: params.options,
       });
     } catch (e) {

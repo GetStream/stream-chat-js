@@ -533,6 +533,54 @@ describe('MessageOperations — optimistic lifecycle', () => {
       expect(lastPersisted()?.text).toBe('after');
     });
 
+    // The optimistic write stamps `updated_at` from the CLIENT clock, so comparing the server's
+    // `updated_at` against it compares two different clocks. A device running even slightly ahead of
+    // the server would lose the whole server copy — the enriched `html`, URL/attachment enrichment,
+    // translations, the server's own `message_text_updated_at` — and the DB row with it.
+    it('applies the server copy even when the client clock runs ahead of the server', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received', text: 'before' });
+      const { lastPersisted, ops, store } = harness({ seed });
+
+      // A server timestamp a minute BEHIND the optimistic stamp: the device's clock is fast.
+      const serverUpdatedAt = new Date(Date.now() - 60_000).toISOString();
+
+      await ops.update({ localMessage: { ...seed, text: 'after' } }, async () => ({
+        message: makeMessageResponse({
+          html: '<p>after</p>',
+          id: 'm1',
+          text: 'after',
+          updated_at: serverUpdatedAt,
+        }),
+      }));
+
+      expect(store.get('m1')?.html).toBe('<p>after</p>');
+      expect(lastPersisted()?.html).toBe('<p>after</p>');
+    });
+
+    // The other half of the guard above: relaxing it must not let a slow response overwrite something
+    // that genuinely landed after it. Once another writer has replaced the copy, identity no longer
+    // matches and the decision falls back to timestamps — and both copies are server-derived by then,
+    // so that comparison is one clock against itself.
+    it('does not overwrite a fresher copy that landed while the request was in flight', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received', text: 'before' });
+      const { ops, store } = harness({ seed });
+
+      const fresher = makeLocalMessage({
+        id: 'm1',
+        status: 'received',
+        text: 'from a websocket event',
+        updated_at: new Date(Date.now() + 60_000),
+      });
+
+      await ops.update({ localMessage: { ...seed, text: 'after' } }, async () => {
+        // Lands while the request is open, exactly as a `message.updated` echo would.
+        store.set('m1', fresher);
+        return { message: makeMessageResponse({ id: 'm1', text: 'after' }) };
+      });
+
+      expect(store.get('m1')?.text).toBe('from a websocket event');
+    });
+
     it('stamps message_text_updated_at so the "edited" indicator shows immediately', async () => {
       const seed = makeLocalMessage({ id: 'm1', status: 'received' });
       const { ops, persisted } = harness({ seed });

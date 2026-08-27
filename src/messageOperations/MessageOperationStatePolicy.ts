@@ -142,11 +142,13 @@ export class MessageOperationStatePolicy {
     kind,
     messageFromResponse,
     messageId,
+    optimistic,
     options,
   }: {
     kind: K;
     messageFromResponse: MessageResponse | undefined;
     messageId: string;
+    optimistic?: OptimisticOutcome;
     options?: MessageOperationSpec[K]['options'];
   }) {
     // Guard before anything else. `formatMessage(undefined)` does not throw — it yields
@@ -169,6 +171,11 @@ export class MessageOperationStatePolicy {
 
     const existing = this.ctx.get(messageId);
 
+    const nothingWroteSinceOptimisticEdit =
+      kind === 'update' && !!optimistic?.applied && existing === optimistic.applied;
+
+    // Only reached when something else did write and then both copies are server-derived, so
+    // comparing their timestamps is comparing one clock against itself.
     const serverNewer =
       !existing || formatted.updated_at.getTime() > existing.updated_at.getTime();
     const serverSameOrNewer =
@@ -176,7 +183,9 @@ export class MessageOperationStatePolicy {
     const existingIsOurOptimisticSend = existing?.status === 'sending';
 
     const applyServerCopy =
-      serverNewer || (existingIsOurOptimisticSend && serverSameOrNewer);
+      nothingWroteSinceOptimisticEdit ||
+      serverNewer ||
+      (existingIsOurOptimisticSend && serverSameOrNewer);
 
     if (applyServerCopy) {
       this.ctx.ingest(formatted);
