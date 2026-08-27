@@ -1,3 +1,14 @@
+## [10.0.0-rc.8](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.7...v10.0.0-rc.8) (2026-08-27)
+
+### Bug Fixes
+
+* adjust paginator offset when items are removed ([#1842](https://github.com/GetStream/stream-chat-js/issues/1842)) ([61b5a1f](https://github.com/GetStream/stream-chat-js/commit/61b5a1f7b8378a6c0d5d7986b3663f9784d0756f))
+
+### Features
+
+* connection recovery ([#1841](https://github.com/GetStream/stream-chat-js/issues/1841)) ([8ec9a9d](https://github.com/GetStream/stream-chat-js/commit/8ec9a9d36592e1fa9ff1841e5337b1ce955e15c5))
+* remaining optimistic updates ([#1843](https://github.com/GetStream/stream-chat-js/issues/1843)) ([808b2c8](https://github.com/GetStream/stream-chat-js/commit/808b2c8740d8ade7ab97e4d7d91247029a2d0919))
+
 ## [10.0.0-rc.7](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.6...v10.0.0-rc.7) (2026-08-21)
 
 ### ⚠ BREAKING CHANGES
