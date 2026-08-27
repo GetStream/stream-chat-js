@@ -9,6 +9,7 @@ import { getClientWithUser } from './test-utils/getClient';
 import { generateUUIDv4 as uuidv4 } from '../../src/utils';
 
 import {
+  sanitizeOutgoingAttachments,
   getAndWatchChannel,
   addToMessageList,
   findIndexInSortedArray,
@@ -1270,5 +1271,97 @@ describe('userHasReadReceipts', () => {
 
   it('returns true (assumes enabled) when privacy settings are unset', () => {
     expect(userHasReadReceipts(makeClient(undefined))).toBe(true);
+  });
+});
+
+describe('sanitizeOutgoingAttachments', () => {
+  const setup = () => {
+    const client = getClientWithUser();
+    const channel = client.channel('messaging', 'id');
+    const addWarning = vi
+      .spyOn(client.notifications, 'addWarning')
+      .mockImplementation(() => undefined);
+    return { addWarning, channel };
+  };
+
+  it('returns the same message when there are no attachments', () => {
+    const { channel } = setup();
+    const message = { text: 'hi' };
+
+    expect(sanitizeOutgoingAttachments({ channel, message })).toBe(message);
+  });
+
+  it('returns the same message when no attachment carries localMetadata', () => {
+    const { channel } = setup();
+    const message = {
+      attachments: [{ asset_url: 'https://cdn.example.com/f.pdf', type: 'file' }],
+      text: 'hi',
+    };
+
+    expect(sanitizeOutgoingAttachments({ channel, message })).toBe(message);
+  });
+
+  it('strips localMetadata from an attachment that resolved', () => {
+    const { addWarning, channel } = setup();
+    const message = {
+      attachments: [
+        {
+          asset_url: 'https://cdn.example.com/f.pdf',
+          localMetadata: { id: 'a1', uploadState: 'finished' },
+          type: 'file',
+        },
+      ],
+    };
+
+    const result = sanitizeOutgoingAttachments({ channel, message });
+
+    expect(result).not.toBe(message);
+    expect(result.attachments).toEqual([
+      { asset_url: 'https://cdn.example.com/f.pdf', type: 'file' },
+    ]);
+    expect(addWarning).not.toHaveBeenCalled();
+  });
+
+  it('drops an attachment that never resolved, and warns', () => {
+    const { addWarning, channel } = setup();
+    const message = {
+      attachments: [
+        { asset_url: 'https://cdn.example.com/ok.pdf', type: 'file' },
+        { localMetadata: { id: 'a2', uploadState: 'uploading' }, type: 'file' },
+      ],
+    };
+
+    const result = sanitizeOutgoingAttachments({ channel, message });
+
+    expect(result.attachments).toEqual([
+      { asset_url: 'https://cdn.example.com/ok.pdf', type: 'file' },
+    ]);
+    expect(addWarning).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: { type: 'validation:attachment:unresolved-upload' },
+      }),
+    );
+  });
+
+  it.each([
+    ['image_url', { image_url: 'https://cdn.example.com/i.png' }],
+    ['og_scrape_url', { og_scrape_url: 'https://example.com' }],
+    ['title_link', { title_link: 'https://example.com' }],
+  ])('keeps an attachment whose only source is %s', (_label, source) => {
+    const { addWarning, channel } = setup();
+    const message = {
+      attachments: [
+        {
+          ...source,
+          localMetadata: { id: 'a3', uploadState: 'finished' },
+          type: 'image',
+        },
+      ],
+    };
+
+    const result = sanitizeOutgoingAttachments({ channel, message });
+
+    expect(result.attachments).toHaveLength(1);
+    expect(addWarning).not.toHaveBeenCalled();
   });
 });

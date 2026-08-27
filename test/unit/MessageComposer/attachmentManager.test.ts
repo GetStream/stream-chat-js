@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { describe, expect, it, vi } from 'vitest';
 import {
   API_MAX_FILES_ALLOWED_PER_MESSAGE,
@@ -781,6 +782,64 @@ describe('AttachmentManager', () => {
       ]);
     });
 
+    it('revokes the preview blob URL of every removed attachment', () => {
+      // Without this each removed attachment - including one cancelled mid-upload - leaks a
+      // blob URL until the page unloads.
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
+      const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation();
+
+      attachmentManager.upsertAttachments([
+        { localMetadata: { id: 'kept', previewUri: 'blob:kept' } },
+        { localMetadata: { id: 'removed', previewUri: 'blob:removed' } },
+      ]);
+
+      attachmentManager.removeAttachments(['removed']);
+
+      expect(revokeObjectURLSpy).toHaveBeenCalledTimes(1);
+      expect(revokeObjectURLSpy).toHaveBeenCalledWith('blob:removed');
+
+      revokeObjectURLSpy.mockRestore();
+    });
+
+    it('leaves a non-blob previewUri alone when removing', () => {
+      // React Native puts the caller's own `FileReference.uri` in the same field; it is not
+      // ours to revoke.
+      const {
+        messageComposer: { attachmentManager },
+      } = setup();
+      const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation();
+
+      attachmentManager.upsertAttachments([
+        { localMetadata: { id: 'native', previewUri: 'file://local/photo.jpg' } },
+      ]);
+
+      attachmentManager.removeAttachments(['native']);
+
+      expect(revokeObjectURLSpy).not.toHaveBeenCalled();
+
+      revokeObjectURLSpy.mockRestore();
+    });
+
+    it('does not revoke preview blob URLs when the composer is only cleared', () => {
+      // `initState` drops the composer's view of the attachments without ending their life -
+      // an attachment handed to an optimistic message while its upload is still running is
+      // still rendered from that blob.
+      const { messageComposer } = setup();
+      const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation();
+
+      messageComposer.attachmentManager.upsertAttachments([
+        { localMetadata: { id: 'in-flight', previewUri: 'blob:in-flight' } },
+      ]);
+
+      messageComposer.clear();
+
+      expect(revokeObjectURLSpy).not.toHaveBeenCalled();
+
+      revokeObjectURLSpy.mockRestore();
+    });
+
     it('should delete matching upload records when removing upload attachments', async () => {
       const {
         messageComposer: { attachmentManager },
@@ -888,15 +947,94 @@ describe('AttachmentManager', () => {
       attachmentManager.removeAttachments([uploadId!]);
       expect(attachmentManager.attachments).toEqual([]);
 
-      mockClient.uploadManager.state.partialNext((current) => ({
-        ...current,
+      mockClient.uploadManager.state.partialNext({
         uploads: {
-          ...current.uploads,
+          ...mockClient.uploadManager.uploads,
           [uploadId!]: { id: uploadId!, uploadProgress: 77 },
         },
-      }));
+      });
 
       expect(attachmentManager.attachments).toEqual([]);
+    });
+  });
+
+  describe('uploadConfirmationPending mirroring', () => {
+    it('mirrors uploadConfirmationPending from the upload record onto the attachment', async () => {
+      const {
+        messageComposer: { attachmentManager },
+        mockClient,
+      } = setup({ config: { trackUploadProgress: true } });
+      vi.spyOn(attachmentManager, 'doUploadRequest').mockImplementation(
+        () => new Promise(() => {}),
+      );
+
+      void attachmentManager.uploadFile(new File([], 'p.png', { type: 'image/png' }));
+
+      await vi.waitFor(() => {
+        expect(Object.keys(mockClient.uploadManager.uploads).length).toBeGreaterThan(0);
+      });
+      const uploadId = Object.keys(mockClient.uploadManager.uploads)[0];
+
+      mockClient.uploadManager.state.partialNext({
+        uploads: {
+          [uploadId!]: {
+            uploadConfirmationPending: true,
+            id: uploadId!,
+            uploadProgress: 100,
+          },
+        },
+      });
+
+      expect(
+        attachmentManager.attachments[0].localMetadata.uploadConfirmationPending,
+      ).toBe(true);
+    });
+
+    it('clears uploadConfirmationPending once the upload finishes', async () => {
+      // Regression guard for a subtle trap: these updates go through `updateAttachment`, which
+      // merges via `mergeWith` — and `mergeWith` skips `undefined` source values. Clearing the
+      // flag with `undefined` silently left a stale `true` behind, so it must be `false`.
+      const {
+        messageComposer: { attachmentManager },
+        mockClient,
+      } = setup({ config: { trackUploadProgress: true } });
+      let resolveUpload!: (value: { file: string }) => void;
+      vi.spyOn(attachmentManager, 'doUploadRequest').mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveUpload = resolve;
+          }),
+      );
+
+      const uploading = attachmentManager.uploadFile(
+        new File([], 'p.png', { type: 'image/png' }),
+      );
+
+      await vi.waitFor(() => {
+        expect(Object.keys(mockClient.uploadManager.uploads).length).toBeGreaterThan(0);
+      });
+      const uploadId = Object.keys(mockClient.uploadManager.uploads)[0];
+
+      mockClient.uploadManager.state.partialNext({
+        uploads: {
+          [uploadId!]: {
+            uploadConfirmationPending: true,
+            id: uploadId!,
+            uploadProgress: 100,
+          },
+        },
+      });
+      expect(
+        attachmentManager.attachments[0].localMetadata.uploadConfirmationPending,
+      ).toBe(true);
+
+      resolveUpload({ file: 'https://cdn.example/p.png' });
+      await uploading;
+
+      expect(attachmentManager.attachments[0].localMetadata.uploadState).toBe('finished');
+      expect(
+        attachmentManager.attachments[0].localMetadata.uploadConfirmationPending,
+      ).toBe(false);
     });
   });
 
@@ -1364,6 +1502,7 @@ describe('AttachmentManager', () => {
         fallback: 'test.jpg',
         file_size: 0,
         localMetadata: {
+          uploadConfirmationPending: false,
           id: expect.any(String),
           file,
           uploadState: 'failed',
@@ -1432,6 +1571,38 @@ describe('AttachmentManager', () => {
           metadata: { reason: 'size_limit' },
         },
       });
+    });
+
+    it.each([
+      ['an axios cancellation', new axios.Cancel('canceled')],
+      ['a DOMException AbortError', new DOMException('Upload aborted', 'AbortError')],
+    ])('does not notify when the upload was cancelled by %s', async (_label, error) => {
+      // Cancelling from the composer aborts the request via `UploadManager`, so the rejection
+      // that lands here is the user's own doing. This path notifies directly instead of going
+      // through `createUploadErrorHandlerMiddleware`, so it needs its own guard.
+      const {
+        messageComposer: { attachmentManager },
+        mockClient,
+      } = setup();
+
+      attachmentManager.setCustomUploadFn(vi.fn().mockRejectedValue(error));
+
+      const attachment = {
+        type: 'image',
+        localMetadata: {
+          id: 'test-id',
+          file: new File([''], 'test.jpg', { type: 'image/jpeg' }),
+          uploadState: 'pending',
+        },
+      };
+      vi.spyOn(attachmentManager, 'ensureLocalUploadAttachment').mockResolvedValue(
+        attachment,
+      );
+
+      const result = await attachmentManager.uploadAttachment(attachment);
+
+      expect(result?.localMetadata.uploadState).toBe('failed');
+      expect(mockClient.notifications.addError).not.toHaveBeenCalled();
     });
 
     it('should use custom upload function when provided', async () => {
@@ -1968,6 +2139,7 @@ describe('AttachmentManager', () => {
           fallback: 'test.jpg',
           file_size: 0,
           localMetadata: {
+            uploadConfirmationPending: false,
             id: expect.any(String),
             file,
             uploadState: 'failed',

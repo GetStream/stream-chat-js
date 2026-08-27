@@ -27,6 +27,26 @@ export const isLocalUploadAttachment = (
 ): attachment is LocalUploadAttachment =>
   !!(attachment as LocalAttachment)?.localMetadata?.uploadState;
 
+/**
+ * Upload states meaning "the bytes are not on the CDN yet, but they are on their way".
+ * `blocked` and `failed` are excluded - those never resolve on their own.
+ */
+const PENDING_UPLOAD_STATES: ReadonlyArray<string> = ['pending', 'uploading'];
+
+/** Whether an upload for this attachment is still expected to resolve. */
+export const isPendingUpload = (
+  attachment: unknown,
+): attachment is LocalUploadAttachment =>
+  isLocalUploadAttachment(attachment) &&
+  PENDING_UPLOAD_STATES.includes(attachment.localMetadata.uploadState);
+
+/** Whether this attachment's upload already resolved to a URL. */
+export const isFinishedUpload = (
+  attachment: unknown,
+): attachment is LocalUploadAttachment =>
+  isLocalUploadAttachment(attachment) &&
+  attachment.localMetadata.uploadState === 'finished';
+
 export const isFileAttachment = (
   attachment: Attachment | LocalAttachment,
   supportedVideoFormat: string[] = [],

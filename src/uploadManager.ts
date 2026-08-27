@@ -1,10 +1,44 @@
+import axios from 'axios';
+
 import type { StreamChat } from './client';
 import type { UploadRequestOptions } from './messageComposer/configuration/types';
 import { StateStore } from './store';
 import type { AttachmentManager } from '.';
 
+/**
+ * Whether an upload ended because it was aborted rather than because it failed.
+ *
+ * {@link UploadManager.deleteUploadRecord} and {@link UploadManager.cancelAllUploads} abort the
+ * request through its `AbortController`, which is what happens when an attachment is removed
+ * from the composer mid-upload or the client disconnects. Axios reports that as a
+ * `CanceledError` (`axios.isCancel`); a custom `doUploadRequest` on another transport
+ * conventionally throws a `DOMException` named `AbortError`.
+ *
+ * Callers use this to keep a deliberate cancellation from being reported as an error.
+ */
+export const isUploadCancellation = (error: unknown) =>
+  axios.isCancel(error) || (error instanceof Error && error.name === 'AbortError');
+
 export type UploadRecord = {
   id: string;
+  /**
+   * `true` once every byte has been handed to the transport but the server has not responded
+   * yet.
+   *
+   * Upload progress measures bytes *written to the connection*, not bytes the server
+   * acknowledged, so it reaches 100% the moment the request body is flushed — then the
+   * connection sits idle while the CDN ingests the file and the response travels back. On a
+   * large file over a slow link that window is long, and a UI that renders 100% as "done"
+   * claims the upload is confirmed while it is not.
+   *
+   * Nothing measurable happens during that window, so it is the point at which a determinate
+   * progress bar should hand over to an indeterminate one. Confirmation is the record being
+   * removed, not progress reaching 100.
+   *
+   * Requires `AttachmentManagerConfig.trackUploadProgress`; without progress reporting there is
+   * no way to tell when the flush happened, and this stays `false`.
+   */
+  uploadConfirmationPending?: boolean;
   uploadProgress?: number;
 };
 
@@ -126,6 +160,7 @@ export class UploadManager {
       const trackProgress = attachmentManager.config.trackUploadProgress;
       try {
         this.upsertUpload({
+          uploadConfirmationPending: false,
           id,
           uploadProgress: trackProgress ? 0 : undefined,
         });
@@ -133,6 +168,10 @@ export class UploadManager {
         const onProgress = trackProgress
           ? (progress?: number) => {
               this.updateUpload({
+                // The record is removed in the `finally` below, so a record that still exists
+                // while reporting 100% can only mean "flushed, awaiting the response".
+                uploadConfirmationPending:
+                  typeof progress === 'number' && progress >= 100,
                 id,
                 uploadProgress: progress,
               });

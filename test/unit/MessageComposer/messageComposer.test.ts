@@ -576,6 +576,35 @@ describe('MessageComposer', () => {
       expect(messageComposer.hasSendableData).toBe(false);
     });
 
+    it('hasSendableDataWithPendingUploads counts an upload in flight as content', () => {
+      const { messageComposer } = setup();
+
+      messageComposer.attachmentManager.state.partialNext({
+        attachments: [
+          { type: 'x', localMetadata: { id: 'a1', uploadState: 'uploading', file: {} } },
+        ],
+      });
+
+      // `hasSendableData` is false for the same state — that is what disables the send button
+      // and Enter-to-submit while an upload runs.
+      expect(messageComposer.hasSendableData).toBe(false);
+      expect(messageComposer.hasSendableDataWithPendingUploads).toBe(true);
+    });
+
+    it('hasSendableDataWithPendingUploads still refuses attachments that will never resolve', () => {
+      const { messageComposer } = setup();
+
+      messageComposer.attachmentManager.state.partialNext({
+        attachments: [
+          { type: 'x', localMetadata: { id: 'a1', uploadState: 'failed', file: {} } },
+          { type: 'x', localMetadata: { id: 'a2', uploadState: 'blocked', file: {} } },
+        ],
+      });
+
+      // A message whose only attachments were rejected must not look sendable.
+      expect(messageComposer.hasSendableDataWithPendingUploads).toBe(false);
+    });
+
     it('should account for command sendability in hasSendableData', () => {
       const validator = vi.fn(({ command, mentionedUsersInText }) =>
         mentionedUsersInText.length > 0

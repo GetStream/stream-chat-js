@@ -34,6 +34,7 @@ describe('UploadManager', () => {
 
     expect(manager.uploads).toEqual({
       'local-a': {
+        uploadConfirmationPending: false,
         id: 'local-a',
         uploadProgress: 0,
       },
@@ -100,6 +101,69 @@ describe('UploadManager', () => {
     onProgress(undefined);
     expect(manager.getUpload('u1')?.uploadProgress).toBeUndefined();
     await start;
+  });
+
+  it('flags uploadConfirmationPending once progress reaches 100 and clears it with the record', async () => {
+    // Upload progress counts bytes written to the connection, not bytes the server
+    // acknowledged, so it hits 100% while the CDN is still ingesting. Consumers need to tell
+    // "flushed, waiting" apart from "confirmed" — a bar parked at 100% claims the latter.
+    const { manager, doUploadRequest } = createManager();
+    let onProgress!: (p?: number) => void;
+    let finish!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    doUploadRequest.mockImplementation(
+      async (_file: unknown, opts?: { onProgress?: (n?: number) => void }) => {
+        onProgress = opts!.onProgress!;
+        return gate;
+      },
+    );
+
+    const promise = manager.upload({
+      id: 'u1',
+      channelCid: TEST_CID,
+      file: new File([], 'x'),
+    });
+
+    onProgress(50);
+    expect(manager.getUpload('u1')).toMatchObject({
+      uploadConfirmationPending: false,
+      uploadProgress: 50,
+    });
+
+    onProgress(100);
+    expect(manager.getUpload('u1')).toMatchObject({
+      uploadConfirmationPending: true,
+      // The percentage stays honest: those bytes really were sent, so a byte readout can still
+      // show full/full. Only the *indicator* should go indeterminate.
+      uploadProgress: 100,
+    });
+
+    // Confirmation is the record disappearing, not progress reaching 100.
+    finish();
+    await promise;
+    expect(manager.getUpload('u1')).toBeUndefined();
+  });
+
+  it('never flags uploadConfirmationPending when progress is not computable', async () => {
+    const { manager, doUploadRequest } = createManager();
+    let onProgress!: (p?: number) => void;
+    doUploadRequest.mockImplementation(
+      async (_file: unknown, opts?: { onProgress?: (n?: number) => void }) => {
+        onProgress = opts!.onProgress!;
+      },
+    );
+
+    const promise = manager.upload({
+      id: 'u1',
+      channelCid: TEST_CID,
+      file: new File([], 'x'),
+    });
+    onProgress(undefined);
+
+    expect(manager.getUpload('u1')).toMatchObject({ uploadConfirmationPending: false });
+    await promise;
   });
 
   it('on failure, removes record and rejects the promise', async () => {
@@ -169,8 +233,16 @@ describe('UploadManager', () => {
     const p1 = manager.upload({ id: 'm1', channelCid: TEST_CID, file });
     const p2 = manager.upload({ id: 'm2', channelCid: TEST_CID, file });
 
-    expect(manager.getUpload('m1')).toEqual({ id: 'm1', uploadProgress: 0 });
-    expect(manager.getUpload('m2')).toEqual({ id: 'm2', uploadProgress: 0 });
+    expect(manager.getUpload('m1')).toEqual({
+      uploadConfirmationPending: false,
+      id: 'm1',
+      uploadProgress: 0,
+    });
+    expect(manager.getUpload('m2')).toEqual({
+      uploadConfirmationPending: false,
+      id: 'm2',
+      uploadProgress: 0,
+    });
 
     const p1Again = manager.upload({ id: 'm1', channelCid: TEST_CID, file });
     expect(p1Again).toBe(p1);
@@ -244,7 +316,11 @@ describe('UploadManager', () => {
 
       manager.deleteUploadRecord('other');
 
-      expect(manager.getUpload('m1')).toEqual({ id: 'm1', uploadProgress: 0 });
+      expect(manager.getUpload('m1')).toEqual({
+        uploadConfirmationPending: false,
+        id: 'm1',
+        uploadProgress: 0,
+      });
       expect(doUploadRequest).toHaveBeenCalledTimes(1);
     });
 

@@ -2584,6 +2584,87 @@ describe('message sending flow', () => {
 			vi.resetAllMocks();
 		});
 
+		it('strips composer-internal localMetadata from outgoing attachments', async () => {
+			client.offlineDb = undefined;
+			const msg = {
+				...message,
+				attachments: [
+					{
+						asset_url: 'https://cdn.example.com/f.pdf',
+						localMetadata: { file: {}, id: 'a1', uploadState: 'finished' },
+						type: 'file',
+					},
+				],
+			};
+
+			await channel.sendMessage(msg, options);
+
+			const sent = channel._sendMessage.mock.calls[0][0];
+			expect(sent.attachments).toHaveLength(1);
+			expect(sent.attachments[0]).not.toHaveProperty('localMetadata');
+			expect(sent.attachments[0].asset_url).toBe('https://cdn.example.com/f.pdf');
+		});
+
+		it('drops an attachment whose upload never resolved, and warns', async () => {
+			// Reachable when a UI installs createSendWithPendingUploadsAttachmentsMiddleware but
+			// does not await the uploads: without this the API would store an attachment pointing
+			// at nothing.
+			client.offlineDb = undefined;
+			const addWarningSpy = vi
+				.spyOn(client.notifications, 'addWarning')
+				.mockImplementation(() => {});
+			const msg = {
+				...message,
+				attachments: [
+					{ asset_url: 'https://cdn.example.com/ok.pdf', type: 'file' },
+					{
+						localMetadata: { file: {}, id: 'a2', uploadState: 'uploading' },
+						type: 'file',
+					},
+				],
+			};
+
+			await channel.sendMessage(msg, options);
+
+			const sent = channel._sendMessage.mock.calls[0][0];
+			expect(sent.attachments).toHaveLength(1);
+			expect(sent.attachments[0].asset_url).toBe('https://cdn.example.com/ok.pdf');
+			expect(addWarningSpy).toHaveBeenCalledWith(
+				expect.objectContaining({
+					options: expect.objectContaining({
+						type: 'validation:attachment:unresolved-upload',
+					}),
+				}),
+			);
+		});
+
+		it('keeps a scraped-link attachment that has no asset_url', async () => {
+			// og_scrape_url / title_link are valid sources; only a missing source counts as unresolved.
+			client.offlineDb = undefined;
+			const msg = {
+				...message,
+				attachments: [
+					{
+						localMetadata: { id: 'a3', uploadState: 'finished' },
+						og_scrape_url: 'https://example.com',
+						type: 'image',
+					},
+				],
+			};
+
+			await channel.sendMessage(msg, options);
+
+			expect(channel._sendMessage.mock.calls[0][0].attachments).toHaveLength(1);
+		});
+
+		it('leaves a message without attachments untouched', async () => {
+			client.offlineDb = undefined;
+
+			await channel.sendMessage(message, options);
+
+			expect(channel._sendMessage).toHaveBeenCalledWith(message, options);
+		});
+
 		it('queues task if offlineDb exists and message has ID', async () => {
 			const result = await channel.sendMessage(message, options);
 

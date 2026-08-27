@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Channel } from '../../../../../src/channel';
 import { StreamChat } from '../../../../../src/client';
 import { MessageComposer } from '../../../../../src/messageComposer/messageComposer';
-import { createAttachmentsCompositionMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/attachments';
+import {
+  createAttachmentsCompositionMiddleware,
+  createSendWithPendingUploadsAttachmentsMiddleware,
+} from '../../../../../src/messageComposer/middleware/messageComposer/attachments';
 import {
   AttachmentLoadingState,
   LocalImageAttachment,
@@ -72,6 +75,12 @@ describe('stream-io/message-composer-middleware/attachments', () => {
     };
 
     const attachmentManager = {
+      get attachments() {
+        return [];
+      },
+      get config() {
+        return { sendWithPendingUploads: false };
+      },
       get uploadsInProgressCount() {
         return 0;
       },
@@ -520,5 +529,142 @@ describe('stream-io/message-composer-middleware/draft-attachments', () => {
 
     expect(result.status).toBeUndefined();
     expect(result.state.draft.attachments).toBeUndefined();
+  });
+});
+
+describe('createSendWithPendingUploadsAttachmentsMiddleware', () => {
+  const finished = {
+    type: 'image',
+    image_url: 'https://example.com/done.jpg',
+    localMetadata: {
+      id: 'done',
+      file: new File([], 'done.jpg', { type: 'image/jpeg' }),
+      uploadState: 'finished' as AttachmentLoadingState,
+    },
+  };
+  const pending = {
+    type: 'image',
+    localMetadata: {
+      id: 'in-flight',
+      file: new File([], 'in-flight.jpg', { type: 'image/jpeg' }),
+      previewUri: 'blob:in-flight',
+      uploadState: 'uploading' as AttachmentLoadingState,
+    },
+  };
+
+  const emptyState = (): MessageComposerMiddlewareState => ({
+    message: { id: 'test-id', parent_id: undefined, type: 'regular' },
+    localMessage: {
+      attachments: [],
+      created_at: new Date(),
+      deleted_at: null,
+      error: undefined,
+      id: 'test-id',
+      mentioned_users: [],
+      parent_id: undefined,
+      pinned_at: null,
+      reaction_groups: null,
+      status: 'sending',
+      text: '',
+      type: 'regular',
+      updated_at: new Date(),
+    },
+    sendOptions: {},
+  });
+
+  const setupComposer = ({ attachments }: { attachments: unknown[] }) => {
+    const client = {
+      userID: 'currentUser',
+      user: { id: 'currentUser' },
+      notifications: { addWarning: vi.fn() },
+    } as any;
+    const messageComposer = {
+      client,
+      get pollId() {
+        return null;
+      },
+      attachmentManager: {
+        get attachments() {
+          return attachments;
+        },
+        get uploadsInProgressCount() {
+          return attachments.filter(
+            (a: any) => a.localMetadata.uploadState === 'uploading',
+          ).length;
+        },
+        get successfulUploads() {
+          return attachments.filter(
+            (a: any) => a.localMetadata.uploadState === 'finished',
+          );
+        },
+      },
+    } as any;
+
+    return {
+      client,
+      messageComposer,
+      middleware: createSendWithPendingUploadsAttachmentsMiddleware(messageComposer),
+    };
+  };
+
+  it('does not discard or warn while an upload is in flight', async () => {
+    const { client, middleware } = setupComposer({ attachments: [pending] });
+
+    const result = await middleware.handlers.compose(setup(emptyState()));
+
+    expect(result.status).toBeUndefined();
+    expect(client.notifications.addWarning).not.toHaveBeenCalled();
+  });
+
+  it('keeps localMetadata on the optimistic message and off the API payload', async () => {
+    const { middleware } = setupComposer({ attachments: [finished, pending] });
+
+    const result = await middleware.handlers.compose(setup(emptyState()));
+
+    // The optimistic message carries the in-flight attachment with its localMetadata - that is
+    // what lets the message list join it to the live `uploadManager` record and render the
+    // local preview meanwhile.
+    expect(result.state.localMessage.attachments).toHaveLength(2);
+    expect(result.state.localMessage.attachments?.[1]).toHaveProperty(
+      'localMetadata.id',
+      'in-flight',
+    );
+    // Composer order is preserved so previews do not reshuffle when an upload settles.
+    expect(result.state.localMessage.attachments?.[0]).not.toHaveProperty(
+      'localMetadata',
+    );
+
+    // The API payload only holds what already resolved to a URL.
+    expect(result.state.message.attachments).toHaveLength(1);
+    expect(result.state.message.attachments?.[0]).toMatchObject({
+      image_url: 'https://example.com/done.jpg',
+    });
+    expect(result.state.message.attachments?.[0]).not.toHaveProperty('localMetadata');
+  });
+
+  it('leaves pending uploads in the composer when it is kept as a draft for a poll', async () => {
+    // `useSubmitHandler` skips `clear()` for a poll composition, so handing the same
+    // localMetadata.id to the message would leave it owned by both.
+    const { messageComposer, middleware } = setupComposer({
+      attachments: [finished, pending],
+    });
+    vi.spyOn(messageComposer, 'pollId', 'get').mockReturnValue('poll-id');
+
+    const result = await middleware.handlers.compose(setup(emptyState()));
+
+    expect(result.state.localMessage.attachments).toHaveLength(1);
+    expect(result.state.localMessage.attachments?.[0]).not.toHaveProperty(
+      'localMetadata',
+    );
+    expect(result.state.message.attachments).toHaveLength(1);
+  });
+
+  it('forwards unchanged when there is nothing to attach', async () => {
+    const { middleware } = setupComposer({ attachments: [] });
+
+    const result = await middleware.handlers.compose(setup(emptyState()));
+
+    expect(result.state.message.attachments ?? []).toHaveLength(0);
+    expect(result.state.localMessage.attachments ?? []).toHaveLength(0);
   });
 });

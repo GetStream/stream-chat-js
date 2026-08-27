@@ -9,6 +9,7 @@ import {
   logChatPromiseExecution,
   messageSetPagination,
   normalizeQuerySort,
+  sanitizeOutgoingAttachments,
 } from './utils';
 import type { StreamChat } from './client';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
@@ -222,7 +223,9 @@ export class Channel {
     );
   }
 
-  async sendMessage(message: Message, options?: SendMessageOptions) {
+  async sendMessage(rawMessage: Message, options?: SendMessageOptions) {
+    const message = sanitizeOutgoingAttachments({ channel: this, message: rawMessage });
+
     try {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {

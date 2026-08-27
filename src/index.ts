@@ -62,3 +62,15 @@ export {
   promoteChannel,
 } from './utils';
 export { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';
+/**
+ * Tag-keyed async runners. Exported so the UI SDKs (and integrators) serialize their own
+ * actions with the same primitive the SDK uses internally instead of hand-rolling promise
+ * chains. Tags share one process-wide map, so namespace yours (`my-app/thing/${id}`) to avoid
+ * colliding with another caller's.
+ */
+export {
+  hasPending,
+  settled,
+  withCancellation,
+  withoutConcurrency,
+} from './utils/concurrency';
