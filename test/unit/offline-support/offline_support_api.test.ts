@@ -3249,6 +3249,63 @@ describe('OfflineDBSyncManager', () => {
         expect(upsertUserSyncStatusSpy).toHaveBeenCalled();
       });
 
+      // `/sync` hands back the `WSEvent` union with its timestamps still raw, because the codegen
+      // emits no decoder for a model whose only decodable field is a union. They arrive as
+      // nanosecond integers, and `new Date(1786219962651957000)` overflows the Date range, so
+      // handing one to the mappers threw `RangeError: Date value out of bounds` — which the catch
+      // in `sync()` reads as the "too many events" API error and answers with `resetDB()`.
+      describe('decoding the events the sync API returns', () => {
+        const NANOS = 1786219962651957000;
+        const EXPECTED_MS = Math.floor(NANOS / 1000000);
+
+        const syncWithEvents = async (events: unknown[]) => {
+          const recentDate = new Date();
+          recentDate.setDate(recentDate.getDate() - 10);
+          getLastSyncedAtSpy.mockResolvedValueOnce(recentDate.toString());
+          syncApiSpy.mockResolvedValueOnce({ events });
+
+          await (syncManager as any).sync();
+
+          return handleEventSpy.mock.calls.map(([{ event }]) => event);
+        };
+
+        it('turns nanosecond timestamps into dates before anything persists them', async () => {
+          const [event] = await syncWithEvents([
+            {
+              type: 'message.new',
+              cid: 'messaging:test',
+              created_at: NANOS,
+              message: { id: 'msg-1', created_at: NANOS, updated_at: NANOS },
+            },
+          ]);
+
+          expect(event.created_at).toBeInstanceOf(Date);
+          expect(event.created_at.getTime()).toBe(EXPECTED_MS);
+          // The nested message is the part that actually gets written, so the decode has to recurse.
+          expect(event.message.created_at).toBeInstanceOf(Date);
+          expect(event.message.created_at.getTime()).toBe(EXPECTED_MS);
+          expect(event.message.updated_at).toBeInstanceOf(Date);
+        });
+
+        it('yields dates the mappers can serialize', async () => {
+          const [event] = await syncWithEvents([
+            { type: 'message.new', created_at: NANOS },
+          ]);
+
+          // Undecoded, this is the exact call that threw.
+          expect(() => new Date(event.created_at).toISOString()).not.toThrow();
+        });
+
+        it('passes an event type the spec does not know through rather than dropping it', async () => {
+          const events = await syncWithEvents([
+            { type: 'some.unpublished.event', created_at: NANOS },
+          ]);
+
+          expect(events).toHaveLength(1);
+          expect(events[0].type).toBe('some.unpublished.event');
+        });
+      });
+
       it('do not reset the DB if sync API throws an AxiosError with request timeout', async () => {
         const recentDate = new Date();
         recentDate.setDate(recentDate.getDate() - 10);
