@@ -4107,6 +4107,62 @@ describe('Channel.reload', () => {
 		expect(channel.messagePaginator.items.map((m) => m.id)).toContain('failed');
 	});
 
+	it('recovers a failed message from the offline DB when memory no longer holds it', async () => {
+		// The cold-boot / evicted case. The in-memory window is the only place `failedBefore` used to look,
+		// so a failed message the paginator had already lost was unrecoverable — v9 got away with reading
+		// its own lagging React copy, which a single reactive source of truth does not have.
+		seedLatestWindow(channel, [msg('m1', 1), msg('m2', 2)]);
+		const unsent = formatMessage(msg('unsent', 10, { status: 'failed' }));
+		client.setOfflineDBApi(new MockOfflineDB({ client }));
+		client.offlineDb.state.partialNext({ initialized: true, userId: 'user' });
+		// `query()` persists its result through `executeQuerySafely`, which hands the returned promise to
+		// `runDetached` — a bare `vi.fn()` returns undefined and blows up there.
+		client.offlineDb.upsertChannels.mockResolvedValue([]);
+		vi.spyOn(client.offlineDb, 'getFailedMessages').mockResolvedValue([unsent]);
+		vi.spyOn(channel, 'getOrCreate').mockImplementation(async () =>
+			generateChannel({
+				channel: { id: channel.id, type: channel.type },
+				messages: [msg('m1', 1), msg('m2', 2)],
+			}),
+		);
+
+		await channel.reload();
+
+		expect(client.offlineDb.getFailedMessages).toHaveBeenCalledWith({ cid: channel.cid });
+		expect(channel.messagePaginator.items.map((m) => m.id)).toContain('unsent');
+	});
+
+	it('does not duplicate a failed message held both in memory and in the offline DB', async () => {
+		const unsent = msg('unsent', 10, { status: 'failed' });
+		seedLatestWindow(channel, [msg('m1', 1), unsent]);
+		client.setOfflineDBApi(new MockOfflineDB({ client }));
+		client.offlineDb.state.partialNext({ initialized: true, userId: 'user' });
+		client.offlineDb.upsertChannels.mockResolvedValue([]);
+		vi.spyOn(client.offlineDb, 'getFailedMessages').mockResolvedValue([
+			formatMessage(unsent),
+		]);
+		vi.spyOn(channel, 'getOrCreate').mockImplementation(async () =>
+			generateChannel({
+				channel: { id: channel.id, type: channel.type },
+				messages: [msg('m1', 1)],
+			}),
+		);
+
+		await channel.reload();
+
+		expect(channel.messagePaginator.items.filter((m) => m.id === 'unsent')).toHaveLength(
+			1,
+		);
+	});
+
+	it('reloads without consulting the DB when offline support is disabled', async () => {
+		seedLatestWindow(channel, [msg('m1', 1)]);
+		vi.spyOn(channel, 'watch').mockResolvedValue({ messages: [msg('m1', 1)] });
+
+		// Guards the `offlineDb ? ... : []` branch: no offline DB must not mean a crash or a stray await.
+		await expect(channel.reload()).resolves.toBeUndefined();
+	});
+
 	it('merges the fetched page into a channel whose only message was ingested live', async () => {
 		// The thread defect from the channel side: a brand-new channel has an EMPTY first page, so the
 		// sent message lands in a LOGICAL head and `reload()` used to discard the server's page whole.

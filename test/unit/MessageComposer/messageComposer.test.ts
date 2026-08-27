@@ -1623,6 +1623,8 @@ describe('MessageComposer', () => {
         messageComposer.textComposer.setText('Hello');
         const composed = await messageComposer.compose();
         const serverMessage = generateMsg({
+          // The echo carries the channel, like a real response — the paginator matches on `{ cid }`.
+          cid: mockChannel.cid,
           id: composed!.localMessage.id,
           updated_at: new Date(
             composed!.localMessage.updated_at.getTime() + 100,
@@ -1653,13 +1655,21 @@ describe('MessageComposer', () => {
           localMessage: composed!.localMessage,
           message: composed!.message,
           options: composed!.sendOptions,
-          sendMessageRequestFn: async () => ({ message: serverMessage }),
+          sendMessageRequestFn: async () => {
+            // The echo their names describe, actually landing — mid-flight, as it would in practice.
+            mockChannel.messagePaginator.ingestItem({
+              ...composed!.localMessage,
+              status: 'received',
+              text: 'from the websocket echo',
+              updated_at: new Date(composedUpdatedAt + 5000),
+            });
+            return { message: serverMessage };
+          },
         });
         const after = mockChannel.messagePaginator.getItem(messageId);
-        expect(after?.status).toBe('sending');
-        expect(after?.updated_at.getTime()).toBeGreaterThanOrEqual(
-          composedUpdatedAt - 100,
-        );
+        // The echo is newer, so the slower response must not overwrite it.
+        expect(after?.text).toBe('from the websocket echo');
+        expect(after?.status).toBe('received');
       });
 
       it('does not update the message in state if it already exists on the server and in the local state as not delivered', async () => {
@@ -1673,18 +1683,26 @@ describe('MessageComposer', () => {
           localMessage: composed!.localMessage,
           message: composed!.message,
           options: composed!.sendOptions,
-          sendMessageRequestFn: async () => ({
-            message: generateMsg({
-              id: messageId,
-              updated_at: olderServerTime.toISOString(),
-            }),
-          }),
+          sendMessageRequestFn: async () => {
+            // The pre-existing copy these names describe, actually landing mid-flight.
+            mockChannel.messagePaginator.ingestItem({
+              ...composed!.localMessage,
+              status: 'received',
+              text: 'from the websocket echo',
+              updated_at: new Date(composedUpdatedAt + 5000),
+            });
+            return {
+              message: generateMsg({
+                id: messageId,
+                updated_at: olderServerTime.toISOString(),
+              }),
+            };
+          },
         });
         const after = mockChannel.messagePaginator.getItem(messageId);
-        expect(after?.status).toBe('sending');
-        expect(after?.updated_at.getTime()).toBeGreaterThanOrEqual(
-          composedUpdatedAt - 100,
-        );
+        // Newer than the response, so the slower response must not overwrite it.
+        expect(after?.text).toBe('from the websocket echo');
+        expect(after?.status).toBe('received');
       });
 
       it('does not update the message in state if it already exists on the server and in the local state as not failed', async () => {
@@ -1698,16 +1716,26 @@ describe('MessageComposer', () => {
           localMessage: composed!.localMessage,
           message: composed!.message,
           options: composed!.sendOptions,
-          sendMessageRequestFn: async () => ({
-            message: generateMsg({
-              id: messageId,
-              updated_at: olderServerTime.toISOString(),
-            }),
-          }),
+          sendMessageRequestFn: async () => {
+            // The pre-existing copy these names describe, actually landing mid-flight.
+            mockChannel.messagePaginator.ingestItem({
+              ...composed!.localMessage,
+              status: 'received',
+              text: 'from the websocket echo',
+              updated_at: new Date(composedUpdatedAt + 5000),
+            });
+            return {
+              message: generateMsg({
+                id: messageId,
+                updated_at: olderServerTime.toISOString(),
+              }),
+            };
+          },
         });
         const after = mockChannel.messagePaginator.getItem(messageId);
-        expect(after?.status).toBe('sending');
-        expect(after?.updated_at.getTime()).toBe(composedUpdatedAt);
+        // Newer than the response, so the slower response must not overwrite it.
+        expect(after?.text).toBe('from the websocket echo');
+        expect(after?.status).toBe('received');
       });
 
       it('updates the message in state if it already exists on the server and in the local state with status sending', async () => {
@@ -1730,6 +1758,7 @@ describe('MessageComposer', () => {
           options: composed!.sendOptions,
           sendMessageRequestFn: async () => ({
             message: generateMsg({
+              cid: mockChannel.cid,
               id: messageId,
               updated_at: serverUpdatedAt.toISOString(),
             }),

@@ -1,9 +1,8 @@
-// todo: add tests
 import type { MessageRequest, UpdateMessageOptions } from '../types';
 import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
 import type { StateStore } from '../store';
 import { ConfigController } from '../configuration/ConfigController';
-import { formatMessage, localMessageToNewMessagePayload } from '../utils';
+import { localMessageToNewMessagePayload } from '../utils';
 import { MessageOperationStatePolicy } from './MessageOperationStatePolicy';
 import type {
   MessageOperationsContext,
@@ -48,7 +47,14 @@ export class MessageOperations {
 
   constructor(ctx: MessageOperationsContext) {
     this.ctx = ctx;
-    this.policy = new MessageOperationStatePolicy({ ingest: ctx.ingest, get: ctx.get });
+    this.policy = new MessageOperationStatePolicy({
+      get: ctx.get,
+      ingest: ctx.ingest,
+      isQueued: ctx.isQueued,
+      persist: ctx.persist,
+      purge: ctx.purge,
+      remove: ctx.remove,
+    });
     this.configController = new ConfigController<MessageOperationsConfig>({
       defaults: DEFAULT_MESSAGE_OPERATIONS_CONFIG,
     });
@@ -138,19 +144,40 @@ export class MessageOperations {
     this.failedSendCache.delete(messageId);
   }
 
+  /**
+   * The shared lifecycle: apply the optimistic state, fire the request, then reconcile or record the
+   * failure. `kind` is threaded through because the three operations want materially different state
+   * transitions — see {@link MessageOperationStatePolicy}.
+   */
   private async run<K extends OperationKind>(
+    kind: K,
     params: OperationParams<K>,
     doRequest: OperationRequestFn<K>,
   ): Promise<void> {
     const messageId = params.localMessage.id;
 
-    this.policy.optimistic(params.localMessage);
+    const optimistic = this.policy.optimistic(kind, params);
 
     try {
-      const { message: messageFromResponse } = await doRequest(params);
-      this.policy.success({ messageFromResponse, messageId });
+      // Destructured defensively: a custom request handler is free to resolve with nothing, and the
+      // policy's own guard treats a missing message as "no server copy to apply".
+      const response = await doRequest(params);
+      this.policy.success({
+        kind,
+        messageFromResponse: response?.message,
+        messageId,
+        optimistic,
+        options: params.options,
+      });
     } catch (e) {
-      this.policy.failure({ error: e, localMessage: params.localMessage, messageId });
+      await this.policy.failure({
+        error: e,
+        kind,
+        localMessage: params.localMessage,
+        messageId,
+        optimistic,
+        options: params.options,
+      });
       throw e;
     }
   }
@@ -166,6 +193,7 @@ export class MessageOperations {
 
     try {
       await this.run<'send'>(
+        'send',
         { ...params, message: messageToSend },
         requestFn ??
           handlers.send ??
@@ -204,6 +232,7 @@ export class MessageOperations {
 
     try {
       await this.run<'retry'>(
+        'retry',
         {
           ...params,
           message: messageToSend,
@@ -242,6 +271,7 @@ export class MessageOperations {
     }
 
     return await this.run<'update'>(
+      'update',
       params,
       requestFn ??
         handlers.update ??
@@ -260,7 +290,6 @@ export class MessageOperations {
       (async (p: OperationParams<'delete'>) =>
         await this.ctx.defaults.delete(p.localMessage.id, p.options));
 
-    const { message: messageFromResponse } = await doRequest(params);
-    this.ctx.ingest(formatMessage(messageFromResponse));
+    return await this.run<'delete'>('delete', params, doRequest);
   }
 }

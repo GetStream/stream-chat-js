@@ -30,6 +30,20 @@ const makeMessageResponse = (overrides?: Partial<MessageResponse>): MessageRespo
     ...overrides,
   }) as MessageResponse;
 
+/**
+ * The local-state hooks the engine needs but most of these tests do not assert on.
+ *
+ * `isQueued: () => false` preserves the semantics these tests were written against: with no offline
+ * queue behind it, every failure is a definitive rejection. The tests that care about the queued case
+ * override it.
+ */
+const stateHooks = (store: Store) => ({
+  isQueued: () => false,
+  persist: () => {},
+  purge: () => {},
+  remove: (id: string) => store.delete(id),
+});
+
 const defaultDelete = async () => ({ message: makeMessageResponse({ id: 'm1' }) });
 
 describe('MessageOperations', () => {
@@ -37,6 +51,7 @@ describe('MessageOperations', () => {
     const store: Store = new Map();
 
     const ops = new MessageOperations({
+      ...stateHooks(store),
       ingest: (m) => store.set(m.id, m),
       get: (id) => store.get(id),
       handlers: () => ({}),
@@ -57,6 +72,7 @@ describe('MessageOperations', () => {
     const store: Store = new Map();
 
     const ops = new MessageOperations({
+      ...stateHooks(store),
       ingest: (m) => store.set(m.id, m),
       get: (id) => store.get(id),
       handlers: () => ({}),
@@ -80,6 +96,7 @@ describe('MessageOperations', () => {
     const store: Store = new Map();
 
     const ops = new MessageOperations({
+      ...stateHooks(store),
       ingest: (m) => store.set(m.id, m),
       get: (id) => store.get(id),
       handlers: () => ({}),
@@ -102,6 +119,7 @@ describe('MessageOperations', () => {
     const store: Store = new Map();
 
     const ops = new MessageOperations({
+      ...stateHooks(store),
       ingest: (m) => store.set(m.id, m),
       get: (id) => store.get(id),
       handlers: () => ({}),
@@ -125,6 +143,7 @@ describe('MessageOperations', () => {
     const sendCalls: Array<{ message: Message; options: unknown }> = [];
 
     const ops = new MessageOperations({
+      ...stateHooks(store),
       ingest: (m) => store.set(m.id, m),
       get: (id) => store.get(id),
       handlers: () => ({}),
@@ -170,6 +189,7 @@ describe('MessageOperations', () => {
       const sendCalls: Array<{ message: Message; options: unknown }> = [];
 
       const ops = new MessageOperations({
+        ...stateHooks(store),
         ingest: (m) => store.set(m.id, m),
         get: (id) => store.get(id),
         handlers: () => ({}),
@@ -218,6 +238,7 @@ describe('MessageOperations', () => {
     const sendCalls: Array<{ message: Message; options: unknown }> = [];
 
     const ops = new MessageOperations({
+      ...stateHooks(store),
       ingest: (m) => store.set(m.id, m),
       get: (id) => store.get(id),
       handlers: () => ({}),
@@ -265,6 +286,7 @@ describe('MessageOperations', () => {
     const store: Store = new Map();
 
     const ops = new MessageOperations({
+      ...stateHooks(store),
       ingest: (m) => store.set(m.id, m),
       get: (id) => store.get(id),
       normalizeOutgoingMessage: (m) => ({ ...m, parent_id: 't1' }),
@@ -294,6 +316,7 @@ describe('MessageOperations', () => {
     let seenOptions: unknown = 'unset';
 
     const ops = new MessageOperations({
+      ...stateHooks(store),
       ingest: (m) => store.set(m.id, m),
       get: (id) => store.get(id),
       handlers: () => ({}),
@@ -332,6 +355,7 @@ describe('MessageOperations', () => {
     let seenOptions: unknown = 'unset';
 
     const ops = new MessageOperations({
+      ...stateHooks(store),
       ingest: (m) => store.set(m.id, m),
       get: (id) => store.get(id),
       handlers: () => ({}),
@@ -358,6 +382,7 @@ describe('MessageOperations', () => {
     }));
 
     const ops = new MessageOperations({
+      ...stateHooks(store),
       ingest: (m) => store.set(m.id, m),
       get: (id) => store.get(id),
       handlers: () => ({}),
@@ -369,6 +394,10 @@ describe('MessageOperations', () => {
     });
 
     const localMessage = makeLocalMessage({ id: 'm1', status: 'received' });
+    // Only a message local state holds can be deleted; an empty store would exercise the phantom-row
+    // path `success` deliberately refuses.
+    store.set(localMessage.id, localMessage);
+
     await ops.delete({ localMessage });
 
     expect(defaultsDelete).toHaveBeenCalledWith('m1', undefined);
@@ -379,6 +408,7 @@ describe('MessageOperations', () => {
     const store: Store = new Map();
 
     const ops = new MessageOperations({
+      ...stateHooks(store),
       ingest: (m) => store.set(m.id, m),
       get: (id) => store.get(id),
       handlers: () => ({}),
@@ -390,6 +420,7 @@ describe('MessageOperations', () => {
     });
 
     const localMessage = makeLocalMessage({ id: 'm1', status: 'received' });
+    store.set(localMessage.id, localMessage);
 
     await ops.delete({ localMessage }, async () => ({
       message: makeMessageResponse({
@@ -414,6 +445,7 @@ describe('MessageOperations', () => {
     }));
 
     const ops = new MessageOperations({
+      ...stateHooks(store),
       ingest: (m) => store.set(m.id, m),
       get: (id) => store.get(id),
       handlers: () => ({ delete: configuredDelete }),
@@ -431,6 +463,515 @@ describe('MessageOperations', () => {
       localMessage,
       options: { hard: true },
     });
-    expect(store.get('m1')?.text).toBe('deleted via configured handler');
+    // A hard delete REMOVES the message rather than re-ingesting the response copy — the same branch
+    // the `message.deleted` WS handler takes on `event.hard_delete`. Ingesting it (which is what this
+    // used to assert) put a message the server had just destroyed back into the list.
+    expect(store.has('m1')).toBe(false);
+  });
+});
+
+describe('MessageOperations — optimistic lifecycle', () => {
+  /**
+   * A harness that records every hook the engine drives, so a test can assert on what was applied to
+   * state, what was mirrored to the DB, and what was removed — without hand-building a context.
+   */
+  const harness = ({
+    isQueued = false,
+    seed,
+  }: { isQueued?: boolean; seed?: LocalMessage } = {}) => {
+    const store: Store = new Map();
+    if (seed) store.set(seed.id, seed);
+    const persisted: LocalMessage[] = [];
+    const purged: string[] = [];
+    const removed: string[] = [];
+
+    const context = {
+      defaults: {
+        delete: defaultDelete,
+        send: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+        update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+      },
+      get: (id: string) => store.get(id),
+      handlers: () => ({}),
+      ingest: (m: LocalMessage) => store.set(m.id, m),
+      isQueued: () => isQueued,
+      persist: (m: LocalMessage) => persisted.push(m),
+      purge: (id: string) => purged.push(id),
+      remove: (id: string) => {
+        removed.push(id);
+        store.delete(id);
+      },
+    };
+
+    return {
+      context,
+      lastPersisted: () => persisted[persisted.length - 1],
+      ops: new MessageOperations(context),
+      persisted,
+      purged,
+      removed,
+      store,
+    };
+  };
+
+  const rejects = async (promise: Promise<unknown>) => {
+    await expect(promise).rejects.toBeDefined();
+  };
+
+  describe('update', () => {
+    it('applies and persists the edit, preserving the existing status', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received', text: 'before' });
+      const { lastPersisted, ops, persisted, store } = harness({ seed });
+
+      // The echo has to carry the edited text. The harness default does not, so whether the edit
+      // survived came down to the optimistic write and the mocked response landing in the same
+      // millisecond — a real server echoes what it stored.
+      await ops.update({ localMessage: { ...seed, text: 'after' } }, async () => ({
+        message: makeMessageResponse({ id: 'm1', text: 'after' }),
+      }));
+
+      // Status preservation is asserted on the optimistic write specifically: the server echo supplies
+      // `received` of its own, so reading the final state could pass without preservation happening.
+      expect(persisted[0].text).toBe('after');
+      expect(persisted[0].status).toBe('received');
+      expect(store.get('m1')?.text).toBe('after');
+      expect(lastPersisted()?.text).toBe('after');
+    });
+
+    // The optimistic write stamps `updated_at` from the CLIENT clock, so comparing the server's
+    // `updated_at` against it compares two different clocks. A device running even slightly ahead of
+    // the server would lose the whole server copy — the enriched `html`, URL/attachment enrichment,
+    // translations, the server's own `message_text_updated_at` — and the DB row with it.
+    it('applies the server copy even when the client clock runs ahead of the server', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received', text: 'before' });
+      const { lastPersisted, ops, store } = harness({ seed });
+
+      // A server timestamp a minute BEHIND the optimistic stamp: the device's clock is fast.
+      const serverUpdatedAt = new Date(Date.now() - 60_000).toISOString();
+
+      await ops.update({ localMessage: { ...seed, text: 'after' } }, async () => ({
+        message: makeMessageResponse({
+          html: '<p>after</p>',
+          id: 'm1',
+          text: 'after',
+          updated_at: serverUpdatedAt,
+        }),
+      }));
+
+      expect(store.get('m1')?.html).toBe('<p>after</p>');
+      expect(lastPersisted()?.html).toBe('<p>after</p>');
+    });
+
+    // The other half of the guard above: relaxing it must not let a slow response overwrite something
+    // that genuinely landed after it. Once another writer has replaced the copy, identity no longer
+    // matches and the decision falls back to timestamps — and both copies are server-derived by then,
+    // so that comparison is one clock against itself.
+    it('does not overwrite a fresher copy that landed while the request was in flight', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received', text: 'before' });
+      const { ops, store } = harness({ seed });
+
+      const fresher = makeLocalMessage({
+        id: 'm1',
+        status: 'received',
+        text: 'from a websocket event',
+        updated_at: new Date(Date.now() + 60_000),
+      });
+
+      await ops.update({ localMessage: { ...seed, text: 'after' } }, async () => {
+        // Lands while the request is open, exactly as a `message.updated` echo would.
+        store.set('m1', fresher);
+        return { message: makeMessageResponse({ id: 'm1', text: 'after' }) };
+      });
+
+      expect(store.get('m1')?.text).toBe('from a websocket event');
+    });
+
+    it('stamps message_text_updated_at so the "edited" indicator shows immediately', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received' });
+      const { ops, persisted } = harness({ seed });
+
+      await ops.update({ localMessage: { ...seed, text: 'after' } });
+
+      // Asserted on the optimistic write specifically: the server echo would supply its own value, so
+      // reading the final state could pass without the optimistic stamp ever existing.
+      expect(persisted[0].message_text_updated_at).toBeInstanceOf(Date);
+    });
+
+    it('does not stamp message_text_updated_at when editing a failed message', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'failed' });
+      const { ops, persisted } = harness({ seed });
+
+      await rejects(
+        ops.update({ localMessage: { ...seed, text: 'after' } }, async () => {
+          throw new Error('nope');
+        }),
+      );
+
+      // A message that never reached the server has no server-confirmed text update to advertise.
+      expect(persisted[0].message_text_updated_at).toBeUndefined();
+      expect(persisted[0].status).toBe('failed');
+    });
+
+    it('keeps the edit and does NOT mark it failed when the request was queued', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received', text: 'before' });
+      const { ops, store } = harness({ isQueued: true, seed });
+
+      await rejects(
+        ops.update({ localMessage: { ...seed, text: 'after' } }, async () => {
+          throw new Error('offline');
+        }),
+      );
+
+      expect(store.get('m1')?.text).toBe('after');
+      expect(store.get('m1')?.status).not.toBe('failed');
+      expect(store.get('m1')?.error).toBeUndefined();
+    });
+
+    it('keeps the edit and records the failure when the request was NOT queued', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received', text: 'before' });
+      const { lastPersisted, ops, store } = harness({ seed });
+
+      await rejects(
+        ops.update({ localMessage: { ...seed, text: 'after' } }, async () => {
+          throw new Error('validation');
+        }),
+      );
+
+      // The edit is never rolled back — that would destroy text the user typed.
+      expect(store.get('m1')?.text).toBe('after');
+      expect(store.get('m1')?.status).toBe('failed');
+      expect(lastPersisted()?.text).toBe('after');
+      expect(lastPersisted()?.status).toBe('failed');
+    });
+
+    it('ignores a response that carries no message', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received', text: 'before' });
+      const { ops, store } = harness({ seed });
+
+      await ops.update(
+        { localMessage: { ...seed, text: 'after' } },
+        async () => ({}) as never,
+      );
+
+      // `formatMessage(undefined)` yields an id-less message stamped with the current time, which used
+      // to beat the freshness check and get ingested over the optimistic copy.
+      expect(store.get('m1')?.text).toBe('after');
+      expect(store.size).toBe(1);
+    });
+  });
+
+  describe('delete', () => {
+    it('optimistically marks the message deleted before the request resolves', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received' });
+      const { ops, store } = harness({ seed });
+      let duringRequest: LocalMessage | undefined;
+
+      await ops.delete({ localMessage: seed }, async () => {
+        duringRequest = store.get('m1');
+        return {
+          message: makeMessageResponse({
+            id: 'm1',
+            deleted_at: new Date().toISOString(),
+          }),
+        };
+      });
+
+      expect(duringRequest?.type).toBe('deleted');
+      expect(duringRequest?.deleted_at).toBeInstanceOf(Date);
+    });
+
+    it('sets deleted_for_me for a delete_for_me delete', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received' });
+      const { ops, store } = harness({ seed });
+      let duringRequest: LocalMessage | undefined;
+
+      await ops.delete(
+        { localMessage: seed, options: { delete_for_me: true } },
+        async () => {
+          duringRequest = store.get('m1');
+          return { message: makeMessageResponse({ id: 'm1' }) };
+        },
+      );
+
+      expect(duringRequest?.deleted_for_me).toBe(true);
+    });
+
+    it('optimistically removes the message for a hard delete, and purges it on success', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received' });
+      const { ops, purged, removed, store } = harness({ seed });
+
+      await ops.delete({ localMessage: seed, options: { hard: true } });
+
+      expect(removed).toContain('m1');
+      expect(store.has('m1')).toBe(false);
+      expect(purged).toContain('m1');
+    });
+
+    /**
+     * The offline-DB row is the optimistic layer's to write, not `client.deleteMessage`'s. It used to be
+     * deleted by the request method before the task was even queued — which put a second uncoordinated
+     * writer on the DB, ran ahead of the state the DB mirrors, and was skipped entirely whenever a
+     * custom `deleteMessageRequest` replaced `client.deleteMessage`.
+     */
+    it('mirrors the deleted message into the offline DB from the optimistic step', async () => {
+      // Asserted on the write that happened BEFORE the response, which is the whole point: the row
+      // used to be written by `client.deleteMessage` ahead of the state it mirrors.
+      const seed = makeLocalMessage({ id: 'm1', status: 'received' });
+      const { ops, persisted } = harness({ seed });
+      let duringRequest: LocalMessage | undefined;
+
+      await ops.delete({ localMessage: seed }, async () => {
+        duringRequest = persisted[0];
+        return { message: makeMessageResponse({ id: 'm1' }) };
+      });
+
+      expect(duringRequest?.type).toBe('deleted');
+      expect(duringRequest?.deleted_at).toBeInstanceOf(Date);
+    });
+
+    it('carries delete_for_me into the mirrored row', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received' });
+      const { ops, persisted } = harness({ seed });
+
+      await ops.delete({ localMessage: seed, options: { delete_for_me: true } });
+
+      expect(persisted[0].deleted_for_me).toBe(true);
+    });
+
+    it('purges the offline-DB row for a hard delete rather than mirroring it', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received' });
+      const { ops, purged } = harness({ seed });
+
+      await ops.delete({ localMessage: seed, options: { hard: true } });
+
+      expect(purged).toContain('m1');
+    });
+
+    it('still writes the row when a custom request handler replaces client.deleteMessage', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received' });
+      const { ops, persisted } = harness({ seed });
+
+      await ops.delete({ localMessage: seed }, async () => ({
+        message: makeMessageResponse({ id: 'm1', type: 'deleted' }),
+      }));
+
+      expect(persisted[0].type).toBe('deleted');
+    });
+
+    it('writes nothing to the offline DB for a message local state does not hold', async () => {
+      // The DB mirrors local state, so it must not be told about state that does not exist — and a
+      // definitive failure would have nothing to restore that row from. Sampled DURING the request,
+      // since the success path legitimately persists the server's copy afterwards.
+      const { ops, persisted } = harness();
+      let duringRequest: number | undefined;
+
+      await ops.delete({ localMessage: makeLocalMessage({ id: 'm1' }) }, async () => {
+        duringRequest = persisted.length;
+        return { message: makeMessageResponse({ id: 'm1' }) };
+      });
+
+      expect(duringRequest).toBe(0);
+    });
+
+    it('reverts the delete when the request fails definitively', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received', text: 'still here' });
+      const { lastPersisted, ops, store } = harness({ seed });
+
+      await rejects(
+        ops.delete({ localMessage: seed }, async () => {
+          throw new Error('not allowed');
+        }),
+      );
+
+      // Leaving a "Message deleted" placeholder on a message that still exists server-side is a lie
+      // that only self-corrects on the next query.
+      expect(store.get('m1')?.type).toBe('regular');
+      expect(store.get('m1')?.deleted_at).toBeNull();
+      expect(store.get('m1')?.text).toBe('still here');
+      expect(lastPersisted()?.type).toBe('regular');
+    });
+
+    it('reverts a failed hard delete by putting the message back', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received', text: 'still here' });
+      const { ops, store } = harness({ seed });
+
+      await rejects(
+        ops.delete({ localMessage: seed, options: { hard: true } }, async () => {
+          throw new Error('not allowed');
+        }),
+      );
+
+      expect(store.get('m1')?.text).toBe('still here');
+    });
+
+    it('keeps the optimistic delete when the request was queued', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received' });
+      const { ops, store } = harness({ isQueued: true, seed });
+
+      await rejects(
+        ops.delete({ localMessage: seed }, async () => {
+          throw new Error('offline');
+        }),
+      );
+
+      expect(store.get('m1')?.type).toBe('deleted');
+    });
+
+    it('does not revert over a fresher copy that landed while the request was in flight', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received', text: 'before' });
+      const { ops, store } = harness({ seed });
+
+      await rejects(
+        ops.delete({ localMessage: seed }, async () => {
+          // Stand in for a WS event replacing the canonical copy mid-request.
+          store.set(
+            'm1',
+            makeLocalMessage({ id: 'm1', status: 'received', text: 'from websocket' }),
+          );
+          throw new Error('not allowed');
+        }),
+      );
+
+      expect(store.get('m1')?.text).toBe('from websocket');
+    });
+
+    it('is a no-op revert when the message was not held locally', async () => {
+      const { ops, store } = harness();
+      const localMessage = makeLocalMessage({ id: 'm1', status: 'received' });
+
+      await rejects(
+        ops.delete({ localMessage }, async () => {
+          throw new Error('not allowed');
+        }),
+      );
+
+      expect(store.has('m1')).toBe(false);
+    });
+  });
+
+  describe('delete', () => {
+    // `optimistic` deliberately writes nothing when local state holds no copy — ingesting would insert
+    // a "Message deleted" row for something that was never on screen. `success` then ingested the
+    // server's copy unconditionally, putting the phantom row back. The guard only appeared to hold
+    // offline, where the request fails and `success` never runs.
+    it('does not insert a deleted row for a message nothing was displaying', async () => {
+      const { ops, persisted, store } = harness();
+
+      await ops.delete({ localMessage: makeLocalMessage({ id: 'm1' }) }, async () => ({
+        message: makeMessageResponse({ id: 'm1', type: 'deleted' }),
+      }));
+
+      expect(store.has('m1')).toBe(false);
+      expect(persisted).toHaveLength(0);
+    });
+
+    it('still applies the server copy for a message it does hold', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received' });
+      const { lastPersisted, ops, store } = harness({ seed });
+
+      await ops.delete({ localMessage: seed }, async () => ({
+        message: makeMessageResponse({ id: 'm1', type: 'deleted' }),
+      }));
+
+      expect(store.get('m1')?.type).toBe('deleted');
+      expect(lastPersisted()?.type).toBe('deleted');
+    });
+  });
+
+  describe('send', () => {
+    it('writes the message ahead as failed, then supersedes it with the received copy', async () => {
+      const { ops, persisted } = harness();
+      const localMessage = makeLocalMessage({ id: 'm1', status: undefined as never });
+
+      await ops.send({ localMessage });
+
+      // The write-ahead is what makes a message survive a process death between compose and ack.
+      expect(persisted[0].status).toBe('failed');
+      expect(persisted[persisted.length - 1].status).toBe('received');
+    });
+
+    // The send twin of the edit case above. The optimistic step does not stamp `updated_at`, but it
+    // spreads the composed message, and the composer stamped it from the CLIENT clock. So the
+    // timestamp comparison here is also cross-clock: a device running fast would drop the server copy
+    // and leave the message `sending`, while the unconditional persist below wrote `received` — memory
+    // and the offline-DB row disagreeing about the same message.
+    it('applies the server copy on a send even when the client clock runs ahead', async () => {
+      const { lastPersisted, ops, store } = harness();
+      const localMessage = makeLocalMessage({
+        id: 'm1',
+        status: 'sending',
+        updated_at: new Date(Date.now() + 60_000),
+      });
+
+      await ops.send({ localMessage }, async () => ({
+        message: makeMessageResponse({ id: 'm1', updated_at: new Date().toISOString() }),
+      }));
+
+      expect(store.get('m1')?.status).toBe('received');
+      expect(lastPersisted()?.status).toBe('received');
+    });
+
+    // The DB mirrors memory. When a fresher copy (a `message.new` echo) has already landed, the
+    // response is too stale to apply — and equally too stale to write to the row.
+    it('does not persist a server copy it declined to apply', async () => {
+      const { ops, persisted, store } = harness();
+      const localMessage = makeLocalMessage({
+        id: 'm1',
+        status: 'sending',
+        updated_at: new Date(Date.now() + 60_000),
+      });
+
+      await ops.send({ localMessage }, async () => {
+        // The echo lands while the request is open, and is newer than the response.
+        store.set(
+          'm1',
+          makeLocalMessage({
+            id: 'm1',
+            status: 'received',
+            text: 'from the echo',
+            updated_at: new Date(Date.now() + 120_000),
+          }),
+        );
+        return {
+          message: makeMessageResponse({
+            id: 'm1',
+            updated_at: new Date().toISOString(),
+          }),
+        };
+      });
+
+      expect(store.get('m1')?.text).toBe('from the echo');
+      // Only the pessimistic write-ahead should have been written; the declined copy must not follow it.
+      expect(persisted.map((m) => m.status)).toEqual(['failed']);
+    });
+
+    it('persists the failed state when the send fails', async () => {
+      const { lastPersisted, ops, store } = harness();
+      const localMessage = makeLocalMessage({ id: 'm1' });
+
+      await rejects(
+        ops.send({ localMessage }, async () => {
+          throw new Error('boom');
+        }),
+      );
+
+      expect(store.get('m1')?.status).toBe('failed');
+      expect(lastPersisted()?.status).toBe('failed');
+    });
+
+    it('still marks a send failed when it was queued — an unsent message is not pending forever', async () => {
+      const { ops, store } = harness({ isQueued: true });
+      const localMessage = makeLocalMessage({ id: 'm1' });
+
+      await rejects(
+        ops.send({ localMessage }, async () => {
+          throw new Error('offline');
+        }),
+      );
+
+      // Deliberately unlike update/delete: v9 showed an offline send as failed-and-retryable, and the
+      // retry affordance is the only way the user gets that message out.
+      expect(store.get('m1')?.status).toBe('failed');
+    });
   });
 });

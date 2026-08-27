@@ -1,12 +1,16 @@
 import { ChannelState, ChannelWatchStatus } from './channel_state';
 import { CooldownTimer } from './CooldownTimer';
-import { isEphemeral } from './errors';
-import { applyReactionLocally } from './entityStore';
+import { queueOrRun } from './offline-support/queueableOperations';
 import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
 import type { ReadStoreReconcileMeta } from './messageDelivery';
 import { MessagePaginator, PinnedMessagePaginator } from './pagination/paginators';
-import { MessageOperations } from './messageOperations';
+import {
+  addReactionOptimistically,
+  createMessageOperationsPersistence,
+  deleteReactionOptimistically,
+  MessageOperations,
+} from './messageOperations';
 import {
   channelHasReadEvents,
   formatMessage,
@@ -39,7 +43,6 @@ import type {
   ChannelStateResponseFields,
   ChannelUpdateOptions,
   Command,
-  CreateDraftResponse,
   DeleteMessageOptions,
   Event,
   EventHandler,
@@ -82,7 +85,6 @@ import type { ChatApi } from './gen/chat/ChatApi';
 import { ChannelApi } from './gen/chat/ChannelApi';
 
 const logger = chatLoggerSystem.getLogger('channel');
-const offlineDbLogger = chatLoggerSystem.getLogger('offline-db');
 
 // todo: move to dedicated file
 export type SendMessageWithStateUpdateParams = {
@@ -375,11 +377,44 @@ export class Channel extends ChannelApi {
     this.cooldownTimer.registerSubscriptions();
 
     this.messageOperations = new MessageOperations({
+      ...createMessageOperationsPersistence({ channel: this }),
       ingest: (m) => {
-        this.messagePaginator.ingestItem(m);
-        this.getClient().messageStore.flushSubscribers(m.id);
+        const store = this.getClient().messageStore;
+        // The paginator is the entry point whenever it can hold the message — it owns interval
+        // placement, and its "no longer matches the filter" branch correctly evicts a message that
+        // stopped matching. But its filter is `{ cid, parent_id? }`, so an operation aimed at a message
+        // this paginator does not accept (most importantly a THREAD PARENT edited or deleted from
+        // inside the open thread, which the reply paginator rejects for having no `parent_id`) would
+        // otherwise be silently dropped. Falling back to the client-global store reaches the message
+        // wherever it is held and fans out to every collection holding it — the same reason
+        // `applyReactionLocally` addresses purely by id.
+        if (this.messagePaginator.matchesFilter(m)) {
+          this.messagePaginator.ingestItem(m);
+        } else if (store.has(m.id)) {
+          store.upsert(m);
+        }
+        store.flushSubscribers(m.id);
       },
-      get: (id) => this.messagePaginator.getItem(id),
+      // Mirrors `ingest`'s routing: a message this paginator does not hold can still be held by the
+      // client-global store (a thread parent, a message displayed by another collection), and the
+      // policy uses this both for its freshness comparison and to decide whether there is anything to
+      // update optimistically at all. Reading only the paginator would make those two disagree.
+      get: (id) =>
+        this.messagePaginator.getItem(id) ?? this.getClient().messageStore.get(id),
+      remove: (id) => {
+        const parentId =
+          this.messagePaginator.getItem(id)?.parent_id ??
+          this.getClient().messageStore.get(id)?.parent_id;
+
+        this.messagePaginator.removeItem({ id });
+        this.pinnedMessagesPaginator.removeItem({ id });
+
+        if (parentId) {
+          this.getClient().threads.threadsById[parentId]?.messagePaginator.removeItem({
+            id,
+          });
+        }
+      },
       handlers: () => {
         const { requestHandlers } = this.configState.getLatestValue();
         const deleteMessageRequest = requestHandlers?.deleteMessageRequest;
@@ -649,26 +684,21 @@ export class Channel extends ChannelApi {
    */
   override async sendMessage(...args: Parameters<ChannelApi['sendMessage']>) {
     const [request] = args;
-    try {
-      const offlineDb = this.getClient().offlineDb;
-      const messageId = request.message?.id;
-      if (offlineDb && messageId) {
-        return await offlineDb.queueTask<Awaited<ReturnType<ChatApi['sendMessage']>>>({
-          task: {
-            channelId: this.id as string,
-            channelType: this.type,
-            messageId,
-            payload: args,
-            type: 'send-message',
-          },
-        });
-      }
-    } catch (error) {
-      offlineDbLogger
-        .withExtraTags('sendMessage', this.cid)
-        .error('Sending the message failed.', { error });
-    }
-    return await this._sendMessage(...args);
+    const messageId = request.message?.id;
+
+    return await queueOrRun({
+      channel: this,
+      client: this.getClient(),
+      // Nothing to key a queue entry on without a message id, so it runs but is not queued.
+      queue: !!messageId,
+      task: {
+        channelId: this.id as string,
+        channelType: this.type,
+        messageId,
+        payload: args,
+        type: 'send-message',
+      },
+    });
   }
 
   /**
@@ -730,10 +760,7 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Adds a reaction with an optimistic local state update: the reaction is applied to the cached
-   * message immediately ({@link applyReactionLocally}), then the request is
-   * fired via {@link Channel.sendReaction} (which owns the offline-DB write + queue). The
-   * server-authoritative counts reconcile on the response; the message is rolled back on failure.
+   * Adds a reaction with an optimistic local state update - see {@link addReactionOptimistically}.
    */
   async addReactionWithLocalUpdate({
     messageId,
@@ -744,31 +771,12 @@ export class Channel extends ChannelApi {
     reaction: ReactionRequest;
     options?: Pick<SendReactionRequest, 'enforce_unique' | 'skip_push'>;
   }) {
-    const client = this.getClient();
-    const undo = applyReactionLocally(client, {
-      enforceUnique: options?.enforce_unique ?? false,
-      messageId,
-      reaction,
-    });
-
-    try {
-      const response = await this.sendReaction({ id: messageId, reaction, ...options });
-      // reconcile the server copy only if we still hold it — a bare upsert of an unheld id would
-      // orphan it (the store's refcount GC only reclaims held ids).
-      if (response?.message && client.messageStore.has(response.message.id)) {
-        client.messageStore.upsert(formatMessage(response.message));
-      }
-    } catch (error) {
-      if (undo && (!client.offlineDb || !isEphemeral(error as Error))) {
-        undo();
-      }
-      throw error;
-    }
+    await addReactionOptimistically({ channel: this, messageId, options, reaction });
   }
 
   /**
-   * Removes the current user's reaction with an optimistic local state update, mirroring
-   * {@link Channel.addReactionWithLocalUpdate}.
+   * Removes the current user's reaction with an optimistic local state update - see
+   * {@link deleteReactionOptimistically}.
    */
   async deleteReactionWithLocalUpdate({
     messageId,
@@ -777,26 +785,7 @@ export class Channel extends ChannelApi {
     messageId: string;
     type: string;
   }) {
-    const client = this.getClient();
-    const undo = applyReactionLocally(client, {
-      messageId,
-      reaction: { type },
-      removed: true,
-    });
-
-    try {
-      const response = await this.deleteReaction({ id: messageId, type });
-      // reconcile the server copy only if we still hold it — a bare upsert of an unheld id would
-      // orphan it (the store's refcount GC only reclaims held ids).
-      if (response?.message && client.messageStore.has(response.message.id)) {
-        client.messageStore.upsert(formatMessage(response.message));
-      }
-    } catch (error) {
-      if (undo && (!client.offlineDb || !isEphemeral(error as Error))) {
-        undo();
-      }
-      throw error;
-    }
+    await deleteReactionOptimistically({ channel: this, messageId, type });
   }
 
   /**
@@ -923,28 +912,19 @@ export class Channel extends ChannelApi {
   async sendReaction(...args: Parameters<ChatApi['sendReaction']>) {
     const [{ id: messageId }] = args;
 
-    try {
-      const offlineDb = this.getClient().offlineDb;
-      if (offlineDb) {
-        // The optimistic reaction row is written by the local-update layer
-        // (`applyReactionLocally`); here we only queue the request for replay.
-        return await offlineDb.queueTask<Awaited<ReturnType<ChatApi['sendReaction']>>>({
-          task: {
-            channelId: this.id as string,
-            channelType: this.type,
-            messageId,
-            payload: args,
-            type: 'send-reaction',
-          },
-        });
-      }
-    } catch (error) {
-      offlineDbLogger
-        .withExtraTags('sendReaction', this.cid)
-        .error('Sending the reaction failed.', { error });
-    }
-
-    return this._sendReaction(...args);
+    // The optimistic reaction row is written by the local-update layer (`applyReactionLocally`); here
+    // we only queue the request for replay.
+    return await queueOrRun({
+      channel: this,
+      client: this.getClient(),
+      task: {
+        channelId: this.id as string,
+        channelType: this.type,
+        messageId,
+        payload: args,
+        type: 'send-reaction',
+      },
+    });
   }
 
   _sendReaction(...args: Parameters<ChatApi['sendReaction']>) {
@@ -955,28 +935,19 @@ export class Channel extends ChannelApi {
     this._checkInitialized();
     const [request] = args;
 
-    try {
-      const offlineDb = this.getClient().offlineDb;
-      if (offlineDb) {
-        // The optimistic reaction-row removal is handled by the local-update layer
-        // (`applyReactionLocally`); here we only queue the request for replay.
-        return await offlineDb.queueTask<Awaited<ReturnType<ChatApi['deleteReaction']>>>({
-          task: {
-            channelId: this.id as string,
-            channelType: this.type,
-            messageId: request.id,
-            payload: args,
-            type: 'delete-reaction',
-          },
-        });
-      }
-    } catch (error) {
-      offlineDbLogger
-        .withExtraTags('deleteReaction', this.cid)
-        .error('Deleting the reaction failed.', { error });
-    }
-
-    return await this._deleteReaction(...args);
+    // The optimistic reaction-row removal is handled by the local-update layer
+    // (`applyReactionLocally`); here we only queue the request for replay.
+    return await queueOrRun({
+      channel: this,
+      client: this.getClient(),
+      task: {
+        channelId: this.id as string,
+        channelType: this.type,
+        messageId: request.id,
+        payload: args,
+        type: 'delete-reaction',
+      },
+    });
   }
 
   /**
@@ -1866,7 +1837,11 @@ export class Channel extends ChannelApi {
    *
    * Preserves failed (unsent) messages: an overlap merge keeps them (the reconcile's provenance guard
    * never prunes a non-server message); only a disjoint rebuild can drop them, so any that actually
-   * fell out are re-ingested below.
+   * fell out are re-ingested below. The offline DB is consulted alongside the in-memory window, because
+   * a failed message can be absent from memory and still be the user's unsent work — a cold boot starts
+   * with an empty paginator, and an eviction can drop it mid-session. v9 got this from a second, lagging
+   * copy of the list (the React SDK's own state); with one reactive source of truth the persisted row is
+   * that buffer.
    */
   async reload() {
     if (this._reloading || (!this.initialized && !this.offlineMode)) return;
@@ -1876,7 +1851,19 @@ export class Channel extends ChannelApi {
       const headItems = paginator.headItems;
       const requestedLimit =
         Math.max(headItems.length, paginator.pageSize ?? 0) || undefined;
-      const failedBefore = headItems.filter((message) => message.status === 'failed');
+      const offlineDb = this.getClient().offlineDb;
+      const failedInMemory = headItems.filter((message) => message.status === 'failed');
+      // Read before the await, so this cannot pick up a message that failed DURING the reload — that
+      // one is already in the paginator and does not need re-ingesting.
+      const failedInDb = offlineDb
+        ? await offlineDb.getFailedMessages({ cid: this.cid })
+        : [];
+      const failedById = new Map<string, LocalMessage>();
+      for (const message of [...failedInDb, ...failedInMemory]) {
+        // In-memory wins on a collision: it is at least as fresh as the row it was mirrored from.
+        failedById.set(message.id, message);
+      }
+      const failedBefore = [...failedById.values()];
 
       await this.watch({ messages: { limit: requestedLimit } });
       this.offlineMode = false;
@@ -2299,26 +2286,18 @@ export class Channel extends ChannelApi {
    */
   override async createDraft(...args: Parameters<ChannelApi['createDraft']>) {
     const [request] = args;
-    try {
-      const offlineDb = this.getClient().offlineDb;
-      if (offlineDb) {
-        return (await offlineDb.queueTask<CreateDraftResponse>({
-          task: {
-            channelId: this.id as string,
-            channelType: this.type,
-            threadId: request.message?.parent_id,
-            payload: args,
-            type: 'create-draft',
-          },
-        })) as Awaited<ReturnType<ChannelApi['createDraft']>>;
-      }
-    } catch (error) {
-      offlineDbLogger
-        .withExtraTags('createDraft', this.cid)
-        .error('Creating the draft in the offline database failed.', { error });
-    }
 
-    return this._createDraft(...args);
+    return await queueOrRun({
+      channel: this,
+      client: this.getClient(),
+      task: {
+        channelId: this.id as string,
+        channelType: this.type,
+        threadId: request.message?.parent_id,
+        payload: args,
+        type: 'create-draft',
+      },
+    });
   }
 
   async _deleteDraft(...args: Parameters<ChannelApi['deleteDraft']>) {
@@ -2331,28 +2310,18 @@ export class Channel extends ChannelApi {
    */
   override async deleteDraft(...args: Parameters<ChannelApi['deleteDraft']>) {
     const [request] = args;
-    try {
-      const offlineDb = this.getClient().offlineDb;
-      if (offlineDb) {
-        return (await offlineDb.queueTask<Awaited<ReturnType<ChannelApi['deleteDraft']>>>(
-          {
-            task: {
-              channelId: this.id as string,
-              channelType: this.type,
-              threadId: request?.parent_id,
-              payload: args,
-              type: 'delete-draft',
-            },
-          },
-        )) as Awaited<ReturnType<ChannelApi['deleteDraft']>>;
-      }
-    } catch (error) {
-      offlineDbLogger
-        .withExtraTags('deleteDraft', this.cid)
-        .error('Deleting the draft from the offline database failed.', { error });
-    }
 
-    return this._deleteDraft(...args);
+    return await queueOrRun({
+      channel: this,
+      client: this.getClient(),
+      task: {
+        channelId: this.id as string,
+        channelType: this.type,
+        threadId: request?.parent_id,
+        payload: args,
+        type: 'delete-draft',
+      },
+    });
   }
 
   /**

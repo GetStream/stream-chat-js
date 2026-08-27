@@ -8,6 +8,7 @@ import type {
   UpdateMessageAPIResponse,
   UpdateMessageOptions,
 } from '../types';
+import type { QueueableType } from '../offline-support/types';
 
 export type OperationKind = 'send' | 'retry' | 'update' | 'delete';
 
@@ -51,6 +52,26 @@ export type MessageOperationsHandlers = {
 export type MessageOperationsContext = {
   ingest: (m: LocalMessage) => void;
   get: (id: string) => LocalMessage | undefined;
+  /**
+   * Drops the message from local state entirely. Needed by the delete lifecycle: a hard delete removes
+   * the message rather than marking it `deleted` (mirroring the `message.deleted` WS handler, which
+   * branches on `event.hard_delete` the same way).
+   */
+  remove: (id: string) => void;
+  /**
+   * Mirrors a message into the offline DB. Fire-and-forget: local state is the source of truth, so a
+   * failed DB write must never fail the operation.
+   */
+  persist: (m: LocalMessage) => void;
+  /** Removes a message's offline-DB row (the hard-delete counterpart of {@link persist}). */
+  purge: (id: string) => void;
+  /**
+   * Whether this message's mutation is sitting in the offline queue waiting to be replayed — read from
+   * the queue, not inferred from the error ({@link isQueuedForReplay}). A queued mutation is pending,
+   * not failed, so the optimistic state stays exactly as it is: no `failed` status, no error, no revert.
+   * Reactions run the same predicate, which is what keeps the two from drifting.
+   */
+  isQueued: (messageId: string, types: readonly QueueableType[]) => Promise<boolean>;
 
   normalizeOutgoingMessage?: (m: MessageRequest) => MessageRequest;
 

@@ -57,6 +57,7 @@ import type {
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { chatLoggerSystem } from './logger';
+import { queueOrRun } from './offline-support/queueableOperations';
 import { Thread } from './thread';
 import { Moderation } from './moderation';
 import { ThreadManager } from './thread_manager';
@@ -2003,26 +2004,16 @@ export class StreamChat extends ChatApi {
     ]
   ) {
     const [request] = args;
-    try {
-      if (this.offlineDb) {
-        return await this.offlineDb.queueTask<
-          Awaited<ReturnType<ChatApi['updateMessage']>>
-        >({
-          task: {
-            ...getPendingTaskChannelData(request.message?.cid),
-            messageId: request.id,
-            payload: args,
-            type: 'update-message',
-          },
-        });
-      }
-    } catch (error) {
-      offlineDbLogger
-        .withExtraTags('updateMessage')
-        .error('Updating the message failed.', { error });
-    }
 
-    return await this._updateMessage(...args);
+    return await queueOrRun({
+      client: this,
+      task: {
+        ...getPendingTaskChannelData(request.message?.cid),
+        messageId: request.id,
+        payload: args,
+        type: 'update-message',
+      },
+    });
   }
 
   async _updateMessage(...args: Parameters<ChatApi['updateMessage']>) {
@@ -2035,33 +2026,15 @@ export class StreamChat extends ChatApi {
    */
   override async deleteMessage(...args: Parameters<ChatApi['deleteMessage']>) {
     const [request] = args;
-    try {
-      if (this.offlineDb) {
-        if (request.hard) {
-          await this.offlineDb.hardDeleteMessage({ id: request.id });
-        } else {
-          await this.offlineDb.softDeleteMessage({
-            id: request.id,
-            deleteForMe: request.delete_for_me,
-          });
-        }
-        return await this.offlineDb.queueTask<
-          Awaited<ReturnType<ChatApi['deleteMessage']>>
-        >({
-          task: {
-            messageId: request.id,
-            payload: args,
-            type: 'delete-message',
-          },
-        });
-      }
-    } catch (error) {
-      offlineDbLogger
-        .withExtraTags('deleteMessage')
-        .error('Deleting the message failed.', { error });
-    }
 
-    return this._deleteMessage(...args);
+    return await queueOrRun({
+      client: this,
+      task: {
+        messageId: request.id,
+        payload: args,
+        type: 'delete-message',
+      },
+    });
   }
 
   async _deleteMessage(...args: Parameters<ChatApi['deleteMessage']>) {

@@ -4,7 +4,6 @@ import {
   formatMessage,
   localMessageToNewMessagePayload,
 } from './utils';
-import { applyReactionLocally } from './entityStore';
 import type {
   DraftResponse,
   EventType,
@@ -20,7 +19,7 @@ import type {
   ThreadStateResponse,
   UserResponse,
 } from './types';
-import { isDoesNotExistError, isEphemeral } from './errors';
+import { isDoesNotExistError } from './errors';
 import type {
   Channel,
   DeleteMessageWithStateUpdateParams,
@@ -30,7 +29,12 @@ import type {
 import type { StreamChat } from './client';
 import type { CustomThreadData } from './custom_types';
 import { MessageComposer } from './messageComposer';
-import { MessageOperations } from './messageOperations';
+import {
+  addReactionOptimistically,
+  createMessageOperationsPersistence,
+  deleteReactionOptimistically,
+  MessageOperations,
+} from './messageOperations';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 import { MessagePaginator } from './pagination';
 import type { MergeNewestPageOptions } from './pagination';
@@ -268,11 +272,37 @@ export class Thread extends WithSubscriptions {
     });
 
     this.messageOperations = new MessageOperations({
+      ...createMessageOperationsPersistence({ channel: this.channel }),
       ingest: (m) => {
-        this.messagePaginator.ingestItem(m);
-        this.channel.getClient().messageStore.flushSubscribers(m.id);
+        const store = this.channel.getClient().messageStore;
+        // See the matching comment in `Channel`: the reply paginator's filter demands
+        // `parent_id === this.id`, so an operation on this thread's PARENT message — edited or deleted
+        // from inside the open thread, which is how the UI SDKs route it — is not something the reply
+        // paginator can hold. The store reaches it (a subscribed thread seeds its parent there) and
+        // fans the change out to the channel list too.
+        if (this.messagePaginator.matchesFilter(m)) {
+          this.messagePaginator.ingestItem(m);
+        } else if (store.has(m.id)) {
+          store.upsert(m);
+        }
+        store.flushSubscribers(m.id);
       },
-      get: (id) => this.messagePaginator.getItem(id),
+      // Mirrors `ingest`'s routing: a message this paginator does not hold can still be held by the
+      // client-global store (a thread parent, a message displayed by another collection), and the
+      // policy uses this both for its freshness comparison and to decide whether there is anything to
+      // update optimistically at all. Reading only the paginator would make those two disagree.
+      get: (id) =>
+        this.messagePaginator.getItem(id) ??
+        this.channel.getClient().messageStore.get(id),
+      remove: (id) => {
+        this.messagePaginator.removeItem({ id });
+        // A reply with `show_in_channel` is held by the channel list as well, so removing it from the
+        // reply paginator alone leaves a ghost there until the `message.deleted` event arrives. Both
+        // calls are no-ops when the paginator does not hold the id, which is the same reason the SDK's
+        // own `removeMessage` removes from the channel unconditionally.
+        this.channel.messagePaginator.removeItem({ id });
+        this.channel.pinnedMessagesPaginator.removeItem({ id });
+      },
       normalizeOutgoingMessage: (m) => ({
         ...m,
         parent_id: this.id,
@@ -1063,10 +1093,10 @@ export class Thread extends WithSubscriptions {
   }
 
   /**
-   * Adds a reaction to a reply with an optimistic local state update, mirroring
-   * {@link Channel.addReactionWithLocalUpdate}. The optimistic message is applied to THIS thread's
-   * paginator (so pure replies get optimism the channel paginator can't give); the request routes
-   * through the parent channel since reactions are channel-level.
+   * Adds a reaction to a reply with an optimistic local state update — see
+   * {@link addReactionOptimistically}, which `Channel` shares. The request routes through the parent
+   * channel because reactions are channel-level, while the local write is addressed by message id and
+   * so reaches a pure reply no channel collection holds.
    */
   async addReactionWithLocalUpdate({
     messageId,
@@ -1077,35 +1107,17 @@ export class Thread extends WithSubscriptions {
     reaction: ReactionRequest;
     options?: Pick<SendReactionRequest, 'enforce_unique' | 'skip_push'>;
   }) {
-    const client = this.channel.getClient();
-    const undo = applyReactionLocally(client, {
-      enforceUnique: options?.enforce_unique ?? false,
+    await addReactionOptimistically({
+      channel: this.channel,
       messageId,
+      options,
       reaction,
     });
-
-    try {
-      const response = await this.channel.sendReaction({
-        id: messageId,
-        reaction,
-        ...options,
-      });
-      // reconcile the server copy only if we still hold it — a bare upsert of an unheld id would
-      // orphan it (the store's refcount GC only reclaims held ids).
-      if (response?.message && client.messageStore.has(response.message.id)) {
-        client.messageStore.upsert(formatMessage(response.message));
-      }
-    } catch (error) {
-      if (undo && (!client.offlineDb || !isEphemeral(error as Error))) {
-        undo();
-      }
-      throw error;
-    }
   }
 
   /**
-   * Removes the current user's reaction from a reply with an optimistic local state update,
-   * mirroring {@link Thread.addReactionWithLocalUpdate}.
+   * Removes the current user's reaction from a reply with an optimistic local state update — see
+   * {@link deleteReactionOptimistically}, which `Channel` shares.
    */
   async deleteReactionWithLocalUpdate({
     messageId,
@@ -1114,26 +1126,7 @@ export class Thread extends WithSubscriptions {
     messageId: string;
     type: string;
   }) {
-    const client = this.channel.getClient();
-    const undo = applyReactionLocally(client, {
-      messageId,
-      reaction: { type },
-      removed: true,
-    });
-
-    try {
-      const response = await this.channel.deleteReaction({ id: messageId, type });
-      // reconcile the server copy only if we still hold it — a bare upsert of an unheld id would
-      // orphan it (the store's refcount GC only reclaims held ids).
-      if (response?.message && client.messageStore.has(response.message.id)) {
-        client.messageStore.upsert(formatMessage(response.message));
-      }
-    } catch (error) {
-      if (undo && (!client.offlineDb || !isEphemeral(error as Error))) {
-        undo();
-      }
-      throw error;
-    }
+    await deleteReactionOptimistically({ channel: this.channel, messageId, type });
   }
 
   public markRead = async ({ force = false }: { force?: boolean } = {}) => {

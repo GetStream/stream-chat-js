@@ -35,6 +35,9 @@ const enableOfflineDb = (client: StreamChat) => {
   client.setOfflineDBApi(new MockOfflineDB({ client }));
   const db = client.offlineDb as MockOfflineDB;
   db.state.partialNext({ initialized: true });
+  // Nothing queued by default: `isQueuedForReplay` reads the pending-tasks table, so a test that wants
+  // the "pending, don't revert" behaviour has to put a task there.
+  db.getPendingTasks.mockResolvedValue([]);
   db.insertReaction.mockResolvedValue([]);
   db.updateReaction.mockResolvedValue([]);
   db.deleteReaction.mockResolvedValue([]);
@@ -215,14 +218,26 @@ describe('optimistic reactions', () => {
     });
   });
 
+  // What decides keep-vs-revert is whether the mutation is sitting in the offline queue, read from the
+  // pending-tasks table — NOT the shape of the error. In production the two coincide, because
+  // `queueTask` persists a task exactly when the error is retryable; these tests set the queue state
+  // each error would really produce.
   describe('keep-vs-revert with offline support', () => {
+    let db: MockOfflineDB;
+
     beforeEach(() => {
-      enableOfflineDb(client);
+      db = enableOfflineDb(client);
     });
+
+    const queueIsHolding = (messageId: string) =>
+      db.getPendingTasks.mockResolvedValue([
+        { id: 1, messageId, payload: [], type: 'send-reaction' },
+      ]);
 
     it('keeps the optimistic reaction on a network error (no response)', async () => {
       const message = buildMessage();
       seed(channel, message);
+      queueIsHolding(message.id);
       vi.spyOn(channel, 'sendReaction').mockRejectedValue(networkError());
 
       await expect(
@@ -238,6 +253,7 @@ describe('optimistic reactions', () => {
     it('keeps the optimistic reaction when the server responds with a retryable code', async () => {
       const message = buildMessage();
       seed(channel, message);
+      queueIsHolding(message.id);
       vi.spyOn(channel, 'sendReaction').mockRejectedValue(apiError(9));
 
       await expect(
@@ -397,6 +413,45 @@ describe('optimistic reactions', () => {
       expect(ownReactionTypes(channel.messagePaginator, reply.id)).toContain('love');
 
       await pending;
+    });
+
+    /**
+     * `Channel` and `Thread` delegate to one shared implementation, so what these two cover is the
+     * delegation itself: a thread routes its REQUEST through the parent channel (reactions are
+     * channel-level) while applying the local change by message id.
+     */
+    it('routes a thread-side reaction request through the parent channel', async () => {
+      const { reply, thread } = setupDualHomed();
+      const sendReaction = vi
+        .spyOn(channel, 'sendReaction')
+        .mockResolvedValue(apiReactionResponse(generateMsg({ id: reply.id })));
+      const threadSendReaction = vi.spyOn(thread.channel, 'sendReaction');
+
+      await thread.addReactionWithLocalUpdate({
+        messageId: reply.id,
+        reaction: { type: 'love' },
+      });
+
+      expect(sendReaction).toHaveBeenCalledWith({
+        id: reply.id,
+        reaction: { type: 'love' },
+      });
+      expect(threadSendReaction).toBe(sendReaction);
+    });
+
+    it('reverts a thread-side reaction on a terminal failure', async () => {
+      const { reply, thread } = setupDualHomed();
+      vi.spyOn(channel, 'sendReaction').mockRejectedValue(apiError(4));
+
+      await expect(
+        thread.addReactionWithLocalUpdate({
+          messageId: reply.id,
+          reaction: { type: 'love' },
+        }),
+      ).rejects.toThrow();
+
+      expect(ownReactionTypes(thread.messagePaginator, reply.id)).toEqual([]);
+      expect(ownReactionTypes(channel.messagePaginator, reply.id)).toEqual([]);
     });
 
     it('reverts both copies when the request fails', async () => {

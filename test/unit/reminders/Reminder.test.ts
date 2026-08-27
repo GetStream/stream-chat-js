@@ -35,9 +35,14 @@ describe('Reminder', () => {
       updated_at: new Date(data.updated_at),
       timeLeftMs: scheduleOffsetMs,
     });
-    expect(Math.floor((reminderState!.timeLeftMs as number) / 1000)).toBe(
-      Math.floor((remindAtDate.getTime() - now.getTime()) / 1000),
-    );
+    // Compared with a tolerance, not floored-and-equal: `timeLeftMs` is sampled inside the constructor
+    // and `now` after it, so two independent clock reads straddling a whole-second boundary made this
+    // fail intermittently under full-suite load.
+    expect(
+      Math.abs(
+        (reminderState!.timeLeftMs as number) - (remindAtDate.getTime() - now.getTime()),
+      ),
+    ).toBeLessThan(1000);
     expect(reminder.timer).toBeInstanceOf(ReminderTimer);
     expect(reminder.timer.timeout).toEqual(expect.any(Object));
   });
