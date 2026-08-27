@@ -82,6 +82,92 @@ describe('optimistic edit/delete routing', () => {
   const parentProjection = (thread: Thread) =>
     thread.state.getLatestValue().parentMessage;
 
+  /**
+   * A `show_in_channel` reply is held by BOTH lists — the channel paginator's filter is just `{ cid }`
+   * — so a hard delete has to clear both. `Thread`'s own `remove` already reaches into the channel;
+   * this is the mirror, for a reply deleted from the channel list while its thread is loaded.
+   */
+  describe('show_in_channel reply hard-deleted from the channel', () => {
+    const setupSharedReply = () => {
+      const parentId = uuidv4();
+      const parentMessage = generateMsg({
+        cid: channel.cid,
+        id: parentId,
+      }) as MessageResponse;
+      const thread = new Thread({ client, channel, parentMessage });
+      thread.registerSubscriptions();
+
+      const reply = generateMsg({
+        cid: channel.cid,
+        parent_id: parentId,
+        show_in_channel: true,
+        text: 'shown in both',
+      }) as MessageResponse;
+
+      // Held by both lists, which is what `show_in_channel` means.
+      seedChannel(channel, reply);
+      thread.messagePaginator.ingestPage({
+        isHead: true,
+        isTail: true,
+        page: [formatMessage(reply)],
+        setActive: true,
+      });
+
+      // Only threads the manager knows about are reachable from `Channel`.
+      client.threads.state.partialNext({ threads: [thread] });
+
+      return { reply, thread };
+    };
+
+    it('clears it from the thread reply list as well as the channel', async () => {
+      const { reply, thread } = setupSharedReply();
+      vi.spyOn(client, 'deleteMessage').mockResolvedValue({} as never);
+
+      expect(channel.messagePaginator.getItem(reply.id)).toBeDefined();
+      expect(thread.messagePaginator.getItem(reply.id)).toBeDefined();
+
+      await channel.deleteMessageWithLocalUpdate({
+        localMessage: formatMessage(reply) as LocalMessage,
+        options: { hard: true },
+      });
+
+      expect(channel.messagePaginator.getItem(reply.id)).toBeUndefined();
+      // Without the mirror this stayed behind until the `message.deleted` event arrived — and for a
+      // hard delete queued offline, not until the next reconnect.
+      expect(thread.messagePaginator.getItem(reply.id)).toBeUndefined();
+    });
+
+    it('leaves threads belonging to other channels alone', async () => {
+      const { reply } = setupSharedReply();
+      const otherChannel = createChannel(client);
+      const otherParent = generateMsg({ cid: otherChannel.cid }) as MessageResponse;
+      const otherThread = new Thread({
+        channel: otherChannel,
+        client,
+        parentMessage: otherParent,
+      });
+      otherThread.registerSubscriptions();
+      // Same id in another channel's thread: only the deleting channel's threads may be touched.
+      otherThread.messagePaginator.ingestPage({
+        isHead: true,
+        isTail: true,
+        page: [formatMessage({ ...reply, cid: otherChannel.cid })],
+        setActive: true,
+      });
+      client.threads.state.partialNext({
+        threads: [...client.threads.state.getLatestValue().threads, otherThread],
+      });
+      vi.spyOn(client, 'deleteMessage').mockResolvedValue({} as never);
+
+      await channel.deleteMessageWithLocalUpdate({
+        localMessage: formatMessage(reply) as LocalMessage,
+        options: { hard: true },
+      });
+
+      expect(otherThread.messagePaginator.getItem(reply.id)).toBeDefined();
+    });
+  });
+
   describe('thread parent edited from inside the thread', () => {
     it('reflects the optimistic edit on the parent projection', async () => {
       const { parentId, parentMessage, thread } = setupThread();

@@ -402,8 +402,18 @@ export class Channel extends ChannelApi {
       get: (id) =>
         this.messagePaginator.getItem(id) ?? this.getClient().messageStore.get(id),
       remove: (id) => {
+        const parentId =
+          this.messagePaginator.getItem(id)?.parent_id ??
+          this.getClient().messageStore.get(id)?.parent_id;
+
         this.messagePaginator.removeItem({ id });
         this.pinnedMessagesPaginator.removeItem({ id });
+
+        if (parentId) {
+          this.getClient().threads.threadsById[parentId]?.messagePaginator.removeItem({
+            id,
+          });
+        }
       },
       handlers: () => {
         const { requestHandlers } = this.configState.getLatestValue();
