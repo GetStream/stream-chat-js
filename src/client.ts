@@ -3051,6 +3051,11 @@ export class StreamChat {
 
   /**
    * unflagMessage - unflag a message
+   *
+   * @deprecated The `/moderation/unflag` endpoint is deprecated and is a no-op on
+   * the backend - calling this resolves successfully but does not remove the flag.
+   * Use `client.moderation.submitAction()` against the review queue item instead.
+   *
    * @param {string} targetMessageID
    * @param {string} [options.user_id] currentUserID, only used with serverside auth
    * @returns {Promise<APIResponse>}
@@ -3064,6 +3069,11 @@ export class StreamChat {
 
   /**
    * unflagUser - unflag a user
+   *
+   * @deprecated The `/moderation/unflag` endpoint is deprecated and is a no-op on
+   * the backend - calling this resolves successfully but does not remove the flag.
+   * Use `client.moderation.submitAction()` against the review queue item instead.
+   *
    * @param {string} targetID
    * @param {string} [options.user_id] currentUserID, only used with serverside auth
    * @returns {Promise<APIResponse>}
