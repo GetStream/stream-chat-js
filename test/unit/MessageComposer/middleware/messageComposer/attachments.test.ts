@@ -607,6 +607,14 @@ describe('createSendWithPendingUploadsAttachmentsMiddleware', () => {
     };
   };
 
+  it('declares that it allows pending uploads', () => {
+    // `MessageComposer.hasSendableData` reads this declaration, so installing the middleware is
+    // the only switch a UI SDK has to flip.
+    const { middleware } = setupComposer({ attachments: [] });
+
+    expect(middleware.allowsPendingUploads).toBe(true);
+  });
+
   it('does not discard or warn while an upload is in flight', async () => {
     const { client, middleware } = setupComposer({ attachments: [pending] });
 

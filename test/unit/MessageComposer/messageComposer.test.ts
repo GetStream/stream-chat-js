@@ -5,6 +5,8 @@ import {
   ChannelAPIResponse,
   ChannelConfigWithInfo,
   ChannelResponse,
+  createAttachmentsCompositionMiddleware,
+  createSendWithPendingUploadsAttachmentsMiddleware,
   LocalMessage,
   MessageComposerConfig,
   StaticLocationPayload,
@@ -576,7 +578,7 @@ describe('MessageComposer', () => {
       expect(messageComposer.hasSendableData).toBe(false);
     });
 
-    it('hasSendableDataWithPendingUploads counts an upload in flight as content', () => {
+    it('counts an upload in flight as content once a middleware allows pending uploads', () => {
       const { messageComposer } = setup();
 
       messageComposer.attachmentManager.state.partialNext({
@@ -585,14 +587,45 @@ describe('MessageComposer', () => {
         ],
       });
 
-      // `hasSendableData` is false for the same state — that is what disables the send button
-      // and Enter-to-submit while an upload runs.
+      // Default chain: an upload in flight disables the send button and Enter-to-submit.
+      expect(messageComposer.allowsPendingUploads).toBe(false);
       expect(messageComposer.hasSendableData).toBe(false);
-      expect(messageComposer.hasSendableDataWithPendingUploads).toBe(true);
+
+      messageComposer.compositionMiddlewareExecutor.replace([
+        createSendWithPendingUploadsAttachmentsMiddleware(messageComposer),
+      ]);
+
+      // Installing the middleware is the whole switch - nothing else has to be told.
+      expect(messageComposer.allowsPendingUploads).toBe(true);
+      expect(messageComposer.hasSendableData).toBe(true);
     });
 
-    it('hasSendableDataWithPendingUploads still refuses attachments that will never resolve', () => {
+    it('recognizes the declaration on a custom middleware, whatever its id', () => {
+      // The composer keys off `allowsPendingUploads`, not off a middleware id, so a UI SDK that
+      // ships its own attachments composition gets the matching sendability rule.
       const { messageComposer } = setup();
+
+      messageComposer.attachmentManager.state.partialNext({
+        attachments: [
+          { type: 'x', localMetadata: { id: 'a1', uploadState: 'uploading', file: {} } },
+        ],
+      });
+
+      messageComposer.compositionMiddlewareExecutor.use({
+        allowsPendingUploads: true,
+        id: 'custom/attachments-with-pending-uploads',
+        handlers: { compose: ({ forward }) => forward() },
+      });
+
+      expect(messageComposer.allowsPendingUploads).toBe(true);
+      expect(messageComposer.hasSendableData).toBe(true);
+    });
+
+    it('still refuses attachments that will never resolve', () => {
+      const { messageComposer } = setup();
+      messageComposer.compositionMiddlewareExecutor.replace([
+        createSendWithPendingUploadsAttachmentsMiddleware(messageComposer),
+      ]);
 
       messageComposer.attachmentManager.state.partialNext({
         attachments: [
@@ -602,7 +635,27 @@ describe('MessageComposer', () => {
       });
 
       // A message whose only attachments were rejected must not look sendable.
-      expect(messageComposer.hasSendableDataWithPendingUploads).toBe(false);
+      expect(messageComposer.hasSendableData).toBe(false);
+    });
+
+    it('goes back to the default rule when the middleware is uninstalled', () => {
+      const { messageComposer } = setup();
+      messageComposer.compositionMiddlewareExecutor.replace([
+        createSendWithPendingUploadsAttachmentsMiddleware(messageComposer),
+      ]);
+      messageComposer.attachmentManager.state.partialNext({
+        attachments: [
+          { type: 'x', localMetadata: { id: 'a1', uploadState: 'uploading', file: {} } },
+        ],
+      });
+      expect(messageComposer.hasSendableData).toBe(true);
+
+      messageComposer.compositionMiddlewareExecutor.replace([
+        createAttachmentsCompositionMiddleware(messageComposer),
+      ]);
+
+      expect(messageComposer.allowsPendingUploads).toBe(false);
+      expect(messageComposer.hasSendableData).toBe(false);
     });
 
     it('should account for command sendability in hasSendableData', () => {

@@ -95,16 +95,20 @@ const composeWithPendingUploads = ({
  * wire — `message.attachments` omits everything that has no URL yet. Whoever performs the send
  * has to await those uploads (`UploadManager.upload` is idempotent by `localMetadata.id`, so
  * calling it again returns the in-flight promise), write the resolved URLs in, and send after
- * that. Sendability has to be relaxed too, or the send can never be triggered — see
- * {@link MessageComposer.hasSendableDataWithPendingUploads}.
+ * that.
+ *
+ * Sendability follows on its own: the `allowsPendingUploads` declaration below is what
+ * {@link MessageComposer.hasSendableData} reads to stop treating an upload in flight as a
+ * blocker, so installing this middleware is the only switch there is.
  *
  * This is why there is no config option turning it on: the switch belongs to the UI SDK that
- * implements the other half. stream-chat-react exposes it as a `Channel` prop;
+ * implements the other half. stream-chat-react exposes it as a `Chat` prop;
  * stream-chat-react-native as `allowSendBeforeAttachmentsUpload` on the message input.
  */
 export const createSendWithPendingUploadsAttachmentsMiddleware = (
   composer: MessageComposer,
 ): MessageCompositionMiddleware => ({
+  allowsPendingUploads: true,
   id: 'stream-io/message-composer-middleware/attachments',
   handlers: {
     compose: ({

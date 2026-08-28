@@ -434,44 +434,49 @@ export class MessageComposer extends WithSubscriptions {
   }
 
   /**
-   * Sendability for a UI SDK that supports sending while attachments are still uploading.
+   * Whether the installed composition middleware composes messages whose uploads are still in
+   * flight — see `MessageCompositionMiddleware.allowsPendingUploads`.
    *
-   * Differs from {@link hasSendableData} in that an upload in flight does not block the send, and
-   * a pending attachment counts as content in its own right — otherwise an attachment-only
-   * message could never be sent before its upload finished, which is the point of the flow.
-   * `failed` and `blocked` attachments still do not count: a message whose only attachment was
-   * rejected must not look sendable.
+   * Derived from the chain rather than from config, so there is exactly one switch: the UI SDK
+   * that implements the rest of the flow installs the middleware, and everything that has to
+   * follow from that (starting with {@link hasSendableData}) follows on its own.
    *
-   * Read this instead of `hasSendableData` when
-   * {@link createSendWithPendingUploadsAttachmentsMiddleware} is installed. There is no config
-   * option choosing between the two — the switch belongs to the UI SDK that implements the flow.
+   * **Temporary API.** In v10 sending with pending uploads becomes part of the composer
+   * configuration (`MessageComposerConfig`, set through `updateConfig`), and this getter,
+   * together with the middleware declaration it reads, is replaced by that config field.
    */
-  get hasSendableDataWithPendingUploads() {
-    const hasSendableAttachment = this.attachmentManager.attachments.some(
-      (attachment) => isFinishedUpload(attachment) || isPendingUpload(attachment),
-    );
-
-    return (
-      this.isCommandSendable &&
-      !!(
-        !this.textComposer.textIsEmpty ||
-        hasSendableAttachment ||
-        this.pollId ||
-        this.locationComposer.validLocation
-      )
+  get allowsPendingUploads() {
+    return this.compositionMiddlewareExecutor.installedMiddleware.some(
+      (middleware) => middleware.allowsPendingUploads,
     );
   }
 
   get hasSendableData() {
-    return (
-      this.isCommandSendable &&
-      !!(
-        (!this.attachmentManager.uploadsInProgressCount &&
-          (!this.textComposer.textIsEmpty ||
-            this.attachmentManager.successfulUploadsCount > 0)) ||
+    if (!this.isCommandSendable) return false;
+
+    if (this.allowsPendingUploads) {
+      // An upload in flight is no longer a blocker, and a pending attachment counts as content
+      // in its own right — otherwise an attachment-only message could never be sent before its
+      // upload finished, which is the point of the flow. `failed` and `blocked` attachments
+      // still do not count: a message whose only attachment was rejected must not look sendable.
+      const hasSendableAttachment = this.attachmentManager.attachments.some(
+        (attachment) => isFinishedUpload(attachment) || isPendingUpload(attachment),
+      );
+
+      return !!(
+        !this.textComposer.textIsEmpty ||
+        hasSendableAttachment ||
         this.pollId ||
-        !!this.locationComposer.validLocation
-      )
+        this.locationComposer.validLocation
+      );
+    }
+
+    return !!(
+      (!this.attachmentManager.uploadsInProgressCount &&
+        (!this.textComposer.textIsEmpty ||
+          this.attachmentManager.successfulUploadsCount > 0)) ||
+      this.pollId ||
+      !!this.locationComposer.validLocation
     );
   }
 
