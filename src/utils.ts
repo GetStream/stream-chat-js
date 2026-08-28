@@ -397,17 +397,17 @@ const isRemoteUrl = (url?: string) => !!url && /^https?:\/\//i.test(url.trim());
  * URL was never settled — which is what happens when
  * `createSendWithPendingUploadsAttachmentsMiddleware` is installed by a UI SDK that does not
  * implement the rest of the flow (awaiting those uploads before sending). Sending it would store
- * an attachment pointing at nothing, so it is dropped and reported instead.
+ * an attachment pointing at nothing, so it is dropped and logged instead.
  *
  * Returns the same message object when there was nothing to change.
  */
-export const sanitizeOutgoingAttachments = ({
-  channel,
+export const sanitizeOutgoingAttachments = <T extends { attachments?: Attachment[] }>({
+  client,
   message,
 }: {
-  channel: Channel;
-  message: Message;
-}): Message => {
+  client: StreamChat;
+  message: T;
+}): T => {
   const attachments = message.attachments;
   if (!attachments?.length) return message;
 
@@ -444,14 +444,11 @@ export const sanitizeOutgoingAttachments = ({
   }, []);
 
   if (unresolved.length) {
-    channel.getClient().notifications.addWarning({
-      message: `Dropped ${unresolved.length} attachment(s) whose upload never completed. Sending while attachments are still uploading requires a UI SDK that awaits them before sending.`,
-      origin: {
-        emitter: 'Channel',
-        context: { attachments: unresolved, channel },
-      },
-      options: { type: 'validation:attachment:unresolved-upload' },
-    });
+    const text = `Dropped ${unresolved.length} attachment(s) whose upload never completed. Composing with pending uploads requires awaiting them before sending.`;
+    const extraData = { attachments: unresolved, message, tags: ['attachments'] };
+
+    client.logger('warn', text, extraData);
+    console.warn(text, extraData);
   }
 
   return changed ? { ...message, attachments: sanitized } : message;

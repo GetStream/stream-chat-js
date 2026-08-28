@@ -213,19 +213,20 @@ export class Channel {
    *
    * @return {Promise<SendMessageAPIResponse>} The Server Response
    */
-  async _sendMessage(message: Message, options?: SendMessageOptions) {
-    return await this.getClient().post<SendMessageAPIResponse>(
-      this._channelURL() + '/message',
-      {
-        message,
-        ...options,
-      },
-    );
+  async _sendMessage(rawMessage: Message, options?: SendMessageOptions) {
+    const client = this.getClient();
+    const message = sanitizeOutgoingAttachments({
+      client,
+      message: rawMessage,
+    });
+
+    return await client.post<SendMessageAPIResponse>(this._channelURL() + '/message', {
+      message,
+      ...options,
+    });
   }
 
-  async sendMessage(rawMessage: Message, options?: SendMessageOptions) {
-    const message = sanitizeOutgoingAttachments({ channel: this, message: rawMessage });
-
+  async sendMessage(message: Message, options?: SendMessageOptions) {
     try {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {

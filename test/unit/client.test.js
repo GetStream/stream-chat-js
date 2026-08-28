@@ -573,6 +573,61 @@ describe('message update', () => {
 		vi.resetAllMocks();
 	});
 
+	describe('_updateMessage', () => {
+		// Sanitization lives here rather than in `updateMessage` because this is where every path
+		// converges - including the offline replay of a queued `update-message` task, and the
+		// replay of a `send-message` task that a failed edit was merged into.
+		let postSpy;
+
+		beforeEach(() => {
+			_updateMessageSpy.mockRestore();
+			postSpy = vi.spyOn(client, 'post').mockResolvedValue({});
+		});
+
+		it('strips composer-internal localMetadata from outgoing attachments', async () => {
+			const message = generateMsg({
+				id: 'msg-123',
+				attachments: [
+					{
+						type: 'image',
+						image_url: 'https://example.com/image.jpg',
+						localMetadata: { file: {}, id: 'local-1', uploadState: 'finished' },
+					},
+				],
+			});
+
+			await client._updateMessage(message);
+
+			const sent = postSpy.mock.calls[0][1].message;
+			expect(sent.attachments).toHaveLength(1);
+			expect(sent.attachments[0]).not.toHaveProperty('localMetadata');
+			expect(sent.attachments[0].image_url).toBe('https://example.com/image.jpg');
+		});
+
+		it('drops an attachment whose upload never resolved, and warns', async () => {
+			vi.spyOn(console, 'warn').mockImplementation(() => {});
+			const message = generateMsg({
+				id: 'msg-123',
+				attachments: [
+					{
+						type: 'image',
+						image_url: 'blob:http://localhost/9f3c',
+						localMetadata: { id: 'local-1', uploadState: 'uploading' },
+					},
+				],
+			});
+
+			await client._updateMessage(message);
+
+			expect(postSpy.mock.calls[0][1].message.attachments).toEqual([]);
+			expect(loggerSpy).toHaveBeenCalledWith(
+				'warn',
+				expect.stringContaining('Dropped 1 attachment(s)'),
+				expect.objectContaining({ attachments: expect.any(Array) }),
+			);
+		});
+	});
+
 	describe('updateMessage', () => {
 		it('queues replayable updates through offlineDb', async () => {
 			const message = generateMsg({

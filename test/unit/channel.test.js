@@ -2575,17 +2575,10 @@ describe('message sending flow', () => {
 		vi.resetAllMocks();
 	});
 
-	describe('sendMessage', () => {
-		beforeEach(() => {
-			vi.spyOn(channel, '_sendMessage').mockResolvedValue({});
-		});
-
-		afterEach(() => {
-			vi.resetAllMocks();
-		});
-
+	describe('_sendMessage', () => {
+		// Sanitization lives here rather than in `sendMessage` because this is where every path
+		// converges - including the offline replay of a queued task, which calls it directly.
 		it('strips composer-internal localMetadata from outgoing attachments', async () => {
-			client.offlineDb = undefined;
 			const msg = {
 				...message,
 				attachments: [
@@ -2597,9 +2590,9 @@ describe('message sending flow', () => {
 				],
 			};
 
-			await channel.sendMessage(msg, options);
+			await channel._sendMessage(msg, options);
 
-			const sent = channel._sendMessage.mock.calls[0][0];
+			const sent = postSpy.mock.calls[0][1].message;
 			expect(sent.attachments).toHaveLength(1);
 			expect(sent.attachments[0]).not.toHaveProperty('localMetadata');
 			expect(sent.attachments[0].asset_url).toBe('https://cdn.example.com/f.pdf');
@@ -2609,10 +2602,7 @@ describe('message sending flow', () => {
 			// Reachable when a UI installs createSendWithPendingUploadsAttachmentsMiddleware but
 			// does not await the uploads: without this the API would store an attachment pointing
 			// at nothing.
-			client.offlineDb = undefined;
-			const addWarningSpy = vi
-				.spyOn(client.notifications, 'addWarning')
-				.mockImplementation(() => {});
+			vi.spyOn(console, 'warn').mockImplementation(() => {});
 			const msg = {
 				...message,
 				attachments: [
@@ -2624,23 +2614,20 @@ describe('message sending flow', () => {
 				],
 			};
 
-			await channel.sendMessage(msg, options);
+			await channel._sendMessage(msg, options);
 
-			const sent = channel._sendMessage.mock.calls[0][0];
+			const sent = postSpy.mock.calls[0][1].message;
 			expect(sent.attachments).toHaveLength(1);
 			expect(sent.attachments[0].asset_url).toBe('https://cdn.example.com/ok.pdf');
-			expect(addWarningSpy).toHaveBeenCalledWith(
-				expect.objectContaining({
-					options: expect.objectContaining({
-						type: 'validation:attachment:unresolved-upload',
-					}),
-				}),
+			expect(loggerSpy).toHaveBeenCalledWith(
+				'warn',
+				expect.stringContaining('Dropped 1 attachment(s)'),
+				expect.objectContaining({ attachments: expect.any(Array) }),
 			);
 		});
 
 		it('keeps a scraped-link attachment that has no asset_url', async () => {
 			// og_scrape_url / title_link are valid sources; only a missing source counts as unresolved.
-			client.offlineDb = undefined;
 			const msg = {
 				...message,
 				attachments: [
@@ -2652,9 +2639,25 @@ describe('message sending flow', () => {
 				],
 			};
 
-			await channel.sendMessage(msg, options);
+			await channel._sendMessage(msg, options);
 
-			expect(channel._sendMessage.mock.calls[0][0].attachments).toHaveLength(1);
+			expect(postSpy.mock.calls[0][1].message.attachments).toHaveLength(1);
+		});
+
+		it('leaves a message without attachments untouched', async () => {
+			await channel._sendMessage(message, options);
+
+			expect(postSpy.mock.calls[0][1].message).toBe(message);
+		});
+	});
+
+	describe('sendMessage', () => {
+		beforeEach(() => {
+			vi.spyOn(channel, '_sendMessage').mockResolvedValue({});
+		});
+
+		afterEach(() => {
+			vi.resetAllMocks();
 		});
 
 		it('leaves a message without attachments untouched', async () => {

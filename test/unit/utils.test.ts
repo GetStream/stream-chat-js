@@ -1277,32 +1277,30 @@ describe('userHasReadReceipts', () => {
 describe('sanitizeOutgoingAttachments', () => {
   const setup = () => {
     const client = getClientWithUser();
-    const channel = client.channel('messaging', 'id');
-    const addWarning = vi
-      .spyOn(client.notifications, 'addWarning')
-      .mockImplementation(() => undefined);
-    return { addWarning, channel };
+    const logger = vi.spyOn(client, 'logger').mockImplementation(() => undefined);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    return { client, logger };
   };
 
   it('returns the same message when there are no attachments', () => {
-    const { channel } = setup();
+    const { client } = setup();
     const message = { text: 'hi' };
 
-    expect(sanitizeOutgoingAttachments({ channel, message })).toBe(message);
+    expect(sanitizeOutgoingAttachments({ client, message })).toBe(message);
   });
 
   it('returns the same message when no attachment carries localMetadata', () => {
-    const { channel } = setup();
+    const { client } = setup();
     const message = {
       attachments: [{ asset_url: 'https://cdn.example.com/f.pdf', type: 'file' }],
       text: 'hi',
     };
 
-    expect(sanitizeOutgoingAttachments({ channel, message })).toBe(message);
+    expect(sanitizeOutgoingAttachments({ client, message })).toBe(message);
   });
 
   it('strips localMetadata from an attachment that resolved', () => {
-    const { addWarning, channel } = setup();
+    const { client, logger } = setup();
     const message = {
       attachments: [
         {
@@ -1313,17 +1311,17 @@ describe('sanitizeOutgoingAttachments', () => {
       ],
     };
 
-    const result = sanitizeOutgoingAttachments({ channel, message });
+    const result = sanitizeOutgoingAttachments({ client, message });
 
     expect(result).not.toBe(message);
     expect(result.attachments).toEqual([
       { asset_url: 'https://cdn.example.com/f.pdf', type: 'file' },
     ]);
-    expect(addWarning).not.toHaveBeenCalled();
+    expect(logger).not.toHaveBeenCalled();
   });
 
   it('drops an attachment that never resolved, and warns', () => {
-    const { addWarning, channel } = setup();
+    const { client, logger } = setup();
     const message = {
       attachments: [
         { asset_url: 'https://cdn.example.com/ok.pdf', type: 'file' },
@@ -1331,15 +1329,34 @@ describe('sanitizeOutgoingAttachments', () => {
       ],
     };
 
-    const result = sanitizeOutgoingAttachments({ channel, message });
+    const result = sanitizeOutgoingAttachments({ client, message });
 
     expect(result.attachments).toEqual([
       { asset_url: 'https://cdn.example.com/ok.pdf', type: 'file' },
     ]);
-    expect(addWarning).toHaveBeenCalledWith(
-      expect.objectContaining({
-        options: { type: 'validation:attachment:unresolved-upload' },
-      }),
+    expect(logger).toHaveBeenCalledWith(
+      'warn',
+      expect.stringContaining('Dropped 1 attachment(s)'),
+      expect.objectContaining({ attachments: expect.any(Array) }),
+    );
+  });
+
+  it('also reaches the console', () => {
+    // `client.logger` is a no-op unless the integrator configured one, and this only fires on a
+    // bug — dropping attachments with no trace at all is the worst outcome.
+    const { client } = setup();
+    const consoleWarn = vi.mocked(console.warn);
+    const message = {
+      attachments: [
+        { localMetadata: { id: 'a6', uploadState: 'uploading' }, type: 'file' },
+      ],
+    };
+
+    sanitizeOutgoingAttachments({ client, message });
+
+    expect(consoleWarn).toHaveBeenCalledWith(
+      expect.stringContaining('Dropped 1 attachment(s)'),
+      expect.objectContaining({ attachments: expect.any(Array) }),
     );
   });
 
@@ -1351,7 +1368,7 @@ describe('sanitizeOutgoingAttachments', () => {
   ])('drops an attachment whose only source is %s', (_label, image_url) => {
     // These resolve only on the device that produced them. React Native keeps the picked file's
     // URI in `image_url` from selection onwards, so a presence check would call this resolved.
-    const { addWarning, channel } = setup();
+    const { client, logger } = setup();
     const message = {
       attachments: [
         {
@@ -1362,19 +1379,19 @@ describe('sanitizeOutgoingAttachments', () => {
       ],
     };
 
-    const result = sanitizeOutgoingAttachments({ channel, message });
+    const result = sanitizeOutgoingAttachments({ client, message });
 
     expect(result.attachments).toEqual([]);
-    expect(addWarning).toHaveBeenCalledWith(
-      expect.objectContaining({
-        options: { type: 'validation:attachment:unresolved-upload' },
-      }),
+    expect(logger).toHaveBeenCalledWith(
+      'warn',
+      expect.stringContaining('Dropped 1 attachment(s)'),
+      expect.objectContaining({ attachments: expect.any(Array) }),
     );
   });
 
   it('keeps an attachment whose local URL sits next to a remote one', () => {
     // A finished upload can still carry the local preview alongside the CDN URL.
-    const { addWarning, channel } = setup();
+    const { client, logger } = setup();
     const message = {
       attachments: [
         {
@@ -1386,10 +1403,10 @@ describe('sanitizeOutgoingAttachments', () => {
       ],
     };
 
-    const result = sanitizeOutgoingAttachments({ channel, message });
+    const result = sanitizeOutgoingAttachments({ client, message });
 
     expect(result.attachments).toHaveLength(1);
-    expect(addWarning).not.toHaveBeenCalled();
+    expect(logger).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -1397,7 +1414,7 @@ describe('sanitizeOutgoingAttachments', () => {
     ['og_scrape_url', { og_scrape_url: 'https://example.com' }],
     ['title_link', { title_link: 'https://example.com' }],
   ])('keeps an attachment whose only source is %s', (_label, source) => {
-    const { addWarning, channel } = setup();
+    const { client, logger } = setup();
     const message = {
       attachments: [
         {
@@ -1408,9 +1425,9 @@ describe('sanitizeOutgoingAttachments', () => {
       ],
     };
 
-    const result = sanitizeOutgoingAttachments({ channel, message });
+    const result = sanitizeOutgoingAttachments({ client, message });
 
     expect(result.attachments).toHaveLength(1);
-    expect(addWarning).not.toHaveBeenCalled();
+    expect(logger).not.toHaveBeenCalled();
   });
 });
