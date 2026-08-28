@@ -268,84 +268,6 @@ async function removeShadowBan() {
 	return await client.unbanUser(evilUser);
 }
 
-async function unflagMessage() {
-	//flag the user
-	const authClient = utils.getTestClient(true);
-	const serverAuthClient = utils.getTestClient(true);
-	const thierry = {
-		id: 'thierry2',
-		name: 'Thierry',
-		status: 'busy',
-		image: 'myimageurl',
-		role: 'admin',
-	};
-
-	const tommaso = {
-		id: 'tommaso',
-		name: 'Tommaso',
-		image: 'myimageurl',
-		role: 'admin',
-	};
-
-	await serverAuthClient.upsertUsers([thierry, tommaso, { id: 'thierry' }]);
-	//	delete thierry.role;
-	// await isn't needed but makes testing a bit easier
-	await authClient.connectUser(thierry);
-
-	const channel = authClient.channel('livestream', `ninja-${uuidv4()}`, {
-		mysearchablefield: 'hi',
-	});
-
-	await channel.watch();
-
-	const text = 'Flag me, i dare you mods!';
-	const messageResponse = await channel.sendMessage({ text });
-	await authClient.flagMessage(messageResponse.message.id);
-
-	return await authClient.unflagMessage(messageResponse.message.id);
-}
-
-async function unflagUser() {
-	//flag the user
-	const authClient = utils.getTestClient(true);
-	const serverAuthClient = utils.getTestClient(true);
-	const evilId = uuidv4();
-	const evil = {
-		id: evilId,
-		name: 'Eviluser',
-		status: 'busy',
-		image: 'myimageurl',
-		role: 'user',
-	};
-	const thierry = {
-		id: 'thierry2',
-		name: 'Thierry',
-		status: 'busy',
-		image: 'myimageurl',
-		role: 'admin',
-	};
-
-	const tommaso = {
-		id: 'tommaso',
-		name: 'Tommaso',
-		image: 'myimageurl',
-		role: 'admin',
-	};
-
-	await serverAuthClient.upsertUsers([thierry, tommaso, { id: 'thierry' }]);
-	//	delete thierry.role;
-	// await isn't needed but makes testing a bit easier
-	await authClient.connectUser(thierry);
-	const modUserID = uuidv4();
-
-	await utils.createUsers([modUserID]);
-	await serverAuthClient.upsertUser(evil);
-
-	await authClient.flagUser(evilId);
-
-	return await authClient.unflagUser(evilId);
-}
-
 async function unmuteUser() {
 	const user1 = uuidv4();
 	const user2 = uuidv4();
@@ -409,8 +331,6 @@ module.exports = {
 	listRoles,
 	muteUser,
 	unbanUsers,
-	unflagMessage,
-	unflagUser,
 	unmuteUser,
 	updateBlockList,
 	updatePermission,
