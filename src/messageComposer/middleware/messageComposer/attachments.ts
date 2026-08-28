@@ -61,16 +61,24 @@ const composeWithPendingUploads = ({
 
   if (!localAttachments.length && !messageAttachments.length) return state;
 
+  // Each payload gets the `attachments` key only when there is something to put in it, matching
+  // the default middleware. An empty array is not "nothing to say": on an edit the API reads it
+  // as "remove every attachment", and a message whose uploads are all still in flight produces
+  // exactly that - no finished upload to put in `message.attachments` yet.
   return {
     ...state,
-    localMessage: {
-      ...state.localMessage,
-      attachments: localAttachments,
-    },
-    message: {
-      ...state.message,
-      attachments: messageAttachments,
-    },
+    localMessage: localAttachments.length
+      ? {
+          ...state.localMessage,
+          attachments: localAttachments,
+        }
+      : state.localMessage,
+    message: messageAttachments.length
+      ? {
+          ...state.message,
+          attachments: messageAttachments,
+        }
+      : state.message,
   };
 };
 

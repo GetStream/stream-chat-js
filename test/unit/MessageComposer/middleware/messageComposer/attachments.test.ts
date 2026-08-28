@@ -659,6 +659,29 @@ describe('createSendWithPendingUploadsAttachmentsMiddleware', () => {
     expect(result.state.message.attachments).toHaveLength(1);
   });
 
+  it('does not introduce an empty attachments array into the API payload', async () => {
+    // Nothing has finished uploading yet, so there is nothing to send. An empty array is not
+    // the same as an absent key: on an edit the API reads `attachments: []` as "remove every
+    // attachment".
+    const { middleware } = setupComposer({ attachments: [pending] });
+
+    const result = await middleware.handlers.compose(setup(emptyState()));
+
+    expect(result.state.message).not.toHaveProperty('attachments');
+    expect(result.state.localMessage.attachments).toHaveLength(1);
+  });
+
+  it('keeps attachments already present on the API payload', async () => {
+    const { middleware } = setupComposer({ attachments: [pending] });
+    const state = emptyState();
+    const scraped = { type: 'image', og_scrape_url: 'https://example.com' };
+    state.message.attachments = [scraped];
+
+    const result = await middleware.handlers.compose(setup(state));
+
+    expect(result.state.message.attachments).toEqual([scraped]);
+  });
+
   it('forwards unchanged when there is nothing to attach', async () => {
     const { middleware } = setupComposer({ attachments: [] });
 
