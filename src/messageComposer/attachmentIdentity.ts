@@ -1,5 +1,6 @@
 import type { Attachment, SharedLocationResponse } from '../types';
 import type {
+  AttachmentLoadingState,
   AudioAttachment,
   FileAttachment,
   GiphyAttachment,
@@ -30,8 +31,14 @@ export const isLocalUploadAttachment = (
 /**
  * Upload states meaning "the bytes are not on the CDN yet, but they are on their way".
  * `blocked` and `failed` are excluded - those never resolve on their own.
+ *
+ * Typed against {@link AttachmentLoadingState} rather than `string`, so renaming a state fails
+ * the build instead of silently making this list match nothing - it decides what gets sent.
  */
-const PENDING_UPLOAD_STATES: ReadonlyArray<string> = ['pending', 'uploading'];
+const PENDING_UPLOAD_STATES: ReadonlyArray<AttachmentLoadingState> = [
+  'pending',
+  'uploading',
+];
 
 /** Whether an upload for this attachment is still expected to resolve. */
 export const isPendingUpload = (
