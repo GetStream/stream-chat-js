@@ -168,12 +168,18 @@ export class UploadManager {
         const onProgress = trackProgress
           ? (progress?: number) => {
               this.updateUpload({
-                // The record is removed in the `finally` below, so a record that still exists
-                // while reporting 100% can only mean "flushed, awaiting the response".
-                uploadConfirmationPending:
-                  typeof progress === 'number' && progress >= 100,
                 id,
                 uploadProgress: progress,
+                // Only a number says anything about the flush, so a report without one leaves
+                // the flag alone: `undefined` means the transport cannot measure this upload,
+                // not that bytes were un-sent. Lowering it there would drop a UI that had
+                // already gone indeterminate back to a determinate one with nothing to show.
+                //
+                // The record is removed in the `finally` below, so a record that still exists
+                // while reporting 100% can only mean "flushed, awaiting the response".
+                ...(typeof progress === 'number'
+                  ? { uploadConfirmationPending: progress >= 100 }
+                  : {}),
               });
             }
           : undefined;

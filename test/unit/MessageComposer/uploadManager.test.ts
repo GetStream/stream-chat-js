@@ -146,6 +146,69 @@ describe('UploadManager', () => {
     expect(manager.getUpload('u1')).toBeUndefined();
   });
 
+  it('keeps uploadConfirmationPending when a later report carries no number', async () => {
+    // A report without a number means the transport cannot measure this upload, not that the
+    // bytes it already flushed were un-sent.
+    const { manager, doUploadRequest } = createManager();
+    let onProgress!: (p?: number) => void;
+    let finish!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    doUploadRequest.mockImplementation(
+      async (_file: unknown, opts?: { onProgress?: (n?: number) => void }) => {
+        onProgress = opts!.onProgress!;
+        return gate;
+      },
+    );
+
+    const promise = manager.upload({
+      id: 'u1',
+      channelCid: TEST_CID,
+      file: new File([], 'x'),
+    });
+
+    onProgress(100);
+    onProgress(undefined);
+
+    expect(manager.getUpload('u1')).toMatchObject({ uploadConfirmationPending: true });
+
+    finish();
+    await promise;
+  });
+
+  it('lowers uploadConfirmationPending only on a number below 100', async () => {
+    const { manager, doUploadRequest } = createManager();
+    let onProgress!: (p?: number) => void;
+    let finish!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    doUploadRequest.mockImplementation(
+      async (_file: unknown, opts?: { onProgress?: (n?: number) => void }) => {
+        onProgress = opts!.onProgress!;
+        return gate;
+      },
+    );
+
+    const promise = manager.upload({
+      id: 'u1',
+      channelCid: TEST_CID,
+      file: new File([], 'x'),
+    });
+
+    onProgress(100);
+    onProgress(40);
+
+    expect(manager.getUpload('u1')).toMatchObject({
+      uploadConfirmationPending: false,
+      uploadProgress: 40,
+    });
+
+    finish();
+    await promise;
+  });
+
   it('never flags uploadConfirmationPending when progress is not computable', async () => {
     const { manager, doUploadRequest } = createManager();
     let onProgress!: (p?: number) => void;
