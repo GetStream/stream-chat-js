@@ -1,3 +1,13 @@
+## [9.52.0](https://github.com/GetStream/stream-chat-js/compare/v9.51.0...v9.52.0) (2026-08-28)
+
+### Bug Fixes
+
+* do not reset channel unread count on thread read ([#1835](https://github.com/GetStream/stream-chat-js/issues/1835)) ([79fbf54](https://github.com/GetStream/stream-chat-js/commit/79fbf54c56cad9979c9fe44f8ca299c6d53d39d7))
+
+### Features
+
+* **MessageComposer:** add composition middleware for pending attachment uploads ([#1845](https://github.com/GetStream/stream-chat-js/issues/1845)) ([68e5d69](https://github.com/GetStream/stream-chat-js/commit/68e5d69336a400434db76a34b46fc0efcd781e85))
+
 ## [9.51.0](https://github.com/GetStream/stream-chat-js/compare/v9.50.3...v9.51.0) (2026-08-14)
 
 ### Features
