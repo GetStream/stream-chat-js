@@ -384,12 +384,17 @@ export function unformatMessage(message: LocalMessage): MessageResponse {
 }
 
 /**
+ * Whether a URL points at something the API and other devices can actually fetch.
+ */
+const isRemoteUrl = (url?: string) => !!url && /^https?:\/\//i.test(url.trim());
+
+/**
  * Strips composer-internal state from a message's attachments, and drops any whose upload never
  * resolved.
  *
  * `localMetadata` is how `AttachmentManager` tracks an upload (its id, the `File`, the local
- * preview); it must never reach the API. An attachment that still carries it and has no URL was
- * never settled — which is what happens when
+ * preview); it must never reach the API. An attachment that still carries it and has no remote
+ * URL was never settled — which is what happens when
  * `createSendWithPendingUploadsAttachmentsMiddleware` is installed by a UI SDK that does not
  * implement the rest of the flow (awaiting those uploads before sending). Sending it would store
  * an attachment pointing at nothing, so it is dropped and reported instead.
@@ -421,15 +426,15 @@ export const sanitizeOutgoingAttachments = ({
 
     changed = true;
 
-    // Any of these means the attachment resolved to something the API can store.
-    const hasSource = !!(
-      rest.asset_url ||
-      rest.image_url ||
-      rest.og_scrape_url ||
-      rest.title_link
-    );
+    // Any of these pointing at a remote URL means the attachment resolved to something the API
+    // can store and other devices can load.
+    const hasRemoteSource =
+      isRemoteUrl(rest.asset_url) ||
+      isRemoteUrl(rest.image_url) ||
+      isRemoteUrl(rest.og_scrape_url) ||
+      isRemoteUrl(rest.title_link);
 
-    if (hasSource) {
+    if (hasRemoteSource) {
       acc.push(rest as Attachment);
     } else {
       unresolved.push(rest as Attachment);
