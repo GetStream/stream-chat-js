@@ -2660,6 +2660,82 @@ describe('message sending flow', () => {
 		vi.resetAllMocks();
 	});
 
+	describe('_sendMessage', () => {
+		// Sanitization lives here rather than in `sendMessage` because this is where every path
+		// converges - including the offline replay of a queued task, which calls it directly.
+		it('strips composer-internal localMetadata from outgoing attachments', async () => {
+			const msg = {
+				...message,
+				attachments: [
+					{
+						asset_url: 'https://cdn.example.com/f.pdf',
+						localMetadata: { file: {}, id: 'a1', uploadState: 'finished' },
+						type: 'file',
+					},
+				],
+			};
+
+			await channel._sendMessage(msg, options);
+
+			const sent = postSpy.mock.calls[0][1].message;
+			expect(sent.attachments).toHaveLength(1);
+			expect(sent.attachments[0]).not.toHaveProperty('localMetadata');
+			expect(sent.attachments[0].asset_url).toBe('https://cdn.example.com/f.pdf');
+		});
+
+		it('drops an attachment whose upload never resolved, and warns', async () => {
+			// Reachable when a UI installs createSendWithPendingUploadsAttachmentsMiddleware but
+			// does not await the uploads: without this the API would store an attachment pointing
+			// at nothing.
+			vi.spyOn(console, 'warn').mockImplementation(() => {});
+			const msg = {
+				...message,
+				attachments: [
+					{ asset_url: 'https://cdn.example.com/ok.pdf', type: 'file' },
+					{
+						localMetadata: { file: {}, id: 'a2', uploadState: 'uploading' },
+						type: 'file',
+					},
+				],
+			};
+
+			await channel._sendMessage(msg, options);
+
+			const sent = postSpy.mock.calls[0][1].message;
+			expect(sent.attachments).toHaveLength(1);
+			expect(sent.attachments[0].asset_url).toBe('https://cdn.example.com/ok.pdf');
+			expect(loggerSpy).toHaveBeenCalledWith(
+				'warn',
+				expect.stringContaining('Dropped 1 attachment(s)'),
+				expect.objectContaining({ attachments: expect.any(Array) }),
+			);
+		});
+
+		it('keeps a scraped-link attachment that has no asset_url', async () => {
+			// og_scrape_url / title_link are valid sources; only a missing source counts as unresolved.
+			const msg = {
+				...message,
+				attachments: [
+					{
+						localMetadata: { id: 'a3', uploadState: 'finished' },
+						og_scrape_url: 'https://example.com',
+						type: 'image',
+					},
+				],
+			};
+
+			await channel._sendMessage(msg, options);
+
+			expect(postSpy.mock.calls[0][1].message.attachments).toHaveLength(1);
+		});
+
+		it('leaves a message without attachments untouched', async () => {
+			await channel._sendMessage(message, options);
+
+			expect(postSpy.mock.calls[0][1].message).toBe(message);
+		});
+	});
+
 	describe('sendMessage', () => {
 		beforeEach(() => {
 			vi.spyOn(channel, '_sendMessage').mockResolvedValue({});
@@ -2667,6 +2743,14 @@ describe('message sending flow', () => {
 
 		afterEach(() => {
 			vi.resetAllMocks();
+		});
+
+		it('leaves a message without attachments untouched', async () => {
+			client.offlineDb = undefined;
+
+			await channel.sendMessage(message, options);
+
+			expect(channel._sendMessage).toHaveBeenCalledWith(message, options);
 		});
 
 		it('queues task if offlineDb exists and message has ID', async () => {

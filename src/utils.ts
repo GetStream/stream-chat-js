@@ -1,6 +1,7 @@
 import FormData from 'form-data';
 import type {
   AscDesc,
+  Attachment,
   ChannelFilters,
   ChannelQueryOptions,
   ChannelSort,
@@ -381,6 +382,77 @@ export function unformatMessage(message: LocalMessage): MessageResponse {
     quoted_message: toMessageResponseBase((message as LocalMessage).quoted_message),
   } as MessageResponse;
 }
+
+/**
+ * Whether a URL points at something the API and other devices can actually fetch.
+ */
+const isRemoteUrl = (url?: string) => !!url && /^https?:\/\//i.test(url.trim());
+
+/**
+ * Strips composer-internal state from a message's attachments, and drops any whose upload never
+ * resolved.
+ *
+ * `localMetadata` is how `AttachmentManager` tracks an upload (its id, the `File`, the local
+ * preview); it must never reach the API. An attachment that still carries it and has no remote
+ * URL was never settled — which is what happens when
+ * `createSendWithPendingUploadsAttachmentsMiddleware` is installed by a UI SDK that does not
+ * implement the rest of the flow (awaiting those uploads before sending). Sending it would store
+ * an attachment pointing at nothing, so it is dropped and logged instead.
+ *
+ * Returns the same message object when there was nothing to change.
+ */
+export const sanitizeOutgoingAttachments = <T extends { attachments?: Attachment[] }>({
+  client,
+  message,
+}: {
+  client: StreamChat;
+  message: T;
+}): T => {
+  const attachments = message.attachments;
+  if (!attachments?.length) return message;
+
+  const unresolved: Attachment[] = [];
+  let changed = false;
+
+  const sanitized = attachments.reduce<Attachment[]>((acc, attachment) => {
+    const { localMetadata, ...rest } = attachment as Attachment & {
+      localMetadata?: Record<string, unknown>;
+    };
+
+    if (!localMetadata) {
+      acc.push(attachment);
+      return acc;
+    }
+
+    changed = true;
+
+    // Any of these pointing at a remote URL means the attachment resolved to something the API
+    // can store and other devices can load.
+    const hasRemoteSource =
+      isRemoteUrl(rest.asset_url) ||
+      isRemoteUrl(rest.image_url) ||
+      isRemoteUrl(rest.og_scrape_url) ||
+      isRemoteUrl(rest.title_link);
+
+    if (hasRemoteSource) {
+      acc.push(rest as Attachment);
+    } else {
+      unresolved.push(rest as Attachment);
+    }
+
+    return acc;
+  }, []);
+
+  if (unresolved.length) {
+    const text = `Dropped ${unresolved.length} attachment(s) whose upload never completed. Composing with pending uploads requires awaiting them before sending.`;
+    const extraData = { attachments: unresolved, message, tags: ['attachments'] };
+
+    client.logger('warn', text, extraData);
+    console.warn(text, extraData);
+  }
+
+  return changed ? { ...message, attachments: sanitized } : message;
+};
 
 export const localMessageToNewMessagePayload = (localMessage: LocalMessage): Message => {
   /* eslint-disable @typescript-eslint/no-unused-vars */

@@ -1,3 +1,5 @@
+import axios from 'axios';
+
 import { MessageComposer, MiddlewareStatus } from '../../../../../../src';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -50,6 +52,32 @@ describe('createUploadErrorHandlerMiddleware', () => {
       .spyOn(composer.client.notifications, 'addError')
       .mockImplementation();
     const { status } = await middleware.handlers.postProcess(setupHandlerParams({}));
+    expect(status).toBeUndefined();
+    expect(addErrorNotificationSpy).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['an axios cancellation', new axios.Cancel('canceled')],
+    ['a DOMException AbortError', new DOMException('Upload aborted', 'AbortError')],
+  ])('does not publish an error notification for %s', async (_label, error) => {
+    // Removing an attachment mid-upload aborts the request through
+    // `UploadManager.deleteUploadRecord`. That is the user getting what they asked for, so it
+    // must not surface as "Attachment upload failed".
+    const { composer, middleware } = setup();
+    const addErrorNotificationSpy = vi
+      .spyOn(composer.client.notifications, 'addError')
+      .mockImplementation();
+
+    const { status } = await middleware.handlers.postProcess(
+      setupHandlerParams({
+        attachment: {
+          localMetadata: { id: 'test-id', uploadState: 'failed' },
+          type: 'file',
+        } as AttachmentPostUploadMiddlewareState['attachment'],
+        error,
+      }),
+    );
+
     expect(status).toBeUndefined();
     expect(addErrorNotificationSpy).not.toHaveBeenCalled();
   });

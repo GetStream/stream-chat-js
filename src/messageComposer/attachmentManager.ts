@@ -27,6 +27,7 @@ import type {
   FileLike,
   FileReference,
   LocalAttachment,
+  LocalAttachmentUploadMetadata,
   LocalNotImageAttachment,
   LocalUploadAttachment,
   UploadPermissionCheckResult,
@@ -34,6 +35,7 @@ import type {
 import type { ChannelResponse, DraftMessage, LocalMessage } from '../types';
 import type { MessageComposer } from './messageComposer';
 import { mergeWithDiff } from '../utils/mergeWith';
+import { isUploadCancellation } from '../uploadManager';
 
 export type FileUploadFilter = (file: Partial<LocalUploadAttachment>) => boolean;
 
@@ -233,6 +235,7 @@ export class AttachmentManager {
       ...attachment,
       localMetadata: {
         ...attachment.localMetadata,
+        uploadConfirmationPending: false,
         uploadProgress: undefined,
         uploadState: 'failed',
       },
@@ -332,8 +335,27 @@ export class AttachmentManager {
     }
   };
 
+  /**
+   * Releases a local preview URL the SDK minted, if it minted one.
+   *
+   * Only `blob:` URLs are ours to revoke: `toLocalUploadAttachment` puts a
+   * `URL.createObjectURL` result in `previewUri` for a `File`, but for a React Native
+   * `FileReference` it stores the caller's own native file URI, which must be left alone.
+   */
+  private revokePreviewUri = (attachment: LocalAttachment) => {
+    const previewUri = (
+      attachment.localMetadata as Partial<LocalAttachmentUploadMetadata>
+    )?.previewUri;
+
+    if (previewUri?.startsWith('blob:')) URL.revokeObjectURL?.(previewUri);
+  };
+
   removeAttachments = (localAttachmentIds: string[]) => {
     if (!localAttachmentIds.length) return;
+
+    const removedAttachments = this.attachments.filter((attachment) =>
+      localAttachmentIds.includes(attachment.localMetadata?.id),
+    );
 
     this.state.partialNext({
       attachments: this.attachments.filter(
@@ -344,6 +366,18 @@ export class AttachmentManager {
     for (const id of localAttachmentIds) {
       this.client.uploadManager.deleteUploadRecord(id);
     }
+
+    // Removal is the end of the line for these attachments, so the preview blob goes with
+    // them - otherwise every removed (or cancelled mid-upload) attachment leaks one blob URL
+    // until the page unloads. Revoked after the record is deleted, so nothing is still
+    // rendering from it.
+    //
+    // Deliberately not done in `initState`/`restoreSnapshot`: those drop the composer's *view*
+    // of the attachments without ending their life. A finished upload has already had its
+    // `previewUri` revoked and removed by the post-upload middleware, and an unfinished one may
+    // still be rendered by whoever took it over (an optimistic message sent with the upload
+    // still in flight, for instance).
+    removedAttachments.forEach(this.revokePreviewUri);
   };
 
   getUploadConfigCheck = async (
@@ -619,21 +653,30 @@ export class AttachmentManager {
           ...attachment.localMetadata,
           uploadState: 'failed',
           uploadProgress: undefined,
+          // `false`, not `undefined`: these updates go through `updateAttachment`, which merges
+          // via `mergeWith` — and that skips `undefined` source values, so `undefined` would
+          // leave a stale `true` in place.
+          uploadConfirmationPending: false,
         },
       };
 
-      this.client.notifications.addError({
-        message: 'Error uploading attachment',
-        origin: {
-          emitter: 'AttachmentManager',
-          context: { attachment, failedAttachment },
-        },
-        options: {
-          type: 'api:attachment:upload:failed',
-          metadata: { reason },
-          originalError: error instanceof Error ? error : undefined,
-        },
-      });
+      // A cancellation is the user getting what they asked for, so it gets no error
+      // notification. This path predates the post-upload middleware chain and notifies
+      // directly, so it needs the same guard `createUploadErrorHandlerMiddleware` applies.
+      if (!isUploadCancellation(error)) {
+        this.client.notifications.addError({
+          message: 'Error uploading attachment',
+          origin: {
+            emitter: 'AttachmentManager',
+            context: { attachment, failedAttachment },
+          },
+          options: {
+            type: 'api:attachment:upload:failed',
+            metadata: { reason },
+            originalError: error instanceof Error ? error : undefined,
+          },
+        });
+      }
 
       this.updateAttachment(failedAttachment);
       return failedAttachment;
@@ -654,6 +697,8 @@ export class AttachmentManager {
         ...attachment.localMetadata,
         uploadState: 'finished',
         uploadProgress: undefined,
+        // See the note in the failure branch: `undefined` cannot clear through `mergeWith`.
+        uploadConfirmationPending: false,
       },
     };
 
@@ -715,6 +760,8 @@ export class AttachmentManager {
             ...attachment.localMetadata,
             uploadState: error ? 'failed' : 'finished',
             uploadProgress: undefined,
+            // See the note in `uploadAttachment`: `undefined` cannot clear through `mergeWith`.
+            uploadConfirmationPending: false,
           },
         },
         error,
@@ -759,6 +806,7 @@ export class AttachmentManager {
           ...attachment.localMetadata,
           uploadState: 'uploading',
           uploadProgress: this.config.trackUploadProgress ? 0 : undefined,
+          uploadConfirmationPending: false,
         },
       },
     ]);
@@ -773,6 +821,7 @@ export class AttachmentManager {
             ...attachment.localMetadata,
             uploadState: 'uploading',
             uploadProgress: nextUpload.uploadProgress,
+            uploadConfirmationPending: nextUpload.uploadConfirmationPending,
           },
         });
       },

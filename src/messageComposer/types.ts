@@ -119,6 +119,11 @@ export type LocalAttachmentUploadMetadata = {
    */
   previewUri?: string;
   uploadState: AttachmentLoadingState;
+  /**
+   * Mirrors {@link UploadRecord.uploadConfirmationPending}: every byte has been sent, but the server has
+   * not confirmed yet - not returned response to the upload request. Render an indeterminate indicator rather than a full bar.
+   */
+  uploadConfirmationPending?: boolean;
   uploadPermissionCheck?: UploadPermissionCheckResult; // added new
   /** 0–100 while uploading when progress tracking is enabled; undefined otherwise or when indeterminate */
   uploadProgress?: number;

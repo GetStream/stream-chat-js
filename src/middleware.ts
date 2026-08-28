@@ -58,6 +58,17 @@ export class MiddlewareExecutor<TValue, THandlers extends string> {
     this.id = generateUUIDv4();
   }
 
+  /**
+   * The middleware currently installed, in execution order.
+   *
+   * Read-only: use `use` / `insert` / `replace` / `setOrder` / `remove` to change the chain. It
+   * exists so components can ask what the chain is capable of - a middleware may declare
+   * behaviour its host has to account for, and the host has no other way to find out.
+   */
+  get installedMiddleware(): ReadonlyArray<Middleware<TValue, THandlers>> {
+    return this.middleware;
+  }
+
   use(middleware: Middleware<TValue, THandlers> | Middleware<TValue, THandlers>[]) {
     this.middleware = this.middleware.concat(middleware);
     return this;

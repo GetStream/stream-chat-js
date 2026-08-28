@@ -34,7 +34,71 @@ const getInitialState = (
   ),
 });
 
+const makeComposerOwning = (ids: string[]) =>
+  ({
+    attachmentManager: {
+      get attachmentsById() {
+        return Object.fromEntries(ids.map((id) => [id, { localMetadata: { id } }]));
+      },
+    },
+  }) as unknown as MessageComposer;
+
 describe('createPostUploadAttachmentEnrichmentMiddleware', () => {
+  it('leaves the preview blob alone once the composer no longer owns the attachment', async () => {
+    // With `attachments.sendWithPendingUploads` an attachment can be handed to a message while
+    // its upload is still running. Revoking here would blank out the preview of a message that
+    // is still waiting on its other uploads.
+    const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation();
+    const attachment = AttachmentManager.toLocalUploadAttachment(
+      new File([''], 'handed-over.pdf', { type: 'application/pdf' }),
+    );
+    attachment.localMetadata.previewUri = 'blob:handed-over';
+
+    const middleware = createPostUploadAttachmentEnrichmentMiddleware(
+      makeComposerOwning([]),
+    );
+
+    const result = await middleware.handlers.postProcess(
+      setupHandlerParams({
+        attachment,
+        response: { file: 'https://example.com/file/url' },
+      }),
+    );
+
+    expect(revokeObjectURLSpy).not.toHaveBeenCalled();
+    expect(result.state.attachment?.localMetadata.previewUri).toBe('blob:handed-over');
+    // Enrichment itself still happens.
+    expect(result.state.attachment).toMatchObject({
+      asset_url: 'https://example.com/file/url',
+    });
+
+    revokeObjectURLSpy.mockRestore();
+  });
+
+  it('revokes the preview blob while the composer still owns the attachment', async () => {
+    const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation();
+    const attachment = AttachmentManager.toLocalUploadAttachment(
+      new File([''], 'still-mine.pdf', { type: 'application/pdf' }),
+    );
+    attachment.localMetadata.previewUri = 'blob:still-mine';
+
+    const middleware = createPostUploadAttachmentEnrichmentMiddleware(
+      makeComposerOwning([attachment.localMetadata.id]),
+    );
+
+    const result = await middleware.handlers.postProcess(
+      setupHandlerParams({
+        attachment,
+        response: { file: 'https://example.com/file/url' },
+      }),
+    );
+
+    expect(revokeObjectURLSpy).toHaveBeenCalledWith('blob:still-mine');
+    expect(result.state.attachment?.localMetadata.previewUri).toBeUndefined();
+
+    revokeObjectURLSpy.mockRestore();
+  });
+
   it('revokes blob: previewUri when enriching attachment', async () => {
     const middleware = createPostUploadAttachmentEnrichmentMiddleware();
     const revokeObjectURLSpy = vi

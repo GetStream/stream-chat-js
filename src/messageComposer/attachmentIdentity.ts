@@ -1,5 +1,6 @@
 import type { Attachment, SharedLocationResponse } from '../types';
 import type {
+  AttachmentLoadingState,
   AudioAttachment,
   FileAttachment,
   GiphyAttachment,
@@ -26,6 +27,32 @@ export const isLocalUploadAttachment = (
   attachment: unknown,
 ): attachment is LocalUploadAttachment =>
   !!(attachment as LocalAttachment)?.localMetadata?.uploadState;
+
+/**
+ * Upload states meaning "the bytes are not on the CDN yet, but they are on their way".
+ * `blocked` and `failed` are excluded - those never resolve on their own.
+ *
+ * Typed against {@link AttachmentLoadingState} rather than `string`, so renaming a state fails
+ * the build instead of silently making this list match nothing - it decides what gets sent.
+ */
+const PENDING_UPLOAD_STATES: ReadonlyArray<AttachmentLoadingState> = [
+  'pending',
+  'uploading',
+];
+
+/** Whether an upload for this attachment is still expected to resolve. */
+export const isPendingUpload = (
+  attachment: unknown,
+): attachment is LocalUploadAttachment =>
+  isLocalUploadAttachment(attachment) &&
+  PENDING_UPLOAD_STATES.includes(attachment.localMetadata.uploadState);
+
+/** Whether this attachment's upload already resolved to a URL. */
+export const isFinishedUpload = (
+  attachment: unknown,
+): attachment is LocalUploadAttachment =>
+  isLocalUploadAttachment(attachment) &&
+  attachment.localMetadata.uploadState === 'finished';
 
 export const isFileAttachment = (
   attachment: Attachment | LocalAttachment,

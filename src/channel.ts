@@ -9,6 +9,7 @@ import {
   logChatPromiseExecution,
   messageSetPagination,
   normalizeQuerySort,
+  sanitizeOutgoingAttachments,
 } from './utils';
 import type { StreamChat } from './client';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
@@ -212,14 +213,17 @@ export class Channel {
    *
    * @return {Promise<SendMessageAPIResponse>} The Server Response
    */
-  async _sendMessage(message: Message, options?: SendMessageOptions) {
-    return await this.getClient().post<SendMessageAPIResponse>(
-      this._channelURL() + '/message',
-      {
-        message,
-        ...options,
-      },
-    );
+  async _sendMessage(rawMessage: Message, options?: SendMessageOptions) {
+    const client = this.getClient();
+    const message = sanitizeOutgoingAttachments({
+      client,
+      message: rawMessage,
+    });
+
+    return await client.post<SendMessageAPIResponse>(this._channelURL() + '/message', {
+      message,
+      ...options,
+    });
   }
 
   async sendMessage(message: Message, options?: SendMessageOptions) {

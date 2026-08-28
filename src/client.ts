@@ -36,6 +36,7 @@ import {
   normalizeQuerySort,
   randomId,
   retryInterval,
+  sanitizeOutgoingAttachments,
   sleep,
   toUpdatedMessagePayload,
 } from './utils';
@@ -3430,7 +3431,12 @@ export class StreamChat {
     }
 
     // should not include user object
-    const payload = toUpdatedMessagePayload(message);
+    // Sanitized at the point of sending, which is the only place every path converges: the
+    // offline replay of a queued `update-message` task calls this method directly.
+    const payload = sanitizeOutgoingAttachments({
+      client: this,
+      message: toUpdatedMessagePayload(message),
+    });
 
     // add user_id (if exists)
     if (typeof partialUserOrUserId === 'string') {
