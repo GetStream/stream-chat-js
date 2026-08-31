@@ -3,11 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StreamChat, UserGroupResponse } from '../../../../src';
 import { UserGroupPaginator } from '../../../../src/pagination/paginators/UserGroupPaginator';
 import { getClientWithUser } from '../../test-utils/getClient';
+import { convertDateToTimestamp } from '../../test-utils/time';
 
 const makeGroup = (id: string, createdAt: string): UserGroupResponse => ({
   id,
   name: id,
-  created_at: new Date(createdAt),
+  created_at: convertDateToTimestamp(createdAt),
   updated_at: new Date(createdAt),
 });
 

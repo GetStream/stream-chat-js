@@ -26,6 +26,8 @@ import { getClientWithUser } from '../test-utils/getClient';
 import * as utils from '../../../src/utils';
 import { AxiosError, CanceledError } from 'axios';
 import { MockOfflineDB } from './MockOfflineDB';
+import { nsToDate, nsToMs } from '../../../src/utils/time';
+import { convertDateToTimestamp } from '../test-utils/time';
 
 describe('OfflineSupportApi', () => {
   let client: StreamChat;
@@ -1146,10 +1148,10 @@ describe('OfflineSupportApi', () => {
             {
               messages: [
                 {
-                  created_at: '2024-01-01T00:00:00.000Z',
+                  created_at: convertDateToTimestamp('2024-01-01T00:00:00.000Z'),
                   id: 'unsent',
                   status: 'failed',
-                  updated_at: '2024-01-01T00:00:00.000Z',
+                  updated_at: convertDateToTimestamp('2024-01-01T00:00:00.000Z'),
                 },
               ],
             },
@@ -1157,9 +1159,9 @@ describe('OfflineSupportApi', () => {
 
           const [failed] = await offlineDb.getFailedMessages({ cid: 'messaging:c1' });
 
-          // The paginator compares `updated_at` as a Date, so a raw storable row cannot be re-ingested.
-          expect(failed.created_at).toBeInstanceOf(Date);
-          expect(failed.updated_at).toBeInstanceOf(Date);
+          // The paginator compares `updated_at` as a wire number, so a raw storable row cannot be re-ingested.
+          expect(failed.created_at).toEqual(expect.any(Number));
+          expect(failed.updated_at).toEqual(expect.any(Number));
         });
 
         it('returns nothing when the channel is not in the database', async () => {
@@ -1605,7 +1607,7 @@ describe('OfflineSupportApi', () => {
           ...baseEvent,
           channel: {
             cid: 'messaging:to-truncate',
-            truncated_at: '2025-05-20T10:00:00Z',
+            truncated_at: convertDateToTimestamp('2025-05-20T10:00:00Z'),
           } as ChannelResponse,
         };
 
@@ -1676,7 +1678,7 @@ describe('OfflineSupportApi', () => {
 
           expect(countUnreadSpy).toHaveBeenCalled();
           expect(countUnreadSpy).toHaveBeenCalledWith(
-            new Date(truncatedEvent.channel!.truncated_at as unknown as string),
+            truncatedEvent.channel!.truncated_at,
           );
 
           expect(offlineDb.upsertReads).toHaveBeenCalledWith({
@@ -1784,7 +1786,7 @@ describe('OfflineSupportApi', () => {
             ...truncatedEvent,
             channel: {
               cid: localChannelResponse.channel.cid,
-              truncated_at: '2025-05-20T10:00:00Z',
+              truncated_at: convertDateToTimestamp('2025-05-20T10:00:00Z'),
             } as ChannelResponse,
           };
           vi.spyOn(
@@ -1821,7 +1823,7 @@ describe('OfflineSupportApi', () => {
             ...truncatedEvent,
             channel: {
               cid: localChannelResponse.channel.cid,
-              truncated_at: '2025-05-20T10:00:00Z',
+              truncated_at: convertDateToTimestamp('2025-05-20T10:00:00Z'),
             } as ChannelResponse,
           };
 
@@ -3249,12 +3251,13 @@ describe('OfflineDBSyncManager', () => {
         expect(upsertUserSyncStatusSpy).toHaveBeenCalled();
       });
 
-      // `/sync` hands back the `WSEvent` union with its timestamps still raw, because the codegen
-      // emits no decoder for a model whose only decodable field is a union. They arrive as
-      // nanosecond integers, and `new Date(1786219962651957000)` overflows the Date range, so
-      // handing one to the mappers threw `RangeError: Date value out of bounds` — which the catch
-      // in `sync()` reads as the "too many events" API error and answers with `resetDB()`.
-      describe('decoding the events the sync API returns', () => {
+      // `/sync` hands back the `WSEvent` union with the timestamps the API put on the wire: unix
+      // nanosecond integers. Nothing decodes them any more, which is the point — this suite pins
+      // the pass-through, and pins that consumers convert with `nsToMs`/`nsToDate` rather than
+      // handing a raw wire value to `new Date`. `new Date(1786219962651957000)` overflows the Date
+      // range, and the resulting `RangeError` used to be misread by the catch in `sync()` as the
+      // "too many events" API error, which answered with `resetDB()`.
+      describe('the events the sync API returns', () => {
         const NANOS = 1786219962651957000;
         const EXPECTED_MS = Math.floor(NANOS / 1000000);
 
@@ -3269,7 +3272,7 @@ describe('OfflineDBSyncManager', () => {
           return handleEventSpy.mock.calls.map(([{ event }]) => event);
         };
 
-        it('turns nanosecond timestamps into dates before anything persists them', async () => {
+        it('passes nanosecond timestamps through untouched, nested ones included', async () => {
           const [event] = await syncWithEvents([
             {
               type: 'message.new',
@@ -3279,21 +3282,24 @@ describe('OfflineDBSyncManager', () => {
             },
           ]);
 
-          expect(event.created_at).toBeInstanceOf(Date);
-          expect(event.created_at.getTime()).toBe(EXPECTED_MS);
-          // The nested message is the part that actually gets written, so the decode has to recurse.
-          expect(event.message.created_at).toBeInstanceOf(Date);
-          expect(event.message.created_at.getTime()).toBe(EXPECTED_MS);
-          expect(event.message.updated_at).toBeInstanceOf(Date);
+          expect(event.created_at).toBe(NANOS);
+          // The nested message is the part that actually gets written, so it matters just as much.
+          expect(event.message.created_at).toBe(NANOS);
+          expect(event.message.updated_at).toBe(NANOS);
         });
 
-        it('yields dates the mappers can serialize', async () => {
+        it('yields timestamps a consumer can convert without overflowing Date', async () => {
           const [event] = await syncWithEvents([
             { type: 'message.new', created_at: NANOS },
           ]);
 
-          // Undecoded, this is the exact call that threw.
-          expect(() => new Date(event.created_at).toISOString()).not.toThrow();
+          // Handing the raw wire value to `new Date` is the call that threw `RangeError`; going
+          // through the conversion helpers is what every consumer must do instead.
+          expect(() => new Date(event.created_at).toISOString()).toThrow(RangeError);
+          expect(nsToMs(event.created_at)).toBe(EXPECTED_MS);
+          expect(nsToDate(event.created_at).toISOString()).toBe(
+            new Date(EXPECTED_MS).toISOString(),
+          );
         });
 
         it('passes an event type the spec does not know through rather than dropping it', async () => {

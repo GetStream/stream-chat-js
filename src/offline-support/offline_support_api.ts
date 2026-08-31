@@ -33,6 +33,7 @@ import {
   localMessageToNewMessagePayload,
   runDetached,
 } from '../utils';
+import { nowNs } from '../utils/time';
 import { isMessageUpdateReplayable } from './util';
 import { QUEUEABLE_OPERATIONS, runQueueableOperation } from './queueableOperations';
 import type { QueueableOperation } from './queueableOperations';
@@ -986,7 +987,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     execute?: boolean;
   }) => {
     const {
-      received_at: last_read = new Date(),
+      received_at: last_read = nowNs(),
       last_read_message_id,
       // @ts-expect-error property missing
       unread_messages = 0,
@@ -1152,7 +1153,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
         let unreadCount = 0;
         if (truncated_at) {
-          unreadCount = activeChannel.countUnread(new Date(truncated_at));
+          unreadCount = activeChannel.countUnread(truncated_at);
         }
 
         const upsertReadQueries = await this.upsertReads({

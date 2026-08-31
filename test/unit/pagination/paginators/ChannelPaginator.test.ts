@@ -16,6 +16,7 @@ import { generateMsg } from '../../test-utils/generateMessage';
 import type { FieldToDataResolver } from '../../../../src/pagination/types.normalization';
 import { MockOfflineDB } from '../../offline-support/MockOfflineDB';
 import * as utils from '../../../../src/utils';
+import { convertDateToTimestamp } from '../../test-utils/time';
 import {
   DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES,
   DEFAULT_QUERY_CHANNELS_RETRY_COUNT,
@@ -45,11 +46,11 @@ describe('ChannelPaginator', () => {
 
     channel1 = new Channel(client, 'type', 'id1', {});
     setLastMessageAt(channel1, new Date('1972-01-01T08:39:35.235Z'));
-    channel1.data!.updated_at = '1972-01-01T08:39:35.235Z';
+    channel1.data!.updated_at = convertDateToTimestamp('1972-01-01T08:39:35.235Z');
 
     channel2 = new Channel(client, 'type', 'id1', {});
     setLastMessageAt(channel2, new Date('1971-01-01T08:39:35.235Z'));
-    channel2.data!.updated_at = '1971-01-01T08:39:35.235Z';
+    channel2.data!.updated_at = convertDateToTimestamp('1971-01-01T08:39:35.235Z');
   });
 
   describe('constructor()', () => {
@@ -69,10 +70,10 @@ describe('ChannelPaginator', () => {
       expect(paginator.sortComparator).toBeDefined();
 
       setLastMessageAt(channel1, new Date('1970-01-01T08:39:35.235Z'));
-      channel1.data!.updated_at = '1970-01-01T08:39:35.235Z';
+      channel1.data!.updated_at = convertDateToTimestamp('1970-01-01T08:39:35.235Z');
 
       setLastMessageAt(channel2, new Date('1971-01-01T08:39:35.235Z'));
-      channel2.data!.updated_at = '1971-01-01T08:39:35.235Z';
+      channel2.data!.updated_at = convertDateToTimestamp('1971-01-01T08:39:35.235Z');
 
       expect(paginator.sortComparator(channel1, channel2)).toBe(1); // channel2 comes before channel1
       expect(paginator.filterBuilder.buildFilters()).toStrictEqual({});
@@ -172,10 +173,10 @@ describe('ChannelPaginator', () => {
       expect(paginator.sortComparator(channel1, channel2)).toBe(keepOrder);
 
       setLastMessageAt(channel1, new Date('1970-01-01T08:39:35.235Z'));
-      channel1.data!.updated_at = '1970-01-01T08:39:35.235Z';
+      channel1.data!.updated_at = convertDateToTimestamp('1970-01-01T08:39:35.235Z');
 
       setLastMessageAt(channel2, new Date('1971-01-01T08:39:35.235Z'));
-      channel2.data!.updated_at = '1971-01-01T08:39:35.235Z';
+      channel2.data!.updated_at = convertDateToTimestamp('1971-01-01T08:39:35.235Z');
 
       expect(paginator.sortComparator(channel1, channel2)).toBe(changeOrder);
     });
@@ -239,16 +240,16 @@ describe('ChannelPaginator', () => {
 
       // compares channel1.state.last_message_at with channel2.data!.updated_at
       setLastMessageAt(channel1, new Date('1975-01-01T08:39:35.235Z'));
-      channel1.data!.updated_at = '1970-01-01T08:39:35.235Z';
+      channel1.data!.updated_at = convertDateToTimestamp('1970-01-01T08:39:35.235Z');
       setLastMessageAt(channel2, new Date('1971-01-01T08:39:35.235Z'));
-      channel2.data!.updated_at = '1973-01-01T08:39:35.235Z';
+      channel2.data!.updated_at = convertDateToTimestamp('1973-01-01T08:39:35.235Z');
       expect(paginator.sortComparator(channel1, channel2)).toBe(changeOrder);
 
       // compares channel2.state.last_message_at with channel1.data!.updated_at
       setLastMessageAt(channel1, new Date('1975-01-01T08:39:35.235Z'));
-      channel1.data!.updated_at = '1976-01-01T08:39:35.235Z';
+      channel1.data!.updated_at = convertDateToTimestamp('1976-01-01T08:39:35.235Z');
       setLastMessageAt(channel2, new Date('1978-01-01T08:39:35.235Z'));
-      channel2.data!.updated_at = '1973-01-01T08:39:35.235Z';
+      channel2.data!.updated_at = convertDateToTimestamp('1973-01-01T08:39:35.235Z');
       expect(paginator.sortComparator(channel1, channel2)).toBe(keepOrder);
     });
     it('should sort by member_count', () => {
@@ -308,12 +309,12 @@ describe('ChannelPaginator', () => {
         sort: [{ field: 'updated_at', direction: 1 }],
       });
 
-      channel1.data!.updated_at = '1972-01-01T08:39:35.235Z';
-      channel2.data!.updated_at = '1971-01-01T08:39:35.235Z';
+      channel1.data!.updated_at = convertDateToTimestamp('1972-01-01T08:39:35.235Z');
+      channel2.data!.updated_at = convertDateToTimestamp('1971-01-01T08:39:35.235Z');
       expect(paginator.sortComparator(channel1, channel2)).toBe(changeOrder);
 
-      channel1.data!.updated_at = '1970-01-01T08:39:35.235Z';
-      channel2.data!.updated_at = '1971-01-01T08:39:35.235Z';
+      channel1.data!.updated_at = convertDateToTimestamp('1970-01-01T08:39:35.235Z');
+      channel2.data!.updated_at = convertDateToTimestamp('1971-01-01T08:39:35.235Z');
       expect(paginator.sortComparator(channel1, channel2)).toBe(keepOrder);
     });
     it('should sort by custom field', () => {

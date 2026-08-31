@@ -41,7 +41,6 @@ import type {
   UpsertConfigRequest,
   UpsertConfigResponse,
 } from '../models';
-import { decoders } from '../model-decoders/decoders';
 
 export class ModerationApi {
   constructor(public readonly apiClient: ApiClient) {}
@@ -74,8 +73,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['GetActionConfigResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -107,8 +104,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['UpsertActionConfigResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -132,8 +127,6 @@ export class ModerationApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['BulkUpsertActionConfigResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -159,8 +152,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['BulkDeleteActionConfigResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -183,8 +174,6 @@ export class ModerationApi {
       undefined,
       requestOptions,
     );
-
-    decoders['DeleteActionConfigResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -212,8 +201,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['AppealResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -234,8 +221,6 @@ export class ModerationApi {
       undefined,
       requestOptions,
     );
-
-    decoders['GetAppealResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -264,8 +249,6 @@ export class ModerationApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['QueryAppealsResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -297,8 +280,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['BulkActionAppealsResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -328,8 +309,6 @@ export class ModerationApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['ModerationBanResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -374,8 +353,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['UpsertConfigResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -402,8 +379,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['DeleteModerationConfigResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -427,8 +402,6 @@ export class ModerationApi {
       undefined,
       requestOptions,
     );
-
-    decoders['GetConfigResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -458,8 +431,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['QueryModerationConfigsResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -487,8 +458,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['FlagItemResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -512,8 +481,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['MuteResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -529,8 +496,6 @@ export class ModerationApi {
       undefined,
       requestOptions,
     );
-
-    decoders['ListQueuesResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -558,8 +523,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['QueueResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -580,8 +543,6 @@ export class ModerationApi {
       undefined,
       requestOptions,
     );
-
-    decoders['QueueResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -610,8 +571,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['QueueResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -633,8 +592,6 @@ export class ModerationApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['QueueResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -668,8 +625,6 @@ export class ModerationApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['QueryReviewQueueResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -715,8 +670,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['SubmitActionResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -740,8 +693,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['UnbanResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -763,8 +714,6 @@ export class ModerationApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['UnmuteResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }

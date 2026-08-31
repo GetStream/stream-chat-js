@@ -116,10 +116,18 @@ const dataFieldFilterResolver: FieldToDataResolver<LocalMessage> = {
   resolve: (message, path) => resolveDotPathValue(message, path),
 };
 
-export const getMessageCreatedAtTimestamp = (message: LocalMessage): number | null => {
-  if (!(message.created_at instanceof Date)) return null;
-  const timestamp = message.created_at.getTime();
-  return Number.isFinite(timestamp) ? timestamp : null;
+/**
+ * A message's `created_at` as the comparable wire timestamp (unix nanoseconds), or `null` when it
+ * is absent or not a finite number.
+ *
+ * Accepts `null`/`undefined` so callers holding an optional message (e.g.
+ * `MessagePaginator.lastMessage`) do not each repeat the guard.
+ */
+export const getMessageCreatedAtTimestamp = (
+  message: LocalMessage | null | undefined,
+): number | null => {
+  const timestamp = message?.created_at;
+  return typeof timestamp === 'number' && Number.isFinite(timestamp) ? timestamp : null;
 };
 
 export type MessagePaginatorOptions = {
@@ -1086,7 +1094,7 @@ export class MessageIntervalPaginator extends BasePaginator<
     lastReadAt,
     messages,
   }: {
-    lastReadAt: Date;
+    lastReadAt: number;
     messages: LocalMessage[];
   }): { firstUnreadMessageId: string | null; lastReadMessageId: string | null } => {
     // Messages are expected in chronological order. We find:
@@ -1095,7 +1103,7 @@ export class MessageIntervalPaginator extends BasePaginator<
     //
     // If the page starts after lastReadAt, the entire page is unread and the first message is
     // used as unread anchor (legacy "whole channel is unread" behavior for this queried window).
-    const lastReadTimestamp = lastReadAt.getTime();
+    const lastReadTimestamp = lastReadAt;
     if (!Number.isFinite(lastReadTimestamp) || !messages.length) {
       return { firstUnreadMessageId: null, lastReadMessageId: null };
     }
@@ -1224,13 +1232,13 @@ export class MessageIntervalPaginator extends BasePaginator<
    * `isTail`/`hasMoreTail` are set; intervals entirely newer keep their flags (unloaded older
    * messages may still sit between them and the cutoff). The active window is re-emitted once.
    */
-  truncate = ({ truncatedAt }: { truncatedAt: Date }) => {
-    const cutoff = truncatedAt.getTime();
-    if (Number.isNaN(cutoff)) return;
+  truncate = ({ truncatedAt }: { truncatedAt: number }) => {
+    const cutoff = truncatedAt;
+    if (!Number.isFinite(cutoff)) return;
 
     const isOld = (item: LocalMessage | undefined) => {
-      const time = item?.created_at ? new Date(item.created_at).getTime() : undefined;
-      return typeof time === 'number' && time < cutoff;
+      const time = getMessageCreatedAtTimestamp(item);
+      return time !== null && time < cutoff;
     };
 
     const removedIds: string[] = [];
@@ -1301,7 +1309,7 @@ export class MessageIntervalPaginator extends BasePaginator<
   }: {
     userId: string;
     hardDelete?: boolean;
-    deletedAt: Date;
+    deletedAt: number;
   }) => {
     const loadedMessages = this.items ?? [];
 
@@ -1453,18 +1461,18 @@ export class MessageIntervalPaginator extends BasePaginator<
 
   /**
    * Map a timestamp to a loaded message — the first message in the latest (head) window whose
-   * `created_at` is >= `timestampMs` (mirrors the legacy `ChannelState.findMessageByTimestamp`
+   * `created_at` is >= `timestamp` (mirrors the legacy `ChannelState.findMessageByTimestamp`
    * lower-bound search), or the newest loaded message when the timestamp is beyond it. Used by the
    * receipts tracker to resolve read/delivered cursors. Searches the newest loaded window — where
    * read cursors live — which is already sorted, so this is O(log n) with no re-sort.
    */
   findItemByTimestamp = (
-    timestampMs: number,
+    timestamp: number,
     exactTsMatch = false,
   ): LocalMessage | null => {
     const items = this.headItems; // ascending by created_at
     if (!items.length) return null;
-    // Resolve the last message created AT OR BEFORE `timestampMs` (floor). The sole caller is
+    // Resolve the last message created AT OR BEFORE `timestamp` (floor). The sole caller is
     // read/delivered cursor resolution (MessageReceiptsTracker): the cursor carries the timestamp of
     // the last message a participant reached, so a message created strictly after the cursor has NOT
     // been reached. A ceil match (first message >= target) would over-count it — e.g. a participant
@@ -1473,7 +1481,7 @@ export class MessageIntervalPaginator extends BasePaginator<
     // the floor is the item immediately before it.
     const firstAfter = lowerBound(items.length, (i) => {
       const t = getMessageCreatedAtTimestamp(items[i]);
-      return t === null || t > timestampMs;
+      return t === null || t > timestamp;
     });
     if (firstAfter === 0) return null; // target precedes every loaded message
     const found = items[firstAfter - 1];
@@ -1482,7 +1490,7 @@ export class MessageIntervalPaginator extends BasePaginator<
     // server timestamp) cannot be located by timestamp.
     if (foundTimestamp === null) return null;
     if (!exactTsMatch) return found;
-    return foundTimestamp === timestampMs ? found : null;
+    return foundTimestamp === timestamp ? found : null;
   };
 
   filterQueryResults = (items: LocalMessage[]) =>

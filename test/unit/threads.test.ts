@@ -19,6 +19,8 @@ import {
 } from '../../src';
 
 import { describe, it, beforeEach, expect, afterEach } from 'vitest';
+import { dateToNs, msToNs, nowNs } from '../../src/utils/time';
+import { convertDateToTimestamp } from './test-utils/time';
 
 const TEST_USER_ID = 'observer';
 
@@ -177,11 +179,11 @@ describe('Threads 2.0', () => {
       const thread = createTestThread({
         latest_replies: [],
         reply_count: 0,
-        last_message_at: '2030-01-01T00:00:00.000Z',
+        last_message_at: convertDateToTimestamp('2030-01-01T00:00:00.000Z'),
       });
       // The server floor seeds the sort key even with no replies loaded to display.
-      expect(thread.messagePaginator.lastMessageAt?.getTime()).to.equal(
-        new Date('2030-01-01T00:00:00.000Z').getTime(),
+      expect(thread.messagePaginator.lastMessageAt).to.equal(
+        convertDateToTimestamp('2030-01-01T00:00:00.000Z'),
       );
       expect(thread.messagePaginator.lastMessage).to.be.null;
     });
@@ -222,7 +224,7 @@ describe('Threads 2.0', () => {
       const thread = createMinimalThread({
         draft: {
           channel_cid: channel.cid,
-          created_at: new Date().toISOString(),
+          created_at: nowNs(),
           message: {
             id: draftId,
             text: 'draft text',
@@ -343,9 +345,7 @@ describe('Threads 2.0', () => {
 
           const stateAfter = thread.state.getLatestValue();
           expect(stateAfter.deletedAt).to.be.not.null;
-          expect(stateAfter.deletedAt!.toISOString()).to.equal(
-            updatedMessage.deleted_at!.toISOString(),
-          );
+          expect(stateAfter.deletedAt).to.equal(updatedMessage.deleted_at);
           expect(stateAfter.replyCount).to.equal(updatedMessage.reply_count);
           expect(stateAfter.participants).to.have.lengthOf(1);
           expect(stateAfter.participants?.[0].user_id).to.equal('participant-1');
@@ -941,7 +941,7 @@ describe('Threads 2.0', () => {
           const thread = createTestThread({
             read: [
               {
-                last_read: new Date().toISOString(),
+                last_read: nowNs(),
                 user: { id: TEST_USER_ID },
                 unread_messages: 42,
               },
@@ -960,7 +960,7 @@ describe('Threads 2.0', () => {
           const thread = createTestThread({
             read: [
               {
-                last_read: new Date().toISOString(),
+                last_read: nowNs(),
                 user: { id: TEST_USER_ID },
                 unread_messages: 42,
               },
@@ -1027,7 +1027,7 @@ describe('Threads 2.0', () => {
         const thread = createTestThread({
           read: [
             {
-              last_read: new Date().toISOString(),
+              last_read: nowNs(),
               user: { id: TEST_USER_ID },
               unread_messages: 42,
             },
@@ -1215,7 +1215,7 @@ describe('Threads 2.0', () => {
           const thread = createTestThread({
             read: [
               {
-                last_read: new Date().toISOString(),
+                last_read: nowNs(),
                 user: { id: 'bob' },
                 unread_messages: 42,
               },
@@ -1244,7 +1244,7 @@ describe('Threads 2.0', () => {
           const thread = createTestThread({
             read: [
               {
-                last_read: lastReadAt.toISOString(),
+                last_read: dateToNs(lastReadAt),
                 last_read_message_id: '',
                 unread_messages: 42,
                 user: { id: 'bob' },
@@ -1264,14 +1264,12 @@ describe('Threads 2.0', () => {
               channelResponse,
               generateMsg({ id: parentMessageResponse.id }),
             ) as ThreadStateResponse,
-            created_at: createdAt.toISOString(),
+            created_at: dateToNs(createdAt),
           });
 
           const stateAfter = thread.state.getLatestValue();
           expect(stateAfter.read['bob']?.unreadMessageCount).to.equal(0);
-          expect(stateAfter.read['bob']?.lastReadAt.toISOString()).to.equal(
-            createdAt.toISOString(),
-          );
+          expect(stateAfter.read['bob']?.lastReadAt).to.equal(dateToNs(createdAt));
 
           thread.unregisterSubscriptions();
         });
@@ -1282,7 +1280,7 @@ describe('Threads 2.0', () => {
           const thread = createTestThread({
             read: [
               {
-                last_read: new Date().toISOString(),
+                last_read: nowNs(),
                 user: { id: TEST_USER_ID },
                 unread_messages: 0,
               },
@@ -1294,7 +1292,7 @@ describe('Threads 2.0', () => {
           client.dispatchEvent({
             type: 'notification.mark_unread',
             user: { id: TEST_USER_ID },
-            created_at: new Date().toISOString(),
+            created_at: nowNs(),
             thread_id: uuidv4(),
             unread_messages: 7,
           });
@@ -1308,7 +1306,7 @@ describe('Threads 2.0', () => {
           const thread = createTestThread({
             read: [
               {
-                last_read: new Date().toISOString(),
+                last_read: nowNs(),
                 user: { id: TEST_USER_ID },
                 unread_messages: 0,
                 last_read_message_id: lastReadMessageId,
@@ -1324,8 +1322,8 @@ describe('Threads 2.0', () => {
           client.dispatchEvent({
             type: 'notification.mark_unread',
             user: { id: TEST_USER_ID },
-            created_at: createdAt.toISOString(),
-            last_read_at: lastReadAt.toISOString(),
+            created_at: dateToNs(createdAt),
+            last_read_at: dateToNs(lastReadAt),
             thread_id: thread.id,
             first_unread_message_id: firstUnreadMessageId,
             unread_messages: 3,
@@ -1336,8 +1334,8 @@ describe('Threads 2.0', () => {
           expect(stateAfter.read[TEST_USER_ID]?.firstUnreadMessageId).to.equal(
             firstUnreadMessageId,
           );
-          expect(stateAfter.read[TEST_USER_ID]?.lastReadAt.toISOString()).to.equal(
-            lastReadAt.toISOString(),
+          expect(stateAfter.read[TEST_USER_ID]?.lastReadAt).to.equal(
+            dateToNs(lastReadAt),
           );
           expect(stateAfter.read[TEST_USER_ID]?.lastReadMessageId).to.equal(
             lastReadMessageId,
@@ -1354,7 +1352,7 @@ describe('Threads 2.0', () => {
           client.dispatchEvent({
             type: 'notification.mark_unread',
             user: { id: otherUserId },
-            created_at: createdAt.toISOString(),
+            created_at: dateToNs(createdAt),
             thread_id: thread.id,
             unread_messages: 4,
           });
@@ -1362,9 +1360,7 @@ describe('Threads 2.0', () => {
           const stateAfter = thread.state.getLatestValue();
           expect(stateAfter.read[otherUserId]?.unreadMessageCount).to.equal(4);
           expect(stateAfter.read[otherUserId]?.user.id).to.equal(otherUserId);
-          expect(stateAfter.read[otherUserId]?.lastReadAt.toISOString()).to.equal(
-            createdAt.toISOString(),
-          );
+          expect(stateAfter.read[otherUserId]?.lastReadAt).to.equal(dateToNs(createdAt));
         });
       });
 
@@ -1408,7 +1404,7 @@ describe('Threads 2.0', () => {
           const thread = createTestThread({
             read: [
               {
-                last_read: new Date().toISOString(),
+                last_read: nowNs(),
                 user: { id: TEST_USER_ID },
                 unread_messages: 0,
               },
@@ -1434,7 +1430,7 @@ describe('Threads 2.0', () => {
             reply_count: 0,
             read: [
               {
-                last_read: new Date().toISOString(),
+                last_read: nowNs(),
                 user: { id: TEST_USER_ID },
                 unread_messages: 0,
               },
@@ -1483,7 +1479,7 @@ describe('Threads 2.0', () => {
             read: [
               {
                 user: { id: TEST_USER_ID },
-                last_read: new Date().toISOString(),
+                last_read: nowNs(),
                 unread_messages: 0,
               },
             ],
@@ -1515,7 +1511,7 @@ describe('Threads 2.0', () => {
             read: [
               {
                 user: { id: TEST_USER_ID },
-                last_read: new Date().toISOString(),
+                last_read: nowNs(),
                 unread_messages: 0,
               },
             ],
@@ -1542,7 +1538,7 @@ describe('Threads 2.0', () => {
         const thread = createTestThread({
           read: [
             {
-              last_read: new Date().toISOString(),
+              last_read: nowNs(),
               user: { id: TEST_USER_ID },
               unread_messages: 42,
             },
@@ -1570,7 +1566,7 @@ describe('Threads 2.0', () => {
         const thread = createTestThread({
           read: [
             {
-              last_read: new Date().toISOString(),
+              last_read: nowNs(),
               user: { id: TEST_USER_ID },
               unread_messages: 0,
             },
@@ -1628,7 +1624,7 @@ describe('Threads 2.0', () => {
           const createdAt = new Date().getTime();
           // five messages "created" second apart
           const messages = Array.from({ length: 5 }, (_, i) =>
-            makeReply({ created_at: new Date(createdAt + 1000 * i).toISOString() }),
+            makeReply({ created_at: msToNs(createdAt + 1000 * i) }),
           );
           const thread = createTestThread({ latest_replies: messages, reply_count: 5 });
           thread.registerSubscriptions();
@@ -1678,14 +1674,10 @@ describe('Threads 2.0', () => {
 
           const stateAfter = thread.state.getLatestValue();
 
-          expect(stateAfter.deletedAt).to.be.a('date');
-          expect(stateAfter.deletedAt!.toISOString()).to.equal(
-            parentMessage.deleted_at!.toISOString(),
-          );
-          expect(stateAfter.parentMessage.deleted_at).to.be.a('date');
-          expect(stateAfter.parentMessage.deleted_at!.toISOString()).to.equal(
-            parentMessage.deleted_at!.toISOString(),
-          );
+          expect(stateAfter.deletedAt).to.be.a('number');
+          expect(stateAfter.deletedAt).to.equal(parentMessage.deleted_at);
+          expect(stateAfter.parentMessage.deleted_at).to.be.a('number');
+          expect(stateAfter.parentMessage.deleted_at).to.equal(parentMessage.deleted_at);
         });
 
         it('reflects quoted_message updates in messagePaginator cache', () => {
@@ -1778,7 +1770,7 @@ describe('Threads 2.0', () => {
               type: 'like',
               user_id: 'other-user',
               message_id: messageId,
-              created_at: new Date().toISOString(),
+              created_at: nowNs(),
             },
           });
 
@@ -1815,7 +1807,7 @@ describe('Threads 2.0', () => {
             client.dispatchEvent({
               type: eventType,
               user: { id: bannedUserId, deleted_at: new Date().toISOString() },
-              created_at: new Date().toISOString(),
+              created_at: nowNs(),
             });
 
             expect(thread.messagePaginator.getItem(replyId)?.type).to.equal('deleted');
@@ -1839,7 +1831,7 @@ describe('Threads 2.0', () => {
               type: 'love',
               user_id: TEST_USER_ID,
               message_id: message.id,
-              created_at: new Date().toISOString(),
+              created_at: nowNs(),
             },
           });
 
@@ -1863,7 +1855,7 @@ describe('Threads 2.0', () => {
               type: 'love',
               user_id: TEST_USER_ID,
               message_id: message.id,
-              created_at: new Date().toISOString(),
+              created_at: nowNs(),
             },
           });
 
@@ -1888,7 +1880,7 @@ describe('Threads 2.0', () => {
                 type: 'love',
                 user_id: TEST_USER_ID,
                 message_id: message.id,
-                created_at: new Date().toISOString(),
+                created_at: nowNs(),
               },
             });
 
@@ -1912,7 +1904,7 @@ describe('Threads 2.0', () => {
                 type: 'love',
                 user_id: TEST_USER_ID,
                 message_id: message.id,
-                created_at: new Date().toISOString(),
+                created_at: nowNs(),
               },
             });
 

@@ -1,5 +1,6 @@
 import type { StreamChat } from '../client';
-import type { ReactionRequest, ReactionResponse, UserResponse } from '../types';
+import type { ReactionResponse, UserResponse } from '../types';
+import { nowNs } from '../utils/time';
 import {
   computeOwnReactions,
   messageWithReactionAdded,
@@ -33,7 +34,13 @@ export const applyReactionLocally = (
     removed = false,
   }: {
     messageId: string;
-    reaction: ReactionRequest;
+    /**
+     * A response-shaped partial the caller already holds — a captured reaction being re-applied by
+     * `undo()`, or a freshly composed one. Response-shaped rather than `ReactionRequest` because its
+     * timestamps are the wire's numbers and it flows straight into the message store and the offline
+     * DB, both of which speak `ReactionResponse`.
+     */
+    reaction: Partial<ReactionResponse> & Pick<ReactionResponse, 'type'>;
     enforceUnique?: boolean;
     removed?: boolean;
   },
@@ -43,7 +50,7 @@ export const applyReactionLocally = (
   const existing = store.get(messageId);
   if (!user || !existing) return;
 
-  const now = new Date();
+  const now = nowNs();
   // Spread `reaction` first so the authoritative fields below win, while still preserving any values
   // the caller already carried (e.g. the original `created_at` when undo re-applies a captured
   // reaction) via `?? now`. `message_id`/`user`/`user_id` are always derived from this message and

@@ -18,6 +18,7 @@ import {
   localMessageToNewMessagePayload,
   logChatPromiseExecution,
 } from './utils';
+import { msToNs, nowNs } from './utils/time';
 import { normalizeUploadFile } from './upload-utils';
 import type { StreamChat } from './client';
 import { chatLoggerSystem } from './logger';
@@ -1340,7 +1341,8 @@ export class Channel extends ChannelApi {
   /**
    * Returns the mute status for the current channel.
    *
-   * @returns An object of the form `{ muted: true | false, createdAt: Date | null, expiresAt: Date | null }`.
+   * @returns An object of the form `{ muted: true | false, createdAt: number | null, expiresAt: number | null }`,
+   *   where the timestamps are unix nanoseconds as the API sends them.
    */
   muteStatus() {
     this._checkInitialized();
@@ -1360,8 +1362,8 @@ export class Channel extends ChannelApi {
     const previous = this.state.getLatestValue().muteStatus;
     const unchanged =
       previous.muted === next.muted &&
-      (previous.createdAt?.getTime() ?? null) === (next.createdAt?.getTime() ?? null) &&
-      (previous.expiresAt?.getTime() ?? null) === (next.expiresAt?.getTime() ?? null);
+      (previous.createdAt ?? null) === (next.createdAt ?? null) &&
+      (previous.expiresAt ?? null) === (next.expiresAt ?? null);
 
     if (unchanged) return;
 
@@ -1415,7 +1417,7 @@ export class Channel extends ChannelApi {
             type: 'typing.start',
             parent_id: parentId,
             ...(options || {}),
-            created_at: new Date(),
+            created_at: nowNs(),
             custom: {},
           },
         },
@@ -1448,7 +1450,7 @@ export class Channel extends ChannelApi {
           type: 'ai_indicator.update',
           message_id: messageId,
           ai_state: state,
-          created_at: new Date(),
+          created_at: nowNs(),
           custom: {},
         },
       },
@@ -1468,7 +1470,7 @@ export class Channel extends ChannelApi {
       {
         event: {
           type: 'ai_indicator.clear',
-          created_at: new Date(),
+          created_at: nowNs(),
           custom: {},
         },
       },
@@ -1488,7 +1490,7 @@ export class Channel extends ChannelApi {
       {
         event: {
           type: 'ai_indicator.stop',
-          created_at: new Date(),
+          created_at: nowNs(),
           custom: {},
         },
       },
@@ -1522,7 +1524,7 @@ export class Channel extends ChannelApi {
           type: 'typing.stop',
           parent_id: parentId,
           ...(options || {}),
-          created_at: new Date(),
+          created_at: nowNs(),
           custom: {},
         },
       },
@@ -1708,7 +1710,7 @@ export class Channel extends ChannelApi {
       channel_id: this.id,
       channel_type: this.type,
       cid: this.cid,
-      created_at: new Date(),
+      created_at: nowNs(),
       last_read_message_id: this.messagePaginator.headmostItem?.id,
       team: this.data?.team,
       type: 'message.read_locally',
@@ -1876,7 +1878,8 @@ export class Channel extends ChannelApi {
   /**
    * Returns the last time the user marked the channel as read. If the user never marked the channel as read, this will return `null`.
    *
-   * @returns The last-read `Date`, `null` if never read, or `undefined` if the user is unset.
+   * @returns The last-read timestamp in unix nanoseconds, `null` if never read, or `undefined` if
+   *   the user is unset.
    */
   lastRead() {
     const { userId } = this.getClient();
@@ -1913,10 +1916,11 @@ export class Channel extends ChannelApi {
   /**
    * Count of unread messages.
    *
-   * @param lastRead - The time that the user read a message (optional, defaults to the current user's read state).
+   * @param lastRead - The time that the user read a message, in unix nanoseconds (optional,
+   *   defaults to the current user's read state).
    * @returns Unread count.
    */
-  countUnread(lastRead?: Date | null) {
+  countUnread(lastRead?: number | null) {
     if (!lastRead) return this.state.unreadCount;
     let count = 0;
     const latestMessages = this.messagePaginator.headItems;
@@ -2483,31 +2487,23 @@ export class Channel extends ChannelApi {
           !(event.type === 'notification.mark_read' && event.thread_id)
         ) {
           const eventUser = event.user;
-          const readAtDate = new Date(event.created_at);
-          const toDate = (value?: string | Date) =>
-            value ? (value instanceof Date ? value : new Date(value)) : undefined;
+          const readAt = event.created_at;
           const userReadState = this._upsertReadState(
             eventUser.id,
             (currentUserReadState) => {
-              const currentDeliveredAt = toDate(currentUserReadState?.last_delivered_at);
+              const currentDeliveredAt = currentUserReadState?.last_delivered_at;
 
               return {
                 // preserve delivery information already known for user
                 ...currentUserReadState,
-                ...(currentUserReadState?.last_read
-                  ? { last_read: toDate(currentUserReadState.last_read) }
-                  : null),
-                ...(currentDeliveredAt
-                  ? { last_delivered_at: currentDeliveredAt }
-                  : null),
-                last_read: readAtDate,
+                last_read: readAt,
                 last_read_message_id: event.last_read_message_id,
                 last_delivered_at:
-                  !currentDeliveredAt || currentDeliveredAt < readAtDate
-                    ? readAtDate
+                  !currentDeliveredAt || currentDeliveredAt < readAt
+                    ? readAt
                     : currentDeliveredAt,
                 last_delivered_message_id:
-                  !currentDeliveredAt || currentDeliveredAt < readAtDate
+                  !currentDeliveredAt || currentDeliveredAt < readAt
                     ? (event.last_read_message_id ??
                       currentUserReadState?.last_delivered_message_id)
                     : currentUserReadState?.last_delivered_message_id,
@@ -2537,21 +2533,26 @@ export class Channel extends ChannelApi {
         if (event.user?.id && event.created_at) {
           const eventUser = event.user;
           const createdAt = event.created_at;
-          const toDate = (value?: string | Date) =>
-            value ? (value instanceof Date ? value : new Date(value)) : undefined;
-          const resolvedDeliveredAt = new Date(event.last_delivered_at ?? createdAt);
+          // `last_delivered_at` is the one timestamp the spec still declares as a bare `type:
+          // string` with no `format: date-time`, so it arrives as RFC3339 while `created_at` on the
+          // very same event arrives as unix nanoseconds. Normalize it into the wire unit so the
+          // comparisons below are unit-consistent; an absent or unparseable value falls back to
+          // `created_at`, which is already in that unit.
+          // TODO: report upstream — this field should be a `date-time` like every other timestamp.
+          const parsedDeliveredAt = event.last_delivered_at
+            ? Date.parse(event.last_delivered_at)
+            : NaN;
+          const resolvedDeliveredAt = Number.isFinite(parsedDeliveredAt)
+            ? msToNs(parsedDeliveredAt)
+            : createdAt;
           const userReadState = this._upsertReadState(
             eventUser.id,
             (currentUserReadState) => {
-              const currentDeliveredAt = toDate(currentUserReadState?.last_delivered_at);
-              const currentReadAt = toDate(currentUserReadState?.last_read);
+              const currentDeliveredAt = currentUserReadState?.last_delivered_at;
+              const currentReadAt = currentUserReadState?.last_read;
 
               return {
                 ...currentUserReadState,
-                ...(currentReadAt ? { last_read: currentReadAt } : null),
-                ...(currentDeliveredAt
-                  ? { last_delivered_at: currentDeliveredAt }
-                  : null),
                 last_delivered_at:
                   currentDeliveredAt && currentDeliveredAt > resolvedDeliveredAt
                     ? currentDeliveredAt
@@ -2562,7 +2563,7 @@ export class Channel extends ChannelApi {
                     : event.last_delivered_message_id,
                 user: eventUser,
                 // delivery events can be received before read events
-                last_read: currentReadAt ?? new Date(createdAt),
+                last_read: currentReadAt ?? createdAt,
                 unread_messages: currentUserReadState?.unread_messages ?? 0,
               };
             },
@@ -2613,7 +2614,7 @@ export class Channel extends ChannelApi {
         break;
       case 'user.messages.deleted':
         if (event.user) {
-          const deletedAt = new Date(event.created_at ?? Date.now());
+          const deletedAt = event.created_at ?? nowNs();
           const hardDelete = !!event.hard_delete;
           this.messagePaginator.applyMessageDeletionForUser({
             userId: event.user.id,
@@ -2663,7 +2664,7 @@ export class Channel extends ChannelApi {
           if (event.user?.id) {
             const eventUser = event.user;
             const eventUserId = eventUser.id;
-            const createdAt = new Date(event.created_at ?? Date.now());
+            const createdAt = event.created_at ?? nowNs();
             const eventMessageId = event.message.id;
             const ownUserId = client.userId;
             this._patchReadState(
@@ -2701,7 +2702,7 @@ export class Channel extends ChannelApi {
                 // every "no last read" consumer already treats a missing value.
                 if (ownUserId && countsAsOwnUnread && !currentReadState[ownUserId]) {
                   nextReadState[ownUserId] = {
-                    last_read: new Date(0),
+                    last_read: 0,
                     unread_messages: 1,
                     user: (client.user ?? { id: ownUserId }) as UserResponse,
                   };
@@ -2738,16 +2739,16 @@ export class Channel extends ChannelApi {
         break;
       case 'channel.truncated':
         if (event.channel?.truncated_at) {
-          const truncatedAtDate = new Date(event.channel.truncated_at);
+          const truncatedAt = event.channel.truncated_at;
 
-          this._setOwnUnreadCount(this.countUnread(truncatedAtDate));
+          this._setOwnUnreadCount(this.countUnread(truncatedAt));
           // Partial truncation: keep messages newer than the cutoff. clearStateAndCache would wipe
           // the whole paginator (readers now source from it), so use the partial truncate. The
           // channel-wide read/unread context is reset by the truncation, so drop the unread snapshot
           // too (clearStateAndCache did this for the full-truncate branch).
-          this.messagePaginator.truncate({ truncatedAt: truncatedAtDate });
+          this.messagePaginator.truncate({ truncatedAt });
           this.messagePaginator.clearUnreadSnapshot();
-          this.pinnedMessagesPaginator.truncate({ truncatedAt: truncatedAtDate });
+          this.pinnedMessagesPaginator.truncate({ truncatedAt });
         } else {
           this._setOwnUnreadCount(0);
           this.messagePaginator.clearStateAndCache();
@@ -2817,7 +2818,7 @@ export class Channel extends ChannelApi {
             // keep the message delivery info
             ...currentUserReadState,
             first_unread_message_id: event.first_unread_message_id,
-            last_read: new Date(lastReadAt),
+            last_read: lastReadAt,
             last_read_message_id: event.last_read_message_id,
             user: eventUser,
             unread_messages: unreadCount,
@@ -3029,7 +3030,7 @@ export class Channel extends ChannelApi {
     // that everything up to this point is not marked as unread
     const readUpdates: ChannelState['read'] = {};
     if (userID != null) {
-      const last_read = this.messagePaginator.lastMessageAt || new Date();
+      const last_read = this.messagePaginator.lastMessageAt || nowNs();
       if (user) {
         readUpdates[user.id] = {
           user: user as UserResponse,
@@ -3043,11 +3044,9 @@ export class Channel extends ChannelApi {
     if (state.read) {
       for (const read of state.read) {
         readUpdates[read.user.id] = {
-          last_delivered_at: read.last_delivered_at
-            ? new Date(read.last_delivered_at)
-            : undefined,
+          last_delivered_at: read.last_delivered_at ?? undefined,
           last_delivered_message_id: read.last_delivered_message_id,
-          last_read: new Date(read.last_read),
+          last_read: read.last_read,
           last_read_message_id: read.last_read_message_id,
           unread_messages: read.unread_messages ?? 0,
           user: read.user,

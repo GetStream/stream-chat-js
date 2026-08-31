@@ -1,9 +1,10 @@
 import { binarySearch } from '../sortCompiler';
+import { dateToNs } from '../../utils/time';
 import type { BasePaginator, CursorDeriveContext, PaginationFlags } from '../paginators';
 import { ComparisonResult } from '../types.normalization';
 
 export const deriveCreatedAtAroundPaginationFlags = <
-  T extends { id: string; created_at: Date },
+  T extends { id: string; created_at: number },
   Q extends { created_at_around?: Date | string },
   P extends BasePaginator<T, Q>,
 >({
@@ -17,15 +18,17 @@ export const deriveCreatedAtAroundPaginationFlags = <
 }: CursorDeriveContext<T, Q> & { paginator: P }): PaginationFlags => {
   let flags: PaginationFlags = { hasMoreHead, hasMoreTail };
   if (!queryShape?.created_at_around) return flags;
-  const createdAtAroundDate = new Date(queryShape.created_at_around);
+  // `created_at_around` is a REQUEST field, so it is still a `Date` (or an ISO string). Items carry
+  // the wire unit, so bring the bound into that unit before comparing the two.
+  const createdAtAround = dateToNs(new Date(queryShape.created_at_around));
   const [firstPageItem, lastPageItem] = [page[0], page.slice(-1)[0]];
 
   // expect ASC order (from oldest to newest)
   const isAboveHeadBound =
-    paginator.sortComparator({ created_at: createdAtAroundDate } as T, lastPageItem) ===
+    paginator.sortComparator({ created_at: createdAtAround } as T, lastPageItem) ===
     ComparisonResult.A_PRECEDES_B;
   const isBelowTailBound =
-    paginator.sortComparator(firstPageItem, { created_at: createdAtAroundDate } as T) ===
+    paginator.sortComparator(firstPageItem, { created_at: createdAtAround } as T) ===
     ComparisonResult.A_PRECEDES_B;
 
   const requestedPageSizeNotMet =
@@ -55,11 +58,11 @@ export const deriveCreatedAtAroundPaginationFlags = <
 
     const midPointByCount = Math.floor(page.length / 2);
     const { insertionIndex } = binarySearch({
-      needle: { created_at: createdAtAroundDate } as T,
+      needle: { created_at: createdAtAround } as T,
       length: page.length,
       getItemAt: (index) => page[index],
-      compare: (a, b) => a.created_at?.getTime() - b.created_at.getTime(),
-      itemIdentityEquals: (a, b) => a.created_at?.getTime() === b.created_at?.getTime(),
+      compare: (a, b) => a.created_at - b.created_at,
+      itemIdentityEquals: (a, b) => a.created_at === b.created_at,
       plateauScan: false,
     });
 

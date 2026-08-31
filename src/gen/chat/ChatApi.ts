@@ -18,6 +18,7 @@ import type {
   CreatePollOptionRequest,
   CreatePollRequest,
   CreateReminderRequest,
+  CreateReminderResponse,
   CreateUserGroupRequest,
   CreateUserGroupResponse,
   DeleteChannelResponse,
@@ -88,7 +89,6 @@ import type {
   QueryThreadsResponse,
   QueryUsersPayload,
   QueryUsersResponse,
-  ReminderResponseData,
   RemoveUserGroupMembersRequest,
   RemoveUserGroupMembersResponse,
   Response,
@@ -149,7 +149,6 @@ import type {
   WrappedUnreadCountsResponse,
   WSAuthMessage,
 } from '../models';
-import { decoders } from '../model-decoders/decoders';
 
 export class ChatApi {
   constructor(public readonly apiClient: ApiClient) {}
@@ -160,8 +159,6 @@ export class ChatApi {
     const response = await this.apiClient.sendRequest<
       StreamResponse<GetApplicationResponse>
     >('GET', '/api/v2/app', undefined, undefined, undefined, undefined, requestOptions);
-
-    decoders['GetApplicationResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -187,8 +184,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['ListBlockListResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -221,8 +216,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['CreateBlockListResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -250,8 +243,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['ImportBlockListResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -275,8 +266,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['Response']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -308,8 +297,6 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['UpdateBlockListResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -349,8 +336,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['QueryChannelsResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -376,8 +361,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['DeleteChannelsResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -401,8 +384,6 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['MarkDeliveredResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -433,8 +414,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['GroupedQueryChannelsResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -456,8 +435,6 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['MarkReadResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -497,8 +474,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['ChannelStateResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -525,8 +500,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['DeleteChannelResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -575,8 +548,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['ChannelStateResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -604,8 +575,6 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['UpdateChannelPartialResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -646,8 +615,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['UpdateChannelResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -673,8 +640,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['Response']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -699,8 +664,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['GetDraftResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -729,8 +692,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['CreateDraftResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -756,8 +717,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['EventResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -782,8 +741,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['Response']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -813,8 +770,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['UploadChannelFileResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -842,8 +797,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['HideChannelResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -868,8 +821,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['Response']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -900,8 +851,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['UploadChannelResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -929,8 +878,6 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['UpdateMemberPartialResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -964,8 +911,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['SendMessageResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -998,8 +943,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['GetManyMessagesResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -1058,8 +1001,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['GetPinnedMessagesResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -1103,8 +1044,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['ChannelStateResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -1131,8 +1070,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['MarkReadResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -1157,8 +1094,6 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['ShowChannelResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -1189,8 +1124,6 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['Response']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -1223,8 +1156,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['TruncateChannelResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -1251,8 +1182,6 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['Response']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -1282,8 +1211,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['QueryDraftsResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -1304,8 +1231,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['MembersResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -1334,8 +1259,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['DeleteMessageResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -1356,8 +1279,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['GetMessageResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -1386,8 +1307,6 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['UpdateMessageResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -1418,8 +1337,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['UpdateMessagePartialResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -1445,8 +1362,6 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['MessageActionResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -1476,8 +1391,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['SendReactionResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -1501,8 +1414,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['DeleteReactionResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -1530,8 +1441,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['GetReactionsResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -1563,8 +1472,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['QueryReactionsResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -1591,8 +1498,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['MessageActionResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -1618,8 +1523,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['PollVoteResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -1643,8 +1546,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['PollVoteResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -1667,8 +1568,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['DeleteReminderResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -1696,15 +1595,13 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['UpdateReminderResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
   async createReminder(
     request: CreateReminderRequest & { message_id: string },
     requestOptions?: StreamRequestOptions,
-  ): Promise<StreamResponse<ReminderResponseData>> {
+  ): Promise<StreamResponse<CreateReminderResponse>> {
     const pathParams = {
       message_id: request?.message_id,
     };
@@ -1713,7 +1610,7 @@ export class ChatApi {
     };
 
     const response = await this.apiClient.sendRequest<
-      StreamResponse<ReminderResponseData>
+      StreamResponse<CreateReminderResponse>
     >(
       'POST',
       '/api/v2/chat/messages/{message_id}/reminders',
@@ -1723,8 +1620,6 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['ReminderResponseData']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -1767,8 +1662,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['GetRepliesResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -1791,8 +1684,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['QueryMessageFlagsResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -1819,8 +1710,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['MuteChannelResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -1843,8 +1732,6 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['UnmuteResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -1869,8 +1756,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['QueryBannedUsersResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -1893,8 +1778,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['QueryFutureChannelBansResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -1924,8 +1807,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['QueryRemindersResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -1946,8 +1827,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['SearchResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -1979,8 +1858,6 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['SyncResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -2015,8 +1892,6 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['QueryThreadsResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -2053,8 +1928,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['GetThreadResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -2082,8 +1955,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['UpdateThreadPartialResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -2101,8 +1972,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['WrappedUnreadCountsResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -2125,8 +1994,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['Response']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -2144,8 +2011,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['ListDevicesResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -2173,8 +2038,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['Response']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -2199,8 +2062,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['CreateGuestResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -2223,8 +2084,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['{}']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -2245,8 +2104,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['GetOGResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -2280,8 +2137,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['PollResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -2314,8 +2169,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['PollResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -2342,8 +2195,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['QueryPollsResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -2365,8 +2216,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['Response']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -2387,8 +2236,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['PollResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -2415,8 +2262,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['PollResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -2441,8 +2286,6 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['PollOptionResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -2470,8 +2313,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['PollOptionResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -2494,8 +2335,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['Response']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -2517,8 +2356,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['PollOptionResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -2548,8 +2385,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['PollVotesResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -2573,8 +2408,6 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['UpsertPushPreferencesResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -2609,8 +2442,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['SearchRolesResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -2631,8 +2462,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['Response']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -2657,8 +2486,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['FileUploadResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -2679,8 +2506,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['Response']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -2707,8 +2532,6 @@ export class ChatApi {
       'multipart/form-data',
       requestOptions,
     );
-
-    decoders['ImageUploadResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -2741,8 +2564,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['ListUserGroupsResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -2770,8 +2591,6 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['CreateUserGroupResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -2806,8 +2625,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['SearchUserGroupsResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -2831,8 +2648,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['Response']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -2859,8 +2674,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['GetUserGroupResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -2890,8 +2703,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['UpdateUserGroupResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -2920,8 +2731,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['AddUserGroupMembersResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -2949,8 +2758,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['RemoveUserGroupMembersResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -2971,8 +2778,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['QueryUsersResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -2998,8 +2803,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['UpdateUsersResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -3024,8 +2827,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['UpdateUsersResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -3043,8 +2844,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['GetBlockedUsersResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -3068,8 +2867,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['BlockUsersResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -3087,8 +2884,6 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    decoders['SharedLocationsResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -3117,8 +2912,6 @@ export class ChatApi {
       requestOptions,
     );
 
-    decoders['SharedLocationResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -3142,8 +2935,6 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['UnblockUsersResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }

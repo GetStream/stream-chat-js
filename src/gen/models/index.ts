@@ -3086,6 +3086,15 @@ export interface CreateReminderRequest {
   remind_at?: Date;
 }
 
+export interface CreateReminderResponse {
+  /**
+   * Duration of the request in milliseconds
+   */
+  duration: string;
+
+  reminder: ReminderResponseData;
+}
+
 export interface CreateUserGroupRequest {
   /**
    * The user friendly name of the user group

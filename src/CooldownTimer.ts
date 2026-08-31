@@ -1,4 +1,6 @@
 import { StateStore } from './store';
+import { getMessageCreatedAtTimestamp } from './pagination/paginators/MessageIntervalPaginator';
+import { nowNs, nsToMs } from './utils/time';
 import type { ChannelResponse, LocalMessage } from './types';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 import type { Channel } from './channel';
@@ -13,22 +15,14 @@ export type CooldownTimerState = {
    */
   canSkipCooldown: boolean;
   /**
-   * Latest message creation date authored by the current user in this channel. Change reported via message.new WS event.
+   * Creation timestamp of the latest message authored by the current user in this channel, in unix
+   * nanoseconds as the API sends it. Change reported via message.new WS event.
    */
-  ownLatestMessageDate?: Date;
+  ownLatestMessageTimestamp?: number;
   /**
    * Remaining cooldown in whole seconds (rounded).
    */
   cooldownRemaining: number;
-};
-
-const toDateOrUndefined = (value: unknown): Date | undefined => {
-  if (value instanceof Date) return value;
-  if (typeof value === 'string' || typeof value === 'number') {
-    const parsed = new Date(value);
-    if (!Number.isNaN(parsed.getTime())) return parsed;
-  }
-  return undefined;
 };
 
 export class CooldownTimer extends WithSubscriptions {
@@ -42,7 +36,7 @@ export class CooldownTimer extends WithSubscriptions {
     this.state = new StateStore<CooldownTimerState>({
       cooldownConfigSeconds: 0,
       cooldownRemaining: 0,
-      ownLatestMessageDate: undefined,
+      ownLatestMessageTimestamp: undefined,
       canSkipCooldown: false,
     });
     this.refresh();
@@ -60,8 +54,8 @@ export class CooldownTimer extends WithSubscriptions {
     return this.state.getLatestValue().canSkipCooldown;
   }
 
-  get ownLatestMessageDate() {
-    return this.state.getLatestValue().ownLatestMessageDate;
+  get ownLatestMessageTimestamp() {
+    return this.state.getLatestValue().ownLatestMessageTimestamp;
   }
 
   /**
@@ -85,7 +79,7 @@ export class CooldownTimer extends WithSubscriptions {
       ),
     );
 
-    // `ownLatestMessageDate` comes from the paginator's head interval. Selected on `items` rather than on
+    // `ownLatestMessageTimestamp` comes from the paginator's head interval. Selected on `items` rather than on
     // the derived date: any ingest can change which message is the own-latest, and `refresh` already
     // declines to publish unless one of its inputs actually moved.
     this.addUnsubscribeFunction(
@@ -114,18 +108,18 @@ export class CooldownTimer extends WithSubscriptions {
       .data ?? {}) as Partial<ChannelResponse>;
     const canSkipCooldown = (own_capabilities ?? []).includes('skip-slow-mode');
 
-    const ownLatestMessageDate = this.findOwnLatestMessageDate({
+    const ownLatestMessageTimestamp = this.findOwnLatestMessageTimestamp({
       messages: this.channel.messagePaginator.headItems,
     });
 
     if (
       cooldownConfigSeconds !== this.cooldownConfigSeconds ||
-      ownLatestMessageDate?.getTime() !== this.ownLatestMessageDate?.getTime() ||
+      ownLatestMessageTimestamp !== this.ownLatestMessageTimestamp ||
       canSkipCooldown !== this.canSkipCooldown
     ) {
       this.state.partialNext({
         cooldownConfigSeconds,
-        ownLatestMessageDate,
+        ownLatestMessageTimestamp,
         canSkipCooldown,
       });
     }
@@ -142,11 +136,13 @@ export class CooldownTimer extends WithSubscriptions {
   };
 
   /**
-   * Updates the known latest own message date and recomputes remaining time.
-   * Prefer calling this when you already know the message date (e.g. from an event).
+   * Updates the known latest own message timestamp and recomputes remaining time.
+   * Prefer calling this when you already know it (e.g. from an event).
+   *
+   * @param timestamp - Unix nanoseconds, as the API sends it.
    */
-  public setOwnLatestMessageDate = (date: Date | undefined) => {
-    this.state.partialNext({ ownLatestMessageDate: date });
+  public setOwnLatestMessageTimestamp = (timestamp: number | undefined) => {
+    this.state.partialNext({ ownLatestMessageTimestamp: timestamp });
     this.recalculate();
   };
 
@@ -155,24 +151,24 @@ export class CooldownTimer extends WithSubscriptions {
     return client.userId ?? client.user?.id;
   }
 
-  private findOwnLatestMessageDate({
+  private findOwnLatestMessageTimestamp({
     messages,
   }: {
     messages: LocalMessage[];
-  }): Date | undefined {
+  }): number | undefined {
     const ownUserId = this.getOwnUserId();
     if (!ownUserId) return undefined;
 
-    let latest: Date | undefined;
+    let latest: number | undefined;
     for (let i = messages.length - 1; i >= 0; i -= 1) {
       const message = messages[i];
       if (message.user?.id !== ownUserId) continue;
-      const createdAt = toDateOrUndefined(message.created_at);
-      if (!createdAt) continue;
-      if (!latest || createdAt.getTime() > latest.getTime()) {
+      const createdAt = getMessageCreatedAtTimestamp(message);
+      if (createdAt === null) continue;
+      if (latest === undefined || createdAt > latest) {
         latest = createdAt;
       }
-      if (latest.getTime() > createdAt.getTime()) break;
+      if (latest > createdAt) break;
     }
     return latest;
   }
@@ -180,13 +176,14 @@ export class CooldownTimer extends WithSubscriptions {
   private recalculate = () => {
     this.clearTimeout();
 
-    const { cooldownConfigSeconds, ownLatestMessageDate, canSkipCooldown } =
+    const { cooldownConfigSeconds, ownLatestMessageTimestamp, canSkipCooldown } =
       this.state.getLatestValue();
 
     const timeSinceOwnLastMessage =
-      ownLatestMessageDate != null
-        ? // prevent negative values
-          Math.max(0, (Date.now() - ownLatestMessageDate.getTime()) / 1000)
+      ownLatestMessageTimestamp != null
+        ? // prevent negative values. Both operands are wire timestamps, so the difference is in
+          // nanoseconds — convert once, here, to the seconds the cooldown config speaks.
+          Math.max(0, nsToMs(nowNs() - ownLatestMessageTimestamp) / 1000)
         : undefined;
 
     const remaining =

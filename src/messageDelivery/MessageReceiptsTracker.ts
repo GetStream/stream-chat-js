@@ -5,9 +5,9 @@ import { WithSubscriptions } from '../utils/WithSubscriptions';
 
 type UserId = string;
 type MessageId = string;
-export type MsgRef = { timestampMs: number; msgId: MessageId };
+export type MsgRef = { timestamp: number; msgId: MessageId };
 export type OwnMessageReceiptsTrackerMessageLocator = (
-  timestampMs: number,
+  timestamp: number,
 ) => MsgRef | null;
 export type UserProgress = {
   user: UserResponse;
@@ -24,31 +24,28 @@ export type ReadStoreReconcileMeta = {
   removedUserIds?: string[];
 };
 type ReadStoreUserState = {
-  last_read?: Date | string;
+  last_read?: number;
   unread_messages?: number;
   user?: UserResponse;
   first_unread_message_id?: string;
   last_read_message_id?: string;
-  last_delivered_at?: Date | string;
+  last_delivered_at?: number;
   last_delivered_message_id?: string;
 };
 
 // ---------- ordering utilities ----------
 
-const MIN_REF: MsgRef = { timestampMs: Number.NEGATIVE_INFINITY, msgId: '' } as const;
-
-const toTimestampMs = (value: Date | string) =>
-  value instanceof Date ? value.getTime() : new Date(value).getTime();
+const MIN_REF: MsgRef = { timestamp: Number.NEGATIVE_INFINITY, msgId: '' } as const;
 
 const isValidReadState = (
   readState: ReadStoreUserState | undefined,
 ): readState is ReadStoreUserState & {
-  last_read: Date | string;
+  last_read: number;
   user: UserResponse;
 } => !!readState?.user && !!readState.last_read;
 
 const compareRefsAsc = (a: MsgRef, b: MsgRef) =>
-  a.timestampMs !== b.timestampMs ? a.timestampMs - b.timestampMs : 0;
+  a.timestamp !== b.timestamp ? a.timestamp - b.timestamp : 0;
 
 const findIndex = <T>(arr: T[], target: MsgRef, keyOf: (x: T) => MsgRef): number => {
   let lo = 0,
@@ -137,9 +134,9 @@ export type OwnMessageReceiptsTrackerOptions = {
  * - `ingestInitial(rows: ReadStateResponse[])`: Builds initial state from server snapshot.
  *   If a user’s `last_read` is ahead of `last_delivered_at`, the tracker enforces
  *   the invariant `lastDeliveredRef >= lastReadRef`.
- * - `onMessageRead(user, readAtISO)`:
+ * - `onMessageRead(user, readAt)`:
  *   Advances the user’s read; also bumps delivered to match if needed.
- * - `onMessageDelivered(user, deliveredAtISO)`:
+ * - `onMessageDelivered(user, deliveredAt)`:
  *   Advances the user’s delivered to `max(currentRead, deliveredAt)`.
  *
  * Queries
@@ -185,9 +182,9 @@ export class MessageReceiptsTracker extends WithSubscriptions {
     this.channel = channel;
     this.locateMessage =
       locateMessage ??
-      ((timestampMs: number) => {
-        const message = this.channel.messagePaginator.findItemByTimestamp(timestampMs);
-        return message ? { timestampMs, msgId: message.id } : null;
+      ((timestamp: number) => {
+        const message = this.channel.messagePaginator.findItemByTimestamp(timestamp);
+        return message ? { timestamp, msgId: message.id } : null;
       });
   }
 
@@ -274,10 +271,8 @@ export class MessageReceiptsTracker extends WithSubscriptions {
     this.readSorted = [];
     this.deliveredSorted = [];
     for (const r of responses) {
-      const lastReadTimestamp = r.last_read ? new Date(r.last_read).getTime() : null;
-      const lastDeliveredTimestamp = r.last_delivered_at
-        ? new Date(r.last_delivered_at).getTime()
-        : null;
+      const lastReadTimestamp = r.last_read ?? null;
+      const lastDeliveredTimestamp = r.last_delivered_at ?? null;
       const lastReadRef = lastReadTimestamp
         ? (this.locateMessage(lastReadTimestamp) ?? MIN_REF)
         : MIN_REF;
@@ -311,13 +306,14 @@ export class MessageReceiptsTracker extends WithSubscriptions {
     lastDeliveredMessageId,
   }: {
     user: UserResponse;
-    deliveredAt: Date;
+    /** Unix nanoseconds, as the API sends it. */
+    deliveredAt: number;
     lastDeliveredMessageId?: string;
   }) {
-    const timestampMs = deliveredAt.getTime();
+    const timestamp = deliveredAt;
     const msgRef = lastDeliveredMessageId
-      ? { timestampMs, msgId: lastDeliveredMessageId }
-      : this.locateMessage(deliveredAt.getTime());
+      ? { timestamp, msgId: lastDeliveredMessageId }
+      : this.locateMessage(deliveredAt);
     if (!msgRef) return;
     const userProgress = this.ensureUser(user);
 
@@ -346,13 +342,14 @@ export class MessageReceiptsTracker extends WithSubscriptions {
     lastReadMessageId,
   }: {
     user: UserResponse;
-    readAt: Date;
+    /** Unix nanoseconds, as the API sends it. */
+    readAt: number;
     lastReadMessageId?: string;
   }) {
-    const timestampMs = readAt.getTime();
+    const timestamp = readAt;
     const msgRef = lastReadMessageId
-      ? { timestampMs, msgId: lastReadMessageId }
-      : this.locateMessage(timestampMs);
+      ? { timestamp, msgId: lastReadMessageId }
+      : this.locateMessage(timestamp);
     if (!msgRef) return;
     const userProgress = this.ensureUser(user);
     // newly announced read message is older than or equal the already recorded last read message
@@ -395,13 +392,14 @@ export class MessageReceiptsTracker extends WithSubscriptions {
     lastReadMessageId,
   }: {
     user: UserResponse;
-    lastReadAt?: Date;
+    /** Unix nanoseconds, as the API sends it. */
+    lastReadAt?: number;
     lastReadMessageId?: string;
   }) {
     const userProgress = this.ensureUser(user);
 
     const newReadRef: MsgRef = lastReadAt
-      ? { timestampMs: lastReadAt.getTime(), msgId: lastReadMessageId ?? '' }
+      ? { timestamp: lastReadAt, msgId: lastReadMessageId ?? '' }
       : { ...MIN_REF };
 
     // If no change, exit early.
@@ -620,24 +618,22 @@ export class MessageReceiptsTracker extends WithSubscriptions {
   }
 
   private readStateToUserProgress(readState: {
-    last_read: Date | string;
+    last_read: number;
     unread_messages?: number;
     user: UserResponse;
     first_unread_message_id?: string;
     last_read_message_id?: string;
-    last_delivered_at?: Date | string;
+    last_delivered_at?: number;
     last_delivered_message_id?: string;
   }): UserProgress {
-    const lastReadTimestamp = toTimestampMs(readState.last_read);
-    const lastDeliveredTimestamp = readState.last_delivered_at
-      ? toTimestampMs(readState.last_delivered_at)
-      : null;
+    const lastReadTimestamp = readState.last_read;
+    const lastDeliveredTimestamp = readState.last_delivered_at ?? null;
     const lastReadRef = readState.last_read_message_id
-      ? { timestampMs: lastReadTimestamp, msgId: readState.last_read_message_id }
+      ? { timestamp: lastReadTimestamp, msgId: readState.last_read_message_id }
       : (this.locateMessage(lastReadTimestamp) ?? MIN_REF);
     let lastDeliveredRef = readState.last_delivered_message_id
       ? {
-          timestampMs: lastDeliveredTimestamp ?? lastReadTimestamp,
+          timestamp: lastDeliveredTimestamp ?? lastReadTimestamp,
           msgId: readState.last_delivered_message_id,
         }
       : lastDeliveredTimestamp
@@ -661,17 +657,14 @@ export class MessageReceiptsTracker extends WithSubscriptions {
     return Object.values(readState).reduce<ReadStateResponse[]>(
       (responses, userReadState) => {
         if (!isValidReadState(userReadState)) return responses;
-        const lastReadDate = new Date(userReadState.last_read);
-        if (Number.isNaN(lastReadDate.getTime())) return responses;
+        if (!Number.isFinite(userReadState.last_read)) return responses;
 
         responses.push({
-          last_read: lastReadDate,
+          last_read: userReadState.last_read,
           user: userReadState.user,
           last_read_message_id: userReadState.last_read_message_id,
           unread_messages: userReadState.unread_messages ?? 0,
-          last_delivered_at: userReadState.last_delivered_at
-            ? new Date(userReadState.last_delivered_at)
-            : undefined,
+          last_delivered_at: userReadState.last_delivered_at,
           last_delivered_message_id: userReadState.last_delivered_message_id,
         });
 

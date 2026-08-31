@@ -10,6 +10,7 @@
  */
 
 import { withCancellation } from './utils/concurrency';
+import { nowNs, nsToMs } from './utils/time';
 import { deepFreezeConfig } from './configuration/utils/deepFreezeConfig';
 import { StateStore } from './store';
 import { ConfigController } from './configuration/ConfigController';
@@ -39,11 +40,14 @@ export type LiveLocationManagerState = {
   messages: Map<MessageId, ScheduledLiveLocationSharing>;
 };
 
-const isExpiredLocation = (location: SharedLiveLocationResponse) => {
-  const endTimeTimestamp = new Date(location.end_at).getTime();
+const isExpiredLocation = (location: SharedLiveLocationResponse) =>
+  location.end_at < nowNs();
 
-  return endTimeTimestamp < Date.now();
-};
+/**
+ * Milliseconds from now until a live location stops sharing, for `setTimeout`. Never negative.
+ * `end_at` is a wire timestamp, so the subtraction happens in nanoseconds and is converted once.
+ */
+const msUntilExpiry = (endAt: number) => Math.max(0, nsToMs(endAt - nowNs()));
 
 function isValidLiveLocationMessage(
   message?: MessageResponse,
@@ -240,12 +244,9 @@ export class LiveLocationManager extends WithSubscriptions {
             location.message_id,
             {
               ...location,
-              stopSharingTimeout: setTimeout(
-                () => {
-                  this.unregisterMessages([location.message_id]);
-                },
-                new Date(location.end_at).getTime() - Date.now(),
-              ),
+              stopSharingTimeout: setTimeout(() => {
+                this.unregisterMessages([location.message_id]);
+              }, msUntilExpiry(location.end_at)),
             },
           ]),
       ),
@@ -369,12 +370,9 @@ export class LiveLocationManager extends WithSubscriptions {
       const messages = new Map(currentValue.messages);
       messages.set(message.id, {
         ...message.shared_location,
-        stopSharingTimeout: setTimeout(
-          () => {
-            this.unregisterMessages([message.id]);
-          },
-          new Date(message.shared_location.end_at).getTime() - Date.now(),
-        ),
+        stopSharingTimeout: setTimeout(() => {
+          this.unregisterMessages([message.id]);
+        }, msUntilExpiry(message.shared_location.end_at)),
       });
       return {
         ...currentValue,

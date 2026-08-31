@@ -4,6 +4,7 @@ import { getClientWithUser } from './test-utils/getClient';
 import { generateMsg } from './test-utils/generateMessage';
 import { formatMessage } from '../../src';
 import type { Channel, ChannelResponse, Event } from '../../src';
+import { convertDateToTimestamp } from './test-utils/time';
 
 // CooldownTimer.refresh() derives the current user's latest message from the message paginator's
 // latest (head) window, so tests seed the paginator (formatted) rather than legacy channel state.
@@ -77,7 +78,9 @@ describe('CooldownTimer', () => {
 
       seedLatestWindow(channel, generateMsg({ created_at, user: { id: 'user-1' } }));
 
-      expect(channel.cooldownTimer.ownLatestMessageDate?.toISOString()).toBe(created_at);
+      expect(channel.cooldownTimer.ownLatestMessageTimestamp).toBe(
+        convertDateToTimestamp(created_at),
+      );
     });
 
     it('stops deriving once unregistered', async () => {

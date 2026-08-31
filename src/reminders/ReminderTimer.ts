@@ -38,8 +38,8 @@ export class ReminderTimer {
   }
 
   getRefreshIntervalLength = () => {
-    if (!this.reminder.remindAt) return null;
-    const distanceFromDeadlineMs = Math.abs(timeLeftMs(this.reminder.remindAt.getTime()));
+    if (this.reminder.remindAt == null) return null;
+    const distanceFromDeadlineMs = Math.abs(timeLeftMs(this.reminder.remindAt));
     let refreshInterval: number | null;
     if (distanceFromDeadlineMs === 0) {
       refreshInterval = oneMinute;
@@ -56,13 +56,14 @@ export class ReminderTimer {
   };
 
   init = () => {
-    if (!this.reminder.remindAt) return null;
+    if (this.reminder.remindAt == null) return null;
     const timeoutLength = this.getRefreshIntervalLength();
     if (timeoutLength === null) return null;
 
-    const boundaryTimestamp =
-      this.reminder.remindAt?.getTime() + this.stopRefreshBoundaryMs;
-    const timeLeftToBoundary = boundaryTimestamp - Date.now();
+    // `stopRefreshBoundaryMs` is a duration in milliseconds, so it is applied after the wire
+    // timestamp has been converted rather than added to it.
+    const timeLeftToBoundary =
+      timeLeftMs(this.reminder.remindAt) + this.stopRefreshBoundaryMs;
 
     if (timeLeftToBoundary <= 0) {
       this.timeout = null;

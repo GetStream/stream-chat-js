@@ -1,5 +1,6 @@
 import { generateChannel } from './generateChannel';
 import { generateMsg } from './generateMessage';
+import { convertDateToTimestamp } from './time';
 import type { ChannelResponse, DraftResponse } from '../../../src';
 
 export const generateMessageDraft = ({
@@ -12,7 +13,7 @@ export const generateMessageDraft = ({
   return {
     channel,
     channel_cid: channel.cid,
-    created_at: new Date(),
+    created_at: convertDateToTimestamp(),
     message: generateMsg(),
     ...customMsgDraft,
   } as DraftResponse;

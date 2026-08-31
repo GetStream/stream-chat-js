@@ -65,10 +65,10 @@ describe('stream-io/message-composer-middleware/shared-location', () => {
         localMessage: {
           shared_location: {
             channel_cid: messageComposer.channel.cid,
-            created_at: expect.any(Date),
+            created_at: expect.any(Number),
             created_by_device_id: messageComposer.locationComposer.deviceId,
             message_id: messageComposer.id,
-            updated_at: expect.any(Date),
+            updated_at: expect.any(Number),
             user_id: user.id,
             ...coords,
           },

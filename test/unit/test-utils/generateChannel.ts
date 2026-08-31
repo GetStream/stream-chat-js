@@ -1,4 +1,5 @@
 import { generateUUIDv4 as uuidv4 } from '../../../src/utils';
+import { convertDateToTimestamp } from './time';
 import {
   ChannelStateResponseFields,
   ChannelConfigWithInfo,
@@ -30,22 +31,22 @@ export const generateChannel = (
       id,
       type,
       cid: `${type}:${id}`,
-      created_at: new Date('2020-04-28T11:20:48.578147Z'),
-      updated_at: new Date('2020-04-28T11:20:48.578147Z'),
+      created_at: convertDateToTimestamp('2020-04-28T11:20:48.578147Z'),
+      updated_at: convertDateToTimestamp('2020-04-28T11:20:48.578147Z'),
       created_by: {
         id: 'vishal',
         role: 'user',
-        created_at: new Date('2020-04-27T13:05:13.847572Z'),
-        updated_at: new Date('2020-04-28T11:21:08.357468Z'),
-        last_active: new Date('2020-04-28T11:21:08.353026Z'),
+        created_at: convertDateToTimestamp('2020-04-27T13:05:13.847572Z'),
+        updated_at: convertDateToTimestamp('2020-04-28T11:21:08.357468Z'),
+        last_active: convertDateToTimestamp('2020-04-28T11:21:08.353026Z'),
         banned: false,
         online: false,
       },
       frozen: false,
       disabled: false,
       config: {
-        created_at: new Date('2020-04-24T11:36:43.859020368Z'),
-        updated_at: new Date('2020-04-24T11:36:43.859022903Z'),
+        created_at: convertDateToTimestamp('2020-04-24T11:36:43.859020368Z'),
+        updated_at: convertDateToTimestamp('2020-04-24T11:36:43.859022903Z'),
         name: 'messaging',
         typing_events: true,
         read_events: true,

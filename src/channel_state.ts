@@ -10,17 +10,20 @@ import type {
 } from './types';
 import { AIStates } from './types';
 import { formatMessage } from './utils';
+import { nowNs, nsToMs } from './utils/time';
 import { StateStore } from './store';
 
 type ChannelReadStatus = Record<
   string,
   {
-    last_read: Date;
+    /** Unix nanoseconds, as the API sends it. */
+    last_read: number;
     unread_messages: number;
     user: UserResponse;
     first_unread_message_id?: string;
     last_read_message_id?: string;
-    last_delivered_at?: Date;
+    /** Unix nanoseconds, as the API sends it. */
+    last_delivered_at?: number;
     last_delivered_message_id?: string;
   }
 >;
@@ -105,8 +108,10 @@ export type ChannelDataState = {
 /** Whether THIS channel is muted for the current user, mirrored from `client.mutedChannels`. */
 export type ChannelMuteStatus = {
   muted: boolean;
-  createdAt: Date | null;
-  expiresAt: Date | null;
+  /** Unix nanoseconds, as the API sends it. */
+  createdAt: number | null;
+  /** Unix nanoseconds, as the API sends it. */
+  expiresAt: number | null;
 };
 
 /**
@@ -389,14 +394,11 @@ export class ChannelState extends StateStore<ChannelStateData> {
    * clean - Remove stale data such as users that stayed in typing state for more than 5 seconds
    */
   clean() {
-    const now = new Date();
+    const now = nowNs();
     // prevent old users from showing up as typing
     for (const [userID, lastEvent] of Object.entries(this.typing)) {
-      const receivedAt =
-        typeof lastEvent.received_at === 'string'
-          ? new Date(lastEvent.received_at)
-          : lastEvent.received_at || new Date();
-      if (now.getTime() - receivedAt.getTime() > 7000) {
+      const receivedAt = lastEvent.received_at ?? now;
+      if (nsToMs(now - receivedAt) > 7000) {
         this.removeTypingEvent(userID);
         this._channel.getClient().dispatchEvent({
           cid: this._channel.cid,

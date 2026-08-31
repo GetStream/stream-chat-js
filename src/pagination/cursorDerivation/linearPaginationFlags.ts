@@ -34,7 +34,7 @@ const HEADWARD_QUERY_PROPERTIES: Array<keyof LinearPaginationQueryShape> = [
   'id_gte',
 ];
 export const deriveLinearPaginationFlags = <
-  T extends { id: string; created_at: Date },
+  T extends { id: string; created_at: number },
   Q extends LinearPaginationQueryShape,
 >({
   direction,

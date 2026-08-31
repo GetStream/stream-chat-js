@@ -1,4 +1,5 @@
 import { StateStore } from './store';
+import { nowNs } from './utils/time';
 import { CORE_NOTIFICATION_TYPE } from './notifications';
 import type { StreamChat } from './client';
 import type {
@@ -48,7 +49,8 @@ export type PollOptionVotesQueryParams = {
 type OptionId = string;
 
 export type PollState = Omit<PollResponseData, 'own_votes' | 'id'> & {
-  lastActivityAt: Date; // todo: would be ideal to get this from the BE
+  /** Unix nanoseconds, matching every API timestamp. */
+  lastActivityAt: number; // todo: would be ideal to get this from the BE
   maxVotedOptionIds: OptionId[];
   ownVotesByOptionId: Record<OptionId, PollVoteResponseData>;
   ownAnswer?: PollVoteResponseData; // each user can have only one answer
@@ -90,7 +92,7 @@ export class Poll {
 
     return {
       ...pollResponseForState,
-      lastActivityAt: new Date(),
+      lastActivityAt: nowNs(),
       maxVotedOptionIds: getMaxVotedOptionIds(pollResponseForState.vote_counts_by_option),
       ownAnswer,
       ownVotesByOptionId: getOwnVotesByOptionId(ownVotes),
@@ -118,7 +120,7 @@ export class Poll {
 
     const { id: _id, ...pollData } = extractPollData(event.poll);
     // @ts-expect-error type mismatch
-    this.state.partialNext({ ...pollData, lastActivityAt: new Date(event.created_at) });
+    this.state.partialNext({ ...pollData, lastActivityAt: event.created_at });
     this.upsertOfflineDb();
   };
 
@@ -127,7 +129,7 @@ export class Poll {
     if (!isPollClosedEventEvent(event)) return;
     this.state.partialNext({
       is_closed: true,
-      lastActivityAt: new Date(event.created_at),
+      lastActivityAt: event.created_at,
     });
     this.upsertOfflineDb();
   };
@@ -160,7 +162,7 @@ export class Poll {
     this.state.partialNext({
       ...pollEnrichData,
       latest_answers: latestAnswers,
-      lastActivityAt: new Date(event.created_at),
+      lastActivityAt: event.created_at,
       ownAnswer,
       ownVotesByOptionId,
       maxVotedOptionIds,
@@ -220,7 +222,7 @@ export class Poll {
     this.state.partialNext({
       ...pollEnrichData,
       latest_answers: latestAnswers,
-      lastActivityAt: new Date(event.created_at),
+      lastActivityAt: event.created_at,
       ownAnswer,
       ownVotesByOptionId,
       maxVotedOptionIds,
@@ -254,7 +256,7 @@ export class Poll {
     this.state.partialNext({
       ...pollEnrichData,
       latest_answers: latestAnswers,
-      lastActivityAt: new Date(event.created_at),
+      lastActivityAt: event.created_at,
       ownAnswer,
       ownVotesByOptionId,
       maxVotedOptionIds,
@@ -264,7 +266,7 @@ export class Poll {
 
   query = async (id: string) => {
     const { poll } = await this.client.getPoll({ poll_id: id });
-    this.state.partialNext({ ...poll, lastActivityAt: new Date() });
+    this.state.partialNext({ ...poll, lastActivityAt: nowNs() });
     return poll;
   };
 
@@ -411,7 +413,7 @@ export function mapPollStateToResponse(poll: Poll): PollResponseData {
   const ownVotes = [
     ...Object.values(ownVotesByOptionId),
     ...(ownAnswer ? [ownAnswer] : []),
-  ].sort((a, b) => a.created_at.getTime() - b.created_at.getTime());
+  ].sort((a, b) => a.created_at - b.created_at);
 
   return {
     ...restState,

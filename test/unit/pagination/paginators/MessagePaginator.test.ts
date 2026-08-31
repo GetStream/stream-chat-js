@@ -13,6 +13,8 @@ import { generateMessageDraft } from '../../test-utils/generateMessageDraft';
 import { generateMsg } from '../../test-utils/generateMessage';
 import { formatMessage } from '../../../../src';
 import { DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE } from '../../../../src/constants';
+import { convertDateToTimestamp } from '../../test-utils/time';
+import { nsToDate } from '../../../../src/utils/time';
 
 const createMessage = (overrides: Partial<MessageResponse>): LocalMessage =>
   formatMessage(
@@ -62,8 +64,14 @@ describe('MessagePaginator', () => {
       // @ts-expect-error accessing protected property
       expect(paginator._filterFieldToDataResolvers).toHaveLength(1);
 
-      const newer = createMessage({ id: 'b', created_at: '2021-01-01T00:00:00.000Z' });
-      const older = createMessage({ id: 'a', created_at: '2020-01-01T00:00:00.000Z' });
+      const newer = createMessage({
+        id: 'b',
+        created_at: convertDateToTimestamp('2021-01-01T00:00:00.000Z'),
+      });
+      const older = createMessage({
+        id: 'a',
+        created_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
+      });
       expect(paginator.sortComparator(older, newer)).toBeLessThan(0);
       expect(paginator.sortComparator(newer, older)).toBeGreaterThan(0);
 
@@ -103,8 +111,14 @@ describe('MessagePaginator', () => {
       expect(paginator.requestSort).toEqual([{ field: 'created_at', direction: -1 }]);
       expect(paginator.itemOrder).toEqual([{ field: 'created_at', direction: -1 }]);
 
-      const newer = createMessage({ id: 'b', created_at: '2021-01-01T00:00:00.000Z' });
-      const older = createMessage({ id: 'a', created_at: '2020-01-01T00:00:00.000Z' });
+      const newer = createMessage({
+        id: 'b',
+        created_at: convertDateToTimestamp('2021-01-01T00:00:00.000Z'),
+      });
+      const older = createMessage({
+        id: 'a',
+        created_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
+      });
       expect(paginator.sortComparator(older, newer)).toBeGreaterThan(0);
     });
 
@@ -215,8 +229,8 @@ describe('MessagePaginator', () => {
 
     it('formats channel query results and sets cursors based on direction', async () => {
       const messages = [
-        { id: 'first', created_at: '2022-01-01T00:00:00.000Z' },
-        { id: 'last', created_at: '2022-01-02T00:00:00.000Z' },
+        { id: 'first', created_at: convertDateToTimestamp('2022-01-01T00:00:00.000Z') },
+        { id: 'last', created_at: convertDateToTimestamp('2022-01-02T00:00:00.000Z') },
       ];
       (channel.query as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
         messages,
@@ -232,14 +246,21 @@ describe('MessagePaginator', () => {
       });
       expect(result.tailward).toBe('first');
       expect(result.headward).toBe('last');
-      expect(result.items[0].created_at).toBeInstanceOf(Date);
-      expect(result.items[1].created_at).toBeInstanceOf(Date);
+      // `query()` formats results but must not transform timestamps: they stay the wire numbers.
+      expect(result.items[0].created_at).toBe(messages[0].created_at);
+      expect(result.items[1].created_at).toBe(messages[1].created_at);
     });
 
     it('queries replies endpoint when parentMessageId is provided', async () => {
       const messages = [
-        { id: 'first-reply', created_at: '2022-01-01T00:00:00.000Z' },
-        { id: 'last-reply', created_at: '2022-01-02T00:00:00.000Z' },
+        {
+          id: 'first-reply',
+          created_at: convertDateToTimestamp('2022-01-01T00:00:00.000Z'),
+        },
+        {
+          id: 'last-reply',
+          created_at: convertDateToTimestamp('2022-01-02T00:00:00.000Z'),
+        },
       ];
       (channel.getReplies as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
         messages,
@@ -263,15 +284,25 @@ describe('MessagePaginator', () => {
       expect(channel.query).not.toHaveBeenCalled();
       expect(result.tailward).toBe('first-reply');
       expect(result.headward).toBe('last-reply');
-      expect(result.items[0].created_at).toBeInstanceOf(Date);
-      expect(result.items[1].created_at).toBeInstanceOf(Date);
+      // `query()` formats results but must not transform timestamps: they stay the wire numbers.
+      expect(result.items[0].created_at).toBe(messages[0].created_at);
+      expect(result.items[1].created_at).toBe(messages[1].created_at);
     });
 
     it('keeps items ordered chronologically when itemOrder is ascending and request sort is descending', async () => {
       const messages = [
-        { id: 'newest-reply', created_at: '2022-01-03T00:00:00.000Z' },
-        { id: 'middle-reply', created_at: '2022-01-02T00:00:00.000Z' },
-        { id: 'oldest-reply', created_at: '2022-01-01T00:00:00.000Z' },
+        {
+          id: 'newest-reply',
+          created_at: convertDateToTimestamp('2022-01-03T00:00:00.000Z'),
+        },
+        {
+          id: 'middle-reply',
+          created_at: convertDateToTimestamp('2022-01-02T00:00:00.000Z'),
+        },
+        {
+          id: 'oldest-reply',
+          created_at: convertDateToTimestamp('2022-01-01T00:00:00.000Z'),
+        },
       ];
       (channel.getReplies as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
         messages,
@@ -308,7 +339,10 @@ describe('MessagePaginator', () => {
     it('delegates to executeQuery with id_around payload', async () => {
       const paginator = new MessagePaginator({ channel, itemIndex });
       itemIndex.setOne(
-        createMessage({ id: 'target-message', created_at: '2020-01-01T00:00:00.000Z' }),
+        createMessage({
+          id: 'target-message',
+          created_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
+        }),
       );
       const targetInterval: Interval = {
         id: 'interval-1',
@@ -442,9 +476,18 @@ describe('MessagePaginator', () => {
       });
       (channel.query as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
         messages: [
-          generateMsg({ id: 'm1', created_at: '2020-01-01T00:00:00.000Z' }),
-          generateMsg({ id: 'm2', created_at: '2020-01-02T00:00:00.000Z' }),
-          generateMsg({ id: 'm3', created_at: '2020-01-03T00:00:00.000Z' }),
+          generateMsg({
+            id: 'm1',
+            created_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
+          }),
+          generateMsg({
+            id: 'm2',
+            created_at: convertDateToTimestamp('2020-01-02T00:00:00.000Z'),
+          }),
+          generateMsg({
+            id: 'm3',
+            created_at: convertDateToTimestamp('2020-01-03T00:00:00.000Z'),
+          }),
         ],
       });
 
@@ -476,9 +519,18 @@ describe('MessagePaginator', () => {
       });
       (channel.query as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
         messages: [
-          generateMsg({ id: 'm1', created_at: '2020-01-01T00:00:00.000Z' }),
-          generateMsg({ id: 'm2', created_at: '2020-01-02T00:00:00.000Z' }),
-          generateMsg({ id: 'm3', created_at: '2020-01-03T00:00:00.000Z' }),
+          generateMsg({
+            id: 'm1',
+            created_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
+          }),
+          generateMsg({
+            id: 'm2',
+            created_at: convertDateToTimestamp('2020-01-02T00:00:00.000Z'),
+          }),
+          generateMsg({
+            id: 'm3',
+            created_at: convertDateToTimestamp('2020-01-03T00:00:00.000Z'),
+          }),
         ],
       });
 
@@ -503,8 +555,14 @@ describe('MessagePaginator', () => {
         itemIndex,
         parentMessageId: 'parent-1',
       });
-      const m1 = createMessage({ id: 'm1', created_at: '2020-01-01T00:00:00.000Z' });
-      const m2 = createMessage({ id: 'm2', created_at: '2020-01-02T00:00:00.000Z' });
+      const m1 = createMessage({
+        id: 'm1',
+        created_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
+      });
+      const m2 = createMessage({
+        id: 'm2',
+        created_at: convertDateToTimestamp('2020-01-02T00:00:00.000Z'),
+      });
       paginator.ingestPage({
         page: [m1, m2],
         isHead: true,
@@ -570,8 +628,14 @@ describe('MessagePaginator', () => {
         itemIndex,
         parentMessageId: 'parent-1',
       });
-      const m4 = createMessage({ id: 'm4', created_at: '2020-01-04T00:00:00.000Z' });
-      const m5 = createMessage({ id: 'm5', created_at: '2020-01-05T00:00:00.000Z' });
+      const m4 = createMessage({
+        id: 'm4',
+        created_at: convertDateToTimestamp('2020-01-04T00:00:00.000Z'),
+      });
+      const m5 = createMessage({
+        id: 'm5',
+        created_at: convertDateToTimestamp('2020-01-05T00:00:00.000Z'),
+      });
       // A non-head window is active (as after jumping to an older message) with a headward cursor,
       // so the "load newer" query is cursor-based (an incremental load, not a first-page reset).
       paginator.ingestPage({
@@ -683,7 +747,7 @@ describe('MessagePaginator', () => {
     });
 
     it('falls back to created_at_around query when unread ids are missing and lastReadAt exists', async () => {
-      const lastReadAt = new Date('2021-01-02T00:00:00.000Z');
+      const lastReadAt = convertDateToTimestamp('2021-01-02T00:00:00.000Z');
       const channelWithReadState = {
         cid: 'channel-id',
         query: vi.fn(),
@@ -720,7 +784,8 @@ describe('MessagePaginator', () => {
 
       expect(ok).toBe(true);
       expect(executeQuerySpy).toHaveBeenCalledWith({
-        queryShape: { created_at_around: lastReadAt, limit: 25 },
+        // `created_at_around` is a request field, so the paginator converts back to a `Date`.
+        queryShape: { created_at_around: nsToDate(lastReadAt), limit: 25 },
         updateState: false,
       });
       expect(jumpSpy).toHaveBeenCalledWith(
@@ -738,7 +803,7 @@ describe('MessagePaginator', () => {
     });
 
     it('jumps to the first unread message when the queried page starts after lastReadAt', async () => {
-      const lastReadAt = new Date('2021-01-01T00:00:00.000Z');
+      const lastReadAt = convertDateToTimestamp('2021-01-01T00:00:00.000Z');
       const channelWithReadState = {
         cid: 'channel-id',
         query: vi.fn(),
@@ -794,7 +859,7 @@ describe('MessagePaginator', () => {
     });
 
     it('infers the first unread from the already-loaded window (no query) and jumps to it, not the last read message', async () => {
-      const lastReadAt = new Date('2021-01-02T00:00:00.000Z');
+      const lastReadAt = convertDateToTimestamp('2021-01-02T00:00:00.000Z');
       const channelWithReadState = {
         cid: 'channel-id',
         query: vi.fn(),
@@ -847,7 +912,7 @@ describe('MessagePaginator', () => {
     });
 
     it('re-seeds the unread snapshot from the current read state on demand (reopen from cache)', () => {
-      const lastReadAt = new Date('2021-05-01T00:00:00.000Z');
+      const lastReadAt = convertDateToTimestamp('2021-05-01T00:00:00.000Z');
       const channelWithReadState = {
         cid: 'channel-id',
         query: vi.fn(),
@@ -1547,7 +1612,9 @@ describe('MessagePaginator', () => {
           setActive: true,
         });
 
-        paginator.truncate({ truncatedAt: new Date('2020-01-05T00:00:00.000Z') });
+        paginator.truncate({
+          truncatedAt: convertDateToTimestamp('2020-01-05T00:00:00.000Z'),
+        });
 
         // m1 dropped; m5 kept (equal, not strictly older); m9 kept
         expect(paginator.items?.map((m) => m.id)).toEqual(['m5', 'm9']);
@@ -1565,7 +1632,9 @@ describe('MessagePaginator', () => {
         });
         expect(paginator.hasMoreTail).toBe(true);
 
-        paginator.truncate({ truncatedAt: new Date('2020-01-05T00:00:00.000Z') });
+        paginator.truncate({
+          truncatedAt: convertDateToTimestamp('2020-01-05T00:00:00.000Z'),
+        });
 
         expect(paginator.items?.map((m) => m.id)).toEqual(['m5', 'm9']);
         // it lost its oldest member → nothing older remains → it is now the tail
@@ -1583,7 +1652,9 @@ describe('MessagePaginator', () => {
         // a separate, older, disjoint window
         paginator.ingestPage({ page: [msg('m2', '02'), msg('m3', '03')] });
 
-        paginator.truncate({ truncatedAt: new Date('2020-01-05T00:00:00.000Z') });
+        paginator.truncate({
+          truncatedAt: convertDateToTimestamp('2020-01-05T00:00:00.000Z'),
+        });
 
         // the older window was entirely older than the cutoff → dropped
         expect(paginator.getItem('m2')).toBeUndefined();
@@ -1603,7 +1674,9 @@ describe('MessagePaginator', () => {
         });
 
         const partialNextSpy = vi.spyOn(paginator.state, 'partialNext');
-        paginator.truncate({ truncatedAt: new Date('2020-01-05T00:00:00.000Z') });
+        paginator.truncate({
+          truncatedAt: convertDateToTimestamp('2020-01-05T00:00:00.000Z'),
+        });
 
         // three messages removed, but a single state emission
         expect(paginator.items?.map((m) => m.id)).toEqual(['m9']);
@@ -1625,7 +1698,9 @@ describe('MessagePaginator', () => {
         });
         expect(paginator.items?.map((m) => m.id)).toEqual(['m1', 'm2']);
 
-        paginator.truncate({ truncatedAt: new Date('2020-01-05T00:00:00.000Z') });
+        paginator.truncate({
+          truncatedAt: convertDateToTimestamp('2020-01-05T00:00:00.000Z'),
+        });
 
         // active window removed entirely, but we show the surviving window — NOT an empty list
         expect(paginator.getItem('m1')).toBeUndefined();
@@ -1649,7 +1724,9 @@ describe('MessagePaginator', () => {
           setActive: true,
         });
 
-        paginator.truncate({ truncatedAt: new Date('2020-01-04T00:00:00.000Z') });
+        paginator.truncate({
+          truncatedAt: convertDateToTimestamp('2020-01-04T00:00:00.000Z'),
+        });
 
         // active [m1,m2] removed; nearest survivor to where it was = the oldest survivor [m5,m6]
         expect(paginator.items?.map((m) => m.id)).toEqual(['m5', 'm6']);
@@ -1671,7 +1748,9 @@ describe('MessagePaginator', () => {
         });
 
         // cutoff 04: everything strictly older (m1, both m3*) dropped; m5, m7 kept
-        paginator.truncate({ truncatedAt: new Date('2020-01-04T00:00:00.000Z') });
+        paginator.truncate({
+          truncatedAt: convertDateToTimestamp('2020-01-04T00:00:00.000Z'),
+        });
 
         expect(paginator.items?.map((m) => m.id)).toEqual(['m5', 'm7']);
         expect(paginator.getItem('m3b')).toBeUndefined();
@@ -1687,7 +1766,7 @@ describe('MessagePaginator', () => {
         });
         const partialNextSpy = vi.spyOn(paginator.state, 'partialNext');
 
-        paginator.truncate({ truncatedAt: new Date('not-a-date') });
+        paginator.truncate({ truncatedAt: Number.NaN });
 
         expect(paginator.items?.map((m) => m.id)).toEqual(['m1']);
         expect(partialNextSpy).not.toHaveBeenCalled();
@@ -3374,7 +3453,7 @@ describe('MessagePaginator', () => {
       });
     };
 
-    const at = (iso: string) => new Date(iso).getTime();
+    const at = (iso: string) => convertDateToTimestamp(iso);
 
     beforeEach(() => {
       skipSystemMessages = false;
@@ -3394,10 +3473,13 @@ describe('MessagePaginator', () => {
       const paginator = buildPaginator();
 
       paginator.trackLastMessage(
-        createMessage({ id: 'a', created_at: '2020-01-01T00:00:00.000Z' }),
+        createMessage({
+          id: 'a',
+          created_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
+        }),
       );
 
-      expect(paginator.lastMessageAt?.getTime()).toBe(at('2020-01-01T00:00:00.000Z'));
+      expect(paginator.lastMessageAt).toBe(at('2020-01-01T00:00:00.000Z'));
       // The display message is tracked on aggregateState (reactive off-window), not the visible list.
       expect(paginator.lastMessage?.id).toBe('a');
       expect(paginator.items).toBeUndefined();
@@ -3405,8 +3487,8 @@ describe('MessagePaginator', () => {
 
     it('seed advances only the timestamp, leaving lastMessage null', () => {
       const paginator = buildPaginator();
-      paginator.seedLastMessageAt('2023-05-03T11:12:53.993Z');
-      expect(paginator.lastMessageAt?.getTime()).toBe(at('2023-05-03T11:12:53.993Z'));
+      paginator.seedLastMessageAt(convertDateToTimestamp('2023-05-03T11:12:53.993Z'));
+      expect(paginator.lastMessageAt).toBe(at('2023-05-03T11:12:53.993Z'));
       // The server seed has a timestamp but not the message itself.
       expect(paginator.lastMessage).toBeNull();
     });
@@ -3414,25 +3496,31 @@ describe('MessagePaginator', () => {
     it('lastMessageAt is the max of the loaded message and the seed; a seed never blocks the display message', () => {
       const paginator = buildPaginator();
       // Server says the newest message is far in the future (not yet loaded).
-      paginator.seedLastMessageAt('2030-01-01T00:00:00.000Z');
-      expect(paginator.lastMessageAt?.getTime()).toBe(at('2030-01-01T00:00:00.000Z'));
+      paginator.seedLastMessageAt(convertDateToTimestamp('2030-01-01T00:00:00.000Z'));
+      expect(paginator.lastMessageAt).toBe(at('2030-01-01T00:00:00.000Z'));
       expect(paginator.lastMessage).toBeNull();
 
       // A real (older-than-seed) message must still become the display message — the guard is against
       // the display message's own timestamp, not the seed-inflated lastMessageAt.
       paginator.trackLastMessage(
-        createMessage({ id: 'a', created_at: '2020-01-01T00:00:00.000Z' }),
+        createMessage({
+          id: 'a',
+          created_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
+        }),
       );
       expect(paginator.lastMessage?.id).toBe('a');
       // Sort key stays the max (the seed), so it can never drift below the display message.
-      expect(paginator.lastMessageAt?.getTime()).toBe(at('2030-01-01T00:00:00.000Z'));
+      expect(paginator.lastMessageAt).toBe(at('2030-01-01T00:00:00.000Z'));
 
       // Once a message newer than the seed arrives, lastMessageAt follows it.
       paginator.trackLastMessage(
-        createMessage({ id: 'b', created_at: '2031-01-01T00:00:00.000Z' }),
+        createMessage({
+          id: 'b',
+          created_at: convertDateToTimestamp('2031-01-01T00:00:00.000Z'),
+        }),
       );
       expect(paginator.lastMessage?.id).toBe('b');
-      expect(paginator.lastMessageAt?.getTime()).toBe(at('2031-01-01T00:00:00.000Z'));
+      expect(paginator.lastMessageAt).toBe(at('2031-01-01T00:00:00.000Z'));
     });
 
     it('does not emit on the pagination state (writes the separate aggregateState store)', () => {
@@ -3444,29 +3532,41 @@ describe('MessagePaginator', () => {
       stateEmissions = 0; // ignore the synchronous initial subscribe call
 
       paginator.trackLastMessage(
-        createMessage({ id: 'a', created_at: '2020-01-01T00:00:00.000Z' }),
+        createMessage({
+          id: 'a',
+          created_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
+        }),
       );
       unsubscribe();
 
       expect(stateEmissions).toBe(0);
-      expect(paginator.lastMessageAt?.getTime()).toBe(at('2020-01-01T00:00:00.000Z'));
+      expect(paginator.lastMessageAt).toBe(at('2020-01-01T00:00:00.000Z'));
     });
 
     it('advances monotonically by created_at', () => {
       const paginator = buildPaginator();
 
       paginator.trackLastMessage(
-        createMessage({ id: 'a', created_at: '2020-01-01T00:00:00.000Z' }),
+        createMessage({
+          id: 'a',
+          created_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
+        }),
       );
       paginator.trackLastMessage(
-        createMessage({ id: 'b', created_at: '2019-01-01T00:00:00.000Z' }),
+        createMessage({
+          id: 'b',
+          created_at: convertDateToTimestamp('2019-01-01T00:00:00.000Z'),
+        }),
       );
-      expect(paginator.lastMessageAt?.getTime()).toBe(at('2020-01-01T00:00:00.000Z'));
+      expect(paginator.lastMessageAt).toBe(at('2020-01-01T00:00:00.000Z'));
 
       paginator.trackLastMessage(
-        createMessage({ id: 'c', created_at: '2021-01-01T00:00:00.000Z' }),
+        createMessage({
+          id: 'c',
+          created_at: convertDateToTimestamp('2021-01-01T00:00:00.000Z'),
+        }),
       );
-      expect(paginator.lastMessageAt?.getTime()).toBe(at('2021-01-01T00:00:00.000Z'));
+      expect(paginator.lastMessageAt).toBe(at('2021-01-01T00:00:00.000Z'));
     });
 
     it('never advances for a shadowed message', () => {
@@ -3503,7 +3603,7 @@ describe('MessagePaginator', () => {
           created_at: '2021-01-01T00:00:00.000Z',
         }),
       );
-      expect(paginator.lastMessageAt?.getTime()).toBe(at('2021-01-01T00:00:00.000Z'));
+      expect(paginator.lastMessageAt).toBe(at('2021-01-01T00:00:00.000Z'));
     });
 
     it('skips system messages only when skip_last_msg_update_for_system_msgs is set', () => {
@@ -3520,7 +3620,7 @@ describe('MessagePaginator', () => {
       skipSystemMessages = false;
       const tracking = buildPaginator();
       tracking.trackLastMessage(systemMessage);
-      expect(tracking.lastMessageAt?.getTime()).toBe(at('2020-01-01T00:00:00.000Z'));
+      expect(tracking.lastMessageAt).toBe(at('2020-01-01T00:00:00.000Z'));
     });
 
     it('auto-tracks on ingestion for the main channel list too', () => {
@@ -3534,18 +3634,18 @@ describe('MessagePaginator', () => {
       );
       // The main list no longer relies on an explicit channel-level call: ingestion advances the
       // lastMessageAt aggregate directly.
-      expect(paginator.lastMessageAt?.getTime()).toBe(at('2020-01-01T00:00:00.000Z'));
+      expect(paginator.lastMessageAt).toBe(at('2020-01-01T00:00:00.000Z'));
     });
 
     it('seeds lastMessageAt from the server value (monotonic)', () => {
       const paginator = buildPaginator();
 
-      paginator.seedLastMessageAt('2020-06-01T00:00:00.000Z');
-      expect(paginator.lastMessageAt?.getTime()).toBe(at('2020-06-01T00:00:00.000Z'));
+      paginator.seedLastMessageAt(convertDateToTimestamp('2020-06-01T00:00:00.000Z'));
+      expect(paginator.lastMessageAt).toBe(at('2020-06-01T00:00:00.000Z'));
 
       // an older server value does not move it back
-      paginator.seedLastMessageAt('2020-01-01T00:00:00.000Z');
-      expect(paginator.lastMessageAt?.getTime()).toBe(at('2020-06-01T00:00:00.000Z'));
+      paginator.seedLastMessageAt(convertDateToTimestamp('2020-01-01T00:00:00.000Z'));
+      expect(paginator.lastMessageAt).toBe(at('2020-06-01T00:00:00.000Z'));
 
       // a newer ingested message advances past the seed
       paginator.ingestItem(
@@ -3555,7 +3655,7 @@ describe('MessagePaginator', () => {
           created_at: '2021-01-01T00:00:00.000Z',
         }),
       );
-      expect(paginator.lastMessageAt?.getTime()).toBe(at('2021-01-01T00:00:00.000Z'));
+      expect(paginator.lastMessageAt).toBe(at('2021-01-01T00:00:00.000Z'));
     });
 
     describe('reply list (parentMessageId) auto-tracks on ingestion', () => {
@@ -3571,14 +3671,14 @@ describe('MessagePaginator', () => {
         const paginator = buildPaginator('parent');
 
         paginator.ingestItem(reply('r2', '2020-01-01T00:00:02.000Z'));
-        expect(paginator.lastMessageAt?.getTime()).toBe(at('2020-01-01T00:00:02.000Z'));
+        expect(paginator.lastMessageAt).toBe(at('2020-01-01T00:00:02.000Z'));
 
         // an older reply arriving later must not move the value back
         paginator.ingestItem(reply('r1', '2020-01-01T00:00:01.000Z'));
-        expect(paginator.lastMessageAt?.getTime()).toBe(at('2020-01-01T00:00:02.000Z'));
+        expect(paginator.lastMessageAt).toBe(at('2020-01-01T00:00:02.000Z'));
 
         paginator.ingestItem(reply('r3', '2020-01-01T00:00:03.000Z'));
-        expect(paginator.lastMessageAt?.getTime()).toBe(at('2020-01-01T00:00:03.000Z'));
+        expect(paginator.lastMessageAt).toBe(at('2020-01-01T00:00:03.000Z'));
       });
 
       it('advances to the newest reply when a page is seeded via setItems', () => {
@@ -3593,16 +3693,19 @@ describe('MessagePaginator', () => {
           isFirstPage: true,
         });
 
-        expect(paginator.lastMessageAt?.getTime()).toBe(at('2020-01-01T00:00:03.000Z'));
+        expect(paginator.lastMessageAt).toBe(at('2020-01-01T00:00:03.000Z'));
       });
     });
 
     it('resets lastMessageAt on clearStateAndCache()', () => {
       const paginator = buildPaginator();
       paginator.trackLastMessage(
-        createMessage({ id: 'a', created_at: '2020-01-01T00:00:00.000Z' }),
+        createMessage({
+          id: 'a',
+          created_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
+        }),
       );
-      expect(paginator.lastMessageAt?.getTime()).toBe(at('2020-01-01T00:00:00.000Z'));
+      expect(paginator.lastMessageAt).toBe(at('2020-01-01T00:00:00.000Z'));
 
       paginator.clearStateAndCache();
 

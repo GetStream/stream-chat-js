@@ -6,6 +6,7 @@ import { ChannelState, StreamChat, Channel } from '../../src';
 import { generateUUIDv4 as uuidv4 } from '../../src/utils';
 
 import { vi, describe, beforeEach, afterEach, it, expect } from 'vitest';
+import { msToNs } from '../../src/utils/time';
 
 const toISOString = (timestampMs) => new Date(timestampMs).toISOString();
 
@@ -19,13 +20,13 @@ describe('ChannelState clean', () => {
 		client.activeChannels[channel.cid] = channel;
 	});
 
-	it('should remove any stale typing events with either string or Date received_at', async () => {
-		// string received_at
+	it('should remove any stale typing events', async () => {
+		// a wire timestamp, as every event carries
 		client.dispatchEvent({
 			cid: channel.cid,
 			type: 'typing.start',
 			user: { id: 'other' },
-			received_at: toISOString(Date.now() - 10000),
+			received_at: msToNs(Date.now() - 10000),
 		});
 		expect(channel.state.typing['other']).not.to.be.undefined;
 
@@ -37,7 +38,7 @@ describe('ChannelState clean', () => {
 			cid: channel.cid,
 			type: 'typing.start',
 			user: { id: 'other' },
-			received_at: new Date(Date.now() - 10000),
+			received_at: msToNs(Date.now() - 10000),
 		});
 		expect(channel.state.typing['other']).not.to.be.undefined;
 

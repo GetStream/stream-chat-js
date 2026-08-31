@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_STOP_REFRESH_BOUNDARY_MS, Reminder, ReminderTimer } from '../../../src';
 import { sleep } from '../../../src/utils';
 import { generateReminderResponse } from './ReminderManager.test';
+import { msToNs, nowNs, nsToMs } from '../../../src/utils/time';
 
 describe('Reminder', () => {
   it('constructor sets up state for bookmark reminder', () => {
@@ -9,9 +10,7 @@ describe('Reminder', () => {
     const reminder = new Reminder({ data });
     expect(reminder.state.getLatestValue()).toEqual({
       ...data,
-      created_at: new Date(data.created_at),
       remind_at: null,
-      updated_at: new Date(data.updated_at),
       timeLeftMs: null,
     });
     expect(reminder.timer).toBeInstanceOf(ReminderTimer);
@@ -22,26 +21,22 @@ describe('Reminder', () => {
     const scheduleOffsetMs = 62 * 1000;
     const data = generateReminderResponse({ scheduleOffsetMs });
     const reminder = new Reminder({ data });
-    const now = new Date();
-    const remindAtDate = new Date(data.remind_at!);
+    const now = nowNs();
+    const remindAt = data.remind_at!;
     const reminderState = reminder!.state.getLatestValue();
     expect({
       ...reminderState,
       timeLeftMs: Math.round(reminderState.timeLeftMs! / 1000) * 1000,
     }).toEqual({
       ...data,
-      created_at: new Date(data.created_at),
-      remind_at: remindAtDate,
-      updated_at: new Date(data.updated_at),
+      remind_at: remindAt,
       timeLeftMs: scheduleOffsetMs,
     });
     // Compared with a tolerance, not floored-and-equal: `timeLeftMs` is sampled inside the constructor
     // and `now` after it, so two independent clock reads straddling a whole-second boundary made this
     // fail intermittently under full-suite load.
     expect(
-      Math.abs(
-        (reminderState!.timeLeftMs as number) - (remindAtDate.getTime() - now.getTime()),
-      ),
+      Math.abs((reminderState!.timeLeftMs as number) - nsToMs(remindAt - now)),
     ).toBeLessThan(1000);
     expect(reminder.timer).toBeInstanceOf(ReminderTimer);
     expect(reminder.timer.timeout).toEqual(expect.any(Object));
@@ -52,7 +47,7 @@ describe('Reminder', () => {
     const data = generateReminderResponse({ scheduleOffsetMs });
     const reminder = new Reminder({ data });
     const timerInitSpy = vi.spyOn(reminder.timer, 'init');
-    reminder.setState({ ...data, remind_at: new Date() });
+    reminder.setState({ ...data, remind_at: nowNs() });
     expect(reminder.timeLeftMs).toBe(0);
     expect(timerInitSpy).toHaveBeenCalledTimes(1);
   });
@@ -66,7 +61,7 @@ describe('Reminder', () => {
     vi.advanceTimersByTime(scheduleOffsetMs + DEFAULT_STOP_REFRESH_BOUNDARY_MS);
     reminder.setState({
       ...data,
-      remind_at: new Date(orignalRemindAt!.getTime() - 1000),
+      remind_at: orignalRemindAt! - msToNs(1000),
     });
     expect(reminder.timer.timeout).toBeNull();
     expect(reminder.timeLeftMs).toBe(-1 * (DEFAULT_STOP_REFRESH_BOUNDARY_MS + 1000));

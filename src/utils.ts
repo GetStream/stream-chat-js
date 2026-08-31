@@ -13,6 +13,7 @@ import type { Channel } from './channel';
 import type { AxiosRequestConfig } from 'axios';
 import { LOCAL_MESSAGE_FIELDS, RESERVED_UPDATED_MESSAGE_FIELDS } from './constants';
 import { chatLoggerSystem } from './logger';
+import { nowNs } from './utils/time';
 
 const logger = chatLoggerSystem.getLogger('utils');
 
@@ -254,16 +255,19 @@ export function formatMessage(message: MessageResponse | LocalMessage): LocalMes
     if (!msg) return null;
     return {
       ...msg,
-      created_at: msg.created_at ? new Date(msg.created_at) : new Date(),
-      deleted_at: msg.deleted_at ? new Date(msg.deleted_at) : undefined,
-      pinned_at: msg.pinned_at ? new Date(msg.pinned_at) : undefined,
+      // Timestamps are the wire's unix-nanosecond numbers and stay that way — there is no
+      // conversion left to do here. `created_at` / `updated_at` still default, because a locally
+      // composed message has none until the server answers.
+      created_at: msg.created_at ?? nowNs(),
+      deleted_at: msg.deleted_at ?? undefined,
+      pinned_at: msg.pinned_at ?? undefined,
       reaction_groups: maybeGetReactionGroupsFallback(
         msg.reaction_groups,
         msg.reaction_counts,
         msg.reaction_scores,
       ),
       status: (msg as LocalMessage).status || 'received',
-      updated_at: msg.updated_at ? new Date(msg.updated_at) : new Date(),
+      updated_at: msg.updated_at ?? nowNs(),
     };
   };
 
@@ -533,7 +537,7 @@ export const findIndexInSortedArray = <T, L>({
    *
    * @example
    * ```ts
-   * selectValueToCompare: (message) => message.created_at.getTime()
+   * selectValueToCompare: (message) => message.created_at
    * ```
    */
   selectValueToCompare?: (arrayElement: T) => L | T;
@@ -748,8 +752,6 @@ export const generateChannelTempCid = (channelType: string, members: string[]) =
   if (!membersStr) return;
   return `${channelType}:!members-${membersStr}`;
 };
-
-export const isDate = (value: unknown): value is Date => !!(value as Date).getTime;
 
 export const isLocalMessage = (message: unknown): message is LocalMessage =>
   typeof (message as LocalMessage | undefined)?.status === 'string';

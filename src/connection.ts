@@ -16,25 +16,26 @@ import { chatLoggerSystem } from './logger';
 import type { ConnectAPIResponse, ConnectedEvent, ConnectionOpen } from './types';
 import type { StreamChat } from './client';
 import type { APIError } from './errors';
-import { decoders } from './gen/model-decoders/decoders';
-import { decodeWSEvent } from './gen/model-decoders/event-decoder-mapping';
 import type { WSEvent } from './gen/models';
 
 const logger = chatLoggerSystem.getLogger('connection');
 
 /**
- * `connection.ok` is not published in the OpenAPI spec yet, so `decodeWSEvent` passes
- * it through raw and its `created_at` / `me` fields would stay strings. Its payload is
- * field-for-field what the `HealthCheckEvent` decoder already handles.
+ * Wire frames are handed through as they arrive. Every server-sent date is the unix-nanosecond
+ * number the API puts on the wire (the generator runs with `response_dates_as_number=true`), so
+ * there is nothing left to decode — the per-model decoders that used to turn those numbers into
+ * `Date` objects no longer exist.
  *
- * Remove this once the backend adds the event to the spec and `src/gen` is regenerated.
+ * `connection.ok` is still not published in the OpenAPI spec, so it is typed by the hand-written
+ * `ConnectedEvent` overlay in `types.ts` rather than by `src/gen`. Remove that overlay, and this
+ * branch, once the backend adds the event to the spec and `src/gen` is regenerated.
  */
 const decodeConnectionEvent = (
   data: { type: string } & Record<string, unknown>,
 ): WSEvent | ConnectedEvent =>
   data.type === 'connection.ok'
-    ? (decoders.HealthCheckEvent(data) as ConnectedEvent)
-    : (decodeWSEvent(data) as WSEvent);
+    ? (data as unknown as ConnectedEvent)
+    : (data as unknown as WSEvent);
 
 // Type guards to check WebSocket error type
 const isCloseEvent = (

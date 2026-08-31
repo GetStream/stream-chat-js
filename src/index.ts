@@ -107,6 +107,15 @@ export {
   formatMessage,
 } from './utils';
 export { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';
+export {
+  convertTimestampToDate,
+  dateToNs,
+  msToNs,
+  nowNs,
+  NS_PER_MS,
+  nsToDate,
+  nsToMs,
+} from './utils/time';
 export * from './ChannelManager';
 export * from './ConnectionRecoveryManager';
 export * from './EventHandlerPipeline';

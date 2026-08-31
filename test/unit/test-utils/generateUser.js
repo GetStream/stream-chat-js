@@ -1,4 +1,5 @@
 import { generateUUIDv4 as uuidv4 } from '../../../src/utils';
+import { convertDateToTimestamp } from './time';
 
 export const generateUser = (options = {}) => {
 	return {
@@ -6,8 +7,8 @@ export const generateUser = (options = {}) => {
 		name: uuidv4(),
 		image: uuidv4(),
 		role: 'user',
-		created_at: new Date('2020-04-27T13:39:49.331742Z'),
-		updated_at: new Date('2020-04-27T13:39:49.332087Z'),
+		created_at: convertDateToTimestamp('2020-04-27T13:39:49.331742Z'),
+		updated_at: convertDateToTimestamp('2020-04-27T13:39:49.332087Z'),
 		banned: false,
 		online: false,
 		...options,

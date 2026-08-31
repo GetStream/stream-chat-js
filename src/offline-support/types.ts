@@ -301,7 +301,8 @@ export type DBDeleteMessagesForChannelType = {
   /** Channel ID. */
   cid: string;
   /** Timestamp before which messages are deleted. */
-  truncated_at?: Date;
+  /** Unix nanoseconds, as the API sends it. */
+  truncated_at?: number;
   /** Whether to immediately execute the operation. */
   execute?: boolean;
 };

@@ -1,3 +1,5 @@
+import { dateToNs, msToNs } from '../utils/time';
+
 export function asArray(v: any): any[] {
   return Array.isArray(v) ? v : [v];
 }
@@ -6,10 +8,23 @@ export function isISODateString(x: any): x is string {
   return typeof x === 'string' && x.includes('T') && !Number.isNaN(Date.parse(x));
 }
 
-export function toEpochMillis(x: any): number | null {
-  if (x instanceof Date) return x.getTime();
-  if (typeof x === 'number' && Number.isFinite(x)) return x; // treat as epoch ms
-  if (isISODateString(x)) return Date.parse(x);
+/**
+ * Brings anything date-shaped into unix **nanoseconds**, the unit item fields carry, so a filter or
+ * sort can compare an operand against a value.
+ *
+ * Nanoseconds rather than milliseconds because the two sides of a comparison come from different
+ * places: an item's `created_at` is the wire number, while a filter operand is typed `Date | string`
+ * in the generated filter types. Normalizing to ms would have meant halving the pair — a `Date`
+ * became ms while a wire number was passed through untouched and *called* ms, so every mixed
+ * comparison silently ordered wrong and `normKey` bucketed the two apart.
+ *
+ * A bare `number` is therefore read as nanoseconds. That is the SDK's unit for a timestamp
+ * everywhere else, and it is what a value read off an item will be.
+ */
+export function toEpochNanos(x: any): number | null {
+  if (x instanceof Date) return dateToNs(x);
+  if (typeof x === 'number' && Number.isFinite(x)) return x; // already the wire unit
+  if (isISODateString(x)) return msToNs(Date.parse(x));
   return null;
 }
 
@@ -23,8 +38,8 @@ export function toNumberLike(x: any): number | null {
 }
 
 export function normalizeComparedValues(a: any, b: any) {
-  const Ad = toEpochMillis(a),
-    Bd = toEpochMillis(b);
+  const Ad = toEpochNanos(a),
+    Bd = toEpochNanos(b);
   if (Ad !== null && Bd !== null) return { kind: 'date', a: Ad, b: Bd };
 
   const An = toNumberLike(a),

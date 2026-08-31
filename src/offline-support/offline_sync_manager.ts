@@ -4,8 +4,6 @@ import type { AbstractOfflineDB } from './offline_support_api';
 import type { AxiosError } from 'axios';
 import { isAxiosError } from 'axios';
 import { chatLoggerSystem } from '../logger';
-import { decodeWSEvent } from '../gen/model-decoders/event-decoder-mapping';
-import type { WSEvent } from '../gen/models';
 import type { APIError } from '../types';
 
 const logger = chatLoggerSystem.getLogger('offline-db');
@@ -196,14 +194,6 @@ export class OfflineDBSyncManager {
             channel_cids: cids,
             last_sync_at: lastSyncedAtDate,
           });
-
-          // Left out decoding is needed here because the timestamps arrive as nanosecond integers,
-          // `new Date(1786219962651957000)` overflows the Date range and persisting one threw
-          // `RangeError: Date value out of bounds`, which the catch below reads as the "too many
-          // events" API error and answers by resetting the whole database. This was introduced with
-          // the OpenAPI refactor and should be addressed there.
-          // TODO: Remove this when the upstream decoders properly handle the sync API.
-          result.events = result.events?.map((event) => decodeWSEvent(event) as WSEvent);
 
           // Opt-in positive cap owned by this manager; undefined/non-positive = no limit.
           const { syncMaxEventCount } = this;
