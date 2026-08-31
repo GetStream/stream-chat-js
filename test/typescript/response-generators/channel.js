@@ -72,11 +72,6 @@ async function removeFilterTags() {
 	return await channel.removeFilterTags(['tag1']);
 }
 
-async function addModerators() {
-	const channel = await utils.createTestChannel(uuidv4(), johnID);
-	return await channel.addModerators([johnID]);
-}
-
 async function create() {
 	const authClient = await utils.getTestClientForUser(johnID, {});
 	const id = uuidv4();
@@ -116,12 +111,6 @@ async function deleteImage() {
 
 	const image = await channel.uploadImage({ file: testImage() });
 	return channel.deleteImage(image.file);
-}
-
-async function demoteModerators() {
-	const channel = await utils.createTestChannel(uuidv4(), johnID);
-	await channel.addModerators([johnID]);
-	return await channel.demoteModerators([johnID]);
 }
 
 async function getConfig() {
@@ -276,12 +265,10 @@ module.exports = {
 	acceptInvite,
 	addMembers,
 	addFilterTags,
-	addModerators,
 	create,
 	deleteChannel,
 	deleteFile,
 	deleteImage,
-	demoteModerators,
 	getConfig,
 	hide,
 	inviteMembers,

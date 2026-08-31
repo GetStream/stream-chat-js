@@ -1721,8 +1721,12 @@ export class StreamChat extends ChatApi {
   getChannelByMembers = (channelType: string, custom: ChannelInput) => {
     // Check if the channel already exists.
     // Only allow 1 channel object per cid
+    // Mirrors the same expression in `channel.ts` (`_initializeState`), which recomputes this
+    // temp cid to evict the stale `activeChannels` entry once the server assigns a real id —
+    // the two must agree exactly. `user_id` became optional in the v2 spec while
+    // `MemberUserRequest.id` is required, so `{ user: { id } }` is now a valid member spec.
     const memberIds = (custom.members ?? []).map((member) =>
-      typeof member === 'string' ? member : member.user_id,
+      typeof member === 'string' ? member : member.user_id || member.user?.id || '',
     );
     const membersStr = memberIds.sort().join(',');
     const tempCid = generateChannelTempCid(channelType, memberIds);

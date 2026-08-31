@@ -5263,7 +5263,7 @@ export interface MemberUserRequest {
 
   name?: string;
 
-  custom?: Record<string, any>;
+  custom?: CustomUserData;
 
   privacy_settings?: PrivacySettingsResponse;
 }

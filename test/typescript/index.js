@@ -28,11 +28,6 @@ const executables = [
 		type: "Unpacked<ReturnType<Channel['addFilterTags']>>",
 	},
 	{
-		f: rg.addModerators,
-		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel['addModerators']>>",
-	},
-	{
 		f: rg.banUsers,
 		imports: ['StreamChat', 'Unpacked'],
 		type: "Unpacked<ReturnType<StreamChat['banUser']>>",
@@ -140,11 +135,6 @@ const executables = [
 		f: rg.deleteUser,
 		imports: ['StreamChat', 'Unpacked'],
 		type: "Unpacked<ReturnType<StreamChat['deleteUser']>>",
-	},
-	{
-		f: rg.demoteModerators,
-		imports: ['Channel', 'Unpacked'],
-		type: "Unpacked<ReturnType<Channel['demoteModerators']>>",
 	},
 	// {
 	// 	f: rg.disconnect,

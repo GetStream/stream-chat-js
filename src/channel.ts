@@ -1179,28 +1179,6 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Adds moderators to the channel.
-   *
-   * @param members - An array of member identifiers.
-   * @param message - Message object for channel members notification (optional).
-   * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
-   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
-   *   into the request (optional).
-   * @returns The server response.
-   */
-  async addModerators(
-    members: string[],
-    message?: MessageRequest,
-    options: ChannelUpdateOptions = {},
-    requestOptions?: StreamRequestOptions,
-  ) {
-    return await this.update(
-      { add_moderators: members, message, ...options },
-      requestOptions,
-    );
-  }
-
-  /**
    * Invite members to the channel.
    *
    * @param members - An array of members to invite to the channel.
@@ -1246,28 +1224,6 @@ export class Channel extends ChannelApi {
   ) {
     return await this.update(
       { remove_members: members, message, ...options },
-      requestOptions,
-    );
-  }
-
-  /**
-   * Removes the moderator role from channel members.
-   *
-   * @param members - An array of member identifiers.
-   * @param message - Message object for channel members notification (optional).
-   * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
-   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
-   *   into the request (optional).
-   * @returns The server response.
-   */
-  async demoteModerators(
-    members: string[],
-    message?: MessageRequest,
-    options: ChannelUpdateOptions = {},
-    requestOptions?: StreamRequestOptions,
-  ) {
-    return await this.update(
-      { demote_moderators: members, message, ...options },
       requestOptions,
     );
   }

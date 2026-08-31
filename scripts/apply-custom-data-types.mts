@@ -59,6 +59,7 @@ const CUSTOM_DATA_MAPPING: Record<string, string> = {
   ConnectUserDetailsRequest: 'CustomUserData',
   EntityCreatorResponse: 'CustomUserData',
   FullUserResponse: 'CustomUserData',
+  MemberUserRequest: 'CustomUserData',
   OwnUserResponse: 'CustomUserData',
   UserRequest: 'CustomUserData',
   UserResponse: 'CustomUserData',
