@@ -28,9 +28,11 @@ export type Filters<
 // The value an operator takes on one filter key. `valueTypes` carries the
 // per-operator overrides the spec publishes and is checked first, so an override
 // also suppresses the `| null` the $eq/$ne rule would otherwise add — the backend
-// rejects null wherever an override applies. Everything else follows the two
-// universal rules ($in/$nin take an array of the key's type, $exists takes a
-// boolean) and finally the key's own type.
+// rejects null wherever an override applies. `closedSet` suppresses it for the
+// same reason: a key that publishes accepted_values takes those values and
+// nothing else, null included. Everything else follows the two universal rules
+// ($in/$nin take an array of the key's type, $exists takes a boolean) and finally
+// the key's own type.
 export type FilterValue<
   Entry extends { type: any },
   Operator extends string,
@@ -41,7 +43,9 @@ export type FilterValue<
     : Operator extends '$exists'
       ? boolean
       : Operator extends '$eq' | '$ne'
-        ? Entry['type'] | null
+        ? Entry extends { closedSet: true }
+          ? Entry['type']
+          : Entry['type'] | null
         : Entry['type'];
 
 export type FCHelper<
@@ -806,11 +810,6 @@ export interface BanRequest {
   target_user_id: string;
 
   /**
-   * ID of the user performing the ban
-   */
-  banned_by_id?: string;
-
-  /**
    * Channel where the ban applies
    */
   channel_cid?: string;
@@ -836,11 +835,6 @@ export interface BanRequest {
    * Duration of the ban in minutes
    */
   timeout?: number;
-
-  /**
-   * User request object
-   */
-  banned_by?: UserRequest;
 }
 
 export interface BanResponse {
@@ -1280,6 +1274,8 @@ export interface ChannelConfigWithInfo {
   mark_messages_pending: boolean;
 
   max_message_length: number;
+
+  message_retention: string;
 
   mutes: boolean;
 
@@ -1729,19 +1725,16 @@ export interface ChannelMemberPartialResponse {
 }
 
 export interface ChannelMemberRequest {
-  user_id: string;
-
   /**
    * Role of the member in the channel
    */
   channel_role?: string;
 
+  user_id?: string;
+
   custom?: CustomMemberData;
 
-  /**
-   * User response object
-   */
-  user?: UserResponse;
+  user?: MemberUserRequest;
 }
 
 export interface ChannelMemberResponse {
@@ -4515,8 +4508,6 @@ export interface GetMessageResponse {
    * Represents any chat message
    */
   message: MessageWithChannelResponse;
-
-  pending_message_metadata?: Record<string, string>;
 }
 
 export interface GetOGResponse {
@@ -5259,6 +5250,22 @@ export interface MemberUpdatedEvent {
   channel_custom?: CustomChannelData;
 
   user?: UserResponseCommonFields;
+}
+
+export interface MemberUserRequest {
+  id: string;
+
+  image?: string;
+
+  invisible?: boolean;
+
+  language?: string;
+
+  name?: string;
+
+  custom?: Record<string, any>;
+
+  privacy_settings?: PrivacySettingsResponse;
 }
 
 export interface MembersResponse {
@@ -6033,6 +6040,11 @@ export interface MessageResponse {
 
   member?: ChannelMemberPartialResponse;
 
+  /**
+   * Channel member data for the users mentioned in the message, keyed by user id. Only present when the app has member custom on mentioned users enabled, and only for the first two mentioned users of each message
+   */
+  mentioned_channel_members?: Record<string, ChannelMemberPartialResponse>;
+
   moderation?: ModerationV2Response;
 
   /**
@@ -6368,6 +6380,11 @@ export interface MessageWithChannelResponse {
   image_labels?: Record<string, Array<string>>;
 
   member?: ChannelMemberPartialResponse;
+
+  /**
+   * Channel member data for the users mentioned in the message, keyed by user id. Only present when the app has member custom on mentioned users enabled, and only for the first two mentioned users of each message
+   */
+  mentioned_channel_members?: Record<string, ChannelMemberPartialResponse>;
 
   moderation?: ModerationV2Response;
 
@@ -7701,8 +7718,6 @@ export interface PendingMessageResponse {
    */
   message?: MessageResponse;
 
-  metadata?: Record<string, string>;
-
   /**
    * User response object
    */
@@ -7832,7 +7847,11 @@ export interface PollResponseData {
 
   vote_count: number;
 
-  voting_visibility: string;
+  /**
+   * Voting visibility of the poll
+   */
+
+  voting_visibility: 'anonymous' | 'public';
 
   latest_answers: Array<PollVoteResponseData>;
 
@@ -8386,8 +8405,9 @@ export interface QueryChannelsRequest {
     };
 
     has_unread: {
-      type: boolean;
+      type: true;
       operators: '$eq';
+      closedSet: true;
     };
 
     hidden: {
@@ -8599,10 +8619,23 @@ export interface QueryFutureChannelBansResponse {
 export interface QueryMembersPayload {
   type: string;
 
+  id?: string;
+
+  limit?: number;
+
+  offset?: number;
+
+  members?: Array<ChannelMemberRequest>;
+
+  /**
+   * Array of sort parameters
+   */
+  sort?: Array<SortParamRequest>;
+
   /**
    * Filter conditions to apply to the query
    */
-  filter_conditions: Filters<{
+  filter_conditions?: Filters<{
     banned: {
       type: boolean;
       operators: '$eq';
@@ -8693,19 +8726,6 @@ export interface QueryMembersPayload {
       operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
   }>;
-
-  id?: string;
-
-  limit?: number;
-
-  offset?: number;
-
-  members?: Array<ChannelMemberRequest>;
-
-  /**
-   * Array of sort parameters
-   */
-  sort?: Array<SortParamRequest>;
 }
 
 export interface QueryMessageFlagsPayload {
@@ -10101,6 +10121,8 @@ export interface ReminderCreatedEvent {
 
   custom: CustomEventData;
 
+  reminder: ReminderResponseData;
+
   /**
    * The type of event: "reminder.created" in this case
    */
@@ -10112,8 +10134,6 @@ export interface ReminderCreatedEvent {
   parent_id?: string;
 
   received_at?: Date;
-
-  reminder?: ReminderResponseData;
 }
 
 export interface ReminderDeletedEvent {
@@ -10139,6 +10159,8 @@ export interface ReminderDeletedEvent {
 
   custom: CustomEventData;
 
+  reminder: ReminderResponseData;
+
   /**
    * The type of event: "reminder.deleted" in this case
    */
@@ -10150,8 +10172,6 @@ export interface ReminderDeletedEvent {
   parent_id?: string;
 
   received_at?: Date;
-
-  reminder?: ReminderResponseData;
 }
 
 export interface ReminderNotificationEvent {
@@ -10177,6 +10197,8 @@ export interface ReminderNotificationEvent {
 
   custom: CustomEventData;
 
+  reminder: ReminderResponseData;
+
   /**
    * The type of event: "notification.reminder_due" in this case
    */
@@ -10185,8 +10207,6 @@ export interface ReminderNotificationEvent {
   parent_id?: string;
 
   received_at?: Date;
-
-  reminder?: ReminderResponseData;
 }
 
 export interface ReminderResponseData {
@@ -10241,6 +10261,8 @@ export interface ReminderUpdatedEvent {
 
   custom: CustomEventData;
 
+  reminder: ReminderResponseData;
+
   /**
    * The type of event: "reminder.updated" in this case
    */
@@ -10252,8 +10274,6 @@ export interface ReminderUpdatedEvent {
   parent_id?: string;
 
   received_at?: Date;
-
-  reminder?: ReminderResponseData;
 }
 
 export interface RemoveUserGroupMembersRequest {
@@ -10657,8 +10677,9 @@ export interface SearchPayload {
     };
 
     has_unread: {
-      type: boolean;
+      type: true;
       operators: '$eq';
+      closedSet: true;
     };
 
     hidden: {
@@ -10995,6 +11016,8 @@ export interface SearchResultMessage {
 
   member?: ChannelMemberPartialResponse;
 
+  mentioned_channel_members?: Record<string, ChannelMemberPartialResponse>;
+
   moderation?: ModerationV2Response;
 
   /**
@@ -11103,11 +11126,6 @@ export interface SendMessageResponse {
    * Map of mentioned user ID to whether that user is currently an active channel member. Only set when include_mentioned_members was requested; omitted when the message has no mentions or the membership lookup failed
    */
   mentioned_members?: Record<string, boolean>;
-
-  /**
-   * Pending message metadata
-   */
-  pending_message_metadata?: Record<string, string>;
 }
 
 export interface SendReactionRequest {
@@ -11927,6 +11945,12 @@ export interface UnbanActionRequestPayload {
   target_user_id?: string;
 }
 
+export interface UnbanRequest {}
+
+export interface UnbanResponse {
+  duration: string;
+}
+
 export interface UnblockActionRequestPayload {
   /**
    * Reason for the appeal decision
@@ -12093,21 +12117,6 @@ export interface UpdateChannelRequest {
   add_members?: Array<ChannelMemberRequest>;
 
   /**
-   * List of user IDs to make channel moderators
-   */
-  add_moderators?: Array<string>;
-
-  /**
-   * List of channel member role assignments. If any specified user is not part of the channel, the request will fail
-   */
-  assign_roles?: Array<ChannelMemberRequest>;
-
-  /**
-   * List of user IDs to take away moderators status from
-   */
-  demote_moderators?: Array<string>;
-
-  /**
    * List of user IDs to invite to the channel
    */
   invites?: Array<ChannelMemberRequest>;
@@ -12218,11 +12227,6 @@ export interface UpdateMessagePartialResponse {
    * Represents any chat message
    */
   message?: MessageResponse;
-
-  /**
-   * Pending message metadata
-   */
-  pending_message_metadata?: Record<string, string>;
 }
 
 export interface UpdateMessageRequest {
@@ -12249,8 +12253,6 @@ export interface UpdateMessageResponse {
    * Represents any chat message
    */
   message: MessageResponse;
-
-  pending_message_metadata?: Record<string, string>;
 }
 
 export interface UpdatePollOptionRequest {

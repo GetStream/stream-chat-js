@@ -31,6 +31,8 @@ import type {
   QueueResponse,
   SubmitActionRequest,
   SubmitActionResponse,
+  UnbanRequest,
+  UnbanResponse,
   UnmuteRequest,
   UnmuteResponse,
   UpdateQueueRequest,
@@ -307,14 +309,12 @@ export class ModerationApi {
   ): Promise<StreamResponse<ModerationBanResponse>> {
     const body = {
       target_user_id: request?.target_user_id,
-      banned_by_id: request?.banned_by_id,
       channel_cid: request?.channel_cid,
       delete_messages: request?.delete_messages,
       ip_ban: request?.ip_ban,
       reason: request?.reason,
       shadow: request?.shadow,
       timeout: request?.timeout,
-      banned_by: request?.banned_by,
     };
 
     const response = await this.apiClient.sendRequest<
@@ -716,6 +716,31 @@ export class ModerationApi {
     );
 
     decoders['SubmitActionResponse']?.(response.body);
+
+    return { ...response.body, metadata: response.metadata };
+  }
+
+  async unban(
+    request: UnbanRequest & { target_user_id: string; channel_cid?: string },
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<UnbanResponse>> {
+    const queryParams = {
+      target_user_id: request?.target_user_id,
+      channel_cid: request?.channel_cid,
+    };
+    const body = {};
+
+    const response = await this.apiClient.sendRequest<StreamResponse<UnbanResponse>>(
+      'POST',
+      '/api/v2/moderation/unban',
+      undefined,
+      queryParams,
+      body,
+      'application/json',
+      requestOptions,
+    );
+
+    decoders['UnbanResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
