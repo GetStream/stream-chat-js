@@ -153,6 +153,26 @@ describe('Channel count unread', function () {
 		expect(channel.countUnread(lastRead)).to.be.equal(2);
 	});
 
+	it('countUnread should count from the epoch when lastRead is 0, not fall back to the cache', function () {
+		// `0` is the epoch sentinel the read-state seeding writes for a channel with no own read row
+		// ("nothing has been read"). A truthiness guard here reads it as "no argument supplied" and
+		// returns the cached aggregate instead of counting — so a channel opened uninitialized or with
+		// `state: false` reports the wrong unread count.
+		seedOwnUnreadCount(channel, 99);
+		seedLatestWindow(channel, [
+			...ignoredMessages,
+			generateMsg({ date: '2021-01-01T00:00:00' }),
+			generateMsg({ date: '2022-01-01T00:00:00' }),
+		]);
+
+		// Against the epoch every countable message is newer, so the three date-excluded ones join the
+		// two added here (5); only the shadowed/silent/muted three stay out. Crucially the answer is a
+		// real count, not the seeded 99 the cache would have returned.
+		expect(channel.countUnread(0)).to.be.equal(5);
+		expect(channel.countUnread(0)).not.to.be.equal(99);
+		seedOwnUnreadCount(channel, 0);
+	});
+
 	it('countUnread should read the latest window, not the active one', () => {
 		expect(channel.countUnread(lastRead)).to.be.equal(0);
 		// latest (head) window

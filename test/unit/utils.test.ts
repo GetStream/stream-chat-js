@@ -3,6 +3,7 @@ import { describe, beforeEach, afterEach, it, expect, vi } from 'vitest';
 
 import { generateChannel } from './test-utils/generateChannel';
 import { generateMember } from './test-utils/generateMember';
+import { generateMsg } from './test-utils/generateMessage';
 import { generateUser } from './test-utils/generateUser';
 import { getClientWithUser } from './test-utils/getClient';
 
@@ -13,6 +14,8 @@ import {
   userHasReadReceipts,
   formatMessage,
   generateChannelTempCid,
+  localMessageToNewMessagePayload,
+  toUpdatedMessagePayload,
   uniqBy,
   runDetached,
   sleep,
@@ -638,5 +641,141 @@ describe('userHasReadReceipts', () => {
 
   it('returns true (assumes enabled) when privacy settings are unset', () => {
     expect(userHasReadReceipts(makeClient(undefined))).toBe(true);
+  });
+});
+
+describe('request-payload date direction', () => {
+  // Both payload builders emit full-precision RFC3339 rather than a `Date`, which is
+  // millisecond-only. A real on-device magnitude, so a regression shows up as an `Invalid Date`.
+  const NANOS = 1786219962651957000;
+  const wire = (value: unknown) => value as unknown as string;
+  const NS_RFC3339 = /^\d{4}-\d{2}-\d{2}T[\d:]{8}\.\d{9}Z$/;
+
+  describe('localMessageToNewMessagePayload', () => {
+    it('sends every direction-crossing date field, and drops the server-managed ones', () => {
+      const payload = localMessageToNewMessagePayload(
+        formatMessage(
+          generateMsg({
+            pinned_at: NANOS,
+            pin_expires: NANOS + 1e9,
+            message_text_updated_at: NANOS,
+          }),
+        ),
+      );
+
+      expect(wire(payload.pinned_at)).toMatch(NS_RFC3339);
+      expect(wire(payload.pin_expires)).toMatch(NS_RFC3339);
+
+      expect(payload).not.toHaveProperty('message_text_updated_at');
+
+      // No date field may still be a number.
+      for (const key of [
+        'created_at',
+        'updated_at',
+        'deleted_at',
+        'pinned_at',
+        'pin_expires',
+      ]) {
+        expect(typeof (payload as Record<string, unknown>)[key]).not.toBe('number');
+      }
+    });
+
+    it('keeps the sub-millisecond part a Date would have dropped', () => {
+      const withSubMs = 1786219962651957000 + 123000;
+      const payload = localMessageToNewMessagePayload(
+        formatMessage(generateMsg({ pinned_at: withSubMs })),
+      );
+
+      const emitted = wire(payload.pinned_at);
+      expect(emitted).toMatch(NS_RFC3339);
+      expect(emitted.slice(-10, -1)).toBe(
+        String(Math.floor(withSubMs / 1e6) % 1000).padStart(3, '0') +
+          String(withSubMs - Math.floor(withSubMs / 1e6) * 1e6).padStart(6, '0'),
+      );
+      expect(new Date(Math.floor(withSubMs / 1e6)).toISOString()).not.toBe(emitted);
+    });
+
+    it('narrows shared_location to the request shape and converts end_at', () => {
+      const payload = localMessageToNewMessagePayload(
+        formatMessage(
+          generateMsg({
+            shared_location: {
+              latitude: 1,
+              longitude: 2,
+              created_by_device_id: 'device',
+              end_at: NANOS,
+              created_at: NANOS,
+              updated_at: NANOS,
+              channel_cid: 'messaging:x',
+              user_id: 'u',
+            },
+          }),
+        ),
+      );
+
+      expect(wire(payload.shared_location?.end_at)).toMatch(NS_RFC3339);
+      expect(payload.shared_location).not.toHaveProperty('created_at');
+      expect(payload.shared_location).not.toHaveProperty('updated_at');
+    });
+
+    it('omits the pin fields entirely when the message is not pinned', () => {
+      const payload = localMessageToNewMessagePayload(formatMessage(generateMsg()));
+
+      expect(payload).not.toHaveProperty('pinned_at');
+      expect(payload).not.toHaveProperty('pin_expires');
+    });
+  });
+
+  describe('toUpdatedMessagePayload', () => {
+    it('strips only the fields that are not request fields at all', () => {
+      const payload = toUpdatedMessagePayload(
+        generateMsg({ pinned_at: NANOS, message_text_updated_at: NANOS }),
+      );
+
+      for (const key of [
+        'created_at',
+        'updated_at',
+        'deleted_at',
+        'message_text_updated_at',
+      ]) {
+        expect(payload).not.toHaveProperty(key);
+      }
+      expect(wire(payload.pinned_at)).toMatch(NS_RFC3339);
+    });
+
+    it('SENDS pin_expires rather than stripping it — stripping clears the expiry', () => {
+      // Omitting it clears the expiry server-side.
+      const payload = toUpdatedMessagePayload(
+        generateMsg({ pinned_at: NANOS, pin_expires: NANOS + 3600e9 }),
+      );
+
+      expect(wire(payload.pin_expires)).toMatch(NS_RFC3339);
+    });
+
+    it('SENDS shared_location, narrowed to the request shape', () => {
+      const payload = toUpdatedMessagePayload(
+        generateMsg({
+          shared_location: {
+            latitude: 1,
+            longitude: 2,
+            end_at: NANOS,
+            created_at: NANOS,
+            updated_at: NANOS,
+            channel_cid: 'messaging:x',
+            user_id: 'u',
+          },
+        }),
+      );
+
+      expect(wire(payload.shared_location?.end_at)).toMatch(NS_RFC3339);
+      expect(payload.shared_location).not.toHaveProperty('created_at');
+    });
+
+    it('reads pinned-ness nullishly, so an epoch pin still counts as pinned', () => {
+      expect(toUpdatedMessagePayload(generateMsg({ pinned_at: 0 })).pinned).toBe(true);
+      expect(toUpdatedMessagePayload(generateMsg({ pinned_at: undefined })).pinned).toBe(
+        false,
+      );
+    });
   });
 });

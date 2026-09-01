@@ -748,6 +748,29 @@ describe('MessageDeliveryReadTracker', () => {
       expect(tracker.getUserProgress(carol.id)?.lastReadRef).toEqual(ref(2000));
     });
 
+    it('accepts a read state whose last_read is the epoch', () => {
+      // `0` is the epoch sentinel; a truthiness check would reject the state as invalid.
+      const newcomer = U('newcomer');
+
+      tracker.reconcileFromReadStore({
+        previousReadState: {},
+        nextReadState: {
+          [newcomer.id]: {
+            last_read: 0,
+            unread_messages: 3,
+            user: newcomer,
+          },
+        },
+        meta: { changedUserIds: [newcomer.id], removedUserIds: [] },
+      });
+
+      // MIN_REF is correct — nothing at or below the epoch has been read.
+      const progress = tracker.getUserProgress(newcomer.id);
+      expect(progress).not.toBeNull();
+      expect(progress?.user).toStrictEqual(newcomer);
+      expect(progress?.lastReadRef.timestamp).toBe(Number.NEGATIVE_INFINITY);
+    });
+
     it('ignores non-bootstrap reconcile when metadata is absent', () => {
       const user = U('missing-meta-user');
 

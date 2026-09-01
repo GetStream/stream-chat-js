@@ -44,6 +44,16 @@ export const nowNs = (): number => msToNs(Date.now());
 /** A wire timestamp as a `Date`, for request payloads and date libraries. */
 export const nsToDate = (ns: number): Date => new Date(nsToMs(ns));
 
+/**
+ * A wire timestamp as a nanosecond-precision RFC3339 string, for an outgoing request date field.
+ * {@link nsToDate} is lossy here — `Date` holds only milliseconds.
+ */
+export const nsToRfc3339 = (ns: number): string => {
+  const ms = nsToMs(ns);
+  const subMs = String(ns - ms * NS_PER_MS).padStart(6, '0');
+  return new Date(ms).toISOString().replace(/\.(\d{3})Z$/, `.$1${subMs}Z`);
+};
+
 /** A `Date` as a wire timestamp. */
 export const dateToNs = (date: Date): number => msToNs(date.getTime());
 

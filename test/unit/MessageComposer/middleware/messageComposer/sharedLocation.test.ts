@@ -8,6 +8,7 @@ import {
   MiddlewareStatus,
   StreamChat,
 } from '../../../../../src';
+import { msToNs } from '../../../../../src/utils/time';
 
 const user = { id: 'user-id' };
 
@@ -83,6 +84,70 @@ describe('stream-io/message-composer-middleware/shared-location', () => {
         sendOptions: {},
       },
     });
+  });
+
+  it('crosses end_at to nanoseconds for the optimistic message, keeping the request a Date', async () => {
+    // Only a live location produces `end_at`, which is why the static-coords tests above miss it.
+    const { messageComposer } = setup();
+    const middleware = createSharedLocationCompositionMiddleware(messageComposer);
+    const durationMs = 60 * 60 * 1000;
+    messageComposer.locationComposer.setData({ latitude: 1, longitude: 1, durationMs });
+
+    const result = await middleware.handlers.compose(setupMiddlewareHandlerParams());
+    const localEndAt = result.state.localMessage.shared_location?.end_at;
+    const requestEndAt = result.state.message.shared_location?.end_at;
+
+    expect(typeof localEndAt).toBe('number');
+    expect(requestEndAt).toBeInstanceOf(Date);
+    expect(localEndAt).toBe((requestEndAt as Date).getTime() * 1e6);
+    // An hour out must not read as already elapsed.
+    expect(localEndAt as number).toBeGreaterThan(Date.now() * 1e6);
+  });
+
+  it('sends only request fields when the location came off the edited message', async () => {
+    // The full chain, not just this middleware: `cleanData` spreads `state.message` OVER the
+    // narrowed payload `toUpdatedMessagePayload` builds, so whatever this middleware puts there is
+    // what goes on the wire. Hydrating composer state from a response used to carry the response's
+    // own `channel_cid` / `user_id` / numeric `created_at` / `updated_at` straight through, and to
+    // drop `end_at` — a field `SharedLocation` declares — turning a live location static on edit.
+    const endAtIso = '2099-12-31T23:59:59.535Z';
+    const editedMessage = {
+      created_at: msToNs(Date.parse('2026-01-01T00:00:00.000Z')),
+      updated_at: msToNs(Date.parse('2026-01-01T00:00:00.000Z')),
+      id: 'edited-message',
+      status: 'received',
+      text: 'shared',
+      type: 'regular',
+      shared_location: {
+        channel_cid: 'channelType:channelId',
+        created_at: msToNs(Date.parse('2026-01-01T00:00:00.000Z')),
+        created_by_device_id: 'device',
+        end_at: msToNs(Date.parse(endAtIso)),
+        latitude: 1,
+        longitude: 2,
+        message_id: 'edited-message',
+        updated_at: msToNs(Date.parse('2026-01-01T00:00:00.000Z')),
+        user_id: user.id,
+      },
+    } as LocalMessage;
+    const { messageComposer } = setup({ composition: editedMessage });
+
+    const composition = await messageComposer.compose();
+
+    // Serialized, so a regression reads as the nanosecond number it would actually send.
+    expect(
+      JSON.parse(JSON.stringify(composition?.message.shared_location)),
+    ).toStrictEqual({
+      created_by_device_id: 'device',
+      end_at: endAtIso,
+      latitude: 1,
+      longitude: 2,
+      message_id: 'edited-message',
+    });
+    // The optimistic copy is response-shaped, so its `end_at` is back in the wire unit.
+    expect(composition?.localMessage.shared_location?.end_at).toBe(
+      msToNs(Date.parse(endAtIso)),
+    );
   });
 
   it('does not inject shared_location to localMessage and message payloads if none is set', async () => {

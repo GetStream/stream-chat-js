@@ -1,7 +1,7 @@
 import type { MiddlewareHandlerParams } from '../../../middleware';
 import type { SharedLocationResponseData as Gen_SharedLocationResponseData } from '../../../gen/models';
 import type { MessageComposer } from '../../messageComposer';
-import { nowNs } from '../../../utils/time';
+import { dateToNs, nowNs } from '../../../utils/time';
 import type {
   MessageComposerMiddlewareState,
   MessageCompositionMiddleware,
@@ -22,12 +22,16 @@ export const createSharedLocationCompositionMiddleware = (
       if (!locationComposer || !location || !composer.client.user) return forward();
       const timestamp = nowNs();
 
+      // `localMessage` is response-shaped, so `end_at` crosses from `Date` to unix nanoseconds.
+      const { end_at, ...locationRest } = location;
+
       return next({
         ...state,
         localMessage: {
           ...state.localMessage,
           shared_location: {
-            ...location,
+            ...locationRest,
+            ...(end_at != null ? { end_at: dateToNs(end_at) } : {}),
             channel_cid: composer.channel.cid,
             created_at: timestamp,
             updated_at: timestamp,

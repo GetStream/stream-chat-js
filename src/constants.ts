@@ -4,10 +4,11 @@ export const DEFAULT_UPLOAD_SIZE_LIMIT_BYTES = 100 * 1024 * 1024; // 100 MB
 export const API_MAX_FILES_ALLOWED_PER_MESSAGE = 10;
 export const MAX_CHANNEL_MEMBER_COUNT_IN_CHANNEL_QUERY = 100;
 export const RESERVED_UPDATED_MESSAGE_FIELDS = Object.freeze({
-  // Dates should not be converted back to ISO strings as JS looses precision on them (milliseconds)
+  // Not `MessageRequest` fields at all. Date fields that *are* (pinned_at, pin_expires,
+  // shared_location) must not be added here — stripping them clears them server-side.
   created_at: true,
   deleted_at: true,
-  pinned_at: true,
+  message_text_updated_at: true,
   updated_at: true,
   command: true,
   // Back-end enriches these fields

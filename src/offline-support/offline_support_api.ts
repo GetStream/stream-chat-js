@@ -726,7 +726,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
               execute: false,
               reads: [
                 {
-                  last_read: ownReads?.last_read ?? new Date(0),
+                  last_read: ownReads?.last_read ?? 0,
                   last_read_message_id: ownReads?.last_read_message_id,
                   unread_messages: unreadCount,
                   // `client.user` is `ClientUser` (everything optional but `id`), so a
@@ -1161,7 +1161,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
           execute: false,
           reads: [
             {
-              last_read: ownReads?.last_read ?? new Date(0),
+              last_read: ownReads?.last_read ?? 0,
               last_read_message_id: ownReads?.last_read_message_id,
               unread_messages: unreadCount,
               // See the note above: supply `blocked_user_ids`, do not assert it.
@@ -1443,16 +1443,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     editedMessage: LocalMessage | Partial<MessageResponse>;
     pendingMessage: MessageRequest;
   }) => {
-    const normalizedEditedMessageSource = {
-      ...editedMessage,
-    } as LocalMessage & { message_text_updated_at?: string };
-
-    if ((editedMessage as LocalMessage).status === 'failed') {
-      delete normalizedEditedMessageSource.message_text_updated_at;
-    }
-
     const normalizedEditedMessage = localMessageToNewMessagePayload(
-      normalizedEditedMessageSource,
+      editedMessage as LocalMessage,
     );
     const pendingMessageStatus = (pendingMessage as { status?: string }).status;
 

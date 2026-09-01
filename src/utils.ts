@@ -13,7 +13,7 @@ import type { Channel } from './channel';
 import type { AxiosRequestConfig } from 'axios';
 import { LOCAL_MESSAGE_FIELDS, RESERVED_UPDATED_MESSAGE_FIELDS } from './constants';
 import { chatLoggerSystem } from './logger';
-import { nowNs } from './utils/time';
+import { nowNs, nsToRfc3339 } from './utils/time';
 
 const logger = chatLoggerSystem.getLogger('utils');
 
@@ -409,6 +409,33 @@ export function messageWithReactionRemoved(
   };
 }
 
+// Generated as `Date`, but `Date` is millisecond-only and the API takes nanosecond RFC3339.
+const toRequestDate = (ns: number) => nsToRfc3339(ns) as unknown as Date;
+
+const toRequestDateFields = ({
+  pinned_at,
+  pin_expires,
+  shared_location,
+}: Pick<Partial<MessageResponse>, 'pinned_at' | 'pin_expires' | 'shared_location'>): Pick<
+  MessageRequest,
+  'pinned_at' | 'pin_expires' | 'shared_location'
+> => ({
+  ...(pinned_at != null ? { pinned_at: toRequestDate(pinned_at) } : {}),
+  ...(pin_expires != null ? { pin_expires: toRequestDate(pin_expires) } : {}),
+  ...(shared_location
+    ? {
+        shared_location: {
+          latitude: shared_location.latitude,
+          longitude: shared_location.longitude,
+          created_by_device_id: shared_location.created_by_device_id,
+          ...(shared_location.end_at != null
+            ? { end_at: toRequestDate(shared_location.end_at) }
+            : {}),
+        },
+      }
+    : {}),
+});
+
 export const localMessageToNewMessagePayload = (
   localMessage: LocalMessage,
 ): MessageRequest => {
@@ -418,6 +445,10 @@ export const localMessageToNewMessagePayload = (
     created_at: _created_at,
     updated_at: _updated_at,
     deleted_at: _deleted_at,
+    message_text_updated_at: _message_text_updated_at,
+    pinned_at,
+    pin_expires,
+    shared_location,
     // Client-specific fields
     error: _error,
     status: _status,
@@ -438,12 +469,15 @@ export const localMessageToNewMessagePayload = (
     ...messageFields
   } = localMessage;
 
+  const requestDates = toRequestDateFields({ pinned_at, pin_expires, shared_location });
+
   // `messageFields` still carries LocalMessage-only fields (cid, deleted_reply_count, mentioned_*,
   // pinned, shadowed, …) that the stricter OpenAPI `MessageRequest` omits; the server ignores them.
   return {
-    ...messageFields,
+    ...(messageFields as MessageRequest),
     mentioned_users: mentioned_users?.map((user) => user.id),
-  } as MessageRequest;
+    ...requestDates,
+  };
 };
 
 export const toUpdatedMessagePayload = (
@@ -462,10 +496,15 @@ export const toUpdatedMessagePayload = (
 
   return {
     ...messageFields,
-    pinned: !!message.pinned_at,
+    pinned: message.pinned_at != null,
     mentioned_users: message.mentioned_users?.map((user) =>
       typeof user === 'string' ? user : user.id,
     ),
+    ...toRequestDateFields({
+      pinned_at: message.pinned_at,
+      pin_expires: message.pin_expires,
+      shared_location: message.shared_location,
+    }),
   };
 };
 

@@ -422,7 +422,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
     // We deliberately do NOT persist the inferred boundary back into the snapshot: writing
     // `firstUnreadMessageId` would make the channel look explicitly marked-unread and suppress
     // auto-mark-read at the bottom. The separator reads the (re-seeded) snapshot directly.
-    if (lastReadAt) {
+    if (lastReadAt != null) {
       let {
         firstUnreadMessageId: inferredFirstUnreadMessageId,
         lastReadMessageId: inferredLastReadMessageId,

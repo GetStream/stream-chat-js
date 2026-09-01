@@ -1921,7 +1921,8 @@ export class Channel extends ChannelApi {
    * @returns Unread count.
    */
   countUnread(lastRead?: number | null) {
-    if (!lastRead) return this.state.unreadCount;
+    // Nullish, not truthy: `0` is a legitimate wire timestamp (the epoch).
+    if (lastRead == null) return this.state.unreadCount;
     let count = 0;
     const latestMessages = this.messagePaginator.headItems;
     for (let i = 0; i < latestMessages.length; i += 1) {

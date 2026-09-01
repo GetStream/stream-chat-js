@@ -42,7 +42,7 @@ const isValidReadState = (
 ): readState is ReadStoreUserState & {
   last_read: number;
   user: UserResponse;
-} => !!readState?.user && !!readState.last_read;
+} => !!readState?.user && readState.last_read != null;
 
 const compareRefsAsc = (a: MsgRef, b: MsgRef) =>
   a.timestamp !== b.timestamp ? a.timestamp - b.timestamp : 0;
@@ -273,12 +273,14 @@ export class MessageReceiptsTracker extends WithSubscriptions {
     for (const r of responses) {
       const lastReadTimestamp = r.last_read ?? null;
       const lastDeliveredTimestamp = r.last_delivered_at ?? null;
-      const lastReadRef = lastReadTimestamp
-        ? (this.locateMessage(lastReadTimestamp) ?? MIN_REF)
-        : MIN_REF;
-      let lastDeliveredRef = lastDeliveredTimestamp
-        ? (this.locateMessage(lastDeliveredTimestamp) ?? MIN_REF)
-        : MIN_REF;
+      const lastReadRef =
+        lastReadTimestamp != null
+          ? (this.locateMessage(lastReadTimestamp) ?? MIN_REF)
+          : MIN_REF;
+      let lastDeliveredRef =
+        lastDeliveredTimestamp != null
+          ? (this.locateMessage(lastDeliveredTimestamp) ?? MIN_REF)
+          : MIN_REF;
       const isReadAfterDelivered = compareRefsAsc(lastDeliveredRef, lastReadRef) < 0;
       if (isReadAfterDelivered) lastDeliveredRef = lastReadRef;
 

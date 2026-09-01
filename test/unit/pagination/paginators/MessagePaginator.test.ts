@@ -746,6 +746,51 @@ describe('MessagePaginator', () => {
       expect(jumpSpy).not.toHaveBeenCalled();
     });
 
+    it('still infers the unread boundary when lastReadAt is the epoch', async () => {
+      // A truthiness guard would skip the inference branch for the epoch sentinel entirely.
+      const channelWithReadState = {
+        cid: 'channel-id',
+        query: vi.fn(),
+        state: {
+          read: {
+            user1: {
+              first_unread_message_id: null,
+              last_read: 0,
+              last_read_message_id: null,
+            },
+          },
+        },
+        getClient: () => ({ user: { id: 'user1' } }),
+      } as unknown as Channel;
+
+      const paginator = new MessagePaginator({
+        channel: channelWithReadState,
+        itemIndex,
+      });
+      const executeQuerySpy = vi.spyOn(paginator, 'executeQuery').mockResolvedValue({
+        stateCandidate: {
+          items: [
+            createMessage({ created_at: '2021-01-01T00:00:00.000Z', id: 'm-first' }),
+            createMessage({ created_at: '2021-01-03T00:00:00.000Z', id: 'm-second' }),
+          ],
+        },
+        targetInterval: null,
+      });
+      const jumpSpy = vi.spyOn(paginator, 'jumpToMessage').mockResolvedValue(true);
+
+      const ok = await paginator.jumpToTheFirstUnreadMessage({ pageSize: 25 });
+
+      expect(ok).toBe(true);
+      expect(executeQuerySpy).toHaveBeenCalledWith({
+        queryShape: { created_at_around: nsToDate(0), limit: 25 },
+        updateState: false,
+      });
+      expect(jumpSpy).toHaveBeenCalledWith(
+        'm-first',
+        expect.objectContaining({ focusReason: 'jump-to-first-unread' }),
+      );
+    });
+
     it('falls back to created_at_around query when unread ids are missing and lastReadAt exists', async () => {
       const lastReadAt = convertDateToTimestamp('2021-01-02T00:00:00.000Z');
       const channelWithReadState = {
