@@ -47,8 +47,9 @@ export function logChatPromiseExecution<T>(promise: Promise<T>, name: string) {
 export const noopLogger: Logger = () => null;
 
 const logError = <T>(logger: Logger, error: unknown, event: T) => {
-  logger('error', 'Unhandled error in event listener', { error, event });
-  if (logger === noopLogger) console.error(error);
+  const message = 'Unhandled error in event listener';
+  logger('error', message, { error, event });
+  if (logger === noopLogger) console.error(message, error, event);
 };
 
 /**
