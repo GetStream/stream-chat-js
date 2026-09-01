@@ -852,7 +852,7 @@ These now delegate to `channel.updateMemberPartial({ set: { archived: true } })`
 
 ```ts
 // v9
-channel.muteStatus(): { muted: boolean; createdAt: Date | null; expiresAt: Date | null };
+channel.muteStatus(): { muted: boolean; createdAt: number | null; expiresAt: number | null };
 channel.sendAction(messageID, formData);
 channel.keystroke(parent_id?, options?: { user_id });
 channel.stopTyping(parent_id?, options?: { user_id });

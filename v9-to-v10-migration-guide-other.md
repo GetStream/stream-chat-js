@@ -30,7 +30,7 @@
 - Composer attachments now nest `mime_type` / `file_size` / `duration` under `.custom`; `LocationComposer` preview `end_at` is a `Date` (was ISO string).
 - Composer configuration gained required `polls`, `attachments.enabled` and `attachments.customCdn` (all defaulted — only full-literal annotations break). The channel type's `uploads` / `polls` flags now resolve **into** that configuration, so read `composer.config` rather than `channel.serverConfig`. **Silent behaviour change:** a custom `doUploadRequest` no longer waives the `upload-file` capability — set `attachments.customCdn: true` if you upload to storage Stream does not host.
 - `Role` type renamed to `RoleName`.
-- Assorted small tightenings: `TokenManager.setTokenOrProvider` user param narrowed, `revokeTokens(before)` no longer accepts `string`, `UserGroupPaginator` cursor field is a `Date`.
+- Assorted small tightenings: `TokenManager.setTokenOrProvider` user param narrowed, `revokeTokens(before)` no longer accepts `string`.
 
 ---
 
@@ -143,21 +143,21 @@ type LocalEvent = (
   | ({ type: 'message.read_locally' } & {
       channel_type: string;
       cid: string;
-      created_at: Date;
+      created_at: number;
       channel_id?: string;
       last_read_message_id?: string;
       team?: string;
       user?: UserResponse;
     })
-) & { received_at?: Date };
+) & { received_at?: number };
 
 // The hello event of the v2 connect endpoint (see "WebSocket transport" below).
 type ConnectedEvent = {
   type: 'connection.ok';
   connection_id: string;
-  created_at: Date;
+  created_at: number;
   me: OwnUserResponse;
-  received_at?: Date;
+  received_at?: number;
 };
 
 // Public alias — same name as in v9, wider shape.
@@ -709,7 +709,7 @@ ISO-string form is gone — construct a `Date` at the call site.
 
 ### `UserGroupPaginator` cursor
 
-The `created_at_gt` cursor field is derived from `lastItem.created_at`, which is now a `Date` (was a string). The paginator internally calls `.toISOString()` on it — read paths (`useNextCursor`) are unchanged, but any custom sub-class or off-path consumer that pulled `.created_at` off the paginator's items must handle the `Date` type.
+The `created_at_gt` cursor field is derived from `lastItem.created_at`, which is now a unix-**nanosecond** `number` (was a string). The paginator converts it internally (`nsToDate(lastItem.created_at).toISOString()`) — read paths (`useNextCursor`) are unchanged, but any custom sub-class or off-path consumer that pulled `.created_at` off the paginator's items must handle the number: `new Date(ns)` is out of range, so use `convertTimestampToDate` / `nsToDate`.
 
 ### Aliases dropped on `StreamChat`
 

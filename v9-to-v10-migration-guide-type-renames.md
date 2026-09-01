@@ -182,13 +182,13 @@ Because the hand-written list omitted `latest_hidden_channels`, and a `user.upda
 
 | Field                 | v10 `Device` (removed)                        | `DeviceResponse`   |
 | --------------------- | --------------------------------------------- | ------------------ |
-| `created_at`          | `string`                                      | `Date`             |
+| `created_at`          | `string`                                      | `number`           |
 | `push_provider`       | `'firebase' \| 'apn' \| 'huawei' \| 'xiaomi'` | `string`           |
 | `user_id`             | `string \| undefined`                         | `string`           |
 | `provider`, `user`    | present                                       | **gone**           |
 | `hardware_id`, `voip` | **absent**                                    | present (optional) |
 
-`created_at` is the one that bites: the response decoders have always produced a `Date` here, so the old `string` annotation was wrong. Call sites doing `new Date(device.created_at)` still work; ones doing `device.created_at.slice(...)` were already broken at runtime and now fail to compile.
+`created_at` is the one that bites: it is the unix-**nanosecond** number the API sends, so the old `string` annotation was wrong in a way that hid a second problem. `device.created_at.slice(...)` was already broken at runtime and now fails to compile — but so does anything that treats the value as a date: `new Date(device.created_at)` is **out of range** for a nanosecond timestamp and yields an `Invalid Date`. Use `convertTimestampToDate(device.created_at)` (or `nsToDate`), or compare the raw numbers.
 
 ### Stale `Omit` keys — two types quietly widened
 
