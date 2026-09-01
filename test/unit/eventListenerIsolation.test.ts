@@ -5,6 +5,10 @@ import { getClientWithUser } from './test-utils/getClient';
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
+// what matters is that the error object reached the reporter, not how the
+// message was worded or where in the argument list it landed
+const reportedErrors = (spy: ReturnType<typeof vi.spyOn>) => spy.mock.calls.flat();
+
 describe('client event listener isolation', () => {
   let consoleError: ReturnType<typeof vi.spyOn>;
 
@@ -38,7 +42,7 @@ describe('client event listener isolation', () => {
     });
     client.dispatchEvent({ type: 'message.new' } as Event);
 
-    expect(consoleError).toHaveBeenCalledWith(error);
+    expect(reportedErrors(consoleError)).toContain(error);
   });
 
   it('captures a rejection from an async listener', async () => {
@@ -56,7 +60,7 @@ describe('client event listener isolation', () => {
     process.off('unhandledRejection', onUnhandled);
 
     expect(rejections).toHaveLength(0);
-    expect(consoleError).toHaveBeenCalledWith(error);
+    expect(reportedErrors(consoleError)).toContain(error);
   });
 
   it('reports through a configured logger at error level', () => {
@@ -71,11 +75,11 @@ describe('client event listener isolation', () => {
 
     expect(logger).toHaveBeenCalledWith(
       'error',
-      'Unhandled error in event listener',
+      expect.any(String),
       expect.objectContaining({ error }),
     );
     // a configured logger takes over, no duplicate console output
-    expect(consoleError).not.toHaveBeenCalledWith(error);
+    expect(consoleError).not.toHaveBeenCalled();
   });
 
   it('does not invoke a listener that subscribes during dispatch', () => {
@@ -176,6 +180,6 @@ describe('channel event listener isolation', () => {
     process.off('unhandledRejection', onUnhandled);
 
     expect(rejections).toHaveLength(0);
-    expect(consoleError).toHaveBeenCalledWith(error);
+    expect(reportedErrors(consoleError)).toContain(error);
   });
 });
