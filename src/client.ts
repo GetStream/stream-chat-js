@@ -29,10 +29,12 @@ import {
   axiosParamsSerializer,
   chatCodes,
   generateChannelTempCid,
+  invokeEventListener,
   isFunction,
   isOnline,
   isOwnUserBaseProperty,
   messageSetPagination,
+  noopLogger,
   normalizeQuerySort,
   randomId,
   retryInterval,
@@ -575,7 +577,7 @@ export class StreamChat {
      *    channel: object
      * }
      */
-    this.logger = isFunction(inputOptions.logger) ? inputOptions.logger : () => null;
+    this.logger = isFunction(inputOptions.logger) ? inputOptions.logger : noopLogger;
     this.recoverStateOnReconnect = this.options.recoverStateOnReconnect;
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
@@ -1700,20 +1702,15 @@ export class StreamChat {
   }
 
   _callClientListeners = (event: Event) => {
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const client = this;
-    // gather and call the listeners
-    const listeners: Array<(event: Event) => void> = [];
-    if (client.listeners.all) {
-      listeners.push(...client.listeners.all);
-    }
-    if (client.listeners[event.type]) {
-      listeners.push(...client.listeners[event.type]);
-    }
+    // snapshot before dispatching: `on` pushes into these arrays in place, so a
+    // listener that subscribes while handling an event must not be invoked for it
+    const listeners = [
+      ...(this.listeners.all ?? []),
+      ...(this.listeners[event.type] ?? []),
+    ];
 
-    // call the event and send it to the listeners
     for (const listener of listeners) {
-      listener(event);
+      invokeEventListener(listener, event, this.logger);
     }
   };
 
