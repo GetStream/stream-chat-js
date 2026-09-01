@@ -6,6 +6,7 @@ import { MessageReceiptsTracker } from './messageDelivery';
 import {
   channelHasReadEvents,
   generateChannelTempCid,
+  invokeEventListener,
   logChatPromiseExecution,
   messageSetPagination,
   normalizeQuerySort,
@@ -2354,22 +2355,17 @@ export class Channel {
   }
 
   _callChannelListeners = (event: Event) => {
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const channel = this;
-    // gather and call the listeners
-    const listeners = [];
-    if (channel.listeners.all) {
-      listeners.push(...channel.listeners.all);
-    }
-    if (channel.listeners[event.type]) {
-      listeners.push(...channel.listeners[event.type]);
-    }
+    // snapshot before dispatching: `on` pushes into these arrays in place, so a
+    // listener that subscribes while handling an event must not be invoked for it
+    const listeners = [
+      ...(this.listeners.all ?? []),
+      ...(this.listeners[event.type] ?? []),
+    ];
 
-    // call the event and send it to the listeners
+    const { logger } = this._client;
     for (const listener of listeners) {
-      if (typeof listener !== 'string') {
-        listener(event);
-      }
+      if (typeof listener === 'string') continue;
+      invokeEventListener(listener, event, logger);
     }
   };
 

@@ -41,6 +41,35 @@ export function logChatPromiseExecution<T>(promise: Promise<T>, name: string) {
   });
 }
 
+/**
+ * The default no-op client logger.
+ */
+export const noopLogger: Logger = () => null;
+
+const logError = <T>(logger: Logger, error: unknown, event: T) => {
+  logger('error', 'Unhandled error in event listener', { error, event });
+  if (logger === noopLogger) console.error(error);
+};
+
+/**
+ * Invokes a single event listener in isolation, so that a faulty listener cannot
+ * abort the dispatch loop or the bookkeeping that follows it.
+ */
+export const invokeEventListener = <T>(
+  listener: (event: T) => unknown,
+  event: T,
+  logger: Logger,
+) => {
+  try {
+    const result = listener(event);
+    if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
+      Promise.resolve(result).catch((error) => logError(logger, error, event));
+    }
+  } catch (error) {
+    logError(logger, error, event);
+  }
+};
+
 export const sleep = (m: number): Promise<void> => new Promise((r) => setTimeout(r, m));
 
 export function isFunction(value: unknown): value is (...args: unknown[]) => unknown {
