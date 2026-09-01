@@ -1825,8 +1825,23 @@ describe('loadMessageIntoState', () => {
 	});
 
 	it('should do nothing if message is available locally in the current set', async () => {
-		state.addMessagesSorted([generateMsg({ id: '8' })], false, true, true, 'latest');
-		state.addMessagesSorted([generateMsg({ id: '5' })], false, true, true, 'new');
+		// pin the timestamps: with `new Date()` defaults the two messages land in the
+		// same millisecond on a fast machine and get merged into one set by timestamp
+		// overlap, but straddle a millisecond boundary under load and do not
+		state.addMessagesSorted(
+			[generateMsg({ id: '8', date: toISOString(800) })],
+			false,
+			true,
+			true,
+			'latest',
+		);
+		state.addMessagesSorted(
+			[generateMsg({ id: '5', date: toISOString(500) })],
+			false,
+			true,
+			true,
+			'new',
+		);
 		await state.loadMessageIntoState('8');
 
 		expect(state.messageSets[0].isCurrent).to.be.equal(true);
