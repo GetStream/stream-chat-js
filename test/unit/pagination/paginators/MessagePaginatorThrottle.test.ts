@@ -5,6 +5,7 @@ import { EntityStore } from '../../../../src/entityStore/EntityStore';
 import { applyReactionLocally } from '../../../../src/entityStore/applyReactionLocally';
 import { formatMessage } from '../../../../src';
 import { generateMsg } from '../../test-utils/generateMessage';
+import { convertDateToTimestamp } from '../../test-utils/time';
 import type { Channel } from '../../../../src/channel';
 import type { StreamChat } from '../../../../src/client';
 import type { LocalMessage, MessageResponse, Reaction } from '../../../../src/types';
@@ -14,7 +15,9 @@ const msg = (id: string, day: number): LocalMessage =>
     generateMsg({
       id,
       cid: 'channel-id',
-      created_at: `2020-01-${String(day).padStart(2, '0')}T00:00:00.000Z`,
+      created_at: convertDateToTimestamp(
+        `2020-01-${String(day).padStart(2, '0')}T00:00:00.000Z`,
+      ),
     }) as MessageResponse,
   );
 

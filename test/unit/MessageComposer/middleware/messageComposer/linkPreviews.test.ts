@@ -20,6 +20,7 @@ import {
 } from '../../../../../src';
 import { getClientWithUser } from '../../../test-utils/getClient';
 import { stubServerConfig } from '../../../test-utils/stubServerConfig';
+import { convertDateToTimestamp } from '../../../test-utils/time';
 
 const enrichURLReturnValue = {
   asset_url: 'https://example.com/image.jpg',
@@ -105,7 +106,7 @@ describe('stream-io/message-composer-middleware/link-previews', () => {
         },
         localMessage: {
           attachments: [],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -116,7 +117,7 @@ describe('stream-io/message-composer-middleware/link-previews', () => {
           status: 'sending',
           text: '',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),
@@ -159,7 +160,7 @@ describe('stream-io/message-composer-middleware/link-previews', () => {
         },
         localMessage: {
           attachments: [],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -170,7 +171,7 @@ describe('stream-io/message-composer-middleware/link-previews', () => {
           status: 'sending',
           text: 'https://example.com',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),
@@ -216,7 +217,7 @@ describe('stream-io/message-composer-middleware/link-previews', () => {
         },
         localMessage: {
           attachments: [],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -227,7 +228,7 @@ describe('stream-io/message-composer-middleware/link-previews', () => {
           status: 'sending',
           text: 'https://example.com',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),
@@ -271,7 +272,7 @@ describe('stream-io/message-composer-middleware/link-previews', () => {
         },
         localMessage: {
           attachments: [],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -282,7 +283,7 @@ describe('stream-io/message-composer-middleware/link-previews', () => {
           status: 'sending',
           text: 'https://example.com',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),
@@ -325,7 +326,7 @@ describe('stream-io/message-composer-middleware/link-previews', () => {
         },
         localMessage: {
           attachments: [],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -336,7 +337,7 @@ describe('stream-io/message-composer-middleware/link-previews', () => {
           status: 'sending',
           text: 'https://example.com',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),
@@ -411,7 +412,7 @@ describe('stream-io/message-composer-middleware/link-previews', () => {
         },
         localMessage: {
           attachments: [],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -422,7 +423,7 @@ describe('stream-io/message-composer-middleware/link-previews', () => {
           status: 'sending',
           text: 'https://example1.com https://example2.com https://example3.com',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),
@@ -484,7 +485,7 @@ describe('stream-io/message-composer-middleware/link-previews', () => {
         },
         localMessage: {
           attachments: [],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -495,7 +496,7 @@ describe('stream-io/message-composer-middleware/link-previews', () => {
           status: 'sending',
           text: 'https://example1.com https://example2.com',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),
@@ -550,7 +551,7 @@ describe('stream-io/message-composer-middleware/link-previews', () => {
               image_url: 'https://example.com/image.jpg',
             },
           ],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -561,7 +562,7 @@ describe('stream-io/message-composer-middleware/link-previews', () => {
           status: 'sending',
           text: 'https://example.com',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),

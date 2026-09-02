@@ -12,6 +12,7 @@ import {
 import { DeepPartial } from '../../../src/types.utility';
 import { mergeWith } from '../../../src/utils/mergeWith';
 import { stubServerConfig } from '../test-utils/stubServerConfig';
+import { convertDateToTimestamp } from '../test-utils/time';
 
 const existingLinkUrl = 'https://existing.com';
 const linkUrl = 'https://example.com';
@@ -139,11 +140,11 @@ describe('LinkPreviewsManager', () => {
         id: 'test-message-id',
         text: '',
         type: 'regular',
-        created_at: new Date(),
+        created_at: convertDateToTimestamp(new Date()),
         deleted_at: null,
         pinned_at: null,
         status: 'pending',
-        updated_at: new Date(),
+        updated_at: convertDateToTimestamp(new Date()),
         attachments: [
           {
             og_scrape_url: linkUrl,
@@ -166,11 +167,11 @@ describe('LinkPreviewsManager', () => {
         id: 'test-message-id',
         text: '',
         type: 'regular',
-        created_at: new Date(),
+        created_at: convertDateToTimestamp(new Date()),
         deleted_at: null,
         pinned_at: null,
         status: 'pending',
-        updated_at: new Date(),
+        updated_at: convertDateToTimestamp(new Date()),
         attachments: [
           {
             og_scrape_url: linkUrl,

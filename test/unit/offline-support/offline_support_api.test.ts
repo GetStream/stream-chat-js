@@ -1125,10 +1125,21 @@ describe('OfflineSupportApi', () => {
           offlineDb.getChannels.mockResolvedValue([
             {
               messages: [
-                { id: 'sent', status: 'received', updated_at: new Date().toISOString() },
-                { id: 'unsent', status: 'failed', updated_at: new Date().toISOString() },
+                {
+                  id: 'sent',
+                  status: 'received',
+                  updated_at: convertDateToTimestamp(new Date().toISOString()),
+                },
+                {
+                  id: 'unsent',
+                  status: 'failed',
+                  updated_at: convertDateToTimestamp(new Date().toISOString()),
+                },
                 // No status at all — a plain server message, which must not be mistaken for unsent.
-                { id: 'plain', updated_at: new Date().toISOString() },
+                {
+                  id: 'plain',
+                  updated_at: convertDateToTimestamp(new Date().toISOString()),
+                },
               ],
             },
           ]);
@@ -2373,7 +2384,9 @@ describe('OfflineSupportApi', () => {
                 id: 'msg-123',
                 status: 'failed',
                 text: 'edited',
-                message_text_updated_at: '2026-04-01T20:48:43.886269Z',
+                message_text_updated_at: convertDateToTimestamp(
+                  '2026-04-01T20:48:43.886269Z',
+                ),
               },
             },
           ) as PendingTask;
@@ -2427,7 +2440,9 @@ describe('OfflineSupportApi', () => {
                 id: 'msg-123',
                 status: 'failed',
                 text: 'edited',
-                message_text_updated_at: '2026-04-01T20:48:43.886269Z',
+                message_text_updated_at: convertDateToTimestamp(
+                  '2026-04-01T20:48:43.886269Z',
+                ),
               },
             },
           ) as PendingTask;

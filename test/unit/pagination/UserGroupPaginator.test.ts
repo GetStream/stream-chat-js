@@ -12,7 +12,7 @@ const createUserGroup = (
   id: 'group-1',
   name: 'Backend Support',
   created_at: convertDateToTimestamp('2026-01-01T00:00:00.000Z'),
-  updated_at: new Date('2026-01-01T00:00:00.000Z'),
+  updated_at: convertDateToTimestamp(new Date('2026-01-01T00:00:00.000Z')),
   ...overrides,
 });
 
@@ -42,7 +42,7 @@ describe('UserGroupPaginator', () => {
         id: 'group-2',
         name: 'Frontend Support',
         created_at: convertDateToTimestamp('2026-01-02T00:00:00.000Z'),
-        updated_at: new Date('2026-01-02T00:00:00.000Z'),
+        updated_at: convertDateToTimestamp(new Date('2026-01-02T00:00:00.000Z')),
       }),
     ];
     const secondPage = [
@@ -50,7 +50,7 @@ describe('UserGroupPaginator', () => {
         id: 'group-3',
         name: 'QA Support',
         created_at: convertDateToTimestamp('2026-01-03T00:00:00.000Z'),
-        updated_at: new Date('2026-01-03T00:00:00.000Z'),
+        updated_at: convertDateToTimestamp(new Date('2026-01-03T00:00:00.000Z')),
       }),
     ];
 

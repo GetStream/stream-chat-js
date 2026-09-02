@@ -20,6 +20,7 @@ vi.mock('../../src/pagination/utility.queryChannel', async () => {
   };
 });
 import { getChannel as mockGetChannel } from '../../src/pagination/utility.queryChannel';
+import { convertDateToTimestamp } from './test-utils/time';
 
 describe('ChannelManager', () => {
   let client: StreamChat;
@@ -1840,11 +1841,14 @@ describe('ChannelManager', () => {
         // what `member.updated` does to the live channel before the manager is notified
         pinned.state.membership = {
           ...pinned.state.membership,
-          pinned_at: new Date().toISOString(),
+          pinned_at: convertDateToTimestamp(new Date().toISOString()),
         };
         client.dispatchEvent({
           cid: pinned.cid,
-          member: { pinned_at: new Date().toISOString(), user: { id: client.userId } },
+          member: {
+            pinned_at: convertDateToTimestamp(new Date().toISOString()),
+            user: { id: client.userId },
+          },
           type: 'member.updated',
         } as any);
 
@@ -1867,11 +1871,14 @@ describe('ChannelManager', () => {
 
         target.state.membership = {
           ...target.state.membership,
-          pinned_at: new Date().toISOString(),
+          pinned_at: convertDateToTimestamp(new Date().toISOString()),
         };
         client.dispatchEvent({
           cid: target.cid,
-          member: { pinned_at: new Date().toISOString(), user: { id: client.userId } },
+          member: {
+            pinned_at: convertDateToTimestamp(new Date().toISOString()),
+            user: { id: client.userId },
+          },
           type: 'member.updated',
         } as any);
         await vi.waitFor(() => expect(paginator.items?.[0]?.cid).toBe(target.cid));
@@ -2064,7 +2071,7 @@ describe('ChannelManager', () => {
     const seedUnread = (channel: Channel, unreadMessages = 1) => {
       channel.state.read = {
         [client.userId as string]: {
-          last_read: new Date(0),
+          last_read: convertDateToTimestamp(new Date(0)),
           unread_messages: unreadMessages,
           user: { id: client.userId as string },
         },
@@ -2084,7 +2091,7 @@ describe('ChannelManager', () => {
       channel_id: channel.id,
       channel_type: channel.type,
       cid: channel.cid,
-      created_at: new Date(),
+      created_at: convertDateToTimestamp(new Date()),
       type: 'notification.mark_read' as const,
       user: { id: client.userId as string },
       ...payload,
@@ -2134,7 +2141,7 @@ describe('ChannelManager', () => {
         channel_id: channel.id,
         channel_type: channel.type,
         cid: channel.cid,
-        created_at: new Date(),
+        created_at: convertDateToTimestamp(new Date()),
         type: 'message.read',
         user: { id: 'somebody-else' },
       });
@@ -2169,7 +2176,7 @@ describe('ChannelManager', () => {
       // reconciles on the next event naming a channel, or the next query
       seedUnread(channel, 0);
       client.dispatchEvent({
-        created_at: new Date(),
+        created_at: convertDateToTimestamp(new Date()),
         type: 'notification.mark_read',
         unread_channels: 0,
         user: { id: client.userId as string },
@@ -2216,7 +2223,7 @@ describe('ChannelManager', () => {
       client.channelManager.registerSubscriptions();
 
       client.dispatchEvent({
-        created_at: new Date(),
+        created_at: convertDateToTimestamp(new Date()),
         type: 'notification.mark_read',
         unread_channels: 0,
         user: { id: client.userId as string },
@@ -2283,7 +2290,7 @@ describe('ChannelManager', () => {
         channel_id: '306',
         channel_type: 'messaging',
         cid: 'messaging:306',
-        created_at: new Date(),
+        created_at: convertDateToTimestamp(new Date()),
         type: 'notification.mark_read',
         user: { id: client.userId as string },
       });

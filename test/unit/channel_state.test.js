@@ -7,6 +7,7 @@ import { generateUUIDv4 as uuidv4 } from '../../src/utils';
 
 import { vi, describe, beforeEach, afterEach, it, expect } from 'vitest';
 import { msToNs } from '../../src/utils/time';
+import { convertDateToTimestamp } from './test-utils/time';
 
 const toISOString = (timestampMs) => new Date(timestampMs).toISOString();
 
@@ -168,7 +169,7 @@ describe('ChannelState read store', () => {
 		const state = new ChannelState();
 		const read = {
 			alice: {
-				last_read: new Date('2026-02-28T00:00:00.000Z'),
+				last_read: convertDateToTimestamp(new Date('2026-02-28T00:00:00.000Z')),
 				unread_messages: 3,
 				user: { id: 'alice' },
 			},
@@ -195,8 +196,16 @@ describe('ChannelState unreadCount', () => {
 		expect(channel.state.unreadCount).to.equal(0);
 
 		channel.state.read = {
-			me: { last_read: new Date(0), unread_messages: 7, user: { id: 'me' } },
-			alice: { last_read: new Date(0), unread_messages: 3, user: { id: 'alice' } },
+			me: {
+				last_read: convertDateToTimestamp(new Date(0)),
+				unread_messages: 7,
+				user: { id: 'me' },
+			},
+			alice: {
+				last_read: convertDateToTimestamp(new Date(0)),
+				unread_messages: 3,
+				user: { id: 'alice' },
+			},
 		};
 
 		expect(channel.state.unreadCount).to.equal(7);
@@ -205,7 +214,11 @@ describe('ChannelState unreadCount', () => {
 
 	it('is 0 while the current user has no read row', () => {
 		channel.state.read = {
-			alice: { last_read: new Date(0), unread_messages: 3, user: { id: 'alice' } },
+			alice: {
+				last_read: convertDateToTimestamp(new Date(0)),
+				unread_messages: 3,
+				user: { id: 'alice' },
+			},
 		};
 
 		expect(channel.state.unreadCount).to.equal(0);
@@ -217,7 +230,11 @@ describe('ChannelState unreadCount', () => {
 
 		client.user = { id: 'me' };
 		channel.state.read = {
-			me: { last_read: new Date(0), unread_messages: 4, user: { id: 'me' } },
+			me: {
+				last_read: convertDateToTimestamp(new Date(0)),
+				unread_messages: 4,
+				user: { id: 'me' },
+			},
 		};
 		channel.pendingDisposal = true;
 
@@ -430,7 +447,11 @@ describe('ChannelState unified store', () => {
 		const state = new ChannelState();
 		const members = { alice: { user: { id: 'alice' }, user_id: 'alice' } };
 		const read = {
-			alice: { last_read: new Date(0), unread_messages: 2, user: { id: 'alice' } },
+			alice: {
+				last_read: convertDateToTimestamp(new Date(0)),
+				unread_messages: 2,
+				user: { id: 'alice' },
+			},
 		};
 		const watchers = { bob: { id: 'bob' } };
 
@@ -464,7 +485,11 @@ describe('ChannelState unified store', () => {
 		);
 
 		const read = {
-			alice: { last_read: new Date(0), unread_messages: 1, user: { id: 'alice' } },
+			alice: {
+				last_read: convertDateToTimestamp(new Date(0)),
+				unread_messages: 1,
+				user: { id: 'alice' },
+			},
 		};
 		state.read = read;
 		// a non-read write must NOT emit to a read selector

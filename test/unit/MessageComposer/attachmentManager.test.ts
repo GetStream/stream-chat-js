@@ -14,6 +14,7 @@ import {
 import { AppResponseFields } from '../../../src';
 import * as Utils from '../../../src/utils';
 import { beforeEach } from 'node:test';
+import { convertDateToTimestamp } from '../test-utils/time';
 
 /**
  * Utility to generate a  file
@@ -165,7 +166,7 @@ describe('AttachmentManager', () => {
           ],
         },
         channel_cid: 'channel-cid',
-        created_at: new Date().toISOString(),
+        created_at: convertDateToTimestamp(new Date().toISOString()),
       };
 
       // ts-expect-error mocked channel
@@ -191,11 +192,11 @@ describe('AttachmentManager', () => {
         id: 'test-message-id',
         text: '',
         type: 'regular',
-        created_at: new Date(),
+        created_at: convertDateToTimestamp(new Date()),
         deleted_at: null,
         pinned_at: null,
         status: 'pending',
-        updated_at: new Date(),
+        updated_at: convertDateToTimestamp(new Date()),
         attachments: [
           {
             type: 'image',
@@ -329,7 +330,7 @@ describe('AttachmentManager', () => {
           }),
         },
         channel_cid: 'channel-cid',
-        created_at: new Date().toISOString(),
+        created_at: convertDateToTimestamp(new Date().toISOString()),
       };
 
       // Initialize with message containing maximum attachments
@@ -456,7 +457,7 @@ describe('AttachmentManager', () => {
           ],
         },
         channel_cid: 'channel-cid',
-        created_at: new Date().toISOString(),
+        created_at: convertDateToTimestamp(new Date().toISOString()),
       };
 
       // Initialize with message containing attachments

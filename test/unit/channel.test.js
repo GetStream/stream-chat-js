@@ -35,7 +35,7 @@ const seedOwnUnreadCount = (channel, unread_messages) => {
 	channel.state.read = {
 		...channel.state.read,
 		[ownUser.id]: {
-			last_read: new Date(0),
+			last_read: convertDateToTimestamp(new Date(0)),
 			user: ownUser,
 			...channel.state.read[ownUser.id],
 			unread_messages,
@@ -752,7 +752,7 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 		const lastMsg = generateMsg({ user: otherUser });
 		seedLatestWindow(channel, [lastMsg]);
 		channel.state.read[user.id] = {
-			last_read: new Date('2020-01-01T00:00:00'),
+			last_read: convertDateToTimestamp(new Date('2020-01-01T00:00:00')),
 			unread_messages: 5,
 			user,
 		};
@@ -860,7 +860,7 @@ describe('Channel _handleChannelEvent', function () {
 
 			const currentMember = generateMember({
 				user,
-				pinned_at: new Date().toISOString(),
+				pinned_at: convertDateToTimestamp(new Date().toISOString()),
 				archived_at: new Date().toISOString(),
 			});
 
@@ -1108,7 +1108,9 @@ describe('Channel _handleChannelEvent', function () {
 				id: 'pinned-existing',
 				cid: channel.cid,
 				pinned: true,
-				pinned_at: new Date('2020-01-01T00:00:00.001Z').toISOString(),
+				pinned_at: convertDateToTimestamp(
+					new Date('2020-01-01T00:00:00.001Z').toISOString(),
+				),
 			});
 			channel.pinnedMessagesPaginator.ingestPage({
 				page: [formatMessage(existing)],
@@ -1125,7 +1127,9 @@ describe('Channel _handleChannelEvent', function () {
 				id: 'pinned-new',
 				cid: channel.cid,
 				pinned: true,
-				pinned_at: new Date('2020-01-01T00:00:00.002Z').toISOString(),
+				pinned_at: convertDateToTimestamp(
+					new Date('2020-01-01T00:00:00.002Z').toISOString(),
+				),
 			});
 			channel._handleChannelEvent({ type: 'message.new', message: newlyPinned, user });
 			expect(channel.pinnedMessagesPaginator.items?.map((m) => m.id)).to.include(
@@ -1218,8 +1222,8 @@ describe('Channel _handleChannelEvent', function () {
 		it('should extend "message.updated" and "message.deleted" event payloads with "own_reactions"', () => {
 			const own_reactions = [
 				{
-					created_at: new Date().toISOString(),
-					updated_at: new Date().toISOString(),
+					created_at: convertDateToTimestamp(new Date().toISOString()),
+					updated_at: convertDateToTimestamp(new Date().toISOString()),
 					type: 'wow',
 				},
 			];
@@ -1332,9 +1336,9 @@ describe('Channel _handleChannelEvent', function () {
 	describe('channel.truncated', () => {
 		it('message.truncate removes all messages if "truncated_at" is "now"', function () {
 			const messages = [
-				{ created_at: '2021-01-01T00:01:00' },
-				{ created_at: '2021-01-01T00:02:00' },
-				{ created_at: '2021-01-01T00:03:00' },
+				{ created_at: convertDateToTimestamp('2021-01-01T00:01:00') },
+				{ created_at: convertDateToTimestamp('2021-01-01T00:02:00') },
+				{ created_at: convertDateToTimestamp('2021-01-01T00:03:00') },
 			].map(generateMsg);
 
 			seedLatestWindow(channel, messages);
@@ -1356,7 +1360,7 @@ describe('Channel _handleChannelEvent', function () {
 			channel.state.read = {
 				[userId]: {
 					unread_messages: 5,
-					last_read: new Date('2021-01-01T00:00:00.000Z'),
+					last_read: convertDateToTimestamp(new Date('2021-01-01T00:00:00.000Z')),
 					user: { id: userId },
 				},
 			};
@@ -1411,9 +1415,9 @@ describe('Channel _handleChannelEvent', function () {
 
 		it('message.truncate removes messages up to specified date', function () {
 			const messages = [
-				{ created_at: '2021-01-01T00:01:00' },
-				{ created_at: '2021-01-01T00:02:00' },
-				{ created_at: '2021-01-01T00:03:00' },
+				{ created_at: convertDateToTimestamp('2021-01-01T00:01:00') },
+				{ created_at: convertDateToTimestamp('2021-01-01T00:02:00') },
+				{ created_at: convertDateToTimestamp('2021-01-01T00:03:00') },
 			].map(generateMsg);
 
 			seedLatestWindow(channel, messages);
@@ -1478,7 +1482,10 @@ describe('Channel _handleChannelEvent', function () {
 			channel._handleChannelEvent({
 				type: 'message.deleted',
 				user: { id: 'id' },
-				message: { ...originalMessage, deleted_at: new Date().toISOString() },
+				message: {
+					...originalMessage,
+					deleted_at: convertDateToTimestamp(new Date().toISOString()),
+				},
 			});
 
 			expect(
@@ -1532,7 +1539,10 @@ describe('Channel _handleChannelEvent', function () {
 			channel._handleChannelEvent({
 				type: 'message.deleted',
 				user: { id: 'id' },
-				message: { ...threadReply, deleted_at: new Date().toISOString() },
+				message: {
+					...threadReply,
+					deleted_at: convertDateToTimestamp(new Date().toISOString()),
+				},
 			});
 
 			// A pure thread reply must never leak a "deleted" placeholder into the channel list.
@@ -1584,7 +1594,7 @@ describe('Channel _handleChannelEvent', function () {
 					...quotedMessage,
 					type: 'deleted',
 					text: 'after delete',
-					deleted_at: new Date().toISOString(),
+					deleted_at: convertDateToTimestamp(new Date().toISOString()),
 				},
 			});
 
@@ -1618,7 +1628,7 @@ describe('Channel _handleChannelEvent', function () {
 					type: 'love',
 					user_id: 'user-1',
 					message_id: message.id,
-					created_at: new Date().toISOString(),
+					created_at: convertDateToTimestamp(new Date().toISOString()),
 				},
 			});
 
@@ -1638,7 +1648,7 @@ describe('Channel _handleChannelEvent', function () {
 					type: 'love',
 					user_id: 'user-1',
 					message_id: message.id,
-					created_at: new Date().toISOString(),
+					created_at: convertDateToTimestamp(new Date().toISOString()),
 				},
 			});
 
@@ -1656,7 +1666,7 @@ describe('Channel _handleChannelEvent', function () {
 					type: 'like',
 					user_id: user.id,
 					message_id: 'p',
-					created_at: new Date().toISOString(),
+					created_at: convertDateToTimestamp(new Date().toISOString()),
 				},
 			});
 
@@ -1678,7 +1688,7 @@ describe('Channel _handleChannelEvent', function () {
 						type: 'love',
 						user_id: 'user-1',
 						message_id: message.id,
-						created_at: new Date().toISOString(),
+						created_at: convertDateToTimestamp(new Date().toISOString()),
 					},
 				});
 
@@ -1698,7 +1708,7 @@ describe('Channel _handleChannelEvent', function () {
 						type: 'love',
 						user_id: 'user-1',
 						message_id: message.id,
-						created_at: new Date().toISOString(),
+						created_at: convertDateToTimestamp(new Date().toISOString()),
 					},
 				});
 
@@ -1786,7 +1796,7 @@ describe('Channel _handleChannelEvent', function () {
 				type: 'user.messages.deleted',
 				user: bannedUser,
 				soft_delete: true,
-				created_at: '2025-01-01T00:00:00.000Z',
+				created_at: convertDateToTimestamp('2025-01-01T00:00:00.000Z'),
 			});
 
 			expect(channel.pinnedMessagesPaginator.getItem('p')?.type).to.equal('deleted');
@@ -1802,7 +1812,7 @@ describe('Channel _handleChannelEvent', function () {
 				type: 'user.messages.deleted',
 				user: bannedUser,
 				hard_delete: true,
-				created_at: '2025-01-01T00:00:00.000Z',
+				created_at: convertDateToTimestamp('2025-01-01T00:00:00.000Z'),
 			});
 
 			expect(channel.pinnedMessagesPaginator.items?.map((m) => m.id)).to.eql(['other']);
@@ -1818,11 +1828,11 @@ describe('Channel _handleChannelEvent', function () {
 
 		it('does not throw on channel-scoped hard-delete when channel contains a same-user self-quote', () => {
 			const m1 = generateMsg({
-				created_at: '2020-01-01T00:00:01.000Z',
+				created_at: convertDateToTimestamp('2020-01-01T00:00:01.000Z'),
 				user: bannedUser,
 			});
 			const m2 = generateMsg({
-				created_at: '2020-01-01T00:00:02.000Z',
+				created_at: convertDateToTimestamp('2020-01-01T00:00:02.000Z'),
 				user: bannedUser,
 				quoted_message: m1,
 				quoted_message_id: m1.id,
@@ -1840,7 +1850,7 @@ describe('Channel _handleChannelEvent', function () {
 				channel_id: channel.id,
 				user: bannedUser,
 				hard_delete: true,
-				created_at: '2025-02-01T14:01:30.000Z',
+				created_at: convertDateToTimestamp('2025-02-01T14:01:30.000Z'),
 			};
 
 			expect(() => channel._handleChannelEvent(event)).not.to.throw();
@@ -2304,13 +2314,13 @@ describe('Channel _handleChannelEvent', function () {
 				user: {
 					id: 'admin',
 					role: 'admin',
-					created_at: '2022-03-08T09:46:56.840739Z',
-					updated_at: '2022-03-15T08:30:09.796926Z',
+					created_at: convertDateToTimestamp('2022-03-08T09:46:56.840739Z'),
+					updated_at: convertDateToTimestamp('2022-03-15T08:30:09.796926Z'),
 					last_active: '2023-05-24T09:20:31.041292724Z',
 					banned: false,
 					online: true,
 				},
-				created_at: '2023-05-24T09:20:43.986615426Z',
+				created_at: convertDateToTimestamp('2023-05-24T09:20:43.986615426Z'),
 			};
 			channel.data.hidden = true;
 			channel.data.blocked = true;
@@ -2332,13 +2342,13 @@ describe('Channel _handleChannelEvent', function () {
 				user: {
 					id: 'admin',
 					role: 'admin',
-					created_at: '2022-03-08T09:46:56.840739Z',
-					updated_at: '2022-03-15T08:30:09.796926Z',
+					created_at: convertDateToTimestamp('2022-03-08T09:46:56.840739Z'),
+					updated_at: convertDateToTimestamp('2022-03-15T08:30:09.796926Z'),
 					last_active: '2023-05-24T09:20:31.041292724Z',
 					banned: false,
 					online: true,
 				},
-				created_at: '2023-05-24T09:20:43.986615426Z',
+				created_at: convertDateToTimestamp('2023-05-24T09:20:43.986615426Z'),
 			};
 			channel.data.hidden = true;
 			channel.data.blocked = true;
@@ -2595,7 +2605,7 @@ describe('Uninitialized Channel', () => {
 			channel_id: channel.id,
 			user: otherUser,
 			message: generateMsg({ user: otherUser }),
-			created_at: new Date().toISOString(),
+			created_at: convertDateToTimestamp(new Date().toISOString()),
 		});
 
 		it('does not throw and still updates channel state on message.new', () => {
@@ -2654,7 +2664,7 @@ describe('reactive channel mute status', () => {
 		preMutedClient.mutedChannels = [
 			{
 				channel: { cid: 'messaging:premuted' },
-				created_at: '2024-01-01T00:00:00.000Z',
+				created_at: convertDateToTimestamp('2024-01-01T00:00:00.000Z'),
 			},
 		];
 
@@ -2680,7 +2690,7 @@ describe('reactive channel mute status', () => {
 				channel_mutes: [
 					{
 						channel: { cid: channel.cid },
-						created_at: '2024-01-01T00:00:00.000Z',
+						created_at: convertDateToTimestamp('2024-01-01T00:00:00.000Z'),
 					},
 				],
 			},
@@ -3362,7 +3372,7 @@ describe('Channel _initializeState', () => {
 		});
 		channel.state.read = {
 			[existingUser.id]: {
-				last_read: new Date('2026-01-01T00:00:00.000Z'),
+				last_read: convertDateToTimestamp(new Date('2026-01-01T00:00:00.000Z')),
 				unread_messages: 1,
 				user: existingUser,
 			},
@@ -3373,7 +3383,9 @@ describe('Channel _initializeState', () => {
 				{
 					last_delivered_at: new Date('2026-01-02T00:00:00.000Z').toISOString(),
 					last_delivered_message_id: 'delivered-message-id',
-					last_read: new Date('2026-01-02T00:00:00.000Z').toISOString(),
+					last_read: convertDateToTimestamp(
+						new Date('2026-01-02T00:00:00.000Z').toISOString(),
+					),
 					last_read_message_id: 'read-message-id',
 					unread_messages: 0,
 					user: newUser,
@@ -3399,7 +3411,11 @@ describe('Channel.query', async () => {
 			messages: Array.from(
 				{ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE },
 				(_, i) =>
-					generateMsg({ created_at: new Date(1700000000000 + i * 1000).toISOString() }),
+					generateMsg({
+						created_at: convertDateToTimestamp(
+							new Date(1700000000000 + i * 1000).toISOString(),
+						),
+					}),
 			),
 		};
 		const stub = sinon
@@ -4292,7 +4308,11 @@ describe('Channel active flag (mark-read stays UI-driven)', () => {
 		channel.activate();
 		channel.messagePaginator.setViewingLive(true);
 		channel.state.read = {
-			me: { last_read: new Date(0), unread_messages: 3, user: { id: 'me' } },
+			me: {
+				last_read: convertDateToTimestamp(new Date(0)),
+				unread_messages: 3,
+				user: { id: 'me' },
+			},
 		};
 
 		expect(spy).not.toHaveBeenCalled();

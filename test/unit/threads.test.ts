@@ -277,12 +277,12 @@ describe('Threads 2.0', () => {
         it('updates optimistically added message', () => {
           const optimisticMessage = makeReply({
             text: 'aaa',
-            created_at: new Date('2020-01-01T00:00:00Z'),
+            created_at: convertDateToTimestamp(new Date('2020-01-01T00:00:00Z')),
           }) as MessageResponse;
 
           const message = makeReply({
             text: 'bbb',
-            created_at: new Date('2020-01-01T00:00:10Z'),
+            created_at: convertDateToTimestamp(new Date('2020-01-01T00:00:10Z')),
           }) as MessageResponse;
 
           const thread = createTestThread({
@@ -292,7 +292,7 @@ describe('Threads 2.0', () => {
           const updatedMessage: MessageResponse = {
             ...optimisticMessage,
             text: 'ccc',
-            created_at: new Date('2020-01-01T00:00:20Z'),
+            created_at: convertDateToTimestamp(new Date('2020-01-01T00:00:20Z')),
           };
 
           const repliesBefore = repliesOf(thread);
@@ -334,7 +334,7 @@ describe('Threads 2.0', () => {
             { id: 'participant-1' },
           ] as unknown as ThreadResponse['thread_participants'];
           const updatedMessage = generateMsg({
-            deleted_at: new Date(),
+            deleted_at: convertDateToTimestamp(new Date()),
             id: parentMessageResponse.id,
             reply_count: 10,
             text: 'aaa',
@@ -428,7 +428,11 @@ describe('Threads 2.0', () => {
         it('retains failed replies after hydration', () => {
           const thread = createTestThread();
           const hydrationThread = createTestThread({
-            latest_replies: [makeReply({ created_at: '2020-01-01T00:00:01.000Z' })],
+            latest_replies: [
+              makeReply({
+                created_at: convertDateToTimestamp('2020-01-01T00:00:01.000Z'),
+              }),
+            ],
             reply_count: 1,
           });
 
@@ -436,7 +440,7 @@ describe('Threads 2.0', () => {
           // timestamps landed in random order and an older-than-window reply sits below it, not in
           // view — ~50% flaky. A just-attempted send is the newest thing anyway.
           const failedMessage = makeReply({
-            created_at: '2020-01-01T00:00:09.000Z',
+            created_at: convertDateToTimestamp('2020-01-01T00:00:09.000Z'),
             status: 'failed',
           });
           thread.upsertReplyLocally({ message: failedMessage });
@@ -450,7 +454,7 @@ describe('Threads 2.0', () => {
         it('re-derives a paginatable reply cursor over a stale window (Thread.reload stays paginatable offline)', () => {
           const existingReply = generateMsg({
             parent_id: parentMessageResponse.id,
-            created_at: '2020-01-01T00:00:00.000Z',
+            created_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
           }) as MessageResponse;
           // Head-anchored, older replies still to load (reply_count > loaded).
           const thread = createTestThread({
@@ -479,7 +483,7 @@ describe('Threads 2.0', () => {
         it('merges the incoming newest reply window into the reply paginator', () => {
           const existingReply = generateMsg({
             parent_id: parentMessageResponse.id,
-            created_at: '2020-01-01T00:00:00.000Z',
+            created_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
             text: 'original',
           }) as MessageResponse;
           // Head-anchored, with older replies still to load (reply_count > loaded).
@@ -494,12 +498,12 @@ describe('Threads 2.0', () => {
           const editedReply = generateMsg({
             id: existingReply.id,
             parent_id: parentMessageResponse.id,
-            created_at: '2020-01-01T00:00:00.000Z',
+            created_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
             text: 'edited',
           }) as MessageResponse;
           const newReply = generateMsg({
             parent_id: parentMessageResponse.id,
-            created_at: '2020-01-02T00:00:00.000Z',
+            created_at: convertDateToTimestamp('2020-01-02T00:00:00.000Z'),
           }) as MessageResponse;
           const hydrationThread = createTestThread({
             latest_replies: [editedReply, newReply],
@@ -643,7 +647,10 @@ describe('Threads 2.0', () => {
 
           // The sent reply — live-ingested, no page behind it.
           const mine = formatMessage(
-            makeReply({ id: 'mine', created_at: '2020-01-01T00:00:01.000Z' }),
+            makeReply({
+              id: 'mine',
+              created_at: convertDateToTimestamp('2020-01-01T00:00:01.000Z'),
+            }),
           );
           thread.messagePaginator.ingestItem(mine);
           expect(repliesOf(thread).map((r) => r.id)).to.eql(['mine']);
@@ -651,16 +658,19 @@ describe('Threads 2.0', () => {
           // Two replies from someone else while offline; the server returns all three.
           const peer1 = makeReply({
             id: 'peer1',
-            created_at: '2020-01-01T00:00:02.000Z',
+            created_at: convertDateToTimestamp('2020-01-01T00:00:02.000Z'),
           });
           const peer2 = makeReply({
             id: 'peer2',
-            created_at: '2020-01-01T00:00:03.000Z',
+            created_at: convertDateToTimestamp('2020-01-01T00:00:03.000Z'),
           });
           sinon.stub(client, 'getThreadAndHydrate').resolves(
             createTestThread({
               latest_replies: [
-                makeReply({ id: 'mine', created_at: '2020-01-01T00:00:01.000Z' }),
+                makeReply({
+                  id: 'mine',
+                  created_at: convertDateToTimestamp('2020-01-01T00:00:01.000Z'),
+                }),
                 peer1,
                 peer2,
               ],
@@ -678,14 +688,23 @@ describe('Threads 2.0', () => {
           // out from under someone reading an older island.
           const thread = createMinimalThread();
           const mine = formatMessage(
-            makeReply({ id: 'mine', created_at: '2020-01-01T00:00:05.000Z' }),
+            makeReply({
+              id: 'mine',
+              created_at: convertDateToTimestamp('2020-01-01T00:00:05.000Z'),
+            }),
           );
           thread.messagePaginator.ingestItem(mine);
 
           // Simulate a jump: an older, separately-anchored island that is the active window.
           const older = [
-            makeReply({ id: 'old1', created_at: '2019-01-01T00:00:01.000Z' }),
-            makeReply({ id: 'old2', created_at: '2019-01-01T00:00:02.000Z' }),
+            makeReply({
+              id: 'old1',
+              created_at: convertDateToTimestamp('2019-01-01T00:00:01.000Z'),
+            }),
+            makeReply({
+              id: 'old2',
+              created_at: convertDateToTimestamp('2019-01-01T00:00:02.000Z'),
+            }),
           ].map((r) => formatMessage(r));
           const jumped = thread.messagePaginator.ingestPage({
             page: older,
@@ -699,8 +718,14 @@ describe('Threads 2.0', () => {
           sinon.stub(client, 'getThreadAndHydrate').resolves(
             createTestThread({
               latest_replies: [
-                makeReply({ id: 'mine', created_at: '2020-01-01T00:00:05.000Z' }),
-                makeReply({ id: 'peer1', created_at: '2020-01-01T00:00:06.000Z' }),
+                makeReply({
+                  id: 'mine',
+                  created_at: convertDateToTimestamp('2020-01-01T00:00:05.000Z'),
+                }),
+                makeReply({
+                  id: 'peer1',
+                  created_at: convertDateToTimestamp('2020-01-01T00:00:06.000Z'),
+                }),
               ],
               reply_count: 2,
             }),
@@ -751,7 +776,11 @@ describe('Threads 2.0', () => {
           // still null and the 404 is the only signal we get. `replyCount > 0` says we had something,
           // so this is a real failure to refresh, not a thread that never existed.
           const thread = createTestThread({
-            latest_replies: [makeReply({ created_at: '2020-01-01T00:00:01.000Z' })],
+            latest_replies: [
+              makeReply({
+                created_at: convertDateToTimestamp('2020-01-01T00:00:01.000Z'),
+              }),
+            ],
             // `replyCount` is read off the PARENT message, not the thread response's own count.
             parentMessageOverrides: { reply_count: 4 },
           });
@@ -800,10 +829,19 @@ describe('Threads 2.0', () => {
         it('removes a reply hard-deleted while offline and keeps one that arrived during the fetch', async () => {
           // End-to-end through the REAL reload orchestration (not a hand-built snapshot): this is what
           // proves the snapshot-before-await guarantee — the thing the paginator-level tests assume.
-          const r1 = makeReply({ id: 'r1', created_at: '2020-01-01T00:00:01.000Z' });
-          const r2 = makeReply({ id: 'r2', created_at: '2020-01-01T00:00:02.000Z' });
+          const r1 = makeReply({
+            id: 'r1',
+            created_at: convertDateToTimestamp('2020-01-01T00:00:01.000Z'),
+          });
+          const r2 = makeReply({
+            id: 'r2',
+            created_at: convertDateToTimestamp('2020-01-01T00:00:02.000Z'),
+          });
           // r3 is the newest loaded reply — hard-deleted by someone else while we were offline.
-          const r3 = makeReply({ id: 'r3', created_at: '2020-01-01T00:00:03.000Z' });
+          const r3 = makeReply({
+            id: 'r3',
+            created_at: convertDateToTimestamp('2020-01-01T00:00:03.000Z'),
+          });
           const thread = createTestThread({
             latest_replies: [r1, r2, r3],
             reply_count: 3,
@@ -813,7 +851,10 @@ describe('Threads 2.0', () => {
           // A brand-new reply that lands via WS DURING the reload fetch — after reload() snapshots the
           // loaded ids, before hydrateState runs. Like the r3 ghost it is absent from the server page,
           // so a naive "loaded − serverPage" would wrongly drop it; the pre-fetch snapshot must save it.
-          const r4 = makeReply({ id: 'r4', created_at: '2020-01-01T00:00:04.000Z' });
+          const r4 = makeReply({
+            id: 'r4',
+            created_at: convertDateToTimestamp('2020-01-01T00:00:04.000Z'),
+          });
 
           // The server's authoritative page (computed before r4 existed) has r3 hard-deleted, no r4.
           const hydrationThread = createTestThread({
@@ -840,14 +881,20 @@ describe('Threads 2.0', () => {
           // thread constructed directly and never registered (what the React Native SDK does via
           // `threadsById[id] ?? new Thread(...)`) it is always empty, and relying on it would drop the
           // user's unsent reply on every reconnect.
-          const r1 = makeReply({ id: 'r1', created_at: '2020-01-01T00:00:01.000Z' });
+          const r1 = makeReply({
+            id: 'r1',
+            created_at: convertDateToTimestamp('2020-01-01T00:00:01.000Z'),
+          });
           const thread = createTestThread({ latest_replies: [r1], reply_count: 1 });
           expect(thread.hasSubscriptions).to.equal(false);
 
           // A reply the user sent while offline, which failed. It only exists locally, and like any
           // just-attempted send it is the newest thing in the thread.
           const failed = formatMessage(
-            makeReply({ id: 'failed-1', created_at: '2021-06-01T00:00:09.000Z' }),
+            makeReply({
+              id: 'failed-1',
+              created_at: convertDateToTimestamp('2021-06-01T00:00:09.000Z'),
+            }),
           );
           failed.status = 'failed';
           thread.messagePaginator.ingestItem(failed);
@@ -855,8 +902,14 @@ describe('Threads 2.0', () => {
 
           // Server page is disjoint from the loaded window, which forces a rebuild — the one case the
           // reconcile's provenance guard does not cover.
-          const far1 = makeReply({ id: 'far1', created_at: '2021-06-01T00:00:01.000Z' });
-          const far2 = makeReply({ id: 'far2', created_at: '2021-06-01T00:00:02.000Z' });
+          const far1 = makeReply({
+            id: 'far1',
+            created_at: convertDateToTimestamp('2021-06-01T00:00:01.000Z'),
+          });
+          const far2 = makeReply({
+            id: 'far2',
+            created_at: convertDateToTimestamp('2021-06-01T00:00:02.000Z'),
+          });
           const hydrationThread = createTestThread({
             latest_replies: [far1, far2],
             reply_count: 2,
@@ -895,7 +948,7 @@ describe('Threads 2.0', () => {
             { length: 5 },
             (_, i) =>
               generateMsg({
-                created_at: new Date(createdAt + 1000 * i),
+                created_at: convertDateToTimestamp(new Date(createdAt + 1000 * i)),
               }) as MessageResponse,
           );
           const thread = createTestThread({ latest_replies: messages });
@@ -981,11 +1034,15 @@ describe('Threads 2.0', () => {
       describe('reply pagination (messagePaginator)', () => {
         it('loads older replies via toTail() and scopes the request to the thread parent', async () => {
           // Seeded newest window with older replies still to load (reply_count > loaded).
-          const newest = makeReply({ created_at: '2020-01-03T00:00:00.000Z' });
+          const newest = makeReply({
+            created_at: convertDateToTimestamp('2020-01-03T00:00:00.000Z'),
+          });
           const thread = createTestThread({ latest_replies: [newest], reply_count: 3 });
           expect(thread.messagePaginator.state.getLatestValue().hasMoreTail).to.be.true;
 
-          const older = makeReply({ created_at: '2020-01-02T00:00:00.000Z' });
+          const older = makeReply({
+            created_at: convertDateToTimestamp('2020-01-02T00:00:00.000Z'),
+          });
           const getRepliesStub = sinon
             .stub(thread.channel.getClient(), 'getReplies')
             .resolves({ messages: [older], duration: '' } as unknown as ReturnType<
@@ -1002,11 +1059,15 @@ describe('Threads 2.0', () => {
         });
 
         it('clears hasMoreTail once toTail() reaches the start of the reply list', async () => {
-          const newest = makeReply({ created_at: '2020-01-03T00:00:00.000Z' });
+          const newest = makeReply({
+            created_at: convertDateToTimestamp('2020-01-03T00:00:00.000Z'),
+          });
           const thread = createTestThread({ latest_replies: [newest], reply_count: 2 });
           expect(thread.messagePaginator.state.getLatestValue().hasMoreTail).to.be.true;
 
-          const older = makeReply({ created_at: '2020-01-02T00:00:00.000Z' });
+          const older = makeReply({
+            created_at: convertDateToTimestamp('2020-01-02T00:00:00.000Z'),
+          });
           sinon
             .stub(thread.channel.getClient(), 'getReplies')
             .resolves({ messages: [older], duration: '' } as unknown as ReturnType<
@@ -1067,14 +1128,18 @@ describe('Threads 2.0', () => {
       });
 
       it('reloads stale state when thread is active', async () => {
-        const initialReply = makeReply({ created_at: '2020-03-01T00:00:00.000Z' });
+        const initialReply = makeReply({
+          created_at: convertDateToTimestamp('2020-03-01T00:00:00.000Z'),
+        });
         const thread = createTestThread({
           latest_replies: [initialReply],
           reply_count: 1,
         });
         thread.registerSubscriptions();
 
-        const reloadedReply = makeReply({ created_at: '2020-03-01T00:00:01.000Z' });
+        const reloadedReply = makeReply({
+          created_at: convertDateToTimestamp('2020-03-01T00:00:01.000Z'),
+        });
         const stubbedGetThread = sinon.stub(client, 'getThreadAndHydrate').resolves(
           createTestThread({
             latest_replies: [initialReply, reloadedReply],
@@ -1598,7 +1663,7 @@ describe('Threads 2.0', () => {
             (_, i) =>
               generateMsg({
                 parent_id: parentMessageResponse.id,
-                created_at: new Date(createdAt + 1000 * i),
+                created_at: convertDateToTimestamp(new Date(createdAt + 1000 * i)),
               }) as MessageResponse,
           );
           const thread = createTestThread({ latest_replies: messages });
@@ -1663,7 +1728,7 @@ describe('Threads 2.0', () => {
 
           const parentMessage = generateMsg({
             id: thread.id,
-            deleted_at: new Date(),
+            deleted_at: convertDateToTimestamp(new Date()),
             type: 'deleted',
           }) as MessageResponse;
 
@@ -1706,7 +1771,7 @@ describe('Threads 2.0', () => {
             message: {
               ...quotedMessage,
               type: 'deleted',
-              deleted_at: new Date().toISOString(),
+              deleted_at: convertDateToTimestamp(new Date().toISOString()),
             },
           });
 
@@ -1806,7 +1871,10 @@ describe('Threads 2.0', () => {
 
             client.dispatchEvent({
               type: eventType,
-              user: { id: bannedUserId, deleted_at: new Date().toISOString() },
+              user: {
+                id: bannedUserId,
+                deleted_at: convertDateToTimestamp(new Date().toISOString()),
+              },
               created_at: nowNs(),
             });
 

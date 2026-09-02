@@ -214,12 +214,12 @@ describe('ChannelPaginator', () => {
         sort: [{ field: 'has_unread', direction: 1 }],
       });
       channel1.state.read[user.id] = {
-        last_read: new Date('1972-01-01T08:39:35.235Z'),
+        last_read: convertDateToTimestamp(new Date('1972-01-01T08:39:35.235Z')),
         unread_messages: 10,
         user,
       };
       channel2.state.read[user.id] = {
-        last_read: new Date('1972-01-01T08:39:35.235Z'),
+        last_read: convertDateToTimestamp(new Date('1972-01-01T08:39:35.235Z')),
         unread_messages: 0,
         user,
       };
@@ -266,12 +266,20 @@ describe('ChannelPaginator', () => {
         client,
         sort: [{ field: 'pinned_at', direction: 1 }],
       });
-      channel1.state.membership = { pinned_at: '1972-01-01T08:39:35.235Z' };
-      channel2.state.membership = { pinned_at: '1971-01-01T08:39:35.235Z' };
+      channel1.state.membership = {
+        pinned_at: convertDateToTimestamp('1972-01-01T08:39:35.235Z'),
+      };
+      channel2.state.membership = {
+        pinned_at: convertDateToTimestamp('1971-01-01T08:39:35.235Z'),
+      };
       expect(paginator.sortComparator(channel1, channel2)).toBe(changeOrder);
 
-      channel1.state.membership = { pinned_at: '1970-01-01T08:39:35.235Z' };
-      channel2.state.membership = { pinned_at: '1971-01-01T08:39:35.235Z' };
+      channel1.state.membership = {
+        pinned_at: convertDateToTimestamp('1970-01-01T08:39:35.235Z'),
+      };
+      channel2.state.membership = {
+        pinned_at: convertDateToTimestamp('1971-01-01T08:39:35.235Z'),
+      };
       expect(paginator.sortComparator(channel1, channel2)).toBe(keepOrder);
     });
     it('should sort by unread_count', () => {
@@ -280,24 +288,24 @@ describe('ChannelPaginator', () => {
         sort: [{ field: 'unread_count', direction: 1 }],
       });
       channel1.state.read[user.id] = {
-        last_read: new Date(),
+        last_read: convertDateToTimestamp(new Date()),
         unread_messages: 10,
         user,
       };
       channel2.state.read[user.id] = {
-        last_read: new Date(),
+        last_read: convertDateToTimestamp(new Date()),
         unread_messages: 0,
         user,
       };
       expect(paginator.sortComparator(channel1, channel2)).toBe(changeOrder);
 
       channel1.state.read[user.id] = {
-        last_read: new Date(),
+        last_read: convertDateToTimestamp(new Date()),
         unread_messages: 10,
         user,
       };
       channel2.state.read[user.id] = {
-        last_read: new Date(),
+        last_read: convertDateToTimestamp(new Date()),
         unread_messages: 11,
         user,
       };
@@ -471,9 +479,13 @@ describe('ChannelPaginator', () => {
       });
 
       channel1.state.read = {
-        [user.id]: { last_read: new Date(2000), unread_messages: 0, user },
+        [user.id]: {
+          last_read: convertDateToTimestamp(new Date(2000)),
+          unread_messages: 0,
+          user,
+        },
         [otherUserId]: {
-          last_read: new Date(1000),
+          last_read: convertDateToTimestamp(new Date(1000)),
           unread_messages: 1,
           user: { id: otherUserId },
         },
@@ -496,7 +508,9 @@ describe('ChannelPaginator', () => {
 
         expect(paginator.matchesFilter(channel1)).toBeTruthy();
 
-        channel1.data = { updated_at: new Date(1000).toISOString() };
+        channel1.data = {
+          updated_at: convertDateToTimestamp(new Date(1000).toISOString()),
+        };
         setLastMessageAt(channel1, null);
 
         expect(paginator.matchesFilter(channel1)).toBeTruthy();
@@ -562,7 +576,9 @@ describe('ChannelPaginator', () => {
 
         setLastMessageAt(channel1, null);
         scenarios.forEach(({ val, expected }) => {
-          channel1.data = { updated_at: new Date(val).toISOString() };
+          channel1.data = {
+            updated_at: convertDateToTimestamp(new Date(val).toISOString()),
+          };
           expect(paginator.matchesFilter(channel1)).toBe(expected);
         });
 
@@ -585,7 +601,7 @@ describe('ChannelPaginator', () => {
 
       channel1.state.membership = {
         user,
-        pinned_at: '2025-09-03T12:19:39.101089Z',
+        pinned_at: convertDateToTimestamp('2025-09-03T12:19:39.101089Z'),
       };
       expect(paginator.matchesFilter(channel1)).toBeTruthy();
 
@@ -1611,7 +1627,9 @@ describe('ChannelPaginator', () => {
       const pinned = new Channel(client, 'type', 'pinned', {});
       const plainA = new Channel(client, 'type', 'plainA', {});
       const plainB = new Channel(client, 'type', 'plainB', {});
-      pinned.state.membership = { pinned_at: '2020-01-01T00:00:00.000Z' };
+      pinned.state.membership = {
+        pinned_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
+      };
       plainA.state.membership = {};
       plainB.state.membership = {};
       setLastMessageAt(pinned, new Date('2020-01-01T00:00:00.000Z')); // old, but pinned → stays on top
@@ -1665,7 +1683,11 @@ describe('ChannelPaginator', () => {
         );
         setLastMessageAt(channel, new Date(CHANNEL_COUNT - index));
         channel.state.read = {
-          [user.id]: { last_read: new Date(0), unread_messages: 1, user },
+          [user.id]: {
+            last_read: convertDateToTimestamp(new Date(0)),
+            unread_messages: 1,
+            user,
+          },
         };
         return channel;
       });

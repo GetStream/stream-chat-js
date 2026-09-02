@@ -8,6 +8,7 @@ import { createDraftMessageComposerStateCompositionMiddleware } from '../../../.
 import { MessageComposerMiddlewareState } from '../../../../../src/messageComposer/middleware/messageComposer/types';
 import { MiddlewareStatus } from '../../../../../src/middleware';
 import { MessageDraftComposerMiddlewareValueState } from '../../../../../src/messageComposer/middleware/messageComposer/types';
+import { convertDateToTimestamp } from '../../../test-utils/time';
 
 const setupHandlerParams = (initialState: MessageComposerMiddlewareState) => {
   return {
@@ -77,7 +78,7 @@ describe('stream-io/message-composer-middleware/own-state', () => {
         },
         localMessage: {
           attachments: [],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -88,7 +89,7 @@ describe('stream-io/message-composer-middleware/own-state', () => {
           status: 'sending',
           text: '',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),
@@ -106,7 +107,7 @@ describe('stream-io/message-composer-middleware/own-state', () => {
     const quotedMessage: LocalMessage = {
       id: 'quoted-message-id',
       attachments: [],
-      created_at: new Date(),
+      created_at: convertDateToTimestamp(new Date()),
       deleted_at: null,
       error: undefined,
       mentioned_users: [],
@@ -116,7 +117,7 @@ describe('stream-io/message-composer-middleware/own-state', () => {
       status: 'sending',
       text: 'This is a quoted message',
       type: 'regular',
-      updated_at: new Date(),
+      updated_at: convertDateToTimestamp(new Date()),
     };
 
     // Mock the composer properties
@@ -132,7 +133,7 @@ describe('stream-io/message-composer-middleware/own-state', () => {
         },
         localMessage: {
           attachments: [],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -143,7 +144,7 @@ describe('stream-io/message-composer-middleware/own-state', () => {
           status: 'sending',
           text: '',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),
@@ -168,7 +169,7 @@ describe('stream-io/message-composer-middleware/own-state', () => {
         },
         localMessage: {
           attachments: [],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -179,7 +180,7 @@ describe('stream-io/message-composer-middleware/own-state', () => {
           status: 'sending',
           text: '',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),
@@ -194,7 +195,7 @@ describe('stream-io/message-composer-middleware/own-state', () => {
     const quotedMessage: LocalMessage = {
       id: 'quoted-message-id',
       attachments: [],
-      created_at: new Date(),
+      created_at: convertDateToTimestamp(new Date()),
       deleted_at: null,
       error: undefined,
       mentioned_users: [],
@@ -204,7 +205,7 @@ describe('stream-io/message-composer-middleware/own-state', () => {
       status: 'sending',
       text: 'This is a quoted message',
       type: 'regular',
-      updated_at: new Date(),
+      updated_at: convertDateToTimestamp(new Date()),
     };
 
     // Mock the composer properties
@@ -220,7 +221,7 @@ describe('stream-io/message-composer-middleware/own-state', () => {
         },
         localMessage: {
           attachments: [],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -231,7 +232,7 @@ describe('stream-io/message-composer-middleware/own-state', () => {
           status: 'sending',
           text: '',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),
@@ -249,7 +250,7 @@ describe('stream-io/message-composer-middleware/own-state', () => {
     const quotedMessage: LocalMessage = {
       id: 'quoted-message-id',
       attachments: [],
-      created_at: new Date(),
+      created_at: convertDateToTimestamp(new Date()),
       deleted_at: null,
       error: undefined,
       mentioned_users: [],
@@ -259,7 +260,7 @@ describe('stream-io/message-composer-middleware/own-state', () => {
       status: 'sending',
       text: 'This is a quoted message',
       type: 'regular',
-      updated_at: new Date(),
+      updated_at: convertDateToTimestamp(new Date()),
     };
 
     // Mock the composer properties
@@ -276,7 +277,7 @@ describe('stream-io/message-composer-middleware/own-state', () => {
         },
         localMessage: {
           attachments: [],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -287,7 +288,7 @@ describe('stream-io/message-composer-middleware/own-state', () => {
           status: 'sending',
           text: 'Original local message text',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),
@@ -317,7 +318,7 @@ describe('stream-io/message-composer-middleware/own-state', () => {
         },
         localMessage: {
           attachments: [],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -328,7 +329,7 @@ describe('stream-io/message-composer-middleware/own-state', () => {
           status: 'sending',
           text: '',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),
@@ -349,7 +350,7 @@ describe('stream-io/message-composer-middleware/own-state', () => {
         },
         localMessage: {
           attachments: [],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -360,7 +361,7 @@ describe('stream-io/message-composer-middleware/own-state', () => {
           status: 'sending',
           text: '',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),
@@ -423,11 +424,11 @@ describe('stream-io/message-composer-middleware/draft-own-state', () => {
     const quotedMessage = {
       id: 'quoted-message-id',
       type: 'regular' as const,
-      created_at: new Date(),
+      created_at: convertDateToTimestamp(new Date()),
       deleted_at: null,
       pinned_at: null,
       status: 'received',
-      updated_at: new Date(),
+      updated_at: convertDateToTimestamp(new Date()),
     };
 
     vi.spyOn(messageComposer, 'quotedMessage', 'get').mockReturnValue(quotedMessage);
@@ -465,11 +466,11 @@ describe('stream-io/message-composer-middleware/draft-own-state', () => {
     const quotedMessage = {
       id: 'quoted-message-id',
       type: 'regular' as const,
-      created_at: new Date(),
+      created_at: convertDateToTimestamp(new Date()),
       deleted_at: null,
       pinned_at: null,
       status: 'received',
-      updated_at: new Date(),
+      updated_at: convertDateToTimestamp(new Date()),
     };
 
     vi.spyOn(messageComposer, 'quotedMessage', 'get').mockReturnValue(quotedMessage);
@@ -492,11 +493,11 @@ describe('stream-io/message-composer-middleware/draft-own-state', () => {
     const quotedMessage = {
       id: 'quoted-message-id',
       type: 'regular' as const,
-      created_at: new Date(),
+      created_at: convertDateToTimestamp(new Date()),
       deleted_at: null,
       pinned_at: null,
       status: 'received',
-      updated_at: new Date(),
+      updated_at: convertDateToTimestamp(new Date()),
     };
 
     vi.spyOn(messageComposer, 'quotedMessage', 'get').mockReturnValue(quotedMessage);

@@ -13,6 +13,7 @@ import { generateUUIDv4 as uuidv4 } from '../../src/utils';
 import { MockOfflineDB } from './offline-support/MockOfflineDB';
 import { generateChannel } from './test-utils/generateChannel';
 import { generateMsg } from './test-utils/generateMessage';
+import { convertDateToTimestamp } from './test-utils/time';
 
 const CURRENT_USER = { id: 'me' };
 
@@ -45,10 +46,10 @@ const enableOfflineDb = (client: StreamChat) => {
 };
 
 const ownReaction = (type: string, messageId: string): ReactionResponse => ({
-  created_at: '2020-01-01T00:00:00.000Z',
+  created_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
   message_id: messageId,
   type,
-  updated_at: '2020-01-01T00:00:00.000Z',
+  updated_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
   user: CURRENT_USER,
   user_id: CURRENT_USER.id,
 });
@@ -487,7 +488,7 @@ describe('optimistic reactions', () => {
       const message = generateMsg({
         cid: channel.cid,
         pinned: true,
-        pinned_at: '2020-01-01T00:00:00.000Z',
+        pinned_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
       });
       // The main list holds it...
       seed(channel, message);

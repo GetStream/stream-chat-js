@@ -9,7 +9,7 @@ const makeGroup = (id: string, createdAt: string): UserGroupResponse => ({
   id,
   name: id,
   created_at: convertDateToTimestamp(createdAt),
-  updated_at: new Date(createdAt),
+  updated_at: convertDateToTimestamp(new Date(createdAt)),
 });
 
 const response = (groups: UserGroupResponse[]) => ({ duration: '', user_groups: groups });

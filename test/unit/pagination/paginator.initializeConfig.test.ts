@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessagePaginator } from '../../../src/pagination/paginators/MessagePaginator';
 import { PinnedMessagePaginator } from '../../../src/pagination/paginators/PinnedMessagePaginator';
 import type { Channel } from '../../../src/channel';
+import { convertDateToTimestamp } from '../test-utils/time';
 
 /** Matches the lightweight channel stub the sibling paginator suites use. */
 const stubChannel = () =>
@@ -102,7 +103,10 @@ describe('paginator initializeConfig', () => {
       // including one with the preservation branch deleted. The field is gone from the type now.
       const paginator = new MessagePaginator({ channel });
       const before = paginator._itemIndex;
-      paginator.ingestItem({ id: 'm1', created_at: new Date() } as never);
+      paginator.ingestItem({
+        id: 'm1',
+        created_at: convertDateToTimestamp(new Date()),
+      } as never);
 
       paginator.initializeConfig({ pageSize: 50 });
 
@@ -186,8 +190,14 @@ describe('paginator initializeConfig', () => {
 
       paginator.initializeConfig();
 
-      const older = { id: 'a', pinned_at: new Date('2020-01-01') } as never;
-      const newer = { id: 'b', pinned_at: new Date('2021-01-01') } as never;
+      const older = {
+        id: 'a',
+        pinned_at: convertDateToTimestamp(new Date('2020-01-01')),
+      } as never;
+      const newer = {
+        id: 'b',
+        pinned_at: convertDateToTimestamp(new Date('2021-01-01')),
+      } as never;
       expect(paginator.config.itemOrderComparator?.(older, newer)).toBeLessThan(0);
     });
 

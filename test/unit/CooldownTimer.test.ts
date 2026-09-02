@@ -74,7 +74,7 @@ describe('CooldownTimer', () => {
 
     it('picks up the own latest message from a paginator ingest', async () => {
       const channel = await open('cooldown-paginator');
-      const created_at = '2024-01-01T00:00:00.000Z';
+      const created_at = convertDateToTimestamp('2024-01-01T00:00:00.000Z');
 
       seedLatestWindow(channel, generateMsg({ created_at, user: { id: 'user-1' } }));
 
@@ -167,8 +167,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: lastOwnMessageAt,
-        updated_at: lastOwnMessageAt,
+        created_at: convertDateToTimestamp(lastOwnMessageAt),
+        updated_at: convertDateToTimestamp(lastOwnMessageAt),
         user: { id: client.userId as string },
       }),
     );
@@ -204,8 +204,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: now,
-        updated_at: now,
+        created_at: convertDateToTimestamp(now),
+        updated_at: convertDateToTimestamp(now),
         user: { id: client.userId as string },
       }),
     );
@@ -219,8 +219,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: now,
-        updated_at: now,
+        created_at: convertDateToTimestamp(now),
+        updated_at: convertDateToTimestamp(now),
         user: { id: client.userId as string },
       }),
     );
@@ -234,8 +234,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: now,
-        updated_at: now,
+        created_at: convertDateToTimestamp(now),
+        updated_at: convertDateToTimestamp(now),
         user: { id: client.userId as string },
       }),
     );
@@ -267,8 +267,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: lastOwnMessageAt,
-        updated_at: lastOwnMessageAt,
+        created_at: convertDateToTimestamp(lastOwnMessageAt),
+        updated_at: convertDateToTimestamp(lastOwnMessageAt),
         user: { id: client.userId as string },
       }),
     );
@@ -294,8 +294,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: now,
-        updated_at: now,
+        created_at: convertDateToTimestamp(now),
+        updated_at: convertDateToTimestamp(now),
         user: { id: client.userId as string },
       }),
     );
@@ -318,8 +318,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: lastOwnMessageAt,
-        updated_at: lastOwnMessageAt,
+        created_at: convertDateToTimestamp(lastOwnMessageAt),
+        updated_at: convertDateToTimestamp(lastOwnMessageAt),
         user: { id: client.userId as string },
       }),
     );
@@ -353,8 +353,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: lastOwnMessageAt,
-        updated_at: lastOwnMessageAt,
+        created_at: convertDateToTimestamp(lastOwnMessageAt),
+        updated_at: convertDateToTimestamp(lastOwnMessageAt),
         user: { id: client.userId as string },
       }),
     );
@@ -388,8 +388,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: lastOwnMessageAt,
-        updated_at: lastOwnMessageAt,
+        created_at: convertDateToTimestamp(lastOwnMessageAt),
+        updated_at: convertDateToTimestamp(lastOwnMessageAt),
         user: { id: client.userId as string },
       }),
     );
@@ -426,8 +426,8 @@ describe('CooldownTimer', () => {
       user: { id: client.userId as string },
       message: generateMsg({
         cid: channel.cid, // must match the paginator filter so message.new ingests into an interval
-        created_at: now,
-        updated_at: now,
+        created_at: convertDateToTimestamp(now),
+        updated_at: convertDateToTimestamp(now),
         user: { id: client.userId as string },
       }),
     } as Event);

@@ -14,6 +14,7 @@ import { LinkPreviewStatus } from '../../../src/messageComposer/linkPreviewsMana
 import type { LocalAttachment } from '../../../src/messageComposer/types';
 import { getClientWithUser } from '../test-utils/getClient';
 import { stubServerConfig } from '../test-utils/stubServerConfig';
+import { convertDateToTimestamp } from '../test-utils/time';
 
 const textComposerMiddlewareExecuteOutput = {
   state: {
@@ -140,11 +141,11 @@ describe('TextComposer', () => {
         type: 'regular',
         text: 'Hello world',
         mentioned_users: [{ id: 'user-1' }, { id: 'user-2', name: 'User 2' }],
-        created_at: new Date(),
+        created_at: convertDateToTimestamp(new Date()),
         deleted_at: null,
         pinned_at: null,
         status: 'pending',
-        updated_at: new Date(),
+        updated_at: convertDateToTimestamp(new Date()),
       };
 
       const {
@@ -170,10 +171,10 @@ describe('TextComposer', () => {
         mentioned_channel: true,
         mentioned_groups: [
           {
-            created_at: '2026-05-28T00:00:00.000Z',
+            created_at: convertDateToTimestamp('2026-05-28T00:00:00.000Z'),
             id: 'backend-team',
             name: 'Backend Team',
-            updated_at: '2026-05-28T00:00:00.000Z',
+            updated_at: convertDateToTimestamp('2026-05-28T00:00:00.000Z'),
           },
         ],
         mentioned_here: true,
@@ -198,11 +199,11 @@ describe('TextComposer', () => {
         id: 'test-message',
         type: 'regular',
         text: 'Hello world',
-        created_at: new Date(),
+        created_at: convertDateToTimestamp(new Date()),
         deleted_at: null,
         pinned_at: null,
         status: 'pending',
-        updated_at: new Date(),
+        updated_at: convertDateToTimestamp(new Date()),
       };
 
       const {
@@ -264,11 +265,11 @@ describe('TextComposer', () => {
         type: 'regular',
         text: 'Hello world',
         mentioned_users: [{ id: 'user-1' }, { id: 'user-2', name: 'User 2' }],
-        created_at: new Date(),
+        created_at: convertDateToTimestamp(new Date()),
         deleted_at: null,
         pinned_at: null,
         status: 'pending',
-        updated_at: new Date(),
+        updated_at: convertDateToTimestamp(new Date()),
       };
       const initialState = {
         command: null,
@@ -291,11 +292,11 @@ describe('TextComposer', () => {
         type: 'regular',
         text: 'Hello world',
         mentioned_users: [{ id: 'user-1' }],
-        created_at: new Date(),
+        created_at: convertDateToTimestamp(new Date()),
         deleted_at: null,
         pinned_at: null,
         status: 'pending',
-        updated_at: new Date(),
+        updated_at: convertDateToTimestamp(new Date()),
       };
       const {
         messageComposer: { textComposer },

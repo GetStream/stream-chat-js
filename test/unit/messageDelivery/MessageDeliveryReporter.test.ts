@@ -16,6 +16,7 @@ import {
 } from '../../../src';
 import type { AxiosResponse } from 'axios';
 import { stubServerConfig } from '../test-utils/stubServerConfig';
+import { convertDateToTimestamp } from '../test-utils/time';
 
 const channelType = 'messaging';
 const channelId = 'channelId';
@@ -28,7 +29,7 @@ const otherUser = {
   id: 'otherUser',
 };
 const mkMsg = (id: string, at: string | number | Date) =>
-  ({ id, created_at: new Date(at) }) as any;
+  ({ id, created_at: convertDateToTimestamp(new Date(at)) }) as any;
 
 // The delivery reporter now derives the latest message from `channel.messagePaginator.headItems`,
 // so tests seed the paginator's latest (head) window instead of assigning `channel.state.latestMessages`.
@@ -79,7 +80,9 @@ describe('MessageDeliveryReporter', () => {
 
     // last_read < last message
     setLatest(channel, [mkMsg('m1', '2025-01-01T10:00:00Z')]);
-    (channel.state as any).read['me'] = { last_read: new Date('2025-01-01T09:00:00Z') };
+    (channel.state as any).read['me'] = {
+      last_read: convertDateToTimestamp(new Date('2025-01-01T09:00:00Z')),
+    };
 
     client.syncDeliveredCandidates([channel]);
     expect(markDeliveredSpy).not.toHaveBeenCalled();
@@ -108,7 +111,9 @@ describe('MessageDeliveryReporter', () => {
       const channel = client.channel(channelType, i.toString());
       channel.initialized = true;
       setLatest(channel, [mkMsg('m1', '2025-01-01T10:00:00Z')]);
-      (channel.state as any).read['me'] = { last_read: new Date('2025-01-01T09:00:00Z') };
+      (channel.state as any).read['me'] = {
+        last_read: convertDateToTimestamp(new Date('2025-01-01T09:00:00Z')),
+      };
       return channel;
     });
     channels.forEach((ch) => {
@@ -148,7 +153,9 @@ describe('MessageDeliveryReporter', () => {
       .mockResolvedValue({ ok: true } as any);
 
     setLatest(channel, [mkMsg('m1', '2025-01-01T10:00:00Z')]);
-    (channel.state as any).read['me'] = { last_read: new Date('2025-01-01T09:00:00Z') };
+    (channel.state as any).read['me'] = {
+      last_read: convertDateToTimestamp(new Date('2025-01-01T09:00:00Z')),
+    };
 
     client.syncDeliveredCandidates([channel]);
     vi.advanceTimersByTime(1000);
@@ -172,7 +179,9 @@ describe('MessageDeliveryReporter', () => {
       .mockResolvedValue({ ok: true } as any);
 
     setLatest(channel, [mkMsg('m1', '2025-01-01T10:00:00Z')]);
-    (channel.state as any).read['me'] = { last_read: new Date('2025-01-01T09:00:00Z') };
+    (channel.state as any).read['me'] = {
+      last_read: convertDateToTimestamp(new Date('2025-01-01T09:00:00Z')),
+    };
 
     client.syncDeliveredCandidates([channel]);
     vi.advanceTimersByTime(1000);
@@ -187,8 +196,8 @@ describe('MessageDeliveryReporter', () => {
 
     setLatest(channel, [mkMsg('m1', '2025-01-01T10:00:00Z')]);
     (channel.state as any).read['me'] = {
-      last_read: new Date('2025-01-01T09:00:00Z'),
-      last_delivered_at: new Date('2025-01-01T11:00:00Z'),
+      last_read: convertDateToTimestamp(new Date('2025-01-01T09:00:00Z')),
+      last_delivered_at: convertDateToTimestamp(new Date('2025-01-01T11:00:00Z')),
     };
 
     client.syncDeliveredCandidates([channel]);
@@ -244,7 +253,9 @@ describe('MessageDeliveryReporter', () => {
       .mockResolvedValue({} as any);
 
     setLatest(channel, [mkMsg('m1', 1000)]);
-    (channel.state as any).read['me'] = { last_read: new Date(0) };
+    (channel.state as any).read['me'] = {
+      last_read: convertDateToTimestamp(new Date(0)),
+    };
 
     client.syncDeliveredCandidates([channel]);
 
@@ -261,7 +272,9 @@ describe('MessageDeliveryReporter', () => {
       .spyOn(client, 'markDelivered')
       .mockResolvedValue({} as any);
 
-    (channel.state as any).read['me'] = { last_read: new Date('2025-01-01T09:00:00Z') };
+    (channel.state as any).read['me'] = {
+      last_read: convertDateToTimestamp(new Date('2025-01-01T09:00:00Z')),
+    };
     setLatest(channel, [mkMsg('m1', '2025-01-01T10:00:00Z')]);
 
     client.syncDeliveredCandidates([channel]);
@@ -300,7 +313,7 @@ describe('MessageDeliveryReporter', () => {
 
     const ch1 = client.channel('messaging', 'ch1');
     ch1.initialized = true;
-    (ch1.state as any).read['me'] = { last_read: new Date(0) };
+    (ch1.state as any).read['me'] = { last_read: convertDateToTimestamp(new Date(0)) };
     setLatest(ch1, [mkMsg('m1', 1000)]);
 
     const ch2 = client.channel('messaging', 'ch2');
@@ -335,7 +348,7 @@ describe('MessageDeliveryReporter', () => {
     });
 
     // While request is in-flight, a new candidate (different channel) arrives.
-    (ch2.state as any).read['me'] = { last_read: new Date(0) };
+    (ch2.state as any).read['me'] = { last_read: convertDateToTimestamp(new Date(0)) };
     setLatest(ch2, [mkMsg('n1', 2000)]);
     client.syncDeliveredCandidates([ch2]);
 
@@ -380,7 +393,9 @@ describe('MessageDeliveryReporter', () => {
       .mockResolvedValue({} as any);
     vi.spyOn(channel, 'markRead').mockResolvedValue({} as any);
 
-    (channel.state as any).read['me'] = { last_read: new Date(0) };
+    (channel.state as any).read['me'] = {
+      last_read: convertDateToTimestamp(new Date(0)),
+    };
     setLatest(channel, [mkMsg('m1', 1000)]);
 
     client.syncDeliveredCandidates([channel]);
@@ -400,7 +415,7 @@ describe('MessageDeliveryReporter', () => {
       channel_id: channelId,
       channel_type: channelType,
       cid: `${channelType}:${channelId}`,
-      created_at: new Date(),
+      created_at: convertDateToTimestamp(new Date()),
       type: 'message.read',
     };
 
@@ -453,7 +468,9 @@ describe('MessageDeliveryReporter', () => {
       const channel = client.channel(channelType, (i + startId).toString());
       channel.initialized = true;
       setLatest(channel, [mkMsg('m1', '2025-01-01T10:00:00Z')]);
-      (channel.state as any).read['me'] = { last_read: new Date('2025-01-01T09:00:00Z') };
+      (channel.state as any).read['me'] = {
+        last_read: convertDateToTimestamp(new Date('2025-01-01T09:00:00Z')),
+      };
       return channel;
     });
     channels.forEach((ch) => {
@@ -635,7 +652,9 @@ describe('MessageDeliveryReporter', () => {
     const markDeliveredSpy = vi.spyOn(client, 'markDelivered');
     vi.spyOn(channel, 'markRead').mockRejectedValue({} as any);
 
-    (channel.state as any).read['me'] = { last_read: new Date(0) };
+    (channel.state as any).read['me'] = {
+      last_read: convertDateToTimestamp(new Date(0)),
+    };
     setLatest(channel, [mkMsg('m1', 1000)]);
 
     client.syncDeliveredCandidates([channel]);
@@ -676,13 +695,15 @@ describe('MessageDeliveryReporter', () => {
       .spyOn(client, 'markDelivered')
       .mockResolvedValue({} as any);
 
-    (channel.state as any).read['me'] = { last_read: new Date(0) };
+    (channel.state as any).read['me'] = {
+      last_read: convertDateToTimestamp(new Date(0)),
+    };
     setLatest(channel, []);
 
     // simulate incoming message.new event
     const ev: Event = {
       type: 'message.new',
-      created_at: new Date('2025-01-01T10:00:00Z'),
+      created_at: convertDateToTimestamp(new Date('2025-01-01T10:00:00Z')),
       user: otherUser,
       // cid must match the paginator filter so message.new ingests into an interval
       message: { ...mkMsg('m1', '2025-01-01T10:00:00Z'), cid: channel.cid } as any,
@@ -708,13 +729,15 @@ describe('MessageDeliveryReporter', () => {
       .spyOn(client, 'markDelivered')
       .mockResolvedValue({} as any);
 
-    (channel.state as any).read['me'] = { last_read: new Date(0) };
+    (channel.state as any).read['me'] = {
+      last_read: convertDateToTimestamp(new Date(0)),
+    };
     setLatest(channel, []);
 
     // simulate incoming message.new event
     const ev: Event = {
       type: 'message.new',
-      created_at: new Date('2025-01-01T10:00:00Z'),
+      created_at: convertDateToTimestamp(new Date('2025-01-01T10:00:00Z')),
       user: ownUser,
       message: mkMsg('m1', '2025-01-01T10:00:00Z') as any,
     };
@@ -731,14 +754,16 @@ describe('MessageDeliveryReporter', () => {
       .spyOn(client, 'markDelivered')
       .mockResolvedValue({} as any);
 
-    (channel.state as any).read['me'] = { last_read: new Date(0) };
+    (channel.state as any).read['me'] = {
+      last_read: convertDateToTimestamp(new Date(0)),
+    };
     setLatest(channel, [mkMsg('m1', '2025-01-01T10:00:00Z')]);
 
     client.syncDeliveredCandidates([channel]);
 
     const ev: Event = {
       type: 'message.read',
-      created_at: new Date('2025-01-01T10:00:00Z'),
+      created_at: convertDateToTimestamp(new Date('2025-01-01T10:00:00Z')),
       last_read_message_id: 'm1',
       message: mkMsg('m1', '2025-01-01T10:00:00Z') as any,
       user: ownUser,
@@ -756,14 +781,16 @@ describe('MessageDeliveryReporter', () => {
       .spyOn(client, 'markDelivered')
       .mockResolvedValue({} as any);
 
-    (channel.state as any).read['me'] = { last_read: new Date(0) };
+    (channel.state as any).read['me'] = {
+      last_read: convertDateToTimestamp(new Date(0)),
+    };
     setLatest(channel, [mkMsg('m1', '2025-01-01T10:00:00Z')]);
 
     client.syncDeliveredCandidates([channel]);
 
     const ev: Event = {
       type: 'message.read',
-      created_at: new Date('2025-01-01T10:00:00Z'),
+      created_at: convertDateToTimestamp(new Date('2025-01-01T10:00:00Z')),
       last_read_message_id: 'm1',
       message: mkMsg('m1', '2025-01-01T10:00:00Z') as any,
       user: otherUser,

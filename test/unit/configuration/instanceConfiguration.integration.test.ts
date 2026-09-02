@@ -7,6 +7,7 @@ import { mockChannelQueryResponse } from '../test-utils/mockChannelQueryResponse
 import { StreamChat } from '../../../src/client';
 import { Thread } from '../../../src/thread';
 import type { Channel } from '../../../src/channel';
+import { convertDateToTimestamp } from '../test-utils/time';
 
 /**
  * Cross-instance coverage: all four built-in keys, both tiers, both registration orders, reset, the
@@ -595,8 +596,14 @@ describe('instance configuration — cross-instance', () => {
       // Re-derivation, not a snapshot: this is the property that makes reset trustworthy when
       // teardowns are integrator-written.
       expect(channel.messagePaginator.config.pageSize).toBe(100);
-      const older = { id: 'a', created_at: new Date('2020-01-01') } as never;
-      const newer = { id: 'b', created_at: new Date('2021-01-01') } as never;
+      const older = {
+        id: 'a',
+        created_at: convertDateToTimestamp(new Date('2020-01-01')),
+      } as never;
+      const newer = {
+        id: 'b',
+        created_at: convertDateToTimestamp(new Date('2021-01-01')),
+      } as never;
       expect(
         channel.messagePaginator.config.itemOrderComparator?.(older, newer),
       ).toBeLessThan(0);

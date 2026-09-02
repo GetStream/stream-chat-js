@@ -3,13 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Channel } from '../../../src/channel';
 import { ChannelMemberSearchSource } from '../../../src/search/ChannelMemberSearchSource';
 import type { ChannelMemberResponse } from '../../../src/types';
+import { convertDateToTimestamp } from '../test-utils/time';
 
 const SHORT_QUERY_DEBOUNCE_MS = 500;
 const LONG_QUERY_DEBOUNCE_MS = 300;
 
 const createChannelMember = (userId: string): ChannelMemberResponse => ({
-  created_at: '2026-01-01T00:00:00.000000000Z',
-  updated_at: '2026-01-01T00:00:00.000000000Z',
+  created_at: convertDateToTimestamp('2026-01-01T00:00:00.000000000Z'),
+  updated_at: convertDateToTimestamp('2026-01-01T00:00:00.000000000Z'),
   user_id: userId,
 });
 

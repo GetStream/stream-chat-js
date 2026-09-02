@@ -26,6 +26,7 @@ import {
 } from 'vitest';
 import { Channel } from '../../src';
 import { MockOfflineDB } from './offline-support/MockOfflineDB';
+import { convertDateToTimestamp } from './test-utils/time';
 
 describe('StreamChat getInstance', () => {
 	beforeEach(() => {
@@ -815,7 +816,7 @@ describe('message update', () => {
 				id: 'msg-123',
 				status: 'failed',
 				text: 'edited',
-				message_text_updated_at: '2026-04-01T20:48:43.886269Z',
+				message_text_updated_at: convertDateToTimestamp('2026-04-01T20:48:43.886269Z'),
 			});
 			const request = { id: failedEditedMessage.id, message: failedEditedMessage };
 
@@ -950,9 +951,18 @@ describe('StreamChat.queryChannels', async () => {
 	it('does not weld a jumped/older window into the newest page when re-hydrating a shared channel on re-query', async () => {
 		const client = await getClientWithUser();
 		const newest = [
-			generateMsg({ id: 'm5', created_at: '2023-11-14T12:00:05.000Z' }),
-			generateMsg({ id: 'm6', created_at: '2023-11-14T12:00:06.000Z' }),
-			generateMsg({ id: 'm7', created_at: '2023-11-14T12:00:07.000Z' }),
+			generateMsg({
+				id: 'm5',
+				created_at: convertDateToTimestamp('2023-11-14T12:00:05.000Z'),
+			}),
+			generateMsg({
+				id: 'm6',
+				created_at: convertDateToTimestamp('2023-11-14T12:00:06.000Z'),
+			}),
+			generateMsg({
+				id: 'm7',
+				created_at: convertDateToTimestamp('2023-11-14T12:00:07.000Z'),
+			}),
 		];
 		const stub = sinon.stub(client, 'queryChannels').resolves({
 			channels: [{ ...mockChannelQueryResponse, messages: newest }],
@@ -967,10 +977,16 @@ describe('StreamChat.queryChannels', async () => {
 		// active (visible) interval while the newest window stays loaded as a separate interval.
 		const older = [
 			channel.state.formatMessage(
-				generateMsg({ id: 'm1', created_at: '2023-11-14T12:00:01.000Z' }),
+				generateMsg({
+					id: 'm1',
+					created_at: convertDateToTimestamp('2023-11-14T12:00:01.000Z'),
+				}),
 			),
 			channel.state.formatMessage(
-				generateMsg({ id: 'm2', created_at: '2023-11-14T12:00:02.000Z' }),
+				generateMsg({
+					id: 'm2',
+					created_at: convertDateToTimestamp('2023-11-14T12:00:02.000Z'),
+				}),
 			),
 		];
 		channel.messagePaginator.ingestPage({
@@ -1000,9 +1016,18 @@ describe('StreamChat.queryChannels', async () => {
 	it('reconciles a trailing offline hard-delete on channel-list re-hydrate (cold-boot path)', async () => {
 		const client = await getClientWithUser();
 		const full = [
-			generateMsg({ id: 'm5', created_at: '2023-11-14T12:00:05.000Z' }),
-			generateMsg({ id: 'm6', created_at: '2023-11-14T12:00:06.000Z' }),
-			generateMsg({ id: 'm7', created_at: '2023-11-14T12:00:07.000Z' }),
+			generateMsg({
+				id: 'm5',
+				created_at: convertDateToTimestamp('2023-11-14T12:00:05.000Z'),
+			}),
+			generateMsg({
+				id: 'm6',
+				created_at: convertDateToTimestamp('2023-11-14T12:00:06.000Z'),
+			}),
+			generateMsg({
+				id: 'm7',
+				created_at: convertDateToTimestamp('2023-11-14T12:00:07.000Z'),
+			}),
 		];
 		const stub = sinon.stub(client, 'queryChannels').resolves({
 			channels: [{ ...mockChannelQueryResponse, messages: full }],
@@ -1396,7 +1421,7 @@ describe('user.updated propagates to message + pinned paginators', () => {
 			cid: channel.cid,
 			user: author,
 			pinned: true,
-			pinned_at: '2020-01-01T00:00:00.000Z',
+			pinned_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
 		});
 
 		channel.messagePaginator.setItems({
@@ -1488,14 +1513,14 @@ describe('user.messages.deleted (client-level, cross-channel)', () => {
 			cid: channel.cid,
 			user: bannedUser,
 			pinned: true,
-			pinned_at: '2020-01-01T00:00:00.000Z',
+			pinned_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
 		});
 		const otherPinned = generateMsg({
 			id: `${id}-op`,
 			cid: channel.cid,
 			user: otherUser,
 			pinned: true,
-			pinned_at: '2020-01-02T00:00:00.000Z',
+			pinned_at: convertDateToTimestamp('2020-01-02T00:00:00.000Z'),
 		});
 		channel.messagePaginator.setItems({
 			valueOrFactory: [main],
@@ -1519,7 +1544,7 @@ describe('user.messages.deleted (client-level, cross-channel)', () => {
 			cid: channel.cid,
 			user: bannedUser,
 			hard_delete: true,
-			created_at: '2025-01-01T00:00:00.000Z',
+			created_at: convertDateToTimestamp('2025-01-01T00:00:00.000Z'),
 		});
 
 		// cid present → the client-level cross-channel loop must be a no-op (no double-delete).
@@ -1534,7 +1559,7 @@ describe('user.messages.deleted (client-level, cross-channel)', () => {
 			type: 'user.messages.deleted',
 			user: bannedUser,
 			soft_delete: true,
-			created_at: '2025-01-01T00:00:00.000Z',
+			created_at: convertDateToTimestamp('2025-01-01T00:00:00.000Z'),
 		});
 
 		channels.forEach((channel) => {
@@ -1557,7 +1582,7 @@ describe('user.messages.deleted (client-level, cross-channel)', () => {
 			type: 'user.messages.deleted',
 			user: bannedUser,
 			hard_delete: true,
-			created_at: '2025-01-01T00:00:00.000Z',
+			created_at: convertDateToTimestamp('2025-01-01T00:00:00.000Z'),
 		});
 
 		channels.forEach((channel) => {
@@ -1580,11 +1605,11 @@ describe('user.messages.deleted — quoted_message regression (#1736)', () => {
 
 	const setupChannelWithSelfQuote = (type, id) => {
 		const m1 = generateMsg({
-			created_at: new Date('2020-01-01T00:00:01.000Z'),
+			created_at: convertDateToTimestamp(new Date('2020-01-01T00:00:01.000Z')),
 			user: bannedUser,
 		});
 		const m2 = generateMsg({
-			created_at: new Date('2020-01-01T00:00:02.000Z'),
+			created_at: convertDateToTimestamp(new Date('2020-01-01T00:00:02.000Z')),
 			user: bannedUser,
 			quoted_message: m1,
 			quoted_message_id: m1.id,
@@ -1608,7 +1633,7 @@ describe('user.messages.deleted — quoted_message regression (#1736)', () => {
 			type: 'user.messages.deleted',
 			user: bannedUser,
 			hard_delete: true,
-			created_at: '2025-02-01T14:01:30.000Z',
+			created_at: convertDateToTimestamp('2025-02-01T14:01:30.000Z'),
 		};
 
 		expect(() => client._handleClientEvent(event)).not.toThrow();
@@ -1630,7 +1655,7 @@ describe('user.messages.deleted — quoted_message regression (#1736)', () => {
 			type: 'user.messages.deleted',
 			user: bannedUser,
 			hard_delete: true,
-			created_at: '2025-02-01T14:01:30.000Z',
+			created_at: convertDateToTimestamp('2025-02-01T14:01:30.000Z'),
 		};
 
 		expect(() => client.dispatchEvent(event)).not.toThrow();
@@ -1642,9 +1667,12 @@ describe('user.messages.deleted — quoted_message regression (#1736)', () => {
 
 		const event = {
 			type: 'user.deleted',
-			user: { ...bannedUser, deleted_at: '2025-02-01T14:01:30.000Z' },
+			user: {
+				...bannedUser,
+				deleted_at: convertDateToTimestamp('2025-02-01T14:01:30.000Z'),
+			},
 			hard_delete: true,
-			created_at: '2025-02-01T14:01:30.000Z',
+			created_at: convertDateToTimestamp('2025-02-01T14:01:30.000Z'),
 		};
 
 		expect(() => client._handleClientEvent(event)).not.toThrow();

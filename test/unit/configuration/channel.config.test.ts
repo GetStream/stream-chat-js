@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getClientWithUser } from '../test-utils/getClient';
 import type { Channel } from '../../../src/channel';
 import type { StreamChat } from '../../../src/client';
+import { convertDateToTimestamp } from '../test-utils/time';
 
 describe("the 'channel' configuration key", () => {
   let client: StreamChat;
@@ -210,8 +211,14 @@ describe("the 'channel' configuration key", () => {
       // stronger claim: the reset restored *the* comparator, not a lookalike.
       expect(channel.messagePaginator.config.itemOrderComparator).toBe(original);
       expect(typeof channel.messagePaginator.config.itemOrderComparator).toBe('function');
-      const older = { id: 'a', created_at: new Date('2020-01-01') } as never;
-      const newer = { id: 'b', created_at: new Date('2021-01-01') } as never;
+      const older = {
+        id: 'a',
+        created_at: convertDateToTimestamp(new Date('2020-01-01')),
+      } as never;
+      const newer = {
+        id: 'b',
+        created_at: convertDateToTimestamp(new Date('2021-01-01')),
+      } as never;
       expect(
         channel.messagePaginator.config.itemOrderComparator?.(older, newer),
       ).toBeLessThan(0);

@@ -2,16 +2,6 @@ import { generateUUIDv4 as uuidv4 } from '../../../src/utils';
 import type { MessageResponse, UserResponse } from '../../../src';
 import { convertDateToTimestamp } from './time';
 
-/** The message fields the API sends as unix-nanosecond numbers. */
-const TIMESTAMP_FIELDS = [
-  'created_at',
-  'updated_at',
-  'deleted_at',
-  'pinned_at',
-  'pin_expires',
-  'message_text_updated_at',
-] as const;
-
 export const generateMsg = (
   msg: Partial<MessageResponse> & { date?: Date | number | string } = {},
 ): MessageResponse => {
@@ -36,17 +26,7 @@ export const generateMsg = (
     silent: false,
     status: 'received',
     ...msg,
-  } as MessageResponse & Record<string, unknown>;
-
-  // Tests read far better overriding a timestamp with a date literal, but the wire carries numbers —
-  // and a fixture that hands the SDK a `Date` cannot catch the bugs that unit exists to prevent.
-  // Normalize every timestamp override here, so no individual test has to.
-  for (const field of TIMESTAMP_FIELDS) {
-    const value = message[field];
-    if (value != null && typeof value !== 'number') {
-      message[field] = convertDateToTimestamp(value as Date | number | string);
-    }
-  }
+  } as MessageResponse;
 
   return message;
 };

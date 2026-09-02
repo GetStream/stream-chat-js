@@ -22,6 +22,7 @@ import { getCommandByName } from '../../../src/messageComposer/middleware/textCo
 import { generateMsg } from '../test-utils/generateMessage';
 import { stubServerConfig } from '../test-utils/stubServerConfig';
 import { msToNs, nowNs } from '../../../src/utils/time';
+import { convertDateToTimestamp } from '../test-utils/time';
 
 const generateUuidV4Output = 'test-uuid';
 // Mock dependencies
@@ -1660,7 +1661,7 @@ describe('MessageComposer', () => {
               ...composed!.localMessage,
               status: 'received',
               text: 'from the websocket echo',
-              updated_at: new Date(composedUpdatedAt + 5000),
+              updated_at: convertDateToTimestamp(new Date(composedUpdatedAt + 5000)),
             });
             return { message: serverMessage };
           },
@@ -1688,7 +1689,7 @@ describe('MessageComposer', () => {
               ...composed!.localMessage,
               status: 'received',
               text: 'from the websocket echo',
-              updated_at: new Date(composedUpdatedAt + 5000),
+              updated_at: convertDateToTimestamp(new Date(composedUpdatedAt + 5000)),
             });
             return {
               message: generateMsg({
@@ -1721,7 +1722,7 @@ describe('MessageComposer', () => {
               ...composed!.localMessage,
               status: 'received',
               text: 'from the websocket echo',
-              updated_at: new Date(composedUpdatedAt + 5000),
+              updated_at: convertDateToTimestamp(new Date(composedUpdatedAt + 5000)),
             });
             return {
               message: generateMsg({
@@ -1745,7 +1746,7 @@ describe('MessageComposer', () => {
         const existingSending = {
           ...composed!.localMessage,
           status: 'sending' as const,
-          updated_at: new Date(Date.now() - 5000),
+          updated_at: convertDateToTimestamp(new Date(Date.now() - 5000)),
         };
         mockChannel.messagePaginator.ingestItem(existingSending);
         const serverUpdatedAt = composed!.localMessage.updated_at + msToNs(100);
@@ -2335,7 +2336,7 @@ describe('MessageComposer', () => {
         attachments: [],
         mentioned_users: [],
       },
-      created_at: new Date().toISOString(),
+      created_at: convertDateToTimestamp(new Date().toISOString()),
     };
     it('should not create draft if edited message exists', async () => {
       const editedMessage = {

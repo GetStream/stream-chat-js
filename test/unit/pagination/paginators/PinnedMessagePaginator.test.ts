@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PinnedMessagePaginator } from '../../../../src/pagination/paginators/PinnedMessagePaginator';
 import type { LocalMessage, MessageResponse } from '../../../../src/types';
+import { convertDateToTimestamp } from '../../test-utils/time';
 
 const CID = 'messaging:cid';
 
@@ -12,15 +13,15 @@ const makePinned = (
   ({
     attachments: [],
     cid: CID,
-    created_at: new Date(pinnedAtMs).toISOString(),
+    created_at: convertDateToTimestamp(new Date(pinnedAtMs).toISOString()),
     id,
     mentioned_users: [],
     pinned: true,
-    pinned_at: new Date(pinnedAtMs).toISOString(),
+    pinned_at: convertDateToTimestamp(new Date(pinnedAtMs).toISOString()),
     status: 'received',
     text: id,
     type: 'regular',
-    updated_at: new Date(pinnedAtMs).toISOString(),
+    updated_at: convertDateToTimestamp(new Date(pinnedAtMs).toISOString()),
     ...overrides,
   }) as MessageResponse;
 
@@ -84,7 +85,7 @@ describe('PinnedMessagePaginator', () => {
     // Same message, now unpinned → matchesFilter({ pinned: true }) fails → removed from the list.
     paginator.ingestItem({
       ...makePinned('p', 1000),
-      created_at: new Date(1000),
+      created_at: convertDateToTimestamp(new Date(1000)),
       pinned: false,
       pinned_at: null,
     } as unknown as LocalMessage);

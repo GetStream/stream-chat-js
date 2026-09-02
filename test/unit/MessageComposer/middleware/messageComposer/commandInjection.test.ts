@@ -10,6 +10,7 @@ import {
   MessageDraftComposerMiddlewareValueState,
   MiddlewareStatus,
 } from '../../../../../src';
+import { convertDateToTimestamp } from '../../../test-utils/time';
 
 const setup = (initialState: MessageComposerMiddlewareState) => {
   return {
@@ -146,7 +147,7 @@ describe('stream-io/message-composer-middleware/command-injection', () => {
         },
         localMessage: {
           attachments: [],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -157,7 +158,7 @@ describe('stream-io/message-composer-middleware/command-injection', () => {
           status: 'sending',
           text: 'haha',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),
@@ -182,7 +183,7 @@ describe('stream-io/message-composer-middleware/command-injection', () => {
         },
         localMessage: {
           attachments: [],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -193,7 +194,7 @@ describe('stream-io/message-composer-middleware/command-injection', () => {
           status: 'sending',
           text: 'haha',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),
