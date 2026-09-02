@@ -262,20 +262,36 @@ client.pinMessage(id, null, message.pinned_at);
 client.pinMessage(id, null, nsToDate(message.pinned_at));
 ```
 
-### Filter operands read a bare number as nanoseconds
+### Filter operands: a server query needs a `Date`, client-side matching reads a number as nanoseconds
 
-Filter and sort operands are normalised to nanoseconds. A `Date` and an ISO string are converted; a
-bare `number` is taken to **already be** the wire unit. If you were passing epoch milliseconds — which
-worked in v9 — the bound now resolves to 1970.
+These two paths behave differently, and only one of them fails loudly.
+
+**A server-side filter must carry a `Date` (or an RFC3339 string).** The API type-checks the operand
+and rejects a number outright — verified against the live API:
 
 ```ts
-// WRONG in v10 — epoch milliseconds read as nanoseconds.
+await client.queryReminders({ filter: { remind_at: { $lte: new Date() } } });
+// -> works
+
+await client.queryReminders({ filter: { remind_at: { $lte: Date.now() * 1e6 } } });
+// -> QueryReminders failed with error: "field \"remind_at\" expects type date"
+```
+
+So a wire timestamp read off a response cannot be fed straight back into a filter. Convert it:
+`nsToDate(message.created_at)`.
+
+**Client-side filtering and sorting is the silent one.** The paginators compile filters and
+comparators that run against loaded items, and there a bare `number` operand is taken to **already
+be** the wire unit. Epoch milliseconds — which worked in v9 — resolve to 1970 with no error:
+
+```ts
+// Silently wrong for client-side matching: epoch ms read as nanoseconds.
 {
   created_at: {
     $gt: 1700000000000;
   }
 }
-// RIGHT — pass a Date, an ISO string, or nanoseconds.
+// Right: a Date or an ISO string is converted for you; a number must already be nanoseconds.
 {
   created_at: {
     $gt: new Date('2023-11-14T12:39:29Z');
