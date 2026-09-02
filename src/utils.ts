@@ -13,7 +13,7 @@ import type { Channel } from './channel';
 import type { AxiosRequestConfig } from 'axios';
 import { LOCAL_MESSAGE_FIELDS, RESERVED_UPDATED_MESSAGE_FIELDS } from './constants';
 import { chatLoggerSystem } from './logger';
-import { nowNs, nsToRfc3339 } from './utils/time';
+import { nowNs, nsToDate } from './utils/time';
 
 const logger = chatLoggerSystem.getLogger('utils');
 
@@ -409,9 +409,14 @@ export function messageWithReactionRemoved(
   };
 }
 
-// Generated as `Date`, but `Date` is millisecond-only and the API takes nanosecond RFC3339.
-const toRequestDate = (ns: number) => nsToRfc3339(ns) as unknown as Date;
-
+/**
+ * Wire timestamps into the `Date` objects `MessageRequest` declares. Sub-millisecond precision is
+ * lost, which is inherent to the declared request type.
+ *
+ * `shared_location` is listed field by field so only what `SharedLocation` declares can reach the
+ * API — a location read off a message also carries `channel_cid`, `user_id`, `created_at`,
+ * `updated_at` and `message_id`.
+ */
 const toRequestDateFields = ({
   pinned_at,
   pin_expires,
@@ -420,8 +425,8 @@ const toRequestDateFields = ({
   MessageRequest,
   'pinned_at' | 'pin_expires' | 'shared_location'
 > => ({
-  ...(pinned_at != null ? { pinned_at: toRequestDate(pinned_at) } : {}),
-  ...(pin_expires != null ? { pin_expires: toRequestDate(pin_expires) } : {}),
+  ...(pinned_at != null ? { pinned_at: nsToDate(pinned_at) } : {}),
+  ...(pin_expires != null ? { pin_expires: nsToDate(pin_expires) } : {}),
   ...(shared_location
     ? {
         shared_location: {
@@ -429,7 +434,7 @@ const toRequestDateFields = ({
           longitude: shared_location.longitude,
           created_by_device_id: shared_location.created_by_device_id,
           ...(shared_location.end_at != null
-            ? { end_at: toRequestDate(shared_location.end_at) }
+            ? { end_at: nsToDate(shared_location.end_at) }
             : {}),
         },
       }

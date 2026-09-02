@@ -850,6 +850,9 @@ These now delegate to `channel.updateMemberPartial({ set: { archived: true } })`
 
 #### `channel.muteStatus` / `channel.sendAction` / `channel.keystroke` / `channel.stopTyping`
 
+> Timestamps in these signatures are unix nanoseconds, not `Date`s — see
+> [`v9-to-v10-migration-guide-dates.md`](./v9-to-v10-migration-guide-dates.md).
+
 ```ts
 // v9
 channel.muteStatus(): { muted: boolean; createdAt: number | null; expiresAt: number | null };

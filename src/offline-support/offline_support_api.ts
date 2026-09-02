@@ -1152,7 +1152,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
         const ownReads = activeChannel.state.read[userId];
 
         let unreadCount = 0;
-        if (truncated_at) {
+        if (truncated_at != null) {
           unreadCount = activeChannel.countUnread(truncated_at);
         }
 

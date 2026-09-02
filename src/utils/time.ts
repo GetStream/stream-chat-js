@@ -8,11 +8,13 @@
  *
  * Two consequences make the helpers below mandatory rather than convenient:
  *
- * - `new Date(ns)` is **out of range**. `Date` tops out around 8.64e15 ms while a current
- *   nanosecond timestamp is ~1.79e18, so the constructor yields `Invalid Date` and
- *   `.toISOString()` on it throws `RangeError`. Neither is a type error, so nothing warns you.
- * - Date libraries read a bare number as milliseconds. `dayjs(ns)` renders a date roughly 50,000
- *   years out, silently.
+ * - **Every `Date`-based path is out of range.** `Date` tops out around 8.64e15 ms while a current
+ *   nanosecond timestamp is ~1.79e18, and a date library reads a bare number as milliseconds, so
+ *   both land on an invalid instance. `.toISOString()` throws `RangeError`; `dayjs(ns).format()`
+ *   returns the literal string `'Invalid Date'`. Neither is a type error.
+ * - **A unit mix-up between two `number`s is the silent one.** Comparing a wire timestamp against
+ *   `Date.now()`, or adding a millisecond duration to one, produces a plausible-looking number and
+ *   no complaint at all.
  *
  * Outgoing **request** date fields are unaffected: they are still typed `Date`, because
  * `JSON.stringify` emits RFC3339 for a `Date` and that is the format the request spec declares.

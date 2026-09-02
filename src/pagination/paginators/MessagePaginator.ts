@@ -245,7 +245,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
    * past it (e.g. from ingested messages), so seed order does not matter.
    */
   seedLastMessageAt(value: number | null | undefined) {
-    if (!value || !Number.isFinite(value)) return;
+    if (value == null || !Number.isFinite(value)) return;
     const current = this.aggregateState.getLatestValue().seededLastMessageAt;
     if (current !== null && value <= current) return;
     this.aggregateState.partialNext({ seededLastMessageAt: value });

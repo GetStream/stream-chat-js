@@ -904,7 +904,7 @@ export class StreamChat extends ChatApi {
   }
 
   dispatchEvent = (event: Event) => {
-    if (!event.received_at) event.received_at = nowNs();
+    if (event.received_at == null) event.received_at = nowNs();
 
     // client event handlers
     const postListenerCallbacks = this._handleClientEvent(event as WSEvent);
@@ -1226,7 +1226,7 @@ export class StreamChat extends ChatApi {
         muteStatus = {
           // `expires` is a wire timestamp, so it compares directly against the local clock in the
           // same unit. Comparing it against `Date.now()` would make every expiry look far future.
-          muted: mute.expires ? mute.expires > nowNs() : true,
+          muted: mute.expires != null ? mute.expires > nowNs() : true,
           createdAt: mute.created_at ?? nowNs(),
           expiresAt: mute.expires ?? null,
         };

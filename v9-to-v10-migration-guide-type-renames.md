@@ -188,7 +188,7 @@ Because the hand-written list omitted `latest_hidden_channels`, and a `user.upda
 | `provider`, `user`    | present                                       | **gone**           |
 | `hardware_id`, `voip` | **absent**                                    | present (optional) |
 
-`created_at` is the one that bites: it is the unix-**nanosecond** number the API sends, so the old `string` annotation was wrong in a way that hid a second problem. `device.created_at.slice(...)` was already broken at runtime and now fails to compile — but so does anything that treats the value as a date: `new Date(device.created_at)` is **out of range** for a nanosecond timestamp and yields an `Invalid Date`. Use `convertTimestampToDate(device.created_at)` (or `nsToDate`), or compare the raw numbers.
+`created_at` is the one that bites: it is the unix-**nanosecond** number the API sends, so the old `string` annotation was wrong in a way that hid a second problem. `device.created_at.slice(...)` was already broken at runtime and now fails to compile — but so does anything that treats the value as a date: `new Date(device.created_at)` is **out of range** for a nanosecond timestamp and yields an `Invalid Date`. Use `convertTimestampToDate(device.created_at)` (or `nsToDate`), or compare the raw numbers. This applies to every date field on every response type — see [`v9-to-v10-migration-guide-dates.md`](./v9-to-v10-migration-guide-dates.md).
 
 ### Stale `Omit` keys — two types quietly widened
 

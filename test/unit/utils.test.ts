@@ -21,6 +21,7 @@ import {
   sleep,
   computeOwnReactions,
 } from '../../src/utils';
+import { nsToMs } from '../../src/utils/time';
 
 import type {
   ChannelFilters,
@@ -645,11 +646,16 @@ describe('userHasReadReceipts', () => {
 });
 
 describe('request-payload date direction', () => {
-  // Both payload builders emit full-precision RFC3339 rather than a `Date`, which is
-  // millisecond-only. A real on-device magnitude, so a regression shows up as an `Invalid Date`.
+  // Both payload builders convert wire timestamps into the `Date` objects `MessageRequest`
+  // declares. A real on-device magnitude, so a skipped conversion shows up as an `Invalid Date`.
   const NANOS = 1786219962651957000;
-  const wire = (value: unknown) => value as unknown as string;
-  const NS_RFC3339 = /^\d{4}-\d{2}-\d{2}T[\d:]{8}\.\d{9}Z$/;
+  const DATE_KEYS = [
+    'created_at',
+    'updated_at',
+    'deleted_at',
+    'pinned_at',
+    'pin_expires',
+  ];
 
   describe('localMessageToNewMessagePayload', () => {
     it('sends every direction-crossing date field, and drops the server-managed ones', () => {
@@ -663,36 +669,42 @@ describe('request-payload date direction', () => {
         ),
       );
 
-      expect(wire(payload.pinned_at)).toMatch(NS_RFC3339);
-      expect(wire(payload.pin_expires)).toMatch(NS_RFC3339);
+      expect(payload.pinned_at).toBeInstanceOf(Date);
+      expect(payload.pin_expires).toBeInstanceOf(Date);
+      expect(payload.pinned_at?.getTime()).toBe(nsToMs(NANOS));
+      expect(payload.pin_expires?.getTime()).toBe(nsToMs(NANOS + 1e9));
 
       expect(payload).not.toHaveProperty('message_text_updated_at');
 
-      // No date field may still be a number.
-      for (const key of [
-        'created_at',
-        'updated_at',
-        'deleted_at',
-        'pinned_at',
-        'pin_expires',
-      ]) {
-        expect(typeof (payload as Record<string, unknown>)[key]).not.toBe('number');
+      // No date field may still be a wire number, or a string wearing a `Date` annotation.
+      for (const key of DATE_KEYS) {
+        const value = (payload as Record<string, unknown>)[key];
+        expect(typeof value).not.toBe('number');
+        expect(typeof value).not.toBe('string');
       }
     });
 
-    it('keeps the sub-millisecond part a Date would have dropped', () => {
-      const withSubMs = 1786219962651957000 + 123000;
+    it('serializes to RFC3339, which is what actually reaches the API', () => {
+      const payload = localMessageToNewMessagePayload(
+        formatMessage(generateMsg({ pinned_at: NANOS })),
+      );
+
+      expect(JSON.parse(JSON.stringify({ pinned_at: payload.pinned_at }))).toEqual({
+        pinned_at: new Date(nsToMs(NANOS)).toISOString(),
+      });
+    });
+
+    it('drops the sub-millisecond part, which a `Date` cannot carry', () => {
+      const withSubMs = NANOS + 123000;
       const payload = localMessageToNewMessagePayload(
         formatMessage(generateMsg({ pinned_at: withSubMs })),
       );
 
-      const emitted = wire(payload.pinned_at);
-      expect(emitted).toMatch(NS_RFC3339);
-      expect(emitted.slice(-10, -1)).toBe(
-        String(Math.floor(withSubMs / 1e6) % 1000).padStart(3, '0') +
-          String(withSubMs - Math.floor(withSubMs / 1e6) * 1e6).padStart(6, '0'),
+      expect(payload.pinned_at).toBeInstanceOf(Date);
+      expect(payload.pinned_at?.getTime()).toBe(nsToMs(withSubMs));
+      expect(payload.pinned_at?.toISOString()).toMatch(
+        /^\d{4}-\d{2}-\d{2}T[\d:]{8}\.\d{3}Z$/,
       );
-      expect(new Date(Math.floor(withSubMs / 1e6)).toISOString()).not.toBe(emitted);
     });
 
     it('narrows shared_location to the request shape and converts end_at', () => {
@@ -713,9 +725,12 @@ describe('request-payload date direction', () => {
         ),
       );
 
-      expect(wire(payload.shared_location?.end_at)).toMatch(NS_RFC3339);
+      expect(payload.shared_location?.end_at).toBeInstanceOf(Date);
+      expect(payload.shared_location?.end_at?.getTime()).toBe(nsToMs(NANOS));
       expect(payload.shared_location).not.toHaveProperty('created_at');
       expect(payload.shared_location).not.toHaveProperty('updated_at');
+      expect(payload.shared_location).not.toHaveProperty('channel_cid');
+      expect(payload.shared_location).not.toHaveProperty('user_id');
     });
 
     it('omits the pin fields entirely when the message is not pinned', () => {
@@ -723,6 +738,15 @@ describe('request-payload date direction', () => {
 
       expect(payload).not.toHaveProperty('pinned_at');
       expect(payload).not.toHaveProperty('pin_expires');
+    });
+
+    it('converts an epoch timestamp rather than treating it as absent', () => {
+      const payload = localMessageToNewMessagePayload(
+        formatMessage(generateMsg({ pinned_at: 0 })),
+      );
+
+      expect(payload.pinned_at).toBeInstanceOf(Date);
+      expect(payload.pinned_at?.getTime()).toBe(0);
     });
   });
 
@@ -740,7 +764,8 @@ describe('request-payload date direction', () => {
       ]) {
         expect(payload).not.toHaveProperty(key);
       }
-      expect(wire(payload.pinned_at)).toMatch(NS_RFC3339);
+      expect(payload.pinned_at).toBeInstanceOf(Date);
+      expect(payload.pinned_at?.getTime()).toBe(nsToMs(NANOS));
     });
 
     it('SENDS pin_expires rather than stripping it — stripping clears the expiry', () => {
@@ -749,7 +774,8 @@ describe('request-payload date direction', () => {
         generateMsg({ pinned_at: NANOS, pin_expires: NANOS + 3600e9 }),
       );
 
-      expect(wire(payload.pin_expires)).toMatch(NS_RFC3339);
+      expect(payload.pin_expires).toBeInstanceOf(Date);
+      expect(payload.pin_expires?.getTime()).toBe(nsToMs(NANOS + 3600e9));
     });
 
     it('SENDS shared_location, narrowed to the request shape', () => {
@@ -767,7 +793,8 @@ describe('request-payload date direction', () => {
         }),
       );
 
-      expect(wire(payload.shared_location?.end_at)).toMatch(NS_RFC3339);
+      expect(payload.shared_location?.end_at).toBeInstanceOf(Date);
+      expect(payload.shared_location?.end_at?.getTime()).toBe(nsToMs(NANOS));
       expect(payload.shared_location).not.toHaveProperty('created_at');
     });
 

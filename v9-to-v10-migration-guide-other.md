@@ -9,11 +9,21 @@
 > - `v9-to-v10-migration-guide-server-side.md` (server-side surface removal, dropped Node-only deps)
 > - `v9-to-v10-migration-guide-type-renames.md` (hand-rolled type aliases → generated names)
 > - `v9-to-v10-migration-guide-i18n.md` (notification identity, poll-composer field errors, the `stream-chat/i18n` subpath)
+> - `v9-to-v10-migration-guide-dates.md` (server-sent dates as unix-nanosecond numbers)
 >
 > Read those first. This guide covers **exports, removed feature modules, event-type shape, filter constraints, small state/composer shape changes, and residual type/property renames** that the topic guides do not.
+>
+> **Start with the dates guide.** It is the change with the widest blast radius — every response and
+> event type — and the only one whose main failure modes produce no compile error.
 
 ## TL;DR
 
+- **Server-sent dates are unix-nanosecond `number`s** on every response and event type — not `Date`
+  objects and not ISO strings, while outgoing **request** date fields are still `Date`. `new Date(ns)`
+  is out of range, date libraries read a bare number as milliseconds, and `0` is a legitimate
+  timestamp so `if (!created_at)` is wrong. Full treatment, including the `t('timestamp.X', …)` call
+  sites the compiler does not guard, in
+  [`v9-to-v10-migration-guide-dates.md`](./v9-to-v10-migration-guide-dates.md).
 - **`engines.node` is now `>=22.18.0`** (was `>=18`). Node 22.18 is the release that unflagged
   TypeScript type stripping, which the package's own build scripts need — `prepare` runs the build, so a
   git-ref install has to be able to execute them. A registry install never builds, so if you are pinned
@@ -27,7 +37,7 @@
 - `EventTypes` (plural) renamed to `EventType` (singular). `CustomEventTypes` interface is unchanged — augment it to add custom event-type keys, same as v9.
 - Filter payloads now carry **per-endpoint operator constraints** (inline `Filters<{ … }>` on each request type) — previously-permissive filter objects may stop type-checking. Only one operator per field is allowed, and `null` is no longer a valid `$in` element. `QueryPollsFilters`, `QueryVotesFilters`, and `ReminderFilters` were the last hand-written holdouts and now derive from their request types too.
 - `ChannelState.membership` initializes to `undefined` (was `{}`); `ChannelState.typing` values are now `EventPayload<'typing.start' | 'typing.stop'>` (were `Event`); read receipts merged with the generated `ReadStateResponse`.
-- Composer attachments now nest `mime_type` / `file_size` / `duration` under `.custom`; `LocationComposer` preview `end_at` is a `Date` (was ISO string).
+- Composer attachments now nest `mime_type` / `file_size` / `duration` under `.custom`. `LocationComposer` state holds the **request** shape, so its `end_at` is a `Date` (was ISO string) — while an `end_at` read off a message is a unix-nanosecond number. `validLocation` returns `StaticLocationPreview | null` (was `SharedLocation | null`). See the [dates guide](./v9-to-v10-migration-guide-dates.md).
 - Composer configuration gained required `polls`, `attachments.enabled` and `attachments.customCdn` (all defaulted — only full-literal annotations break). The channel type's `uploads` / `polls` flags now resolve **into** that configuration, so read `composer.config` rather than `channel.serverConfig`. **Silent behaviour change:** a custom `doUploadRequest` no longer waives the `upload-file` capability — set `attachments.customCdn: true` if you upload to storage Stream does not host.
 - `Role` type renamed to `RoleName`.
 - Assorted small tightenings: `TokenManager.setTokenOrProvider` user param narrowed, `revokeTokens(before)` no longer accepts `string`.
@@ -283,6 +293,11 @@ filter?: Filters<{
 }>;
 ```
 
+**Note the asymmetry on date fields.** A filter operand is `Date | string`, while the same field on the
+_response_ is a unix-nanosecond `number` — so a value read off a response cannot be fed back into a
+filter, and a bare `number` operand is read as nanoseconds rather than milliseconds. See the
+[dates guide](./v9-to-v10-migration-guide-dates.md#filter-operands-read-a-bare-number-as-nanoseconds).
+
 Endpoints carrying a typed filter, and the property it sits on:
 
 | Request type                                                                                                                                                                                                                   | Property                                            |
@@ -460,22 +475,36 @@ Consequences:
 ### `LocationComposer` preview
 
 ```ts
-// v9
+// v9 — `StaticLocationPayload` / `LiveLocationPayload` were hand-written and are gone
 export type LiveLocationPreview = Omit<LiveLocationPayload, 'end_at'> & {
   durationMs?: number;
 };
 // end_at was set to `new Date(...).toISOString()`
 
-// v10
-export type StaticLocationPreview = StaticLocationPayload & { message_id?: string };
-export type LiveLocationPreview = Omit<LiveLocationPayload, 'end_at'> & {
+// v10 — both build on the generated request type `SharedLocation`
+export type StaticLocationPreview = SharedLocation & { message_id?: string };
+export type LiveLocationPreview = Omit<SharedLocation, 'end_at'> & {
   durationMs?: number;
   message_id?: string;
 };
-// end_at is now a Date (or undefined when durationMs is not a number)
+// end_at is a Date, because composer state holds the REQUEST shape
 ```
 
 If your app called `preview.end_at.toISOString()` or passed `end_at` directly to a `<time>` element expecting a string, format it (`.toISOString()`) at the read site.
+
+Two further changes in this area:
+
+- **`validLocation` returns `StaticLocationPreview | null`** (was `SharedLocation | null`), and it is now
+  built field by field rather than spread — so a location hydrated from a message no longer leaks that
+  message's `channel_cid` / `user_id` / `created_at` / `updated_at` into the outgoing payload.
+- **An absolute `end_at` now survives an edit.** `validLocation` previously emitted
+  `end_at: undefined` whenever `durationMs` was absent — which is always the case for a location read
+  off a message — silently turning a live location static on every edit. It now keeps the existing
+  `end_at` and only recomputes from `durationMs` when one is present.
+- **Composer state is narrowed on init.** `initState` copies only the `SharedLocation` fields plus
+  `message_id`, and converts the message's unix-nanosecond `end_at` into a `Date`. If you read
+  `locationComposer.location` expecting the response-only fields, they are no longer there — read them
+  off the message instead. See the [dates guide](./v9-to-v10-migration-guide-dates.md).
 
 ### `PollComposer`
 
@@ -709,7 +738,7 @@ ISO-string form is gone — construct a `Date` at the call site.
 
 ### `UserGroupPaginator` cursor
 
-The `created_at_gt` cursor field is derived from `lastItem.created_at`, which is now a unix-**nanosecond** `number` (was a string). The paginator converts it internally (`nsToDate(lastItem.created_at).toISOString()`) — read paths (`useNextCursor`) are unchanged, but any custom sub-class or off-path consumer that pulled `.created_at` off the paginator's items must handle the number: `new Date(ns)` is out of range, so use `convertTimestampToDate` / `nsToDate`.
+The `created_at_gt` cursor field is derived from `lastItem.created_at`, which is now a unix-**nanosecond** `number` (was a string). The paginator converts it internally (`nsToDate(lastItem.created_at).toISOString()`) — read paths (`useNextCursor`) are unchanged, but any custom sub-class or off-path consumer that pulled `.created_at` off the paginator's items must handle the number: `new Date(ns)` is out of range, so use `convertTimestampToDate` / `nsToDate`. See [the dates guide](./v9-to-v10-migration-guide-dates.md).
 
 ### Aliases dropped on `StreamChat`
 

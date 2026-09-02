@@ -1949,7 +1949,7 @@ export class Channel extends ChannelApi {
       const message = latestMessages[i];
       if (
         this._countMessageAsUnread(message) &&
-        (!lastRead || message.created_at > lastRead) &&
+        (lastRead == null || message.created_at > lastRead) &&
         message.mentioned_users?.some((user) => user.id === userId)
       ) {
         count++;
@@ -2738,10 +2738,9 @@ export class Channel extends ChannelApi {
           }
         }
         break;
-      case 'channel.truncated':
-        if (event.channel?.truncated_at) {
-          const truncatedAt = event.channel.truncated_at;
-
+      case 'channel.truncated': {
+        const truncatedAt = event.channel?.truncated_at;
+        if (truncatedAt != null) {
           this._setOwnUnreadCount(this.countUnread(truncatedAt));
           // Partial truncation: keep messages newer than the cutoff. clearStateAndCache would wipe
           // the whole paginator (readers now source from it), so use the partial truncate. The
@@ -2763,6 +2762,7 @@ export class Channel extends ChannelApi {
         }
 
         break;
+      }
       case 'member.added':
       case 'member.updated': {
         const memberCopy: ChannelMemberResponse = {
@@ -3031,7 +3031,7 @@ export class Channel extends ChannelApi {
     // that everything up to this point is not marked as unread
     const readUpdates: ChannelState['read'] = {};
     if (userID != null) {
-      const last_read = this.messagePaginator.lastMessageAt || nowNs();
+      const last_read = this.messagePaginator.lastMessageAt ?? nowNs();
       if (user) {
         readUpdates[user.id] = {
           user: user as UserResponse,

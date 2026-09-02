@@ -52,7 +52,7 @@ const msUntilExpiry = (endAt: number) => Math.max(0, nsToMs(endAt - nowNs()));
 function isValidLiveLocationMessage(
   message?: MessageResponse,
 ): message is MessageResponse & { shared_location: SharedLiveLocationResponse } {
-  if (!message || message.type === 'deleted' || !message.shared_location?.end_at)
+  if (!message || message.type === 'deleted' || message.shared_location?.end_at == null)
     return false;
 
   return !isExpiredLocation(message.shared_location as SharedLiveLocationResponse);

@@ -491,7 +491,7 @@ export class MessageComposer extends WithSubscriptions {
 
     // does not mean that the original edited message is different from the current state
     const editedMessageWasUpdated =
-      !!this.editedMessage?.updated_at &&
+      this.editedMessage?.updated_at != null &&
       this.editedMessage.updated_at < this.lastChange.stateUpdate;
 
     const draftWasChanged =
@@ -1051,7 +1051,7 @@ export class MessageComposer extends WithSubscriptions {
           id: this.id,
           mentioned_users: [] as UserResponse[],
           parent_id: this.threadId ?? undefined,
-          pinned_at: this.editedMessage?.pinned_at || undefined,
+          pinned_at: this.editedMessage?.pinned_at ?? undefined,
           reaction_groups: undefined,
           status: this.editedMessage ? this.editedMessage.status : 'sending',
           text,
