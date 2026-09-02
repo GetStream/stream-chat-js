@@ -608,14 +608,10 @@ describe('stream-io/message-composer-middleware/data-validation', () => {
         },
         localMessage: {
           ...editedMessage,
-          created_at: convertDateToTimestamp(
-            new Date(editedMessage.created_at as string),
-          ),
+          created_at: editedMessage.created_at,
           deleted_at: null,
           pinned_at: null,
-          updated_at: convertDateToTimestamp(
-            new Date(editedMessage.updated_at as string),
-          ),
+          updated_at: editedMessage.updated_at,
         } as LocalMessage,
         sendOptions: {},
       }),

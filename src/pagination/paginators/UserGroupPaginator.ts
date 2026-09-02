@@ -7,7 +7,7 @@ import type {
 } from './BasePaginator';
 import type { ListUserGroupsOptions, UserGroupResponse } from '../../types';
 import type { StreamChat } from '../../client';
-import { nsToDate } from '../../utils/time';
+import { nsToRfc3339 } from '../../utils/time';
 import { StoreBackedItemIndex } from '../../entityStore/StoreBackedItemIndex';
 
 type UserGroupListCursor = {
@@ -89,8 +89,11 @@ export class UserGroupPaginator extends BasePaginator<
 
     return JSON.stringify({
       // The cursor is a request value, so it has to go back out as RFC3339 rather than as the
-      // wire number the item carries.
-      created_at_gt: nsToDate(lastItem.created_at).toISOString(),
+      // wire number the item carries. `nsToRfc3339` and not `nsToDate(...).toISOString()`:
+      // `Date` holds only milliseconds, so flooring the boundary item's timestamp would put the
+      // cursor below it and a strict `created_at_gt` could hand that same item back on the next
+      // page.
+      created_at_gt: nsToRfc3339(lastItem.created_at),
       id_gt: lastItem.id,
     } satisfies UserGroupListCursor);
   };

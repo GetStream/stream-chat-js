@@ -712,7 +712,7 @@ export class Thread extends WithSubscriptions {
 
   private subscribeRepliesUnread = () =>
     this.client.on('notification.mark_unread', (event) => {
-      if (!event.user || !event.created_at || !event.thread_id) return;
+      if (!event.user || event.created_at == null || !event.thread_id) return;
       if (event.thread_id !== this.id) return;
 
       const userId = event.user.id;
@@ -790,7 +790,7 @@ export class Thread extends WithSubscriptions {
 
   private subscribeRepliesRead = () =>
     this.client.on('message.read', (event) => {
-      if (!event.user || !event.created_at || !event.thread) return;
+      if (!event.user || event.created_at == null || !event.thread) return;
       if (event.thread.parent_message_id !== this.id) return;
 
       const userId = event.user.id;

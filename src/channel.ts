@@ -2483,7 +2483,7 @@ export class Channel extends ChannelApi {
       case 'message.read':
         if (
           event.user?.id &&
-          event.created_at &&
+          event.created_at != null &&
           // the same event announces a thread read, which says nothing about the channel
           !(event.type === 'notification.mark_read' && event.thread_id)
         ) {
@@ -2531,7 +2531,7 @@ export class Channel extends ChannelApi {
         break;
       case 'message.delivered':
         // todo: update also on thread
-        if (event.user?.id && event.created_at) {
+        if (event.user?.id && event.created_at != null) {
           const eventUser = event.user;
           const createdAt = event.created_at;
           // `last_delivered_at` is the one timestamp the spec still declares as a bare `type:
@@ -2809,7 +2809,7 @@ export class Channel extends ChannelApi {
         break;
       case 'notification.mark_unread': {
         const ownMessage = event.user?.id === this.getClient().user?.id;
-        if (!ownMessage || !event.user || !event.last_read_at) break;
+        if (!ownMessage || !event.user || event.last_read_at == null) break;
         const eventUser = event.user;
         const lastReadAt = event.last_read_at;
         const unreadCount = event.unread_messages ?? 0;

@@ -110,7 +110,7 @@ const hasPaginationQueryShapeChanged: PaginationQueryShapeChangeIdentifier<
 
 const archivedFilterResolver: FieldToDataResolver<Channel> = {
   matchesField: (field) => field === 'archived',
-  resolve: (channel) => !!channel.state.membership.archived_at,
+  resolve: (channel) => channel.state.membership.archived_at != null,
 };
 
 const appBannedFilterResolver: FieldToDataResolver<Channel> = {
@@ -189,7 +189,7 @@ const memberUserNameFilterResolver: FieldToDataResolver<Channel> = {
 
 const pinnedFilterResolver: FieldToDataResolver<Channel> = {
   matchesField: (field) => field === 'pinned',
-  resolve: (channel) => !!channel.state.membership.pinned_at,
+  resolve: (channel) => channel.state.membership.pinned_at != null,
 };
 
 const mutedFilterResolver: FieldToDataResolver<Channel> = {

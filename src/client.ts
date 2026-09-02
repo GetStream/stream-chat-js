@@ -1078,7 +1078,7 @@ export class StreamChat extends ChatApi {
 
     if (
       event.type === 'user.deleted' &&
-      event.user.deleted_at &&
+      event.user.deleted_at != null &&
       (event.mark_messages_deleted || event.hard_delete)
     ) {
       this._deleteUserMessageReference(

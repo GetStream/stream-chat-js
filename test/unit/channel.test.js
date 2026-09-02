@@ -2028,17 +2028,17 @@ describe('Channel _handleChannelEvent', function () {
 			channel._handleChannelEvent(event);
 
 			expect(channel.state.unreadCount).toBe(initialCountUnread);
-			expect(new Date(channel.state.read[anotherUser.id].last_read).getTime()).toBe(
-				new Date(messageReadEvent.created_at).getTime(),
+			expect(channel.state.read[anotherUser.id].last_read).toBe(
+				messageReadEvent.created_at,
 			);
 			expect(channel.state.read[anotherUser.id].last_read_message_id).toBe(
 				event.last_read_message_id,
 			);
 			expect(channel.state.read[anotherUser.id].first_unread_message_id).toBeUndefined();
 			expect(channel.state.read[anotherUser.id].unread_messages).toBe(0);
-			expect(
-				new Date(channel.state.read[anotherUser.id].last_delivered_at).getTime(),
-			).toBe(new Date(messageReadEvent.created_at).getTime());
+			expect(channel.state.read[anotherUser.id].last_delivered_at).toBe(
+				messageReadEvent.created_at,
+			);
 			expect(channel.state.read[anotherUser.id].last_delivered_message_id).toBe(
 				event.last_read_message_id,
 			);
@@ -2063,9 +2063,7 @@ describe('Channel _handleChannelEvent', function () {
 
 			expect(changes).to.have.length(1);
 			expect(changes[0].next).to.not.equal(changes[0].prev);
-			expect(new Date(changes[0].next.last_read).getTime()).toBe(
-				new Date(messageReadEvent.created_at).getTime(),
-			);
+			expect(changes[0].next.last_read).toBe(messageReadEvent.created_at);
 		});
 	});
 
@@ -2098,9 +2096,7 @@ describe('Channel _handleChannelEvent', function () {
 
 			expect(channel.state.read[user.id].unread_messages).toBe(0);
 			expect(channel.state.unreadCount).toBe(0);
-			expect(new Date(channel.state.read[user.id].last_read).getTime()).toBe(
-				new Date(markReadEvent.created_at).getTime(),
-			);
+			expect(channel.state.read[user.id].last_read).toBe(markReadEvent.created_at);
 			expect(channel.state.read[user.id].last_read_message_id).toBe(
 				markReadEvent.last_read_message_id,
 			);
