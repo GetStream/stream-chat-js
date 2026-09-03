@@ -1,3 +1,13 @@
+## [10.0.0-rc.9](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.8...v10.0.0-rc.9) (2026-09-03)
+
+### ⚠ BREAKING CHANGES
+
+* remove response date transform (#1849)
+
+### Features
+
+* remove response date transform ([#1849](https://github.com/GetStream/stream-chat-js/issues/1849)) ([ef5dcc6](https://github.com/GetStream/stream-chat-js/commit/ef5dcc6175c26bf89ab423e0bf1caab1de3473bd))
+
 ## [10.0.0-rc.8](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.7...v10.0.0-rc.8) (2026-08-27)
 
 ### Bug Fixes
