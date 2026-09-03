@@ -422,12 +422,15 @@ export class MessagePaginator extends MessageIntervalPaginator {
     // We deliberately do NOT persist the inferred boundary back into the snapshot: writing
     // `firstUnreadMessageId` would make the channel look explicitly marked-unread and suppress
     // auto-mark-read at the bottom. The separator reads the (re-seeded) snapshot directly.
-    if (lastReadAt != null) {
+    const lastReadBoundary =
+      lastReadAt != null && Number.isFinite(lastReadAt) ? lastReadAt : null;
+
+    if (lastReadBoundary !== null) {
       let {
         firstUnreadMessageId: inferredFirstUnreadMessageId,
         lastReadMessageId: inferredLastReadMessageId,
       } = this.resolveUnreadBoundaryIdsByTimestamp({
-        lastReadAt,
+        lastReadAt: lastReadBoundary,
         messages: this.state.getLatestValue().items ?? [],
       });
 
@@ -435,7 +438,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
         const result = await this.executeQuery({
           queryShape: {
             // `created_at_around` is a request field and still takes a `Date`.
-            created_at_around: nsToDate(lastReadAt),
+            created_at_around: nsToDate(lastReadBoundary),
             limit: options?.pageSize,
           },
           updateState: false,
@@ -445,7 +448,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
             firstUnreadMessageId: inferredFirstUnreadMessageId,
             lastReadMessageId: inferredLastReadMessageId,
           } = this.resolveUnreadBoundaryIdsByTimestamp({
-            lastReadAt,
+            lastReadAt: lastReadBoundary,
             messages: result.stateCandidate.items ?? [],
           }));
         }

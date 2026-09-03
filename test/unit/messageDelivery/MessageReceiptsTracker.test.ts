@@ -834,4 +834,43 @@ describe('MessageDeliveryReadTracker', () => {
       expect(tracker.snapshotStore.getLatestValue().revision).toBe(1);
     });
   });
+  describe('read-store reconcile guards', () => {
+    // A non-finite `last_read` used to reach `locateMessage`, whose lower-bound search finds no
+    // index satisfying `t > NaN` and so resolves to the NEWEST loaded message — reporting the
+    // whole channel as read. The row is skipped instead.
+    it.each([
+      ['NaN', Number.NaN],
+      ['an ISO string', '2026-09-03T00:00:00.000Z'],
+    ])('ignores a read row whose last_read is %s', (_label, lastRead) => {
+      // Resolves any timestamp to the newest message, so a leaked non-finite value is visible.
+      const { channel, readStore } = createChannelMock({
+        findMessageByTimestamp: () => ({ id: 'm4' }),
+      });
+      const localTracker = new MessageReceiptsTracker({ channel });
+      localTracker.registerSubscriptions();
+      localTracker.setPendingReadStoreReconcileMeta({ changedUserIds: ['u1'] });
+
+      readStore.next({
+        read: { u1: { user: U('u1'), last_read: lastRead, unread_messages: 0 } },
+      } as never);
+
+      expect(localTracker.getUserProgress('u1')).toBeNull();
+      expect(ids(localTracker.readersForMessage(ref(4000)))).toEqual([]);
+    });
+
+    it('still accepts the epoch, which means "nothing read"', () => {
+      const { channel, readStore } = createChannelMock();
+      const localTracker = new MessageReceiptsTracker({ channel });
+      localTracker.registerSubscriptions();
+      localTracker.setPendingReadStoreReconcileMeta({ changedUserIds: ['u1'] });
+
+      readStore.next({
+        read: { u1: { user: U('u1'), last_read: 0, unread_messages: 0 } },
+      } as never);
+
+      // Tracked, but ahead of nothing — the epoch resolves below every message.
+      expect(localTracker.getUserProgress('u1')).not.toBeNull();
+      expect(ids(localTracker.readersForMessage(ref(1000)))).toEqual([]);
+    });
+  });
 });

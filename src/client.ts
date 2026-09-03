@@ -1897,16 +1897,25 @@ export class StreamChat extends ChatApi {
   /**
    * Transforms an expiration value into an ISO string.
    *
+   * A `number` is an offset in SECONDS, not a timestamp — passing a wire `pin_expires` overflows
+   * `Date`, which used to surface as an opaque `RangeError` from `toISOString()`.
+   *
    * @param timeoutOrExpirationDate - Expiration date or timeout. Use `number` to set the timeout
    *   in seconds, `string` or `Date` to set the exact expiration date (optional).
    * @returns The expiration as an ISO string, or `null`.
+   * @throws If a numeric offset does not resolve to a representable date.
    */
   _normalizeExpiration(timeoutOrExpirationDate?: null | number | string | Date) {
     let pinExpires: null | string = null;
     if (typeof timeoutOrExpirationDate === 'number') {
-      const now = new Date();
-      now.setSeconds(now.getSeconds() + timeoutOrExpirationDate);
-      pinExpires = now.toISOString();
+      const expiresAt = new Date();
+      expiresAt.setSeconds(expiresAt.getSeconds() + timeoutOrExpirationDate);
+      if (Number.isNaN(expiresAt.getTime())) {
+        throw new Error(
+          `Expiration offset ${timeoutOrExpirationDate} does not resolve to a valid date`,
+        );
+      }
+      pinExpires = expiresAt.toISOString();
     } else if (isString(timeoutOrExpirationDate)) {
       pinExpires = timeoutOrExpirationDate;
     } else if (timeoutOrExpirationDate instanceof Date) {

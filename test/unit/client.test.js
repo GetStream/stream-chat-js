@@ -1966,3 +1966,39 @@ describe('activeChannels eviction when the current user is removed (#2599)', () 
 		expect(client.activeChannels[notifDeleted.cid]).to.be.undefined;
 	});
 });
+
+describe('_normalizeExpiration', () => {
+	let client;
+
+	beforeEach(async () => {
+		client = await getClientWithUser({ id: 'user' });
+	});
+
+	it('reads a number as an offset in seconds', () => {
+		const before = Date.now();
+		const iso = client._normalizeExpiration(3600);
+		const offsetMs = new Date(iso).getTime() - before;
+		expect(offsetMs).toBeGreaterThanOrEqual(3600 * 1000 - 1000);
+		expect(offsetMs).toBeLessThanOrEqual(3600 * 1000 + 1000);
+	});
+
+	it.each([
+		['a Date', new Date('2026-12-25T00:00:00.000Z'), '2026-12-25T00:00:00.000Z'],
+		['a string', '2026-12-25T00:00:00.000Z', '2026-12-25T00:00:00.000Z'],
+		['null', null, null],
+		['undefined', undefined, null],
+	])('passes %s through', (_label, input, expected) => {
+		expect(client._normalizeExpiration(input)).toBe(expected);
+	});
+
+	// A wire timestamp (~1.79e18) added as seconds leaves `Date`'s range. That used to throw an
+	// opaque `RangeError` from `toISOString()`, as an unhandled rejection inside `pinMessage`.
+	it.each([
+		['a wire nanosecond timestamp', 1798156800000000000],
+		['NaN', Number.NaN],
+	])('throws an actionable error for %s', (_label, input) => {
+		expect(() => client._normalizeExpiration(input)).toThrow(
+			/does not resolve to a valid date/,
+		);
+	});
+});

@@ -88,6 +88,9 @@ export type ThreadUserReadState = {
 
 export type ThreadReadState = Record<string, ThreadUserReadState | undefined>;
 
+const timestampOr = (value: number | undefined, fallback: number): number =>
+  typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+
 const DEFAULT_PAGE_LIMIT = 50;
 const DEFAULT_SORT: SortParamRequest[] = [{ field: 'created_at', direction: -1 }];
 const DEFAULT_ITEM_ORDER: SortParamRequest[] = [{ field: 'created_at', direction: 1 }];
@@ -198,7 +201,7 @@ export class Thread extends WithSubscriptions {
       }
 
       const formattedParentMessage = formatMessage(parentMessage);
-      const createdAt = parentMessage.created_at ?? nowNs();
+      const createdAt = timestampOr(parentMessage.created_at, nowNs());
 
       this.state = new StateStore<ThreadState>({
         active: false,
@@ -725,7 +728,7 @@ export class Thread extends WithSubscriptions {
           ...current.read,
           [userId]: {
             ...current.read[userId],
-            lastReadAt: event.last_read_at ?? createdAt,
+            lastReadAt: timestampOr(event.last_read_at, createdAt),
             user,
             firstUnreadMessageId: event.first_unread_message_id,
             unreadMessageCount: event.unread_messages ?? 0,
@@ -767,7 +770,7 @@ export class Thread extends WithSubscriptions {
             // in that thread
             nextUserRead = {
               ...nextUserRead,
-              lastReadAt: event.created_at ?? nowNs(),
+              lastReadAt: timestampOr(event.created_at, nowNs()),
               user: event.user,
               unreadMessageCount: 0,
             };

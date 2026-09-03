@@ -42,7 +42,7 @@ const isValidReadState = (
 ): readState is ReadStoreUserState & {
   last_read: number;
   user: UserResponse;
-} => !!readState?.user && readState.last_read != null;
+} => !!readState?.user && Number.isFinite(readState.last_read);
 
 const compareRefsAsc = (a: MsgRef, b: MsgRef) =>
   a.timestamp !== b.timestamp ? a.timestamp - b.timestamp : 0;
@@ -400,9 +400,11 @@ export class MessageReceiptsTracker extends WithSubscriptions {
   }) {
     const userProgress = this.ensureUser(user);
 
-    const newReadRef: MsgRef = lastReadAt
-      ? { timestamp: lastReadAt, msgId: lastReadMessageId ?? '' }
-      : { ...MIN_REF };
+    // `0` is the "never read" sentinel
+    const newReadRef: MsgRef =
+      lastReadAt != null && Number.isFinite(lastReadAt)
+        ? { timestamp: lastReadAt, msgId: lastReadMessageId ?? '' }
+        : { ...MIN_REF };
 
     // If no change, exit early.
     if (
@@ -638,7 +640,7 @@ export class MessageReceiptsTracker extends WithSubscriptions {
           timestamp: lastDeliveredTimestamp ?? lastReadTimestamp,
           msgId: readState.last_delivered_message_id,
         }
-      : lastDeliveredTimestamp
+      : lastDeliveredTimestamp != null && Number.isFinite(lastDeliveredTimestamp)
         ? (this.locateMessage(lastDeliveredTimestamp) ?? MIN_REF)
         : MIN_REF;
 
@@ -659,7 +661,6 @@ export class MessageReceiptsTracker extends WithSubscriptions {
     return Object.values(readState).reduce<ReadStateResponse[]>(
       (responses, userReadState) => {
         if (!isValidReadState(userReadState)) return responses;
-        if (!Number.isFinite(userReadState.last_read)) return responses;
 
         responses.push({
           last_read: userReadState.last_read,

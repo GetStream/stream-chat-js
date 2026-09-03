@@ -797,6 +797,48 @@ describe('MessagePaginator', () => {
       );
     });
 
+    // `nsToDate(NaN)` is an `Invalid Date`, which `JSON.stringify` emits as `null` — so the query
+    // used to go out with `created_at_around: null`. The row is not a usable boundary; fall through.
+    it.each([
+      ['NaN', Number.NaN],
+      ['an ISO string', '2021-01-02T00:00:00.000Z'],
+    ])(
+      'does not query created_at_around when lastReadAt is %s',
+      async (_label, lastRead) => {
+        const channelWithReadState = {
+          cid: 'channel-id',
+          query: vi.fn(),
+          state: {
+            read: {
+              user1: {
+                first_unread_message_id: null,
+                last_read: lastRead,
+                last_read_message_id: 'm-last-read',
+              },
+            },
+          },
+          getClient: () => ({ user: { id: 'user1' } }),
+        } as unknown as Channel;
+
+        const paginator = new MessagePaginator({
+          channel: channelWithReadState,
+          itemIndex,
+        });
+        const executeQuerySpy = vi.spyOn(paginator, 'executeQuery');
+        const jumpSpy = vi.spyOn(paginator, 'jumpToMessage').mockResolvedValue(true);
+
+        const ok = await paginator.jumpToTheFirstUnreadMessage({ pageSize: 25 });
+
+        expect(executeQuerySpy).not.toHaveBeenCalled();
+        // Falls through to the last-read id we do have.
+        expect(ok).toBe(true);
+        expect(jumpSpy).toHaveBeenCalledWith(
+          'm-last-read',
+          expect.objectContaining({ focusReason: 'jump-to-first-unread' }),
+        );
+      },
+    );
+
     it('falls back to created_at_around query when unread ids are missing and lastReadAt exists', async () => {
       const lastReadAt = convertDateToTimestamp('2021-01-02T00:00:00.000Z');
       const channelWithReadState = {
