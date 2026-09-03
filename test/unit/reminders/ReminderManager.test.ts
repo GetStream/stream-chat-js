@@ -13,6 +13,8 @@ import {
 } from '../../../src';
 import { describe, expect, it, vi } from 'vitest';
 import { PaginationQueryReturnValue } from '../../../src/pagination';
+import { msToNs, nowNs, nsToMs } from '../../../src/utils/time';
+import { convertDateToTimestamp } from '../test-utils/time';
 
 const baseData = {
   channel_cid: 'channel_cid',
@@ -27,7 +29,7 @@ export const generateReminderResponse = ({
   data?: Partial<ReminderResponseData>;
   scheduleOffsetMs?: number;
 } = {}): ReminderResponseData => {
-  const created_at = new Date();
+  const created_at = nowNs();
   const basePayload = {
     ...baseData,
     created_at,
@@ -36,7 +38,7 @@ export const generateReminderResponse = ({
     user: { id: baseData.user_id },
   } as ReminderResponseData;
   if (typeof scheduleOffsetMs === 'number') {
-    basePayload.remind_at = new Date(created_at.getTime() + scheduleOffsetMs);
+    basePayload.remind_at = created_at + msToNs(scheduleOffsetMs);
   }
   return {
     ...basePayload,
@@ -48,7 +50,7 @@ const generateReminderEvent = (type: ListenerKeys, reminder: ReminderResponseDat
   ({
     ...baseData,
     cid: baseData.channel_cid,
-    created_at: new Date(),
+    created_at: nowNs(),
     reminder,
     type,
   }) as EventPayload<typeof type>;
@@ -121,9 +123,7 @@ describe('ReminderManager', () => {
         manager.reminders.get(reminderResponse.message_id)?.state.getLatestValue(),
       ).toEqual({
         ...reminderResponse,
-        created_at: new Date(reminderResponse.created_at),
         remind_at: null,
-        updated_at: new Date(reminderResponse.updated_at),
         timeLeftMs: null,
       });
     });
@@ -132,7 +132,7 @@ describe('ReminderManager', () => {
       const client = new StreamChat('api-key');
       const manager = new ReminderManager({ client });
       const scheduleOffsetMs = 62 * 1000;
-      const now = new Date().getTime();
+      const now = nowNs();
       const reminderResponse = generateReminderResponse({ scheduleOffsetMs });
       manager.upsertToState({ data: reminderResponse });
 
@@ -141,19 +141,15 @@ describe('ReminderManager', () => {
       const reminder = manager.getFromState(reminderResponse.message_id);
       expect(reminder).toBeInstanceOf(Reminder);
 
-      const remindAtDate = new Date(
-        new Date(reminderResponse.created_at).getTime() + scheduleOffsetMs,
-      );
+      const remindAt = reminderResponse.created_at + msToNs(scheduleOffsetMs);
       const reminderState = reminder!.state.getLatestValue();
       expect(reminderState).toEqual({
         ...reminderResponse,
-        created_at: new Date(reminderResponse.created_at),
-        remind_at: remindAtDate,
-        updated_at: new Date(reminderResponse.updated_at),
+        remind_at: remindAt,
         timeLeftMs: expect.any(Number),
       });
       expect(Math.floor((reminderState!.timeLeftMs as number) / 10000)).toBe(
-        Math.floor((remindAtDate.getTime() - now) / 10000),
+        Math.floor(nsToMs(remindAt - now) / 10000),
       );
     });
 
@@ -179,9 +175,7 @@ describe('ReminderManager', () => {
         manager.reminders.get(reminderResponse.message_id)?.state.getLatestValue(),
       ).toEqual({
         ...reminderResponse,
-        created_at: new Date(reminderResponse.created_at),
         remind_at: null,
-        updated_at: new Date(reminderResponse.updated_at),
         timeLeftMs: null,
       });
     });
@@ -202,9 +196,7 @@ describe('ReminderManager', () => {
         manager.reminders.get(reminderResponse.message_id)?.state.getLatestValue(),
       ).toEqual({
         ...reminderResponse,
-        created_at: new Date(reminderResponse.created_at),
         remind_at: null,
-        updated_at: new Date(reminderResponse.updated_at),
         timeLeftMs: null,
       });
     });
@@ -275,9 +267,7 @@ describe('ReminderManager', () => {
         manager.reminders.get(reminderResponse.message_id)?.state.getLatestValue(),
       ).toEqual({
         ...reminderResponse,
-        created_at: new Date(reminderResponse.created_at),
         remind_at: null,
-        updated_at: new Date(reminderResponse.updated_at),
         timeLeftMs: null,
       });
     });
@@ -288,26 +278,22 @@ describe('ReminderManager', () => {
       manager.registerSubscriptions();
 
       const scheduleOffsetMs = 62 * 1000;
-      const now = new Date().getTime();
+      const now = nowNs();
       const reminderResponse = generateReminderResponse({ scheduleOffsetMs });
       const type: ListenerKeys = 'reminder.created';
       client.dispatchEvent(generateReminderEvent(type, reminderResponse));
       const reminder = manager.getFromState(reminderResponse.message_id);
       expect(reminder).toBeInstanceOf(Reminder);
 
-      const remindAtDate = new Date(
-        new Date(reminderResponse.created_at).getTime() + scheduleOffsetMs,
-      );
+      const remindAt = reminderResponse.created_at + msToNs(scheduleOffsetMs);
       const reminderState = reminder!.state.getLatestValue();
       expect(reminderState).toEqual({
         ...reminderResponse,
-        created_at: new Date(reminderResponse.created_at),
-        remind_at: remindAtDate,
-        updated_at: new Date(reminderResponse.updated_at),
+        remind_at: remindAt,
         timeLeftMs: expect.any(Number),
       });
       expect(Math.floor((reminderState!.timeLeftMs as number) / 10000)).toBe(
-        Math.floor((remindAtDate.getTime() - now) / 10000),
+        Math.floor(nsToMs(remindAt - now) / 10000),
       );
     });
 
@@ -318,12 +304,11 @@ describe('ReminderManager', () => {
 
       const reminderResponse = generateReminderResponse();
       manager.upsertToState({ data: reminderResponse });
-      reminderResponse.remind_at = new Date('1970-01-01');
+      reminderResponse.remind_at = convertDateToTimestamp('1970-01-01');
       const type: ListenerKeys = 'reminder.updated';
-      const now = new Date();
       client.dispatchEvent(generateReminderEvent(type, reminderResponse));
       expect(manager.reminders.size).toBe(1);
-      const remindAtDate = new Date('1970-01-01');
+      const remindAt = convertDateToTimestamp('1970-01-01');
       const { timeLeftMs, ...state } = manager.reminders
         .get(reminderResponse.message_id)
         ?.state.getLatestValue() as ReminderState;
@@ -332,10 +317,8 @@ describe('ReminderManager', () => {
         timeLeftMs: Math.round((timeLeftMs ?? 0) / 1000),
       }).toEqual({
         ...reminderResponse,
-        created_at: new Date(reminderResponse.created_at),
-        remind_at: remindAtDate,
-        updated_at: new Date(reminderResponse.updated_at),
-        timeLeftMs: Math.round((remindAtDate.getTime() - now.getTime()) / 1000),
+        remind_at: remindAt,
+        timeLeftMs: Math.round(nsToMs(remindAt - nowNs()) / 1000),
       });
     });
     it('removes reminder from state on reminder.deleted event', () => {
@@ -370,11 +353,14 @@ describe('ReminderManager', () => {
     it('creates a reminder server-side and updates the state', async () => {
       const client = new StreamChat('api-key');
       const manager = new ReminderManager({ client });
-      const reminderResponse = {
-        ...generateReminderResponse(),
+      const reminderResponse = generateReminderResponse();
+      // The response wraps the reminder, like updateReminder's below: the spec used to
+      // declare this endpoint as returning ReminderResponseData bare (CHA-4993).
+      vi.spyOn(client, 'createReminder').mockResolvedValueOnce({
+        duration: '0ms',
+        reminder: reminderResponse,
         metadata: {} as RequestMetadata,
-      };
-      vi.spyOn(client, 'createReminder').mockResolvedValueOnce(reminderResponse);
+      });
       const stateUpdateSpy = vi
         .spyOn(manager, 'upsertToState')
         .mockReturnValueOnce(undefined);

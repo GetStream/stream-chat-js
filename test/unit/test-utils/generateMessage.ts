@@ -1,11 +1,12 @@
 import { generateUUIDv4 as uuidv4 } from '../../../src/utils';
 import type { MessageResponse, UserResponse } from '../../../src';
+import { convertDateToTimestamp } from './time';
 
 export const generateMsg = (
-  msg: Partial<MessageResponse> & { date?: Date } = {},
+  msg: Partial<MessageResponse> & { date?: Date | number | string } = {},
 ): MessageResponse => {
-  const date = msg?.date ?? new Date();
-  return {
+  const date = convertDateToTimestamp(msg?.date);
+  const message = {
     cid: 'messaging:general',
     pinned: false,
     id: uuidv4(),
@@ -25,5 +26,7 @@ export const generateMsg = (
     silent: false,
     status: 'received',
     ...msg,
-  };
+  } as MessageResponse;
+
+  return message;
 };

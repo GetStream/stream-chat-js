@@ -10,6 +10,7 @@
  */
 
 import { withCancellation } from './utils/concurrency';
+import { nowNs, nsToMs } from './utils/time';
 import { deepFreezeConfig } from './configuration/utils/deepFreezeConfig';
 import { StateStore } from './store';
 import { ConfigController } from './configuration/ConfigController';
@@ -39,19 +40,38 @@ export type LiveLocationManagerState = {
   messages: Map<MessageId, ScheduledLiveLocationSharing>;
 };
 
-const isExpiredLocation = (location: SharedLiveLocationResponse) => {
-  const endTimeTimestamp = new Date(location.end_at).getTime();
+/** `setTimeout` silently clamps a longer delay to 1 ms, so longer waits are armed in steps. */
+const MAX_TIMEOUT_MS = 2 ** 31 - 1;
 
-  return endTimeTimestamp < Date.now();
-};
+/**
+ * Whether the manager can track this location: a finite `end_at` that has not passed. `end_at` is
+ * optional on the wire, and `NaN < nowNs()` is `false`, so both would otherwise read as live.
+ */
+const canTrackLocation = (location: SharedLocationResponseData): boolean =>
+  typeof location.end_at === 'number' &&
+  Number.isFinite(location.end_at) &&
+  location.end_at >= nowNs();
+
+/**
+ * The narrowing form, which replaces the `as` cast at the response boundary. Negating a predicate
+ * narrows `state.messages` values to `never`, so use `canTrackLocation` for the boolean.
+ */
+const isTrackableLocation = (
+  location: SharedLocationResponseData,
+): location is SharedLiveLocationResponse => canTrackLocation(location);
+
+/**
+ * Milliseconds from now until a live location stops sharing. Never negative.
+ * `end_at` is a wire timestamp, so the subtraction happens in nanoseconds and is converted once.
+ */
+const msUntilExpiry = (endAt: number) => Math.max(0, nsToMs(endAt - nowNs()));
 
 function isValidLiveLocationMessage(
   message?: MessageResponse,
 ): message is MessageResponse & { shared_location: SharedLiveLocationResponse } {
-  if (!message || message.type === 'deleted' || !message.shared_location?.end_at)
-    return false;
+  if (!message || message.type === 'deleted' || !message.shared_location) return false;
 
-  return !isExpiredLocation(message.shared_location as SharedLiveLocationResponse);
+  return isTrackableLocation(message.shared_location);
 }
 
 export type LiveLocationManagerConstructorParameters = {
@@ -234,20 +254,16 @@ export class LiveLocationManager extends WithSubscriptions {
     const { active_live_locations } = await this.client.getUserLiveLocations();
     this.state.next({
       messages: new Map(
-        (active_live_locations as SharedLiveLocationResponse[])
-          .filter((location) => !isExpiredLocation(location))
-          .map((location) => [
-            location.message_id,
-            {
-              ...location,
-              stopSharingTimeout: setTimeout(
-                () => {
-                  this.unregisterMessages([location.message_id]);
-                },
-                new Date(location.end_at).getTime() - Date.now(),
-              ),
-            },
-          ]),
+        active_live_locations.filter(isTrackableLocation).map((location) => [
+          location.message_id,
+          {
+            ...location,
+            stopSharingTimeout: this.scheduleStopSharing(
+              location.message_id,
+              location.end_at,
+            ),
+          },
+        ]),
       ),
       ready: true,
     });
@@ -292,7 +308,8 @@ export class LiveLocationManager extends WithSubscriptions {
         const expiredLocations: string[] = [];
 
         for (const [messageId, location] of this.messages) {
-          if (isExpiredLocation(location)) {
+          // Drops an absent or non-finite `end_at` too, not just an expired one.
+          if (!canTrackLocation(location)) {
             expiredLocations.push(location.message_id);
             continue;
           }
@@ -357,6 +374,38 @@ export class LiveLocationManager extends WithSubscriptions {
     return () => subscriptions.forEach((subscription) => subscription.unsubscribe());
   }
 
+  /**
+   * Arms the stop-sharing timer, stepping when the expiry is beyond `MAX_TIMEOUT_MS` (~24.9 days).
+   * A share of any length is valid — only a minimum duration is enforced — and scheduling one in a
+   * single call was clamped to 1 ms, unregistering it immediately.
+   */
+  private scheduleStopSharing(
+    messageId: MessageId,
+    endAt: number,
+  ): ReturnType<typeof setTimeout> | null {
+    if (!Number.isFinite(endAt)) return null;
+
+    const remaining = msUntilExpiry(endAt);
+    if (remaining <= MAX_TIMEOUT_MS) {
+      return setTimeout(() => {
+        this.unregisterMessages([messageId]);
+      }, remaining);
+    }
+
+    return setTimeout(() => {
+      this.state.next((currentValue) => {
+        const current = currentValue.messages.get(messageId);
+        if (!current) return currentValue; // unregistered while waiting
+        const messages = new Map(currentValue.messages);
+        messages.set(messageId, {
+          ...current,
+          stopSharingTimeout: this.scheduleStopSharing(messageId, endAt),
+        });
+        return { ...currentValue, messages };
+      });
+    }, MAX_TIMEOUT_MS);
+  }
+
   private registerMessage(message: MessageResponse) {
     if (
       !this.client.userId ||
@@ -369,11 +418,9 @@ export class LiveLocationManager extends WithSubscriptions {
       const messages = new Map(currentValue.messages);
       messages.set(message.id, {
         ...message.shared_location,
-        stopSharingTimeout: setTimeout(
-          () => {
-            this.unregisterMessages([message.id]);
-          },
-          new Date(message.shared_location.end_at).getTime() - Date.now(),
+        stopSharingTimeout: this.scheduleStopSharing(
+          message.id,
+          message.shared_location.end_at,
         ),
       });
       return {

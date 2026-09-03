@@ -33,6 +33,7 @@ import {
   localMessageToNewMessagePayload,
   runDetached,
 } from '../utils';
+import { nowNs } from '../utils/time';
 import { isMessageUpdateReplayable } from './util';
 import { QUEUEABLE_OPERATIONS, runQueueableOperation } from './queueableOperations';
 import type { QueueableOperation } from './queueableOperations';
@@ -725,7 +726,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
               execute: false,
               reads: [
                 {
-                  last_read: ownReads?.last_read ?? new Date(0),
+                  last_read: ownReads?.last_read ?? 0,
                   last_read_message_id: ownReads?.last_read_message_id,
                   unread_messages: unreadCount,
                   // `client.user` is `ClientUser` (everything optional but `id`), so a
@@ -986,7 +987,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     execute?: boolean;
   }) => {
     const {
-      received_at: last_read = new Date(),
+      received_at: last_read = nowNs(),
       last_read_message_id,
       // @ts-expect-error property missing
       unread_messages = 0,
@@ -1151,8 +1152,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
         const ownReads = activeChannel.state.read[userId];
 
         let unreadCount = 0;
-        if (truncated_at) {
-          unreadCount = activeChannel.countUnread(new Date(truncated_at));
+        if (truncated_at != null) {
+          unreadCount = activeChannel.countUnread(truncated_at);
         }
 
         const upsertReadQueries = await this.upsertReads({
@@ -1160,7 +1161,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
           execute: false,
           reads: [
             {
-              last_read: ownReads?.last_read ?? new Date(0),
+              last_read: ownReads?.last_read ?? 0,
               last_read_message_id: ownReads?.last_read_message_id,
               unread_messages: unreadCount,
               // See the note above: supply `blocked_user_ids`, do not assert it.
@@ -1442,16 +1443,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     editedMessage: LocalMessage | Partial<MessageResponse>;
     pendingMessage: MessageRequest;
   }) => {
-    const normalizedEditedMessageSource = {
-      ...editedMessage,
-    } as LocalMessage & { message_text_updated_at?: string };
-
-    if ((editedMessage as LocalMessage).status === 'failed') {
-      delete normalizedEditedMessageSource.message_text_updated_at;
-    }
-
     const normalizedEditedMessage = localMessageToNewMessagePayload(
-      normalizedEditedMessageSource,
+      editedMessage as LocalMessage,
     );
     const pendingMessageStatus = (pendingMessage as { status?: string }).status;
 

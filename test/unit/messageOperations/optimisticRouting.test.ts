@@ -229,7 +229,7 @@ describe('optimistic edit/delete routing', () => {
       });
 
       expect(parentProjection(thread)?.type).toBe('deleted');
-      expect(parentProjection(thread)?.deleted_at).toBeInstanceOf(Date);
+      expect(parentProjection(thread)?.deleted_at).toEqual(expect.any(Number));
       // `deletedAt` sits on the thread state root, derived from the parent by the store projection —
       // so this also proves the write went through the store rather than the reply paginator.
       expect(thread.state.getLatestValue().deletedAt).toBeTruthy();
@@ -298,8 +298,8 @@ describe('optimistic edit/delete routing', () => {
       });
 
       expect(channel.messagePaginator.getItem(message.id)?.type).toBe('deleted');
-      expect(channel.messagePaginator.getItem(message.id)?.deleted_at).toBeInstanceOf(
-        Date,
+      expect(channel.messagePaginator.getItem(message.id)?.deleted_at).toEqual(
+        expect.any(Number),
       );
     });
 

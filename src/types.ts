@@ -250,13 +250,13 @@ type LocalEvent = (
   | ({ type: 'message.read_locally' } & {
       channel_type: string;
       cid: string;
-      created_at: Date;
+      created_at: number;
       channel_id?: string;
       last_read_message_id?: string;
       team?: string;
       user?: UserResponse;
     })
-) & { received_at?: Date };
+) & { received_at?: number };
 
 /**
  * The hello event of the `/api/v2/connect` WebSocket endpoint, sent once the auth frame
@@ -269,9 +269,11 @@ type LocalEvent = (
 export type ConnectedEvent = {
   type: 'connection.ok';
   connection_id: string;
-  created_at: Date;
+  /** Unix nanoseconds, as every other wire event carries it. */
+  created_at: number;
   me: OwnUserResponse;
-  received_at?: Date;
+  /** Unix nanoseconds, as every other wire event carries it. */
+  received_at?: number;
 };
 
 export type Event = WSEvent | ConnectedEvent | LocalEvent | keyof CustomEventTypes;

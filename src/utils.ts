@@ -13,6 +13,7 @@ import type { Channel } from './channel';
 import type { AxiosRequestConfig } from 'axios';
 import { LOCAL_MESSAGE_FIELDS, RESERVED_UPDATED_MESSAGE_FIELDS } from './constants';
 import { chatLoggerSystem } from './logger';
+import { nowNs, nsToDate } from './utils/time';
 
 const logger = chatLoggerSystem.getLogger('utils');
 
@@ -254,16 +255,19 @@ export function formatMessage(message: MessageResponse | LocalMessage): LocalMes
     if (!msg) return null;
     return {
       ...msg,
-      created_at: msg.created_at ? new Date(msg.created_at) : new Date(),
-      deleted_at: msg.deleted_at ? new Date(msg.deleted_at) : undefined,
-      pinned_at: msg.pinned_at ? new Date(msg.pinned_at) : undefined,
+      // Timestamps are the wire's unix-nanosecond numbers and stay that way — there is no
+      // conversion left to do here. `created_at` / `updated_at` still default, because a locally
+      // composed message has none until the server answers.
+      created_at: msg.created_at ?? nowNs(),
+      deleted_at: msg.deleted_at ?? undefined,
+      pinned_at: msg.pinned_at ?? undefined,
       reaction_groups: maybeGetReactionGroupsFallback(
         msg.reaction_groups,
         msg.reaction_counts,
         msg.reaction_scores,
       ),
       status: (msg as LocalMessage).status || 'received',
-      updated_at: msg.updated_at ? new Date(msg.updated_at) : new Date(),
+      updated_at: msg.updated_at ?? nowNs(),
     };
   };
 
@@ -405,6 +409,38 @@ export function messageWithReactionRemoved(
   };
 }
 
+/**
+ * Wire timestamps into the `Date` objects `MessageRequest` declares. Sub-millisecond precision is
+ * lost, which is inherent to the declared request type.
+ *
+ * `shared_location` is listed field by field so only what `SharedLocation` declares can reach the
+ * API — a location read off a message also carries `channel_cid`, `user_id`, `created_at`,
+ * `updated_at` and `message_id`.
+ */
+const toRequestDateFields = ({
+  pinned_at,
+  pin_expires,
+  shared_location,
+}: Pick<Partial<MessageResponse>, 'pinned_at' | 'pin_expires' | 'shared_location'>): Pick<
+  MessageRequest,
+  'pinned_at' | 'pin_expires' | 'shared_location'
+> => ({
+  ...(pinned_at != null ? { pinned_at: nsToDate(pinned_at) } : {}),
+  ...(pin_expires != null ? { pin_expires: nsToDate(pin_expires) } : {}),
+  ...(shared_location
+    ? {
+        shared_location: {
+          latitude: shared_location.latitude,
+          longitude: shared_location.longitude,
+          created_by_device_id: shared_location.created_by_device_id,
+          ...(shared_location.end_at != null
+            ? { end_at: nsToDate(shared_location.end_at) }
+            : {}),
+        },
+      }
+    : {}),
+});
+
 export const localMessageToNewMessagePayload = (
   localMessage: LocalMessage,
 ): MessageRequest => {
@@ -414,6 +450,10 @@ export const localMessageToNewMessagePayload = (
     created_at: _created_at,
     updated_at: _updated_at,
     deleted_at: _deleted_at,
+    message_text_updated_at: _message_text_updated_at,
+    pinned_at,
+    pin_expires,
+    shared_location,
     // Client-specific fields
     error: _error,
     status: _status,
@@ -434,12 +474,15 @@ export const localMessageToNewMessagePayload = (
     ...messageFields
   } = localMessage;
 
+  const requestDates = toRequestDateFields({ pinned_at, pin_expires, shared_location });
+
   // `messageFields` still carries LocalMessage-only fields (cid, deleted_reply_count, mentioned_*,
   // pinned, shadowed, …) that the stricter OpenAPI `MessageRequest` omits; the server ignores them.
   return {
-    ...messageFields,
+    ...(messageFields as MessageRequest),
     mentioned_users: mentioned_users?.map((user) => user.id),
-  } as MessageRequest;
+    ...requestDates,
+  };
 };
 
 export const toUpdatedMessagePayload = (
@@ -458,10 +501,15 @@ export const toUpdatedMessagePayload = (
 
   return {
     ...messageFields,
-    pinned: !!message.pinned_at,
+    pinned: message.pinned_at != null,
     mentioned_users: message.mentioned_users?.map((user) =>
       typeof user === 'string' ? user : user.id,
     ),
+    ...toRequestDateFields({
+      pinned_at: message.pinned_at,
+      pin_expires: message.pin_expires,
+      shared_location: message.shared_location,
+    }),
   };
 };
 
@@ -533,7 +581,7 @@ export const findIndexInSortedArray = <T, L>({
    *
    * @example
    * ```ts
-   * selectValueToCompare: (message) => message.created_at.getTime()
+   * selectValueToCompare: (message) => message.created_at
    * ```
    */
   selectValueToCompare?: (arrayElement: T) => L | T;
@@ -748,8 +796,6 @@ export const generateChannelTempCid = (channelType: string, members: string[]) =
   if (!membersStr) return;
   return `${channelType}:!members-${membersStr}`;
 };
-
-export const isDate = (value: unknown): value is Date => !!(value as Date).getTime;
 
 export const isLocalMessage = (message: unknown): message is LocalMessage =>
   typeof (message as LocalMessage | undefined)?.status === 'string';

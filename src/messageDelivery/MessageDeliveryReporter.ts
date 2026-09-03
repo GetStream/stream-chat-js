@@ -232,8 +232,9 @@ export class MessageDeliveryReporter {
     if (!ownUserId) return;
 
     let latestMessages: LocalMessage[] = [];
-    let lastDeliveredAt: Date | undefined;
-    let lastReadAt: Date | undefined;
+    // Wire timestamps (unix nanoseconds), directly comparable against a message's `created_at`.
+    let lastDeliveredAt: number | undefined;
+    let lastReadAt: number | undefined;
     let key: string | undefined = undefined;
 
     // todo: unify the API for read state access btw channel and threads
@@ -265,7 +266,7 @@ export class MessageDeliveryReporter {
     const [latestMessage] = latestMessages.slice(-1);
 
     const wholeCollectionIsRead =
-      !latestMessage || lastReadAt >= latestMessage.created_at;
+      !latestMessage || (lastReadAt ?? 0) >= latestMessage.created_at;
     if (wholeCollectionIsRead) return { key, id: null };
     const wholeCollectionIsMarkedDelivered =
       !latestMessage || (lastDeliveredAt ?? 0) >= latestMessage.created_at;

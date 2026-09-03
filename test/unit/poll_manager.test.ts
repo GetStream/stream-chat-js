@@ -15,6 +15,7 @@ import {
 } from '../../src';
 
 import { describe, beforeEach, afterEach, it, expect } from 'vitest';
+import { convertDateToTimestamp } from './test-utils/time';
 
 const TEST_USER_ID = 'observer';
 
@@ -30,8 +31,8 @@ const generatePollMessage = (
   const user1 = {
     id: 'admin',
     role: 'admin',
-    created_at: '2022-03-08T09:46:56.840739Z',
-    updated_at: '2024-09-13T13:53:32.883409Z',
+    created_at: convertDateToTimestamp('2022-03-08T09:46:56.840739Z'),
+    updated_at: convertDateToTimestamp('2024-09-13T13:53:32.883409Z'),
     last_active: '2024-10-23T08:14:23.299448386Z',
     banned: false,
     online: true,
@@ -46,8 +47,8 @@ const generatePollMessage = (
       option_id: '85610252-7d50-429c-8183-51a7eba46246',
       user_id: user1.id,
       user: user1,
-      created_at: '2024-10-22T15:58:27.756166Z',
-      updated_at: '2024-10-22T15:58:27.756166Z',
+      created_at: convertDateToTimestamp('2024-10-22T15:58:27.756166Z'),
+      updated_at: convertDateToTimestamp('2024-10-22T15:58:27.756166Z'),
     },
     {
       poll_id: pollId,
@@ -55,16 +56,16 @@ const generatePollMessage = (
       option_id: 'dc22dcd6-4fc8-4c92-92c2-bfd63245724c',
       user_id: user1.id,
       user: user1,
-      created_at: '2024-10-22T15:58:25.886491Z',
-      updated_at: '2024-10-22T15:58:25.886491Z',
+      created_at: convertDateToTimestamp('2024-10-22T15:58:25.886491Z'),
+      updated_at: convertDateToTimestamp('2024-10-22T15:58:25.886491Z'),
     },
   ];
 
   const user2 = {
     id: 'SmithAnne',
     role: 'user',
-    created_at: '2022-01-27T08:28:28.412254Z',
-    updated_at: '2024-09-26T10:12:23.427141Z',
+    created_at: convertDateToTimestamp('2022-01-27T08:28:28.412254Z'),
+    updated_at: convertDateToTimestamp('2024-09-26T10:12:23.427141Z'),
     last_active: '2024-10-23T08:01:43.157632831Z',
     banned: false,
     online: true,
@@ -80,8 +81,8 @@ const generatePollMessage = (
       option_id: '7312e983-b042-4596-b5ce-f9e82deb363f',
       user_id: user2.id,
       user: user2,
-      created_at: '2024-10-22T16:00:50.2493Z',
-      updated_at: '2024-10-22T16:00:50.2493Z',
+      created_at: convertDateToTimestamp('2024-10-22T16:00:50.2493Z'),
+      updated_at: convertDateToTimestamp('2024-10-22T16:00:50.2493Z'),
     },
     {
       poll_id: pollId,
@@ -89,8 +90,8 @@ const generatePollMessage = (
       option_id: 'ba933470-c0da-4b6f-a4d2-d2176ac0d4a8',
       user_id: user2.id,
       user: user2,
-      created_at: '2024-10-22T16:00:54.410474Z',
-      updated_at: '2024-10-22T16:00:54.410474Z',
+      created_at: convertDateToTimestamp('2024-10-22T16:00:54.410474Z'),
+      updated_at: convertDateToTimestamp('2024-10-22T16:00:54.410474Z'),
     },
   ];
 
@@ -102,8 +103,8 @@ const generatePollMessage = (
     answer_text: 'comment1',
     user_id: user1.id,
     user: user1,
-    created_at: '2024-10-23T13:12:57.944913Z',
-    updated_at: '2024-10-23T13:12:57.944913Z',
+    created_at: convertDateToTimestamp('2024-10-23T13:12:57.944913Z'),
+    updated_at: convertDateToTimestamp('2024-10-23T13:12:57.944913Z'),
   };
 
   const pollResponse = {
@@ -149,8 +150,8 @@ const generatePollMessage = (
     own_votes: [...user1Votes, user1Answer],
     created_by_id: user1.id,
     created_by: user1,
-    created_at: '2024-10-22T15:28:20.580523Z',
-    updated_at: '2024-10-22T15:28:20.580523Z',
+    created_at: convertDateToTimestamp('2024-10-22T15:28:20.580523Z'),
+    updated_at: convertDateToTimestamp('2024-10-22T15:28:20.580523Z'),
     ...extraData,
   };
 

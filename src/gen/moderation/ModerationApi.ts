@@ -31,6 +31,8 @@ import type {
   QueueResponse,
   SubmitActionRequest,
   SubmitActionResponse,
+  UnbanRequest,
+  UnbanResponse,
   UnmuteRequest,
   UnmuteResponse,
   UpdateQueueRequest,
@@ -39,7 +41,6 @@ import type {
   UpsertConfigRequest,
   UpsertConfigResponse,
 } from '../models';
-import { decoders } from '../model-decoders/decoders';
 
 export class ModerationApi {
   constructor(public readonly apiClient: ApiClient) {}
@@ -72,8 +73,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['GetActionConfigResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -105,8 +104,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['UpsertActionConfigResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -130,8 +127,6 @@ export class ModerationApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['BulkUpsertActionConfigResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -157,8 +152,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['BulkDeleteActionConfigResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -181,8 +174,6 @@ export class ModerationApi {
       undefined,
       requestOptions,
     );
-
-    decoders['DeleteActionConfigResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -210,8 +201,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['AppealResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -232,8 +221,6 @@ export class ModerationApi {
       undefined,
       requestOptions,
     );
-
-    decoders['GetAppealResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -262,8 +249,6 @@ export class ModerationApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['QueryAppealsResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -295,8 +280,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['BulkActionAppealsResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -307,14 +290,12 @@ export class ModerationApi {
   ): Promise<StreamResponse<ModerationBanResponse>> {
     const body = {
       target_user_id: request?.target_user_id,
-      banned_by_id: request?.banned_by_id,
       channel_cid: request?.channel_cid,
       delete_messages: request?.delete_messages,
       ip_ban: request?.ip_ban,
       reason: request?.reason,
       shadow: request?.shadow,
       timeout: request?.timeout,
-      banned_by: request?.banned_by,
     };
 
     const response = await this.apiClient.sendRequest<
@@ -328,8 +309,6 @@ export class ModerationApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['ModerationBanResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -374,8 +353,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['UpsertConfigResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -402,8 +379,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['DeleteModerationConfigResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -427,8 +402,6 @@ export class ModerationApi {
       undefined,
       requestOptions,
     );
-
-    decoders['GetConfigResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -458,8 +431,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['QueryModerationConfigsResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -487,8 +458,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['FlagItemResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -512,8 +481,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['MuteResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -529,8 +496,6 @@ export class ModerationApi {
       undefined,
       requestOptions,
     );
-
-    decoders['ListQueuesResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -558,8 +523,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['QueueResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -580,8 +543,6 @@ export class ModerationApi {
       undefined,
       requestOptions,
     );
-
-    decoders['QueueResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -610,8 +571,6 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['QueueResponse']?.(response.body);
-
     return { ...response.body, metadata: response.metadata };
   }
 
@@ -633,8 +592,6 @@ export class ModerationApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['QueueResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -668,8 +625,6 @@ export class ModerationApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['QueryReviewQueueResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -715,7 +670,28 @@ export class ModerationApi {
       requestOptions,
     );
 
-    decoders['SubmitActionResponse']?.(response.body);
+    return { ...response.body, metadata: response.metadata };
+  }
+
+  async unban(
+    request: UnbanRequest & { target_user_id: string; channel_cid?: string },
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<UnbanResponse>> {
+    const queryParams = {
+      target_user_id: request?.target_user_id,
+      channel_cid: request?.channel_cid,
+    };
+    const body = {};
+
+    const response = await this.apiClient.sendRequest<StreamResponse<UnbanResponse>>(
+      'POST',
+      '/api/v2/moderation/unban',
+      undefined,
+      queryParams,
+      body,
+      'application/json',
+      requestOptions,
+    );
 
     return { ...response.body, metadata: response.metadata };
   }
@@ -738,8 +714,6 @@ export class ModerationApi {
       'application/json',
       requestOptions,
     );
-
-    decoders['UnmuteResponse']?.(response.body);
 
     return { ...response.body, metadata: response.metadata };
   }

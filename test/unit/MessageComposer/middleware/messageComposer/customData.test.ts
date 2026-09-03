@@ -11,6 +11,7 @@ import type {
   MessageDraftComposerMiddlewareValueState,
 } from '../../../../../src/messageComposer/middleware/messageComposer/types';
 import { MiddlewareStatus } from '../../../../../src';
+import { convertDateToTimestamp } from '../../../test-utils/time';
 
 const setup = (initialState: MessageComposerMiddlewareState) => {
   return {
@@ -65,8 +66,8 @@ describe('Custom Data Middleware', () => {
           text: '',
           type: 'regular',
           status: 'sending',
-          created_at: new Date(),
-          updated_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
+          updated_at: convertDateToTimestamp(new Date()),
           attachments: [],
           mentioned_users: [],
           reaction_groups: null,
@@ -91,8 +92,8 @@ describe('Custom Data Middleware', () => {
           text: '',
           type: 'regular',
           status: 'sending',
-          created_at: new Date(),
-          updated_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
+          updated_at: convertDateToTimestamp(new Date()),
           attachments: [],
           mentioned_users: [],
           reaction_groups: null,

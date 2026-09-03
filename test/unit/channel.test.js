@@ -14,6 +14,8 @@ import { MockOfflineDB } from './offline-support/MockOfflineDB';
 import { formatMessage, generateUUIDv4 as uuidv4 } from '../../src/utils';
 
 import { describe, beforeEach, afterEach, it, expect, vi } from 'vitest';
+import { convertDateToTimestamp } from './test-utils/time';
+import { msToNs } from '../../src/utils/time';
 
 // Seed the channel's messagePaginator "latest" (head) window from raw generated messages.
 // The unread/last-message readers now source from `messagePaginator.headItems`/`headmostItem`,
@@ -33,7 +35,7 @@ const seedOwnUnreadCount = (channel, unread_messages) => {
 	channel.state.read = {
 		...channel.state.read,
 		[ownUser.id]: {
-			last_read: new Date(0),
+			last_read: convertDateToTimestamp(new Date(0)),
 			user: ownUser,
 			...channel.state.read[ownUser.id],
 			unread_messages,
@@ -49,7 +51,7 @@ describe('Channel count unread', function () {
 	let client;
 	beforeEach(() => {
 		user = { id: 'user' };
-		lastRead = new Date('2020-01-01T00:00:00');
+		lastRead = convertDateToTimestamp('2020-01-01T00:00:00');
 		const channelResponse = generateChannel();
 
 		client = new StreamChat('apiKey');
@@ -149,6 +151,26 @@ describe('Channel count unread', function () {
 			generateMsg({ date: '2022-01-01T00:00:00' }),
 		]);
 		expect(channel.countUnread(lastRead)).to.be.equal(2);
+	});
+
+	it('countUnread should count from the epoch when lastRead is 0, not fall back to the cache', function () {
+		// `0` is the epoch sentinel the read-state seeding writes for a channel with no own read row
+		// ("nothing has been read"). A truthiness guard here reads it as "no argument supplied" and
+		// returns the cached aggregate instead of counting — so a channel opened uninitialized or with
+		// `state: false` reports the wrong unread count.
+		seedOwnUnreadCount(channel, 99);
+		seedLatestWindow(channel, [
+			...ignoredMessages,
+			generateMsg({ date: '2021-01-01T00:00:00' }),
+			generateMsg({ date: '2022-01-01T00:00:00' }),
+		]);
+
+		// Against the epoch every countable message is newer, so the three date-excluded ones join the
+		// two added here (5); only the shadowed/silent/muted three stay out. Crucially the answer is a
+		// real count, not the seeded 99 the cache would have returned.
+		expect(channel.countUnread(0)).to.be.equal(5);
+		expect(channel.countUnread(0)).not.to.be.equal(99);
+		seedOwnUnreadCount(channel, 0);
 	});
 
 	it('countUnread should read the latest window, not the active one', () => {
@@ -707,7 +729,7 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 		expect(channel.state.read[user.id]).to.be.ok;
 		expect(channel.state.read[user.id].unread_messages).to.be.equal(1);
 		expect(channel.state.read[user.id].user.id).to.be.equal(user.id);
-		expect(channel.state.read[user.id].last_read.getTime()).to.be.equal(0);
+		expect(channel.state.read[user.id].last_read).to.be.equal(0);
 	});
 
 	it('message.new does not increment the unread count with read events off when the flag is not set', function () {
@@ -730,7 +752,7 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 		const lastMsg = generateMsg({ user: otherUser });
 		seedLatestWindow(channel, [lastMsg]);
 		channel.state.read[user.id] = {
-			last_read: new Date('2020-01-01T00:00:00'),
+			last_read: convertDateToTimestamp(new Date('2020-01-01T00:00:00')),
 			unread_messages: 5,
 			user,
 		};
@@ -753,14 +775,15 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 		expect(event.channel_type).to.be.equal(channel.type);
 		expect(event.user.id).to.be.equal(user.id);
 		expect(event.last_read_message_id).to.be.equal(lastMsg.id);
-		// markReadLocally now builds the event with a Date `created_at` (not an ISO string).
-		expect(event.created_at).to.be.instanceof(Date);
+		// markReadLocally builds the event with a wire `created_at` (unix nanoseconds), matching the
+		// server `message.read` it is shaped after.
+		expect(event.created_at).to.be.a('number');
 
 		// markReadLocally returns the same dispatched event so callers (e.g. the RN SDK) can sync
 		// their own unread UI from that read info instead of re-deriving it.
 		expect(returned).to.equal(event);
 		expect(returned.last_read_message_id).to.be.equal(lastMsg.id);
-		expect(returned.created_at).to.be.instanceof(Date);
+		expect(returned.created_at).to.be.a('number');
 	});
 
 	it('markReadLocally returns undefined and dispatches nothing when there is no connected user', function () {
@@ -837,7 +860,7 @@ describe('Channel _handleChannelEvent', function () {
 
 			const currentMember = generateMember({
 				user,
-				pinned_at: new Date().toISOString(),
+				pinned_at: convertDateToTimestamp(new Date().toISOString()),
 				archived_at: new Date().toISOString(),
 			});
 
@@ -1085,7 +1108,9 @@ describe('Channel _handleChannelEvent', function () {
 				id: 'pinned-existing',
 				cid: channel.cid,
 				pinned: true,
-				pinned_at: new Date('2020-01-01T00:00:00.001Z').toISOString(),
+				pinned_at: convertDateToTimestamp(
+					new Date('2020-01-01T00:00:00.001Z').toISOString(),
+				),
 			});
 			channel.pinnedMessagesPaginator.ingestPage({
 				page: [formatMessage(existing)],
@@ -1102,7 +1127,9 @@ describe('Channel _handleChannelEvent', function () {
 				id: 'pinned-new',
 				cid: channel.cid,
 				pinned: true,
-				pinned_at: new Date('2020-01-01T00:00:00.002Z').toISOString(),
+				pinned_at: convertDateToTimestamp(
+					new Date('2020-01-01T00:00:00.002Z').toISOString(),
+				),
 			});
 			channel._handleChannelEvent({ type: 'message.new', message: newlyPinned, user });
 			expect(channel.pinnedMessagesPaginator.items?.map((m) => m.id)).to.include(
@@ -1195,8 +1222,8 @@ describe('Channel _handleChannelEvent', function () {
 		it('should extend "message.updated" and "message.deleted" event payloads with "own_reactions"', () => {
 			const own_reactions = [
 				{
-					created_at: new Date().toISOString(),
-					updated_at: new Date().toISOString(),
+					created_at: convertDateToTimestamp(new Date().toISOString()),
+					updated_at: convertDateToTimestamp(new Date().toISOString()),
 					type: 'wow',
 				},
 			];
@@ -1309,9 +1336,9 @@ describe('Channel _handleChannelEvent', function () {
 	describe('channel.truncated', () => {
 		it('message.truncate removes all messages if "truncated_at" is "now"', function () {
 			const messages = [
-				{ created_at: '2021-01-01T00:01:00' },
-				{ created_at: '2021-01-01T00:02:00' },
-				{ created_at: '2021-01-01T00:03:00' },
+				{ created_at: convertDateToTimestamp('2021-01-01T00:01:00') },
+				{ created_at: convertDateToTimestamp('2021-01-01T00:02:00') },
+				{ created_at: convertDateToTimestamp('2021-01-01T00:03:00') },
 			].map(generateMsg);
 
 			seedLatestWindow(channel, messages);
@@ -1321,7 +1348,7 @@ describe('Channel _handleChannelEvent', function () {
 				type: 'channel.truncated',
 				user: { id: 'id' },
 				channel: {
-					truncated_at: new Date().toISOString(),
+					truncated_at: convertDateToTimestamp(),
 				},
 			});
 
@@ -1333,7 +1360,7 @@ describe('Channel _handleChannelEvent', function () {
 			channel.state.read = {
 				[userId]: {
 					unread_messages: 5,
-					last_read: new Date('2021-01-01T00:00:00.000Z'),
+					last_read: convertDateToTimestamp(new Date('2021-01-01T00:00:00.000Z')),
 					user: { id: userId },
 				},
 			};
@@ -1370,7 +1397,7 @@ describe('Channel _handleChannelEvent', function () {
 				type: 'channel.truncated',
 				user: { id: 'id' },
 				channel: {
-					truncated_at: new Date().toISOString(),
+					truncated_at: convertDateToTimestamp(),
 				},
 			});
 
@@ -1388,9 +1415,9 @@ describe('Channel _handleChannelEvent', function () {
 
 		it('message.truncate removes messages up to specified date', function () {
 			const messages = [
-				{ created_at: '2021-01-01T00:01:00' },
-				{ created_at: '2021-01-01T00:02:00' },
-				{ created_at: '2021-01-01T00:03:00' },
+				{ created_at: convertDateToTimestamp('2021-01-01T00:01:00') },
+				{ created_at: convertDateToTimestamp('2021-01-01T00:02:00') },
+				{ created_at: convertDateToTimestamp('2021-01-01T00:03:00') },
 			].map(generateMsg);
 
 			seedLatestWindow(channel, messages);
@@ -1416,7 +1443,7 @@ describe('Channel _handleChannelEvent', function () {
 
 			channel._handleChannelEvent({
 				type: 'channel.truncated',
-				channel: { truncated_at: '2020-02-01T00:00:00.000Z' },
+				channel: { truncated_at: convertDateToTimestamp('2020-02-01T00:00:00.000Z') },
 			});
 
 			expect(pinnedIds()).to.eql(['new']);
@@ -1455,7 +1482,10 @@ describe('Channel _handleChannelEvent', function () {
 			channel._handleChannelEvent({
 				type: 'message.deleted',
 				user: { id: 'id' },
-				message: { ...originalMessage, deleted_at: new Date().toISOString() },
+				message: {
+					...originalMessage,
+					deleted_at: convertDateToTimestamp(new Date().toISOString()),
+				},
 			});
 
 			expect(
@@ -1487,7 +1517,7 @@ describe('Channel _handleChannelEvent', function () {
 			});
 			channel.messagePaginator.ingestItem(message);
 
-			const deletedAt = new Date().toISOString();
+			const deletedAt = convertDateToTimestamp();
 			channel._handleChannelEvent({
 				type: 'message.deleted',
 				user: { id: 'id' },
@@ -1495,7 +1525,7 @@ describe('Channel _handleChannelEvent', function () {
 			});
 
 			const itemFromPaginator = channel.messagePaginator.getItem(message.id);
-			expect(itemFromPaginator?.deleted_at?.toISOString()).to.equal(deletedAt);
+			expect(itemFromPaginator?.deleted_at).to.equal(deletedAt);
 		});
 
 		it('message.deleted (soft) ignores thread replies in messagePaginator', function () {
@@ -1509,7 +1539,10 @@ describe('Channel _handleChannelEvent', function () {
 			channel._handleChannelEvent({
 				type: 'message.deleted',
 				user: { id: 'id' },
-				message: { ...threadReply, deleted_at: new Date().toISOString() },
+				message: {
+					...threadReply,
+					deleted_at: convertDateToTimestamp(new Date().toISOString()),
+				},
 			});
 
 			// A pure thread reply must never leak a "deleted" placeholder into the channel list.
@@ -1561,7 +1594,7 @@ describe('Channel _handleChannelEvent', function () {
 					...quotedMessage,
 					type: 'deleted',
 					text: 'after delete',
-					deleted_at: new Date().toISOString(),
+					deleted_at: convertDateToTimestamp(new Date().toISOString()),
 				},
 			});
 
@@ -1595,7 +1628,7 @@ describe('Channel _handleChannelEvent', function () {
 					type: 'love',
 					user_id: 'user-1',
 					message_id: message.id,
-					created_at: new Date().toISOString(),
+					created_at: convertDateToTimestamp(new Date().toISOString()),
 				},
 			});
 
@@ -1615,7 +1648,7 @@ describe('Channel _handleChannelEvent', function () {
 					type: 'love',
 					user_id: 'user-1',
 					message_id: message.id,
-					created_at: new Date().toISOString(),
+					created_at: convertDateToTimestamp(new Date().toISOString()),
 				},
 			});
 
@@ -1633,7 +1666,7 @@ describe('Channel _handleChannelEvent', function () {
 					type: 'like',
 					user_id: user.id,
 					message_id: 'p',
-					created_at: new Date().toISOString(),
+					created_at: convertDateToTimestamp(new Date().toISOString()),
 				},
 			});
 
@@ -1655,7 +1688,7 @@ describe('Channel _handleChannelEvent', function () {
 						type: 'love',
 						user_id: 'user-1',
 						message_id: message.id,
-						created_at: new Date().toISOString(),
+						created_at: convertDateToTimestamp(new Date().toISOString()),
 					},
 				});
 
@@ -1675,7 +1708,7 @@ describe('Channel _handleChannelEvent', function () {
 						type: 'love',
 						user_id: 'user-1',
 						message_id: message.id,
-						created_at: new Date().toISOString(),
+						created_at: convertDateToTimestamp(new Date().toISOString()),
 					},
 				});
 
@@ -1689,7 +1722,7 @@ describe('Channel _handleChannelEvent', function () {
 		const otherUser = { id: 'other-user' };
 
 		it('updates messagePaginator items on soft delete', () => {
-			const deletedAt = new Date('2025-02-01T14:01:30.000Z');
+			const deletedAt = convertDateToTimestamp('2025-02-01T14:01:30.000Z');
 			const bannedMessage = generateMsg({ id: 'mp-soft-banned', user: bannedUser });
 			const quoteCarrier = generateMsg({
 				id: 'mp-soft-quote-carrier',
@@ -1710,24 +1743,20 @@ describe('Channel _handleChannelEvent', function () {
 				channel_id: channel.id,
 				user: bannedUser,
 				soft_delete: true,
-				created_at: deletedAt.toISOString(),
+				created_at: deletedAt,
 			});
 
 			const deletedFromPaginator = channel.messagePaginator.getItem(bannedMessage.id);
 			expect(deletedFromPaginator?.type).to.equal('deleted');
-			expect(deletedFromPaginator?.deleted_at?.toISOString()).to.equal(
-				deletedAt.toISOString(),
-			);
+			expect(deletedFromPaginator?.deleted_at).to.equal(deletedAt);
 
 			const quoteCarrierFromPaginator = channel.messagePaginator.getItem(quoteCarrier.id);
 			expect(quoteCarrierFromPaginator?.quoted_message?.type).to.equal('deleted');
-			expect(
-				quoteCarrierFromPaginator?.quoted_message?.deleted_at?.toISOString(),
-			).to.equal(deletedAt.toISOString());
+			expect(quoteCarrierFromPaginator?.quoted_message?.deleted_at).to.equal(deletedAt);
 		});
 
 		it('updates messagePaginator items on hard delete', () => {
-			const deletedAt = new Date('2025-02-01T14:01:30.000Z');
+			const deletedAt = convertDateToTimestamp('2025-02-01T14:01:30.000Z');
 			const bannedMessage = generateMsg({ id: 'mp-hard-banned', user: bannedUser });
 			const quoteCarrier = generateMsg({
 				id: 'mp-hard-quote-carrier',
@@ -1748,7 +1777,7 @@ describe('Channel _handleChannelEvent', function () {
 				channel_id: channel.id,
 				user: bannedUser,
 				hard_delete: true,
-				created_at: deletedAt.toISOString(),
+				created_at: deletedAt,
 			});
 
 			expect(
@@ -1756,9 +1785,7 @@ describe('Channel _handleChannelEvent', function () {
 			).toBeUndefined();
 			const quoteCarrierFromPaginator = channel.messagePaginator.getItem(quoteCarrier.id);
 			expect(quoteCarrierFromPaginator?.quoted_message?.type).to.equal('deleted');
-			expect(
-				quoteCarrierFromPaginator?.quoted_message?.deleted_at?.toISOString(),
-			).to.equal(deletedAt.toISOString());
+			expect(quoteCarrierFromPaginator?.quoted_message?.deleted_at).to.equal(deletedAt);
 		});
 
 		// Pinned-message deletion for a banned user (moved from the pinnedMessagesPaginator suite).
@@ -1769,7 +1796,7 @@ describe('Channel _handleChannelEvent', function () {
 				type: 'user.messages.deleted',
 				user: bannedUser,
 				soft_delete: true,
-				created_at: '2025-01-01T00:00:00.000Z',
+				created_at: convertDateToTimestamp('2025-01-01T00:00:00.000Z'),
 			});
 
 			expect(channel.pinnedMessagesPaginator.getItem('p')?.type).to.equal('deleted');
@@ -1785,7 +1812,7 @@ describe('Channel _handleChannelEvent', function () {
 				type: 'user.messages.deleted',
 				user: bannedUser,
 				hard_delete: true,
-				created_at: '2025-01-01T00:00:00.000Z',
+				created_at: convertDateToTimestamp('2025-01-01T00:00:00.000Z'),
 			});
 
 			expect(channel.pinnedMessagesPaginator.items?.map((m) => m.id)).to.eql(['other']);
@@ -1801,11 +1828,11 @@ describe('Channel _handleChannelEvent', function () {
 
 		it('does not throw on channel-scoped hard-delete when channel contains a same-user self-quote', () => {
 			const m1 = generateMsg({
-				created_at: '2020-01-01T00:00:01.000Z',
+				created_at: convertDateToTimestamp('2020-01-01T00:00:01.000Z'),
 				user: bannedUser,
 			});
 			const m2 = generateMsg({
-				created_at: '2020-01-01T00:00:02.000Z',
+				created_at: convertDateToTimestamp('2020-01-01T00:00:02.000Z'),
 				user: bannedUser,
 				quoted_message: m1,
 				quoted_message_id: m1.id,
@@ -1823,7 +1850,7 @@ describe('Channel _handleChannelEvent', function () {
 				channel_id: channel.id,
 				user: bannedUser,
 				hard_delete: true,
-				created_at: '2025-02-01T14:01:30.000Z',
+				created_at: convertDateToTimestamp('2025-02-01T14:01:30.000Z'),
 			};
 
 			expect(() => channel._handleChannelEvent(event)).not.to.throw();
@@ -1844,25 +1871,23 @@ describe('Channel _handleChannelEvent', function () {
 		beforeEach(() => {
 			initialCountUnread = 0;
 			initialReadState = {
-				last_read: new Date().toISOString(),
+				last_read: convertDateToTimestamp(),
 				last_read_message_id: '6',
 				user,
 				unread_messages: initialCountUnread,
-				last_delivered_at: new Date(1000).toISOString(),
+				last_delivered_at: msToNs(1000),
 				last_delivered_message_id: 'delivered-msg-id',
 			};
 			notificationMarkUnreadEvent = {
 				type: 'notification.mark_unread',
-				created_at: new Date().toISOString(),
+				created_at: convertDateToTimestamp(),
 				cid: channel.cid,
 				channel_id: channel.id,
 				channel_type: channel.type,
 				channel: null,
 				user,
 				first_unread_message_id: '2',
-				last_read_at: new Date(
-					new Date(initialReadState.last_read).getTime() - 1000,
-				).toISOString(),
+				last_read_at: initialReadState.last_read - msToNs(1000),
 				last_read_message_id: '1',
 				unread_messages: 5,
 				unread_count: 6,
@@ -1878,9 +1903,7 @@ describe('Channel _handleChannelEvent', function () {
 			channel._handleChannelEvent(event);
 
 			expect(channel.state.unreadCount).to.be.equal(event.unread_messages);
-			expect(new Date(channel.state.read[user.id].last_read).getTime()).to.be.equal(
-				new Date(event.last_read_at).getTime(),
-			);
+			expect(channel.state.read[user.id].last_read).to.be.equal(event.last_read_at);
 			expect(channel.state.read[user.id].last_read_message_id).to.be.equal(
 				event.last_read_message_id,
 			);
@@ -1898,7 +1921,7 @@ describe('Channel _handleChannelEvent', function () {
 			).toBe(event.last_read_message_id);
 			expect(channel.messagePaginator.unreadStateSnapshot.getLatestValue()).toEqual({
 				firstUnreadMessageId: event.first_unread_message_id,
-				lastReadAt: new Date(event.last_read_at),
+				lastReadAt: event.last_read_at,
 				lastReadMessageId: event.last_read_message_id,
 				unreadCount: event.unread_messages,
 			});
@@ -1931,8 +1954,8 @@ describe('Channel _handleChannelEvent', function () {
 				channel._handleChannelEvent(event);
 
 				expect(channel.state.unreadCount).to.be.equal(initialCountUnread);
-				expect(new Date(channel.state.read[user.id].last_read).getTime()).to.be.equal(
-					new Date(initialReadState.last_read).getTime(),
+				expect(channel.state.read[user.id].last_read).to.be.equal(
+					initialReadState.last_read,
 				);
 				expect(channel.state.read[user.id].last_read_message_id).to.be.equal(
 					initialReadState.last_read_message_id,
@@ -1952,17 +1975,17 @@ describe('Channel _handleChannelEvent', function () {
 		beforeEach(() => {
 			initialCountUnread = 100;
 			initialReadState = {
-				last_read: new Date(1500).toISOString(),
+				last_read: msToNs(1500),
 				last_read_message_id: '6',
 				first_unread_message_id: 'first-unread-msg-id',
 				user,
 				unread_messages: initialCountUnread,
-				last_delivered_at: new Date(1000).toISOString(),
+				last_delivered_at: msToNs(1000),
 				last_delivered_message_id: 'delivered-msg-id',
 			};
 			messageReadEvent = {
 				type: 'message.read',
-				created_at: new Date(2000).toISOString(),
+				created_at: msToNs(2000),
 				cid: channel.cid,
 				channel_member_count: 100,
 				channel_type: channel.type,
@@ -1979,16 +2002,14 @@ describe('Channel _handleChannelEvent', function () {
 			channel._handleChannelEvent(event);
 
 			expect(channel.state.unreadCount).toBe(0);
-			expect(new Date(channel.state.read[user.id].last_read).getTime()).toBe(
-				new Date(messageReadEvent.created_at).getTime(),
-			);
+			expect(channel.state.read[user.id].last_read).toBe(messageReadEvent.created_at);
 			expect(channel.state.read[user.id].last_read_message_id).toBe(
 				event.last_read_message_id,
 			);
 			expect(channel.state.read[user.id].first_unread_message_id).toBeUndefined();
 			expect(channel.state.read[user.id].unread_messages).toBe(0);
-			expect(new Date(channel.state.read[user.id].last_delivered_at).getTime()).toBe(
-				new Date(messageReadEvent.created_at).getTime(),
+			expect(channel.state.read[user.id].last_delivered_at).toBe(
+				messageReadEvent.created_at,
 			);
 			expect(channel.state.read[user.id].last_delivered_message_id).toBe(
 				event.last_read_message_id,
@@ -2007,17 +2028,17 @@ describe('Channel _handleChannelEvent', function () {
 			channel._handleChannelEvent(event);
 
 			expect(channel.state.unreadCount).toBe(initialCountUnread);
-			expect(new Date(channel.state.read[anotherUser.id].last_read).getTime()).toBe(
-				new Date(messageReadEvent.created_at).getTime(),
+			expect(channel.state.read[anotherUser.id].last_read).toBe(
+				messageReadEvent.created_at,
 			);
 			expect(channel.state.read[anotherUser.id].last_read_message_id).toBe(
 				event.last_read_message_id,
 			);
 			expect(channel.state.read[anotherUser.id].first_unread_message_id).toBeUndefined();
 			expect(channel.state.read[anotherUser.id].unread_messages).toBe(0);
-			expect(
-				new Date(channel.state.read[anotherUser.id].last_delivered_at).getTime(),
-			).toBe(new Date(messageReadEvent.created_at).getTime());
+			expect(channel.state.read[anotherUser.id].last_delivered_at).toBe(
+				messageReadEvent.created_at,
+			);
 			expect(channel.state.read[anotherUser.id].last_delivered_message_id).toBe(
 				event.last_read_message_id,
 			);
@@ -2042,9 +2063,7 @@ describe('Channel _handleChannelEvent', function () {
 
 			expect(changes).to.have.length(1);
 			expect(changes[0].next).to.not.equal(changes[0].prev);
-			expect(new Date(changes[0].next.last_read).getTime()).toBe(
-				new Date(messageReadEvent.created_at).getTime(),
-			);
+			expect(changes[0].next.last_read).toBe(messageReadEvent.created_at);
 		});
 	});
 
@@ -2053,7 +2072,7 @@ describe('Channel _handleChannelEvent', function () {
 
 		beforeEach(() => {
 			channel.state.read[user.id] = {
-				last_read: new Date(1500).toISOString(),
+				last_read: msToNs(1500),
 				last_read_message_id: '6',
 				first_unread_message_id: 'first-unread-msg-id',
 				user,
@@ -2061,7 +2080,7 @@ describe('Channel _handleChannelEvent', function () {
 			};
 			markReadEvent = {
 				type: 'notification.mark_read',
-				created_at: new Date(2000).toISOString(),
+				created_at: msToNs(2000),
 				cid: channel.cid,
 				channel_type: channel.type,
 				channel_id: channel.id,
@@ -2077,9 +2096,7 @@ describe('Channel _handleChannelEvent', function () {
 
 			expect(channel.state.read[user.id].unread_messages).toBe(0);
 			expect(channel.state.unreadCount).toBe(0);
-			expect(new Date(channel.state.read[user.id].last_read).getTime()).toBe(
-				new Date(markReadEvent.created_at).getTime(),
-			);
+			expect(channel.state.read[user.id].last_read).toBe(markReadEvent.created_at);
 			expect(channel.state.read[user.id].last_read_message_id).toBe(
 				markReadEvent.last_read_message_id,
 			);
@@ -2090,7 +2107,7 @@ describe('Channel _handleChannelEvent', function () {
 			channel._handleChannelEvent({ ...markReadEvent, thread_id: 'thread-1' });
 
 			expect(channel.state.read[user.id].unread_messages).toBe(100);
-			expect(new Date(channel.state.read[user.id].last_read).getTime()).toBe(1500);
+			expect(channel.state.read[user.id].last_read).toBe(msToNs(1500));
 		});
 	});
 
@@ -2102,16 +2119,16 @@ describe('Channel _handleChannelEvent', function () {
 		beforeEach(() => {
 			initialCountUnread = 100;
 			initialReadState = {
-				last_read: new Date(1500).toISOString(),
+				last_read: msToNs(1500),
 				last_read_message_id: '6',
 				user,
 				unread_messages: initialCountUnread,
-				last_delivered_at: new Date(1000).toISOString(),
+				last_delivered_at: msToNs(1000),
 				last_delivered_message_id: 'delivered-msg-id',
 			};
 			messageDeliveredEvent = {
 				type: 'message.delivered',
-				created_at: new Date(2000).toISOString(),
+				created_at: msToNs(2000),
 				cid: channel.cid,
 				channel_member_count: 100,
 				channel_type: channel.type,
@@ -2128,17 +2145,15 @@ describe('Channel _handleChannelEvent', function () {
 			channel._handleChannelEvent(messageDeliveredEvent);
 
 			expect(channel.state.unreadCount).toBe(initialReadState.unread_messages);
-			expect(new Date(channel.state.read[user.id].last_read).getTime()).toBe(
-				new Date(initialReadState.last_read).getTime(),
-			);
+			expect(channel.state.read[user.id].last_read).toBe(initialReadState.last_read);
 			expect(channel.state.read[user.id].last_read_message_id).toBe(
 				initialReadState.last_read_message_id,
 			);
 			expect(channel.state.read[user.id].unread_messages).toBe(
 				initialReadState.unread_messages,
 			);
-			expect(new Date(channel.state.read[user.id].last_delivered_at).getTime()).toBe(
-				new Date(messageDeliveredEvent.last_delivered_at).getTime(),
+			expect(channel.state.read[user.id].last_delivered_at).toBe(
+				msToNs(Date.parse(messageDeliveredEvent.last_delivered_at)),
 			);
 			expect(channel.state.read[user.id].last_delivered_message_id).toBe(
 				messageDeliveredEvent.last_delivered_message_id,
@@ -2148,21 +2163,19 @@ describe('Channel _handleChannelEvent', function () {
 		it('should not move canonical delivered state backwards on out-of-order events', () => {
 			channel.state.read[user.id] = {
 				...initialReadState,
-				last_delivered_at: new Date(3000).toISOString(),
+				last_delivered_at: msToNs(3000),
 				last_delivered_message_id: 'newer-message-id',
 			};
 			const olderDeliveryEvent = {
 				...messageDeliveredEvent,
-				created_at: new Date(2000).toISOString(),
+				created_at: msToNs(2000),
 				last_delivered_at: new Date(2000).toISOString(),
 				last_delivered_message_id: 'older-message-id',
 			};
 
 			channel._handleChannelEvent(olderDeliveryEvent);
 
-			expect(new Date(channel.state.read[user.id].last_delivered_at).getTime()).toBe(
-				new Date(3000).getTime(),
-			);
+			expect(channel.state.read[user.id].last_delivered_at).toBe(msToNs(3000));
 			expect(channel.state.read[user.id].last_delivered_message_id).toBe(
 				'newer-message-id',
 			);
@@ -2177,8 +2190,8 @@ describe('Channel _handleChannelEvent', function () {
 			channel._handleChannelEvent(event);
 
 			expect(channel.state.unreadCount).toBe(initialCountUnread);
-			expect(new Date(channel.state.read[anotherUser.id].last_read).getTime()).toBe(
-				new Date(initialReadState.last_read).getTime(),
+			expect(channel.state.read[anotherUser.id].last_read).toBe(
+				initialReadState.last_read,
 			);
 			expect(channel.state.read[anotherUser.id].last_read_message_id).toBe(
 				initialReadState.last_read_message_id,
@@ -2186,9 +2199,9 @@ describe('Channel _handleChannelEvent', function () {
 			expect(channel.state.read[anotherUser.id].unread_messages).toBe(
 				initialReadState.unread_messages,
 			);
-			expect(
-				new Date(channel.state.read[anotherUser.id].last_delivered_at).getTime(),
-			).toBe(new Date(event.last_delivered_at).getTime());
+			expect(channel.state.read[anotherUser.id].last_delivered_at).toBe(
+				msToNs(Date.parse(event.last_delivered_at)),
+			);
 			expect(channel.state.read[anotherUser.id].last_delivered_message_id).toBe(
 				event.last_delivered_message_id,
 			);
@@ -2297,13 +2310,13 @@ describe('Channel _handleChannelEvent', function () {
 				user: {
 					id: 'admin',
 					role: 'admin',
-					created_at: '2022-03-08T09:46:56.840739Z',
-					updated_at: '2022-03-15T08:30:09.796926Z',
+					created_at: convertDateToTimestamp('2022-03-08T09:46:56.840739Z'),
+					updated_at: convertDateToTimestamp('2022-03-15T08:30:09.796926Z'),
 					last_active: '2023-05-24T09:20:31.041292724Z',
 					banned: false,
 					online: true,
 				},
-				created_at: '2023-05-24T09:20:43.986615426Z',
+				created_at: convertDateToTimestamp('2023-05-24T09:20:43.986615426Z'),
 			};
 			channel.data.hidden = true;
 			channel.data.blocked = true;
@@ -2325,13 +2338,13 @@ describe('Channel _handleChannelEvent', function () {
 				user: {
 					id: 'admin',
 					role: 'admin',
-					created_at: '2022-03-08T09:46:56.840739Z',
-					updated_at: '2022-03-15T08:30:09.796926Z',
+					created_at: convertDateToTimestamp('2022-03-08T09:46:56.840739Z'),
+					updated_at: convertDateToTimestamp('2022-03-15T08:30:09.796926Z'),
 					last_active: '2023-05-24T09:20:31.041292724Z',
 					banned: false,
 					online: true,
 				},
-				created_at: '2023-05-24T09:20:43.986615426Z',
+				created_at: convertDateToTimestamp('2023-05-24T09:20:43.986615426Z'),
 			};
 			channel.data.hidden = true;
 			channel.data.blocked = true;
@@ -2588,7 +2601,7 @@ describe('Uninitialized Channel', () => {
 			channel_id: channel.id,
 			user: otherUser,
 			message: generateMsg({ user: otherUser }),
-			created_at: new Date().toISOString(),
+			created_at: convertDateToTimestamp(new Date().toISOString()),
 		});
 
 		it('does not throw and still updates channel state on message.new', () => {
@@ -2647,7 +2660,7 @@ describe('reactive channel mute status', () => {
 		preMutedClient.mutedChannels = [
 			{
 				channel: { cid: 'messaging:premuted' },
-				created_at: '2024-01-01T00:00:00.000Z',
+				created_at: convertDateToTimestamp('2024-01-01T00:00:00.000Z'),
 			},
 		];
 
@@ -2673,7 +2686,7 @@ describe('reactive channel mute status', () => {
 				channel_mutes: [
 					{
 						channel: { cid: channel.cid },
-						created_at: '2024-01-01T00:00:00.000Z',
+						created_at: convertDateToTimestamp('2024-01-01T00:00:00.000Z'),
 					},
 				],
 			},
@@ -3182,8 +3195,8 @@ describe('Channel lastMessage', async () => {
 			generateMsg({ date: latestMessageDate }),
 		]);
 
-		expect(channel.messagePaginator.headmostItem.created_at.getTime()).to.be.equal(
-			new Date(latestMessageDate).getTime(),
+		expect(channel.messagePaginator.headmostItem.created_at).to.be.equal(
+			convertDateToTimestamp(latestMessageDate),
 		);
 	});
 
@@ -3196,8 +3209,8 @@ describe('Channel lastMessage', async () => {
 			generateMsg({ date: '2018-01-01T00:00:00' }),
 		]);
 
-		expect(channel.messagePaginator.headmostItem.created_at.getTime()).to.be.equal(
-			new Date(latestMessageDate).getTime(),
+		expect(channel.messagePaginator.headmostItem.created_at).to.be.equal(
+			convertDateToTimestamp(latestMessageDate),
 		);
 	});
 
@@ -3220,8 +3233,8 @@ describe('Channel lastMessage', async () => {
 			setActive: false,
 		});
 
-		expect(channel.messagePaginator.headmostItem.created_at.getTime()).to.be.equal(
-			new Date(latestMessageDate).getTime(),
+		expect(channel.messagePaginator.headmostItem.created_at).to.be.equal(
+			convertDateToTimestamp(latestMessageDate),
 		);
 	});
 
@@ -3239,9 +3252,7 @@ describe('Channel lastMessage', async () => {
 		// ingestion advances the tracked latest, skipping the newest (system) message per config.
 		seedLatestWindow(channel, latestMessages);
 
-		expect(channel.messagePaginator.lastMessageAt.getTime()).toBe(
-			new Date(latestMessages[1].created_at).getTime(),
-		);
+		expect(channel.messagePaginator.lastMessageAt).toBe(latestMessages[1].created_at);
 	});
 });
 
@@ -3260,17 +3271,17 @@ describe('Channel last_message_at', () => {
 	it('advances monotonically as messages are tracked', () => {
 		expect(channel.messagePaginator.lastMessageAt).to.be.null;
 		track(generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }));
-		expect(channel.messagePaginator.lastMessageAt.getTime()).to.be.equal(
-			new Date('2020-01-01T00:00:00.000Z').getTime(),
+		expect(channel.messagePaginator.lastMessageAt).to.be.equal(
+			convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
 		);
 		track(generateMsg({ id: '1', date: '2019-01-01T00:00:00.000Z' }));
-		expect(channel.messagePaginator.lastMessageAt.getTime()).to.be.equal(
-			new Date('2020-01-01T00:00:00.000Z').getTime(),
+		expect(channel.messagePaginator.lastMessageAt).to.be.equal(
+			convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
 		);
 
 		track(generateMsg({ id: '2', date: '2020-01-01T00:00:00.001Z' }));
-		expect(channel.messagePaginator.lastMessageAt.getTime()).to.be.equal(
-			new Date('2020-01-01T00:00:00.001Z').getTime(),
+		expect(channel.messagePaginator.lastMessageAt).to.be.equal(
+			convertDateToTimestamp('2020-01-01T00:00:00.001Z'),
 		);
 	});
 
@@ -3289,17 +3300,21 @@ describe('Channel last_message_at', () => {
 	it('is seeded from the server-provided last_message_at', () => {
 		// A channel surfaced by the channel-list query: lastMessageAt is seeded from the server
 		// aggregate so it sorts correctly even before its message paginator loads a page.
-		channel.messagePaginator.seedLastMessageAt('2023-05-03T11:12:53.993Z');
-		expect(channel.messagePaginator.lastMessageAt.getTime()).to.be.equal(
-			new Date('2023-05-03T11:12:53.993Z').getTime(),
+		channel.messagePaginator.seedLastMessageAt(
+			convertDateToTimestamp('2023-05-03T11:12:53.993Z'),
+		);
+		expect(channel.messagePaginator.lastMessageAt).to.be.equal(
+			convertDateToTimestamp('2023-05-03T11:12:53.993Z'),
 		);
 	});
 
 	it('advances past the seeded value when a newer message is tracked (monotonic max)', () => {
-		channel.messagePaginator.seedLastMessageAt('2020-01-01T00:00:00.000Z');
+		channel.messagePaginator.seedLastMessageAt(
+			convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
+		);
 		track(generateMsg({ id: '0', date: '2021-06-01T00:00:00.000Z' }));
-		expect(channel.messagePaginator.lastMessageAt.getTime()).to.be.equal(
-			new Date('2021-06-01T00:00:00.000Z').getTime(),
+		expect(channel.messagePaginator.lastMessageAt).to.be.equal(
+			convertDateToTimestamp('2021-06-01T00:00:00.000Z'),
 		);
 	});
 });
@@ -3353,7 +3368,7 @@ describe('Channel _initializeState', () => {
 		});
 		channel.state.read = {
 			[existingUser.id]: {
-				last_read: new Date('2026-01-01T00:00:00.000Z'),
+				last_read: convertDateToTimestamp(new Date('2026-01-01T00:00:00.000Z')),
 				unread_messages: 1,
 				user: existingUser,
 			},
@@ -3364,7 +3379,9 @@ describe('Channel _initializeState', () => {
 				{
 					last_delivered_at: new Date('2026-01-02T00:00:00.000Z').toISOString(),
 					last_delivered_message_id: 'delivered-message-id',
-					last_read: new Date('2026-01-02T00:00:00.000Z').toISOString(),
+					last_read: convertDateToTimestamp(
+						new Date('2026-01-02T00:00:00.000Z').toISOString(),
+					),
 					last_read_message_id: 'read-message-id',
 					unread_messages: 0,
 					user: newUser,
@@ -3390,7 +3407,11 @@ describe('Channel.query', async () => {
 			messages: Array.from(
 				{ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE },
 				(_, i) =>
-					generateMsg({ created_at: new Date(1700000000000 + i * 1000).toISOString() }),
+					generateMsg({
+						created_at: convertDateToTimestamp(
+							new Date(1700000000000 + i * 1000).toISOString(),
+						),
+					}),
 			),
 		};
 		const stub = sinon
@@ -4283,7 +4304,11 @@ describe('Channel active flag (mark-read stays UI-driven)', () => {
 		channel.activate();
 		channel.messagePaginator.setViewingLive(true);
 		channel.state.read = {
-			me: { last_read: new Date(0), unread_messages: 3, user: { id: 'me' } },
+			me: {
+				last_read: convertDateToTimestamp(new Date(0)),
+				unread_messages: 3,
+				user: { id: 'me' },
+			},
 		};
 
 		expect(spy).not.toHaveBeenCalled();

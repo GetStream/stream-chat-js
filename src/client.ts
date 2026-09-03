@@ -5,6 +5,7 @@ import type { AxiosInstance } from 'axios';
 import axios from 'axios';
 
 import { Channel } from './channel';
+import type { ChannelMuteStatus } from './channel_state';
 import { ChannelWatchStatus } from './channel_state';
 import { ClientState } from './client_state';
 import { StableWSConnection } from './connection';
@@ -19,6 +20,7 @@ import {
   isOwnUserBaseProperty,
   randomId,
 } from './utils';
+import { nowNs } from './utils/time';
 import { normalizeUploadFile } from './upload-utils';
 
 import type {
@@ -902,7 +904,7 @@ export class StreamChat extends ChatApi {
   }
 
   dispatchEvent = (event: Event) => {
-    if (!event.received_at) event.received_at = new Date();
+    if (event.received_at == null) event.received_at = nowNs();
 
     // client event handlers
     const postListenerCallbacks = this._handleClientEvent(event as WSEvent);
@@ -1003,12 +1005,12 @@ export class StreamChat extends ChatApi {
         channel.messagePaginator.applyMessageDeletionForUser({
           userId: user.id,
           hardDelete,
-          deletedAt: deletedAt ?? new Date(),
+          deletedAt: deletedAt ?? nowNs(),
         });
         channel.pinnedMessagesPaginator.applyMessageDeletionForUser({
           userId: user.id,
           hardDelete,
-          deletedAt: deletedAt ?? new Date(),
+          deletedAt: deletedAt ?? nowNs(),
         });
       }
     }
@@ -1076,7 +1078,7 @@ export class StreamChat extends ChatApi {
 
     if (
       event.type === 'user.deleted' &&
-      event.user.deleted_at &&
+      event.user.deleted_at != null &&
       (event.mark_messages_deleted || event.hard_delete)
     ) {
       this._deleteUserMessageReference(
@@ -1216,17 +1218,17 @@ export class StreamChat extends ChatApi {
     }
   }
 
-  _muteStatus(cid: string) {
-    let muteStatus;
+  _muteStatus(cid: string): ChannelMuteStatus {
+    let muteStatus: ChannelMuteStatus | undefined;
     for (let i = 0; i < this.mutedChannels.length; i++) {
       const mute = this.mutedChannels[i];
       if (mute.channel?.cid === cid) {
         muteStatus = {
-          muted: mute.expires
-            ? new Date(mute.expires).getTime() > new Date().getTime()
-            : true,
-          createdAt: mute.created_at ? new Date(mute.created_at) : new Date(),
-          expiresAt: mute.expires ? new Date(mute.expires) : null,
+          // `expires` is a wire timestamp, so it compares directly against the local clock in the
+          // same unit. Comparing it against `Date.now()` would make every expiry look far future.
+          muted: mute.expires != null ? mute.expires > nowNs() : true,
+          createdAt: mute.created_at ?? nowNs(),
+          expiresAt: mute.expires ?? null,
         };
         break;
       }
@@ -1721,8 +1723,12 @@ export class StreamChat extends ChatApi {
   getChannelByMembers = (channelType: string, custom: ChannelInput) => {
     // Check if the channel already exists.
     // Only allow 1 channel object per cid
+    // Mirrors the same expression in `channel.ts` (`_initializeState`), which recomputes this
+    // temp cid to evict the stale `activeChannels` entry once the server assigns a real id —
+    // the two must agree exactly. `user_id` became optional in the v2 spec while
+    // `MemberUserRequest.id` is required, so `{ user: { id } }` is now a valid member spec.
     const memberIds = (custom.members ?? []).map((member) =>
-      typeof member === 'string' ? member : member.user_id,
+      typeof member === 'string' ? member : member.user_id || member.user?.id || '',
     );
     const membersStr = memberIds.sort().join(',');
     const tempCid = generateChannelTempCid(channelType, memberIds);
@@ -1891,16 +1897,25 @@ export class StreamChat extends ChatApi {
   /**
    * Transforms an expiration value into an ISO string.
    *
+   * A `number` is an offset in SECONDS, not a timestamp — passing a wire `pin_expires` overflows
+   * `Date`, which used to surface as an opaque `RangeError` from `toISOString()`.
+   *
    * @param timeoutOrExpirationDate - Expiration date or timeout. Use `number` to set the timeout
    *   in seconds, `string` or `Date` to set the exact expiration date (optional).
    * @returns The expiration as an ISO string, or `null`.
+   * @throws If a numeric offset does not resolve to a representable date.
    */
   _normalizeExpiration(timeoutOrExpirationDate?: null | number | string | Date) {
     let pinExpires: null | string = null;
     if (typeof timeoutOrExpirationDate === 'number') {
-      const now = new Date();
-      now.setSeconds(now.getSeconds() + timeoutOrExpirationDate);
-      pinExpires = now.toISOString();
+      const expiresAt = new Date();
+      expiresAt.setSeconds(expiresAt.getSeconds() + timeoutOrExpirationDate);
+      if (Number.isNaN(expiresAt.getTime())) {
+        throw new Error(
+          `Expiration offset ${timeoutOrExpirationDate} does not resolve to a valid date`,
+        );
+      }
+      pinExpires = expiresAt.toISOString();
     } else if (isString(timeoutOrExpirationDate)) {
       pinExpires = timeoutOrExpirationDate;
     } else if (timeoutOrExpirationDate instanceof Date) {

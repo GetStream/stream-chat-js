@@ -12,6 +12,7 @@ import {
   type MessageQueryShape,
 } from './MessageIntervalPaginator';
 import type { LocalMessage } from '../../types';
+import { nsToDate } from '../../utils/time';
 import { StateStore } from '../../store';
 
 export type {
@@ -57,7 +58,7 @@ export type MessagePaginatorAggregateState = {
    * sort key {@link MessagePaginator.lastMessageAt} is derived as the max of the two, so the two can
    * never drift out of sync.
    */
-  seededLastMessageAt: Date | null;
+  seededLastMessageAt: number | null;
 };
 
 export type MessagePaginatorOptions = BaseMessagePaginatorOptions & {
@@ -72,7 +73,7 @@ export type MessagePaginatorOptions = BaseMessagePaginatorOptions & {
 };
 
 export type UnreadSnapshotState = {
-  lastReadAt: Date | null;
+  lastReadAt: number | null;
   unreadCount: number;
   /**
    * Snapshot of the first unread message id for the user.
@@ -166,12 +167,11 @@ export class MessagePaginator extends MessageIntervalPaginator {
    * **Derived** (never stored) so it cannot drift from {@link lastMessage}. `null` until seeded or a
    * message is ingested.
    */
-  get lastMessageAt(): Date | null {
+  get lastMessageAt(): number | null {
     const { lastMessage, seededLastMessageAt } = this.aggregateState.getLatestValue();
-    const fromMessage =
-      lastMessage?.created_at instanceof Date ? lastMessage.created_at : null;
-    if (fromMessage && seededLastMessageAt) {
-      return fromMessage >= seededLastMessageAt ? fromMessage : seededLastMessageAt;
+    const fromMessage = getMessageCreatedAtTimestamp(lastMessage);
+    if (fromMessage !== null && seededLastMessageAt !== null) {
+      return Math.max(fromMessage, seededLastMessageAt);
     }
     return fromMessage ?? seededLastMessageAt;
   }
@@ -244,14 +244,11 @@ export class MessagePaginator extends MessageIntervalPaginator {
    * authoritative whole-channel aggregate. Monotonic: a no-op when the paginator already advanced
    * past it (e.g. from ingested messages), so seed order does not matter.
    */
-  seedLastMessageAt(value: string | Date | null | undefined) {
-    if (!value) return;
-    const date = value instanceof Date ? value : new Date(value);
-    const timestamp = date.getTime();
-    if (!Number.isFinite(timestamp)) return;
+  seedLastMessageAt(value: number | null | undefined) {
+    if (value == null || !Number.isFinite(value)) return;
     const current = this.aggregateState.getLatestValue().seededLastMessageAt;
-    if (current && timestamp <= current.getTime()) return;
-    this.aggregateState.partialNext({ seededLastMessageAt: date });
+    if (current !== null && value <= current) return;
+    this.aggregateState.partialNext({ seededLastMessageAt: value });
   }
 
   ingestItem(item: LocalMessage): boolean {
@@ -425,19 +422,23 @@ export class MessagePaginator extends MessageIntervalPaginator {
     // We deliberately do NOT persist the inferred boundary back into the snapshot: writing
     // `firstUnreadMessageId` would make the channel look explicitly marked-unread and suppress
     // auto-mark-read at the bottom. The separator reads the (re-seeded) snapshot directly.
-    if (lastReadAt) {
+    const lastReadBoundary =
+      lastReadAt != null && Number.isFinite(lastReadAt) ? lastReadAt : null;
+
+    if (lastReadBoundary !== null) {
       let {
         firstUnreadMessageId: inferredFirstUnreadMessageId,
         lastReadMessageId: inferredLastReadMessageId,
       } = this.resolveUnreadBoundaryIdsByTimestamp({
-        lastReadAt,
+        lastReadAt: lastReadBoundary,
         messages: this.state.getLatestValue().items ?? [],
       });
 
       if (!inferredLastReadMessageId) {
         const result = await this.executeQuery({
           queryShape: {
-            created_at_around: lastReadAt,
+            // `created_at_around` is a request field and still takes a `Date`.
+            created_at_around: nsToDate(lastReadBoundary),
             limit: options?.pageSize,
           },
           updateState: false,
@@ -447,7 +448,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
             firstUnreadMessageId: inferredFirstUnreadMessageId,
             lastReadMessageId: inferredLastReadMessageId,
           } = this.resolveUnreadBoundaryIdsByTimestamp({
-            lastReadAt,
+            lastReadAt: lastReadBoundary,
             messages: result.stateCandidate.items ?? [],
           }));
         }

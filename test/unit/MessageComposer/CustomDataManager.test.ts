@@ -4,6 +4,7 @@ import { MessageComposer } from '../../../src/messageComposer/messageComposer';
 import { Channel } from '../../../src/channel';
 import { StreamChat } from '../../../src/client';
 import { LocalMessage } from '../../../src/types';
+import { convertDateToTimestamp } from '../test-utils/time';
 
 describe('CustomDataManager', () => {
   let customDataManager: CustomDataManager;
@@ -44,11 +45,11 @@ describe('CustomDataManager', () => {
         type: 'regular',
         attachments: [],
         mentioned_users: [],
-        created_at: new Date(),
+        created_at: convertDateToTimestamp(new Date()),
         deleted_at: null,
         pinned_at: null,
         status: 'sent',
-        updated_at: new Date(),
+        updated_at: convertDateToTimestamp(new Date()),
       };
 
       const managerWithMessage = new CustomDataManager({
@@ -79,11 +80,11 @@ describe('CustomDataManager', () => {
         type: 'regular',
         attachments: [],
         mentioned_users: [],
-        created_at: new Date(),
+        created_at: convertDateToTimestamp(new Date()),
         deleted_at: null,
         pinned_at: null,
         status: 'sent',
-        updated_at: new Date(),
+        updated_at: convertDateToTimestamp(new Date()),
       };
 
       customDataManager.initState({ message });

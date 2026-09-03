@@ -850,9 +850,12 @@ These now delegate to `channel.updateMemberPartial({ set: { archived: true } })`
 
 #### `channel.muteStatus` / `channel.sendAction` / `channel.keystroke` / `channel.stopTyping`
 
+> Timestamps in these signatures are unix nanoseconds, not `Date`s — see
+> [`v9-to-v10-migration-guide-dates.md`](./v9-to-v10-migration-guide-dates.md).
+
 ```ts
 // v9
-channel.muteStatus(): { muted: boolean; createdAt: Date | null; expiresAt: Date | null };
+channel.muteStatus(): { muted: boolean; createdAt: number | null; expiresAt: number | null };
 channel.sendAction(messageID, formData);
 channel.keystroke(parent_id?, options?: { user_id });
 channel.stopTyping(parent_id?, options?: { user_id });
@@ -1401,6 +1404,17 @@ channel roles is a server-side operation; use
 [`@stream-io/node-sdk`](https://github.com/GetStream/stream-node). The `RoleName` type went
 with it, along with the rest of the v1 permission surface — see
 [the v1 permission system](./v9-to-v10-migration-guide-type-renames.md#the-v1-permission-system--removed).
+
+## Removed after `10.0.0-rc.8` — moderator promotion moves server-side
+
+**`channel.addModerators(members, message?, options?, requestOptions?)` and
+`channel.demoteModerators(members, message?, options?, requestOptions?)` — REMOVED.** The
+clientside API no longer publishes `add_moderators` / `demote_moderators` on the channel-update
+payload. Promoting or demoting an existing member is a server-side operation; use
+[`@stream-io/node-sdk`](https://github.com/GetStream/stream-node). A member can still be given a
+role at insert time, clientside, via
+`channel.addMembers([{ user_id: 'thierry', channel_role: 'channel_moderator' }])`. This is the same
+rationale as the `channel.assignRoles` removal above.
 
 ## Removed after `10.0.0-rc.4` — moderation moves to the generated V2 API
 

@@ -11,6 +11,7 @@ import { createDraftAttachmentsCompositionMiddleware } from '../../../../../src/
 import { MessageDraftComposerMiddlewareValueState } from '../../../../../src/messageComposer/middleware/messageComposer/types';
 import { MessageComposerMiddlewareState } from '../../../../../src/messageComposer/middleware/messageComposer/types';
 import { MiddlewareStatus } from '../../../../../src/middleware';
+import { convertDateToTimestamp } from '../../../test-utils/time';
 
 const setup = (initialState: MessageComposerMiddlewareState) => {
   return {
@@ -142,7 +143,7 @@ describe('stream-io/message-composer-middleware/attachments', () => {
         },
         localMessage: {
           attachments: [],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -153,7 +154,7 @@ describe('stream-io/message-composer-middleware/attachments', () => {
           status: 'sending',
           text: '',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),
@@ -190,7 +191,7 @@ describe('stream-io/message-composer-middleware/attachments', () => {
         },
         localMessage: {
           attachments: [attachment],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -201,7 +202,7 @@ describe('stream-io/message-composer-middleware/attachments', () => {
           status: 'sending',
           text: '',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),
@@ -251,7 +252,7 @@ describe('stream-io/message-composer-middleware/attachments', () => {
         },
         localMessage: {
           attachments,
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -262,7 +263,7 @@ describe('stream-io/message-composer-middleware/attachments', () => {
           status: 'sending',
           text: '',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),
@@ -306,7 +307,7 @@ describe('stream-io/message-composer-middleware/attachments', () => {
         },
         localMessage: {
           attachments: [attachment],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -317,7 +318,7 @@ describe('stream-io/message-composer-middleware/attachments', () => {
           status: 'sending',
           text: '',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),
@@ -354,7 +355,7 @@ describe('stream-io/message-composer-middleware/attachments', () => {
         },
         localMessage: {
           attachments: [attachment],
-          created_at: new Date(),
+          created_at: convertDateToTimestamp(new Date()),
           deleted_at: null,
           error: undefined,
           id: 'test-id',
@@ -365,7 +366,7 @@ describe('stream-io/message-composer-middleware/attachments', () => {
           status: 'sending',
           text: '',
           type: 'regular',
-          updated_at: new Date(),
+          updated_at: convertDateToTimestamp(new Date()),
         },
         sendOptions: {},
       }),

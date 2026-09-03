@@ -21,6 +21,8 @@ import { MockOfflineDB } from '../offline-support/MockOfflineDB';
 import { getCommandByName } from '../../../src/messageComposer/middleware/textComposer/commandUtils';
 import { generateMsg } from '../test-utils/generateMessage';
 import { stubServerConfig } from '../test-utils/stubServerConfig';
+import { msToNs, nowNs } from '../../../src/utils/time';
+import { convertDateToTimestamp } from '../test-utils/time';
 
 const generateUuidV4Output = 'test-uuid';
 // Mock dependencies
@@ -48,10 +50,10 @@ vi.mock('../../../src/utils', async (importOriginal) => ({
 const quotedMessage = {
   id: 'quoted-message-id',
   type: 'regular' as const,
-  created_at: new Date(),
+  created_at: nowNs(),
   deleted_at: null,
   pinned_at: null,
-  updated_at: new Date(),
+  updated_at: nowNs(),
   status: 'received',
   text: 'Quoted message',
   user: { id: 'user-id', name: 'User Name' },
@@ -69,8 +71,8 @@ const getThread = (channel: Channel, client: StreamChat, threadId: string) =>
         text: 'Test message',
         type: 'regular' as const,
         user,
-        created_at: new Date(),
-        updated_at: new Date(),
+        created_at: nowNs(),
+        updated_at: nowNs(),
       },
       channel: {
         id: channel.id!,
@@ -80,8 +82,8 @@ const getThread = (channel: Channel, client: StreamChat, threadId: string) =>
         frozen: false,
       },
       title: 'Test Thread',
-      created_at: new Date(),
-      updated_at: new Date(),
+      created_at: nowNs(),
+      updated_at: nowNs(),
       channel_cid: channel.cid,
       latest_replies: [],
       thread_participants: [],
@@ -418,7 +420,7 @@ describe('MessageComposer', () => {
           mentioned_users: [],
         },
         channel_cid: 'test-channel-id',
-        created_at: new Date().toISOString(),
+        created_at: nowNs(),
       };
 
       const { messageComposer } = setup({ composition: draftMessage });
@@ -581,10 +583,10 @@ describe('MessageComposer', () => {
       expect(messageComposer.quotedMessage).toEqual({
         id: 'quoted-message-id',
         type: 'regular',
-        created_at: expect.any(Date),
+        created_at: expect.any(Number),
         deleted_at: null,
         pinned_at: null,
-        updated_at: expect.any(Date),
+        updated_at: expect.any(Number),
         status: 'received',
         text: 'Quoted message',
         user: { id: 'user-id', name: 'User Name' },
@@ -687,8 +689,8 @@ describe('MessageComposer', () => {
         id: 'id',
         type: 'regular',
         status: 'delivered',
-        created_at: new Date(),
-        updated_at: new Date(),
+        created_at: nowNs(),
+        updated_at: nowNs(),
         deleted_at: null,
         pinned_at: null,
       });
@@ -844,8 +846,8 @@ describe('MessageComposer', () => {
         id: 'id',
         type: 'regular',
         status: 'delivered',
-        created_at: new Date(),
-        updated_at: new Date(),
+        created_at: nowNs(),
+        updated_at: nowNs(),
         deleted_at: null,
         pinned_at: null,
       });
@@ -928,8 +930,8 @@ describe('MessageComposer', () => {
           id: 'id',
           type: 'regular',
           status: 'delivered',
-          created_at: new Date(),
-          updated_at: new Date(),
+          created_at: nowNs(),
+          updated_at: nowNs(),
           deleted_at: null,
           pinned_at: null,
         });
@@ -1325,11 +1327,11 @@ describe('MessageComposer', () => {
       const baseline: LocalMessage = {
         id: 'edited-message-id',
         type: 'regular',
-        created_at: new Date(),
+        created_at: nowNs(),
         deleted_at: null,
         pinned_at: null,
         status: 'received',
-        updated_at: new Date(),
+        updated_at: nowNs(),
       };
 
       messageComposer.setEditedMessage(baseline);
@@ -1346,11 +1348,11 @@ describe('MessageComposer', () => {
       const baseline: LocalMessage = {
         id: 'edited-message-id',
         type: 'regular',
-        created_at: new Date(),
+        created_at: nowNs(),
         deleted_at: null,
         pinned_at: null,
         status: 'received',
-        updated_at: new Date(),
+        updated_at: nowNs(),
       };
 
       messageComposer.setEditedMessage(baseline);
@@ -1397,7 +1399,7 @@ describe('MessageComposer', () => {
         localMessage: {
           attachments: [],
           cid: 'messaging:test-channel-id',
-          created_at: expect.any(Date),
+          created_at: expect.any(Number),
           deleted_at: undefined,
           error: undefined,
           id: 'test-uuid',
@@ -1413,7 +1415,7 @@ describe('MessageComposer', () => {
           status: 'sending',
           text: 'Test message',
           type: 'regular',
-          updated_at: expect.any(Date),
+          updated_at: expect.any(Number),
           user: {
             id: 'user-id',
             name: 'User Name',
@@ -1626,9 +1628,7 @@ describe('MessageComposer', () => {
           // The echo carries the channel, like a real response — the paginator matches on `{ cid }`.
           cid: mockChannel.cid,
           id: composed!.localMessage.id,
-          updated_at: new Date(
-            composed!.localMessage.updated_at.getTime() + 100,
-          ).toISOString(),
+          updated_at: composed!.localMessage.updated_at + msToNs(100),
         });
         await mockChannel.sendMessageWithLocalUpdate({
           localMessage: composed!.localMessage,
@@ -1645,11 +1645,11 @@ describe('MessageComposer', () => {
         messageComposer.textComposer.setText('Hello');
         const composed = await messageComposer.compose();
         const messageId = composed!.localMessage.id;
-        const composedUpdatedAt = composed!.localMessage.updated_at.getTime();
-        const olderServerTime = new Date(composedUpdatedAt - 5000);
+        const composedUpdatedAt = composed!.localMessage.updated_at;
+        const olderServerTime = composedUpdatedAt - msToNs(5000);
         const serverMessage = generateMsg({
           id: messageId,
-          updated_at: olderServerTime.toISOString(),
+          updated_at: olderServerTime,
         });
         await mockChannel.sendMessageWithLocalUpdate({
           localMessage: composed!.localMessage,
@@ -1661,7 +1661,7 @@ describe('MessageComposer', () => {
               ...composed!.localMessage,
               status: 'received',
               text: 'from the websocket echo',
-              updated_at: new Date(composedUpdatedAt + 5000),
+              updated_at: convertDateToTimestamp(new Date(composedUpdatedAt + 5000)),
             });
             return { message: serverMessage };
           },
@@ -1677,8 +1677,8 @@ describe('MessageComposer', () => {
         messageComposer.textComposer.setText('Hello');
         const composed = await messageComposer.compose();
         const messageId = composed!.localMessage.id;
-        const composedUpdatedAt = composed!.localMessage.updated_at.getTime();
-        const olderServerTime = new Date(composedUpdatedAt - 2000);
+        const composedUpdatedAt = composed!.localMessage.updated_at;
+        const olderServerTime = composedUpdatedAt - msToNs(2000);
         await mockChannel.sendMessageWithLocalUpdate({
           localMessage: composed!.localMessage,
           message: composed!.message,
@@ -1689,12 +1689,12 @@ describe('MessageComposer', () => {
               ...composed!.localMessage,
               status: 'received',
               text: 'from the websocket echo',
-              updated_at: new Date(composedUpdatedAt + 5000),
+              updated_at: convertDateToTimestamp(new Date(composedUpdatedAt + 5000)),
             });
             return {
               message: generateMsg({
                 id: messageId,
-                updated_at: olderServerTime.toISOString(),
+                updated_at: olderServerTime,
               }),
             };
           },
@@ -1710,8 +1710,8 @@ describe('MessageComposer', () => {
         messageComposer.textComposer.setText('Hello');
         const composed = await messageComposer.compose();
         const messageId = composed!.localMessage.id;
-        const composedUpdatedAt = composed!.localMessage.updated_at.getTime();
-        const olderServerTime = new Date(composedUpdatedAt - 1000);
+        const composedUpdatedAt = composed!.localMessage.updated_at;
+        const olderServerTime = composedUpdatedAt - msToNs(1000);
         await mockChannel.sendMessageWithLocalUpdate({
           localMessage: composed!.localMessage,
           message: composed!.message,
@@ -1722,12 +1722,12 @@ describe('MessageComposer', () => {
               ...composed!.localMessage,
               status: 'received',
               text: 'from the websocket echo',
-              updated_at: new Date(composedUpdatedAt + 5000),
+              updated_at: convertDateToTimestamp(new Date(composedUpdatedAt + 5000)),
             });
             return {
               message: generateMsg({
                 id: messageId,
-                updated_at: olderServerTime.toISOString(),
+                updated_at: olderServerTime,
               }),
             };
           },
@@ -1746,12 +1746,10 @@ describe('MessageComposer', () => {
         const existingSending = {
           ...composed!.localMessage,
           status: 'sending' as const,
-          updated_at: new Date(Date.now() - 5000),
+          updated_at: convertDateToTimestamp(new Date(Date.now() - 5000)),
         };
         mockChannel.messagePaginator.ingestItem(existingSending);
-        const serverUpdatedAt = new Date(
-          composed!.localMessage.updated_at.getTime() + 100,
-        );
+        const serverUpdatedAt = composed!.localMessage.updated_at + msToNs(100);
         await mockChannel.sendMessageWithLocalUpdate({
           localMessage: composed!.localMessage,
           message: composed!.message,
@@ -1760,13 +1758,13 @@ describe('MessageComposer', () => {
             message: generateMsg({
               cid: mockChannel.cid,
               id: messageId,
-              updated_at: serverUpdatedAt.toISOString(),
+              updated_at: serverUpdatedAt,
             }),
           }),
         });
         const after = mockChannel.messagePaginator.getItem(messageId);
         expect(after?.status).toBe('received');
-        expect(after?.updated_at.getTime()).toBe(serverUpdatedAt.getTime());
+        expect(after?.updated_at).toBe(serverUpdatedAt);
       });
 
       it('updates the message in state if it does not exist on the server and the send request failed', async () => {
@@ -2338,7 +2336,7 @@ describe('MessageComposer', () => {
         attachments: [],
         mentioned_users: [],
       },
-      created_at: new Date().toISOString(),
+      created_at: convertDateToTimestamp(new Date().toISOString()),
     };
     it('should not create draft if edited message exists', async () => {
       const editedMessage = {

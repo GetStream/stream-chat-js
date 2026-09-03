@@ -35,6 +35,7 @@ import {
   deleteReactionOptimistically,
   MessageOperations,
 } from './messageOperations';
+import { nowNs } from './utils/time';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 import { MessagePaginator } from './pagination';
 import type { MergeNewestPageOptions } from './pagination';
@@ -56,9 +57,11 @@ export type ThreadState = {
    */
   active: boolean;
   channel: Channel;
-  createdAt: Date;
+  /** Unix nanoseconds, as the API sends it. */
+  createdAt: number;
   custom: CustomThreadData;
-  deletedAt: Date | null;
+  /** Unix nanoseconds, as the API sends it. */
+  deletedAt: number | null;
   isLoading: boolean;
   isStateStale: boolean;
   /**
@@ -70,11 +73,13 @@ export type ThreadState = {
   read: ThreadReadState;
   replyCount: number;
   title: string;
-  updatedAt: Date | null;
+  /** Unix nanoseconds, as the API sends it. */
+  updatedAt: number | null;
 };
 
 export type ThreadUserReadState = {
-  lastReadAt: Date;
+  /** Unix nanoseconds, as the API sends it. */
+  lastReadAt: number;
   unreadMessageCount: number;
   user: UserResponse;
   lastReadMessageId?: string;
@@ -82,6 +87,9 @@ export type ThreadUserReadState = {
 };
 
 export type ThreadReadState = Record<string, ThreadUserReadState | undefined>;
+
+const timestampOr = (value: number | undefined, fallback: number): number =>
+  typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 
 const DEFAULT_PAGE_LIMIT = 50;
 const DEFAULT_SORT: SortParamRequest[] = [{ field: 'created_at', direction: -1 }];
@@ -159,9 +167,9 @@ export class Thread extends WithSubscriptions {
         isStateStale: false,
         // 99.9% should never change
         channel: threadChannel,
-        createdAt: new Date(threadData.created_at),
+        createdAt: threadData.created_at,
         // rest
-        deletedAt: threadData.deleted_at ? new Date(threadData.deleted_at) : null,
+        deletedAt: threadData.deleted_at ?? null,
         parentMessage: formatMessage(threadData.parent_message),
         participants: threadData.thread_participants,
         read: formatReadState(
@@ -175,7 +183,7 @@ export class Thread extends WithSubscriptions {
         // INCLUDE them so the top level value renders fewer replies than the channel badge shows.
         // parent_message.reply_count is the authoritative, channel consistent count.
         replyCount: threadData.parent_message.reply_count ?? 0,
-        updatedAt: threadData.updated_at ? new Date(threadData.updated_at) : null,
+        updatedAt: threadData.updated_at ?? null,
         title: threadData.title,
         custom: threadData.custom ?? {},
       });
@@ -193,9 +201,7 @@ export class Thread extends WithSubscriptions {
       }
 
       const formattedParentMessage = formatMessage(parentMessage);
-      const createdAt = parentMessage.created_at
-        ? new Date(parentMessage.created_at)
-        : new Date();
+      const createdAt = timestampOr(parentMessage.created_at, nowNs());
 
       this.state = new StateStore<ThreadState>({
         active: false,
@@ -210,7 +216,7 @@ export class Thread extends WithSubscriptions {
         read: formatReadState(getPlaceholderReadResponse(client.userId)),
         replyCount: parentMessage.reply_count ?? 0,
         title: '',
-        updatedAt: parentMessage.updated_at ? new Date(parentMessage.updated_at) : null,
+        updatedAt: parentMessage.updated_at ?? null,
       });
 
       this.id = parentMessage.id;
@@ -664,8 +670,8 @@ export class Thread extends WithSubscriptions {
 
       this.state.partialNext({
         title: threadData.title,
-        updatedAt: new Date(threadData.updated_at),
-        deletedAt: threadData.deleted_at ? new Date(threadData.deleted_at) : null,
+        updatedAt: threadData.updated_at,
+        deletedAt: threadData.deleted_at ?? null,
         custom: threadData.custom ?? {},
       });
     }).unsubscribe;
@@ -709,7 +715,7 @@ export class Thread extends WithSubscriptions {
 
   private subscribeRepliesUnread = () =>
     this.client.on('notification.mark_unread', (event) => {
-      if (!event.user || !event.created_at || !event.thread_id) return;
+      if (!event.user || event.created_at == null || !event.thread_id) return;
       if (event.thread_id !== this.id) return;
 
       const userId = event.user.id;
@@ -722,10 +728,7 @@ export class Thread extends WithSubscriptions {
           ...current.read,
           [userId]: {
             ...current.read[userId],
-            lastReadAt:
-              typeof event.last_read_at !== 'undefined'
-                ? new Date(event.last_read_at)
-                : new Date(createdAt),
+            lastReadAt: timestampOr(event.last_read_at, createdAt),
             user,
             firstUnreadMessageId: event.first_unread_message_id,
             unreadMessageCount: event.unread_messages ?? 0,
@@ -767,7 +770,7 @@ export class Thread extends WithSubscriptions {
             // in that thread
             nextUserRead = {
               ...nextUserRead,
-              lastReadAt: event.created_at ? new Date(event.created_at) : new Date(),
+              lastReadAt: timestampOr(event.created_at, nowNs()),
               user: event.user,
               unreadMessageCount: 0,
             };
@@ -790,7 +793,7 @@ export class Thread extends WithSubscriptions {
 
   private subscribeRepliesRead = () =>
     this.client.on('message.read', (event) => {
-      if (!event.user || !event.created_at || !event.thread) return;
+      if (!event.user || event.created_at == null || !event.thread) return;
       if (event.thread.parent_message_id !== this.id) return;
 
       const userId = event.user.id;
@@ -802,7 +805,7 @@ export class Thread extends WithSubscriptions {
         read: {
           ...current.read,
           [userId]: {
-            lastReadAt: new Date(createdAt),
+            lastReadAt: createdAt,
             user,
             lastReadMessageId: event.last_read_message_id,
             unreadMessageCount: 0,
@@ -926,7 +929,7 @@ export class Thread extends WithSubscriptions {
           this.messagePaginator.applyMessageDeletionForUser({
             userId: event.user.id,
             hardDelete: !!event.hard_delete,
-            deletedAt: deletedAtSource ? new Date(deletedAtSource) : new Date(),
+            deletedAt: deletedAtSource ?? nowNs(),
           });
         }).unsubscribe,
     );
@@ -1159,7 +1162,7 @@ const normalizeThreadParticipants = (
 ): ThreadStateResponse['thread_participants'] | undefined => {
   if (!participants) return undefined;
 
-  const now = new Date();
+  const now = nowNs();
 
   return participants.map(
     (participant: MessageThreadParticipant) =>
@@ -1179,7 +1182,7 @@ const formatReadState = (read: ReadStateResponse[]): ThreadReadState =>
       user: userRead.user,
       lastReadMessageId: userRead.last_read_message_id,
       unreadMessageCount: userRead.unread_messages ?? 0,
-      lastReadAt: new Date(userRead.last_read),
+      lastReadAt: userRead.last_read,
     };
     return state;
   }, {});
@@ -1190,7 +1193,7 @@ const getPlaceholderReadResponse = (currentUserId?: string): ReadStateResponse[]
         {
           user: { id: currentUserId } as UserResponse,
           unread_messages: 0,
-          last_read: new Date(),
+          last_read: nowNs(),
         },
       ]
     : [];

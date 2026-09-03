@@ -5,6 +5,7 @@ import type {
   StreamAPIError,
 } from '../types';
 import { formatMessage } from '../utils';
+import { nowNs } from '../utils/time';
 import type { QueueableType } from '../offline-support';
 import type { MessageOperationSpec, OperationKind, OperationParams } from './types';
 
@@ -94,7 +95,7 @@ export class MessageOperationStatePolicy {
 
       const applied: LocalMessage = {
         ...localMessage,
-        deleted_at: new Date(),
+        deleted_at: nowNs(),
         type: 'deleted',
         ...(deleteForMe ? { deleted_for_me: true } : {}),
       };
@@ -107,7 +108,7 @@ export class MessageOperationStatePolicy {
       // Preserve the status: an edit must not turn a received message into `sending`, and an edit of a
       // message that never left the device has to stay `failed`.
       const isFailed = localMessage.status === 'failed';
-      const editedAt = new Date();
+      const editedAt = nowNs();
       const applied: LocalMessage = {
         ...localMessage,
         error: isFailed ? localMessage.error : undefined,
@@ -183,10 +184,8 @@ export class MessageOperationStatePolicy {
     // Reached only when something else did write since the optimistic step. For an edit both copies
     // are then server derived, so comparing their timestamps compares one clock against itself. For a
     // send the copy that landed is a `message.new` WS event, which is server derived too.
-    const serverNewer =
-      !existing || formatted.updated_at.getTime() > existing.updated_at.getTime();
-    const serverSameOrNewer =
-      !existing || formatted.updated_at.getTime() >= existing.updated_at.getTime();
+    const serverNewer = !existing || formatted.updated_at > existing.updated_at;
+    const serverSameOrNewer = !existing || formatted.updated_at >= existing.updated_at;
     const existingIsOurOptimisticSend = existing?.status === 'sending';
 
     const applyServerCopy =

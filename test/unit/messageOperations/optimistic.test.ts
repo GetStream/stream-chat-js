@@ -10,14 +10,15 @@ import type {
   LocalMessageAccessor,
 } from '../../../src/messageOperations/optimistic';
 import type { LocalMessage } from '../../../src/types';
+import { convertDateToTimestamp } from '../test-utils/time';
 
 const message = (overrides?: Partial<LocalMessage>): LocalMessage =>
   ({
-    created_at: new Date(),
+    created_at: convertDateToTimestamp(new Date()),
     id: 'm1',
     text: 'hi',
     type: 'regular',
-    updated_at: new Date(),
+    updated_at: convertDateToTimestamp(new Date()),
     ...overrides,
   }) as LocalMessage;
 

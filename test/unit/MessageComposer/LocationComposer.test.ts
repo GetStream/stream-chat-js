@@ -6,6 +6,7 @@ import {
   MessageComposer,
   StreamChat,
 } from '../../../src';
+import { convertDateToTimestamp } from '../test-utils/time';
 
 const deviceId = 'deviceId';
 
@@ -41,25 +42,30 @@ const setup = ({
   });
   return { mockClient, mockChannel, messageComposer };
 };
+// Wire-shaped, because that is the whole point: a `shared_location` read off a message carries the
+// response-only fields below and a unix-**nanosecond** `end_at`. A fixture written with ISO strings
+// or `Date`s cannot catch either thing leaking back into a request.
+const END_AT_ISO = '2099-12-31T23:59:59.535Z';
+const sharedLocationResponse = {
+  channel_cid: 'channelType:channelId',
+  created_at: convertDateToTimestamp('2026-01-01T00:00:00.000Z'),
+  created_by_device_id: 'created_by_device_id',
+  end_at: convertDateToTimestamp(END_AT_ISO),
+  latitude: 1,
+  longitude: 2,
+  message_id: 'liveLocation_message_id',
+  updated_at: convertDateToTimestamp('2026-01-01T00:00:00.000Z'),
+  user_id: user.id,
+};
 const locationMessage: LocalMessage = {
-  created_at: new Date(),
-  updated_at: new Date(),
-  deleted_at: null,
-  pinned_at: null,
+  created_at: convertDateToTimestamp('2026-01-01T00:00:00.000Z'),
+  updated_at: convertDateToTimestamp('2026-01-01T00:00:00.000Z'),
+  deleted_at: undefined,
+  pinned_at: undefined,
   type: 'regular',
   status: 'received',
   id: 'messageId',
-  shared_location: {
-    channel_cid: 'channel_cid',
-    created_at: 'created_at',
-    created_by_device_id: 'created_by_device_id',
-    end_at: '9999-12-31T23:59:59.535Z',
-    latitude: 1,
-    longitude: 2,
-    message_id: 'liveLocation_message_id',
-    updated_at: 'updated_at',
-    user_id: user.id,
-  },
+  shared_location: sharedLocationResponse,
 };
 describe('LocationComposer', () => {
   it('constructor initiates state and variables', () => {
@@ -73,14 +79,86 @@ describe('LocationComposer', () => {
     expect(locationComposer.config).toEqual(defaultConfig);
   });
 
-  it('overrides state with initState', () => {
+  it('overrides state with initState, narrowed to the request shape', () => {
     const {
       messageComposer: { locationComposer },
     } = setup();
     locationComposer.initState({ message: locationMessage });
-    expect(locationComposer.state.getLatestValue()).toEqual({
-      location: locationMessage.shared_location,
+    // Not the response object: the response-only fields are dropped and the nanosecond `end_at`
+    // becomes the `Date` a `SharedLocation` request declares. Storing the response verbatim is how
+    // `channel_cid` / `user_id` / a numeric `created_at` reached the API on the next composition.
+    expect(locationComposer.state.getLatestValue()).toStrictEqual({
+      location: {
+        created_by_device_id: 'created_by_device_id',
+        end_at: new Date(END_AT_ISO),
+        latitude: 1,
+        longitude: 2,
+        message_id: 'liveLocation_message_id',
+      },
     });
+  });
+
+  it('keeps a hydrated live location live rather than silently making it static', () => {
+    const {
+      messageComposer: { locationComposer },
+    } = setup();
+    locationComposer.initState({ message: locationMessage });
+
+    // A location off a message has an absolute `end_at` and no `durationMs`. Resolving the expiry
+    // from `durationMs` alone dropped it here, so editing the message unshared the live location.
+    expect(locationComposer.validLocation?.end_at).toStrictEqual(new Date(END_AT_ISO));
+  });
+
+  it('emits only request fields for a hydrated location', () => {
+    const {
+      messageComposer: { locationComposer },
+    } = setup();
+    locationComposer.initState({ message: locationMessage });
+
+    expect(locationComposer.validLocation).toStrictEqual({
+      created_by_device_id: 'created_by_device_id',
+      end_at: new Date(END_AT_ISO),
+      latitude: 1,
+      longitude: 2,
+      message_id: 'liveLocation_message_id',
+    });
+    // Serialized, so a regression shows up as the nanosecond number it would put on the wire.
+    expect(JSON.parse(JSON.stringify(locationComposer.validLocation))).toStrictEqual({
+      created_by_device_id: 'created_by_device_id',
+      end_at: END_AT_ISO,
+      latitude: 1,
+      longitude: 2,
+      message_id: 'liveLocation_message_id',
+    });
+  });
+
+  it('hydrates a static location without inventing an expiry', () => {
+    const {
+      messageComposer: { locationComposer },
+    } = setup();
+    locationComposer.initState({
+      message: {
+        ...locationMessage,
+        shared_location: { ...sharedLocationResponse, end_at: undefined },
+      },
+    });
+
+    expect(locationComposer.location).not.toHaveProperty('end_at');
+    expect(locationComposer.validLocation).not.toHaveProperty('end_at');
+  });
+
+  it('drops a non-finite end_at rather than storing an Invalid Date', () => {
+    const {
+      messageComposer: { locationComposer },
+    } = setup();
+    locationComposer.initState({
+      message: {
+        ...locationMessage,
+        shared_location: { ...sharedLocationResponse, end_at: NaN },
+      },
+    });
+
+    expect(locationComposer.location).not.toHaveProperty('end_at');
   });
 
   it('does not override state with initState with message without shared_location', () => {

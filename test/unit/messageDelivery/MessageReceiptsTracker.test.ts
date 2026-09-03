@@ -10,9 +10,8 @@ import type { Channel } from '../../../src/channel';
 
 const ownUserId = 'author';
 const U = (id: string): UserResponse => ({ id, name: id }); // matches UserResponse shape for the service
-// Read/delivery timestamps are `Date` in the OpenAPI-aligned tracker API; this helper builds one
-// from a millisecond value (the tracker no longer accepts ISO strings).
-const iso = (ms: number): Date => new Date(ms);
+// Read/delivery timestamps are plain wire numbers, in the same space as the message timeline below,
+// so they are written inline — there is nothing left to convert.
 
 // Timeline: 4 messages with ascending timestamps
 const msgs = [
@@ -23,18 +22,18 @@ const msgs = [
 ] as const;
 
 const byTs = new Map<number, { id: string; ts: number }>(msgs.map((m) => [m.ts, m]));
-const ref = (ts: number): MsgRef => ({ timestampMs: ts, msgId: byTs.get(ts)!.id });
+const ref = (ts: number): MsgRef => ({ timestamp: ts, msgId: byTs.get(ts)!.id });
 
-const defaultFindMessageByTimestamp = (timestampMs?: number) => {
-  if (!timestampMs) return undefined;
-  const m = byTs.get(timestampMs);
+const defaultFindMessageByTimestamp = (timestamp?: number) => {
+  if (!timestamp) return undefined;
+  const m = byTs.get(timestamp);
   return m ? { id: m.id } : undefined;
 };
 
 const createChannelMock = ({
   findMessageByTimestamp = defaultFindMessageByTimestamp,
 }: {
-  findMessageByTimestamp?: (timestampMs?: number) => { id: string } | undefined;
+  findMessageByTimestamp?: (timestamp?: number) => { id: string } | undefined;
 } = {}) => {
   const readStore = new StateStore({
     read: {},
@@ -70,8 +69,8 @@ describe('MessageDeliveryReadTracker', () => {
 
   describe('constructor', () => {
     it('allows locateMessage constructor override while requiring channel', () => {
-      const customLocateMessage = vi.fn((timestampMs: number) => ({
-        timestampMs,
+      const customLocateMessage = vi.fn((timestamp: number) => ({
+        timestamp,
         msgId: 'custom',
       }));
       const trackerWithCustomLocator = new MessageReceiptsTracker({
@@ -81,7 +80,7 @@ describe('MessageDeliveryReadTracker', () => {
 
       trackerWithCustomLocator.onMessageRead({
         user: U('compat-user'),
-        readAt: iso(2000),
+        readAt: 2000,
       });
 
       expect(customLocateMessage).toHaveBeenCalledWith(2000);
@@ -101,13 +100,13 @@ describe('MessageDeliveryReadTracker', () => {
       const snapshot: ReadStateResponse[] = [
         {
           user: alice,
-          last_read: new Date(2000),
-          last_delivered_at: new Date(1000),
+          last_read: 2000,
+          last_delivered_at: 1000,
         },
         {
           user: bob,
-          last_read: new Date(500),
-          last_delivered_at: new Date(3000),
+          last_read: 500,
+          last_delivered_at: 3000,
         },
       ];
 
@@ -119,7 +118,7 @@ describe('MessageDeliveryReadTracker', () => {
       expect(pAlice.lastReadRef).toEqual(ref(2000));
       expect(pAlice.lastDeliveredRef).toEqual(ref(2000)); // bumped up
 
-      expect(pBob.lastReadRef.timestampMs).toBe(Number.NEGATIVE_INFINITY);
+      expect(pBob.lastReadRef.timestamp).toBe(Number.NEGATIVE_INFINITY);
       expect(pBob.lastDeliveredRef).toEqual(ref(3000));
 
       // Readers of m2: Alice only
@@ -136,8 +135,8 @@ describe('MessageDeliveryReadTracker', () => {
       const snapshot: ReadStateResponse[] = [
         {
           user: ownUser,
-          last_read: new Date(2000),
-          last_delivered_at: new Date(1000),
+          last_read: 2000,
+          last_delivered_at: 1000,
         },
       ];
 
@@ -154,21 +153,21 @@ describe('MessageDeliveryReadTracker', () => {
       expect(p0).toBeNull();
 
       // first read at m3
-      tracker.onMessageRead({ user: carol, readAt: new Date(3000) });
+      tracker.onMessageRead({ user: carol, readAt: 3000 });
 
       const p1 = tracker.getUserProgress('carol')!;
       expect(p1.lastReadRef).toEqual(ref(3000));
       expect(p1.lastDeliveredRef).toEqual(ref(3000)); // bumped
 
       // older/equal reads are no-ops
-      tracker.onMessageRead({ user: carol, readAt: new Date(2000) });
-      tracker.onMessageRead({ user: carol, readAt: new Date(3000) });
+      tracker.onMessageRead({ user: carol, readAt: 2000 });
+      tracker.onMessageRead({ user: carol, readAt: 3000 });
       const p2 = tracker.getUserProgress('carol')!;
       expect(p2.lastReadRef).toEqual(ref(3000));
       expect(p2.lastDeliveredRef).toEqual(ref(3000));
 
       // later read moves forward and bumps delivered
-      tracker.onMessageRead({ user: carol, readAt: new Date(4000) });
+      tracker.onMessageRead({ user: carol, readAt: 4000 });
       const p3 = tracker.getUserProgress('carol')!;
       expect(p3.lastReadRef).toEqual(ref(4000));
       expect(p3.lastDeliveredRef).toEqual(ref(4000));
@@ -183,11 +182,11 @@ describe('MessageDeliveryReadTracker', () => {
       tracker = new MessageReceiptsTracker({ channel: channelMock.channel });
 
       const dave = U('dave');
-      tracker.onMessageRead({ user: dave, readAt: new Date(4000) }); // unknown -> ignored
+      tracker.onMessageRead({ user: dave, readAt: 4000 }); // unknown -> ignored
       expect(tracker.getUserProgress('dave')).toBeNull();
 
       // but a known read creates progress
-      tracker.onMessageRead({ user: dave, readAt: new Date(2000) });
+      tracker.onMessageRead({ user: dave, readAt: 2000 });
       const pd = tracker.getUserProgress('dave')!;
       expect(pd.lastReadRef).toEqual(ref(2000));
       expect(pd.lastDeliveredRef).toEqual(ref(2000));
@@ -200,18 +199,18 @@ describe('MessageDeliveryReadTracker', () => {
       const user = U('frank');
       tracker.onMessageRead({
         user,
-        readAt: new Date(3000),
+        readAt: 3000,
         lastReadMessageId: 'X',
       }); // unknown -> ignored
       expect(findMessageByTimestamp).not.toHaveBeenCalled();
       expect(tracker.getUserProgress('frank')).toStrictEqual({
         lastDeliveredRef: {
           msgId: 'X',
-          timestampMs: 3000,
+          timestamp: 3000,
         },
         lastReadRef: {
           msgId: 'X',
-          timestampMs: 3000,
+          timestamp: 3000,
         },
         user: {
           id: 'frank',
@@ -222,7 +221,7 @@ describe('MessageDeliveryReadTracker', () => {
 
     it('does not ignore own message.read events', () => {
       const ownUser = U(ownUserId);
-      tracker.onMessageRead({ user: ownUser, readAt: new Date(2000) });
+      tracker.onMessageRead({ user: ownUser, readAt: 2000 });
       expect(tracker.getUserProgress(ownUserId)!.user).toStrictEqual(ownUser);
     });
   });
@@ -231,26 +230,26 @@ describe('MessageDeliveryReadTracker', () => {
     it('creates user on first delivered; uses max(read, delivered)', () => {
       const eve = U('eve');
 
-      tracker.onMessageDelivered({ user: eve, deliveredAt: new Date(2000) });
+      tracker.onMessageDelivered({ user: eve, deliveredAt: 2000 });
       let progressEve = tracker.getUserProgress('eve')!;
       expect(progressEve.lastDeliveredRef).toEqual(ref(2000));
-      expect(progressEve.lastReadRef.timestampMs).toBe(Number.NEGATIVE_INFINITY);
+      expect(progressEve.lastReadRef.timestamp).toBe(Number.NEGATIVE_INFINITY);
 
       // deliver older/equal -> no-op
-      tracker.onMessageDelivered({ user: eve, deliveredAt: new Date(1000) });
-      tracker.onMessageDelivered({ user: eve, deliveredAt: new Date(2000) });
+      tracker.onMessageDelivered({ user: eve, deliveredAt: 1000 });
+      tracker.onMessageDelivered({ user: eve, deliveredAt: 2000 });
       progressEve = tracker.getUserProgress('eve')!;
       expect(progressEve.lastDeliveredRef).toEqual(ref(2000));
 
       // if read goes ahead to m3, and a delivery arrives for m2,
       // newDelivered = max(read, deliveredEvent) = read (m3)
-      tracker.onMessageRead({ user: eve, readAt: new Date(3000) });
+      tracker.onMessageRead({ user: eve, readAt: 3000 });
       progressEve = tracker.getUserProgress('eve')!;
       expect(progressEve.lastReadRef).toEqual(ref(3000));
       expect(progressEve.lastDeliveredRef).toEqual(ref(3000)); // bumped by read
 
       // deliver at m4 -> moves forward
-      tracker.onMessageDelivered({ user: eve, deliveredAt: new Date(4000) });
+      tracker.onMessageDelivered({ user: eve, deliveredAt: 4000 });
       progressEve = tracker.getUserProgress('eve')!;
       expect(progressEve.lastDeliveredRef).toEqual(ref(4000));
       expect(progressEve.lastReadRef).toEqual(ref(3000));
@@ -264,10 +263,10 @@ describe('MessageDeliveryReadTracker', () => {
       tracker = new MessageReceiptsTracker({ channel: channelMock.channel });
 
       const frank = U('frank');
-      tracker.onMessageDelivered({ user: frank, deliveredAt: new Date(3000) }); // unknown -> ignored
+      tracker.onMessageDelivered({ user: frank, deliveredAt: 3000 }); // unknown -> ignored
       expect(tracker.getUserProgress('frank')).toBeNull();
 
-      tracker.onMessageDelivered({ user: frank, deliveredAt: new Date(2000) }); // known -> creates
+      tracker.onMessageDelivered({ user: frank, deliveredAt: 2000 }); // known -> creates
       const pf = tracker.getUserProgress('frank')!;
       expect(pf.lastDeliveredRef).toEqual(ref(2000));
     });
@@ -279,18 +278,18 @@ describe('MessageDeliveryReadTracker', () => {
       const user = U('frank');
       tracker.onMessageDelivered({
         user,
-        deliveredAt: new Date(3000),
+        deliveredAt: 3000,
         lastDeliveredMessageId: 'X',
       }); // unknown -> ignored
       expect(findMessageByTimestamp).not.toHaveBeenCalled();
       expect(tracker.getUserProgress('frank')).toStrictEqual({
         lastDeliveredRef: {
           msgId: 'X',
-          timestampMs: 3000,
+          timestamp: 3000,
         },
         lastReadRef: {
           msgId: '',
-          timestampMs: Number.NEGATIVE_INFINITY,
+          timestamp: Number.NEGATIVE_INFINITY,
         },
         user: {
           id: 'frank',
@@ -301,7 +300,7 @@ describe('MessageDeliveryReadTracker', () => {
 
     it('does not ignore own message.delivered events', () => {
       const ownUser = U(ownUserId);
-      tracker.onMessageDelivered({ user: ownUser, deliveredAt: new Date(2000) });
+      tracker.onMessageDelivered({ user: ownUser, deliveredAt: 2000 });
       expect(tracker.getUserProgress(ownUserId)!.user).toStrictEqual(ownUser);
     });
   });
@@ -311,13 +310,13 @@ describe('MessageDeliveryReadTracker', () => {
     it('moves lastRead backward to the event boundary and keeps delivered unchanged (no backward move)', () => {
       tracker.onMessageRead({
         user,
-        readAt: new Date(3000),
+        readAt: 3000,
         lastReadMessageId: 'm3',
       });
 
       tracker.onNotificationMarkUnread({
         user,
-        lastReadAt: new Date(2000),
+        lastReadAt: 2000,
         lastReadMessageId: 'm2',
       });
 
@@ -337,12 +336,12 @@ describe('MessageDeliveryReadTracker', () => {
       // v delivered m4 and read m2
       tracker.onMessageDelivered({
         user,
-        deliveredAt: new Date(4000),
+        deliveredAt: 4000,
         lastDeliveredMessageId: 'm4',
       });
       tracker.onMessageRead({
         user,
-        readAt: new Date(2000),
+        readAt: 2000,
         lastReadMessageId: 'm2',
       });
 
@@ -356,19 +355,19 @@ describe('MessageDeliveryReadTracker', () => {
       });
 
       userProgress = tracker.getUserProgress(user.id)!;
-      expect(userProgress.lastReadRef.timestampMs).toBe(Number.NEGATIVE_INFINITY);
+      expect(userProgress.lastReadRef.timestamp).toBe(Number.NEGATIVE_INFINITY);
       expect(userProgress.lastReadRef.msgId).toBe('');
       // delivered remains ahead (not decreased)
       expect(userProgress.lastDeliveredRef).toEqual(ref(4000));
     });
 
     it('is a no-op when the provided last_read equals current lastReadRef', () => {
-      tracker.onMessageRead({ user, readAt: new Date(3000) });
+      tracker.onMessageRead({ user, readAt: 3000 });
       const before = structuredClone(tracker.getUserProgress(user.id)!);
 
       tracker.onNotificationMarkUnread({
         user,
-        lastReadAt: new Date(3000),
+        lastReadAt: 3000,
         lastReadMessageId: 'm3',
       });
 
@@ -386,7 +385,7 @@ describe('MessageDeliveryReadTracker', () => {
 
       tracker.onNotificationMarkUnread({
         user,
-        lastReadAt: new Date(2000),
+        lastReadAt: 2000,
         lastReadMessageId: 'm2',
       });
 
@@ -408,7 +407,7 @@ describe('MessageDeliveryReadTracker', () => {
       channelMock.readStore.next({
         read: {
           [user.id]: {
-            last_read: new Date(2000),
+            last_read: 2000,
             user,
             unread_messages: 0,
             last_read_message_id: 'm2',
@@ -421,7 +420,7 @@ describe('MessageDeliveryReadTracker', () => {
       channelMock.readStore.next({
         read: {
           [user.id]: {
-            last_read: new Date(3000),
+            last_read: 3000,
             user,
             unread_messages: 0,
             last_read_message_id: 'm3',
@@ -441,11 +440,11 @@ describe('MessageDeliveryReadTracker', () => {
       const c = U('c');
 
       // a: read m3, delivered m3
-      tracker.onMessageRead({ user: a, readAt: new Date(3000) });
+      tracker.onMessageRead({ user: a, readAt: 3000 });
       // b: delivered m3 only (not read)
-      tracker.onMessageDelivered({ user: b, deliveredAt: new Date(3000) });
+      tracker.onMessageDelivered({ user: b, deliveredAt: 3000 });
       // c: read m4, delivered m4
-      tracker.onMessageRead({ user: c, readAt: new Date(4000) });
+      tracker.onMessageRead({ user: c, readAt: 4000 });
 
       // Readers of m2 => a, c
       expect(ids(tracker.readersForMessage(ref(2000)))).toEqual(['a', 'c']);
@@ -461,8 +460,8 @@ describe('MessageDeliveryReadTracker', () => {
       const u1 = U('u1');
       const u2 = U('u2');
 
-      tracker.onMessageDelivered({ user: u1, deliveredAt: new Date(2000) }); // delivered m2
-      tracker.onMessageRead({ user: u2, readAt: new Date(3000) }); // read m3 (delivered m3)
+      tracker.onMessageDelivered({ user: u1, deliveredAt: 2000 }); // delivered m2
+      tracker.onMessageRead({ user: u2, readAt: 3000 }); // read m3 (delivered m3)
 
       // For m2:
       expect(tracker.hasUserDelivered(ref(2000), 'u1')).toBe(true);
@@ -488,25 +487,25 @@ describe('MessageDeliveryReadTracker', () => {
         const e = U('e'); // same for delivered side
 
         // a: read m2 -> delivered m2
-        tracker.onMessageRead({ user: a, readAt: new Date(2000) });
+        tracker.onMessageRead({ user: a, readAt: 2000 });
 
         // b: read m3 -> delivered m3
-        tracker.onMessageRead({ user: b, readAt: new Date(3000) });
+        tracker.onMessageRead({ user: b, readAt: 3000 });
 
         // c: delivered m3 only
-        tracker.onMessageDelivered({ user: c, deliveredAt: new Date(3000) });
+        tracker.onMessageDelivered({ user: c, deliveredAt: 3000 });
 
         // d: read at ts=3000 but with a different msgId "X" (tests plateau filtering by msgId)
         tracker.onMessageRead({
           user: d,
-          readAt: new Date(3000),
+          readAt: 3000,
           lastReadMessageId: 'X',
         });
 
         // e: delivered at ts=3000 but with a different msgId "X"
         tracker.onMessageDelivered({
           user: e,
-          deliveredAt: new Date(3000),
+          deliveredAt: 3000,
           lastDeliveredMessageId: 'X',
         });
 
@@ -527,12 +526,12 @@ describe('MessageDeliveryReadTracker', () => {
         const user = U('x');
 
         // x reads m2 -> last read m2 (and delivered m2)
-        tracker.onMessageRead({ user, readAt: new Date(2000) });
+        tracker.onMessageRead({ user, readAt: 2000 });
         expect(ids(tracker.usersWhoseLastReadIs(ref(2000)))).toEqual(['x']);
         expect(ids(tracker.usersWhoseLastDeliveredIs(ref(2000)))).toEqual(['x']);
 
         // x later reads m4 -> moves out of m2 group and into m4 group
-        tracker.onMessageRead({ user, readAt: new Date(4000) });
+        tracker.onMessageRead({ user, readAt: 4000 });
         expect(ids(tracker.usersWhoseLastReadIs(ref(2000)))).toEqual([]);
         expect(ids(tracker.usersWhoseLastReadIs(ref(4000)))).toEqual(['x']);
 
@@ -542,10 +541,10 @@ describe('MessageDeliveryReadTracker', () => {
       });
 
       it('returns empty array for empty message id', () => {
-        expect(tracker.usersWhoseLastReadIs({ timestampMs: 123, msgId: '' })).toEqual([]);
-        expect(
-          tracker.usersWhoseLastDeliveredIs({ timestampMs: 123, msgId: '' }),
-        ).toEqual([]);
+        expect(tracker.usersWhoseLastReadIs({ timestamp: 123, msgId: '' })).toEqual([]);
+        expect(tracker.usersWhoseLastDeliveredIs({ timestamp: 123, msgId: '' })).toEqual(
+          [],
+        );
       });
     });
 
@@ -560,28 +559,28 @@ describe('MessageDeliveryReadTracker', () => {
 
         tracker.onMessageDelivered({
           user: c,
-          deliveredAt: iso(2000),
+          deliveredAt: 2000,
           lastDeliveredMessageId: '2000',
         });
         tracker.onMessageDelivered({
           user: a,
-          deliveredAt: iso(2000),
+          deliveredAt: 2000,
           lastDeliveredMessageId: '2000',
         });
         tracker.onMessageDelivered({
           user: e,
-          deliveredAt: iso(3000),
+          deliveredAt: 3000,
           lastDeliveredMessageId: '3000',
         });
         tracker.onMessageDelivered({
           user: f,
-          deliveredAt: iso(3000),
+          deliveredAt: 3000,
           lastDeliveredMessageId: '3000',
         });
 
-        tracker.onMessageRead({ user: a, readAt: iso(1000), lastReadMessageId: '1000' });
-        tracker.onMessageRead({ user: d, readAt: iso(3000), lastReadMessageId: '3000' });
-        tracker.onMessageRead({ user: b, readAt: iso(3000), lastReadMessageId: '3000' });
+        tracker.onMessageRead({ user: a, readAt: 1000, lastReadMessageId: '1000' });
+        tracker.onMessageRead({ user: d, readAt: 3000, lastReadMessageId: '3000' });
+        tracker.onMessageRead({ user: b, readAt: 3000, lastReadMessageId: '3000' });
 
         expect(tracker.groupUsersByLastDeliveredMessage()).toStrictEqual({
           '2000': [c, a],
@@ -601,14 +600,14 @@ describe('MessageDeliveryReadTracker', () => {
       const y = U('y');
 
       // x reads m2, y reads m3
-      tracker.onMessageRead({ user: x, readAt: new Date(2000) });
-      tracker.onMessageRead({ user: y, readAt: new Date(3000) });
+      tracker.onMessageRead({ user: x, readAt: 2000 });
+      tracker.onMessageRead({ user: y, readAt: 3000 });
 
       // Readers of m2 -> x, y
       expect(ids(tracker.readersForMessage(ref(2000)))).toEqual(['x', 'y']);
 
       // now x reads m4 (moves past y)
-      tracker.onMessageRead({ user: x, readAt: new Date(4000) });
+      tracker.onMessageRead({ user: x, readAt: 4000 });
       // Readers of m3 -> x, y? Actually only x (m4) and y (m3) both >= m3
       expect(ids(tracker.readersForMessage(ref(3000)))).toEqual(['y', 'x']);
       // and of m4 -> x only
@@ -618,9 +617,7 @@ describe('MessageDeliveryReadTracker', () => {
 
   describe('snapshotStore', () => {
     it('updates revision on every ingestInitial call', () => {
-      const snapshot = [
-        { user: U('alice'), last_read: iso(2000), last_delivered_at: iso(2000) },
-      ];
+      const snapshot = [{ user: U('alice'), last_read: 2000, last_delivered_at: 2000 }];
 
       tracker.ingestInitial(snapshot);
       expect(tracker.snapshotStore.getLatestValue().revision).toBe(1);
@@ -634,7 +631,7 @@ describe('MessageDeliveryReadTracker', () => {
 
       // changed state -> new revision
       tracker.ingestInitial([
-        { user: U('alice'), last_read: iso(3000), last_delivered_at: iso(3000) },
+        { user: U('alice'), last_read: 3000, last_delivered_at: 3000 },
       ]);
       expect(tracker.snapshotStore.getLatestValue().revision).toBe(3);
     });
@@ -642,42 +639,42 @@ describe('MessageDeliveryReadTracker', () => {
     it('updates revision for effective message.read changes only', () => {
       const user = U('reader');
 
-      tracker.onMessageRead({ user, readAt: iso(2000) });
+      tracker.onMessageRead({ user, readAt: 2000 });
       expect(tracker.snapshotStore.getLatestValue().revision).toBe(1);
 
       // same/older read should be a no-op
-      tracker.onMessageRead({ user, readAt: iso(2000) });
-      tracker.onMessageRead({ user, readAt: iso(1000) });
+      tracker.onMessageRead({ user, readAt: 2000 });
+      tracker.onMessageRead({ user, readAt: 1000 });
       expect(tracker.snapshotStore.getLatestValue().revision).toBe(1);
 
-      tracker.onMessageRead({ user, readAt: iso(3000) });
+      tracker.onMessageRead({ user, readAt: 3000 });
       expect(tracker.snapshotStore.getLatestValue().revision).toBe(2);
     });
 
     it('updates revision for effective message.delivered changes only', () => {
       const user = U('delivered-user');
 
-      tracker.onMessageDelivered({ user, deliveredAt: iso(2000) });
+      tracker.onMessageDelivered({ user, deliveredAt: 2000 });
       expect(tracker.snapshotStore.getLatestValue().revision).toBe(1);
 
       // same/older delivery should be a no-op
-      tracker.onMessageDelivered({ user, deliveredAt: iso(2000) });
-      tracker.onMessageDelivered({ user, deliveredAt: iso(1000) });
+      tracker.onMessageDelivered({ user, deliveredAt: 2000 });
+      tracker.onMessageDelivered({ user, deliveredAt: 1000 });
       expect(tracker.snapshotStore.getLatestValue().revision).toBe(1);
 
-      tracker.onMessageDelivered({ user, deliveredAt: iso(3000) });
+      tracker.onMessageDelivered({ user, deliveredAt: 3000 });
       expect(tracker.snapshotStore.getLatestValue().revision).toBe(2);
     });
 
     it('updates revision for effective notification.mark_unread changes only', () => {
       const user = U('mark-unread-user');
 
-      tracker.onMessageRead({ user, readAt: iso(3000), lastReadMessageId: 'm3' });
+      tracker.onMessageRead({ user, readAt: 3000, lastReadMessageId: 'm3' });
       expect(tracker.snapshotStore.getLatestValue().revision).toBe(1);
 
       tracker.onNotificationMarkUnread({
         user,
-        lastReadAt: iso(2000),
+        lastReadAt: 2000,
         lastReadMessageId: 'm2',
       });
       expect(tracker.snapshotStore.getLatestValue().revision).toBe(2);
@@ -685,7 +682,7 @@ describe('MessageDeliveryReadTracker', () => {
       // same boundary -> no-op
       tracker.onNotificationMarkUnread({
         user,
-        lastReadAt: iso(2000),
+        lastReadAt: 2000,
         lastReadMessageId: 'm2',
       });
       expect(tracker.snapshotStore.getLatestValue().revision).toBe(2);
@@ -699,42 +696,42 @@ describe('MessageDeliveryReadTracker', () => {
       const carol = U('carol');
       const previousReadState = {
         [alice.id]: {
-          last_read: new Date(2000),
+          last_read: 2000,
           unread_messages: 0,
           user: alice,
           last_read_message_id: 'm2',
         },
         [bob.id]: {
-          last_read: new Date(3000),
+          last_read: 3000,
           unread_messages: 0,
           user: bob,
           last_read_message_id: 'm3',
-          last_delivered_at: new Date(3000),
+          last_delivered_at: 3000,
           last_delivered_message_id: 'm3',
         },
       };
       const nextReadState = {
         [bob.id]: {
-          last_read: new Date(4000),
+          last_read: 4000,
           unread_messages: 0,
           user: bob,
           last_read_message_id: 'm4',
-          last_delivered_at: new Date(4000),
+          last_delivered_at: 4000,
           last_delivered_message_id: 'm4',
         },
         [carol.id]: {
-          last_read: new Date(2000),
+          last_read: 2000,
           unread_messages: 0,
           user: carol,
           last_read_message_id: 'm2',
-          last_delivered_at: new Date(2000),
+          last_delivered_at: 2000,
           last_delivered_message_id: 'm2',
         },
       };
 
       tracker.ingestInitial([
-        { user: alice, last_read: iso(2000), last_delivered_at: iso(2000) },
-        { user: bob, last_read: iso(3000), last_delivered_at: iso(3000) },
+        { user: alice, last_read: 2000, last_delivered_at: 2000 },
+        { user: bob, last_read: 3000, last_delivered_at: 3000 },
       ]);
 
       tracker.reconcileFromReadStore({
@@ -751,6 +748,29 @@ describe('MessageDeliveryReadTracker', () => {
       expect(tracker.getUserProgress(carol.id)?.lastReadRef).toEqual(ref(2000));
     });
 
+    it('accepts a read state whose last_read is the epoch', () => {
+      // `0` is the epoch sentinel; a truthiness check would reject the state as invalid.
+      const newcomer = U('newcomer');
+
+      tracker.reconcileFromReadStore({
+        previousReadState: {},
+        nextReadState: {
+          [newcomer.id]: {
+            last_read: 0,
+            unread_messages: 3,
+            user: newcomer,
+          },
+        },
+        meta: { changedUserIds: [newcomer.id], removedUserIds: [] },
+      });
+
+      // MIN_REF is correct — nothing at or below the epoch has been read.
+      const progress = tracker.getUserProgress(newcomer.id);
+      expect(progress).not.toBeNull();
+      expect(progress?.user).toStrictEqual(newcomer);
+      expect(progress?.lastReadRef.timestamp).toBe(Number.NEGATIVE_INFINITY);
+    });
+
     it('ignores non-bootstrap reconcile when metadata is absent', () => {
       const user = U('missing-meta-user');
 
@@ -758,11 +778,11 @@ describe('MessageDeliveryReadTracker', () => {
         previousReadState: {},
         nextReadState: {
           [user.id]: {
-            last_read: new Date(3000),
+            last_read: 3000,
             unread_messages: 0,
             user,
             last_read_message_id: 'm3',
-            last_delivered_at: new Date(3000),
+            last_delivered_at: 3000,
             last_delivered_message_id: 'm3',
           },
         },
@@ -777,8 +797,8 @@ describe('MessageDeliveryReadTracker', () => {
       tracker.ingestInitial([
         {
           user,
-          last_read: iso(2000),
-          last_delivered_at: iso(2000),
+          last_read: 2000,
+          last_delivered_at: 2000,
           last_read_message_id: 'm2',
           last_delivered_message_id: 'm2',
         },
@@ -788,21 +808,21 @@ describe('MessageDeliveryReadTracker', () => {
       tracker.reconcileFromReadStore({
         previousReadState: {
           [user.id]: {
-            last_read: new Date(2000),
+            last_read: 2000,
             unread_messages: 0,
             user,
             last_read_message_id: 'm2',
-            last_delivered_at: new Date(2000),
+            last_delivered_at: 2000,
             last_delivered_message_id: 'm2',
           },
         },
         nextReadState: {
           [user.id]: {
-            last_read: new Date(4000),
+            last_read: 4000,
             unread_messages: 0,
             user,
             last_read_message_id: 'm4',
-            last_delivered_at: new Date(4000),
+            last_delivered_at: 4000,
             last_delivered_message_id: 'm4',
           },
         },
@@ -812,6 +832,45 @@ describe('MessageDeliveryReadTracker', () => {
       // Metadata drives reconciliation; undeclared users are ignored.
       expect(tracker.getUserProgress(user.id)?.lastReadRef).toEqual(ref(2000));
       expect(tracker.snapshotStore.getLatestValue().revision).toBe(1);
+    });
+  });
+  describe('read-store reconcile guards', () => {
+    // A non-finite `last_read` used to reach `locateMessage`, whose lower-bound search finds no
+    // index satisfying `t > NaN` and so resolves to the NEWEST loaded message — reporting the
+    // whole channel as read. The row is skipped instead.
+    it.each([
+      ['NaN', Number.NaN],
+      ['an ISO string', '2026-09-03T00:00:00.000Z'],
+    ])('ignores a read row whose last_read is %s', (_label, lastRead) => {
+      // Resolves any timestamp to the newest message, so a leaked non-finite value is visible.
+      const { channel, readStore } = createChannelMock({
+        findMessageByTimestamp: () => ({ id: 'm4' }),
+      });
+      const localTracker = new MessageReceiptsTracker({ channel });
+      localTracker.registerSubscriptions();
+      localTracker.setPendingReadStoreReconcileMeta({ changedUserIds: ['u1'] });
+
+      readStore.next({
+        read: { u1: { user: U('u1'), last_read: lastRead, unread_messages: 0 } },
+      } as never);
+
+      expect(localTracker.getUserProgress('u1')).toBeNull();
+      expect(ids(localTracker.readersForMessage(ref(4000)))).toEqual([]);
+    });
+
+    it('still accepts the epoch, which means "nothing read"', () => {
+      const { channel, readStore } = createChannelMock();
+      const localTracker = new MessageReceiptsTracker({ channel });
+      localTracker.registerSubscriptions();
+      localTracker.setPendingReadStoreReconcileMeta({ changedUserIds: ['u1'] });
+
+      readStore.next({
+        read: { u1: { user: U('u1'), last_read: 0, unread_messages: 0 } },
+      } as never);
+
+      // Tracked, but ahead of nothing — the epoch resolves below every message.
+      expect(localTracker.getUserProgress('u1')).not.toBeNull();
+      expect(ids(localTracker.readersForMessage(ref(1000)))).toEqual([]);
     });
   });
 });

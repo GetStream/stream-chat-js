@@ -306,7 +306,7 @@ export class ReminderManager extends WithSubscriptions {
 
   createReminder = async (options: CreateReminderOptions) => {
     const response = await this.client.createReminder(options);
-    return this.upsertToState({ data: response, overwrite: false });
+    return this.upsertToState({ data: response.reminder, overwrite: false });
   };
 
   updateReminder = async (options: CreateReminderOptions) => {

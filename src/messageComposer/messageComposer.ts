@@ -15,6 +15,7 @@ import {
 import type { Unsubscribe } from '../store';
 import { StateStore } from '../store';
 import { formatMessage, generateUUIDv4, isLocalMessage } from '../utils';
+import { nowNs } from '../utils/time';
 import { ConfigController } from '../configuration/ConfigController';
 import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
 import { mergeServerRestrictions } from '../configuration/utils/serverAuthority';
@@ -59,6 +60,11 @@ import {
 
 type UnregisterSubscriptions = Unsubscribe;
 
+/**
+ * Composer edit-audit clock. Both values are unix nanoseconds, so a locally stamped change and a
+ * server-derived `created_at` / `updated_at` are directly comparable — which is the whole point of
+ * this state.
+ */
 export type LastComposerChange = { draftUpdate: number | null; stateUpdate: number };
 
 export type EditingAuditState = {
@@ -123,11 +129,11 @@ const initEditingAuditState = (
   composition?: DraftResponse | MessageResponse | LocalMessage,
 ): EditingAuditState => {
   let draftUpdate = null;
-  let stateUpdate = new Date().getTime();
+  let stateUpdate = nowNs();
   if (compositionIsDraftResponse(composition)) {
-    stateUpdate = draftUpdate = new Date(composition.created_at).getTime();
+    stateUpdate = draftUpdate = composition.created_at;
   } else if (composition && isLocalMessage(composition)) {
-    stateUpdate = new Date(composition.updated_at).getTime();
+    stateUpdate = composition.updated_at;
   }
   return {
     lastChange: {
@@ -485,8 +491,8 @@ export class MessageComposer extends WithSubscriptions {
 
     // does not mean that the original edited message is different from the current state
     const editedMessageWasUpdated =
-      !!this.editedMessage?.updated_at &&
-      new Date(this.editedMessage.updated_at).getTime() < this.lastChange.stateUpdate;
+      this.editedMessage?.updated_at != null &&
+      this.editedMessage.updated_at < this.lastChange.stateUpdate;
 
     const draftWasChanged =
       !!this.lastChange.draftUpdate &&
@@ -731,13 +737,13 @@ export class MessageComposer extends WithSubscriptions {
 
   private logStateUpdateTimestamp() {
     this.editingAuditState.partialNext({
-      lastChange: { ...this.lastChange, stateUpdate: new Date().getTime() },
+      lastChange: { ...this.lastChange, stateUpdate: nowNs() },
     });
   }
 
   private logDraftUpdateTimestamp() {
     if (!this.config.drafts.enabled) return;
-    const timestamp = new Date().getTime();
+    const timestamp = nowNs();
     this.editingAuditState.partialNext({
       lastChange: { draftUpdate: timestamp, stateUpdate: timestamp },
     });
@@ -1025,7 +1031,7 @@ export class MessageComposer extends WithSubscriptions {
   };
 
   compose = async (): Promise<MessageComposerMiddlewareValue['state'] | undefined> => {
-    const created_at = this.editedMessage?.created_at ?? new Date();
+    const created_at = this.editedMessage?.created_at ?? nowNs();
 
     const text = '';
     const result = await this.compositionMiddlewareExecutor.execute({
@@ -1045,7 +1051,7 @@ export class MessageComposer extends WithSubscriptions {
           id: this.id,
           mentioned_users: [] as UserResponse[],
           parent_id: this.threadId ?? undefined,
-          pinned_at: this.editedMessage?.pinned_at || undefined,
+          pinned_at: this.editedMessage?.pinned_at ?? undefined,
           reaction_groups: undefined,
           status: this.editedMessage ? this.editedMessage.status : 'sending',
           text,
@@ -1090,7 +1096,7 @@ export class MessageComposer extends WithSubscriptions {
       try {
         const optimisticDraftResponse = {
           channel_cid: this.channel.cid,
-          created_at: new Date(),
+          created_at: nowNs(),
           message: draft as DraftMessage,
           parent_id: draft.parent_id,
           quoted_message: this.quotedMessage ?? undefined,

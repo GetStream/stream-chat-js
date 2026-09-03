@@ -3,12 +3,14 @@ import {
   Coords,
   LiveLocationManager,
   LiveLocationManagerConstructorParameters,
+  msToNs,
   SharedLiveLocationResponse,
   StreamChat,
   UPDATE_LIVE_LOCATION_REQUEST_MIN_THROTTLE_TIMEOUT,
   WatchLocationHandler,
 } from '../../src';
 import { getClientWithUser } from './test-utils/getClient';
+import { convertDateToTimestamp } from './test-utils/time';
 import { sleep } from '../../src/utils';
 
 const makeWatchLocation =
@@ -33,24 +35,24 @@ describe('LiveLocationManager', () => {
   const user = { id: 'user-id' };
   const liveLocation: SharedLiveLocationResponse = {
     channel_cid: 'channel_cid',
-    created_at: 'created_at',
+    created_at: convertDateToTimestamp('2026-01-01T00:00:00.000Z'),
     created_by_device_id: 'created_by_device_id',
-    end_at: '9999-12-31T23:59:59.535Z',
+    end_at: convertDateToTimestamp('9999-12-31T23:59:59.535Z'),
     latitude: 1,
     longitude: 2,
     message_id: 'liveLocation_message_id',
-    updated_at: 'updated_at',
+    updated_at: convertDateToTimestamp('2026-01-01T00:00:00.000Z'),
     user_id: user.id,
   };
   const liveLocation2: SharedLiveLocationResponse = {
     channel_cid: 'channel_cid2',
-    created_at: 'created_at',
+    created_at: convertDateToTimestamp('2026-01-01T00:00:00.000Z'),
     created_by_device_id: 'created_by_device_id',
-    end_at: '9999-12-31T23:59:59.535Z',
+    end_at: convertDateToTimestamp('9999-12-31T23:59:59.535Z'),
     latitude: 1,
     longitude: 2,
     message_id: 'liveLocation_message_id2',
-    updated_at: 'updated_at',
+    updated_at: convertDateToTimestamp('2026-01-01T00:00:00.000Z'),
     user_id: user.id,
   };
 
@@ -550,9 +552,9 @@ describe('LiveLocationManager', () => {
           active_live_locations: [
             {
               ...liveLocation,
-              end_at: new Date(
+              end_at: msToNs(
                 Date.now() + UPDATE_LIVE_LOCATION_REQUEST_MIN_THROTTLE_TIMEOUT - 1000,
-              ).toISOString(),
+              ),
             },
           ],
           duration: '',
@@ -659,7 +661,7 @@ describe('LiveLocationManager', () => {
       it('updates location for registered message', async () => {
         const client = await getClientWithUser(user);
         vi.spyOn(client, 'getUserLiveLocations').mockResolvedValue({
-          active_live_locations: [{ ...liveLocation, end_at: new Date().toISOString() }],
+          active_live_locations: [{ ...liveLocation, end_at: msToNs(Date.now()) }],
           duration: '',
         });
         vi.spyOn(client, 'updateLiveLocation').mockResolvedValue(liveLocation);
@@ -791,7 +793,7 @@ describe('LiveLocationManager', () => {
 
         await manager.init();
         expect(manager.messages).toHaveLength(1);
-        const newEndAt = '1970-01-01T08:08:08.532Z';
+        const newEndAt = convertDateToTimestamp('1970-01-01T08:08:08.532Z');
         client.dispatchEvent({
           message: {
             id: liveLocation.message_id,
@@ -822,7 +824,7 @@ describe('LiveLocationManager', () => {
 
         await manager.init();
         expect(manager.messages).toHaveLength(1);
-        const newEndAt = '1970-01-01T08:08:08.532Z';
+        const newEndAt = convertDateToTimestamp('1970-01-01T08:08:08.532Z');
         client.dispatchEvent({
           message: {
             id: liveLocation.message_id,
@@ -917,6 +919,74 @@ describe('LiveLocationManager', () => {
       });
       expect(manager.deviceId).toBe(deviceId);
       expect(manager.deviceId).toBe(deviceId);
+    });
+  });
+  describe('stop-sharing timer', () => {
+    // `setTimeout` clamps a delay past 2^31-1 ms (~24.9 days) to 1 ms, and only a minimum share
+    // duration is enforced, so a long share used to unregister itself on the next tick.
+    it('keeps a share whose expiry is beyond the maximum timeout delay', async () => {
+      vi.useFakeTimers();
+      try {
+        const client = await getClientWithUser(user);
+        const farFuture = { ...liveLocation, end_at: msToNs(Date.now() + 90 * 86400000) };
+        vi.spyOn(client, 'getUserLiveLocations').mockResolvedValue({
+          active_live_locations: [farFuture],
+          duration: '',
+        });
+        const manager = new LiveLocationManager({ client, getDeviceId, watchLocation });
+
+        await manager.init();
+        expect(manager.messages.size).toBe(1);
+
+        await vi.advanceTimersByTimeAsync(2 ** 31 - 1);
+        // Re-armed rather than expired: still tracked, and holding a fresh handle to clear.
+        expect(manager.messages.size).toBe(1);
+        expect(
+          manager.messages.get(farFuture.message_id)?.stopSharingTimeout,
+        ).not.toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('unregisters a share once its expiry actually arrives', async () => {
+      vi.useFakeTimers();
+      try {
+        const client = await getClientWithUser(user);
+        const soon = { ...liveLocation, end_at: msToNs(Date.now() + 60_000) };
+        vi.spyOn(client, 'getUserLiveLocations').mockResolvedValue({
+          active_live_locations: [soon],
+          duration: '',
+        });
+        const manager = new LiveLocationManager({ client, getDeviceId, watchLocation });
+
+        await manager.init();
+        expect(manager.messages.size).toBe(1);
+
+        await vi.advanceTimersByTimeAsync(60_001);
+        expect(manager.messages.size).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // `end_at` is optional on the wire even though the overlay type marks it required, and
+    // `undefined < nowNs()` is `false` — so an unguarded filter kept it and scheduled NaN.
+    it.each([
+      ['absent', undefined],
+      ['non-finite', Number.NaN],
+    ])('does not track a share whose end_at is %s', async (_label, endAt) => {
+      const client = await getClientWithUser(user);
+      vi.spyOn(client, 'getUserLiveLocations').mockResolvedValue({
+        active_live_locations: [
+          { ...liveLocation, end_at: endAt } as unknown as SharedLiveLocationResponse,
+        ],
+        duration: '',
+      });
+      const manager = new LiveLocationManager({ client, getDeviceId, watchLocation });
+
+      await manager.init();
+      expect(manager.messages.size).toBe(0);
     });
   });
 });

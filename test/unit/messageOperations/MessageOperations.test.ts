@@ -1,13 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MessageOperations } from '../../../src/messageOperations/MessageOperations';
 import type { LocalMessage, Message, MessageResponse } from '../../../src/types';
+import { msToNs, nowNs } from '../../../src/utils/time';
 
 type Store = Map<string, LocalMessage>;
 
 const makeLocalMessage = (overrides?: Partial<LocalMessage>): LocalMessage =>
   ({
     attachments: [],
-    created_at: new Date(),
+    created_at: nowNs(),
     deleted_at: null,
     id: 'm1',
     mentioned_users: [],
@@ -16,7 +17,7 @@ const makeLocalMessage = (overrides?: Partial<LocalMessage>): LocalMessage =>
     status: 'failed',
     text: 'hi',
     type: 'regular',
-    updated_at: new Date(),
+    updated_at: nowNs(),
     ...overrides,
   }) as LocalMessage;
 
@@ -25,8 +26,8 @@ const makeMessageResponse = (overrides?: Partial<MessageResponse>): MessageRespo
     id: 'm1',
     text: 'hi',
     type: 'regular',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    created_at: nowNs(),
+    updated_at: nowNs(),
     ...overrides,
   }) as MessageResponse;
 
@@ -378,7 +379,7 @@ describe('MessageOperations', () => {
   it('delete uses defaults.delete and ingests deleted message', async () => {
     const store: Store = new Map();
     const defaultsDelete = vi.fn(async () => ({
-      message: makeMessageResponse({ id: 'm1', deleted_at: new Date().toISOString() }),
+      message: makeMessageResponse({ id: 'm1', deleted_at: nowNs() }),
     }));
 
     const ops = new MessageOperations({
@@ -401,7 +402,7 @@ describe('MessageOperations', () => {
     await ops.delete({ localMessage });
 
     expect(defaultsDelete).toHaveBeenCalledWith('m1', undefined);
-    expect(store.get('m1')?.deleted_at).toBeInstanceOf(Date);
+    expect(store.get('m1')?.deleted_at).toEqual(expect.any(Number));
   });
 
   it('delete uses per-call requestFn override', async () => {
@@ -425,13 +426,13 @@ describe('MessageOperations', () => {
     await ops.delete({ localMessage }, async () => ({
       message: makeMessageResponse({
         id: 'm1',
-        deleted_at: new Date().toISOString(),
+        deleted_at: nowNs(),
         text: 'deleted via override',
       }),
     }));
 
     expect(store.get('m1')?.text).toBe('deleted via override');
-    expect(store.get('m1')?.deleted_at).toBeInstanceOf(Date);
+    expect(store.get('m1')?.deleted_at).toEqual(expect.any(Number));
   });
 
   it('delete uses configured handlers.delete when provided', async () => {
@@ -439,7 +440,7 @@ describe('MessageOperations', () => {
     const configuredDelete = vi.fn(async () => ({
       message: makeMessageResponse({
         id: 'm1',
-        deleted_at: new Date().toISOString(),
+        deleted_at: nowNs(),
         text: 'deleted via configured handler',
       }),
     }));
@@ -547,7 +548,7 @@ describe('MessageOperations — optimistic lifecycle', () => {
       const { lastPersisted, ops, store } = harness({ seed });
 
       // A server timestamp a minute BEHIND the optimistic stamp: the device's clock is fast.
-      const serverUpdatedAt = new Date(Date.now() - 60_000).toISOString();
+      const serverUpdatedAt = nowNs() - msToNs(60_000);
 
       await ops.update({ localMessage: { ...seed, text: 'after' } }, async () => ({
         message: makeMessageResponse({
@@ -574,7 +575,7 @@ describe('MessageOperations — optimistic lifecycle', () => {
         id: 'm1',
         status: 'received',
         text: 'from a websocket event',
-        updated_at: new Date(Date.now() + 60_000),
+        updated_at: nowNs() + msToNs(60_000),
       });
 
       await ops.update({ localMessage: { ...seed, text: 'after' } }, async () => {
@@ -594,7 +595,7 @@ describe('MessageOperations — optimistic lifecycle', () => {
 
       // Asserted on the optimistic write specifically: the server echo would supply its own value, so
       // reading the final state could pass without the optimistic stamp ever existing.
-      expect(persisted[0].message_text_updated_at).toBeInstanceOf(Date);
+      expect(persisted[0].message_text_updated_at).toEqual(expect.any(Number));
     });
 
     it('does not stamp message_text_updated_at when editing a failed message', async () => {
@@ -671,13 +672,13 @@ describe('MessageOperations — optimistic lifecycle', () => {
         return {
           message: makeMessageResponse({
             id: 'm1',
-            deleted_at: new Date().toISOString(),
+            deleted_at: nowNs(),
           }),
         };
       });
 
       expect(duringRequest?.type).toBe('deleted');
-      expect(duringRequest?.deleted_at).toBeInstanceOf(Date);
+      expect(duringRequest?.deleted_at).toEqual(expect.any(Number));
     });
 
     it('sets deleted_for_me for a delete_for_me delete', async () => {
@@ -726,7 +727,7 @@ describe('MessageOperations — optimistic lifecycle', () => {
       });
 
       expect(duringRequest?.type).toBe('deleted');
-      expect(duringRequest?.deleted_at).toBeInstanceOf(Date);
+      expect(duringRequest?.deleted_at).toEqual(expect.any(Number));
     });
 
     it('carries delete_for_me into the mirrored row', async () => {
@@ -900,11 +901,11 @@ describe('MessageOperations — optimistic lifecycle', () => {
       const localMessage = makeLocalMessage({
         id: 'm1',
         status: 'sending',
-        updated_at: new Date(Date.now() + 60_000),
+        updated_at: nowNs() + msToNs(60_000),
       });
 
       await ops.send({ localMessage }, async () => ({
-        message: makeMessageResponse({ id: 'm1', updated_at: new Date().toISOString() }),
+        message: makeMessageResponse({ id: 'm1', updated_at: nowNs() }),
       }));
 
       expect(store.get('m1')?.status).toBe('received');
@@ -918,7 +919,7 @@ describe('MessageOperations — optimistic lifecycle', () => {
       const localMessage = makeLocalMessage({
         id: 'm1',
         status: 'sending',
-        updated_at: new Date(Date.now() + 60_000),
+        updated_at: nowNs() + msToNs(60_000),
       });
 
       await ops.send({ localMessage }, async () => {
@@ -929,13 +930,13 @@ describe('MessageOperations — optimistic lifecycle', () => {
             id: 'm1',
             status: 'received',
             text: 'from the echo',
-            updated_at: new Date(Date.now() + 120_000),
+            updated_at: nowNs() + msToNs(120_000),
           }),
         );
         return {
           message: makeMessageResponse({
             id: 'm1',
-            updated_at: new Date().toISOString(),
+            updated_at: nowNs(),
           }),
         };
       });

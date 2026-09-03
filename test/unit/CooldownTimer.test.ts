@@ -4,6 +4,7 @@ import { getClientWithUser } from './test-utils/getClient';
 import { generateMsg } from './test-utils/generateMessage';
 import { formatMessage } from '../../src';
 import type { Channel, ChannelResponse, Event } from '../../src';
+import { convertDateToTimestamp } from './test-utils/time';
 
 // CooldownTimer.refresh() derives the current user's latest message from the message paginator's
 // latest (head) window, so tests seed the paginator (formatted) rather than legacy channel state.
@@ -73,11 +74,13 @@ describe('CooldownTimer', () => {
 
     it('picks up the own latest message from a paginator ingest', async () => {
       const channel = await open('cooldown-paginator');
-      const created_at = '2024-01-01T00:00:00.000Z';
+      const created_at = convertDateToTimestamp('2024-01-01T00:00:00.000Z');
 
       seedLatestWindow(channel, generateMsg({ created_at, user: { id: 'user-1' } }));
 
-      expect(channel.cooldownTimer.ownLatestMessageDate?.toISOString()).toBe(created_at);
+      expect(channel.cooldownTimer.ownLatestMessageTimestamp).toBe(
+        convertDateToTimestamp(created_at),
+      );
     });
 
     it('stops deriving once unregistered', async () => {
@@ -164,8 +167,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: lastOwnMessageAt,
-        updated_at: lastOwnMessageAt,
+        created_at: convertDateToTimestamp(lastOwnMessageAt),
+        updated_at: convertDateToTimestamp(lastOwnMessageAt),
         user: { id: client.userId as string },
       }),
     );
@@ -201,8 +204,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: now,
-        updated_at: now,
+        created_at: convertDateToTimestamp(now),
+        updated_at: convertDateToTimestamp(now),
         user: { id: client.userId as string },
       }),
     );
@@ -216,8 +219,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: now,
-        updated_at: now,
+        created_at: convertDateToTimestamp(now),
+        updated_at: convertDateToTimestamp(now),
         user: { id: client.userId as string },
       }),
     );
@@ -231,8 +234,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: now,
-        updated_at: now,
+        created_at: convertDateToTimestamp(now),
+        updated_at: convertDateToTimestamp(now),
         user: { id: client.userId as string },
       }),
     );
@@ -264,8 +267,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: lastOwnMessageAt,
-        updated_at: lastOwnMessageAt,
+        created_at: convertDateToTimestamp(lastOwnMessageAt),
+        updated_at: convertDateToTimestamp(lastOwnMessageAt),
         user: { id: client.userId as string },
       }),
     );
@@ -291,8 +294,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: now,
-        updated_at: now,
+        created_at: convertDateToTimestamp(now),
+        updated_at: convertDateToTimestamp(now),
         user: { id: client.userId as string },
       }),
     );
@@ -315,8 +318,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: lastOwnMessageAt,
-        updated_at: lastOwnMessageAt,
+        created_at: convertDateToTimestamp(lastOwnMessageAt),
+        updated_at: convertDateToTimestamp(lastOwnMessageAt),
         user: { id: client.userId as string },
       }),
     );
@@ -350,8 +353,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: lastOwnMessageAt,
-        updated_at: lastOwnMessageAt,
+        created_at: convertDateToTimestamp(lastOwnMessageAt),
+        updated_at: convertDateToTimestamp(lastOwnMessageAt),
         user: { id: client.userId as string },
       }),
     );
@@ -385,8 +388,8 @@ describe('CooldownTimer', () => {
     seedLatestWindow(
       channel,
       generateMsg({
-        created_at: lastOwnMessageAt,
-        updated_at: lastOwnMessageAt,
+        created_at: convertDateToTimestamp(lastOwnMessageAt),
+        updated_at: convertDateToTimestamp(lastOwnMessageAt),
         user: { id: client.userId as string },
       }),
     );
@@ -423,8 +426,8 @@ describe('CooldownTimer', () => {
       user: { id: client.userId as string },
       message: generateMsg({
         cid: channel.cid, // must match the paginator filter so message.new ingests into an interval
-        created_at: now,
-        updated_at: now,
+        created_at: convertDateToTimestamp(now),
+        updated_at: convertDateToTimestamp(now),
         user: { id: client.userId as string },
       }),
     } as Event);

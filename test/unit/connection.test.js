@@ -13,12 +13,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 // the real Stream backend sends on the first message. Used with
 // `client.options.WebSocketImpl` so tests never touch the network.
 const HEALTH_CHECK_PAYLOAD =
-	'{"type":"health.check","connection_id":"61112366-0a15-3891-0000-000000000009","cid":"*","me":{"id":"amin","role":"user","created_at":"2021-07-27T13:18:23.293696Z","updated_at":"2021-07-27T13:20:08.047284Z","last_active":"2021-08-11T10:42:44.213510048Z","banned":false,"online":true,"invisible":false,"devices":[],"mutes":[],"channel_mutes":[],"unread_count":98,"total_unread_count":98,"unread_channels":18,"language":"","image":"https://cdn.fakercloud.com/avatars/Shriiiiimp_128.jpg","name":"amin"},"created_at":"2021-08-11T10:42:44.222203145Z"}';
+	'{"type":"health.check","connection_id":"61112366-0a15-3891-0000-000000000009","cid":"*","me":{"id":"amin","role":"user","created_at":1627391903293696000,"updated_at":1627392008047284000,"last_active":1628678564213510048,"banned":false,"online":true,"invisible":false,"devices":[],"mutes":[],"channel_mutes":[],"unread_count":98,"total_unread_count":98,"unread_channels":18,"language":"","image":"https://cdn.fakercloud.com/avatars/Shriiiiimp_128.jpg","name":"amin"},"created_at":1628678564222203145}';
 
 // The `/api/v2/connect` hello frame. Unlike `health.check` it has no `cid`, and it
 // carries the duplicate `chat` block alongside `me`.
 const CONNECTION_OK_PAYLOAD =
-	'{"type":"connection.ok","connection_id":"61112366-0a15-3891-0000-000000000009","me":{"id":"amin","role":"user","created_at":"2021-07-27T13:18:23.293696Z","updated_at":"2021-07-27T13:20:08.047284Z","last_active":"2021-08-11T10:42:44.213510048Z","banned":false,"online":true,"invisible":false,"devices":[],"mutes":[],"channel_mutes":[],"unread_count":98,"total_unread_count":98,"unread_channels":18,"language":"","image":"https://cdn.fakercloud.com/avatars/Shriiiiimp_128.jpg","name":"amin"},"chat":{"mutes":[],"channel_mutes":[],"total_unread_count":98,"unread_channels":18,"unread_threads":0,"latest_hidden_channels":null},"created_at":"2021-08-11T10:42:44.222203145Z"}';
+	'{"type":"connection.ok","connection_id":"61112366-0a15-3891-0000-000000000009","me":{"id":"amin","role":"user","created_at":1627391903293696000,"updated_at":1627392008047284000,"last_active":1628678564213510048,"banned":false,"online":true,"invisible":false,"devices":[],"mutes":[],"channel_mutes":[],"unread_count":98,"total_unread_count":98,"unread_channels":18,"language":"","image":"https://cdn.fakercloud.com/avatars/Shriiiiimp_128.jpg","name":"amin"},"chat":{"mutes":[],"channel_mutes":[],"total_unread_count":98,"unread_channels":18,"unread_threads":0,"latest_hidden_channels":null},"created_at":1628678564222203145}';
 
 class MockWebSocket {
 	static CONNECTING = 0;
@@ -325,14 +325,14 @@ describe('connection', function () {
 			expect(c.isHealthy).to.be.true;
 		});
 
-		it('should decode dates on the event', async () => {
+		it('passes wire timestamps through untouched', async () => {
 			const c = new StableWSConnection({ client: newStreamChat() });
 			const health = await c.connect();
 
-			// connection.ok is absent from the generated decoders, so without the shim in
-			// connection.ts these would still be strings.
-			expect(health.created_at).to.be.instanceOf(Date);
-			expect(health.me.created_at).to.be.instanceOf(Date);
+			// Nothing decodes frames any more: every timestamp stays the unix-nanosecond number the
+			// API put on the wire, `connection.ok` included.
+			expect(health.created_at).to.be.a('number');
+			expect(health.me.created_at).to.be.a('number');
 		});
 
 		it('should schedule the next ping', async () => {

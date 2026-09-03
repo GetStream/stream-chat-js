@@ -10,6 +10,7 @@
 > - `v9-to-v10-migration-guide-server-side.md` (server-side surface removal)
 > - `v9-to-v10-migration-guide-sort.md` (`SortParamRequest[]` shape)
 > - `v9-to-v10-migration-guide-type-renames.md` (type aliases → generated names)
+> - `v9-to-v10-migration-guide-dates.md` (server-sent dates as unix-nanosecond numbers — **read this for the `t('timestamp.X', { timestamp })` call sites**)
 > - `v9-to-v10-migration-guide-other.md` (everything else)
 
 ## TL;DR
@@ -20,6 +21,12 @@
 - **`Notification.message` is now documented as a developer-facing fallback, not display copy.** Its wording is not part of the public contract and may change in a minor release. Nothing breaks today, but anything user-facing should switch on `type`. See [Rendering notifications](#rendering-notifications).
 - **New subpath `stream-chat/i18n`** carries the shared translation runtime (`Streami18n`, formatters, date handling). Nothing is re-exported from `stream-chat`'s root, so the root bundle is unchanged.
 - **New subpath `stream-chat/i18n/codegen`** carries the build-time translation-catalog generator. Node-only, and ESM-only — but `engines.node` is now `>=22.18.0`, and `require(esm)` has been unflagged since 22.12, so `require()` works on every supported Node as well as `import`.
+- **Every timestamp you hand a formatter is now a unix-nanosecond number**, and the
+  `t('timestamp.X', { timestamp })` path is **not type-checked** — i18next's interpolation bag is
+  untyped, so a raw wire number compiles and renders the literal text `Invalid Date` into your UI.
+  `getDateString`'s `messageCreatedAt` _is_ typed (`string | Date`), so only the `t(…)` call sites
+  need auditing. See
+  [Timestamps reaching a formatter](#timestamps-reaching-a-formatter).
 - **`stream-chat` now depends on `i18next` and `dayjs`.** Install footprint grows ~2.3 MB; **bundle size is unaffected** unless you import `stream-chat/i18n`.
 - Nothing in the JSDoc ever described a `Notification.code` field. There is no such field and never was — the block documenting the `domain:entity:operation:result` scheme was attached to `type` and mislabelled. It has been corrected.
 
@@ -235,6 +242,44 @@ Notable if you are building custom UI directly on `stream-chat`:
   so the UI renders rather than blanking. A later `init()` retries.
 - The keys with no inline default at their call site are injected via the `runtimeDefaults` option,
   because the catalog belongs to the UI layer rather than to core.
+
+### Timestamps reaching a formatter
+
+Server-sent dates are unix-**nanosecond** numbers in v10 (see
+[`v9-to-v10-migration-guide-dates.md`](./v9-to-v10-migration-guide-dates.md)), and the date layer has
+no way to tell one from a millisecond value. There are two entry points and only one of them is
+type-safe:
+
+- **`getDateString({ messageCreatedAt })` is typed `string | Date`.** A wire number is a compile
+  error, so this path forces the conversion.
+- **`t('timestamp.X', { timestamp })` is not.** The `timestamp.*` keys carry a `timestampFormatter`
+  expression and the value arrives through i18next's interpolation options, which are untyped.
+  `timestampFormatter` declares `FormatterFactory<string | Date>`, but nothing enforces that at the
+  call site.
+
+```ts
+// COMPILES CLEANLY. A nanosecond value is out of `Date`'s range, so dayjs cannot parse it and
+// `.format()` returns the literal string 'Invalid Date' — which lands on screen.
+t('timestamp.LiveLocation', { timestamp: location.end_at });
+
+// Convert at the call site.
+import { convertTimestampToDate } from 'stream-chat';
+t('timestamp.LiveLocation', { timestamp: convertTimestampToDate(location.end_at) });
+```
+
+`convertTimestampToDate` returns `undefined` for an absent or non-finite value, and the formatter
+renders an empty string for `undefined` rather than the literal text `"undefined"`, so it can be
+passed straight through.
+
+**`duration.*` keys are the mirror-image trap.** `durationFormatter` goes through the date library's
+`.duration()`, so it expects a length of time in **milliseconds** — not a timestamp. Handing it a
+timestamp renders something like "57 years ago". Derive a duration by subtracting two wire timestamps
+and converting once: `nsToMs(later - earlier)`.
+
+**`isDate` no longer helps.** `timestamp && isDate(timestamp) ? timestamp.toISOString() : undefined`
+was a common idiom, and it now correctly reports that a wire number is not a `Date` — so it yields
+`undefined` for every timestamp and the value silently disappears from the UI. Convert instead of
+guarding.
 
 ### Removed from the `Streami18n` surface
 

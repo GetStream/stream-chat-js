@@ -1,6 +1,7 @@
 import { applyReactionLocally } from '../entityStore';
 import { isEphemeral } from '../errors';
 import { formatMessage } from '../utils';
+import { dateToNs } from '../utils/time';
 import type { Channel } from '../channel';
 import type { StreamChat } from '../client';
 import type { QueueableType } from '../offline-support';
@@ -24,7 +25,7 @@ import type {
  * ```ts
  * const undo = applyMessageChangeLocally(accessor, {
  *   messageId,
- *   produce: (m) => m && { ...m, pinned: true, pinned_at: new Date() },
+ *   produce: (m) => m && { ...m, pinned: true, pinned_at: nowNs() },
  * });
  *
  * try {
@@ -203,10 +204,17 @@ export const addReactionOptimistically = async ({
   options?: Pick<SendReactionRequest, 'enforce_unique' | 'skip_push'>;
 }) => {
   const client = channel.getClient();
+  // `reaction` is a REQUEST, so any timestamps on it are `Date`s. The local store speaks the wire
+  // unit, so bring them across rather than handing a `Date` to a numeric field.
+  const { created_at, updated_at, ...restOfReaction } = reaction;
   const undo = applyReactionLocally(client, {
     enforceUnique: options?.enforce_unique ?? false,
     messageId,
-    reaction,
+    reaction: {
+      ...restOfReaction,
+      ...(created_at ? { created_at: dateToNs(created_at) } : {}),
+      ...(updated_at ? { updated_at: dateToNs(updated_at) } : {}),
+    },
   });
 
   try {

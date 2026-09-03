@@ -18,6 +18,7 @@ import type {
   UserResponse,
 } from '../../../../../src/types';
 import type { MentionSuggestion } from '../../../../../src/messageComposer/middleware/textComposer/types';
+import { convertDateToTimestamp } from '../../../test-utils/time';
 
 describe('calculateLevenshtein', () => {
   it('should return length of first string if second is empty', () => {
@@ -96,19 +97,31 @@ describe('MentionsSearchSource', () => {
 
     mockUserGroups = [
       {
-        created_at: '2026-05-08T12:00:00.000Z',
+        created_at: convertDateToTimestamp('2026-05-08T12:00:00.000Z'),
         id: 'backend-team',
         members: [
-          { created_at: '2026-05-08T12:00:00.000Z', id: 'member-1', is_admin: false },
+          {
+            created_at: convertDateToTimestamp('2026-05-08T12:00:00.000Z'),
+            id: 'member-1',
+            is_admin: false,
+          },
         ],
         name: 'Backend Team',
       },
       {
-        created_at: '2026-05-08T12:01:00.000Z',
+        created_at: convertDateToTimestamp('2026-05-08T12:01:00.000Z'),
         id: 'admins-group',
         members: [
-          { created_at: '2026-05-08T12:00:00.000Z', id: 'member-1', is_admin: false },
-          { created_at: '2026-05-08T12:01:00.000Z', id: 'member-2', is_admin: false },
+          {
+            created_at: convertDateToTimestamp('2026-05-08T12:00:00.000Z'),
+            id: 'member-1',
+            is_admin: false,
+          },
+          {
+            created_at: convertDateToTimestamp('2026-05-08T12:01:00.000Z'),
+            id: 'member-2',
+            is_admin: false,
+          },
         ],
         name: 'Admins',
       },
@@ -505,8 +518,8 @@ describe('MentionsSearchSource', () => {
     const mute: UserMuteResponse = {
       target: { id: 'user1' },
       user: { id: 'currentUser' },
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      created_at: convertDateToTimestamp(new Date().toISOString()),
+      updated_at: convertDateToTimestamp(new Date().toISOString()),
     };
     client.mutedUsers = [mute];
 
@@ -528,8 +541,8 @@ describe('MentionsSearchSource', () => {
     const mute: UserMuteResponse = {
       target: { id: 'user1' },
       user: { id: 'currentUser' },
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      created_at: convertDateToTimestamp(new Date().toISOString()),
+      updated_at: convertDateToTimestamp(new Date().toISOString()),
     };
     client.mutedUsers = [mute];
 
