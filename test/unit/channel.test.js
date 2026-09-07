@@ -211,6 +211,129 @@ describe('Channel count unread', function () {
 	});
 });
 
+describe('Channel markAsReadRequest and markUnread', function () {
+	const user = { id: 'user' };
+
+	const setup = ({ ownCapabilities, readEvents = true, serverSide = false } = {}) => {
+		const client = serverSide
+			? new StreamChat('apiKey', 'secret')
+			: getClientWithUser(user);
+		const channel = client.channel('messaging', 'channel-id');
+		channel.initialized = true;
+		channel.data = { ...channel.data, own_capabilities: ownCapabilities };
+		client.configs[channel.cid] = { read_events: readEvents };
+		const post = vi.spyOn(client, 'post').mockResolvedValue({ event: {} });
+		return { channel, post };
+	};
+
+	it('sends the request when the user holds the read-events capability', async () => {
+		const { channel, post } = setup({ ownCapabilities: ['read-events'] });
+
+		await channel.markAsReadRequest();
+
+		expect(post).toHaveBeenCalledTimes(1);
+		expect(post.mock.calls[0][0]).to.contain('/read');
+	});
+
+	// Channels the user has no read-events capability on do not track read state on the backend;
+	// `markReadLocally` is the client-local path for those.
+	it('does not send the request when the read-events capability is missing', async () => {
+		const { channel, post } = setup({ ownCapabilities: [] });
+
+		const result = await channel.markAsReadRequest();
+
+		expect(post).not.toHaveBeenCalled();
+		expect(result).to.be.null;
+	});
+
+	// own_capabilities can be absent on partially hydrated or offline state - fail open there,
+	// otherwise a cold start would stop clearing the unread count.
+	it('sends the request when own_capabilities is absent', async () => {
+		const { channel, post } = setup({ ownCapabilities: undefined });
+
+		await channel.markAsReadRequest();
+
+		expect(post).toHaveBeenCalledTimes(1);
+	});
+
+	it('does not send the request when read events are disabled for the channel type', async () => {
+		const { channel, post } = setup({
+			ownCapabilities: ['read-events'],
+			readEvents: false,
+		});
+
+		const result = await channel.markAsReadRequest();
+
+		expect(post).not.toHaveBeenCalled();
+		expect(result).to.be.null;
+	});
+
+	// Server-side auth acts on behalf of a user whose own capabilities the client never sees.
+	it('sends the request server-side regardless of capabilities and config', async () => {
+		const { channel, post } = setup({
+			ownCapabilities: [],
+			readEvents: false,
+			serverSide: true,
+		});
+
+		await channel.markAsReadRequest({ user_id: user.id });
+
+		expect(post).toHaveBeenCalledTimes(1);
+	});
+
+	// markUnread is gated the same way - the UI SDKs already hide the affordance without the
+	// `read-events` capability.
+	it('markUnread sends the request when the user holds the read-events capability', async () => {
+		const { channel, post } = setup({ ownCapabilities: ['read-events'] });
+
+		await channel.markUnread({ message_id: 'm1' });
+
+		expect(post).toHaveBeenCalledTimes(1);
+		expect(post.mock.calls[0][0]).to.contain('/unread');
+	});
+
+	it('markUnread does not send the request when the read-events capability is missing', async () => {
+		const { channel, post } = setup({ ownCapabilities: [] });
+
+		const result = await channel.markUnread({ message_id: 'm1' });
+
+		expect(post).not.toHaveBeenCalled();
+		expect(result).to.be.null;
+	});
+
+	it('markUnread sends the request when own_capabilities is absent', async () => {
+		const { channel, post } = setup({ ownCapabilities: undefined });
+
+		await channel.markUnread({ message_id: 'm1' });
+
+		expect(post).toHaveBeenCalledTimes(1);
+	});
+
+	it('markUnread does not send the request when read events are disabled for the channel type', async () => {
+		const { channel, post } = setup({
+			ownCapabilities: ['read-events'],
+			readEvents: false,
+		});
+
+		const result = await channel.markUnread({ message_id: 'm1' });
+
+		expect(post).not.toHaveBeenCalled();
+		expect(result).to.be.null;
+	});
+
+	it('markUnread sends the request server-side regardless of capabilities and config', async () => {
+		const { channel, post } = setup({
+			ownCapabilities: [],
+			readEvents: false,
+			serverSide: true,
+		});
+
+		await channel.markUnread({ message_id: 'm1', user_id: user.id });
+
+		expect(post).toHaveBeenCalledTimes(1);
+	});
+});
+
 describe('Channel localized unread count (isLocalUnreadCountEnabled)', function () {
 	const user = { id: 'user' };
 	const otherUser = { id: 'other-user' };
