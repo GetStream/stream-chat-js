@@ -1,3 +1,10 @@
+## [9.52.1](https://github.com/GetStream/stream-chat-js/compare/v9.52.0...v9.52.1) (2026-09-07)
+
+### Bug Fixes
+
+* isolate event listener errors from the dispatch loop ([#1850](https://github.com/GetStream/stream-chat-js/issues/1850)) ([dc56e57](https://github.com/GetStream/stream-chat-js/commit/dc56e57e5610b9fc02094080554964967707b3a8))
+* send the read request regardless of read receipt privacy settings ([#1853](https://github.com/GetStream/stream-chat-js/issues/1853)) ([59d8f31](https://github.com/GetStream/stream-chat-js/commit/59d8f3138c386a518dfefbda6bd66aebc1237c35))
+
 ## [9.52.0](https://github.com/GetStream/stream-chat-js/compare/v9.51.0...v9.52.0) (2026-08-28)
 
 ### Bug Fixes
