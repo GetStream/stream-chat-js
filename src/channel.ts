@@ -1222,7 +1222,8 @@ export class Channel {
   }
 
   /**
-   * markReadRequest - Send the mark read event for this user, only works if the `read_events` setting is enabled
+   * markReadRequest - Send the mark read event for this user, only works if the `read_events` setting is
+   * enabled and the user holds the `read-events` capability on this channel
    *
    * @param {MarkReadOptions} data
    * @return {Promise<EventAPIResponse | null>} Description
@@ -1230,7 +1231,13 @@ export class Channel {
   async markAsReadRequest(data: MarkReadOptions = {}) {
     this._checkInitialized();
 
-    if (!this.getConfig()?.read_events && !this.getClient()._isUsingServerAuth()) {
+    // Server-side auth acts on behalf of a user with no own capabilities, so only the client-side
+    // flow is gated. Channels the user has no `read-events` capability on do not track read state
+    // on the backend at all - see `markReadLocally` for the client-local unread count.
+    if (
+      !this.getClient()._isUsingServerAuth() &&
+      (!this.getConfig()?.read_events || !channelHasReadEvents(this))
+    ) {
       return null;
     }
 
@@ -1240,7 +1247,8 @@ export class Channel {
   }
 
   /**
-   * markUnread - Mark the channel as unread from messageID, only works if the `read_events` setting is enabled
+   * markUnread - Mark the channel as unread from messageID, only works if the `read_events` setting is
+   * enabled and the user holds the `read-events` capability on this channel
    *
    * @param {MarkUnreadOptions} data
    * @return {APIResponse} An API response
@@ -1248,7 +1256,11 @@ export class Channel {
   async markUnread(data: MarkUnreadOptions) {
     this._checkInitialized();
 
-    if (!this.getConfig()?.read_events && !this.getClient()._isUsingServerAuth()) {
+    // Gated the same way as `markAsReadRequest` - see the comment there.
+    if (
+      !this.getClient()._isUsingServerAuth() &&
+      (!this.getConfig()?.read_events || !channelHasReadEvents(this))
+    ) {
       return Promise.resolve(null);
     }
 

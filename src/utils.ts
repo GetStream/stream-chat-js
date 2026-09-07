@@ -156,13 +156,6 @@ export const channelTracksReadLocally = (channel?: Channel) =>
   !channelHasReadEvents(channel) &&
   !!channel?.getClient().options.isLocalUnreadCountEnabled;
 
-/**
- * userHasReadReceipts - Whether the current user allows read receipts, per their privacy settings.
- * Read receipts are treated as enabled unless the user has explicitly disabled them.
- */
-export const userHasReadReceipts = (client: StreamChat) =>
-  client.user?.privacy_settings?.read_receipts?.enabled ?? true;
-
 export function addFileToFormData(
   uri: string | NodeJS.ReadableStream | Buffer | File,
   name?: string,

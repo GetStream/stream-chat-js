@@ -7,7 +7,9 @@ import {
   Event,
   EventAPIResponse,
   StreamChat,
+  Thread,
 } from '../../../src';
+import { generateThreadResponse } from '../test-utils/generateThreadResponse';
 import type { AxiosResponse } from 'axios';
 
 const channelType = 'messaging';
@@ -295,16 +297,40 @@ describe('MessageDeliveryReporter', () => {
     });
   });
 
-  it('does not send a read when the user disabled read receipts', async () => {
+  // Read receipt privacy is enforced by the backend, which stops broadcasting the read to other
+  // users but still advances the caller's own last_read. Skipping the request client-side left the
+  // channel permanently unread for those users.
+  it('sends the read request when the user disabled read receipts', async () => {
     (client as any).user.privacy_settings = { read_receipts: { enabled: false } };
+    const response = { event: {} } as any;
     const markAsReadRequestSpy = vi
       .spyOn(channel, 'markAsReadRequest')
-      .mockResolvedValue({} as any);
+      .mockResolvedValue(response);
 
     const result = await channel.markRead();
 
-    expect(markAsReadRequestSpy).not.toHaveBeenCalled();
-    expect(result).toBeNull();
+    expect(markAsReadRequestSpy).toHaveBeenCalledTimes(1);
+    expect(result).toBe(response);
+  });
+
+  it('sends the thread read request when the user disabled read receipts', async () => {
+    (client as any).user.privacy_settings = { read_receipts: { enabled: false } };
+    const response = { event: {} } as any;
+    const markAsReadRequestSpy = vi
+      .spyOn(channel, 'markAsReadRequest')
+      .mockResolvedValue(response);
+    const thread = new Thread({
+      client,
+      threadData: generateThreadResponse(
+        { type: channelType, id: channelId, cid: channel.cid },
+        mkMsg('parent', 1000),
+      ),
+    });
+
+    const result = await client.messageDeliveryReporter.markRead(thread);
+
+    expect(markAsReadRequestSpy).toHaveBeenCalledWith({ thread_id: thread.id });
+    expect(result).toBe(response);
   });
 
   it('removes the pending delivery candidate upon channel.markRead', async () => {

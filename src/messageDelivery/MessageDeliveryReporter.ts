@@ -10,7 +10,7 @@ import type {
   MarkReadOptions,
 } from '../types';
 import { type APIErrorResponse } from '../types';
-import { throttle, userHasReadReceipts } from '../utils';
+import { throttle } from '../utils';
 import { isAPIError, isErrorRetryable } from '../errors';
 
 const MAX_DELIVERED_MESSAGE_COUNT_IN_PAYLOAD = 100 as const;
@@ -279,8 +279,6 @@ export class MessageDeliveryReporter {
    * @param options
    */
   public markRead = async (collection: Channel | Thread, options?: MarkReadOptions) => {
-    if (!userHasReadReceipts(this.client)) return null;
-
     let result: EventAPIResponse | null = null;
     if (isChannel(collection)) {
       result = await collection.markAsReadRequest(options);
@@ -291,7 +289,10 @@ export class MessageDeliveryReporter {
       });
     }
 
-    this.removeCandidateFor(collection);
+    // A read implies delivery, so the candidate is only dropped once the request actually went
+    // out. `markAsReadRequest` returns null for channels that do not track read state on the
+    // backend, and those candidates must survive for the next delivery report.
+    if (result) this.removeCandidateFor(collection);
     return result;
   };
 
