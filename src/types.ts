@@ -83,6 +83,7 @@ export type TranslateResponse = {
 export type AppSettingsAPIResponse = APIResponse & {
   app?: {
     id?: string | number;
+    activity_metrics_config?: Record<string, number>;
     allow_multi_user_devices?: boolean;
     feed_audit_logs_enabled?: boolean;
     moderation_onboarding_complete?: boolean | null;
@@ -139,6 +140,7 @@ export type AppSettingsAPIResponse = APIResponse & {
     before_message_send_hook_attempt_timeout_ms?: number;
     campaign_enabled?: boolean;
     cdn_expiration_seconds?: number;
+    chat_primary_use_case?: string;
     custom_action_handler_url?: string;
     datadog_info?: {
       api_key: string;
@@ -163,13 +165,18 @@ export type AppSettingsAPIResponse = APIResponse & {
     image_upload_config?: FileUploadConfig;
     allowed_flag_reasons?: string[];
     max_aggregated_activities_length?: number;
+    member_custom_on_mentioned_users_enabled?: boolean;
+    member_custom_on_messages_enabled?: boolean;
+    member_custom_on_typing_events_enabled?: boolean;
     moderation_bulk_submit_action_enabled?: boolean;
     moderation_dashboard_preferences?: Record<string, unknown> | null;
     moderation_audio_call_moderation_enabled?: boolean;
     moderation_enabled?: boolean;
     moderation_flood_rules_enabled?: boolean;
+    moderation_keyframe_video_enabled?: boolean;
     moderation_llm_configurability_enabled?: boolean;
     moderation_multitenant_blocklist_enabled?: boolean;
+    moderation_s3_image_access_role_arn?: string;
     moderation_video_call_moderation_enabled?: boolean;
     moderation_webhook_url?: string;
     multi_tenant_enabled?: boolean;
@@ -206,6 +213,7 @@ export type AppSettingsAPIResponse = APIResponse & {
     use_hook_v2?: boolean;
     user_response_time_enabled?: boolean;
     user_search_disallowed_roles?: string[] | null;
+    video_primary_use_case?: string;
     video_provider?: string;
     webhook_events?: Array<string>;
     webhook_url?: string;
