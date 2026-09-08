@@ -219,11 +219,40 @@ export class WSConnection extends WithSubscriptions {
    * field belongs to the object that owns it.
    */
   connect(timeout?: number): ConnectAPIResponse | undefined {
-    this.connection = this.buildConnection();
+    const next = this.buildConnection();
+    const previous = this.connection;
+
+    // Close the socket being replaced. Without this it is abandoned rather than shut down: nothing
+    // else clears its ping and connection-check timers, and only `disconnect()` sets
+    // `isDisconnected`, which is the flag `_reconnect()` checks before giving up. So the old socket
+    // stayed live and kept reconnecting *alongside* the new one — two sockets, two ping loops, and
+    // whichever answered last winning the client's status.
+    //
+    // Safe here because `openConnection()` has already returned early if a healthy connection exists
+    // or an attempt is in flight, so anything still held at this point is a socket we are done with.
+    // Skipped when `buildConnection` hands back the same instance, which it does for an injected one.
+    if (previous && previous !== next) {
+      // Fire and forget: the parts that neutralise it — bumping `wsID`, clearing the timers, setting
+      // `isDisconnected` — all happen synchronously, and only the socket close is awaited. Errors are
+      // swallowed deliberately; this socket is being discarded either way.
+      void Promise.resolve(previous.disconnect()).catch((error) => {
+        logger
+          .withExtraTags('wsConnection')
+          .debug('Closing the replaced WebSocket failed; discarding it anyway.', {
+            error,
+          });
+      });
+    }
+
+    this.connection = next;
     // Left to the socket to default from `config.connectTimeoutMs`, so the value lives in one place.
-    return this.connection.connect(timeout);
+    return next.connect(timeout);
   }
 
+  /**
+   * `config.connection` lets a caller supply a pre-built socket — used by unit tests, and the reason
+   * `StableWSConnection` accepts a client through `setClient` as well as its constructor.
+   */
   private buildConnection(): StableWSConnection {
     const injected = this.config.connection;
 

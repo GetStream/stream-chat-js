@@ -141,6 +141,96 @@ describe('client.wsConnection', () => {
       expect(built.wsConnection.connection).not.toBe(first);
     });
 
+    it('closes the socket it replaces, rather than abandoning it', () => {
+      // Left unclosed, the old socket kept both its timers armed and `isDisconnected` false — and
+      // `isDisconnected` is the flag `_reconnect()` checks before giving up. So it stayed live and
+      // reconnected alongside its replacement: two sockets, two ping loops, and whichever answered
+      // last winning the client's status.
+      vi.spyOn(StableWSConnection.prototype, '_connect').mockResolvedValue(
+        undefined as never,
+      );
+      vi.spyOn(StableWSConnection.prototype, '_waitForHealthy').mockResolvedValue(
+        undefined as never,
+      );
+      // Fake timers installed BEFORE anything is armed, so the socket's timers register on the fake
+      // clock. Installed afterwards, the real timers stay pending on the real clock and advancing
+      // this one proves nothing.
+      vi.useFakeTimers();
+      const replacing = new StreamChat('api-key-replace', {
+        allowServerSideConnect: true,
+      });
+
+      replacing.wsConnection.connect(10);
+      const first = replacing.wsConnection.connection;
+      if (!first) throw new Error('socket missing');
+
+      // The state a health-check timeout leaves behind: down, timers running, never disconnected.
+      first._setOnline(true);
+      first.scheduleNextPing();
+      first.scheduleConnectionCheck();
+      first._setOnline(false);
+      expect(first.isDisconnected).toBe(false);
+
+      const reconnect = vi.spyOn(first, '_reconnect').mockResolvedValue(undefined);
+      const send = vi.fn();
+      first.ws = { send, close: vi.fn(), readyState: 1 } as never;
+
+      replacing.wsConnection.connect(10);
+
+      expect(replacing.wsConnection.connection).not.toBe(first);
+      // `isDisconnected` is what makes `_reconnect()` give up, and only `disconnect()` sets it.
+      expect(first.isDisconnected).toBe(true);
+
+      // And the timers really are dead: nothing fires however far the clock is advanced. Asserted by
+      // running the clock rather than by checking the handles, because `disconnect()` cancels the
+      // timers without nulling the fields — so `healthCheckTimeoutRef` stays truthy while being a
+      // stale handle.
+      vi.advanceTimersByTime(10 * 60_000);
+      vi.useRealTimers();
+
+      expect(reconnect).not.toHaveBeenCalled();
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    it('bumps the replaced socket wsID so its in-flight callbacks are ignored', () => {
+      // `wsID` is how every callback in `StableWSConnection` recognises that it belongs to a socket
+      // that has moved on (`if (this.wsID !== wsId) return`). A frame already in flight when the
+      // socket is replaced has to land on a stale id, or a discarded socket can still drive status.
+      vi.spyOn(StableWSConnection.prototype, '_connect').mockResolvedValue(
+        undefined as never,
+      );
+      vi.spyOn(StableWSConnection.prototype, '_waitForHealthy').mockResolvedValue(
+        undefined as never,
+      );
+      const replacing = new StreamChat('api-key-wsid', { allowServerSideConnect: true });
+
+      replacing.wsConnection.connect(10);
+      const first = replacing.wsConnection.connection;
+      if (!first) throw new Error('socket missing');
+      const idBefore = first.wsID;
+
+      replacing.wsConnection.connect(10);
+
+      expect(first.wsID).toBeGreaterThan(idBefore);
+    });
+
+    it('does not close an injected socket that is being reused', () => {
+      // `buildConnection` hands back the same instance every time when one is injected, so the
+      // replacement check must compare identity — disconnecting it here would shut down the very
+      // socket about to be connected.
+      const injected = new StableWSConnection({} as never);
+      injected.connect = vi.fn().mockResolvedValue(undefined) as never;
+      const disconnect = vi.spyOn(injected, 'disconnect');
+      const reusing = new StreamChat('api-key-reuse', { allowServerSideConnect: true });
+      reusing.wsConnection.updateConfig({ connection: injected });
+
+      reusing.wsConnection.connect(10);
+      reusing.wsConnection.connect(10);
+
+      expect(reusing.wsConnection.connection).toBe(injected);
+      expect(disconnect).not.toHaveBeenCalled();
+    });
+
     it('uses a socket supplied through options.wsConnection instead of building one', () => {
       const injected = new StableWSConnection({} as never);
       injected.connect = vi.fn().mockResolvedValue(undefined) as never;
