@@ -350,6 +350,24 @@ const id = client.wsConnection.connectionID;
 is assigned on a successful connect and **never cleared**, so it stays `true` through a drop. It means
 "connected at some point", not "connected now" — read `client.wsConnection.isOnline` for that.
 
+### `connection.recovered` is withheld when the device network drops mid-recovery
+
+`ConnectionRecoveryManager` reloads active channels and threads with `Promise.allSettled`, so one
+failure never stops the others. The consequence was that a network drop during a recovery could fail
+**every** reload while `connection.recovered` was still dispatched — telling consumers that what is on
+screen is fresh when none of it had been refreshed.
+
+It is now withheld in that case, and no recovery is started at all while the device reports no network.
+If you key work off `connection.recovered` — the UI SDKs' mark-read-on-catch-up does — you will
+correctly stop seeing it for recoveries that did not actually recover anything.
+
+This is safe rather than stranding: a network drop guarantees a later socket reconnect, and that
+recovery dispatches the event.
+
+**Nothing changes if you have no network registrar installed.** The checks are `=== false` and a
+`lastOfflineAt` comparison, so an _unknown_ network — React Native before you install one, Node,
+SSR — can neither suppress a recovery nor withhold its completion.
+
 ### `WebSocketImpl`, `wsUrlParams` and `wsConnection` moved off `StreamChatOptions`
 
 All three were read only by the WebSocket layer, so they now sit with the rest of the socket's
