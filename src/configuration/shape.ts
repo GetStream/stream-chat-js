@@ -1,3 +1,5 @@
+import type { NetworkConnectionObserverConfig } from '../networkConnection/types';
+import type { WSConnectionConfig } from '../wsConnection/types';
 import type {
   ChannelDeclarativeConfig,
   ClientDeclarativeConfig,
@@ -450,6 +452,57 @@ const CONNECTION_RECOVERY_FIELDS: Record<
   },
 };
 
+const NETWORK_CONNECTION_FIELDS: Record<
+  keyof NetworkConnectionObserverConfig,
+  ConfigNode
+> = {
+  statusListenerRegistrar: {
+    description:
+      "The platform listener that reports the device's network status. There is no default outside the browser, so React Native and other hosts must supply one or the status stays unknown.",
+    kind: 'value',
+    type: 'function',
+  },
+};
+
+const WS_CONNECTION_FIELDS: Record<keyof WSConnectionConfig, ConfigNode> = {
+  connection: {
+    description:
+      'A pre-built `StableWSConnection` to use instead of constructing one. A test seam; `client.config.reset()` discards it and the next connect builds a real socket. Was `StreamChatOptions.wsConnection`.',
+    kind: 'value',
+    type: 'object',
+  },
+  connectTimeoutMs: {
+    description:
+      "How long `connect()` waits for the server's hello before giving up. The default of 15s allows between two and three attempts of the underlying retry. Was `client.defaultWSTimeout`.",
+    kind: 'value',
+    type: 'number',
+  },
+  healthCheckGracePeriodMs: {
+    description:
+      'Extra room on top of the ping interval before the socket is declared dead — the time a ping has to make its round trip. The connection check fires at `pingIntervalMs + healthCheckGracePeriodMs`, so changing the ping interval moves it too. Floored at 1s, below which the connection check would fire on a healthy connection.',
+    kind: 'value',
+    type: 'number',
+  },
+  pingIntervalMs: {
+    description:
+      'How often a health-check ping goes out while the socket is up. Held between 1s and 25s — 25s is also the default, so this can only make the socket ping more often, never less: a slower ping risks the connection being closed for idleness.',
+    kind: 'value',
+    type: 'number',
+  },
+  urlParams: {
+    description:
+      'Extra query parameters appended to the WebSocket URL. Was `StreamChatOptions.wsUrlParams`.',
+    kind: 'value',
+    type: 'object',
+  },
+  webSocketImpl: {
+    description:
+      'The `WebSocket` constructor to open the socket with, for hosts with no usable global — a Node process, or a test wanting a fake socket. Defaults to the global `WebSocket`. Was `StreamChatOptions.WebSocketImpl`.',
+    kind: 'value',
+    type: 'function',
+  },
+};
+
 const CLIENT_FIELDS: Record<keyof ClientDeclarativeConfig, ConfigNode> = {
   connectionRecovery: {
     description:
@@ -460,6 +513,12 @@ const CLIENT_FIELDS: Record<keyof ClientDeclarativeConfig, ConfigNode> = {
   messageDelivery: {
     description: 'Delivery and read receipt reporting.',
     fields: MESSAGE_DELIVERY_FIELDS,
+    kind: 'group',
+  },
+  networkConnection: {
+    description:
+      "The device's own network status, as distinct from this client's WebSocket. Fed by a platform listener you register.",
+    fields: NETWORK_CONNECTION_FIELDS,
     kind: 'group',
   },
   notifications: {
@@ -475,6 +534,12 @@ const CLIENT_FIELDS: Record<keyof ClientDeclarativeConfig, ConfigNode> = {
   threads: {
     description: 'The thread list manager.',
     fields: THREAD_MANAGER_FIELDS,
+    kind: 'group',
+  },
+  wsConnection: {
+    description:
+      "This client's WebSocket: how long to wait for it, how often to ping it, and how long it may go quiet before being declared dead.",
+    fields: WS_CONNECTION_FIELDS,
     kind: 'group',
   },
 };

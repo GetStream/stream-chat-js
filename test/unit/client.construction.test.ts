@@ -68,7 +68,7 @@ describe('StreamChat construction', () => {
   });
 
   describe('initial instance state', () => {
-    it('initializes empty collections and null connection refs', () => {
+    it('initializes empty collections and unstarted connection refs', () => {
       const client = new StreamChat(API_KEY);
 
       expect(client.listeners).to.be.instanceOf(Map);
@@ -81,12 +81,17 @@ describe('StreamChat construction', () => {
       expect(client.activeChannels).to.deep.equal({});
       expect(client.channelServerConfigs).to.deep.equal({});
 
-      expect(client.wsConnection).to.be.null;
+      // `wsConnection` is a stable wrapper created with the client, not the transport itself — that
+      // is what lets a consumer subscribe to `wsConnection.state` before `connectUser` resolves. The
+      // transport underneath is what does not exist yet.
+      expect(client.wsConnection).to.not.be.null;
+      expect(client.wsConnection.connection).to.be.null;
+      expect(client.wsConnection.isOnline).to.equal(false);
       expect(client.wsPromise).to.be.null;
       expect(client.setUserPromise).to.be.null;
 
       expect(client.anonymous).to.equal(false);
-      expect(client.defaultWSTimeout).to.equal(15000);
+      expect(client.wsConnection.config.connectTimeoutMs).to.equal(15000);
     });
 
     it('initializes blockedUsers as a StateStore with empty userIds', () => {
@@ -116,7 +121,11 @@ describe('StreamChat construction', () => {
 
       expect(client.options.warmUp).to.equal(false);
       expect(client.options.disableCache).to.equal(false);
-      expect(client.options.wsUrlParams).to.be.instanceOf(URLSearchParams);
+      // No longer an empty `URLSearchParams` on `options` — the field moved to
+      // `wsConnection.config.urlParams` and defaults to `undefined`. `_buildUrl` does
+      // `new URLSearchParams(urlParams)`, which treats `undefined` and an empty instance
+      // identically, so the URL it builds is unchanged.
+      expect(client.wsConnection.config.urlParams).to.be.undefined;
       // Recovery is on by default, and now says so through its own configuration rather than a
       // client option.
       expect(client.connectionRecovery.config.enabled).to.equal(true);

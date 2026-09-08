@@ -533,9 +533,9 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 		await channel.watch();
 		const sweep = vi.spyOn(client, '_markActiveChannelsWatchInterrupted');
 		const connection = new StableWSConnection({ client });
-		connection.isHealthy = true;
+		connection.isOnline = true;
 
-		connection._setHealth(false);
+		connection._setOnline(false);
 
 		expect(sweep).toHaveBeenCalledTimes(1);
 	});
@@ -610,7 +610,7 @@ describe('Channel AI indicator state (channel.state.aiState)', function () {
 
 	it('clean() resets aiState to Idle when the WS connection is down', () => {
 		const { channel } = setupChannel();
-		channel.getClient().wsConnection = { isHealthy: false };
+		channel.getClient().wsConnection = { isOnline: false };
 		channel._handleChannelEvent({
 			type: 'ai_indicator.update',
 			ai_state: 'AI_STATE_GENERATING',
@@ -624,7 +624,7 @@ describe('Channel AI indicator state (channel.state.aiState)', function () {
 
 	it('clean() leaves a live aiState untouched while the WS connection is healthy', () => {
 		const { channel } = setupChannel();
-		channel.getClient().wsConnection = { isHealthy: true };
+		channel.getClient().wsConnection = { isOnline: true };
 		channel._handleChannelEvent({
 			type: 'ai_indicator.update',
 			ai_state: 'AI_STATE_GENERATING',

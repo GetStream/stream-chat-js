@@ -16,6 +16,8 @@ import type { NotificationManagerConfig } from '../notifications/types';
 import type { MessageDeliveryReporterConfig } from '../messageDelivery/MessageDeliveryReporter';
 import type { ThreadManagerConfig } from '../thread_manager';
 import type { ConnectionRecoveryManagerConfig } from '../ConnectionRecoveryManager';
+import type { NetworkConnectionObserverConfig } from '../networkConnection/types';
+import type { WSConnectionConfig } from '../wsConnection/types';
 import type { MessageOperationsConfig } from '../messageOperations/MessageOperations';
 import type { DeclarativePaginatorConfig as ImportedDeclarativePaginatorConfig } from '../pagination/paginators/BasePaginator';
 import type { DeepPartial } from '../types.utility';
@@ -139,7 +141,20 @@ export type ClientDeclarativeConfig = {
    */
   connectionRecovery?: Partial<ConnectionRecoveryManagerConfig>;
   messageDelivery?: Partial<MessageDeliveryReporterConfig>;
+  /**
+   * Connection status — specifically, the platform listener that reports the device's network. There
+   * is no default outside the browser, so this is how React Native and other hosts supply one.
+   * `Partial`, not `DeepPartial`: the only field holds a function, which `DeepPartial` would descend
+   * into.
+   */
+  networkConnection?: Partial<NetworkConnectionObserverConfig>;
   threads?: Partial<ThreadManagerConfig>;
+  /**
+   * The WebSocket's timing: connect timeout, ping interval, and the health-check grace period on top of it.
+   * These three, and only these, because each was a public mutable field before it was configuration.
+   * `Partial`, not `DeepPartial`: every field is a flat number.
+   */
+  wsConnection?: Partial<WSConnectionConfig>;
   notifications?: DeepPartial<NotificationManagerConfig>;
   /**
    * `Partial`, not `DeepPartial`: `scheduledOffsetsMs` is a `number[]`, and `DeepPartial` would widen

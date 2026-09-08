@@ -71,7 +71,7 @@ export const DEFAULT_CONNECTION_RECOVERY_MANAGER_CONFIG: ConnectionRecoveryManag
  *
  * Recovery deliberately keeps no "did we drop?" flag of its own: `ChannelWatchStatus.WasWatching`
  * already records exactly that, written from both truthful hooks
- * (`StableWSConnection._setHealth(false)` and `closeConnection()`).
+ * (`StableWSConnection._setOnline(false)` and `closeConnection()`).
  */
 export class ConnectionRecoveryManager extends WithSubscriptions {
   client: StreamChat;
@@ -121,6 +121,10 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
     if (!this.hasSubscriptions) {
       this.addUnsubscribeFunction(
         this.client.on('connection.changed', (event) => {
+          // Only the socket coming back starts a recovery. The device regaining a network is too
+          // early: there is no reconnected socket and no fresh connection ID yet, so a query fired
+          // then would not establish a watch. See `Channel.reload` / `ChannelManager.recover`.
+          if (event.connection !== 'ws') return;
           if (!event.online) return;
 
           // The lists always recover off this event; their own deferral handles offline ordering.
@@ -276,7 +280,7 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
     // `StableWSConnection._reconnect()`, so a `closeConnection()` → `openConnection()` cycle (mobile
     // backgrounding) never produced it. Consumers keying post-recovery work off this event — the UI
     // SDKs' mark-read-on-catch-up among them — need it after the reload above, not before.
-    this.client.dispatchEvent({ type: 'connection.recovered' });
+    this.client.dispatchEvent({ type: 'connection.recovered', connection: 'ws' });
   };
 
   /**

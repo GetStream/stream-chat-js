@@ -353,7 +353,7 @@ describe('optimistic edit/delete routing', () => {
 
       // Offline: `queueTask` short-circuits before any HTTP, and the direct attempt that
       // `client.updateMessage` falls through to fails too.
-      client.wsConnection = { isHealthy: false } as StableWSConnection;
+      client.wsConnection = { isOnline: false } as StableWSConnection;
       vi.spyOn(client, '_updateMessage').mockRejectedValue(
         Object.assign(new Error('network down'), { code: 9 }),
       );

@@ -18,6 +18,11 @@
 
 ## TL;DR
 
+- **`client.defaultWSTimeout` is gone**, and so are the `WebSocketImpl`, `wsUrlParams` and
+  `wsConnection` client options. Everything the WebSocket reads now lives in one configuration slice —
+  `client.config.set({ client: { wsConnection: { … } } })` — as `connectTimeoutMs`, `pingIntervalMs`,
+  `healthCheckGracePeriodMs`, `webSocketImpl`, `urlParams` and `connection`. Unlike the fields and
+  options they replace, these survive a reconnect.
 - **Server-sent dates are unix-nanosecond `number`s** on every response and event type — not `Date`
   objects and not ISO strings, while outgoing **request** date fields are still `Date`. `new Date(ns)`
   is out of range, date libraries read a bare number as milliseconds, and `0` is a legitimate
@@ -32,6 +37,7 @@
   means if you deploy the WebSocket client on Node 18 or 20.
 - **Server-side is gone.** If you construct with a `secret` or call server-only admin endpoints, switch to `@stream-io/node-sdk`. The construction guide has the full list — every feature module below that was server-only is dropped for the same reason.
 - Two barrels removed from the package root, one added: **`./events` and `./base64` are gone; `./logger` is new.** `./signing` survives with exactly one export left, `UserFromToken`. The `./campaign`, `./channel_batch_updater`, and `./segment` barrels are still exported but the modules are emptied (they contain only a comment pointing at the server SDK) — importing anything by name from them will fail.
+- **`connection.changed` / `connection.recovered` now carry a `connection: 'network' | 'ws'` field**, and `StableWSConnection.isHealthy` is renamed `isOnline`. The rename breaks your build; the new field does not — an existing handler keeps compiling and keeps reacting to **both** connections, so a handler that means one of them has to gain a guard. See below.
 - **The WebSocket connect endpoint moved to `/api/v2/connect`.** The hello event is now `connection.ok` rather than `health.check`, and the long-poll fallback (`enableWSFallback`, `transport.changed`) is gone.
 - `Event` (type name) is kept, but its shape widened: `Event = WSEvent | ConnectedEvent | LocalEvent | keyof CustomEventTypes`. `EventPayload<'<type>'>` narrows to a specific event.
 - `EventTypes` (plural) renamed to `EventType` (singular). `CustomEventTypes` interface is unchanged — augment it to add custom event-type keys, same as v9.
@@ -225,6 +231,190 @@ declare module 'stream-chat' {
 Because the v10 generic on `channel.on<T extends EventType | string>` accepts any `string`, unknown listener keys still type-check without augmentation, but the event payload will not be narrowed. Augmenting `CustomEventTypes` adds the custom key to `Event['type']`, which flows through `EventType` and `EventHandler` narrowing.
 
 > **Larger topic** — the event system rewrite (removed hand-rolled event types across `poll`, `poll_manager`, `thread`, `reminders`, live-location, and the client itself; the shift from a hand-maintained `EVENT_MAP` to generated decoders) touches enough call sites that it may warrant a dedicated guide. Flag me if you want one written.
+
+---
+
+## Connection events say which connection
+
+`connection.changed` reported this client's WebSocket health, but nothing in its name or payload said
+so — the field was called `online`. That is why UI built on it ends up telling users they have no
+network when in fact the server closed the socket, the token expired, or a health check timed out on a
+perfectly good connection.
+
+v10 keeps both event names and adds one field:
+
+```ts
+export type ConnectionType = 'network' | 'ws';
+
+// LocalEvent
+| ({ type: 'connection.changed' } & { connection: ConnectionType; online: boolean })
+| ({ type: 'connection.recovered' } & { connection: ConnectionType })
+```
+
+`'ws'` is this client's WebSocket. `'network'` is the **device's** network status, reported by a
+platform listener you register on `client.connections` — a separate fact that routinely disagrees with
+the socket in both directions. Both statuses are readable as reactive state on
+`client.connections.state`, whose fields name the connection they describe (`isNetworkOnline`,
+`isWSOnline`, …).
+
+### What breaks, and what silently does not
+
+**Breaking:** `StableWSConnection.isHealthy` is renamed **`isOnline`** (and the internal
+`_setHealth` → `_setOnline`), so `client.wsConnection?.isHealthy` no longer compiles:
+
+```diff
+- if (client.wsConnection?.isHealthy) { … }
++ if (client.wsConnection?.isOnline) { … }
+```
+
+**Not breaking, and this is the one to look at:** adding `connection` does not change any existing
+handler's types or behaviour. Your `connection.changed` listener keeps compiling and keeps firing for
+**both** connections. If it meant the WebSocket — which it did, because that was all v9 dispatched —
+it now also fires when the device's network changes:
+
+```diff
+  client.on('connection.changed', (event) => {
++   if (event.connection !== 'ws') return;
+    if (!event.online) showReconnecting();
+  });
+```
+
+Nothing forces that guard: both variants carry the same `online: boolean`, so the compiler cannot
+help. Grep your `connection.changed` and `connection.recovered` handlers and decide, per handler,
+which connection it actually meant. If the answer is "the device's network", that is the point of the
+new value — and worth pairing with `client.connections.state` for the current status rather than only the edge.
+
+`connection.recovered` currently only ever carries `connection: 'ws'`: it is dispatched after channel
+lists, active channels and active threads have been reloaded following a socket reconnect. Do not wait
+for a `'network'` recovery — none is emitted.
+
+---
+
+## `client.defaultWSTimeout` is now `wsConnection` configuration
+
+`client.defaultWSTimeout` was a public mutable field with no option behind it, no validation and no
+documentation. Assigning to it worked, which is the only reason the connect timeout was tunable at
+all. It has been removed in favour of a configuration slice.
+
+```ts
+// v9
+client.defaultWSTimeout = 5000;
+
+// v10
+client.config.set({ client: { wsConnection: { connectTimeoutMs: 5000 } } });
+// …or, imperatively:
+client.wsConnection.updateConfig({ connectTimeoutMs: 5000 });
+```
+
+Two sibling values move with it, because they were public mutable fields on `StableWSConnection` for
+the same accidental reason:
+
+| Field                      | Default | Was                                                                  |
+| -------------------------- | ------- | -------------------------------------------------------------------- |
+| `connectTimeoutMs`         | `15000` | `client.defaultWSTimeout`                                            |
+| `pingIntervalMs`           | `25000` | `StableWSConnection.pingInterval`                                    |
+| `healthCheckGracePeriodMs` | `10000` | `StableWSConnection.connectionCheckTimeout`, which held ping + grace |
+
+Read them back through `client.wsConnection.config`, or subscribe to `client.wsConnection.configState`.
+
+**These were reachable before, but not durable.** The two socket fields were reset to their defaults by
+every reconnect, because each connect built a fresh `StableWSConnection` whose constructor reassigned
+them. If you were setting them, they were silently reverting on you. Through the config they persist.
+
+**`connectionCheckTimeout` is now expressed as a grace period, not as a deadline.** The old field held the whole
+window, which allowed a connection check _shorter_ than the ping interval — a socket that declares itself dead
+on a perfectly healthy connection, then does it again after every reconnect. The connection check now fires at
+`pingIntervalMs + healthCheckGracePeriodMs`, so changing the ping interval moves it too, and the grace period is
+floored at 1s.
+
+**`pingIntervalMs` can only be lowered.** 25s is both the default and the maximum, and a higher value is
+clamped back to it with a warning rather than rejected. A slower ping risks the connection being closed
+for idleness — by Stream, or by load balancers and proxies in between — which surfaces as an apparently
+random disconnect rather than as a setting. The useful direction is downward: shortening the interval
+makes a dead socket noticed sooner, because the connection check moves with it. The floor is 1s, so a
+few-millisecond interval cannot flood the server with health checks.
+
+### `client._getConnectionID()` removed
+
+It was a one-line indirection over the connection ID, which now has a home of its own:
+
+```ts
+// v9
+const id = client._getConnectionID();
+
+// v10
+const id = client.wsConnection.connectionID;
+```
+
+`client._hasConnectionID()` stays for now, and is worth a warning while you are here: the connection ID
+is assigned on a successful connect and **never cleared**, so it stays `true` through a drop. It means
+"connected at some point", not "connected now" — read `client.wsConnection.isOnline` for that.
+
+### `WebSocketImpl`, `wsUrlParams` and `wsConnection` moved off `StreamChatOptions`
+
+All three were read only by the WebSocket layer, so they now sit with the rest of the socket's
+settings — and the first two are renamed to suit the namespace they moved into:
+
+```ts
+// v9
+const client = new StreamChat('key', {
+  WebSocketImpl: WebSocket,
+  wsUrlParams: new URLSearchParams({ foo: '1' }),
+});
+
+// v10
+const client = new StreamChat('key');
+client.config.set({
+  client: {
+    wsConnection: {
+      webSocketImpl: WebSocket,
+      urlParams: new URLSearchParams({ foo: '1' }),
+    },
+  },
+});
+```
+
+`webSocketImpl` rather than `WebSocketImpl`, because a config object of camelCase fields should not
+have one PascalCase outlier; `urlParams` rather than `wsUrlParams`, because the `wsConnection`
+namespace already says which connection it is about.
+
+**Set them before `connectUser()`, not necessarily at construction.** The socket is built inside
+`connect()`, so anything applied before that takes effect — and unlike the options they replace, these
+survive a reconnect.
+
+`wsUrlParams` used to default to an empty `URLSearchParams`; `urlParams` defaults to `undefined`. The
+URL is unchanged either way, since the socket does `new URLSearchParams(urlParams)` and both inputs
+produce no parameters.
+
+`wsConnection` — a pre-built `StableWSConnection`, which only tests supply — keeps its name and moves
+the same way:
+
+```ts
+// v9
+const client = new StreamChat('key', { wsConnection: socket });
+
+// v10
+const client = new StreamChat('key');
+client.wsConnection.updateConfig({ connection: socket });
+```
+
+One thing to know: `client.config.reset()` restores these to their defaults like any other field, so
+after a reset the next `connect()` builds a real socket with the global `WebSocket`. A socket already
+open is unaffected. It matters mainly in tests — the connection attempt fails at the connect, not at
+the reset, so the breakage shows up away from its cause.
+
+### Two timings that are _not_ configurable
+
+The delay before a drop is announced through `connection.changed` (5s) and the retry delay after the
+device network returns (10ms) are constants in `src/wsConnection/config.ts`. Both were bare literals
+inside the socket that no caller could reach, so exposing them would be new surface rather than a
+preserved capability.
+
+The announce delay in particular is load-bearing: it is what stops a brief flap from strobing a
+"connection lost" banner, and `stream-chat-react`'s `useReportLostConnectionSystemNotification` renders
+a persistent toast off that event. If you want the drop _without_ the wait, subscribe to
+`client.wsConnection.state`, which publishes the raw edge immediately — that is what the separate status
+store is for.
 
 ---
 

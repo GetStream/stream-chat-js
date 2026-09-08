@@ -1537,7 +1537,7 @@ export class Channel extends ChannelApi {
     // with what the integrator registered, so a client-side `typingEvents.enabled: false` is honoured
     // too. The other two axes are runtime facts no configuration can express.
     const { typingEvents } = this.configController.value;
-    if (!typingEvents.enabled || !this.getClient().wsConnection?.isHealthy) {
+    if (!typingEvents.enabled || !this.getClient().wsConnection?.isOnline) {
       return false;
     }
     return this.getClient().user?.privacy_settings?.typing_indicators?.enabled ?? true;
@@ -1740,7 +1740,7 @@ export class Channel extends ChannelApi {
     // path clears the indicator itself. Gate on health, not staleness — a healthy connection must
     // never cut off a long-running response.
     const client = this.getClient();
-    if (!client.wsConnection?.isHealthy) {
+    if (!client.wsConnection?.isOnline) {
       this.state.resetAIState();
     }
   }

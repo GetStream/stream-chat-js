@@ -21,9 +21,10 @@ import { MockOfflineDB } from './offline-support/MockOfflineDB';
 describe('ConnectionRecoveryManager', () => {
   let client: StreamChat;
 
-  const online = () => client.dispatchEvent({ type: 'connection.changed', online: true });
+  const online = () =>
+    client.dispatchEvent({ type: 'connection.changed', connection: 'ws', online: true });
   const offline = () =>
-    client.dispatchEvent({ type: 'connection.changed', online: false });
+    client.dispatchEvent({ type: 'connection.changed', connection: 'ws', online: false });
 
   /** A channel a consumer has declared it is reading, i.e. what recovery reloads. */
   const activeChannel = (id: string) => {
@@ -315,7 +316,7 @@ describe('ConnectionRecoveryManager', () => {
     };
 
     it('waits for pending-task replay and sync before reloading, on the closeConnection path', async () => {
-      // The path worth pinning: `closeConnection()` sets `isHealthy` directly, so no offline
+      // The path worth pinning: `closeConnection()` sets `isOnline` directly, so no offline
       // `connection.changed` is ever dispatched and `syncStatus` stays stale-true across the outage.
       // Anything that polled that flag would conclude "already synced" and query ahead of the replay.
       // The sync-status EDGE has no such problem: the sync manager publishes it unconditionally after
