@@ -1,17 +1,17 @@
-import { StateStore } from '../store';
-import { WithSubscriptions } from '../utils/WithSubscriptions';
-import { StableWSConnection } from '../connection';
-import { ConfigController } from '../configuration/ConfigController';
-import { chatLoggerSystem } from '../logger';
+import { StateStore } from '../../store';
+import { WithSubscriptions } from '../../utils/WithSubscriptions';
+import { StableWSConnection } from '../../connection';
+import { ConfigController } from '../../configuration/ConfigController';
+import { chatLoggerSystem } from '../../logger';
 import {
   clampWSConnectionConfig,
   DEFAULT_WS_CONNECTION_CONFIG,
   WS_CONNECTION_CONFIG_BOUNDS,
 } from './config';
 import type { WSConnectionConfig, WSConnectionState } from './types';
-import type { StreamChat } from '../client';
-import type { ConnectAPIResponse } from '../types';
-import type { Unsubscribe } from '../store';
+import type { StreamChat } from '../../client';
+import type { ConnectAPIResponse } from '../../types';
+import type { Unsubscribe } from '../../store';
 
 const logger = chatLoggerSystem.getLogger('client');
 

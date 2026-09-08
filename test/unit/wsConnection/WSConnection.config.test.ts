@@ -6,7 +6,7 @@ import {
   DEFAULT_WS_CONNECTION_CONFIG,
   WS_NETWORK_RECOVERY_RETRY_MS,
   WS_OFFLINE_ANNOUNCE_DELAY_MS,
-} from '../../../src/wsConnection/config';
+} from '../../../src/connection';
 
 describe('client.wsConnection configuration', () => {
   let client: StreamChat;

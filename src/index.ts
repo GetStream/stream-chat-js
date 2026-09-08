@@ -118,7 +118,4 @@ export {
   nsToRfc3339,
 } from './utils/time';
 export * from './ChannelManager';
-export * from './networkConnection';
-export * from './wsConnection';
-export * from './ConnectionRecoveryManager';
 export * from './EventHandlerPipeline';

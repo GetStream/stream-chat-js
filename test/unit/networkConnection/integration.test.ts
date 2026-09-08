@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StreamChat } from '../../../src';
 import { StableWSConnection } from '../../../src/connection';
-import { WS_NETWORK_RECOVERY_RETRY_MS } from '../../../src/wsConnection/config';
+import { WS_NETWORK_RECOVERY_RETRY_MS } from '../../../src/connection';
 import type { NetworkStatusListenerRegistrar } from '../../../src';
 
 /**

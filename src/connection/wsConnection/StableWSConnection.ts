@@ -1,20 +1,26 @@
-import { chatCodes, convertErrorToJson, randomId, retryInterval, sleep } from './utils';
+import {
+  chatCodes,
+  convertErrorToJson,
+  randomId,
+  retryInterval,
+  sleep,
+} from '../../utils';
 import {
   buildWsFatalInsight,
   buildWsSuccessAfterFailureInsight,
   postInsights,
-} from './insights';
-import { chatLoggerSystem } from './logger';
+} from '../../insights';
+import { chatLoggerSystem } from '../../logger';
 import {
   DEFAULT_WS_CONNECTION_CONFIG,
   WS_NETWORK_RECOVERY_RETRY_MS,
   WS_OFFLINE_ANNOUNCE_DELAY_MS,
-} from './wsConnection/config';
-import type { ConnectAPIResponse, ConnectedEvent, ConnectionOpen } from './types';
-import type { StreamChat } from './client';
-import type { APIError } from './errors';
-import type { WSEvent } from './gen/models';
-import type { WSConnectionConfig } from './wsConnection/types';
+} from './config';
+import type { ConnectAPIResponse, ConnectedEvent, ConnectionOpen } from '../../types';
+import type { StreamChat } from '../../client';
+import type { APIError } from '../../errors';
+import type { WSEvent } from '../../gen/models';
+import type { WSConnectionConfig } from './types';
 
 const logger = chatLoggerSystem.getLogger('connection');
 

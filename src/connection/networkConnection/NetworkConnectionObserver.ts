@@ -1,16 +1,16 @@
-import { WithSubscriptions } from '../utils/WithSubscriptions';
-import { StateStore } from '../store';
-import { ConfigController } from '../configuration/ConfigController';
-import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
-import { chatLoggerSystem } from '../logger';
+import { WithSubscriptions } from '../../utils/WithSubscriptions';
+import { StateStore } from '../../store';
+import { ConfigController } from '../../configuration/ConfigController';
+import { deepFreezeConfig } from '../../configuration/utils/deepFreezeConfig';
+import { chatLoggerSystem } from '../../logger';
 import { getDefaultNetworkStatusListenerRegistrar } from './registrars';
 import type {
   NetworkConnectionObserverConfig,
   NetworkConnectionState,
   NetworkStatusListenerRegistrar,
 } from './types';
-import type { StreamChat } from '../client';
-import type { Unsubscribe } from '../store';
+import type { StreamChat } from '../../client';
+import type { Unsubscribe } from '../../store';
 
 const logger = chatLoggerSystem.getLogger('client');
 

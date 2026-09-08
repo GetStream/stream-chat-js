@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StreamChat } from '../../../src';
 import { StableWSConnection } from '../../../src/connection';
-import type { NetworkStatusListenerRegistrar } from '../../../src';
+import type { NetworkStatusListenerRegistrar } from '../../../src/connection';
 
 /** A registrar whose callback the test drives, standing in for any platform listener. */
 const fakeRegistrar = () => {

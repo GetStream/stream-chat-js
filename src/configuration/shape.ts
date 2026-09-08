@@ -1,5 +1,8 @@
-import type { NetworkConnectionObserverConfig } from '../networkConnection/types';
-import type { WSConnectionConfig } from '../wsConnection/types';
+import type {
+  ConnectionRecoveryManagerConfig,
+  NetworkConnectionObserverConfig,
+  WSConnectionConfig,
+} from '../connection';
 import type {
   ChannelDeclarativeConfig,
   ClientDeclarativeConfig,
@@ -11,7 +14,7 @@ import type { DeclarativePaginatorConfig } from '../pagination/paginators/BasePa
 import type { MessageOperationsConfig } from '../messageOperations/MessageOperations';
 import type { MessageDeliveryReporterConfig } from '../messageDelivery/MessageDeliveryReporter';
 import type { ThreadManagerConfig } from '../thread_manager';
-import type { ConnectionRecoveryManagerConfig } from '../ConnectionRecoveryManager';
+
 import type { LiveLocationManagerConfig } from '../LiveLocationManager';
 import type { SearchControllerConfig } from '../search/SearchController';
 import type { NotificationManagerConfig } from '../notifications/types';

@@ -1,4 +1,4 @@
-import type { StableWSConnection } from '../connection';
+import type { StableWSConnection } from '../../connection';
 
 export type WSConnectionState = {
   /**

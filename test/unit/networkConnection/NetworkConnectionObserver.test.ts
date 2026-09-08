@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { NetworkConnectionObserver } from '../../../src/networkConnection';
+import { NetworkConnectionObserver } from '../../../src/connection';
 import type {
   NetworkConnectionState,
   NetworkStatusListenerRegistrar,
-} from '../../../src/networkConnection';
+} from '../../../src/connection';
 import type { StreamChat } from '../../../src/client';
 
 /**

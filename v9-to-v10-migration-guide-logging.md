@@ -40,7 +40,7 @@ Every internal module attaches to one of these scopes via `chatLoggerSystem.getL
 | `channel`          | `src/channel.ts`                                                                                      |
 | `channel-manager`  | `src/channel_manager.ts`                                                                              |
 | `client`           | `src/client.ts` — connection lifecycle, event dispatch                                                |
-| `connection`       | `src/connection.ts` — primary WS transport                                                            |
+| `connection`       | `src/StableWSConnection.ts` — primary WS transport                                                    |
 | `message-composer` | `src/messageComposer/messageComposer.ts`                                                              |
 | `offline-db`       | `src/offline-support/*` **and** offline-DB paths in `client.ts` / `channel.ts` / `messageComposer.ts` |
 | `state-store`      | reserved — declared in the scope union, not yet emitted                                               |

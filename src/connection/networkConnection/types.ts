@@ -1,4 +1,4 @@
-import type { Unsubscribe } from '../store';
+import type { Unsubscribe } from '../../store';
 
 /**
  * Registers a platform-specific network status listener.

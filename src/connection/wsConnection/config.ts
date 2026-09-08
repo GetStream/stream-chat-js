@@ -1,4 +1,4 @@
-import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
+import { deepFreezeConfig } from '../../configuration/utils/deepFreezeConfig';
 import type { WSConnectionConfig } from './types';
 
 /**

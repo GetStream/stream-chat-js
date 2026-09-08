@@ -15,9 +15,11 @@ import type { ReminderManagerConfig } from '../reminders/ReminderManager';
 import type { NotificationManagerConfig } from '../notifications/types';
 import type { MessageDeliveryReporterConfig } from '../messageDelivery/MessageDeliveryReporter';
 import type { ThreadManagerConfig } from '../thread_manager';
-import type { ConnectionRecoveryManagerConfig } from '../ConnectionRecoveryManager';
-import type { NetworkConnectionObserverConfig } from '../networkConnection/types';
-import type { WSConnectionConfig } from '../wsConnection/types';
+import type {
+  ConnectionRecoveryManagerConfig,
+  NetworkConnectionObserverConfig,
+  WSConnectionConfig,
+} from '../connection';
 import type { MessageOperationsConfig } from '../messageOperations/MessageOperations';
 import type { DeclarativePaginatorConfig as ImportedDeclarativePaginatorConfig } from '../pagination/paginators/BasePaginator';
 import type { DeepPartial } from '../types.utility';

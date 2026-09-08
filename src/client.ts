@@ -67,7 +67,11 @@ import { DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import { PollManager } from './poll_manager';
 import { EntityStore } from './entityStore/EntityStore';
 import { ChannelManager } from './ChannelManager';
-import { ConnectionRecoveryManager } from './ConnectionRecoveryManager';
+import {
+  ConnectionRecoveryManager,
+  NetworkConnectionObserver,
+  WSConnection,
+} from './connection';
 import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
 import { ReminderManager } from './reminders';
@@ -80,8 +84,7 @@ import type { InstanceSetupState } from './configuration';
 import { InstanceConfigurationRegistry } from './configuration/InstanceConfigurationRegistry';
 import { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
 import { StateStore } from './store';
-import { NetworkConnectionObserver } from './networkConnection';
-import { WSConnection } from './wsConnection';
+
 import type { Unsubscribe } from './store';
 import type {
   ConnectUserDetailsRequest,

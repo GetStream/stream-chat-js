@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   browserNetworkStatusListenerRegistrar,
   getDefaultNetworkStatusListenerRegistrar,
-} from '../../../src/networkConnection';
+} from '../../../src/connection';
 
 type Listener = () => void;
 

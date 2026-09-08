@@ -260,7 +260,7 @@ type LocalEvent = (
  *
  * Hand-written because the event is not published in the OpenAPI spec, so it cannot
  * come from `src/gen`. Remove this — along with the `decodeConnectionEvent` shim in
- * `connection.ts` — once the backend adds it to the spec and `src/gen` is regenerated.
+ * `StableWSConnection.ts` — once the backend adds it to the spec and `src/gen` is regenerated.
  */
 export type ConnectedEvent = {
   type: 'connection.ok';
