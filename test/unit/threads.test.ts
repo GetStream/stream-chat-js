@@ -2220,7 +2220,7 @@ describe('Threads 2.0', () => {
         });
       });
 
-      it('reloads after connection drop if the thread list was activated at least once', () => {
+      it('reloads on connection.recovered if the thread list was activated at least once', () => {
         const thread = createTestThread();
         threadManager.state.partialNext({
           threads: [thread],
@@ -2233,18 +2233,66 @@ describe('Threads 2.0', () => {
         });
         const clock = sinon.useFakeTimers();
 
-        client.dispatchEvent({
-          type: 'connection.changed',
-          online: false,
-        });
-
-        const { lastConnectionDropAt } = threadManager.state.getLatestValue();
-        expect(lastConnectionDropAt).to.be.a('date');
-
-        client.dispatchEvent({ type: 'connection.recovered' });
+        // No `connection.changed { online: false }` first, deliberately — this is the regression.
+        // `connection.recovered` is dispatched on every reconnect path, so it already implies a drop
+        // happened, and requiring a preceding drop event is the bug this replaced. It bit hardest on
+        // `closeConnection()` → `openConnection()`, the documented mobile background/foreground path,
+        // which marks the socket down without announcing it (pinned in
+        // `test/unit/wsConnection/WSConnection.test.ts`), so a backgrounded app came back to a stale
+        // thread list.
+        client.dispatchEvent({ type: 'connection.recovered', connection: 'ws' });
         clock.runAll();
 
         expect(stub.calledOnce).to.be.true;
+
+        threadManager.unregisterSubscriptions();
+        clock.restore();
+      });
+
+      it('collapses several recoveries in one window into a single reload', () => {
+        const thread = createTestThread();
+        threadManager.state.partialNext({
+          threads: [thread],
+          wasActivatedAtLeastOnce: true,
+        });
+        threadManager.registerSubscriptions();
+        const stub = sinon.stub(client, 'queryThreads').resolves({
+          threads: [],
+          next: undefined,
+        });
+        const clock = sinon.useFakeTimers();
+
+        for (let i = 0; i < 5; i++) {
+          client.dispatchEvent({ type: 'connection.recovered', connection: 'ws' });
+        }
+        clock.runAll();
+
+        expect(stub.calledOnce).to.be.true;
+
+        threadManager.unregisterSubscriptions();
+        clock.restore();
+      });
+
+      it('ignores a recovery reported for the network rather than the socket', () => {
+        const thread = createTestThread();
+        threadManager.state.partialNext({
+          threads: [thread],
+          wasActivatedAtLeastOnce: true,
+        });
+        threadManager.registerSubscriptions();
+        const stub = sinon.stub(client, 'queryThreads').resolves({
+          threads: [],
+          next: undefined,
+        });
+        const clock = sinon.useFakeTimers();
+
+        // Nothing dispatches this today — `ConnectionRecoveryManager` only reports `'ws'`. The test
+        // pins the narrowing so that if recovery ever reports for the network too, requerying the
+        // thread list off it is a deliberate decision rather than a silent behaviour change.
+        client.dispatchEvent({ type: 'connection.recovered', connection: 'network' });
+        clock.runAll();
+
+        expect(stub.called).to.be.false;
 
         threadManager.unregisterSubscriptions();
         clock.restore();
@@ -2260,15 +2308,7 @@ describe('Threads 2.0', () => {
         });
         const clock = sinon.useFakeTimers();
 
-        client.dispatchEvent({
-          type: 'connection.changed',
-          online: false,
-        });
-
-        const { lastConnectionDropAt } = threadManager.state.getLatestValue();
-        expect(lastConnectionDropAt).to.be.a('date');
-
-        client.dispatchEvent({ type: 'connection.recovered' });
+        client.dispatchEvent({ type: 'connection.recovered', connection: 'ws' });
         clock.runAll();
 
         expect(stub.called).to.be.false;

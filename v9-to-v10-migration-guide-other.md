@@ -597,6 +597,31 @@ This mirrors what the SDK itself now does in `ExtendedQueryLogicalOperators` (`s
 
 ## State shape changes
 
+### `ThreadManagerState.lastConnectionDropAt` removed
+
+`client.threads.state` no longer carries `lastConnectionDropAt`. It was a timestamp the thread list
+recorded for itself, and it never worked:
+
+- It was written from `connection.changed { online: false }`, which is not a reliable disconnect
+  signal — the drop is announced 5s late, dropped entirely if the socket returns inside that window,
+  and never announced at all by `closeConnection()`, the documented mobile background/foreground path.
+- It was set once and never cleared, so after the first drop of a session it stayed truthy forever.
+
+The thread list now reloads on `connection.recovered` alone, which `ConnectionRecoveryManager`
+dispatches on every reconnect path — so it already implies a drop happened. The practical fix is that a
+backgrounded app coming back no longer keeps a stale thread list.
+
+If you were reading the field, read `client.wsConnection.state.lastOfflineAt` instead. It is written on
+every status transition, including the `disconnect()` path the event is silent about:
+
+```ts
+// v9
+const { lastConnectionDropAt } = client.threads.state.getLatestValue();
+
+// v10
+const { lastOfflineAt } = client.wsConnection.state.getLatestValue();
+```
+
 ### `ChannelState.membership`
 
 ```ts

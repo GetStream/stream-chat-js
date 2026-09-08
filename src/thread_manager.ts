@@ -41,7 +41,6 @@ export const THREAD_MANAGER_INITIAL_STATE = {
   threads: [],
   unreadThreadCount: 0,
   unseenThreadIds: [],
-  lastConnectionDropAt: null,
   pagination: {
     isLoading: false,
     isLoadingNext: false,
@@ -59,7 +58,6 @@ export type ThreadManagerState = {
    */
   wasActivatedAtLeastOnce: boolean;
   isThreadOrderStale: boolean;
-  lastConnectionDropAt: Date | null;
   pagination: ThreadManagerPagination;
   ready: boolean;
   threads: Thread[];
@@ -180,7 +178,7 @@ export class ThreadManager extends WithSubscriptions {
     this.addUnsubscribeFunction(this.subscribeManageThreadSubscriptions());
     this.addUnsubscribeFunction(this.subscribeReloadOnActivation());
     this.addUnsubscribeFunction(this.subscribeNewReplies());
-    this.addUnsubscribeFunction(this.subscribeRecoverAfterConnectionDrop());
+    this.addUnsubscribeFunction(this.subscribeReloadOnConnectionRecovered());
     this.addUnsubscribeFunction(this.subscribeChannelDeleted());
   };
 
@@ -263,40 +261,46 @@ export class ThreadManager extends WithSubscriptions {
       }
     }).unsubscribe;
 
-  private subscribeRecoverAfterConnectionDrop = () => {
-    const unsubscribeConnectionDropped = this.client.on('connection.changed', (event) => {
-      if (event.online === false) {
-        this.state.next((current) =>
-          current.lastConnectionDropAt
-            ? current
-            : {
-                ...current,
-                lastConnectionDropAt: new Date(),
-              },
-        );
-      }
-    }).unsubscribe;
-
+  /**
+   * Reloads the thread list once recovery after a reconnect has finished.
+   *
+   * `connection.recovered` on its own is the whole condition. This used to be gated on a
+   * `lastConnectionDropAt` timestamp this class recorded itself from
+   * `connection.changed { online: false }`, and that gate was wrong in both directions:
+   *
+   * - It **missed** recoveries, because `connection.changed` is not a reliable disconnect signal.
+   *   Going offline is delayed by `WS_OFFLINE_ANNOUNCE_DELAY_MS` and dropped entirely if the socket
+   *   returns inside that window, and `closeConnection()` — the documented mobile
+   *   background/foreground path — never dispatches it at all. So a backgrounded app came back to a
+   *   stale thread list.
+   * - Then it **stopped gating anything**, because the flag was written once and never cleared: the
+   *   setter kept the existing value if there was one, and `reload()` clears `isThreadOrderStale`
+   *   but never touched this.
+   *
+   * The gate is also unnecessary now. `connection.recovered` is dispatched by
+   * `ConnectionRecoveryManager` on every reconnect path, so it already implies a drop happened —
+   * which was not true when this code was written, back when only `_reconnect()` produced it.
+   *
+   * Anything that genuinely needs the drop timestamp should read
+   * `client.wsConnection.state.lastOfflineAt`, which is written on every status transition including
+   * the `disconnect()` path this event is silent about.
+   */
+  private subscribeReloadOnConnectionRecovered = () => {
     const throttledHandleConnectionRecovered = throttle(
       () => {
-        const { lastConnectionDropAt, wasActivatedAtLeastOnce } =
-          this.state.getLatestValue();
-        if (!lastConnectionDropAt || !wasActivatedAtLeastOnce) return;
+        if (!this.state.getLatestValue().wasActivatedAtLeastOnce) return;
         this.reload({ force: true });
       },
       this.config.connectionRecoveryThrottleMs,
       { trailing: true },
     ).throttledFn;
 
-    const unsubscribeConnectionRecovered = this.client.on(
-      'connection.recovered',
-      throttledHandleConnectionRecovered,
-    ).unsubscribe;
-
-    return () => {
-      unsubscribeConnectionDropped();
-      unsubscribeConnectionRecovered();
-    };
+    return this.client.on('connection.recovered', (event) => {
+      // The socket going down is what invalidates the loaded list. If recovery ever reports for the
+      // device's network as well, that is a different fact and not a reason to requery.
+      if (event.connection !== 'ws') return;
+      throttledHandleConnectionRecovered();
+    }).unsubscribe;
   };
 
   public unregisterSubscriptions = () => {
