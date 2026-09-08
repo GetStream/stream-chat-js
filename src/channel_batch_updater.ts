@@ -212,14 +212,6 @@ export class ChannelBatchUpdater {
    */
   async updateData(
     filter: UpdateChannelsBatchFilters,
-    data: BatchChannelDataUpdate,
-  ): Promise<APIResponse & UpdateChannelsBatchResponse>;
-  async updateData(
-    filter: UpdateChannelsBatchFilters,
-    options: ChannelBatchDataUpdateOptions,
-  ): Promise<APIResponse & UpdateChannelsBatchResponse>;
-  async updateData(
-    filter: UpdateChannelsBatchFilters,
     update: BatchChannelDataUpdate | ChannelBatchDataUpdateOptions,
   ): Promise<APIResponse & UpdateChannelsBatchResponse> {
     const options = isChannelBatchDataUpdateOptions(update) ? update : { data: update };
