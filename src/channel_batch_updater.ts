@@ -2,9 +2,9 @@ import type { StreamChat } from './client';
 import type {
   APIResponse,
   BatchChannelDataUpdate,
+  ChannelCustomPatch,
   NewMemberPayload,
   UpdateChannelsBatchFilters,
-  UpdateChannelsBatchOptions,
   UpdateChannelsBatchResponse,
 } from './types';
 
@@ -196,25 +196,55 @@ export class ChannelBatchUpdater {
    * updateData - Update data on channels matching the filter
    *
    * `data.custom` replaces the channel's whole custom object. To patch
-   * individual custom keys instead, pass `custom_set` / `custom_unset`, which
-   * the client sends at the request root rather than inside `data`; `data` may
-   * then be omitted.
+   * individual custom keys alongside other channel data, pass `customPatch`,
+   * which the client sends at the request root rather than inside `data`;
+   * `data` may then be omitted. To send a patch on its own, prefer
+   * `updateCustom`.
    *
    * @param {UpdateChannelsBatchFilters} filter Filter to select channels
    * @param {BatchChannelDataUpdate} data Data to update
-   * @param {Pick<UpdateChannelsBatchOptions, 'custom_set' | 'custom_unset'>} customPatch Custom keys to merge in or delete
+   * @param {ChannelCustomPatch} customPatch Custom keys to merge in or delete
    * @return {Promise<APIResponse & UpdateChannelsBatchResponse>} The server response
    */
   async updateData(
     filter: UpdateChannelsBatchFilters,
     data?: BatchChannelDataUpdate,
-    customPatch?: Pick<UpdateChannelsBatchOptions, 'custom_set' | 'custom_unset'>,
+    customPatch?: ChannelCustomPatch,
   ): Promise<APIResponse & UpdateChannelsBatchResponse> {
     return await this.client.updateChannelsBatch({
       operation: 'updateData',
       filter,
       data,
       ...customPatch,
+    });
+  }
+
+  /**
+   * updateCustom - Patch individual custom keys on channels matching the filter
+   *
+   * `customSet` merges its keys into each matched channel's existing custom
+   * object and `customUnset` deletes its keys, both leaving every other custom
+   * key untouched — unlike `data.custom`, which replaces the whole object. Keys
+   * are dot-paths. No `data` is sent, so nothing but the named custom keys
+   * changes; to update other channel data in the same call, use `updateData`.
+   *
+   * The backend owns the rules for the combinations it rejects.
+   *
+   * @param {UpdateChannelsBatchFilters} filter Filter to select channels
+   * @param {Record<string, unknown>} customSet Custom keys to merge in
+   * @param {string[]} customUnset Custom keys to delete
+   * @return {Promise<APIResponse & UpdateChannelsBatchResponse>} The server response
+   */
+  async updateCustom(
+    filter: UpdateChannelsBatchFilters,
+    customSet?: Record<string, unknown>,
+    customUnset?: string[],
+  ): Promise<APIResponse & UpdateChannelsBatchResponse> {
+    return await this.client.updateChannelsBatch({
+      operation: 'updateData',
+      filter,
+      custom_set: customSet,
+      custom_unset: customUnset,
     });
   }
 }

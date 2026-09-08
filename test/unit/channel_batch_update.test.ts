@@ -75,4 +75,42 @@ describe('updateChannelsBatch', () => {
     expect(body.custom_unset).toEqual(['location_id']);
     expect(body.data).toBeUndefined();
   });
+
+  it('sends only a custom patch from channelBatchUpdater().updateCustom', async () => {
+    await client
+      .channelBatchUpdater()
+      .updateCustom(
+        { cids: { $in: ['messaging:a', 'messaging:b'] } },
+        { group: 'new', 'expiration.value': 3 },
+        ['location_id'],
+      );
+
+    expect(putSpy).toHaveBeenCalledWith(`${client.baseURL}/channels/batch`, {
+      operation: 'updateData',
+      filter: { cids: { $in: ['messaging:a', 'messaging:b'] } },
+      custom_set: { group: 'new', 'expiration.value': 3 },
+      custom_unset: ['location_id'],
+    });
+
+    // Both fields are siblings of `operation` and `filter`, and no `data` key
+    // is sent at all — a `data.custom` next to a patch is a 400, and `data` is
+    // the extra-fields sink that would swallow a misplaced `custom_set`.
+    const body = putSpy.mock.calls[0][1] as UpdateChannelsBatchOptions;
+    expect(Object.keys(body)).toContain('custom_set');
+    expect(Object.keys(body)).toContain('custom_unset');
+    expect(Object.keys(body)).not.toContain('data');
+  });
+
+  it('sends updateCustom with only the keys it was given', async () => {
+    await client
+      .channelBatchUpdater()
+      .updateCustom({ types: { $eq: 'messaging' } }, { group: 'new' });
+
+    const body = putSpy.mock.calls[0][1] as UpdateChannelsBatchOptions;
+    expect(body.operation).toBe('updateData');
+    expect(body.filter).toEqual({ types: { $eq: 'messaging' } });
+    expect(body.custom_set).toEqual({ group: 'new' });
+    expect(body.custom_unset).toBeUndefined();
+    expect(Object.keys(body)).not.toContain('data');
+  });
 });

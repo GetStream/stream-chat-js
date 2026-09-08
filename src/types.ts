@@ -5019,6 +5019,16 @@ export type UpdateChannelsBatchOptions = {
   custom_unset?: string[];
 };
 
+/**
+ * The `custom_set` / `custom_unset` pair of `UpdateChannelsBatchOptions`, as a
+ * value on its own: a patch of individual custom keys to merge in and to
+ * delete. See the two fields for their semantics.
+ */
+export type ChannelCustomPatch = Pick<
+  UpdateChannelsBatchOptions,
+  'custom_set' | 'custom_unset'
+>;
+
 export type UpdateChannelsBatchFilters = QueryFilters<{
   cids?:
     | RequireOnlyOne<Pick<QueryFilter<string>, '$in' | '$eq'>>
