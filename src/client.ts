@@ -58,6 +58,7 @@ import type {
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { chatLoggerSystem } from './logger';
+import { waitForWSConnection } from './utils/waitForWSConnection';
 import { queueOrRun } from './offline-support/queueableOperations';
 import { Thread } from './thread';
 import { Moderation } from './moderation';
@@ -493,14 +494,6 @@ export class StreamChat extends ChatApi {
     return this.anonymous ? 'anonymous' : 'jwt';
   }
 
-  /**
-   * Whether this client has ever held a connection ID.
-   *
-   * **Not "is connected".** The ID is assigned on a successful connect and never cleared, so this
-   * stays truthy through a drop — read `client.wsConnection.isOnline` for connectedness.
-   */
-  _hasConnectionID = () => Boolean(this.wsConnection.connectionID);
-
   setBaseURL(baseURL: string) {
     this.baseURL = baseURL;
     this.wsBaseURL = this.baseURL.replace('http', 'ws').replace(':3030', ':8800');
@@ -661,7 +654,7 @@ export class StreamChat extends ChatApi {
       return this.wsPromise;
     }
 
-    if (this.wsConnection?.isOnline && this._hasConnectionID()) {
+    if (this.wsConnection?.isOnline && this.wsConnection.connectionID) {
       logger
         .withExtraTags('openConnection')
         .debug('openConnection was called twice; a healthy connection already exists.');
@@ -1383,13 +1376,13 @@ export class StreamChat extends ChatApi {
       presence: false,
     };
 
-    // Make sure we wait for the connect promise if there is a pending one
-    await this.wsPromise;
-
-    // TODO: probably serverside only thing, remove at some point
-    if (!this._hasConnectionID()) {
-      defaultOptions.watch = false;
-    }
+    // Same treatment as `channel.watch()`: wait for a live socket rather than degrade, so
+    // `watch: true` always goes out and always binds to a current connection ID.
+    //
+    // The `TODO: probably serverside only thing` that guarded the downgrade is gone with it. There is
+    // no server-side surface in v10 — the constructor takes no `secret` — so there is no client that
+    // can never open a socket, which is what makes waiting safe here rather than a hang.
+    await waitForWSConnection(this);
 
     const {
       predefined_filter,
@@ -1569,7 +1562,7 @@ export class StreamChat extends ChatApi {
       // truthful rather than hopeful: `queryChannels` waits for a live socket, so by the time this
       // runs the socket really is up. `isOnline`, not the connection ID — the ID is never cleared and
       // so stays truthy right through a drop.
-      if (!offlineMode && (queryChannelsOptions?.watch ?? this._hasConnectionID())) {
+      if (!offlineMode && (queryChannelsOptions?.watch ?? this.wsConnection.isOnline)) {
         c.watchStatus = ChannelWatchStatus.Watching;
       }
       c.push_preferences = channelState.push_preferences;

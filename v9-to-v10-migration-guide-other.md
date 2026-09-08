@@ -350,6 +350,32 @@ const id = client.wsConnection.connectionID;
 is assigned on a successful connect and **never cleared**, so it stays `true` through a drop. It means
 "connected at some point", not "connected now" — read `client.wsConnection.isOnline` for that.
 
+### `channel.watch()` and `queryChannels()` wait for the socket instead of degrading
+
+Both used to send `watch: false` when the client had no connection ID, resolving with unwatched data.
+They now wait for a live WebSocket and always send `watch: true`, exactly once.
+
+**What this fixes.** The old guard read the connection ID, which is assigned on a successful connect
+and never cleared — so during a reconnect it did _not_ downgrade. It sent `watch: true` against a dead
+connection and the channel then recorded `watchStatus = Watching` when nothing was watching. Where it
+_did_ downgrade, you got unwatched data that a second, watched query had to follow.
+
+**What changes for you.** Opening a channel while the socket is down now waits, up to
+`client.wsConnection.config.connectTimeoutMs` (15s by default), instead of returning unwatched data
+immediately. On a working network with a dead socket that is a delay where there used to be content.
+Shorten the wait by lowering that setting.
+
+If the socket does not come back in time, `watch()` **throws**. That is not a dead end: the channel
+stays unwatched, offline support renders it from the local database, and `ConnectionRecoveryManager`
+reloads it on the next reconnect — its recovery is filtered on whether a channel is _active_, never on
+`watchStatus`.
+
+Three cases reject **immediately** rather than waiting out the timeout: no user connected, no socket
+ever opened, and a socket closed deliberately with `client.closeConnection()` (the mobile
+backgrounding path). Opening a channel on a backgrounded app fails at once instead of blocking.
+
+An explicit `watch: false` from you is still honoured — only the SDK's own downgrade is gone.
+
 ### `connection.recovered` is withheld when the device network drops mid-recovery
 
 `ConnectionRecoveryManager` reloads active channels and threads with `Promise.allSettled`, so one

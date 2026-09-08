@@ -61,8 +61,10 @@ export type ChannelWatchState = {
    * `WasWatching` when the WS connection is lost (only from `Watching` — a deliberate stop is never
    * resurrected); and to `NotWatching` on `channel.stopWatching()` or teardown.
    *
-   * Note `channel.watch()` silently downgrades to a non-watching query when the client has no
-   * connection ID; this is what makes that observable.
+   * It is truthful by construction: `channel.watch()` and `client.queryChannels()` wait for a live
+   * socket rather than degrading, so a query carrying `watch: true` can only succeed against a
+   * connection ID that is actually current. They used to downgrade to a non-watching query instead,
+   * which is what made a false `Watching` possible.
    */
   watchStatus: ChannelWatchStatus;
 };

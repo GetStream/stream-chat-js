@@ -22,6 +22,7 @@ import { msToNs, nowNs } from './utils/time';
 import { normalizeUploadFile } from './upload-utils';
 import type { StreamChat } from './client';
 import { chatLoggerSystem } from './logger';
+import { waitForWSConnection } from './utils/waitForWSConnection';
 import { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
 import { ConfigController } from './configuration/ConfigController';
 import { copyConfigPatch } from './configuration/utils/copyConfigPatch';
@@ -1758,12 +1759,19 @@ export class Channel extends ChannelApi {
       presence: false,
     };
 
-    // Make sure we wait for the connect promise if there is a pending one
-    await this.getClient().wsPromise;
-
-    if (!this.getClient()._hasConnectionID()) {
-      defaultOptions.watch = false;
-    }
+    // Wait for a live socket rather than degrading. `watch: true` always goes out, exactly once, and
+    // always binds to a connection ID that is actually current — so `watchStatus = Watching` is
+    // truthful by construction rather than by a guard that could be wrong.
+    //
+    // This replaces `await client.wsPromise` plus a `watch: false` downgrade, which was wrong both
+    // ways: `wsPromise` is already resolved during a socket-internal reconnect so the wait did not
+    // cover that case, and the downgrade was gated on the connection ID, which is never cleared — so
+    // during a reconnect it did not downgrade and sent `watch: true` against a dead connection.
+    //
+    // If the socket does not come back inside the timeout this throws, which is the correct existing
+    // path: the channel stays unwatched, offline support renders it from the local database, and
+    // `ConnectionRecoveryManager` reloads it on the next reconnect.
+    await waitForWSConnection(this.getClient());
 
     const combined = { ...defaultOptions, ...options };
     const state = await this.query(combined, 'latest');

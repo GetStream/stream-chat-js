@@ -295,6 +295,12 @@ describe('OfflineSupportApi', () => {
     beforeEach(async () => {
       offlineDb = new MockOfflineDB({ client });
       vi.spyOn(offlineDb!, 'initializeDB').mockResolvedValue(true);
+      // Socket down on purpose. `OfflineDBSyncManager.init` syncs and replays pending tasks straight
+      // away when the user is connected *and* the socket is up, and these tests are about queueing
+      // tasks rather than about that sync — the mock DB is not set up to serve it. Previously the
+      // socket happened to be down because `getClientWithUser` left it that way; now that the helper
+      // marks a connected client's socket up, a test that wants it down has to say so.
+      client.wsConnection._setStatus({ isOnline: false });
       await offlineDb.init(client.userId as unknown as string);
     });
 
