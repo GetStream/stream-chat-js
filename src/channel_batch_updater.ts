@@ -4,6 +4,7 @@ import type {
   BatchChannelDataUpdate,
   NewMemberPayload,
   UpdateChannelsBatchFilters,
+  UpdateChannelsBatchOptions,
   UpdateChannelsBatchResponse,
 } from './types';
 
@@ -194,18 +195,26 @@ export class ChannelBatchUpdater {
   /**
    * updateData - Update data on channels matching the filter
    *
+   * `data.custom` replaces the channel's whole custom object. To patch
+   * individual custom keys instead, pass `custom_set` / `custom_unset`, which
+   * the client sends at the request root rather than inside `data`; `data` may
+   * then be omitted.
+   *
    * @param {UpdateChannelsBatchFilters} filter Filter to select channels
    * @param {BatchChannelDataUpdate} data Data to update
+   * @param {Pick<UpdateChannelsBatchOptions, 'custom_set' | 'custom_unset'>} customPatch Custom keys to merge in or delete
    * @return {Promise<APIResponse & UpdateChannelsBatchResponse>} The server response
    */
   async updateData(
     filter: UpdateChannelsBatchFilters,
-    data: BatchChannelDataUpdate,
+    data?: BatchChannelDataUpdate,
+    customPatch?: Pick<UpdateChannelsBatchOptions, 'custom_set' | 'custom_unset'>,
   ): Promise<APIResponse & UpdateChannelsBatchResponse> {
     return await this.client.updateChannelsBatch({
       operation: 'updateData',
       filter,
       data,
+      ...customPatch,
     });
   }
 }
