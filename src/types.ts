@@ -5020,13 +5020,13 @@ export type UpdateChannelsBatchOptions = {
 };
 
 /**
- * The `custom_set` / `custom_unset` pair of `UpdateChannelsBatchOptions`, as a
- * value on its own: a patch of individual custom keys to merge in and to
- * delete. See the two fields for their semantics.
+ * Options for {@link ChannelBatchUpdater.updateData}. `custom_set` and
+ * `custom_unset` are sent at the request root, while `data` contains the
+ * channel fields to update.
  */
-export type ChannelCustomPatch = Pick<
+export type ChannelBatchDataUpdateOptions = Pick<
   UpdateChannelsBatchOptions,
-  'custom_set' | 'custom_unset'
+  'data' | 'custom_set' | 'custom_unset'
 >;
 
 export type UpdateChannelsBatchFilters = QueryFilters<{
