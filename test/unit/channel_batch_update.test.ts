@@ -107,4 +107,21 @@ describe('updateChannelsBatch', () => {
       custom_unset: ['location_id'],
     });
   });
+
+  it('does not let update options override the operation or filter', async () => {
+    const filter = { cids: { $eq: 'messaging:a' } } as const;
+    const options = {
+      operation: 'hide' as const,
+      filter: { cids: { $eq: 'messaging:b' } } as const,
+      data: { frozen: true },
+    };
+
+    await client.channelBatchUpdater().updateData(filter, options);
+
+    expect(putSpy).toHaveBeenCalledWith(`${client.baseURL}/channels/batch`, {
+      operation: 'updateData',
+      filter,
+      data: { frozen: true },
+    });
+  });
 });

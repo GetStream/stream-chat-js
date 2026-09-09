@@ -222,12 +222,16 @@ export class ChannelBatchUpdater {
     filter: UpdateChannelsBatchFilters,
     update: BatchChannelDataUpdate | ChannelBatchDataUpdateOptions,
   ): Promise<APIResponse & UpdateChannelsBatchResponse> {
-    const options = isChannelBatchDataUpdateOptions(update) ? update : { data: update };
+    const { data, custom_set, custom_unset } = isChannelBatchDataUpdateOptions(update)
+      ? update
+      : { data: update };
 
     return await this.client.updateChannelsBatch({
       operation: 'updateData',
       filter,
-      ...options,
+      ...(data && { data }),
+      ...(custom_set && { custom_set }),
+      ...(custom_unset && { custom_unset }),
     });
   }
 }
