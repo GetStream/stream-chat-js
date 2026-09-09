@@ -375,16 +375,18 @@ describe('MessageDeliveryReporter', () => {
     });
   });
 
-  it('does not send a read when the user disabled read receipts', async () => {
+  // Read receipt privacy is enforced by the backend, which stops broadcasting the read to other
+  // users but still advances the caller's own last_read. Skipping the request client-side left the
+  // channel permanently unread for those users.
+  it('sends the read request when the user disabled read receipts', async () => {
     (client as any).user.privacy_settings = { read_receipts: { enabled: false } };
-    const markAsReadRequestSpy = vi
-      .spyOn(channel, 'markRead')
-      .mockResolvedValue({} as any);
+    const response = { event: {} } as any;
+    const markReadSpy = vi.spyOn(channel, 'markRead').mockResolvedValue(response);
 
     const result = await channel.markReadViaReporter();
 
-    expect(markAsReadRequestSpy).not.toHaveBeenCalled();
-    expect(result).toBeNull();
+    expect(markReadSpy).toHaveBeenCalledTimes(1);
+    expect(result).toBe(response);
   });
 
   it('removes the pending delivery candidate upon channel.markReadViaReporter', async () => {

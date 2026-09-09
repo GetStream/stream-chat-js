@@ -296,6 +296,35 @@ describe('BasePaginator', () => {
       expect(paginator.mockClientQuery).toHaveBeenCalledTimes(3);
     });
 
+    it('issues one request when both directions are requested in the same tick', async () => {
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+      // A list with no loaded window sits within the scroll threshold of its top AND its bottom, so
+      // a UI's scroll handler asks for both directions one line apart. With nothing loaded, both
+      // resolve to the same first page — the second must not slip past the `isLoading` gate while
+      // the first is still awaiting its offline preload.
+      const tailward = paginator.toTail();
+      const headward = paginator.toHead();
+
+      // The gate that matters: set synchronously, so the second call is turned away before the
+      // request for the first has even been built.
+      expect(paginator.isLoading).toBe(true);
+
+      // wait for the DB data first page load
+      await sleep(0);
+      expect(paginator.mockClientQuery).toHaveBeenCalledTimes(1);
+
+      paginator.queryResolve({
+        items: [{ id: 'id1' }],
+        tailward: 'next1',
+        headward: 'prev1',
+      });
+      await Promise.all([tailward, headward]);
+
+      expect(paginator.mockClientQuery).toHaveBeenCalledTimes(1);
+      expect(paginator.items).toEqual([{ id: 'id1' }]);
+      expect(paginator.isLoading).toBe(false);
+    });
+
     it('supports legacy next/prev cursor fields from query response', async () => {
       const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
 

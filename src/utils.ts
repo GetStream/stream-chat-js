@@ -8,7 +8,6 @@ import type {
   ReactionResponse,
   UserResponse,
 } from './types';
-import type { StreamChat } from './client';
 import type { Channel } from './channel';
 import type { AxiosRequestConfig } from 'axios';
 import { LOCAL_MESSAGE_FIELDS, RESERVED_UPDATED_MESSAGE_FIELDS } from './constants';
@@ -88,13 +87,6 @@ export const channelHasReadEvents = (channel?: Channel) => {
 export const channelTracksReadLocally = (channel?: Channel) =>
   !channelHasReadEvents(channel) &&
   !!channel?.getClient().options.isLocalUnreadCountEnabled;
-
-/**
- * userHasReadReceipts - Whether the current user allows read receipts, per their privacy settings.
- * Read receipts are treated as enabled unless the user has explicitly disabled them.
- */
-export const userHasReadReceipts = (client: StreamChat) =>
-  client.user?.privacy_settings?.read_receipts?.enabled ?? true;
 
 /**
  * retryInterval - A retry interval which increases acc to number of failures

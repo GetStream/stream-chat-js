@@ -13,7 +13,7 @@ import type {
   StreamAPIError,
   StreamResponse,
 } from '../types';
-import { throttle, userHasReadReceipts } from '../utils';
+import { throttle } from '../utils';
 import { isAPIError, isErrorRetryable } from '../errors';
 
 export type MessageDeliveryReporterConfig = {
@@ -394,7 +394,6 @@ export class MessageDeliveryReporter {
    * @returns The server response, or `null` when the collection is unsupported.
    */
   public markRead = async (collection: Channel | Thread, options?: MarkReadRequest) => {
-    if (!userHasReadReceipts(this.client)) return null;
     const isThreadCollection = isThread(collection);
     const channel = isThreadCollection ? collection.channel : collection;
     const requestOptions = isThreadCollection

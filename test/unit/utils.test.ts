@@ -11,7 +11,6 @@ import {
   findIndexInSortedArray,
   channelHasReadEvents,
   channelTracksReadLocally,
-  userHasReadReceipts,
   formatMessage,
   generateChannelTempCid,
   localMessageToNewMessagePayload,
@@ -616,32 +615,6 @@ describe('channelTracksReadLocally', () => {
 
   it('returns false when the channel is undefined', () => {
     expect(channelTracksReadLocally(undefined)).toBe(false);
-  });
-});
-
-describe('userHasReadReceipts', () => {
-  const makeClient = (readReceiptsEnabled?: boolean) => {
-    const client = new StreamChat('apiKey');
-    client.user = {
-      id: 'user',
-      privacy_settings:
-        readReceiptsEnabled === undefined
-          ? undefined
-          : { read_receipts: { enabled: readReceiptsEnabled } },
-    };
-    return client;
-  };
-
-  it('returns true when read receipts are enabled', () => {
-    expect(userHasReadReceipts(makeClient(true))).toBe(true);
-  });
-
-  it('returns false when read receipts are explicitly disabled', () => {
-    expect(userHasReadReceipts(makeClient(false))).toBe(false);
-  });
-
-  it('returns true (assumes enabled) when privacy settings are unset', () => {
-    expect(userHasReadReceipts(makeClient(undefined))).toBe(true);
   });
 });
 
