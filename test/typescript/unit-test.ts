@@ -88,6 +88,19 @@ const singletonClient2: StreamChat = StreamChat.getInstance(apiKey, {
   timeout: 3000,
 });
 
+const channelBatchUpdater = client.channelBatchUpdater();
+channelBatchUpdater.updateData({}, { frozen: true });
+channelBatchUpdater.updateData({}, { custom_set: { group: 'new' } });
+channelBatchUpdater.updateData(
+  {},
+  {
+    data: { frozen: true },
+    custom_set: { group: 'new' },
+  },
+);
+// @ts-expect-error channel data fields must be nested under data in the options form
+channelBatchUpdater.updateData({}, { frozen: true, custom_set: { group: 'new' } });
+
 const devToken: string = client.devToken('joshua');
 const token: string = client.createToken('james', 3600);
 const authType: string = client.getAuthType();

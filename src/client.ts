@@ -5306,6 +5306,10 @@ export class StreamChat {
   /**
    *  Update Channels Batch
    *
+   *  For the `updateData` operation, `data.custom` replaces the channel's whole
+   *  custom object, while the root-level `custom_set` / `custom_unset` patch
+   *  individual keys and leave the rest untouched.
+   *
    *  @param {UpdateChannelsBatchOptions} payload for updating channels in batch
    *  @return {Promise<APIResponse & UpdateChannelsBatchResponse>} The server response
    */

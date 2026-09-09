@@ -2,10 +2,16 @@ import type { StreamChat } from './client';
 import type {
   APIResponse,
   BatchChannelDataUpdate,
+  ChannelBatchDataUpdateOptions,
   NewMemberPayload,
   UpdateChannelsBatchFilters,
   UpdateChannelsBatchResponse,
 } from './types';
+
+const isChannelBatchDataUpdateOptions = (
+  update: BatchChannelDataUpdate | ChannelBatchDataUpdateOptions,
+): update is ChannelBatchDataUpdateOptions =>
+  'data' in update || 'custom_set' in update || 'custom_unset' in update;
 
 /**
  * ChannelBatchUpdater - A class that provides convenience methods for batch channel operations
@@ -194,18 +200,38 @@ export class ChannelBatchUpdater {
   /**
    * updateData - Update data on channels matching the filter
    *
+   * `data.custom` replaces the channel's whole custom object. To patch
+   * individual custom keys, pass an options object with `custom_set` or
+   * `custom_unset`. The client sends those fields at the request root rather
+   * than inside `data`. The options object can also include `data` to update
+   * channel fields in the same request.
+   *
    * @param {UpdateChannelsBatchFilters} filter Filter to select channels
-   * @param {BatchChannelDataUpdate} data Data to update
+   * @param {BatchChannelDataUpdate | ChannelBatchDataUpdateOptions} update Data or update options
    * @return {Promise<APIResponse & UpdateChannelsBatchResponse>} The server response
    */
   async updateData(
     filter: UpdateChannelsBatchFilters,
     data: BatchChannelDataUpdate,
+  ): Promise<APIResponse & UpdateChannelsBatchResponse>;
+  async updateData(
+    filter: UpdateChannelsBatchFilters,
+    options: ChannelBatchDataUpdateOptions,
+  ): Promise<APIResponse & UpdateChannelsBatchResponse>;
+  async updateData(
+    filter: UpdateChannelsBatchFilters,
+    update: BatchChannelDataUpdate | ChannelBatchDataUpdateOptions,
   ): Promise<APIResponse & UpdateChannelsBatchResponse> {
+    const { data, custom_set, custom_unset } = isChannelBatchDataUpdateOptions(update)
+      ? update
+      : { data: update };
+
     return await this.client.updateChannelsBatch({
       operation: 'updateData',
       filter,
-      data,
+      ...(data && { data }),
+      ...(custom_set && { custom_set }),
+      ...(custom_unset && { custom_unset }),
     });
   }
 }

@@ -4998,7 +4998,36 @@ export type UpdateChannelsBatchOptions = {
   filter: UpdateChannelsBatchFilters;
   members?: string[] | Array<NewMemberPayload>;
   data?: BatchChannelDataUpdate;
+  /**
+   * `updateData` only. Merges these keys into each matched channel's existing
+   * custom object, leaving every other custom key untouched — unlike
+   * `data.custom`, which replaces the whole object. Keys are dot-paths, so
+   * `a.b` sets key `b` inside object `a` (the parent object must already
+   * exist). Cannot be combined with `data.custom`.
+   *
+   * Lives at the request root, not inside `data`.
+   */
+  custom_set?: Record<string, unknown>;
+  /**
+   * `updateData` only. Deletes these keys from each matched channel's existing
+   * custom object, leaving every other custom key untouched. Keys are
+   * dot-paths; deleting a key that does not exist is a no-op. Cannot be
+   * combined with `data.custom`.
+   *
+   * Lives at the request root, not inside `data`.
+   */
+  custom_unset?: string[];
 };
+
+/**
+ * Options for {@link ChannelBatchUpdater.updateData}. `custom_set` and
+ * `custom_unset` are sent at the request root, while `data` contains the
+ * channel fields to update.
+ */
+export type ChannelBatchDataUpdateOptions = Pick<
+  UpdateChannelsBatchOptions,
+  'data' | 'custom_set' | 'custom_unset'
+>;
 
 export type UpdateChannelsBatchFilters = QueryFilters<{
   cids?:
