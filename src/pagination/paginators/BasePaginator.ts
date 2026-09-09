@@ -2843,6 +2843,20 @@ export abstract class BasePaginator<T, Q> {
 
     if (isFirstPage && !keepPreviousItems) {
       const state = this.getStateBeforeFirstQuery();
+      // Publish the loading flag BEFORE the offline preload is awaited. `canExecuteQuery` gates on
+      // `isLoading`, so anything published after an await leaves a window in which a second call
+      // made in the same tick still reads `false` and proceeds — and on a paginator with no loaded
+      // window both directions resolve to the SAME first page, so the two calls issue byte-identical
+      // requests. A UI that loads both ends at once does exactly that: an empty list sits within the
+      // scroll threshold of its top AND its bottom, so the scroll handler calls `toTail` and `toHead`
+      // one line apart.
+      //
+      // Only the flag: `state` carries `items: undefined`, so publishing all of it here would blank
+      // a list that offline data is about to fill — the reason the full publish waits for the preload.
+      // A forced reset published it (loading included) synchronously above, so it needs nothing.
+      if (!isForcedReset) {
+        this.state.partialNext({ isLoading: true });
+      }
       let items: T[] | undefined = undefined;
       if (!this.isInitialized) {
         items =
