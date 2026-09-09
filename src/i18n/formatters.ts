@@ -1,4 +1,5 @@
 import { isDate, isDayOrMoment, isNumberOrString } from './dayjs';
+import { nsToDate } from '../utils/time';
 import type { CalendarFormats } from './dayjs';
 import { asDynamicKey } from './translator';
 import type {
@@ -250,9 +251,24 @@ export const predefinedFormatters: PredefinedFormatters = {
  * getDateString
  * ---------------------------------------------------------------------------------------------- */
 
+/**
+ * A timestamp as something the formatters below can parse.
+ *
+ * Server-sent date fields are unix-NANOSECOND numbers, and every path here ends in `new Date(...)`
+ * or a dayjs-like parser — both of which read a bare number as MILLISECONDS and land far out of
+ * range (`.toISOString()` throws, dayjs renders `'Invalid Date'`). Converting once, here, is what
+ * lets a caller pass a message's `created_at` straight through.
+ */
+const normalizeTimestamp = <T extends string | Date | number | undefined>(
+  timestamp: T,
+): Exclude<T, number> | Date =>
+  (typeof timestamp === 'number' ? nsToDate(timestamp) : timestamp) as
+    | Exclude<T, number>
+    | Date;
+
 export type GetDateStringParams = TimestampFormatterOptions & {
-  /** The timestamp to render. */
-  messageCreatedAt?: string | Date;
+  /** The timestamp to render. Accepts a wire timestamp (unix nanoseconds) as well as a `Date`. */
+  messageCreatedAt?: string | Date | number;
   /** An integrator-supplied override, which wins over everything else. */
   formatDate?: (date: Date) => string;
   /** The key carrying a formatter expression for this timestamp, if there is one. */
@@ -274,7 +290,7 @@ export const getDateString = ({
   calendarFormats,
   format,
   formatDate,
-  messageCreatedAt,
+  messageCreatedAt: rawMessageCreatedAt,
   relativeCompact,
   relativeCompactMaxDays,
   relativeCompactMaxWeeks,
@@ -283,6 +299,7 @@ export const getDateString = ({
   tDateTimeParser,
   timestampTranslationKey,
 }: GetDateStringParams): string | number | null => {
+  const messageCreatedAt = normalizeTimestamp(rawMessageCreatedAt);
   if (
     !messageCreatedAt ||
     (typeof messageCreatedAt === 'string' && isUnparseableDateString(messageCreatedAt))
@@ -409,7 +426,7 @@ export type GetCalendarDateStringForA11yParams = {
   calendarFormatOverrides?: Partial<CalendarFormats>;
   /** Calendar wording per language. Defaults to {@link A11Y_CALENDAR_FORMATS}. */
   calendarFormats?: Record<string, CalendarFormats>;
-  messageCreatedAt?: string | Date;
+  messageCreatedAt?: string | Date | number;
   tDateTimeParser?: TDateTimeParser;
   /**
    * The UI language, used to pick calendar wording. Plain `string`: it indexes `calendarFormats`, which
@@ -435,10 +452,11 @@ export type GetCalendarDateStringForA11yParams = {
 export const getCalendarDateStringForA11y = ({
   calendarFormatOverrides,
   calendarFormats = A11Y_CALENDAR_FORMATS,
-  messageCreatedAt,
+  messageCreatedAt: rawMessageCreatedAt,
   tDateTimeParser,
   userLanguage,
 }: GetCalendarDateStringForA11yParams): string | undefined => {
+  const messageCreatedAt = normalizeTimestamp(rawMessageCreatedAt);
   if (
     !messageCreatedAt ||
     (typeof messageCreatedAt === 'string' && isUnparseableDateString(messageCreatedAt)) ||

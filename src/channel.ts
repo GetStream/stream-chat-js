@@ -1060,8 +1060,16 @@ export class Channel extends ChannelApi {
     return result;
   }
 
+  /**
+   * Ends an active live-location share.
+   *
+   * `end_at` is owned by this method — it is set to now, overwriting anything the caller passes —
+   * so the parameter omits it. That also lets a caller hand over a location read off a message
+   * (`SharedLocationResponseData`), whose own `end_at` is a wire timestamp rather than the `Date`
+   * the request declares.
+   */
   public async stopLiveLocationSharing(
-    payload: UpdateLiveLocationRequest,
+    payload: Omit<UpdateLiveLocationRequest, 'end_at'>,
     requestOptions?: StreamRequestOptions,
   ) {
     const location = await this.getClient().updateLiveLocation(
