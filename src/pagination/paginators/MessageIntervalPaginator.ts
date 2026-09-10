@@ -719,7 +719,18 @@ export class MessageIntervalPaginator extends BasePaginator<
    * @param page - The fetched newest window (may be empty). `created_at` order is normalized on ingest.
    * @param options - See {@link MergeNewestPageOptions}. Omit to prune only within the page's own span.
    */
+  /**
+   * Merges a freshly fetched newest page into the loaded window (the hydrate path). Wraps the
+   * implementation so the query shape is recorded on EVERY exit — the body returns early in
+   * several places, and a window left without a shape loses itself on the next pagination (see
+   * `recordLoadedWindowQueryShape`).
+   */
   mergeNewestPage = (page: LocalMessage[], options?: MergeNewestPageOptions) => {
+    this._mergeNewestPage(page, options);
+    this.recordLoadedWindowQueryShape();
+  };
+
+  private _mergeNewestPage = (page: LocalMessage[], options?: MergeNewestPageOptions) => {
     const headInterval = this.itemIntervals[0] as Interval | undefined;
     if (!headInterval?.isHead) {
       // Live content no page has anchored yet, the first query came back empty and the reply the

@@ -2569,10 +2569,25 @@ export abstract class BasePaginator<T, Q> {
       return newState;
     });
 
-    // A populated page means a first page is effectively "loaded". Record a query shape so the
-    // paginator counts as initialized and the next pagination continues from this page - otherwise
-    // an undefined `_lastQueryShape` makes the first query look like a shape change, triggering a
-    // first page reset that wipes the seeded items and re-fetches the first page before paginating.
+    this.recordLoadedWindowQueryShape();
+  }
+
+  /**
+   * Records the shape a query would have used to produce the currently loaded window, so the next
+   * pagination counts as a continuation rather than a shape change.
+   *
+   * Server data reaches a window without a query on two paths — a seeded page (`setItems`) and a
+   * hydrate (`mergeNewestPage`). Leaving `_lastQueryShape` undefined afterwards makes the next
+   * query look like a shape change, so `executeQuery` takes its first-page branch and publishes
+   * `getStateBeforeFirstQuery()` (items `undefined`) BEFORE the request. A response with items
+   * rebuilds the window from the surviving intervals, so that case merely churns; an empty one — a
+   * tailward query on a thread whose replies are all loaded — has nothing to rebuild from and the
+   * loaded window is lost.
+   *
+   * Only meaningful with items in hand: an empty window has no shape to continue from, and the
+   * flags already say there is nothing more to fetch.
+   */
+  protected recordLoadedWindowQueryShape() {
     if (
       typeof this._lastQueryShape === 'undefined' &&
       (this.state.getLatestValue().items?.length ?? 0) > 0

@@ -411,6 +411,35 @@ describe('Threads 2.0', () => {
           expect(() => thread.hydrateState(otherThread)).to.throw();
         });
 
+        it('seeds the reply window when the thread has never loaded one', () => {
+          // A thread opened from a message (channel + parentMessage, no server payload) has never
+          // held a reply window. `mergeNewestPage` deliberately no-ops in that state — it merges
+          // into an anchored head and leaves seeding to the query path — so hydrating through it
+          // dropped the replies `Thread.reload()` had just fetched, and the panel stayed empty
+          // until something else queried them separately.
+          const thread = createMinimalThread();
+          expect(thread.messagePaginator.state.getLatestValue().items).to.be.undefined;
+
+          const reply = generateMsg({
+            parent_id: parentMessageResponse.id,
+            created_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
+          }) as MessageResponse;
+          const hydrationThread = createTestThread({
+            latest_replies: [reply],
+            // The count that matters is the parent message's — the thread endpoint's top-level
+            // `reply_count` excludes soft-deleted replies, so the LLC reads the parent's.
+            parentMessageOverrides: { reply_count: 1 },
+            reply_count: 1,
+          });
+
+          thread.hydrateState(hydrationThread);
+
+          const paginatorState = thread.messagePaginator.state.getLatestValue();
+          expect(paginatorState.items?.map((item) => item.id)).to.deep.equal([reply.id]);
+          // Every reply is in hand, so there is nothing older to fetch.
+          expect(paginatorState.hasMoreTail).to.be.false;
+        });
+
         it('copies state of the instance with the same id', () => {
           const thread = createTestThread();
           const hydrationThread = createTestThread();
