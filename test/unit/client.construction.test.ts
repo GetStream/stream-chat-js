@@ -10,7 +10,7 @@ import { Moderation } from '../../src/moderation';
 import { NotificationManager } from '../../src/notifications';
 import { PollManager } from '../../src/poll_manager';
 import { ReminderManager } from '../../src/reminders';
-import { StateStore } from '../../src/store';
+import { StateStore } from '@stream-io/state-store';
 import { StreamChat } from '../../src/client';
 import { ThreadManager } from '../../src/thread_manager';
 import { TokenManager } from '../../src/token_manager';

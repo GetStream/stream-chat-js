@@ -1,6 +1,6 @@
 import type { MessageRequest, UpdateMessageOptions } from '../types';
 import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
-import type { StateStore } from '../store';
+import type { StateStore } from '@stream-io/state-store';
 import { ConfigController } from '../configuration/ConfigController';
 import { localMessageToNewMessagePayload } from '../utils';
 import { MessageOperationStatePolicy } from './MessageOperationStatePolicy';

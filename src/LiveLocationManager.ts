@@ -12,12 +12,12 @@
 import { withCancellation } from './utils/concurrency';
 import { nowNs, nsToMs } from './utils/time';
 import { deepFreezeConfig } from './configuration/utils/deepFreezeConfig';
-import { StateStore } from './store';
+import { StateStore } from '@stream-io/state-store';
 import { ConfigController } from './configuration/ConfigController';
 import { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 import type { StreamChat } from './client';
-import type { Unsubscribe } from './store';
+import type { Unsubscribe } from '@stream-io/state-store';
 import type {
   EventType,
   MessageResponse,

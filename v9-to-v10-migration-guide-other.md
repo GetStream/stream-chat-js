@@ -73,6 +73,7 @@ supported. If you are on Node 18 or 20 and rely on that path, plan the upgrade t
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `export * from './events'` | `src/events.ts` deleted along with `EVENT_MAP`. Event-type set is now derived from the generated event decoders, no longer a hand-rolled map.                                                                                               |
 | `export * from './base64'` | `src/base64.ts` deleted along with the `base64-js` dependency. `encodeBase64` / `decodeBase64` are gone; `UserFromToken` now decodes through the global `atob`. Take base64 helpers from a package of your own if you were importing these. |
+| `export * from './store'`  | `src/store.ts` deleted. `StateStore`, `MergedStateStore`, `isPatch` and their types now come from **`@stream-io/state-store`**, which this package depends on rather than vendoring. See below.                                             |
 
 | Emptied module (barrel still present, no named exports) | Reason                                                        |
 | ------------------------------------------------------- | ------------------------------------------------------------- |
@@ -93,6 +94,32 @@ The barrel is still there, but it holds a **single** function: `UserFromToken`. 
 `UserFromToken` itself changed implementation: it decodes the JWT payload with the global `atob` instead of the removed `base64-js` helpers. It runs on the `connectUser` path, so older React Native / Hermes targets — Hermes only gained `atob` / `btoa` around React Native 0.74 — must install a base64 polyfill before the first `connectUser`, or connecting throws `ReferenceError: atob is not defined`. Verify with `typeof atob` on the target rather than by version number; browsers, Node 16+, Bun, and Deno all have it natively.
 
 ---
+
+### `StateStore` moved to `@stream-io/state-store`
+
+`stream-chat` used to carry its own copy of `StateStore` and re-export it. It is now a dependency,
+and the class is **no longer part of this package's public API**.
+
+```diff
+- import { StateStore } from 'stream-chat';
++ import { StateStore } from '@stream-io/state-store';
+```
+
+Add the package to your own dependencies:
+
+```sh
+npm install @stream-io/state-store
+```
+
+`MergedStateStore`, `isPatch`, and the `Handler` / `Patch` / `Preprocessor` / `RemovePreprocessor` /
+`Unsubscribe` / `ValueOrPatch` types move with it. The runtime behaviour is unchanged — the store
+instances on `channel.messagePaginator.state`, `client.state`, composer state and so on are the same
+objects; only where you import the class from changes.
+
+**Why it matters beyond tidiness:** TypeScript compares classes with `protected` members
+_nominally_, so two copies of `StateStore` are not assignable to one another even when byte-identical.
+A single shared declaration is what lets `stream-chat`, `@stream-io/i18n` and the UI SDKs pass stores
+across package boundaries at all.
 
 ## Removed feature modules / subsystems
 

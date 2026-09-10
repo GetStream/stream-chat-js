@@ -71,8 +71,8 @@ import type {
   UserResponse,
 } from './types';
 import { AIStates } from './types';
-import type { StateStore } from './store';
-import type { Unsubscribe } from './store';
+import type { StateStore } from '@stream-io/state-store';
+import type { Unsubscribe } from '@stream-io/state-store';
 import type {
   ChannelMemberRequest as Gen_ChannelMemberRequest,
   ChannelPushPreferencesResponse as Gen_ChannelPushPreferencesResponse,

@@ -1,4 +1,4 @@
-import { StateStore } from './store';
+import { StateStore } from '@stream-io/state-store';
 import { getMessageCreatedAtTimestamp } from './pagination/paginators/MessageIntervalPaginator';
 import { nowNs, nsToMs } from './utils/time';
 import type { ChannelResponse, LocalMessage } from './types';

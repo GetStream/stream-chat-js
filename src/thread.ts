@@ -1,4 +1,4 @@
-import { StateStore } from './store';
+import { StateStore } from '@stream-io/state-store';
 import {
   computeOwnReactions,
   formatMessage,

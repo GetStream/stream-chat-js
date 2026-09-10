@@ -1,4 +1,4 @@
-import { StateStore } from '..';
+import { StateStore } from '@stream-io/state-store';
 import type {
   CustomMessageComposerData,
   CustomMessageData,

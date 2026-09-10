@@ -1,4 +1,4 @@
-import { StateStore } from '../store';
+import { StateStore } from '@stream-io/state-store';
 import type { DebouncedFunc } from '../utils';
 import { debounce } from '../utils';
 import { mergeWithDiff } from '../utils/mergeWith';

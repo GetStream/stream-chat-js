@@ -1,4 +1,4 @@
-import { StateStore } from '../store';
+import { StateStore } from '@stream-io/state-store';
 import type { MessageComposer } from './messageComposer';
 import type { DraftMessage, LocalMessage, SharedLocation } from '../types';
 import { convertTimestampToDate } from '../utils/time';

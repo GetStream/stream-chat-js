@@ -1,4 +1,4 @@
-import type { Unsubscribe } from '../store';
+import type { Unsubscribe } from '@stream-io/state-store';
 
 /**
  * Class to use as a template for subscribable entities.

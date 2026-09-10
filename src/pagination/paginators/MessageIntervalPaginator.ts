@@ -28,7 +28,7 @@ import type {
 } from '../../types';
 import type { Channel } from '../../channel';
 import { CORE_NOTIFICATION_TYPE } from '../../notifications';
-import { StateStore } from '../../store';
+import { StateStore } from '@stream-io/state-store';
 import {
   computeOwnReactions,
   formatMessage,

@@ -1,5 +1,5 @@
 import { ReminderTimer } from './ReminderTimer';
-import { StateStore } from '../store';
+import { StateStore } from '@stream-io/state-store';
 import { nowNs, nsToMs } from '../utils/time';
 import type { ReminderTimerConfig } from './ReminderTimer';
 import type { MessageResponse, ReminderResponseData, UserResponse } from '../types';

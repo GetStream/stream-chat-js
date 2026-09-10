@@ -12,8 +12,8 @@ import {
   MessageComposerMiddlewareExecutor,
   MessageDraftComposerMiddlewareExecutor,
 } from './middleware';
-import type { Unsubscribe } from '../store';
-import { StateStore } from '../store';
+import type { Unsubscribe } from '@stream-io/state-store';
+import { StateStore } from '@stream-io/state-store';
 import { formatMessage, generateUUIDv4, isLocalMessage } from '../utils';
 import { nowNs } from '../utils/time';
 import { ConfigController } from '../configuration/ConfigController';

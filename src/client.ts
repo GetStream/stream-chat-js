@@ -79,8 +79,8 @@ import type { MessageComposer } from './messageComposer';
 import type { InstanceSetupState } from './configuration';
 import { InstanceConfigurationRegistry } from './configuration/InstanceConfigurationRegistry';
 import { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
-import { StateStore } from './store';
-import type { Unsubscribe } from './store';
+import { StateStore } from '@stream-io/state-store';
+import type { Unsubscribe } from '@stream-io/state-store';
 import type {
   ConnectUserDetailsRequest,
   FileUploadRequest,

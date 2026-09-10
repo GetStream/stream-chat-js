@@ -1,5 +1,5 @@
-import { StateStore } from '../store';
-import type { Unsubscribe } from '../store';
+import { StateStore } from '@stream-io/state-store';
+import type { Unsubscribe } from '@stream-io/state-store';
 import type { MessageResponse } from '../types';
 import type { StreamChat } from '../client';
 import type { SearchSource } from './BaseSearchSource';

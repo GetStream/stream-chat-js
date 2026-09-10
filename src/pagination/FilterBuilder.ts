@@ -1,4 +1,4 @@
-import { StateStore } from '../store';
+import { StateStore } from '@stream-io/state-store';
 import type { QueryFilter } from '../types';
 
 type ElementType<T> = T extends (infer U)[] ? U : T;
