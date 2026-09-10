@@ -593,10 +593,22 @@ export class Thread extends WithSubscriptions {
       this.client.messageStore.upsert(parentMessage);
     }
 
-    this.messagePaginator.mergeNewestPage(
-      thread.messagePaginator.state.getLatestValue().items ?? [],
-      options?.reconcile,
-    );
+    const incomingReplies = thread.messagePaginator.state.getLatestValue().items ?? [];
+
+    if (typeof this.messagePaginator.items === 'undefined') {
+      // Nothing loaded yet — the common case for a thread opened from a message, whose paginator
+      // has never held a window. `mergeNewestPage` deliberately no-ops there (it merges into an
+      // anchored head and leaves seeding to the query path), so hydrating through it would drop the
+      // replies this request just fetched and leave the panel empty until something else queried
+      // them. Seed instead, exactly as the constructor does for a thread response's `latest_replies`.
+      this.messagePaginator.setItems({
+        valueOrFactory: incomingReplies,
+        isFirstPage: true,
+        isLastPage: incomingReplies.length === replyCount,
+      });
+    } else {
+      this.messagePaginator.mergeNewestPage(incomingReplies, options?.reconcile);
+    }
     pendingReplies.forEach((reply) => this.messagePaginator.ingestItem(reply));
     // Carry the re-queried thread's last-activity floor so lastMessageAt stays fresh even when the
     // merged page does not include the newest reply. Monotonic, so an older value is a no-op.
