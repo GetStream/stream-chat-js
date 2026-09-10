@@ -392,6 +392,9 @@ export class StableWSConnection {
       this.isConnecting = false;
 
       if (response) {
+        // Already set in `onmessage`, from the same hello event this promise resolved with. Kept so
+        // the field is still assigned on any path that resolves `connectionOpen` without going
+        // through `onmessage`.
         this.connectionID = response.connection_id;
         if (
           this.client.insightMetrics.wsConsecutiveFailures > 0 &&
@@ -618,6 +621,15 @@ export class StableWSConnection {
         this.rejectPromise?.(this._errorFromWSEvent(data, false));
         return;
       }
+
+      // Assigned before going online, not after, because "the socket is up" has to imply "we have
+      // an id to watch on". `_connect()` also sets this from the resolved promise, but that runs a
+      // microtask later — so anything reacting to the status change saw `connectionID` as
+      // `undefined`, and `client.wsConnection.connectionID` (which `api-client` sends as
+      // `connection_id`) stayed that way, because `_setStatus` ignores a repeat of the same
+      // `isOnline`. Every watched request then failed with "Watch or ChatPresence requires an
+      // active websocket connection".
+      this.connectionID = (decodedData as ConnectionOpen).connection_id;
 
       this.resolvePromise?.(decodedData as ConnectionOpen);
       this._setOnline(true);

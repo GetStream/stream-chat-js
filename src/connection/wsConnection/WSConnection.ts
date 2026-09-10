@@ -173,8 +173,9 @@ export class WSConnection extends WithSubscriptions {
     const now = new Date();
     this.state.partialNext(
       isOnline
-        ? // `connectionId` is current by the time we go up. It is never cleared, which is why going
-          // down leaves it alone rather than pretending to.
+        ? // The socket assigns its `connectionID` before announcing it is up, so this is current
+          // here. It is never cleared, which is why going down leaves it alone rather than
+          // pretending to.
           { isOnline, connectionId, lastOnlineAt: now }
         : { isOnline, lastOfflineAt: now },
     );

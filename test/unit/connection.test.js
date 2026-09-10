@@ -229,6 +229,31 @@ describe('connection', function () {
 			return { c, socket, frame: JSON.parse(socket.sent[0]) };
 		};
 
+		/**
+		 * The invariant every watched request depends on: by the time the socket reports itself online,
+		 * there is a connection id to watch on — in the socket's own field *and* in
+		 * `client.wsConnection.state`, which is what `api-client` sends as `connection_id`.
+		 *
+		 * It was broken: `connectionID` was assigned from the resolved `connectionOpen` promise, a
+		 * microtask after `onmessage` had already called `_setOnline(true)`. So the store went online
+		 * carrying `connectionId: undefined`, and `_setStatus` ignores a repeat of the same `isOnline`,
+		 * so nothing ever filled it in. Every watched query then came back 400 with "Watch or
+		 * ChatPresence requires an active websocket connection".
+		 */
+		it('has a connection id in the store by the time it reports online', async () => {
+			const client = newStreamChat();
+			const { c } = await connectAndGetFrame(client);
+			client.wsConnection.connection = c;
+
+			expect(c.isOnline).to.be.true;
+			expect(c.connectionID).to.equal('61112366-0a15-3891-0000-000000000009');
+			// The store, not just the socket: this is the one `api-client` reads.
+			expect(client.wsConnection.isOnline).to.be.true;
+			expect(client.wsConnection.connectionID).to.equal(
+				'61112366-0a15-3891-0000-000000000009',
+			);
+		});
+
 		it('should send exactly one auth frame with the token, user and products', async () => {
 			const { socket, frame } = await connectAndGetFrame(newStreamChat());
 

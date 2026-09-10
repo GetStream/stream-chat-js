@@ -41,7 +41,16 @@ export const waitForWSConnection = (
     timeout = client.wsConnection.config.connectTimeoutMs,
   }: WaitForWSConnectionOptions = {},
 ): Promise<void> => {
-  if (client.wsConnection.isOnline) return Promise.resolve();
+  // Both, not just `isOnline`. The callers need a connection **id** — it is what the server keys a
+  // watch by, and what `api-client` sends as `connection_id` — so resolving on the boolean alone let
+  // a watched query go out before the id existed, and the server rejected it with "Watch or
+  // ChatPresence requires an active websocket connection". The socket now assigns the id before
+  // announcing it is up, so these move together; requiring both means a future reordering surfaces
+  // as a wait that times out rather than as a 400.
+  const isReady = () =>
+    client.wsConnection.isOnline && !!client.wsConnection.connectionID;
+
+  if (isReady()) return Promise.resolve();
 
   if (!client.userId) {
     return Promise.reject(
@@ -99,12 +108,12 @@ export const waitForWSConnection = (
       timeout,
     );
 
-    unsubscribe = client.wsConnection.state.subscribe(({ isOnline }) => {
-      if (isOnline) finish(resolve);
+    unsubscribe = client.wsConnection.state.subscribe(() => {
+      if (isReady()) finish(resolve);
     });
 
-    // The synchronous first call cannot have resolved — `isOnline` was false above — but it can have
-    // been the moment the socket came up in between. Re-checked rather than assumed.
-    if (client.wsConnection.isOnline) finish(resolve);
+    // The synchronous first call cannot have resolved — the check above failed — but the socket can
+    // have come up in between. Re-checked rather than assumed.
+    if (isReady()) finish(resolve);
   });
 };
