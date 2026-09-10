@@ -1938,6 +1938,58 @@ describe('MessagePaginator', () => {
       return { paginator, m1, m2, m3 };
     };
 
+    it('continues pagination after a hydrate instead of re-fetching the first page', async () => {
+      // `Thread.reload()` hydrates through `mergeNewestPage`, which records no query shape. The
+      // next `toTail()` therefore reads `_lastQueryShape === undefined`, and
+      // `shouldResetStateBeforeQuery` treats an undefined previous shape as a shape CHANGE — so the
+      // continuation is classified as a first page: the loaded window is blanked and page one is
+      // fetched again. Scrolling up in a freshly opened thread should paginate, not reload.
+      const { paginator, m1 } = setupLoadedHead({ isTail: false });
+      const m4 = m('m4', '04');
+      paginator.mergeNewestPage([m1, m('m2', '02'), m('m3', '03'), m4]);
+      // The older page the scroll asks for.
+      (channel.getReplies as ReturnType<typeof vi.fn>).mockResolvedValue({
+        messages: [
+          m('m0', '01', {
+            created_at: convertDateToTimestamp('2019-12-31T00:00:00.000Z'),
+          }),
+        ],
+      });
+
+      await paginator.toTail();
+
+      // The request itself is a correct continuation — older than the oldest loaded reply...
+      expect(channel.getReplies).toHaveBeenCalledWith(
+        expect.objectContaining({ id_lt: m1.id, parent_id: 'parent-1' }),
+      );
+      // ...but the page must be PREPENDED to the hydrated window, not replace it.
+      expect(paginator.items?.map((message) => message.id)).toEqual([
+        'm0',
+        'm1',
+        'm2',
+        'm3',
+        'm4',
+      ]);
+    });
+
+    it('keeps the hydrated window when the older page comes back empty', async () => {
+      // Scrolling to the top of a thread whose replies are all loaded: the tailward query returns
+      // nothing, which means "no older replies", not "no replies". The hydrate recorded no query
+      // shape, so `isFirstPageQuery` classifies this continuation as a first page and publishes
+      // `getStateBeforeFirstQuery()` (items undefined) before the request — with nothing in the
+      // response to rebuild from, the loaded window is lost.
+      const { paginator, m1 } = setupLoadedHead({ isTail: false });
+      paginator.mergeNewestPage([m1, m('m2', '02'), m('m3', '03')]);
+      (channel.getReplies as ReturnType<typeof vi.fn>).mockResolvedValue({
+        messages: [],
+      });
+
+      await paginator.toTail();
+
+      expect(paginator.items?.map((message) => message.id)).toEqual(['m1', 'm2', 'm3']);
+      expect(paginator.hasMoreTail).toBe(false);
+    });
+
     it('reconciles in-place edits and appends new messages without a query', () => {
       const { paginator, m1, m2 } = setupLoadedHead({ isTail: true });
       // While offline: m3 was edited and m4/m5 arrived; the hydrated newest window carries both.
