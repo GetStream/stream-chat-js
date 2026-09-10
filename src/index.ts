@@ -68,6 +68,7 @@ export * from './poll_manager';
 export * from './reminders';
 export * from './search';
 export * from './signing';
+export * from './languageNames';
 export * from './store';
 export { Thread } from './thread';
 export type {

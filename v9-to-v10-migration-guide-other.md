@@ -8,7 +8,7 @@
 > - `v9-to-v10-migration-guide-sort.md` (`SortParamRequest[]` shape)
 > - `v9-to-v10-migration-guide-server-side.md` (server-side surface removal, dropped Node-only deps)
 > - `v9-to-v10-migration-guide-type-renames.md` (hand-rolled type aliases → generated names)
-> - `v9-to-v10-migration-guide-i18n.md` (notification identity, poll-composer field errors, the `stream-chat/i18n` subpath)
+> - `v9-to-v10-migration-guide-i18n.md` (notification identity, poll-composer field errors, the `@stream-io/i18n` package)
 > - `v9-to-v10-migration-guide-dates.md` (server-sent dates as unix-nanosecond numbers)
 >
 > Read those first. This guide covers **exports, removed feature modules, event-type shape, filter constraints, small state/composer shape changes, and residual type/property renames** that the topic guides do not.

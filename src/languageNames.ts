@@ -1,4 +1,4 @@
-import type { TranslationLanguage } from '../types';
+import type { TranslationLanguage } from './types';
 
 /**
  * The human-readable name of each language the API can auto-translate a message into.

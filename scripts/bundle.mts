@@ -32,12 +32,9 @@ const browserExternal = modules.filter(
 const nodeExternal = [...modules, ...builtinModules];
 
 const commonBuildOptions = {
-  // Name-keyed so `[name]` stays stable per entry. `i18n` is a separate entry point on purpose: it
-  // pulls in i18next and dayjs, and keeping those out of the root bundle is the whole reason
-  // `stream-chat/i18n` exists as a subpath. `assertBundleBoundaries` enforces that below.
+  // Name-keyed so `[name]` stays stable per entry.
   entryPoints: {
     index: resolve(__dirname, '../src/index.ts'),
-    i18n: resolve(__dirname, '../src/i18n/index.ts'),
   },
   bundle: true,
   metafile: true,
@@ -51,12 +48,6 @@ const commonBuildOptions = {
   // possibly-`undefined` value and stop typechecking. This checks the literal against `BuildOptions`
   // while keeping its exact shape.
 } satisfies esbuild.BuildOptions;
-
-/** Dependencies that must never be reachable from the root bundle. */
-const I18N_ONLY_DEPENDENCIES = ['i18next', 'dayjs'];
-
-/** The generator's source, which lives outside `src/`. */
-const CODEGEN_SOURCES = /(^|\/)codegen\//;
 
 type EntryBoundary = {
   /** Suffix-matched against esbuild's `entryPoint`. */
@@ -74,22 +65,11 @@ type EntryBoundary = {
  */
 const ENTRY_BOUNDARIES: EntryBoundary[] = [
   {
-    // The root bundle: no i18n at all, and none of its dependencies.
+    // The only entry point. The translation layer that used to live behind `stream-chat/i18n` — and
+    // the `i18next`/`dayjs` it pulled in — now ships as `@stream-io/i18n`, so there is no second
+    // bundle to keep it out of. The mechanism is kept because it is what makes *adding* an entry
+    // point a deliberate act: an undeclared one fails the build rather than silently shipping.
     entry: 'src/index.ts',
-    forbiddenDeps: I18N_ONLY_DEPENDENCIES,
-    // Two directories rather than the one `src/i18n(-codegen)?/` pattern this used to be, now that the
-    // generator sits outside `src/`.
-    forbiddenSources: /(^|\/)(src\/i18n|codegen)\//,
-  },
-  {
-    // The runtime i18n layer must not pull in the Node-only build tooling.
-    entry: 'src/i18n/index.ts',
-    forbiddenDeps: [],
-    forbiddenSources: CODEGEN_SOURCES,
-  },
-  {
-    // The codegen is Node-only by design and has no restriction of its own.
-    entry: 'codegen/i18n/index.ts',
     forbiddenDeps: [],
     forbiddenSources: null,
   },
@@ -98,17 +78,12 @@ const ENTRY_BOUNDARIES: EntryBoundary[] = [
 /**
  * Fails the build if an entry point reached something it must not.
  *
- * Two directions, both a single careless `export * from './i18n'` away:
- *   - the root bundle must not reach `src/i18n/` or its dependencies, or every consumer of
- *     `stream-chat` pays for i18next and dayjs whether they translate anything or not;
- *   - the runtime i18n bundle must not reach `codegen/`, which is Node-only build tooling.
+ * Nothing is forbidden today: the i18n layer this used to fence off now lives in `@stream-io/i18n`,
+ * so the root bundle is the only bundle. What the check still buys is the *undeclared entry* failure
+ * below — a new entry point has to state its boundary rather than inherit none by accident.
  *
- * Checked here rather than left to review, because the failure is invisible: everything still works,
- * the bundle is just quietly bigger.
- *
- * The second direction is now *also* enforced by the type system, since `codegen/` sits outside the
- * library tsconfig — an import from `src/i18n/` fails at `tsc` first, with a better error. This stays
- * as the backstop for a deliberate `require`, which `tsc` would not see.
+ * Checked here rather than left to review, because this class of failure is invisible: everything
+ * still works, the bundle is just quietly bigger.
  */
 const assertBundleBoundaries = (metafile: esbuild.Metafile) => {
   const failures: string[] = [];
@@ -196,35 +171,6 @@ const bundles = [
       ...commonBuildOptions.define,
       'process.env.CLIENT_BUNDLE': JSON.stringify('browser-esm'),
     },
-  } satisfies esbuild.BuildOptions,
-  // Build-time codegen: **ESM only, and Node only.**
-  //
-  // No browser variant because it reads the filesystem. No CJS variant because nothing needs one: it is
-  // invoked by a build script, never bundled and never loaded by a test runner. Both UI SDKs run it as
-  // `node scripts/generate-i18n-keys.mts`, and `.mts` is unambiguously ESM. The CJS flavours elsewhere
-  // in this file exist for React Native's Jest, which loads the *runtime* in CJS and does not transform
-  // `node_modules` — the generator never enters that path. Shipping a second flavour nothing exercises
-  // is worse than not shipping it.
-  //
-  // A CJS caller is still fine on `await import('stream-chat/i18n/codegen')`, and on plain `require()`
-  // from Node 20.19 / 22.12 onward.
-  //
-  // Kept a separate entry so it never becomes reachable from `stream-chat/i18n`, which
-  // `assertBundleBoundaries` enforces.
-  {
-    entryPoints: {
-      'i18n-codegen': resolve(__dirname, '../codegen/i18n/index.ts'),
-    },
-    bundle: true,
-    metafile: true,
-    target: 'es2022',
-    platform: 'node',
-    format: 'esm',
-    external: nodeExternal,
-    sourcemap: watchModeEnabled ? 'inline' : 'linked',
-    define: { 'process.env.PKG_VERSION': JSON.stringify(version) },
-    outExtension: { '.js': '.mjs' },
-    outdir: resolve(__dirname, '../dist/esm'),
   } satisfies esbuild.BuildOptions,
 ].flat();
 
