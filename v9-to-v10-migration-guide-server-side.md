@@ -517,7 +517,7 @@ Things to know when running both clients:
 
 ## Running the WS client under Node
 
-`stream-chat@10` no longer bundles `isomorphic-ws` or `ws` — the internal `StableWSConnection` picks up the runtime's global `WebSocket` (see `src/connection.ts`). What that means per runtime:
+`stream-chat@10` no longer bundles `isomorphic-ws` or `ws` — the internal `StableWSConnection` picks up the runtime's global `WebSocket` (see `src/StableWSConnection.ts`). What that means per runtime:
 
 | Runtime             | Do you need to do anything?                                                                                |
 | ------------------- | ---------------------------------------------------------------------------------------------------------- |

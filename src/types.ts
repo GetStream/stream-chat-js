@@ -1,5 +1,4 @@
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
-import type { StableWSConnection } from './connection';
 import type { CustomEventTypes } from './custom_types';
 import type { NotificationManager } from './notifications';
 import type { InstanceConfigTree } from './configuration/types';
@@ -196,22 +195,6 @@ export type StreamChatOptions = {
    */
   persistUserOnConnectionFailure?: boolean;
   warmUp?: boolean;
-  /**
-   * Sets the instance of `StableWSConnection` on the chat client. Intended purely for testing and
-   * should not be used in production apps.
-   */
-  wsConnection?: StableWSConnection;
-  /**
-   * Overrides the `WebSocket` constructor used by `StableWSConnection`. Intended purely for
-   * testing so a mock/drivable WebSocket can be swapped in; production code should leave this
-   * unset and rely on the platform's global `WebSocket`.
-   */
-  WebSocketImpl?: typeof WebSocket;
-  /**
-   * Sets a suffix to the wsUrl when it is being built in `wsConnection`. Is meant to be
-   * used purely in testing suites and should not be used in production apps.
-   */
-  wsUrlParams?: URLSearchParams;
 };
 
 export type UnBanUserOptions = {
@@ -227,6 +210,19 @@ export type UnBanUserOptions = {
 /** Everything `queryUsers()` accepts apart from the filter and the sort. */
 export type UserOptions = Omit<QueryUsersPayload, 'filter_conditions' | 'sort'>;
 
+/**
+ * Which connection a `connection.changed` / `connection.recovered` event is about.
+ *
+ * `'network'` is the device's own network status, reported by the platform listener registered on
+ * `client.networkConnection`. `'ws'` is this client's WebSocket. They are different facts and routinely
+ * disagree: a socket dies on a working network (server close, expired token, health-check timeout),
+ * and a device goes offline while the socket has not noticed yet.
+ *
+ * Handlers that mean one of them **must** narrow on `event.connection` — the payload shape is the
+ * same for both, so nothing forces the check.
+ */
+export type ConnectionType = 'network' | 'ws';
+
 type LocalEvent = (
   | ({ type: 'live_location_sharing.started' } & { message: MessageResponse })
   | ({ type: 'live_location_sharing.stopped' } & {
@@ -238,8 +234,8 @@ type LocalEvent = (
         isLatestMessageSet: boolean;
       };
     })
-  | ({ type: 'connection.changed' } & { online: boolean })
-  | { type: 'connection.recovered' }
+  | ({ type: 'connection.changed' } & { connection: ConnectionType; online: boolean })
+  | ({ type: 'connection.recovered' } & { connection: ConnectionType })
   | ({ type: 'offline_reactions.queried' } & {
       offlineReactions: ReactionResponse[];
     })
@@ -264,7 +260,7 @@ type LocalEvent = (
  *
  * Hand-written because the event is not published in the OpenAPI spec, so it cannot
  * come from `src/gen`. Remove this — along with the `decodeConnectionEvent` shim in
- * `connection.ts` — once the backend adds it to the spec and `src/gen` is regenerated.
+ * `StableWSConnection.ts` — once the backend adds it to the spec and `src/gen` is regenerated.
  */
 export type ConnectedEvent = {
   type: 'connection.ok';

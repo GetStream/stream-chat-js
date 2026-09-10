@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 // A test-only WebSocket that immediately opens and pushes the canned hello frame
 // the real Stream backend sends on the first message. Used with
-// `client.options.WebSocketImpl` so tests never touch the network.
+// `wsConnection.config.webSocketImpl` so tests never touch the network.
 const HEALTH_CHECK_PAYLOAD =
 	'{"type":"health.check","connection_id":"61112366-0a15-3891-0000-000000000009","cid":"*","me":{"id":"amin","role":"user","created_at":1627391903293696000,"updated_at":1627392008047284000,"last_active":1628678564213510048,"banned":false,"online":true,"invisible":false,"devices":[],"mutes":[],"channel_mutes":[],"unread_count":98,"total_unread_count":98,"unread_channels":18,"language":"","image":"https://cdn.fakercloud.com/avatars/Shriiiiimp_128.jpg","name":"amin"},"created_at":1628678564222203145}';
 
@@ -121,7 +121,8 @@ describe('connection', function () {
 	tokenManager.token = 't.oke.n';
 	const user = { name: 'amin', id: 'amin' };
 	const newStreamChat = () => {
-		const client = new StreamChat('key', { WebSocketImpl: MockWebSocket });
+		const client = new StreamChat('key');
+		client.wsConnection.updateConfig({ webSocketImpl: MockWebSocket });
 		client.wsBaseURL = wsBaseURL;
 		client.tokenManager = tokenManager;
 		client._user = user;
@@ -135,11 +136,12 @@ describe('connection', function () {
 
 	describe('Connection tokenProvider', () => {
 		it('should handle token provider rejection ', async () => {
-			const client = new StreamChat('apiKey', {
-				allowServerSideConnect: true,
-				WebSocketImpl: MockWebSocket,
+			const client = new StreamChat('apiKey', { allowServerSideConnect: true });
+			client.config.set({
+				client: {
+					wsConnection: { connectTimeoutMs: 20, webSocketImpl: MockWebSocket },
+				},
 			});
-			client.defaultWSTimeout = 20;
 			const tokenProvider = () => Promise.reject(new Error('network failure'));
 			await expect(client.connectUser({ id: 'amin' }, tokenProvider)).rejects.toThrow(
 				/tokenProvider failed/,
@@ -201,7 +203,9 @@ describe('connection', function () {
 
 		it('should include extra params when building url if provided', function () {
 			const { query: prevQuery } = url.parse(ws._buildUrl(), true);
-			ws.client.options.wsUrlParams = new URLSearchParams({ foo: '1', bar: '2' });
+			ws.client.wsConnection.updateConfig({
+				urlParams: new URLSearchParams({ foo: '1', bar: '2' }),
+			});
 			const { query } = url.parse(ws._buildUrl(), true);
 
 			// all of the previous query params should remain intact
@@ -224,6 +228,31 @@ describe('connection', function () {
 			const [socket] = MockWebSocket.instances;
 			return { c, socket, frame: JSON.parse(socket.sent[0]) };
 		};
+
+		/**
+		 * The invariant every watched request depends on: by the time the socket reports itself online,
+		 * there is a connection id to watch on — in the socket's own field *and* in
+		 * `client.wsConnection.state`, which is what `api-client` sends as `connection_id`.
+		 *
+		 * It was broken: `connectionID` was assigned from the resolved `connectionOpen` promise, a
+		 * microtask after `onmessage` had already called `_setOnline(true)`. So the store went online
+		 * carrying `connectionId: undefined`, and `_setStatus` ignores a repeat of the same `isOnline`,
+		 * so nothing ever filled it in. Every watched query then came back 400 with "Watch or
+		 * ChatPresence requires an active websocket connection".
+		 */
+		it('has a connection id in the store by the time it reports online', async () => {
+			const client = newStreamChat();
+			const { c } = await connectAndGetFrame(client);
+			client.wsConnection.connection = c;
+
+			expect(c.isOnline).to.be.true;
+			expect(c.connectionID).to.equal('61112366-0a15-3891-0000-000000000009');
+			// The store, not just the socket: this is the one `api-client` reads.
+			expect(client.wsConnection.isOnline).to.be.true;
+			expect(client.wsConnection.connectionID).to.equal(
+				'61112366-0a15-3891-0000-000000000009',
+			);
+		});
 
 		it('should send exactly one auth frame with the token, user and products', async () => {
 			const { socket, frame } = await connectAndGetFrame(newStreamChat());
@@ -322,7 +351,7 @@ describe('connection', function () {
 			expect(health.type).to.equal('connection.ok');
 			expect(health.connection_id).to.equal('61112366-0a15-3891-0000-000000000009');
 			expect(c.connectionID).to.equal('61112366-0a15-3891-0000-000000000009');
-			expect(c.isHealthy).to.be.true;
+			expect(c.isOnline).to.be.true;
 		});
 
 		it('passes wire timestamps through untouched', async () => {
@@ -428,7 +457,7 @@ describe('connection', function () {
 
 		it('should set and unset the flag correctly without opening WS', async () => {
 			const client = newStreamChat();
-			client.options.WebSocketImpl = FailingWebSocket;
+			client.wsConnection.updateConfig({ webSocketImpl: FailingWebSocket });
 			client.wsBaseURL = 'https://stream-dummy-test.com';
 			const c = new StableWSConnection({ client });
 
@@ -463,9 +492,12 @@ describe('connection', function () {
 			const client = new StreamChat('apiKey', {
 				allowServerSideConnect: true,
 				baseURL: 'http://localhost:1111', // invalid base url
-				WebSocketImpl: FailingWebSocket,
 			});
-			client.defaultWSTimeout = 2000;
+			client.config.set({
+				client: {
+					wsConnection: { connectTimeoutMs: 2000, webSocketImpl: FailingWebSocket },
+				},
+			});
 
 			await expect(client.connectUser({ id: 'amin' }, token)).rejects.toThrow(
 				/initial WS connection could not be established/,
@@ -476,9 +508,12 @@ describe('connection', function () {
 			const client = new StreamChat('apiKey', {
 				allowServerSideConnect: true,
 				baseURL: 'http://localhost:1111',
-				WebSocketImpl: FailingWebSocket,
 			});
-			client.defaultWSTimeout = 5000;
+			client.config.set({
+				client: {
+					wsConnection: { connectTimeoutMs: 5000, webSocketImpl: FailingWebSocket },
+				},
+			});
 
 			await Promise.all([
 				client.connectUser({ id: 'amin' }, token).then((health) => {
@@ -486,7 +521,7 @@ describe('connection', function () {
 				}),
 				sleep(1000).then(() => {
 					// swap in the healthy mock so the retrying connect will succeed
-					client.options.WebSocketImpl = MockWebSocket;
+					client.wsConnection.updateConfig({ webSocketImpl: MockWebSocket });
 					client.setBaseURL(wsBaseURL);
 					client.wsConnection.wsBaseURL = client.wsBaseURL;
 				}),

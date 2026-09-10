@@ -533,7 +533,7 @@
 			simulateBurst.state.reactions = counters.reactions;
 		};
 
-		// Mirror the real receive path: src/connection.ts onmessage parses
+		// Mirror the real receive path: src/StableWSConnection.ts onmessage parses
 		// the frame locally (health-check / error shortcut), then
 		// src/client.ts handleEvent parses it again before dispatching.
 		// Both parses happen per frame in production — pay both here too.

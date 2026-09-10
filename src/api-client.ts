@@ -136,7 +136,7 @@ export class ApiClient {
         ...this.client.options.axiosRequestConfig?.params,
         ...additonalConfig.params,
         connection_id:
-          additonalConfig.params?.connection_id || this.client._getConnectionID(),
+          additonalConfig.params?.connection_id || this.client.wsConnection.connectionID,
       },
     } satisfies AxiosRequestConfig;
   }

@@ -424,7 +424,7 @@ describe("the 'channel' configuration key", () => {
       // and the assertions below pass for the wrong reason — which they did, until reverting the gate to
       // the raw server flag failed to break anything.
       beforeEach(() => {
-        client.wsConnection = { isHealthy: true } as never;
+        client.wsConnection = { isOnline: true } as never;
         client.user = { id: 'user' } as never;
       });
 

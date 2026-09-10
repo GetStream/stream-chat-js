@@ -347,9 +347,9 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 		client.user = user;
 		client.user = { id: user.id };
 		client.wsPromise = Promise.resolve();
-		// a connection id is what makes a watch possible at all
-		client._hasConnectionID = () => true;
-		client.connectionId = 'connection-id';
+		// A live socket is what makes a watch possible at all — `watch()` now waits for one instead of
+		// degrading to `watch: false`, so this is what lets it proceed.
+		client.wsConnection._setStatus({ isOnline: true, connectionId: 'connection-id' });
 		channel = client.channel('messaging', 'watching-id');
 		client.activeChannels[channel.cid] = channel;
 		mockQueryResponse(generateChannel({ channel: { id: 'watching-id' } }));
@@ -395,12 +395,58 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 		expect(channel.watchStatus).to.equal(ChannelWatchStatus.Watching);
 	});
 
-	it('stays NotWatching when watch() downgrades for lack of a connection id', async () => {
-		client._hasConnectionID = () => false;
+	it('rejects at once when no socket was ever opened, rather than waiting', async () => {
+		// `connect()` assigns the socket synchronously, so a null one means nothing was ever asked to
+		// open. Waiting for it would burn the whole timeout to reach the same failure.
+		client.wsConnection.connection = null;
+		client.wsConnection._setStatus({ isOnline: false });
 
-		await channel.watch();
+		await expect(channel.watch()).rejects.toThrow(/none has been opened/);
 
 		expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
+	});
+
+	it('throws rather than downgrading when the socket does not come back', async () => {
+		// `watch()` used to send `watch: false` here and resolve with unwatched data, which is what made
+		// a false `Watching` possible elsewhere. It now waits for a live socket and throws if one does
+		// not arrive, leaving the status untouched.
+		client.wsConnection.connection = new StableWSConnection({ client });
+		client.wsConnection._setStatus({ isOnline: false });
+		// The wait defaults to the socket's own connect budget, so shortening that shortens the wait.
+		client.config.set({ client: { wsConnection: { connectTimeoutMs: 20 } } });
+
+		await expect(channel.watch()).rejects.toThrow(/Timed out after 20ms/);
+
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
+	});
+
+	it('rejects at once after a deliberate closeConnection, not on the timeout', async () => {
+		// The mobile backgrounding path. The absence of a socket is intentional there, so opening a
+		// channel must fail immediately rather than block for the full wait.
+		const socket = new StableWSConnection({ client });
+		socket.isDisconnected = true;
+		client.wsConnection.connection = socket;
+		client.wsConnection._setStatus({ isOnline: false });
+		client.config.set({ client: { wsConnection: { connectTimeoutMs: 60_000 } } });
+
+		await expect(channel.watch()).rejects.toThrow(/closed deliberately/);
+	});
+
+	it('issues exactly one watched request once a socket arrives while it waits', async () => {
+		client.wsConnection.connection = new StableWSConnection({ client });
+		client.wsConnection._setStatus({ isOnline: false });
+		const query = sinon.spy(channel, 'query');
+
+		const watching = channel.watch();
+		// Nothing has gone out yet — the old code would already have sent an unwatched query here.
+		expect(query.called).to.be.false;
+
+		client.wsConnection._setStatus({ isOnline: true, connectionId: 'reconnected-id' });
+		await watching;
+
+		expect(query.calledOnce).to.be.true;
+		expect(query.firstCall.args[0].watch).to.be.true;
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.Watching);
 	});
 
 	it('goes to NotWatching on stopWatching() — a deliberate stop is not restored', async () => {
@@ -503,8 +549,8 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 		expect(channel.watchStatus).to.equal(ChannelWatchStatus.WasWatching);
 	});
 
-	it('is NOT set by hydration without a connection id', () => {
-		client._hasConnectionID = () => false;
+	it('is NOT set by hydration while the socket is down', () => {
+		client.wsConnection._setStatus({ isOnline: false });
 		const response = generateChannel({ channel: { id: 'no-connection-id' } });
 
 		const [hydrated] = client.hydrateActiveChannels([response]);
@@ -521,7 +567,7 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 		expect(hydrated.offlineMode).to.equal(true);
 	});
 
-	it('is demoted via closeConnection (deliberate shutdown never reaches _setHealth)', async () => {
+	it('is demoted via closeConnection (deliberate shutdown never reaches _setOnline)', async () => {
 		await channel.watch();
 
 		await client.closeConnection();
@@ -533,9 +579,9 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 		await channel.watch();
 		const sweep = vi.spyOn(client, '_markActiveChannelsWatchInterrupted');
 		const connection = new StableWSConnection({ client });
-		connection.isHealthy = true;
+		connection.isOnline = true;
 
-		connection._setHealth(false);
+		connection._setOnline(false);
 
 		expect(sweep).toHaveBeenCalledTimes(1);
 	});
@@ -555,6 +601,8 @@ describe('Channel AI indicator state (channel.state.aiState)', function () {
 	const setupChannel = () => {
 		const client = new StreamChat('apiKey');
 		client.user = { id: 'user' };
+		// `reload()` re-watches, and `watch()` waits for a live socket.
+		client.wsConnection._setStatus({ isOnline: true, connectionId: 'connection-id' });
 		const channel = client.channel('messaging', 'ai-state-id');
 		channel.initialized = true;
 		return { channel };
@@ -610,7 +658,7 @@ describe('Channel AI indicator state (channel.state.aiState)', function () {
 
 	it('clean() resets aiState to Idle when the WS connection is down', () => {
 		const { channel } = setupChannel();
-		channel.getClient().wsConnection = { isHealthy: false };
+		channel.getClient().wsConnection = { isOnline: false };
 		channel._handleChannelEvent({
 			type: 'ai_indicator.update',
 			ai_state: 'AI_STATE_GENERATING',
@@ -624,7 +672,7 @@ describe('Channel AI indicator state (channel.state.aiState)', function () {
 
 	it('clean() leaves a live aiState untouched while the WS connection is healthy', () => {
 		const { channel } = setupChannel();
-		channel.getClient().wsConnection = { isHealthy: true };
+		channel.getClient().wsConnection = { isOnline: true };
 		channel._handleChannelEvent({
 			type: 'ai_indicator.update',
 			ai_state: 'AI_STATE_GENERATING',
@@ -2791,6 +2839,8 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		clientVish.user = user;
 		clientVish.user = { id: user.id };
 		clientVish.wsPromise = Promise.resolve();
+		// A connected client has a live socket; `watch()` waits for one.
+		clientVish.wsConnection._setStatus({ isOnline: true, connectionId: 'connection-id' });
 	};
 
 	clientVish.connectUser();
@@ -3989,6 +4039,8 @@ describe('Channel.query — initial page size', () => {
 	beforeEach(() => {
 		client = new StreamChat('apiKey');
 		client.user = { id: 'user' };
+		// `reload()` re-watches, and `watch()` waits for a live socket.
+		client.wsConnection._setStatus({ isOnline: true, connectionId: 'connection-id' });
 		const channelResponse = generateChannel();
 		channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
 		channel.initialized = true;
@@ -4045,6 +4097,8 @@ describe('Channel.reload', () => {
 	beforeEach(() => {
 		client = new StreamChat('apiKey');
 		client.user = { id: 'user' };
+		// `watch()` waits for a live socket; a connected client has one.
+		client.wsConnection._setStatus({ isOnline: true, connectionId: 'connection-id' });
 		const channelResponse = generateChannel();
 		channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
 		channel.initialized = true;

@@ -1406,7 +1406,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    */
   public queueTask = async <T>({ task }: { task: PendingTask }): Promise<T> => {
     const attemptTaskExecution = async () => {
-      if (!this.client.wsConnection?.isHealthy) {
+      if (!this.client.wsConnection?.isOnline) {
         throw new OfflineError(
           'Cannot execute task because the connection has been lost.',
           { type: 'connection:lost' },
@@ -1523,7 +1523,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
     if (
       task.type === 'update-message' &&
-      !this.client.wsConnection?.isHealthy &&
+      !this.client.wsConnection?.isOnline &&
       (task.payload[0].message as { status?: string } | undefined)?.status === 'failed'
     ) {
       await this.handleOfflineFailedUpdateMessagePendingTask(task);

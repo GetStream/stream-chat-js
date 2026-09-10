@@ -490,7 +490,8 @@ describe('Client openConnection', () => {
 			});
 		};
 
-		client = new StreamChat('', { allowServerSideConnect: true, wsConnection });
+		client = new StreamChat('', { allowServerSideConnect: true });
+		client.wsConnection.updateConfig({ connection: wsConnection });
 	});
 
 	it('should return same promise in case of multiple calls', async () => {
@@ -552,12 +553,17 @@ describe('Client connectUser', () => {
 		expect(connection).to.equal('openConnection');
 	});
 
-	it('_getConnectionID, _hasConnectionID', () => {
-		expect(client._hasConnectionID()).to.be.false;
-		expect(client._getConnectionID()).to.equal(undefined);
-		client.wsConnection = { connectionID: 'ID' };
-		expect(client._getConnectionID()).to.equal('ID');
-		expect(client._hasConnectionID()).to.be.true;
+	it('exposes the connection id, which is never cleared', () => {
+		expect(client.wsConnection.connectionID).to.equal(undefined);
+
+		client.wsConnection._setStatus({ isOnline: true, connectionId: 'ID' });
+		expect(client.wsConnection.connectionID).to.equal('ID');
+
+		// Left alone when the socket goes down, which is why a value here means "connected at some
+		// point" rather than "connected now" — read `isOnline` for the latter.
+		client.wsConnection._setStatus({ isOnline: false });
+		expect(client.wsConnection.isOnline).to.be.false;
+		expect(client.wsConnection.connectionID).to.equal('ID');
 	});
 });
 
@@ -820,7 +826,7 @@ describe('message update', () => {
 			});
 			const request = { id: failedEditedMessage.id, message: failedEditedMessage };
 
-			client.wsConnection = { isHealthy: false };
+			client.wsConnection = { isOnline: false };
 			queueTaskSpy.mockRejectedValue(new Error('Offline failure'));
 			_updateMessageSpy.mockResolvedValue({ message: failedEditedMessage });
 
