@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ClientState } from '../../src/client_state';
 import { FixedSizeQueueCache } from '../../src/utils/FixedSizeQueueCache';
-import { InsightMetrics } from '../../src/insights';
 import { MessageDeliveryReporter } from '../../src/messageDelivery';
 import { Moderation } from '../../src/moderation';
 import { NotificationManager } from '../../src/notifications';
@@ -62,8 +61,8 @@ describe('StreamChat construction', () => {
 
     it('treats an omitted options argument as an empty options object', () => {
       const client = new StreamChat(API_KEY);
-      expect(client.options.warmUp).to.equal(false);
-      expect(client.options.disableCache).to.equal(false);
+      expect(client.options.isLocalUnreadCountEnabled).to.equal(false);
+      expect(client.options.wsUrlParams).to.be.instanceOf(URLSearchParams);
     });
   });
 
@@ -114,8 +113,7 @@ describe('StreamChat construction', () => {
     it('applies defaults when no options are passed', () => {
       const client = new StreamChat(API_KEY);
 
-      expect(client.options.warmUp).to.equal(false);
-      expect(client.options.disableCache).to.equal(false);
+      expect(client.options.isLocalUnreadCountEnabled).to.equal(false);
       expect(client.options.wsUrlParams).to.be.instanceOf(URLSearchParams);
       // Recovery is on by default, and now says so through its own configuration rather than a
       // client option.
@@ -124,13 +122,11 @@ describe('StreamChat construction', () => {
 
     it('honors user-provided overrides', () => {
       const client = new StreamChat(API_KEY, {
-        warmUp: true,
-        disableCache: true,
+        isLocalUnreadCountEnabled: true,
         config: { client: { connectionRecovery: { enabled: false } } },
       });
 
-      expect(client.options.warmUp).to.equal(true);
-      expect(client.options.disableCache).to.equal(true);
+      expect(client.options.isLocalUnreadCountEnabled).to.equal(true);
       // Seeded from `options.config` before the managers are wired, so it applies from construction.
       expect(client.connectionRecovery.config.enabled).to.equal(false);
     });
@@ -327,7 +323,6 @@ describe('StreamChat construction', () => {
       expect(client.reminders).to.be.instanceOf(ReminderManager);
       expect(client.messageDeliveryReporter).to.be.instanceOf(MessageDeliveryReporter);
       expect(client.messageComposerCache).to.be.instanceOf(FixedSizeQueueCache);
-      expect(client.insightMetrics).to.be.instanceOf(InsightMetrics);
     });
 
     it('reuses an externally supplied NotificationManager instead of wrapping it', () => {
@@ -365,7 +360,6 @@ describe('StreamChat construction', () => {
       expect(a.uploadManager).to.not.equal(b.uploadManager);
       expect(a.messageDeliveryReporter).to.not.equal(b.messageDeliveryReporter);
       expect(a.messageComposerCache).to.not.equal(b.messageComposerCache);
-      expect(a.insightMetrics).to.not.equal(b.insightMetrics);
       expect(a.notifications).to.not.equal(b.notifications);
       expect(a.state).to.not.equal(b.state);
     });

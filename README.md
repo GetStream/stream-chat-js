@@ -43,9 +43,8 @@ import { StreamChat } from 'stream-chat';
 // or if you are using CommonJS
 const { StreamChat } = require('stream-chat');
 
-const client = new StreamChat('API_KEY', 'API_SECRET', {
-  disableCache: true, // recommended option for server-side use
-  // ...other options like `baseURL`...
+const client = new StreamChat('API_KEY', {
+  // ...options like `baseURL` or `axiosRequestConfig`...
 });
 
 // create a user

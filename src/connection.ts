@@ -1,17 +1,11 @@
 import {
   addConnectionEventListeners,
   chatCodes,
-  convertErrorToJson,
   randomId,
   removeConnectionEventListeners,
   retryInterval,
   sleep,
 } from './utils';
-import {
-  buildWsFatalInsight,
-  buildWsSuccessAfterFailureInsight,
-  postInsights,
-} from './insights';
 import { chatLoggerSystem } from './logger';
 import type { ConnectAPIResponse, ConnectedEvent, ConnectionOpen } from './types';
 import type { StreamChat } from './client';
@@ -324,7 +318,6 @@ export class StableWSConnection {
     if (this.isConnecting || this.isDisconnected) return;
     this.isConnecting = true;
     this.requestID = randomId();
-    this.client.insightMetrics.connectionStartTimestamp = new Date().getTime();
     let isTokenReady = false;
     try {
       logger.withExtraTags('_connect').debug('Waiting for the auth token.');
@@ -365,16 +358,6 @@ export class StableWSConnection {
 
       if (response) {
         this.connectionID = response.connection_id;
-        if (
-          this.client.insightMetrics.wsConsecutiveFailures > 0 &&
-          this.client.options.enableInsights
-        ) {
-          postInsights(
-            'ws_success_after_failure',
-            buildWsSuccessAfterFailureInsight(this as unknown as StableWSConnection),
-          );
-          this.client.insightMetrics.wsConsecutiveFailures = 0;
-        }
         return response;
       }
     } catch (error: any) {
@@ -382,16 +365,6 @@ export class StableWSConnection {
       logger
         .withExtraTags('_connect')
         .warn('An error occurred while connecting.', { error });
-      if (this.client.options.enableInsights) {
-        this.client.insightMetrics.wsConsecutiveFailures++;
-        this.client.insightMetrics.wsTotalFailures++;
-
-        const insights = buildWsFatalInsight(
-          this as unknown as StableWSConnection,
-          convertErrorToJson(error as Error),
-        );
-        postInsights?.('ws_fatal', insights);
-      }
       throw error;
     }
   }

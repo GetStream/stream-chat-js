@@ -1,5 +1,4 @@
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
-import type { StableWSConnection } from './connection';
 import type { CustomEventTypes } from './custom_types';
 import type { NotificationManager } from './notifications';
 import type { InstanceConfigTree } from './configuration/types';
@@ -158,16 +157,6 @@ export type StreamChatOptions = {
   baseURL?: string;
   browser?: boolean;
   /**
-   * Disables the hydration of all caches within the JS Client. This includes this.activeChannels,
-   * this.polls.pollCache and this.config.
-   * It is mainly meant to be used for integrations where stream-chat is used as a server-side service
-   * interacting with Stream's REST API, not depending on any state and purely serving as a wrapper
-   * around HTTP requests. Using this property on either the client side or a backend implementation
-   * that also relies on WS events will break these functionalities, so please use carefully.
-   */
-  disableCache?: boolean;
-  enableInsights?: boolean;
-  /**
    * When true, maintains a client-local unread count on channels that have read events disabled
    * (e.g. livestreams). The count increments on incoming messages and is reset via
    * `channel.markReadLocally()`. It is never sent to the backend, but is persisted to the offline DB.
@@ -195,12 +184,6 @@ export type StreamChatOptions = {
    * persist even if connectUser call fails.
    */
   persistUserOnConnectionFailure?: boolean;
-  warmUp?: boolean;
-  /**
-   * Sets the instance of `StableWSConnection` on the chat client. Intended purely for testing and
-   * should not be used in production apps.
-   */
-  wsConnection?: StableWSConnection;
   /**
    * Overrides the `WebSocket` constructor used by `StableWSConnection`. Intended purely for
    * testing so a mock/drivable WebSocket can be swapped in; production code should leave this

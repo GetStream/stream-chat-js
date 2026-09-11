@@ -111,15 +111,6 @@ describe('StreamChat getInstance', () => {
 		);
 		expect(requestSpy.mock.calls[0][0].headers).to.haveOwnProperty('Pragma', 'no-cache');
 	});
-
-	it('should correctly resolve _cacheEnabled', async () => {
-		const client1 = new StreamChat('key', { disableCache: true });
-		expect(client1._cacheEnabled()).to.be.equal(false);
-		const client2 = new StreamChat('key', { disableCache: false });
-		expect(client2._cacheEnabled()).to.be.equal(true);
-		const client3 = new StreamChat('key');
-		expect(client3._cacheEnabled()).to.be.equal(true);
-	});
 });
 
 describe('StreamChat config(s) store', () => {
@@ -152,18 +143,6 @@ describe('StreamChat config(s) store', () => {
 				'messaging:general': { replies: true },
 			},
 		});
-	});
-
-	it('does not update channelServerConfigsStore through _addChannelConfig when cache is disabled', () => {
-		const client = new StreamChat('key', 'secret');
-		client._cacheEnabled = () => false;
-
-		client._addChannelConfig({
-			cid: 'messaging:general',
-			config: { replies: true },
-		});
-
-		expect(client.channelServerConfigsStore.getLatestValue()).to.eql({ configs: {} });
 	});
 });
 
@@ -477,9 +456,10 @@ describe('Client openConnection', () => {
 	let client;
 
 	beforeEach(() => {
-		const wsConnection = new StableWSConnection({});
-		wsConnection.isConnecting = false;
-		wsConnection.connect = function () {
+		// `connect()` always builds its own StableWSConnection, so the seam is the prototype.
+		// `isConnecting` has to flip synchronously — that is what the second `openConnection()`
+		// call reads to decide it should hand back the in-flight promise.
+		sinon.stub(StableWSConnection.prototype, 'connect').callsFake(function () {
 			this.isConnecting = true;
 			return new Promise((resolve) => {
 				setTimeout(() => {
@@ -488,9 +468,13 @@ describe('Client openConnection', () => {
 					});
 				}, 1000);
 			});
-		};
+		});
 
-		client = new StreamChat('', { allowServerSideConnect: true, wsConnection });
+		client = new StreamChat('', { allowServerSideConnect: true });
+	});
+
+	afterEach(() => {
+		sinon.restore();
 	});
 
 	it('should return same promise in case of multiple calls', async () => {
@@ -865,25 +849,6 @@ describe('StreamChat.queryChannels', async () => {
 			),
 		};
 	};
-
-	it('should not hydrate activeChannels and channel configs when disableCache is true', async () => {
-		const client = await getClientWithUser();
-		client._cacheEnabled = () => false;
-		const mockedChannelsQueryResponse = Array.from({ length: 10 }, () => ({
-			...mockChannelQueryResponse,
-			messages: Array.from(
-				{ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE },
-				generateMsg,
-			),
-		}));
-		sinon
-			.stub(client, 'queryChannels')
-			.resolves({ channels: mockedChannelsQueryResponse });
-		await client.queryChannelsAndHydrate();
-		expect(Object.keys(client.activeChannels).length).to.be.equal(0);
-		expect(Object.keys(client.channelServerConfigs).length).to.be.equal(0);
-		sinon.restore();
-	});
 
 	it('should return hydrated channels as Channel instances from queryChannels', async () => {
 		const client = await getClientWithUser();

@@ -26,13 +26,13 @@ export class ClientState {
   }
 
   updateUser(user?: UserResponse | OwnUserResponse) {
-    if (user != null && this.client._cacheEnabled()) {
+    if (user != null) {
       this.users[user.id] = user;
     }
   }
 
   updateUserReference(user: UserResponse, channelID: string) {
-    if (user == null || !this.client._cacheEnabled()) {
+    if (user == null) {
       return;
     }
     this.updateUser(user);

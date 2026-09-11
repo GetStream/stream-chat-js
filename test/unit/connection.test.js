@@ -5,7 +5,6 @@ import { StableWSConnection } from '../../src/connection';
 import { StreamChat } from '../../src/client';
 import { TokenManager } from '../../src/token_manager';
 import { sleep } from '../../src/utils';
-import { InsightMetrics } from '../../src/insights';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -125,10 +124,8 @@ describe('connection', function () {
 		client.wsBaseURL = wsBaseURL;
 		client.tokenManager = tokenManager;
 		client._user = user;
-		client.options.enableInsights = true;
 		client.userAgent = 'agent';
 		client.clientId = 'clientID';
-		client.insightMetrics = new InsightMetrics();
 		client.dispatchEvent = () => null;
 		return client;
 	};

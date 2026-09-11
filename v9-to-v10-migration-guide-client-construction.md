@@ -152,21 +152,31 @@ If you relied on a custom serializer, file an issue — there is no supported wa
 
 ### Removed options
 
-Two options were dropped in v10. Both are silent no-ops if left in place — TypeScript will flag
+Six options were dropped in v10. All are silent no-ops if left in place — TypeScript will flag
 them, but a plain-JS call site will not error, so remove them explicitly.
 
 | Option             | Replacement                                                                                                                                             |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `device`           | Call [`client.createDevice({ id, push_provider, push_provider_name? })`](./v9-to-v10-migration-guide-methods.md#clientsetlocaldevice) after connecting. |
+| `disableCache`     | None — the client always caches. See [`disableCache`](#disablecache).                                                                                   |
+| `enableInsights`   | None — the telemetry it enabled was removed. See [`enableInsights`](#enableinsights).                                                                   |
 | `enableWSFallback` | None — see [long-poll fallback removed](./v9-to-v10-migration-guide-other.md#long-poll-fallback-removed).                                               |
+| `warmUp`           | None — see [`warmUp`](#warmup).                                                                                                                         |
+| `wsConnection`     | `WebSocketImpl`, which works in both browser and node. See [`wsConnection`](#wsconnection).                                                             |
 
 ```diff
   const client = new StreamChat(API_KEY, {
 -   device: { id: pushToken, push_provider: 'firebase' },
+-   disableCache: true,
+-   enableInsights: true,
 -   enableWSFallback: true,
+-   warmUp: true,
+-   wsConnection: myFakeConnection,
   });
 + await client.createDevice({ id: pushToken, push_provider: 'firebase' });
 ```
+
+#### `device`
 
 `device` existed to have the device serialized into the WebSocket connect payload, where the
 server registered it as a side effect of connecting. The v2 connect endpoint's auth message has
@@ -174,13 +184,71 @@ no `device` field, so the option had no remaining effect. It was undocumented an
 Stream SDK, so most integrations are unaffected. `client.setLocalDevice()`, the setter for this
 option, was removed with it.
 
+#### `disableCache`
+
+`disableCache` suppressed every client-side cache write — `activeChannels`, the channel config
+cache, `ClientState.users`, `PollManager.pollCache` and `ReminderManager`. It existed for
+integrations that used `stream-chat` as a stateless server-side REST wrapper.
+
+**In v9 it did nothing unless you also passed a `secret`.** The guard read
+`_cacheEnabled = () => !this._isUsingServerAuth() || !this.options.disableCache`, and
+`_isUsingServerAuth()` was `!!this.secret` — so for any client-side integration the option was
+already a no-op. v10 removes server-side support entirely, so the only configuration in which it
+ever took effect is gone; those integrations belong on
+[stream-node](https://github.com/GetStream/stream-node).
+
+There is no replacement. `client._cacheEnabled()` was removed along with it.
+
+#### `enableInsights`
+
+Off by default, this opted into WebSocket-health telemetry POSTed to
+`https://chat-insights.getstream.io` — `ws_fatal`, `ws_success_after_failure` and
+`http_hi_failed`. v10 removes the telemetry entirely: `src/insights.ts` is deleted, along with
+the `InsightMetrics`, `postInsights`, `buildWsFatalInsight` and `buildWsSuccessAfterFailureInsight`
+exports and the `client.insightMetrics` property.
+
+If you imported any of those directly, drop the import — there is no replacement. Note that the
+insight payload included the connected user's auth token and user details, so removing it also
+removes that egress.
+
+#### `warmUp`
+
+Off by default, `warmUp` fired a fire-and-forget `GET /hi` before opening the WebSocket so the
+first real API call could reuse an already-established connection.
+
+Under node its benefit depended on the keep-alive `https.Agent` the v9 constructor created, which
+v10 [no longer creates](#httpsagent-is-no-longer-defaulted-in-node) — without keep-alive the
+warmed socket closes and the next request handshakes again. In the browser it saved at most one
+connection setup on a cold start. The `/hi` request is no longer issued at all.
+
+If you want the node behavior back, supply a keep-alive agent through
+`axiosRequestConfig.httpsAgent` rather than reaching for a warm-up request.
+
+#### `wsConnection`
+
+`wsConnection` injected a pre-built `StableWSConnection` for `connect()` to use instead of
+constructing one. It was documented as a testing-only seam, and it was gated on node
+(`if (this.options.wsConnection && this.node)`), so browser and React Native integrations could
+never use it.
+
+Use `WebSocketImpl` instead — it overrides the `WebSocket` constructor rather than the whole
+connection object, and it works in both environments:
+
+```diff
+- const client = new StreamChat(API_KEY, { wsConnection: myFakeConnection });
++ const client = new StreamChat(API_KEY, { WebSocketImpl: MockWebSocket });
+```
+
+If you need to drive the connection object itself, stub `StableWSConnection.prototype` — that is
+what this repo's own tests now do.
+
 ## Unchanged behavior worth confirming
 
 These are intentionally listed so agents don't "fix" them during migration:
 
 - `new StreamChat(key)` still works with no options.
 - `StreamChat.getInstance(key)` still returns the same cached instance on repeated calls and ignores the `key`/`options` of subsequent calls.
-- All remaining non-axios options are unchanged: `allowServerSideConnect`, `baseURL`, `browser`, `disableCache`, `enableInsights`, `notifications`, `persistUserOnConnectionFailure`, `recoverStateOnReconnect`, `warmUp`, `wsConnection`, `wsUrlParams`. One option is **new**: `WebSocketImpl?: typeof WebSocket`, which overrides the constructor `StableWSConnection` instantiates. It exists because v10 dropped the `isomorphic-ws` / `ws` dependency in favor of the platform's global `WebSocket`; it is meant for test doubles, and for node runtimes older than 22 that have no global `WebSocket` — see [`v9-to-v10-migration-guide-server-side.md`](./v9-to-v10-migration-guide-server-side.md#running-the-ws-client-under-node). Browser and React-Native apps should leave it unset.
+- All remaining non-axios options are unchanged: `allowServerSideConnect`, `baseURL`, `browser`, `isLocalUnreadCountEnabled`, `notifications`, `persistUserOnConnectionFailure`, `wsUrlParams`. Two options are **new**: `config?: DeepPartial<InstanceConfigTree>`, which seeds declarative configuration before the client's managers are constructed (and is where `recoverStateOnReconnect` went — see below), and `WebSocketImpl?: typeof WebSocket`, which overrides the constructor `StableWSConnection` instantiates. It exists because v10 dropped the `isomorphic-ws` / `ws` dependency in favor of the platform's global `WebSocket`; it is meant for test doubles, and for node runtimes older than 22 that have no global `WebSocket` — see [`v9-to-v10-migration-guide-server-side.md`](./v9-to-v10-migration-guide-server-side.md#running-the-ws-client-under-node). Browser and React-Native apps should leave it unset.
 - `STREAM_LOCAL_TEST_RUN` / `STREAM_LOCAL_TEST_HOST` env-var overrides on `baseURL` still work the same way.
 - `browser` auto-detection (`typeof window !== 'undefined'`) and the `browser: true | false` override still work the same way.
 - The subsystem managers constructed on the client (`state`, `notifications`, `uploadManager`, `moderation`, `tokenManager`, `threads`, `polls`, `reminders`, `messageDeliveryReporter`, `messageComposerCache`, `insightMetrics`) are identical in v10.

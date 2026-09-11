@@ -3398,30 +3398,6 @@ describe('Channel _initializeState', () => {
 });
 
 describe('Channel.query', async () => {
-	it('should not populate client.activeChannels if caching is disabled', async () => {
-		const client = await getClientWithUser();
-		client._cacheEnabled = () => false;
-		const channel = client.channel('messaging', uuidv4());
-		const mockedChannelQueryResponse = {
-			...mockChannelQueryResponse,
-			messages: Array.from(
-				{ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE },
-				(_, i) =>
-					generateMsg({
-						created_at: convertDateToTimestamp(
-							new Date(1700000000000 + i * 1000).toISOString(),
-						),
-					}),
-			),
-		};
-		const stub = sinon
-			.stub(client.api, 'sendRequest')
-			.resolves({ body: mockedChannelQueryResponse, metadata: {} });
-		await channel.query();
-		expect(Object.keys(client.activeChannels).length).to.be.equal(0);
-		stub.restore();
-	});
-
 	it('seeds the message paginator with the full latest page on query', async () => {
 		const client = await getClientWithUser();
 		const channel = client.channel('messaging', uuidv4());

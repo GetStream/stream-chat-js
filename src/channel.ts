@@ -994,8 +994,6 @@ export class Channel extends ChannelApi {
   ) {
     const data = await this.updateChannelPartial(update, requestOptions);
 
-    if (!this.getClient()._cacheEnabled) return data;
-
     const channel = data.channel;
     const currentCapabilities = this.data?.own_capabilities ?? [];
     const newCapabilities = channel?.own_capabilities;
@@ -2061,10 +2059,7 @@ export class Channel extends ChannelApi {
         delete this.getClient().activeChannels[tempChannelCid];
       }
 
-      if (
-        !(this.cid in this.getClient().activeChannels) &&
-        this.getClient()._cacheEnabled()
-      ) {
+      if (!(this.cid in this.getClient().activeChannels)) {
         this.getClient().activeChannels[this.cid] = this;
       }
     }
