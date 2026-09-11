@@ -194,3 +194,49 @@ Recorded because each was asserted before being checked, and each changed the wo
   _worse_ and was reverted.
 - Vitest now forces `TZ=UTC`. The date assertions previously passed only on a machine that happened to
   be in UTC, which is what CI is — so a local run disagreed with CI by exactly the host's offset.
+
+## Superseded: the layer moved again, out of core and into `@stream-io/i18n`
+
+Recorded here rather than by rewriting the entries above, per this file's convention: the reason a
+decision was later reversed is the useful part.
+
+Everything above describes moving the shared runtime **into** `stream-chat` behind a
+`stream-chat/i18n` subpath. That shipped and was correct for the problem it solved — one runtime
+instead of two near-duplicates — but it put the layer in the wrong package. Translation is not a
+Chat concern: Video, Feeds and Moderation cannot reach it without depending on the Chat client, and
+every `stream-chat` consumer paid ~2.3 MB of installed `i18next` + `dayjs` whether they translated
+anything or not.
+
+The runtime, the codegen and all 153 tests now live in **`@stream-io/i18n`** (`js-toolkit`), with
+React bindings at `@stream-io/i18n/react`.
+
+**The subpath was never published.** This initiative was blocked on cutting `stream-chat
+10.0.0-rc.3`, so `stream-chat/i18n` existed only on unreleased branches — which is exactly why the
+move was cheap to make now, and why no deprecation cycle exists for it. The UI SDKs retarget their
+imports straight from `stream-chat/i18n` to `@stream-io/i18n`; nothing else about their usage
+changes.
+
+What did **not** move, and why:
+
+- **`languageNames.ts`** — `LANGUAGE_NAMES` is gated by `satisfies Record<TranslationLanguage,
+string>`, and `TranslationLanguage` is derived from Chat's generated OpenAPI client. It enumerates
+  the languages the API can auto-translate a _message_ into, so it is Chat API metadata that happens
+  to be rendered as copy. It now sits at `src/languageNames.ts` and is root-exported.
+- **`CORE_NOTIFICATION_TYPE` and `POLL_COMPOSER_VALIDATION_CODE`** — already outside `src/i18n/` and
+  already root-exported. They are the identifiers a UI SDK maps to keys, and they name Chat
+  operations.
+
+Two things found while moving that the original port had not surfaced:
+
+- **`StateStore` identity is load-bearing.** `Streami18n.state` is a `StateStore`, and both UI SDKs
+  read it through a `useStateStore` hook typed against `stream-chat`. TypeScript compares classes
+  with `protected` members _nominally_, so a second declaration breaks assignability even when the
+  two classes are byte-identical — verified with a minimal repro (TS2345, "Property 'handlers' is
+  protected but type 'StateStore<T>' is not a class derived from 'StateStore<T>'"). `src/store.ts`
+  was a stale fork of `@stream-io/state-store`; it is now a re-export of it, so one identity exists
+  everywhere.
+- **Re-export style matters at the bundle level.** `export * from '@stream-io/state-store'` in
+  `src/store.ts` made esbuild emit a runtime `__reExport` shim, because a star re-export of an
+  _external_ module is opaque to it — costing bundle size and defeating tree-shaking downstream.
+  Explicit named re-exports removed the shim and left the root bundle **7.6 kB smaller** than before
+  the change.

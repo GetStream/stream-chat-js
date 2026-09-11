@@ -1,6 +1,6 @@
 import type { StreamChat } from '../client';
 import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
-import type { StateStore } from '../store';
+import type { StateStore } from '@stream-io/state-store';
 import { ConfigController } from '../configuration/ConfigController';
 import { Channel } from '../channel';
 import type { ThreadUserReadState } from '../thread';

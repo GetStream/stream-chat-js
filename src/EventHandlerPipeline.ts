@@ -1,7 +1,7 @@
 import { generateUUIDv4 } from './utils';
 import type { Event, EventType } from './types';
 import type { KeysOfUnion, ValueOfUnion } from './types.utility';
-import type { Unsubscribe } from './store';
+import type { Unsubscribe } from '@stream-io/state-store';
 
 /**
  * Flat routing view of an event: every field any event can carry, all optional, on one object.

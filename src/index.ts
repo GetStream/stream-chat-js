@@ -68,7 +68,7 @@ export * from './poll_manager';
 export * from './reminders';
 export * from './search';
 export * from './signing';
-export * from './store';
+export * from './languageNames';
 export { Thread } from './thread';
 export type {
   CustomThreadMarkReadRequestFn,

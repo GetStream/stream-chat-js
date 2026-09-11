@@ -1,6 +1,6 @@
 # v9 → v10 Migration Guide — Notifications, Poll Validation & i18n
 
-> Scope: this guide covers **notification identity** (`Notification.type` and `Notification.message`), the **shape of poll-composer field errors**, and the new **`stream-chat/i18n`** and **`stream-chat/i18n/codegen`** subpath exports. It is relevant to you even if you never translate anything: the notification and poll-error changes affect any app that renders either.
+> Scope: this guide covers **notification identity** (`Notification.type` and `Notification.message`), the **shape of poll-composer field errors**, and the move of the translation runtime into the standalone **`@stream-io/i18n`** package. It is relevant to you even if you never translate anything: the notification and poll-error changes affect any app that renders either.
 >
 > Sibling guides:
 >
@@ -19,15 +19,15 @@
 - **`PollComposerFieldErrors` values are now objects**, not bare English strings: `{ code, message, metadata? }`. Read `.message` for the previous value, or switch on `.code` to localize. **Breaking.**
 - **`Notification.type` is now typed** as `CoreNotificationType | (string & {})` and enumerated in the exported `CORE_NOTIFICATION_TYPE` map. Additive — your own identifiers still pass.
 - **`Notification.message` is now documented as a developer-facing fallback, not display copy.** Its wording is not part of the public contract and may change in a minor release. Nothing breaks today, but anything user-facing should switch on `type`. See [Rendering notifications](#rendering-notifications).
-- **New subpath `stream-chat/i18n`** carries the shared translation runtime (`Streami18n`, formatters, date handling). Nothing is re-exported from `stream-chat`'s root, so the root bundle is unchanged.
-- **New subpath `stream-chat/i18n/codegen`** carries the build-time translation-catalog generator. Node-only, and ESM-only — but `engines.node` is now `>=22.18.0`, and `require(esm)` has been unflagged since 22.12, so `require()` works on every supported Node as well as `import`.
+- **The shared translation runtime ships as [`@stream-io/i18n`](https://www.npmjs.com/package/@stream-io/i18n)** — `Streami18n`, formatters and date handling — with React bindings at `@stream-io/i18n/react` and the build-time catalog generator at `@stream-io/i18n/codegen`. It is **not** part of `stream-chat`: install it alongside.
+- **`stream-chat` does not depend on `i18next` or `dayjs`.** Both moved with the runtime, so a consumer who never translates anything no longer installs them.
 - **Every timestamp you hand a formatter is now a unix-nanosecond number**, and the
   `t('timestamp.X', { timestamp })` path is **not type-checked** — i18next's interpolation bag is
   untyped, so a raw wire number compiles and renders the literal text `Invalid Date` into your UI.
   `getDateString`'s `messageCreatedAt` _is_ typed (`string | Date`), so only the `t(…)` call sites
   need auditing. See
   [Timestamps reaching a formatter](#timestamps-reaching-a-formatter).
-- **`stream-chat` now depends on `i18next` and `dayjs`.** Install footprint grows ~2.3 MB; **bundle size is unaffected** unless you import `stream-chat/i18n`.
+- **`LANGUAGE_NAMES` / `languageNameDefaults` stay in `stream-chat`**, root-exported. They name the languages the API can auto-translate a message into, which is a Chat API concern rather than an i18n one.
 - Nothing in the JSDoc ever described a `Notification.code` field. There is no such field and never was — the block documenting the `domain:entity:operation:result` scheme was attached to `type` and mislabelled. It has been corrected.
 
 ## Notification identity
@@ -215,19 +215,26 @@ text.
 These are **not** notifications and are deliberately not routed through `NotificationManager` — they are
 field-level form state rendered inline next to an input, and a toast per keystroke would be wrong.
 
-## New subpath: `stream-chat/i18n`
+## The translation runtime: `@stream-io/i18n`
 
-The translation runtime shared by the React and React Native SDKs now lives in core. If you use a UI
-SDK, you do not need to import this directly — the SDK re-exports what you need, bound to its own key
-catalog.
+It is a separate package, so install it:
 
-```ts
-import { Streami18n, getDateString, predefinedFormatters } from 'stream-chat/i18n';
+```sh
+npm install @stream-io/i18n
 ```
 
-It is a separate entry point, not part of `stream-chat`'s root barrel, because it pulls in `i18next` and
-`dayjs`. **The root bundle is unchanged** — the build fails if anything in `src/i18n/` becomes reachable
-from it.
+Add `react` only if you use the `@stream-io/i18n/react` bindings — it is an optional peer.
+
+The translation runtime shared by the React and React Native SDKs. If you use a UI SDK, you do not
+need to import this directly — the SDK re-exports what you need, bound to its own key catalog.
+
+```ts
+import { Streami18n, getDateString, predefinedFormatters } from '@stream-io/i18n';
+```
+
+It is a separate **package**, not part of `stream-chat`, because it pulls in `i18next` and `dayjs` and
+because translation is not a Chat concern — Video, Feeds and Moderation use the same runtime without
+depending on Chat. `stream-chat`'s own bundle carries neither dependency.
 
 Notable if you are building custom UI directly on `stream-chat`:
 
@@ -298,10 +305,10 @@ dictionary behind it — exactly the state the unregistered-language warning exi
 
 These are now internal (`private`), having never been part of either SDK's documented API:
 `translations`, `dayjsLocales`, `isCustomDateTimeParser`, `localeExists()`, `addOrUpdateLocale()`,
-`validateCurrentLanguage()`. To register a dayjs locale directly, `stream-chat/i18n` exports
+`validateCurrentLanguage()`. To register a dayjs locale directly, `@stream-io/i18n` exports
 `addOrUpdateDayjsLocale()` and `dayjsLocaleExists()`.
 
-## New subpath: `stream-chat/i18n/codegen`
+## The catalog generator: `@stream-io/i18n/codegen`
 
 Build-time only, **Node-only** and **ESM-only**: it reads the filesystem and uses the TypeScript parser
 API. It generates a type-only translation-key catalog from your `t()` call sites, which is how a
@@ -310,13 +317,13 @@ mistyped key becomes a compile error.
 There is one artifact and no CommonJS build, since the caller is always a build script you control. From
 an ESM script (`.mjs`, `.mts`, or a `"type": "module"` package) import it directly. A CommonJS script can
 `require()` it too: `require(esm)` was unflagged in Node 22.12 and this package's floor is now 22.18.0.
-`await import('stream-chat/i18n/codegen')` also works, on any Node.
+`await import('@stream-io/i18n/codegen')` also works, on any Node.
 
 `typescript` is injected rather than imported, so `stream-chat` does not depend on the compiler:
 
 ```ts
 import ts from 'typescript';
-import { generateI18nKeys } from 'stream-chat/i18n/codegen';
+import { generateI18nKeys } from '@stream-io/i18n/codegen';
 
 generateI18nKeys({
   ts,
@@ -328,33 +335,30 @@ generateI18nKeys({
 This is primarily for the UI SDKs. You only need it if you maintain your own translation catalog with
 the same call-site-as-source-of-truth approach.
 
-## New dependencies
+## Dependency changes
 
-`stream-chat` now depends on:
+`stream-chat` **dropped** `i18next` and `dayjs`. They travelled with the translation runtime into
+`@stream-io/i18n`, so a consumer who never translates anything no longer installs either — about
+2.3 MB unpacked (`i18next` ~416 KB, `dayjs` ~1.9 MB). The root bundle never carried them, so bundle
+size is unchanged; this is an install-footprint saving.
 
-| Package   | Range      | Why                                               |
-| --------- | ---------- | ------------------------------------------------- |
-| `i18next` | `^26.3.6`  | the translation runtime behind `stream-chat/i18n` |
-| `dayjs`   | `^1.11.13` | date and duration formatting                      |
+It **added** one:
 
-Direct dependencies rather than optional peers, so importing `stream-chat/i18n` works without you
-installing anything extra.
+| Package                  | Range    | Why                                                        |
+| ------------------------ | -------- | ---------------------------------------------------------- |
+| `@stream-io/state-store` | `^1.1.6` | the `StateStore` this package used to vendor and re-export |
 
-Two things to note:
+`StateStore` is no longer exported from `stream-chat`'s root — see the `StateStore` section of
+`v9-to-v10-migration-guide-other.md`. `@stream-io/i18n` carries `i18next` and `dayjs` as direct
+dependencies rather than optional peers, so installing it is enough; you do not declare them yourself.
 
-- **Bundle size is unaffected** if you do not import `stream-chat/i18n`. Both are externalized and the
-  root bundle is byte-identical.
-- **Install footprint grows ~2.3 MB unpacked** (`i18next` ~416 KB, `dayjs` ~1.9 MB) even if you never
-  translate. This takes `stream-chat` from three runtime dependencies to five, which is a deliberate
-  trade: a package that imports something should depend on it rather than push the requirement onto
-  consumers.
-
-If you already declared `i18next` or `dayjs` because a UI SDK needed them, you can drop them — but check
-that only one copy resolves, since two `i18next` instances mean dictionaries registered on one are read
-from the other:
+If you declared `i18next` or `dayjs` because a Stream SDK needed them, you can drop them. If you keep
+`dayjs` because your own code uses it, match `@stream-io/i18n`'s range (`^1.11.23`) — locale
+registration is global, so a second copy means your `import 'dayjs/locale/de'` extends an instance the
+SDK never formats with, and dates stay English with no error anywhere:
 
 ```bash
-find . -maxdepth 4 -name i18next -type d -path '*node_modules*'
+find . -maxdepth 4 -name dayjs -type d -path '*node_modules*'
 ```
 
 ## Mechanical migration checklist

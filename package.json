@@ -27,34 +27,7 @@
       "node": "./dist/cjs/index.node.js",
       "default": "./dist/esm/index.mjs"
     },
-    "./i18n": {
-      "types": "./dist/types/i18n/index.d.ts",
-      "browser": {
-        "import": "./dist/esm/i18n.mjs",
-        "require": "./dist/cjs/i18n.browser.js"
-      },
-      "react-native": {
-        "import": "./dist/esm/i18n.mjs",
-        "require": "./dist/cjs/i18n.browser.js"
-      },
-      "node": "./dist/cjs/i18n.node.js",
-      "default": "./dist/esm/i18n.mjs"
-    },
-    "./i18n/codegen": {
-      "types": "./dist/types/i18n-codegen/index.d.ts",
-      "default": "./dist/esm/i18n-codegen.mjs"
-    },
     "./package.json": "./package.json"
-  },
-  "typesVersions": {
-    "*": {
-      "i18n": [
-        "./dist/types/i18n/index.d.ts"
-      ],
-      "i18n/codegen": [
-        "./dist/types/i18n-codegen/index.d.ts"
-      ]
-    }
   },
   "sideEffects": false,
   "license": "SEE LICENSE IN LICENSE",
@@ -69,14 +42,12 @@
   ],
   "files": [
     "/dist",
-    "/codegen",
     "/src"
   ],
   "dependencies": {
     "@stream-io/logger": "^2.0.0",
+    "@stream-io/state-store": "^1.1.6",
     "axios": "^1.19.0",
-    "dayjs": "^1.11.13",
-    "i18next": "^26.3.6",
     "linkifyjs": "^4.3.3"
   },
   "devDependencies": {
@@ -108,9 +79,9 @@
     "yaml": "^2.8.4"
   },
   "scripts": {
-    "build": "rm -rf dist && concurrently 'tsc' 'tsc -p tsconfig.codegen.json' './scripts/bundle.mts'",
+    "build": "rm -rf dist && concurrently 'tsc' './scripts/bundle.mts'",
     "start": "concurrently 'tsc --watch' './scripts/bundle.mts --watch'",
-    "types": "tsc --noEmit && tsc -p tsconfig.codegen.json --noEmit && yarn run types:scripts",
+    "types": "tsc --noEmit && yarn run types:scripts",
     "lint": "yarn run prettier && yarn run eslint",
     "lint-fix": "yarn run eslint-fix; yarn run prettier-fix",
     "prettier": "prettier '**/*.{json,js,mjs,mts,cjs,ts,yml,md}' --check",

@@ -19,7 +19,7 @@ import {
   AttachmentPostUploadMiddlewareExecutor,
   AttachmentPreUploadMiddlewareExecutor,
 } from './middleware/attachmentManager';
-import { StateStore } from '../store';
+import { StateStore } from '@stream-io/state-store';
 import { CORE_NOTIFICATION_TYPE } from '../notifications';
 import { generateUUIDv4 } from '../utils';
 import { DEFAULT_UPLOAD_SIZE_LIMIT_BYTES } from '../constants';

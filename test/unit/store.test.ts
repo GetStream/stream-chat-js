@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MergedStateStore, StateStore } from '../../src/store';
+import { MergedStateStore, StateStore } from '@stream-io/state-store';
 
 describe('StateStore', () => {
   type State = { count: number; flag: boolean };

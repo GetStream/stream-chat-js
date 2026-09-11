@@ -6,7 +6,7 @@ import { deepFreezeConfig } from './configuration/utils/deepFreezeConfig';
 import type { StreamChat } from './client';
 import type { Channel } from './channel';
 import type { Thread } from './thread';
-import type { StateStore, Unsubscribe } from './store';
+import type { StateStore, Unsubscribe } from '@stream-io/state-store';
 
 const logger = chatLoggerSystem.getLogger('client');
 

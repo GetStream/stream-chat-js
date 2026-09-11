@@ -1,4 +1,4 @@
-import { StateStore } from './store';
+import { StateStore } from '@stream-io/state-store';
 import { nowNs } from './utils/time';
 import { CORE_NOTIFICATION_TYPE } from './notifications';
 import type { StreamChat } from './client';

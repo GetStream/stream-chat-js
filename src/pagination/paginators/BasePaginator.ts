@@ -2,7 +2,7 @@ import type { ItemLocation } from '../sortCompiler';
 import { deepFreezeConfig } from '../../configuration/utils/deepFreezeConfig';
 import { binarySearch } from '../sortCompiler';
 import { itemMatchesFilter } from '../filterCompiler';
-import { isPatch, StateStore, type ValueOrPatch } from '../../store';
+import { isPatch, StateStore, type ValueOrPatch } from '@stream-io/state-store';
 import { debounce, type DebouncedFunc, generateUUIDv4, sleep } from '../../utils';
 import { throttle, type Throttled } from '../../utils/throttling/throttle';
 import { isStateThrottlingEnabled } from './stateThrottling';

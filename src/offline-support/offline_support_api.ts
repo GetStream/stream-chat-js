@@ -25,7 +25,7 @@ import type { StreamChat } from '../client';
 import type { AxiosError } from 'axios';
 import { OfflineDBSyncManager } from './offline_sync_manager';
 import { chatLoggerSystem } from '../logger';
-import { StateStore } from '../store';
+import { StateStore } from '@stream-io/state-store';
 import {
   channelHasReadEvents,
   channelTracksReadLocally,

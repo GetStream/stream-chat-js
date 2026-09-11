@@ -16,14 +16,9 @@ import { convertDateToTimestamp } from '../test-utils/time';
 
 const existingLinkUrl = 'https://existing.com';
 const linkUrl = 'https://example.com';
-// Mock dependencies
-vi.mock('../../src/store', () => ({
-  StateStore: vi.fn().mockImplementation(() => ({
-    getLatestValue: vi.fn().mockReturnValue({}),
-    next: vi.fn(),
-    partialNext: vi.fn(),
-  })),
-}));
+// No `StateStore` mock: the one that used to sit here pointed at '../../src/store', which from
+// this directory resolves to `test/src/store` and never existed — so it never applied, and these
+// tests have always exercised the real store. Removed rather than repaired.
 
 vi.mock('../../src/utils', () => ({
   debounce: vi.fn().mockImplementation((fn) => {

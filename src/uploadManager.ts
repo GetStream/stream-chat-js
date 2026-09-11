@@ -1,7 +1,7 @@
 import type { StreamChat } from './client';
 import { chatLoggerSystem } from './logger';
 import type { UploadRequestOptions } from './messageComposer/configuration/types';
-import { StateStore } from './store';
+import { StateStore } from '@stream-io/state-store';
 import type { AttachmentManager } from '.';
 
 const logger = chatLoggerSystem.getLogger('upload-manager');
