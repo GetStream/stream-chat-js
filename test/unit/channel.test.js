@@ -348,8 +348,7 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 		client.user = { id: user.id };
 		client.wsPromise = Promise.resolve();
 		// a connection id is what makes a watch possible at all
-		client._hasConnectionID = () => true;
-		client.connectionId = 'connection-id';
+		client.connectionIdManager.resolveConnectionId('connection-id');
 		channel = client.channel('messaging', 'watching-id');
 		client.activeChannels[channel.cid] = channel;
 		mockQueryResponse(generateChannel({ channel: { id: 'watching-id' } }));
@@ -393,14 +392,6 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 		await channel.query({ watch: false });
 
 		expect(channel.watchStatus).to.equal(ChannelWatchStatus.Watching);
-	});
-
-	it('stays NotWatching when watch() downgrades for lack of a connection id', async () => {
-		client._hasConnectionID = () => false;
-
-		await channel.watch();
-
-		expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
 	});
 
 	it('goes to NotWatching on stopWatching() — a deliberate stop is not restored', async () => {
@@ -501,15 +492,6 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 
 		// a non-watching hydrate neither starts nor ends a watch
 		expect(channel.watchStatus).to.equal(ChannelWatchStatus.WasWatching);
-	});
-
-	it('is NOT set by hydration without a connection id', () => {
-		client._hasConnectionID = () => false;
-		const response = generateChannel({ channel: { id: 'no-connection-id' } });
-
-		const [hydrated] = client.hydrateActiveChannels([response]);
-
-		expect(hydrated.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
 	});
 
 	it('is NOT set by offline hydration (state without a live watch)', () => {

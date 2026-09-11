@@ -536,12 +536,28 @@ describe('Client connectUser', () => {
 		expect(connection).to.equal('openConnection');
 	});
 
-	it('_getConnectionID, _hasConnectionID', () => {
+	it('_getConnectionID, _hasConnectionID read through the connection id manager', () => {
 		expect(client._hasConnectionID()).to.be.false;
 		expect(client._getConnectionID()).to.equal(undefined);
-		client.wsConnection = { connectionID: 'ID' };
+
+		client.connectionIdManager.resolveConnectionId('ID');
+
 		expect(client._getConnectionID()).to.equal('ID');
 		expect(client._hasConnectionID()).to.be.true;
+	});
+
+	it('drops the connection id when the socket closes', async () => {
+		client.connectionIdManager.resolveConnectionId('ID');
+		client.wsConnection = new StableWSConnection({ client });
+		// the socket was never opened, so disconnect() only has to run its teardown
+		client.wsConnection.ws = undefined;
+
+		await client.closeConnection();
+
+		// the server tears the watch down with the connection - keeping the id would let the next
+		// request register a subscription against one that no longer exists
+		expect(client._getConnectionID()).to.equal(undefined);
+		expect(client._hasConnectionID()).to.be.false;
 	});
 });
 

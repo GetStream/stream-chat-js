@@ -9,6 +9,7 @@ import type { ChannelMuteStatus } from './channel_state';
 import { ChannelWatchStatus } from './channel_state';
 import { ClientState } from './client_state';
 import { StableWSConnection } from './connection';
+import { ConnectionIdManager } from './connection_id_manager';
 import { UploadManager } from './uploadManager';
 import { TokenManager, type TokenManagerMinimalUser } from './token_manager';
 import { ApiClient } from './api-client';
@@ -194,6 +195,7 @@ export class StreamChat extends ChatApi {
   setUserPromise: ConnectAPIResponse | null;
   state: ClientState;
   tokenManager: TokenManager;
+  connectionIdManager: ConnectionIdManager;
   user?: ClientUser;
   userAgent?: string;
   wsBaseURL?: string;
@@ -321,6 +323,7 @@ export class StreamChat extends ChatApi {
     // If its a server-side client, then lets initialize the tokenManager, since token will be
     // generated from secret.
     this.tokenManager = new TokenManager();
+    this.connectionIdManager = new ConnectionIdManager();
 
     this.defaultWSTimeout = 15 * 1000;
 
@@ -471,7 +474,7 @@ export class StreamChat extends ChatApi {
     this.wsBaseURL = this.baseURL.replace('http', 'ws').replace(':3030', ':8800');
   }
 
-  _getConnectionID = () => this.wsConnection?.connectionID;
+  _getConnectionID = () => this.connectionIdManager.connectionId;
 
   _hasConnectionID = () => Boolean(this._getConnectionID());
 
@@ -1240,8 +1243,12 @@ export class StreamChat extends ChatApi {
   };
 
   /**
-   * Settles the connect promises after a successful reconnect, so the `await this.wsPromise` gates
-   * spread across the client stop resolving against a superseded (possibly rejected) attempt.
+   * Settles the connect promises after a successful reconnect, so `connectUser()` and the
+   * `wsPromise`/`setUserPromise` a caller may still be holding stop resolving against a superseded
+   * (possibly rejected) attempt.
+   *
+   * Requests no longer settle against these: waiting for a connection id is the
+   * {@link ConnectionIdManager}'s job, applied centrally in `ApiClient`.
    *
    * Called by `StableWSConnection._reconnect()`. Recovery itself is owned by
    * {@link ConnectionRecoveryManager}, which subscribes to the connection lifecycle and so covers
@@ -1280,7 +1287,14 @@ export class StreamChat extends ChatApi {
       client: this,
     });
 
-    return await this.wsConnection.connect(this.defaultWSTimeout);
+    try {
+      return await this.wsConnection.connect(this.defaultWSTimeout);
+    } catch (error) {
+      // The single funnel for a failed *initial* connect. `_reconnect()` failures deliberately do
+      // not land here: it keeps retrying, so waiters should keep waiting rather than be rejected.
+      this.connectionIdManager.rejectConnectionId(error);
+      throw error;
+    }
   }
 
   /**
@@ -1294,9 +1308,6 @@ export class StreamChat extends ChatApi {
    */
   override async queryUsers(...args: Parameters<ChatApi['queryUsers']>) {
     const [request, requestOptions] = args;
-    // Make sure we wait for the connect promise if there is a pending one
-    await this.wsPromise;
-
     const data = await super.queryUsers(request ?? {}, requestOptions);
     this.state.updateUsers(data.users);
 
@@ -1325,14 +1336,6 @@ export class StreamChat extends ChatApi {
       watch: true,
       presence: false,
     };
-
-    // Make sure we wait for the connect promise if there is a pending one
-    await this.wsPromise;
-
-    // TODO: probably serverside only thing, remove at some point
-    if (!this._hasConnectionID()) {
-      defaultOptions.watch = false;
-    }
 
     const {
       predefined_filter,
@@ -1479,9 +1482,6 @@ export class StreamChat extends ChatApi {
       }
     }
 
-    // Make sure we wait for the connect promise if there is a pending one
-    await this.wsPromise;
-
     return await this.queryReactions(request, requestOptions);
   }
 
@@ -1505,10 +1505,11 @@ export class StreamChat extends ChatApi {
       c.offlineMode = offlineMode;
       c.initialized = !offlineMode;
       // Same precedence `queryChannels` applies to the request: an explicit caller choice wins,
-      // otherwise we watch only if there is a connection to watch on. Offline hydration populates
-      // state without a live watch, so it never counts - and a query that did not watch leaves the
-      // status untouched (it neither starts nor ends a watch).
-      if (!offlineMode && (queryChannelsOptions?.watch ?? this._hasConnectionID())) {
+      // otherwise the query watched, because that is `queryChannels`' default and a request that
+      // reached the server got a connection id to watch on (`ApiClient` gates on one). Offline
+      // hydration populates state without a live watch, so it never counts - and a query that did
+      // not watch leaves the status untouched (it neither starts nor ends a watch).
+      if (!offlineMode && (queryChannelsOptions?.watch ?? true)) {
         c.watchStatus = ChannelWatchStatus.Watching;
       }
       c.push_preferences = channelState.push_preferences;
@@ -1579,9 +1580,6 @@ export class StreamChat extends ChatApi {
     if (request?.payload?.offset && request?.payload?.next) {
       throw Error(`Cannot specify "offset" with "next"`);
     }
-
-    // Make sure we wait for the connect promise if there is a pending one
-    await this.wsPromise;
 
     return await super.search(request, requestOptions);
   }

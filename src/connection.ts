@@ -252,6 +252,10 @@ export class StableWSConnection {
     this.wsID += 1;
     this.isConnecting = false;
     this.isDisconnected = true;
+    // The connection id dies with the socket. Dropping it here fails anything still waiting on one
+    // instead of letting it hang, and stops a later request from registering a watch against a
+    // connection the server has already torn down.
+    this.client.connectionIdManager.reset();
 
     // start by removing all the listeners
     if (this.healthCheckTimeoutRef) {
@@ -318,6 +322,9 @@ export class StableWSConnection {
     if (this.isConnecting || this.isDisconnected) return;
     this.isConnecting = true;
     this.requestID = randomId();
+    // Arm before anything can await a connection id. A no-op on a reconnect that still holds one -
+    // those requests keep flowing against the old id rather than blocking for the whole outage.
+    this.client.connectionIdManager.arm();
     let isTokenReady = false;
     try {
       logger.withExtraTags('_connect').debug('Waiting for the auth token.');
@@ -358,6 +365,7 @@ export class StableWSConnection {
 
       if (response) {
         this.connectionID = response.connection_id;
+        this.client.connectionIdManager.resolveConnectionId(response.connection_id);
         return response;
       }
     } catch (error: any) {

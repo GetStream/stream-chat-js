@@ -322,6 +322,49 @@ The WebSocket's own reconnect and health-check loop is unchanged and still handl
 network failures. If you need to react to connectivity, use `connection.changed` — it is
 unaffected.
 
+### Watching a channel now requires a connected user
+
+The server keys channel watches and presence subscriptions by **WebSocket connection id**, and
+answers `200` while registering nothing when a request that needs one arrives without it. v9 papered
+over this: `queryChannels()` and `channel.watch()` checked `client._hasConnectionID()` and silently
+downgraded `watch: true` to `watch: false` when there was no connection — a server-side
+accommodation that outlived the server-side surface (see
+[`v9-to-v10-migration-guide-server-side.md`](./v9-to-v10-migration-guide-server-side.md)).
+
+v10 removes the downgrade. Waiting for the connection id now happens centrally in the API client,
+for every request that carries a watch or presence subscription, and a request that cannot get one
+**throws** rather than quietly returning unwatched state:
+
+```
+No connection id is available. Call and await `client.connectUser()` before issuing a request that
+watches a channel or subscribes to presence.
+```
+
+```diff
+  const client = StreamChat.getInstance(API_KEY);
+- // v9: resolved, but the channels were never watched - no events ever arrived
+- const channels = await client.queryChannels(filters, sort);
++ await client.connectUser(user, token);
++ const channels = await client.queryChannels(filters, sort);
+```
+
+You do **not** have to await `connectUser()` before issuing the request — a request made while the
+handshake is in flight waits for it and then goes out with the id. Only a client that has never
+connected (or has since disconnected) throws.
+
+Affected methods: `client.queryChannels()`, `client.groupedQueryChannels()`, `client.sync()`,
+`client.queryThreads()`, `client.getThread()`, `channel.query()`, `channel.watch()` and
+`channel.stopWatching()`. `client.queryUsers()` is affected only when the query asks for
+`presence: true`.
+
+Two methods gained coverage they never had: `client.sync()` and `client.queryThreads()` were not
+gated at all in v9, so on a reconnect they could register their watches against a connection id
+that did not exist yet.
+
+Related: `client._getConnectionID()` now reads through the new `client.connectionIdManager` rather
+than `client.wsConnection.connectionID`. The practical difference is that it correctly returns
+`undefined` after `closeConnection()` — in v9 the id survived the socket it belonged to.
+
 ---
 
 ## Filter payloads — per-endpoint operator constraints

@@ -452,6 +452,83 @@ describe('connection', function () {
 		});
 	});
 
+	describe('connection id lifecycle', () => {
+		const token =
+			'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYW1pbiJ9.dN0CCAW5CayCq0dsTXxLZvjxhQuZvlaeIfrJmxk9NkU';
+
+		it('publishes the id the handshake answered with', async () => {
+			const client = newStreamChat();
+			const c = new StableWSConnection({ client });
+
+			await c.connect();
+
+			expect(client.connectionIdManager.connectionId).to.equal(
+				'61112366-0a15-3891-0000-000000000009',
+			);
+			expect(client._getConnectionID()).to.equal('61112366-0a15-3891-0000-000000000009');
+		});
+
+		it('arms the deferred synchronously, so an un-awaited connectUser still gates requests', () => {
+			const client = new StreamChat('apiKey', {
+				allowServerSideConnect: true,
+				WebSocketImpl: MockWebSocket,
+			});
+			client.setBaseURL(wsBaseURL);
+
+			// deliberately not awaited - this is the documented "fire connectUser, query immediately"
+			// shape, and it only works if arm() runs before the first await inside _connect()
+			const connecting = client.connectUser({ id: 'amin' }, token);
+
+			expect(client.connectionIdManager.loadConnectionIdPromise).to.be.instanceOf(
+				Promise,
+			);
+			expect(() => client.connectionIdManager.getConnectionId()).not.to.throw();
+
+			return connecting;
+		});
+
+		it('releases a request that queued up during the handshake', async () => {
+			const client = new StreamChat('apiKey', {
+				allowServerSideConnect: true,
+				WebSocketImpl: MockWebSocket,
+			});
+			client.setBaseURL(wsBaseURL);
+
+			const connecting = client.connectUser({ id: 'amin' }, token);
+			const waiter = client.connectionIdManager.getConnectionId();
+
+			await connecting;
+
+			expect(await waiter).to.equal('61112366-0a15-3891-0000-000000000009');
+		});
+
+		it('drops the id when the socket is closed', async () => {
+			const client = newStreamChat();
+			const c = new StableWSConnection({ client });
+			await c.connect();
+
+			await c.disconnect();
+
+			expect(client.connectionIdManager.connectionId).to.be.undefined;
+			expect(client._hasConnectionID()).to.be.false;
+		});
+
+		it('fails a request still waiting when the initial connect gives up', async () => {
+			const client = new StreamChat('apiKey', {
+				allowServerSideConnect: true,
+				baseURL: 'http://localhost:1111',
+				WebSocketImpl: FailingWebSocket,
+			});
+			client.defaultWSTimeout = 500;
+
+			const connecting = client.connectUser({ id: 'amin' }, token);
+			const waiter = client.connectionIdManager.getConnectionId();
+
+			await expect(connecting).rejects.toThrow();
+			await expect(waiter).rejects.toThrow();
+		});
+	});
+
 	describe('Connection connect timeout', function () {
 		const token =
 			'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYW1pbiJ9.dN0CCAW5CayCq0dsTXxLZvjxhQuZvlaeIfrJmxk9NkU';

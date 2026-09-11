@@ -171,6 +171,12 @@ export class ApiClient {
     data?: unknown | null,
     additionalConfig: AxiosRequestConfig = {},
   ): Promise<{ body: T; metadata: RequestMetadata }> {
+    // Before `populateRequestConfigWithDefaults`, which snapshots `connection_id` synchronously -
+    // gating after it would capture the `undefined` this await exists to avoid.
+    if (requiresConnectionId(additionalConfig.params, data)) {
+      await this.client.connectionIdManager.getConnectionId();
+    }
+
     const initialRequestConfig = this.populateRequestConfigWithDefaults(additionalConfig);
 
     const clientRequestId = initialRequestConfig.headers?.[
@@ -248,6 +254,47 @@ export class ApiClient {
     }
   }
 }
+
+/**
+ * Whether a request registers a server-side subscription and so must not be sent before the WS
+ * handshake has produced a connection id. The server keys watches and presence by connection id
+ * and answers 200 while registering nothing when it is missing, so a request that races the
+ * handshake yields a channel that never receives an event.
+ *
+ * Two signals, because - checked against every operation in the client-side OpenAPI spec - neither
+ * one alone is complete:
+ *
+ * - an explicit `watch`/`presence` flag, in any of the three shapes the generator emits it: a flat
+ *   query param (`sync`, `getThread`), a nested `payload` query param (`queryUsers`), or the
+ *   request body (`queryChannels`, `getOrCreate(Distinct)Channel`, `groupedQueryChannels`,
+ *   `queryThreads`). `queryUsers` is the only operation that needs an id without declaring the
+ *   param, so this branch is the one keeping it gated;
+ * - a declared `connection_id` query param, which is the spec saying the endpoint is
+ *   connection-scoped. This is the only signal `stopWatchingChannel` and `longPoll` give, as
+ *   neither carries a flag.
+ *
+ * The first branch is redundant for every operation but `queryUsers` today, since the rest also
+ * declare the param. It is kept as defence in depth: should the generator stop emitting
+ * `connection_id` keys holding `undefined`, the flags still catch seven of the nine.
+ */
+export const requiresConnectionId = (
+  params: Record<string, unknown> | undefined,
+  body: unknown,
+) => {
+  if (params && 'connection_id' in params) return true;
+
+  const payload = params?.payload as Record<string, unknown> | undefined;
+  const requestBody = (body ?? undefined) as Record<string, unknown> | undefined;
+
+  return Boolean(
+    params?.watch ||
+    params?.presence ||
+    payload?.watch ||
+    payload?.presence ||
+    requestBody?.watch ||
+    requestBody?.presence,
+  );
+};
 
 /**
  * An `AbortSignal` that went through JSON persistence - as it does when an offline-db task

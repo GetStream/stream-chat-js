@@ -1756,13 +1756,6 @@ export class Channel extends ChannelApi {
       presence: false,
     };
 
-    // Make sure we wait for the connect promise if there is a pending one
-    await this.getClient().wsPromise;
-
-    if (!this.getClient()._hasConnectionID()) {
-      defaultOptions.watch = false;
-    }
-
     const combined = { ...defaultOptions, ...options };
     const state = await this.query(combined, 'latest');
     this.initialized = true;
@@ -2012,9 +2005,6 @@ export class Channel extends ChannelApi {
     // a reconnect/re-hydrate sizes it to the loaded window (channel.reload → items.length), and
     // pagination/around pass their own cursors + limit.
     const requestedPageSize = options?.messages?.limit ?? this.messagePaginator.pageSize;
-
-    // Make sure we wait for the connect promise if there is a pending one
-    await this.getClient().wsPromise;
 
     const queryPayload: ChannelGetOrCreateRequest = {
       data: this._data,
