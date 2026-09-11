@@ -1,14 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  ChannelInput,
-  ChannelMemberResponse,
-  ChannelResponse,
-  ContainsOperator,
-  PrimitiveFilter,
-  QueryFilter,
-  QueryFilters,
-  RequireOnlyOne,
-} from '../../../src';
+import { ChannelInput, ChannelMemberResponse, Filters } from '../../../src';
 import {
   itemMatchesFilter,
   ItemMatchesFilterOptions,
@@ -26,34 +17,29 @@ type CustomChannelData = {
   };
   name?: string;
 };
-type CustomChannelFilters = QueryFilters<
-  ContainsOperator<Omit<CustomChannelData, 'name'>> & {
-    archived?: boolean;
-    'member.user.name'?:
-      | RequireOnlyOne<{
-          $autocomplete?: string;
-          $eq?: string;
-        }>
-      | string;
-
-    members?:
-      | RequireOnlyOne<Pick<QueryFilter<string>, '$in'>>
-      | RequireOnlyOne<Pick<QueryFilter<string[]>, '$eq'>>
-      | PrimitiveFilter<string[]>;
-    name?:
-      | RequireOnlyOne<
-          {
-            $autocomplete?: string;
-          } & QueryFilter<string>
-        >
-      | PrimitiveFilter<string>;
-    pinned?: boolean;
-  } & {
-    [Key in keyof Omit<ChannelResponse, 'name' | 'members' | keyof CustomChannelData>]:
-      | RequireOnlyOne<QueryFilter<ChannelResponse[Key]>>
-      | PrimitiveFilter<ChannelResponse[Key]>;
-  }
->;
+// Declared the way the OpenAPI spec declares a filter: one entry per key, carrying the operators
+// that key actually accepts. Array-valued keys take the *element* type, with a `valueTypes`
+// override where the backend also accepts the whole array (see `members` in QueryChannelsRequest).
+type CustomChannelFilters = Filters<{
+  archived: { type: boolean; operators: '$eq' };
+  blocked: { type: boolean; operators: '$eq' };
+  custom1: { type: string; operators: '$contains' | '$in' };
+  custom2: { type: string; operators: '$eq' | '$gt' | '$in' | '$lt' };
+  custom3: { type: number; operators: '$eq' | '$gt' | '$lt' };
+  custom4: { type: boolean; operators: '$eq' | '$exists' };
+  custom5: { type: string; operators: '$eq' | '$in' };
+  'member.user.name': { type: string; operators: '$autocomplete' | '$eq' };
+  members: {
+    type: string;
+    operators: '$eq' | '$in';
+    valueTypes: { $eq: Array<string> };
+  };
+  name: {
+    type: string;
+    operators: '$autocomplete' | '$eq' | '$exists' | '$gt' | '$gte' | '$lt' | '$lte';
+  };
+  pinned: { type: boolean; operators: '$eq' };
+}>;
 
 type TestChannel = ChannelInput & CustomChannelData;
 

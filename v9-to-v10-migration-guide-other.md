@@ -442,7 +442,37 @@ Beyond the three breaking effects above, the field sets shifted to match the API
 - **Removed** — `ReminderFilters.user_id`, `QueryPollsFilters.user_id`, `QueryVotesFilters.created_by_id`. These were never declared by the endpoints; filter on a supported field instead (e.g. `created_by_id` for polls).
 - **Added** — `QueryVotesFilters` gains `poll_id`, and `QueryPollsFilters` gains a `custom.${string}` index signature for filtering on custom poll data.
 
-The legacy building blocks (`QueryFilter`, `PrimitiveFilter`, `QueryFilters`, `RequireOnlyOne`) remain exported for callers who compose their own filter types against `itemMatchesFilter` and the paginators.
+### Removed — the hand-written filter building blocks
+
+`QueryFilter` and `PrimitiveFilter` are **removed**, along with `ExtendedQueryFilter`, `ExtendedQueryFilters` and `ExtendedQueryLogicalOperators` (`src/pagination/FilterBuilder.ts`). `QueryFilters` and `RequireOnlyOne` remain exported.
+
+These were the v9 building blocks for hand-authoring a filter type — every alias in the table above used to be assembled from them. Nothing in the SDK uses them any more. If you composed your own filter type for `itemMatchesFilter`, a paginator or a `FilterBuilder`, declare it with the generated `Filters<>` helper instead: one entry per key, carrying the operators that key accepts.
+
+```ts
+// v9
+type MyFilters = QueryFilters<{
+  [Key in keyof MyItem]?:
+    | RequireOnlyOne<QueryFilter<MyItem[Key]>>
+    | PrimitiveFilter<MyItem[Key]>;
+}>;
+
+// v10
+type MyFilters = Filters<{
+  id: { type: string; operators: '$autocomplete' | '$eq' | '$in' };
+  age: { type: number; operators: '$gt' | '$lt' };
+  // Array-valued keys take the *element* type, with a `valueTypes` override where the
+  // backend also accepts the whole array — the way the spec models `members` / `teams`.
+  teams: {
+    type: string;
+    operators: '$contains' | '$eq' | '$in';
+    valueTypes: { $eq: Array<string> };
+  };
+}>;
+```
+
+`Filters<>` is what the generated request types themselves are built from, so it is strictly more expressive than what it replaces: operators are constrained per key (`$autocomplete` on a numeric field is now a compile error), `$ne` and `$nin` are available on the keys that declare them, `RequireOnlyOne` is applied for you, and the bare-value shorthand (`{ id: 'u1' }`) still works wherever `$eq` is allowed.
+
+One shape does not survive the move: an all-optional operator object. `QueryFilter` made every operator optional, so `{}` type-checked; `Filters<>` requires exactly one. Express "no constraint" by omitting the key.
 
 ### Removed — `ArrayOneOrMore` and `ArrayTwoOrMore`
 
@@ -489,7 +519,7 @@ type MyLogicalOperators<T> = {
 };
 ```
 
-This mirrors what the SDK itself now does in `ExtendedQueryLogicalOperators` (`src/pagination/FilterBuilder.ts`). The change is widening, not narrowing: everything that compiled in v9 still compiles, and the array-variable cases above now compile too. The only thing you lose is the compile error on an empty (or single-element `$or`) array, which the API rejects at runtime anyway.
+This mirrors the generated `QueryLogicalOperators` (`src/gen/models`), which types all three as plain arrays. The change is widening, not narrowing: everything that compiled in v9 still compiles, and the array-variable cases above now compile too. The only thing you lose is the compile error on an empty (or single-element `$or`) array, which the API rejects at runtime anyway.
 
 ---
 

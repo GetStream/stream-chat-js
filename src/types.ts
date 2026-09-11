@@ -284,25 +284,6 @@ export type QueryVotesFilters = NonNullable<QueryPollVotesRequest['filter']>;
 
 export type MessageFilters = NonNullable<SearchPayload['message_filter_conditions']>;
 
-export type PrimitiveFilter<ObjectType> = ObjectType | null;
-
-export type QueryFilter<ObjectType = string> =
-  NonNullable<ObjectType> extends string | number | boolean | Date
-    ? {
-        $eq?: PrimitiveFilter<ObjectType>;
-        $exists?: boolean;
-        $gt?: PrimitiveFilter<ObjectType>;
-        $gte?: PrimitiveFilter<ObjectType>;
-        $in?: PrimitiveFilter<ObjectType>[];
-        $lt?: PrimitiveFilter<ObjectType>;
-        $lte?: PrimitiveFilter<ObjectType>;
-      }
-    : {
-        $eq?: PrimitiveFilter<ObjectType>;
-        $exists?: boolean;
-        $in?: PrimitiveFilter<Unpacked<ObjectType>>[];
-      };
-
 export type UserFilters = QueryUsersPayload['filter_conditions'];
 
 export type MemberFilters = QueryMembersPayload['filter_conditions'];
