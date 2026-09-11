@@ -1,3 +1,15 @@
+## [10.0.0-rc.10](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.9...v10.0.0-rc.10) (2026-09-11)
+
+### Bug Fixes
+
+* **paginator:** correct windows filled by hydration rather than by a query ([#1860](https://github.com/GetStream/stream-chat-js/issues/1860)) ([93b6fa0](https://github.com/GetStream/stream-chat-js/commit/93b6fa0d8148b1acff234c857a5a84268cfbfd4e))
+* **paginator:** do not issue the first-page query twice ([#1858](https://github.com/GetStream/stream-chat-js/issues/1858)) ([6462cef](https://github.com/GetStream/stream-chat-js/commit/6462cefea294d53a282a66bd08142345fa5279b3))
+* send the read request regardless of read receipt privacy settings in v10 ([#1855](https://github.com/GetStream/stream-chat-js/issues/1855)) ([3b24387](https://github.com/GetStream/stream-chat-js/commit/3b2438711e92d9861814b815f91e6bcfd3fdade2))
+
+### Refactors
+
+* **i18n:** move the translation runtime to @stream-io/i18n ([#1861](https://github.com/GetStream/stream-chat-js/issues/1861)) ([45f45bd](https://github.com/GetStream/stream-chat-js/commit/45f45bd579df7391eb9cbec14deccd695c204cd6))
+
 ## [10.0.0-rc.9](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.8...v10.0.0-rc.9) (2026-09-03)
 
 ### ⚠ BREAKING CHANGES
