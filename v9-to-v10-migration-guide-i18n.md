@@ -335,33 +335,30 @@ generateI18nKeys({
 This is primarily for the UI SDKs. You only need it if you maintain your own translation catalog with
 the same call-site-as-source-of-truth approach.
 
-## New dependencies
+## Dependency changes
 
-`stream-chat` now depends on:
+`stream-chat` **dropped** `i18next` and `dayjs`. They travelled with the translation runtime into
+`@stream-io/i18n`, so a consumer who never translates anything no longer installs either — about
+2.3 MB unpacked (`i18next` ~416 KB, `dayjs` ~1.9 MB). The root bundle never carried them, so bundle
+size is unchanged; this is an install-footprint saving.
 
-| Package   | Range      | Why                                              |
-| --------- | ---------- | ------------------------------------------------ |
-| `i18next` | `^26.3.6`  | the translation runtime behind `@stream-io/i18n` |
-| `dayjs`   | `^1.11.13` | date and duration formatting                     |
+It **added** one:
 
-Direct dependencies rather than optional peers, so importing `@stream-io/i18n` works without you
-installing anything extra.
+| Package                  | Range    | Why                                                        |
+| ------------------------ | -------- | ---------------------------------------------------------- |
+| `@stream-io/state-store` | `^1.1.6` | the `StateStore` this package used to vendor and re-export |
 
-Two things to note:
+`StateStore` is no longer exported from `stream-chat`'s root — see the `StateStore` section of
+`v9-to-v10-migration-guide-other.md`. `@stream-io/i18n` carries `i18next` and `dayjs` as direct
+dependencies rather than optional peers, so installing it is enough; you do not declare them yourself.
 
-- **Bundle size is unaffected** if you do not import `@stream-io/i18n`. Both are externalized and the
-  root bundle is byte-identical.
-- **Install footprint grows ~2.3 MB unpacked** (`i18next` ~416 KB, `dayjs` ~1.9 MB) even if you never
-  translate. This takes `stream-chat` from three runtime dependencies to five, which is a deliberate
-  trade: a package that imports something should depend on it rather than push the requirement onto
-  consumers.
-
-If you already declared `i18next` or `dayjs` because a UI SDK needed them, you can drop them — but check
-that only one copy resolves, since two `i18next` instances mean dictionaries registered on one are read
-from the other:
+If you declared `i18next` or `dayjs` because a Stream SDK needed them, you can drop them. If you keep
+`dayjs` because your own code uses it, match `@stream-io/i18n`'s range (`^1.11.23`) — locale
+registration is global, so a second copy means your `import 'dayjs/locale/de'` extends an instance the
+SDK never formats with, and dates stay English with no error anywhere:
 
 ```bash
-find . -maxdepth 4 -name i18next -type d -path '*node_modules*'
+find . -maxdepth 4 -name dayjs -type d -path '*node_modules*'
 ```
 
 ## Mechanical migration checklist

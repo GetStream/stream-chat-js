@@ -121,6 +121,24 @@ _nominally_, so two copies of `StateStore` are not assignable to one another eve
 A single shared declaration is what lets `stream-chat`, `@stream-io/i18n` and the UI SDKs pass stores
 across package boundaries at all.
 
+**That makes one resolved copy a hard requirement, not a preference.** `stream-chat`,
+`@stream-io/i18n`, `stream-chat-react` and `stream-chat-react-native` each declare
+`@stream-io/state-store` at `^1.1.6`, which dedupes to one install. Declare the same range yourself. If
+you ever end up with two — a nested copy from a pinned or bumped range — the symptom is a compile
+error rather than a runtime one, typically `TS2345` when you pass `client.state` into a hook the SDK
+exported:
+
+```
+Argument of type 'StateStore<ClientState>' is not assignable to parameter of type 'StateStore<ClientState>'.
+  Types have separate declarations of a private property 'handlers'.
+```
+
+Two identical-looking types in one message is the tell. Check with:
+
+```bash
+find . -maxdepth 5 -path '*node_modules/@stream-io/state-store' -type d
+```
+
 ## Removed feature modules / subsystems
 
 Beyond the individual server-side methods listed in the methods guide, entire subsystems are gone. If your app used one of these, the client-side wrapper is not coming back — move to `@stream-io/node-sdk`:
