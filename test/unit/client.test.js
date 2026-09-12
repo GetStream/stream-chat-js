@@ -265,6 +265,84 @@ describe('Client openConnection', () => {
 	});
 });
 
+describe('Client wsPromise close/reopen race', () => {
+	const timeout = (ms) =>
+		new Promise((resolve) => setTimeout(() => resolve('timeout'), ms));
+
+	const createClientWithHangingConnect = () => {
+		const connectResolvers = [];
+		const wsConnection = new StableWSConnection({});
+		wsConnection.isConnecting = false;
+		wsConnection.isHealthy = false;
+		wsConnection.disconnect = function () {
+			this.isConnecting = false;
+			this.isHealthy = false;
+			return Promise.resolve();
+		};
+		wsConnection.connect = function () {
+			this.isConnecting = true;
+			return new Promise((resolve) => {
+				connectResolvers.push((connection) => {
+					this.isConnecting = false;
+					this.isHealthy = true;
+					this.connectionID = connection.connection_id;
+					resolve(connection);
+				});
+			});
+		};
+
+		const client = new StreamChat('key', {
+			allowServerSideConnect: true,
+			wsConnection,
+		});
+		client.userID = 'user';
+		client._setUser({ id: 'user' });
+
+		return { client, connectResolvers };
+	};
+
+	it('should resolve queryChannels after closeConnection and openConnection during connect', async () => {
+		const { client, connectResolvers } = createClientWithHangingConnect();
+		const postStub = sinon.stub(client, 'post').resolves({ channels: [] });
+
+		client.openConnection();
+		const queryPromise = client.queryChannels().then(() => 'resolved');
+
+		await client.closeConnection();
+		client.openConnection();
+
+		expect(connectResolvers.length).to.equal(2);
+		connectResolvers[1]({ connection_id: 'conn-2' });
+
+		const outcome = await Promise.race([queryPromise, timeout(200)]);
+		expect(outcome).to.equal('resolved');
+		expect(postStub.calledOnce).to.be.true;
+
+		await client.closeConnection();
+		postStub.restore();
+	});
+
+	it('should reject queryChannels when connect is closed and the next connect fails', async () => {
+		const { client } = createClientWithHangingConnect();
+
+		client.openConnection();
+		const queryPromise = client.queryChannels().then(
+			() => 'resolved',
+			(error) => error.message,
+		);
+
+		await client.closeConnection();
+		client.wsConnection.connect = function () {
+			this.isConnecting = true;
+			return Promise.reject(new Error('connect failed'));
+		};
+		client.openConnection();
+
+		const outcome = await Promise.race([queryPromise, timeout(200)]);
+		expect(outcome).to.equal('connect failed');
+	});
+});
+
 describe('Client connectUser', () => {
 	let client;
 	beforeEach(() => {
