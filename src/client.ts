@@ -393,6 +393,10 @@ export class StreamChat {
   wsConnection: StableWSConnection | null;
   wsFallback?: WSConnectionFallback;
   wsPromise: ConnectAPIResponse | null;
+  private _wsPromiseSettled = true;
+  private _wsConnectId = 0;
+  private _resolveWsPromise?: (value: Awaited<ConnectAPIResponse>) => void;
+  private _rejectWsPromise?: (reason?: unknown) => void;
   consecutiveFailures: number;
   insightMetrics: InsightMetrics;
   defaultWSTimeoutWithFallback: number;
@@ -852,9 +856,42 @@ export class StreamChat {
     }
 
     this.clientID = `${this.userID}--${randomId()}`;
-    this.wsPromise = this.connect();
+    this.wsPromise = this._bindWsPromise(this.connect());
     this._startCleaning();
     return this.wsPromise;
+  };
+
+  /**
+   * Keep a single pending `wsPromise` across close/reopen so callers that already
+   * `await this.wsPromise` are not stranded when `openConnection` starts a new connect.
+   */
+  private _bindWsPromise = (connectPromise: ConnectAPIResponse): ConnectAPIResponse => {
+    const connectId = ++this._wsConnectId;
+
+    let pending = this.wsPromise;
+    if (this._wsPromiseSettled || !pending) {
+      this._wsPromiseSettled = false;
+      pending = new Promise((resolve, reject) => {
+        this._resolveWsPromise = resolve;
+        this._rejectWsPromise = reject;
+      });
+      this.wsPromise = pending;
+    }
+
+    connectPromise.then(
+      (value) => {
+        if (connectId !== this._wsConnectId) return;
+        this._wsPromiseSettled = true;
+        this._resolveWsPromise?.(value);
+      },
+      (error) => {
+        if (connectId !== this._wsConnectId) return;
+        this._wsPromiseSettled = true;
+        this._rejectWsPromise?.(error);
+      },
+    );
+
+    return pending;
   };
 
   /**
