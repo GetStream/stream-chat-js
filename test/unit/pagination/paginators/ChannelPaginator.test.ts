@@ -757,6 +757,24 @@ describe('ChannelPaginator', () => {
       ]);
     });
 
+    it('sends the backend default to the server rather than an empty sort', async () => {
+      const queryChannels = vi
+        .spyOn(client, 'queryChannelsAndHydrate')
+        .mockResolvedValue({ channels: [], duration: '0.1ms' });
+      const paginator = new ChannelPaginator({ client, filters: {}, sort: [] });
+
+      await paginator.toTail();
+
+      expect(queryChannels.mock.calls[0][0]).toEqual(
+        expect.objectContaining({
+          sort: [
+            { direction: -1, field: 'last_message_at' },
+            { direction: -1, field: 'updated_at' },
+          ],
+        }),
+      );
+    });
+
     it('does not re-sort the list into cid order when an item is ingested', () => {
       // `zeta` is the most recently active, so it must stay on top however often it is re-ingested.
       const zeta = new Channel(client, 'type', 'zeta', {});
@@ -1180,6 +1198,10 @@ describe('ChannelPaginator', () => {
         expect(scheduleSyncStatusChangeCallback).not.toHaveBeenCalled();
         // And the preloaded list was not blanked (non-destructive refresh).
         expect(paginator.items).toStrictEqual([cachedChannel]);
+        // The seed recorded `offset = 1`; this call site must still ask for the first page.
+        expect(queryChannels.mock.calls[0][0]).toEqual(
+          expect.objectContaining({ offset: 0 }),
+        );
       });
 
       it('runs the query directly even when the cache is empty and the sync lands during the preload', async () => {
