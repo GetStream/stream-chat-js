@@ -730,6 +730,48 @@ describe('ChannelPaginator', () => {
     });
   });
 
+  describe('empty sort', () => {
+    // Regression: `<ChannelList>` defaults its `sort` prop to `[]`, which `??` does not treat as
+    // "unset". The comparator then had no fields, every comparison tied, and the id tiebreaker
+    // re-sorted the whole list into cid order on the first ingest.
+    it('falls back to the backend default when given an empty array', () => {
+      const paginator = new ChannelPaginator({ client, filters: {}, sort: [] });
+
+      expect(paginator.sort).toStrictEqual([
+        { direction: -1, field: 'last_message_at' },
+        { direction: -1, field: 'updated_at' },
+      ]);
+    });
+
+    it('falls back after the sort setter is handed an empty array', () => {
+      const paginator = new ChannelPaginator({
+        client,
+        filters: {},
+        sort: [{ direction: -1, field: 'created_at' }],
+      });
+      paginator.sort = [];
+
+      expect(paginator.sort).toStrictEqual([
+        { direction: -1, field: 'last_message_at' },
+        { direction: -1, field: 'updated_at' },
+      ]);
+    });
+
+    it('does not re-sort the list into cid order when an item is ingested', () => {
+      // `zeta` is the most recently active, so it must stay on top however often it is re-ingested.
+      const zeta = new Channel(client, 'type', 'zeta', {});
+      setLastMessageAt(zeta, new Date('1999-01-01T00:00:00.000Z'));
+      const alpha = new Channel(client, 'type', 'alpha', {});
+      setLastMessageAt(alpha, new Date('1980-01-01T00:00:00.000Z'));
+      const paginator = new ChannelPaginator({ client, filters: {}, sort: [] });
+      paginator.setItems({ valueOrFactory: [zeta, alpha], isFirstPage: true });
+
+      paginator.ingestItem(zeta);
+
+      expect(paginator.items?.map((c) => c.id)).toStrictEqual(['zeta', 'alpha']);
+    });
+  });
+
   describe('setters', () => {
     // Seed via the real ingestion path (distinct cids — interval storage dedupes by cid) and capture
     // the resulting state. These setters must not re-emit / reset it, so the state reference should
@@ -759,7 +801,11 @@ describe('ChannelPaginator', () => {
       const originalComparator = paginator.sortComparator;
       paginator.sort = [];
       expect(paginator.state.getLatestValue()).toBe(before);
-      expect(paginator.sort).toStrictEqual([]);
+      // An empty sort is a RESET to the backend default, not "sort by nothing".
+      expect(paginator.sort).toStrictEqual([
+        { direction: -1, field: 'last_message_at' },
+        { direction: -1, field: 'updated_at' },
+      ]);
       expect(paginator.sortComparator).not.toEqual(originalComparator);
     });
 
@@ -1270,6 +1316,78 @@ describe('ChannelPaginator', () => {
 
         expect(queryChannels).toHaveBeenCalledTimes(2);
         expect(scheduleSyncStatusChangeCallback).not.toHaveBeenCalled();
+      });
+
+      // The cold start `<ChannelList>` actually performs. A list seeded from the offline cache is
+      // short, so its FlatList sits within the scroll threshold of its own bottom at mount and fires
+      // `onEndReached` straight away — and again on the re-render a `message.new` causes.
+      const seedFromCache = async () => {
+        await setUpOfflineDb({ syncStatus: false });
+        const cached = [
+          new Channel(client, 'type', 'a', {}),
+          new Channel(client, 'type', 'b', {}),
+          new Channel(client, 'type', 'c', {}),
+        ];
+        getChannelsForQuery.mockResolvedValue(cached.map(() => ({})));
+        vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue(cached);
+        const queryChannels = vi
+          .spyOn(client, 'queryChannelsAndHydrate')
+          .mockResolvedValue({ channels: cached, duration: '0.1ms' });
+        const paginator = makePaginator({ filters: {} });
+
+        await paginator.toTail(); // cold start: surface the cached page, defer the query
+        expect(paginator.items).toStrictEqual(cached);
+        expect(queryChannels).not.toHaveBeenCalled();
+
+        return { cached, paginator, queryChannels };
+      };
+
+      it('does not paginate a window that came only from the cache', async () => {
+        const { paginator, queryChannels } = await seedFromCache();
+
+        await paginator.toTail();
+
+        // A cache-seeded window is not an already-loaded list: the seed records `offset = 3` without
+        // any page having been fetched, so an un-deferred continuation would ask the server for
+        // whatever follows the ENTIRE cache instead of for the list's first page.
+        expect(queryChannels).not.toHaveBeenCalled();
+      });
+
+      it('refreshes a cache-seeded window from the first page, not from the end of the cache', async () => {
+        const { cached, paginator, queryChannels } = await seedFromCache();
+
+        await paginator.toTail(); // the extra onEndReached, deferred like the first
+
+        client.offlineDb!.syncManager.syncStatus = true;
+        // Callbacks are stored in a Map keyed by paginator id, so only the last schedule survives.
+        const calls = scheduleSyncStatusChangeCallback.mock.calls;
+        await calls[calls.length - 1][1]();
+
+        expect(queryChannels).toHaveBeenCalledTimes(1);
+        // `toTail` asks to continue tailward; the deferred refresh must override that, because the
+        // position it would continue from was recorded by the seed rather than earned by a query.
+        expect(queryChannels.mock.calls[0][0]).toEqual(
+          expect.objectContaining({ offset: 0 }),
+        );
+        // ...and the cached list stayed on screen throughout.
+        expect(paginator.items).toStrictEqual(cached);
+      });
+
+      it('does not continue from the seeded position once the sync completes', async () => {
+        const { cached, paginator, queryChannels } = await seedFromCache();
+
+        // The sync lands (a queued pending-task replay is exactly this: it holds `syncStatus` false
+        // for seconds, then flips it), and a fling-driven next-page query races ahead of the
+        // deferred refresh. It is no longer deferred — but the window is still cache-only, so it
+        // must not continue from the position the seed recorded.
+        client.offlineDb!.syncManager.syncStatus = true;
+        await paginator.toTail();
+
+        expect(queryChannels).toHaveBeenCalledTimes(1);
+        expect(queryChannels.mock.calls[0][0]).toEqual(
+          expect.objectContaining({ offset: 0 }),
+        );
+        expect(paginator.items).toStrictEqual(cached);
       });
     });
   });

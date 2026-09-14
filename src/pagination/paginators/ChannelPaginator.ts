@@ -264,6 +264,13 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
    * `postQueryReconcile` decides whether it should be committed (first page only).
    */
   private _pendingPredefinedFilter: ParsedPredefinedFilterResponse | undefined;
+  /**
+   * True while the loaded window came ONLY from the offline cache - seeded by `setItems`, never
+   * confirmed by a query. Such a window has no pagination position worth continuing from, so the seed
+   * records `offset = <cache size>` and a query shape, which is what makes the next query look like a
+   * continuation rather than a first page. See `executeQuery`.
+   */
+  private _windowIsOfflineCacheOnly = false;
   protected _sortComparatorFactory: ChannelSortComparatorFactory | undefined;
   sortComparator: (a: Channel, b: Channel) => number;
   filterBuilder: FilterBuilder<ChannelFilters>;
@@ -287,7 +294,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       retryCount: DEFAULT_QUERY_CHANNELS_RETRY_COUNT,
       ...paginatorOptions,
     });
-    const definedSort = sort ?? DEFAULT_BACKEND_SORT;
+    const definedSort = sort?.length ? sort : DEFAULT_BACKEND_SORT;
     this.client = client;
     this._id = id ?? `channel-paginator-${generateUUIDv4()}`;
     this._sort = definedSort;
@@ -351,7 +358,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   }
 
   get sort(): SortParamRequest[] {
-    return this._sort ?? DEFAULT_BACKEND_SORT;
+    return this._sort?.length ? this._sort : DEFAULT_BACKEND_SORT;
   }
 
   /**
@@ -620,18 +627,26 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
    */
   async executeQuery(params: PaginationQueryParams<ChannelQueryShape> = {}) {
     const { offlineDb } = this.client;
-    const queryShape = params.queryShape ?? this.getNextQueryShape();
+
+    const effectiveParams: PaginationQueryParams<ChannelQueryShape> =
+      this._windowIsOfflineCacheOnly && params.reset !== 'yes'
+        ? { ...params, keepPreviousItems: true, reset: 'yes' as const }
+        : params;
+
+    const queryShape = effectiveParams.queryShape ?? this.getNextQueryShape();
     const shouldDeferUntilSynced =
       !!offlineDb?.getChannelsForQuery &&
       !!this.client.user?.id &&
       !offlineDb.syncManager.syncStatus &&
-      this.isFirstPageQuery({ queryShape, reset: params.reset });
+      // A cache seeded window is not an already loaded list, so paginating it has to defer too.
+      (this._windowIsOfflineCacheOnly ||
+        this.isFirstPageQuery({ queryShape, reset: effectiveParams.reset }));
 
-    if (!shouldDeferUntilSynced) return await super.executeQuery(params);
+    if (!shouldDeferUntilSynced) return await super.executeQuery(effectiveParams);
 
     if (!this.isInitialized) {
       const cachedChannels = await this.preloadFirstPageFromOfflineDb({
-        ...params,
+        ...effectiveParams,
         queryShape,
       });
       if (cachedChannels?.length) {
@@ -641,30 +656,34 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
         //       running. This all happens so fast it should never be noticeable but it's
         //       a microoptimization.
         this.setItems({ valueOrFactory: cachedChannels, isFirstPage: true });
+        this._windowIsOfflineCacheOnly = true;
       }
       // Nothing is in flight while we wait for the sync; leaving `isLoading` true would make
       // `canExecuteQuery` reject the query scheduled below.
       this.state.partialNext({ isLoading: false });
     }
 
+    const refreshParams: PaginationQueryParams<ChannelQueryShape> = {
+      ...effectiveParams,
+      keepPreviousItems: true,
+      ...(this._windowIsOfflineCacheOnly ? { reset: 'yes' as const } : {}),
+    };
+
     // Check if everything is synced up already and if so, just run the actual queryChannels request.
     // Otherwise, the sync status change will never fire and so `executeQuery` will never really be
     // run.
     if (offlineDb.syncManager.syncStatus) {
-      return await super.executeQuery({ ...params, keepPreviousItems: true });
+      return await super.executeQuery(refreshParams);
     }
 
-    // When the sync completes, run the real query — but as a NON-DESTRUCTIVE refresh
-    // (`keepPreviousItems`) so the channels we already surfaced from the offline DB stay visible while it
-    // runs. Without this the re-run goes through the first-page reset path and re-preloads from the DB;
-    // if the sync invalidated the offline query cache (i.e. a channel changed while the app was closed),
-    // that re-preload returns nothing and the list blanks to a second skeleton before the fresh page lands.
     offlineDb.syncManager.scheduleSyncStatusChangeCallback(this.id, async () => {
-      await this.executeQuery({ ...params, keepPreviousItems: true });
+      await this.executeQuery(refreshParams);
     });
   }
 
   query = async (): Promise<PaginationQueryReturnValue<Channel>> => {
+    // A query is going out, so whatever it returns the window is no longer cache-only.
+    this._windowIsOfflineCacheOnly = false;
     // get the params only if they were not generated previously
     if (!this._nextQueryShape) {
       this._nextQueryShape = this.getNextQueryShape();
