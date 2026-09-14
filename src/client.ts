@@ -868,10 +868,6 @@ export class StreamChat {
   };
 
   /**
-   * Keep a single pending `wsPromise` across close/reopen so callers that already
-   * `await this.wsPromise` are not stranded when `openConnection` starts a new connect.
-   */
-  /**
    * Rejects the shared `wsPromise` and invalidates any in-flight connect attempt.
    *
    * Only `disconnectUser()` does this. `closeConnection()` deliberately leaves the
@@ -889,6 +885,10 @@ export class StreamChat {
     this._rejectWsPromise?.(reason);
   };
 
+  /**
+   * Keep a single pending `wsPromise` across close/reopen so callers that already
+   * `await this.wsPromise` are not stranded when `openConnection` starts a new connect.
+   */
   private _bindWsPromise = (connectPromise: ConnectAPIResponse): ConnectAPIResponse => {
     const connectId = ++this._wsConnectId;
 
