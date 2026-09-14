@@ -1395,6 +1395,44 @@ describe('ChannelPaginator', () => {
         expect(paginator.items).toStrictEqual(cached);
       });
 
+      it('resumes normal pagination once a query has confirmed the window', async () => {
+        // The cache-only rewrite turns a continuation into a first-page refresh. If the flag outlived
+        // the first real query, EVERY later page would be rewritten too and the list could never
+        // paginate past page one.
+        await setUpOfflineDb({ syncStatus: false });
+        const channel = (id: string) => new Channel(client, 'type', id, {});
+        const cached = [channel('a'), channel('b')];
+        getChannelsForQuery.mockResolvedValue(cached.map(() => ({})));
+        vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue(cached);
+        const queryChannels = vi
+          .spyOn(client, 'queryChannelsAndHydrate')
+          .mockResolvedValueOnce({ channels: cached, duration: '0.1ms' })
+          .mockResolvedValueOnce({
+            channels: [channel('c'), channel('d')],
+            duration: '0.1ms',
+          });
+        const paginator = new ChannelPaginator({
+          client,
+          filters: {},
+          paginatorOptions: { pageSize: 2 },
+        });
+
+        await paginator.toTail();
+        client.offlineDb!.syncManager.syncStatus = true;
+        const calls = scheduleSyncStatusChangeCallback.mock.calls;
+        await calls[calls.length - 1][1]();
+
+        expect(queryChannels.mock.calls[0][0]).toEqual(
+          expect.objectContaining({ offset: 0 }),
+        );
+
+        await paginator.toTail();
+
+        expect(queryChannels.mock.calls[1][0]).toEqual(
+          expect.objectContaining({ offset: 2 }),
+        );
+      });
+
       it('does not continue from the seeded position once the sync completes', async () => {
         const { cached, paginator, queryChannels } = await seedFromCache();
 
