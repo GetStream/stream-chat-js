@@ -1013,12 +1013,12 @@ describe('ChannelPaginator', () => {
     let getChannelsForQuery: MockInstance;
     let scheduleSyncStatusChangeCallback: MockInstance;
 
-    const setUpOfflineDb = async ({ syncStatus }: { syncStatus: boolean }) => {
+    const setUpOfflineDb = async ({ isSynced }: { isSynced: boolean }) => {
       offlineDb = new MockOfflineDB({ client });
       client.setOfflineDBApi(offlineDb);
       (client.offlineDb!.initializeDB as unknown as MockInstance).mockReturnValue(true);
       await client.offlineDb!.init(client.userId as string);
-      client.offlineDb!.syncManager.syncStatus = syncStatus;
+      client.offlineDb!.syncManager.isSynced = isSynced;
       upsertCidsForQuery = client.offlineDb!
         .upsertCidsForQuery as unknown as MockInstance;
       upsertCidsForQuery.mockImplementation(() => Promise.resolve(true));
@@ -1042,7 +1042,7 @@ describe('ChannelPaginator', () => {
       });
 
     it('reads the cache with the full query request, including predefined-filter options', async () => {
-      await setUpOfflineDb({ syncStatus: true });
+      await setUpOfflineDb({ isSynced: true });
       vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
         channels: [],
         duration: '0.1ms',
@@ -1062,7 +1062,7 @@ describe('ChannelPaginator', () => {
     });
 
     it('persists cids under the full query request after a query', async () => {
-      await setUpOfflineDb({ syncStatus: true });
+      await setUpOfflineDb({ isSynced: true });
       const channelA = new Channel(client, 'type', 'offline-a', {});
       vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
         channels: [channelA],
@@ -1081,7 +1081,7 @@ describe('ChannelPaginator', () => {
     });
 
     it('persists the new cid order after a live ingest and after a removal', async () => {
-      await setUpOfflineDb({ syncStatus: true });
+      await setUpOfflineDb({ isSynced: true });
       const channelA = new Channel(client, 'type', 'offline-a', {});
       setLastMessageAt(channelA, new Date('1971-01-01T00:00:00.000Z'));
       const channelB = new Channel(client, 'type', 'offline-b', {});
@@ -1117,7 +1117,7 @@ describe('ChannelPaginator', () => {
     });
 
     it('does not persist when a removal changed nothing', async () => {
-      await setUpOfflineDb({ syncStatus: true });
+      await setUpOfflineDb({ isSynced: true });
       vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
         channels: [],
         duration: '0.1ms',
@@ -1133,7 +1133,7 @@ describe('ChannelPaginator', () => {
 
     // ported from the legacy suite ("continues with normal queryChannels flow if client.user is missing")
     it('queries normally without touching the cache when there is no user', async () => {
-      await setUpOfflineDb({ syncStatus: false });
+      await setUpOfflineDb({ isSynced: false });
       client.user = undefined;
       const queryChannels = vi
         .spyOn(client, 'queryChannelsAndHydrate')
@@ -1150,7 +1150,7 @@ describe('ChannelPaginator', () => {
 
     describe('while the offline sync is in progress', () => {
       it('surfaces the cached page and defers the query until the sync completes', async () => {
-        await setUpOfflineDb({ syncStatus: false });
+        await setUpOfflineDb({ isSynced: false });
         const cachedChannel = new Channel(client, 'type', 'cached', {});
         getChannelsForQuery.mockResolvedValue([{ channel: cachedChannel.data }]);
         vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue([cachedChannel]);
@@ -1167,7 +1167,7 @@ describe('ChannelPaginator', () => {
         expect(scheduleSyncStatusChangeCallback.mock.calls[0][0]).toBe(paginator.id);
 
         // the scheduled callback runs the deferred query once the sync manager reports completion
-        client.offlineDb!.syncManager.syncStatus = true;
+        client.offlineDb!.syncManager.isSynced = true;
         await scheduleSyncStatusChangeCallback.mock.calls[0][1]();
 
         expect(queryChannels).toHaveBeenCalledTimes(1);
@@ -1177,12 +1177,12 @@ describe('ChannelPaginator', () => {
         // This test basically confirms a very intermittent regression that would cause the sync status
         // to be changed to true way before the preload/initial population finishes. In that instance,
         // we would drop all of the listeners and so the actual query would not fire.
-        await setUpOfflineDb({ syncStatus: false });
+        await setUpOfflineDb({ isSynced: false });
         const cachedChannel = new Channel(client, 'type', 'cached', {});
-        // getChannelsForQuery IS the awaited preload: flipping syncStatus here mimics the sync landing
+        // getChannelsForQuery IS the awaited preload: flipping isSynced here mimics the sync landing
         // mid-await (and the sync manager having already drained + cleared its callback map).
         getChannelsForQuery.mockImplementation(async () => {
-          client.offlineDb!.syncManager.syncStatus = true;
+          client.offlineDb!.syncManager.isSynced = true;
           return [{ channel: cachedChannel.data }];
         });
         vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue([cachedChannel]);
@@ -1207,10 +1207,10 @@ describe('ChannelPaginator', () => {
       it('runs the query directly even when the cache is empty and the sync lands during the preload', async () => {
         // Same race, but nothing is cached: the preload returns nothing yet the sync still completes
         // mid-await. We must not strand a callback — run the query directly so the (watched) list still lands.
-        await setUpOfflineDb({ syncStatus: false });
+        await setUpOfflineDb({ isSynced: false });
         const fresh = new Channel(client, 'type', 'fresh', {});
         getChannelsForQuery.mockImplementation(async () => {
-          client.offlineDb!.syncManager.syncStatus = true;
+          client.offlineDb!.syncManager.isSynced = true;
           return null;
         });
         const queryChannels = vi
@@ -1230,7 +1230,7 @@ describe('ChannelPaginator', () => {
         // Otherwise it re-preloads from the offline DB; if the sync invalidated the query cache (i.e. a
         // channel changed while the app was closed), that re-preload returns nothing and the list blanks
         // to a second skeleton before the fresh page lands.
-        await setUpOfflineDb({ syncStatus: false });
+        await setUpOfflineDb({ isSynced: false });
         const cachedChannel = new Channel(client, 'type', 'cached', {});
         getChannelsForQuery.mockResolvedValue([{ channel: cachedChannel.data }]);
         vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue([cachedChannel]);
@@ -1245,7 +1245,7 @@ describe('ChannelPaginator', () => {
 
         // The sync invalidates the offline query cache before the deferred re-run fires.
         getChannelsForQuery.mockResolvedValue(null);
-        client.offlineDb!.syncManager.syncStatus = true;
+        client.offlineDb!.syncManager.isSynced = true;
 
         // Watch for ANY transient blank (items === undefined) while the deferred re-run executes.
         let blanked = false;
@@ -1264,7 +1264,7 @@ describe('ChannelPaginator', () => {
         // just set the displayed `items`. Otherwise a channel ingested concurrently during the presync
         // window (i.e a message.new from the offline-send replay in executePendingTasks) rebuilds the
         // list from an empty index and collapses it to just that one channel.
-        await setUpOfflineDb({ syncStatus: false });
+        await setUpOfflineDb({ isSynced: false });
         const a = new Channel(client, 'type', 'a', {});
         const b = new Channel(client, 'type', 'b', {});
         const c = new Channel(client, 'type', 'c', {});
@@ -1291,7 +1291,7 @@ describe('ChannelPaginator', () => {
       });
 
       it('defers even when nothing is cached and the list is already loaded', async () => {
-        await setUpOfflineDb({ syncStatus: true });
+        await setUpOfflineDb({ isSynced: true });
         vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
           channels: [new Channel(client, 'type', 'offline-a', {})],
           duration: '0.1ms',
@@ -1299,7 +1299,7 @@ describe('ChannelPaginator', () => {
         const paginator = makePaginator();
         await paginator.toTail();
 
-        client.offlineDb!.syncManager.syncStatus = false;
+        client.offlineDb!.syncManager.isSynced = false;
         getChannelsForQuery.mockClear();
         const queryChannels = vi
           .spyOn(client, 'queryChannelsAndHydrate')
@@ -1315,7 +1315,7 @@ describe('ChannelPaginator', () => {
       });
 
       it('does not defer a next-page query', async () => {
-        await setUpOfflineDb({ syncStatus: true });
+        await setUpOfflineDb({ isSynced: true });
         const paginator = new ChannelPaginator({
           client,
           filters: { type: 'type' },
@@ -1329,7 +1329,7 @@ describe('ChannelPaginator', () => {
           });
         await paginator.toTail();
 
-        client.offlineDb!.syncManager.syncStatus = false;
+        client.offlineDb!.syncManager.isSynced = false;
         queryChannels.mockResolvedValue({
           channels: [new Channel(client, 'type', 'offline-b', {})],
           duration: '0.1ms',
@@ -1344,7 +1344,7 @@ describe('ChannelPaginator', () => {
       // short, so its FlatList sits within the scroll threshold of its own bottom at mount and fires
       // `onEndReached` straight away — and again on the re-render a `message.new` causes.
       const seedFromCache = async () => {
-        await setUpOfflineDb({ syncStatus: false });
+        await setUpOfflineDb({ isSynced: false });
         const cached = [
           new Channel(client, 'type', 'a', {}),
           new Channel(client, 'type', 'b', {}),
@@ -1380,7 +1380,7 @@ describe('ChannelPaginator', () => {
 
         await paginator.toTail(); // the extra onEndReached, deferred like the first
 
-        client.offlineDb!.syncManager.syncStatus = true;
+        client.offlineDb!.syncManager.isSynced = true;
         // Callbacks are stored in a Map keyed by paginator id, so only the last schedule survives.
         const calls = scheduleSyncStatusChangeCallback.mock.calls;
         await calls[calls.length - 1][1]();
@@ -1399,7 +1399,7 @@ describe('ChannelPaginator', () => {
         // The cache-only rewrite turns a continuation into a first-page refresh. If the flag outlived
         // the first real query, EVERY later page would be rewritten too and the list could never
         // paginate past page one.
-        await setUpOfflineDb({ syncStatus: false });
+        await setUpOfflineDb({ isSynced: false });
         const channel = (id: string) => new Channel(client, 'type', id, {});
         const cached = [channel('a'), channel('b')];
         getChannelsForQuery.mockResolvedValue(cached.map(() => ({})));
@@ -1418,7 +1418,7 @@ describe('ChannelPaginator', () => {
         });
 
         await paginator.toTail();
-        client.offlineDb!.syncManager.syncStatus = true;
+        client.offlineDb!.syncManager.isSynced = true;
         const calls = scheduleSyncStatusChangeCallback.mock.calls;
         await calls[calls.length - 1][1]();
 
@@ -1436,11 +1436,11 @@ describe('ChannelPaginator', () => {
       it('does not continue from the seeded position once the sync completes', async () => {
         const { cached, paginator, queryChannels } = await seedFromCache();
 
-        // The sync lands (a queued pending-task replay is exactly this: it holds `syncStatus` false
+        // The sync lands (a queued pending-task replay is exactly this: it holds `isSynced` false
         // for seconds, then flips it), and a fling-driven next-page query races ahead of the
         // deferred refresh. It is no longer deferred — but the window is still cache-only, so it
         // must not continue from the position the seed recorded.
-        client.offlineDb!.syncManager.syncStatus = true;
+        client.offlineDb!.syncManager.isSynced = true;
         await paginator.toTail();
 
         expect(queryChannels).toHaveBeenCalledTimes(1);

@@ -637,7 +637,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     const shouldDeferUntilSynced =
       !!offlineDb?.getChannelsForQuery &&
       !!this.client.user?.id &&
-      !offlineDb.syncManager.syncStatus &&
+      !offlineDb.syncManager.isSynced &&
       // A cache seeded window is not an already loaded list, so paginating it has to defer too.
       (this._windowIsOfflineCacheOnly ||
         this.isFirstPageQuery({ queryShape, reset: effectiveParams.reset }));
@@ -672,7 +672,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     // Check if everything is synced up already and if so, just run the actual queryChannels request.
     // Otherwise, the sync status change will never fire and so `executeQuery` will never really be
     // run.
-    if (offlineDb.syncManager.syncStatus) {
+    if (offlineDb.syncManager.isSynced) {
       return await super.executeQuery(refreshParams);
     }
 
