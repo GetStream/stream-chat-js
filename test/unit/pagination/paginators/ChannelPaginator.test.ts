@@ -1076,6 +1076,7 @@ describe('ChannelPaginator', () => {
         cids: [channelA.cid],
         filters: { type: 'type' },
         options: expect.objectContaining(requestOptions),
+        predefinedFilter: undefined,
         sort: [{ field: 'last_message_at', direction: -1 }],
       });
     });
@@ -1152,7 +1153,9 @@ describe('ChannelPaginator', () => {
       it('surfaces the cached page and defers the query until the sync completes', async () => {
         await setUpOfflineDb({ syncStatus: false });
         const cachedChannel = new Channel(client, 'type', 'cached', {});
-        getChannelsForQuery.mockResolvedValue([{ channel: cachedChannel.data }]);
+        getChannelsForQuery.mockResolvedValue({
+          channels: [{ channel: cachedChannel.data }],
+        });
         vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue([cachedChannel]);
         const queryChannels = vi
           .spyOn(client, 'queryChannelsAndHydrate')
@@ -1183,7 +1186,7 @@ describe('ChannelPaginator', () => {
         // mid-await (and the sync manager having already drained + cleared its callback map).
         getChannelsForQuery.mockImplementation(async () => {
           client.offlineDb!.syncManager.syncStatus = true;
-          return [{ channel: cachedChannel.data }];
+          return { channels: [{ channel: cachedChannel.data }] };
         });
         vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue([cachedChannel]);
         const queryChannels = vi
@@ -1232,7 +1235,9 @@ describe('ChannelPaginator', () => {
         // to a second skeleton before the fresh page lands.
         await setUpOfflineDb({ syncStatus: false });
         const cachedChannel = new Channel(client, 'type', 'cached', {});
-        getChannelsForQuery.mockResolvedValue([{ channel: cachedChannel.data }]);
+        getChannelsForQuery.mockResolvedValue({
+          channels: [{ channel: cachedChannel.data }],
+        });
         vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue([cachedChannel]);
         vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
           channels: [cachedChannel],
@@ -1268,7 +1273,7 @@ describe('ChannelPaginator', () => {
         const a = new Channel(client, 'type', 'a', {});
         const b = new Channel(client, 'type', 'b', {});
         const c = new Channel(client, 'type', 'c', {});
-        getChannelsForQuery.mockResolvedValue([{}, {}, {}]);
+        getChannelsForQuery.mockResolvedValue({ channels: [{}, {}, {}] });
         vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue([a, b, c]);
         vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
           channels: [a, b, c],
@@ -1350,7 +1355,7 @@ describe('ChannelPaginator', () => {
           new Channel(client, 'type', 'b', {}),
           new Channel(client, 'type', 'c', {}),
         ];
-        getChannelsForQuery.mockResolvedValue(cached.map(() => ({})));
+        getChannelsForQuery.mockResolvedValue({ channels: cached.map(() => ({})) });
         vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue(cached);
         const queryChannels = vi
           .spyOn(client, 'queryChannelsAndHydrate')
@@ -1402,7 +1407,7 @@ describe('ChannelPaginator', () => {
         await setUpOfflineDb({ syncStatus: false });
         const channel = (id: string) => new Channel(client, 'type', id, {});
         const cached = [channel('a'), channel('b')];
-        getChannelsForQuery.mockResolvedValue(cached.map(() => ({})));
+        getChannelsForQuery.mockResolvedValue({ channels: cached.map(() => ({})) });
         vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue(cached);
         const queryChannels = vi
           .spyOn(client, 'queryChannelsAndHydrate')
@@ -1448,6 +1453,138 @@ describe('ChannelPaginator', () => {
           expect.objectContaining({ offset: 0 }),
         );
         expect(paginator.items).toStrictEqual(cached);
+      });
+    });
+
+    describe('predefined-filter metadata in the cache', () => {
+      // The rule the server resolved for a `predefined_filter` list. A cache-seeded window has no
+      // response to learn it from, so without persisting it the paginator matches against the LOCAL
+      // filters and orders by `DEFAULT_BACKEND_SORT` until the first query lands - a window a queued
+      // pending-task replay can stretch to seconds.
+      const RESOLVED = {
+        name: 'user_messaging',
+        filter: { archived: false },
+        sort: [{ field: 'last_message_at', direction: 1 as const }],
+      };
+
+      const seedWith = async (
+        predefinedFilter: typeof RESOLVED | undefined,
+        channels: Channel[],
+      ) => {
+        await setUpOfflineDb({ syncStatus: false });
+        getChannelsForQuery.mockResolvedValue({
+          channels: channels.map(() => ({})),
+          predefinedFilter,
+        });
+        vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue(channels);
+        const queryChannels = vi
+          .spyOn(client, 'queryChannelsAndHydrate')
+          .mockResolvedValue({ channels: [], duration: '0.1ms' });
+        const paginator = makePaginator({ filters: {} });
+        await paginator.toTail();
+        return { paginator, queryChannels };
+      };
+
+      it('persists the resolved metadata with the cid order it produced', async () => {
+        await setUpOfflineDb({ syncStatus: true });
+        const channelA = new Channel(client, 'type', 'offline-a', {});
+        vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
+          channels: [channelA],
+          duration: '0.1ms',
+          predefined_filter: RESOLVED,
+        });
+        const paginator = makePaginator({ filters: {} });
+
+        await paginator.toTail();
+
+        expect(upsertCidsForQuery).toHaveBeenCalledWith(
+          expect.objectContaining({
+            cids: [channelA.cid],
+            predefinedFilter: RESOLVED,
+          }),
+        );
+      });
+
+      it('restores it from the cache and writes it back with the seeded order', async () => {
+        const cachedChannel = new Channel(client, 'type', 'cached', {});
+        const { paginator } = await seedWith(RESOLVED, [cachedChannel]);
+
+        expect(paginator.predefinedFilter).toEqual(RESOLVED);
+        expect(paginator.effectiveFilters).toEqual(RESOLVED.filter);
+        expect(paginator.effectiveSort).toEqual(RESOLVED.sort);
+        expect(upsertCidsForQuery).toHaveBeenCalledWith(
+          expect.objectContaining({
+            cids: [cachedChannel.cid],
+            predefinedFilter: RESOLVED,
+          }),
+        );
+      });
+
+      it('orders a live ingest into the seeded window by the restored sort', async () => {
+        const older = new Channel(client, 'type', 'older', {});
+        setLastMessageAt(older, new Date('1970-01-01T00:00:00.000Z'));
+        const newer = new Channel(client, 'type', 'newer', {});
+        setLastMessageAt(newer, new Date('1980-01-01T00:00:00.000Z'));
+        // RESOLVED sorts ASCENDING - the opposite of the `DEFAULT_BACKEND_SORT` fallback, so the
+        // placement below tells the two rules apart.
+        const { paginator } = await seedWith(RESOLVED, [older, newer]);
+
+        const oldest = new Channel(client, 'type', 'oldest', {});
+        setLastMessageAt(oldest, new Date('1960-01-01T00:00:00.000Z'));
+        paginator.ingestItem(oldest);
+
+        // Ascending, it belongs at the head - which the seeded window has loaded. Under the fallback
+        // it would sort past the last item into unloaded tail territory and be dropped instead.
+        expect(paginator.items?.map(({ cid }) => cid)).toEqual([
+          oldest.cid,
+          older.cid,
+          newer.cid,
+        ]);
+        expect(paginator.sortComparator(older, newer)).toBeLessThan(0);
+      });
+
+      it('rejects a live ingest the restored filter excludes', async () => {
+        const cachedChannel = new Channel(client, 'type', 'cached', {});
+        // The paginator's own filters are `{}` - everything matches until the restored rule says
+        // otherwise, which is the membership half of the bug.
+        const { paginator } = await seedWith(RESOLVED, [cachedChannel]);
+
+        const archived = new Channel(client, 'type', 'archived', {});
+        archived.state.membership = { user, archived_at: '2025-09-03T12:19:39.101089Z' };
+
+        expect(paginator.ingestItem(archived)).toBe(false);
+        expect(paginator.items).toStrictEqual([cachedChannel]);
+      });
+
+      it('lets the first real response overwrite what the cache restored', async () => {
+        const cachedChannel = new Channel(client, 'type', 'cached', {});
+        const { paginator, queryChannels } = await seedWith(RESOLVED, [cachedChannel]);
+        const server = {
+          name: 'user_messaging',
+          filter: { archived: true },
+          sort: [{ field: 'last_message_at', direction: -1 as const }],
+        };
+        queryChannels.mockResolvedValue({
+          channels: [cachedChannel],
+          duration: '0.1ms',
+          predefined_filter: server,
+        });
+
+        client.offlineDb!.syncManager.syncStatus = true;
+        const calls = scheduleSyncStatusChangeCallback.mock.calls;
+        await calls[calls.length - 1][1]();
+
+        expect(paginator.predefinedFilter).toEqual(server);
+      });
+
+      it('leaves the metadata unset when the cached query carried none', async () => {
+        const cachedChannel = new Channel(client, 'type', 'cached', {});
+        const { paginator } = await seedWith(undefined, [cachedChannel]);
+
+        expect(paginator.predefinedFilter).toBeUndefined();
+        expect(upsertCidsForQuery).toHaveBeenCalledWith(
+          expect.objectContaining({ predefinedFilter: undefined }),
+        );
       });
     });
   });
