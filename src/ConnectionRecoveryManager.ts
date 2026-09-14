@@ -64,7 +64,7 @@ export const DEFAULT_CONNECTION_RECOVERY_MANAGER_CONFIG: ConnectionRecoveryManag
  *
  * The edge is what guarantees `executePendingTasks()` → `sync()` → query ordering, on every reconnect
  * path: `OfflineDBSyncManager` calls `invokeSyncStatusListeners(true)` **unconditionally** after
- * `syncAndExecutePendingTasks()` on each online transition — it does not require `syncStatus` to have
+ * `syncAndExecutePendingTasks()` on each online transition — it does not require `isSynced` to have
  * been `false` first. That matters because the going-offline `connection.changed` is 5s-debounced,
  * skipped entirely on a quick flap, and never dispatched at all by `closeConnection()` (mobile
  * backgrounding), so anything derived from *that* event is not a reliable signal. The edge is.
