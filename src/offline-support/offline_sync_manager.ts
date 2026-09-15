@@ -16,7 +16,7 @@ const logger = chatLoggerSystem.getLogger('offline-db');
  * consistent with the server once connectivity is restored.
  */
 export class OfflineDBSyncManager {
-  public syncStatus = false;
+  public isSynced = false;
   public connectionChangedListener: { unsubscribe: () => void } | null = null;
   private syncStatusListeners: Array<(status: boolean) => void> = [];
   private scheduledSyncStatusCallbacks: Map<string | symbol, () => Promise<void>> =
@@ -128,7 +128,7 @@ export class OfflineDBSyncManager {
    * @param status - The new sync status (`true` or `false`).
    */
   private invokeSyncStatusListeners = async (status: boolean) => {
-    this.syncStatus = status;
+    this.isSynced = status;
     this.syncStatusListeners.forEach((l) => {
       try {
         l(status);
@@ -253,7 +253,7 @@ export class OfflineDBSyncManager {
    * Each step is isolated so a failure in one does not prevent the other, and
    * neither can escape to the callers (init + the connection.changed handler).
    * This guarantees the subsequent invokeSyncStatusListeners(true) always runs,
-   * so syncStatus recovers to true and gated channel queries are unblocked.
+   * so isSynced recovers to true and gated channel queries are unblocked.
    * Failed syncs degrade to "possibly stale data until the next query" rather
    * than freezing all future queries. See issue #1816.
    */
