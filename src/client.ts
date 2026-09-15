@@ -725,10 +725,11 @@ export class StreamChat {
     try {
       return await setUserPromise;
     } catch (err) {
-      // disconnectUser() now rejects an in-flight handshake instead of leaving it
-      // pending, so this catch can run *after* a newer connectUser() has taken over.
-      // Cleaning up then would disconnect the connection that replaced ours.
-      if (this.setUserPromise === setUserPromise) {
+      // disconnectUser() rejects an in-flight handshake so this catch can run *after* something else has taken over.
+      // Cleaning up then would tear down whatever replaced us. setUserPromise catches a
+      // newer connectUser(); userID additionally catches connectAnonymousUser(), which
+      // never sets setUserPromise, and a bare disconnectUser() that already cleaned up.
+      if (this.setUserPromise === setUserPromise && this.userID === user.id) {
         if (this.persistUserOnConnectionFailure) {
           // cleanup client to allow the user to retry connectUser again
           this.closeConnection();
@@ -862,27 +863,23 @@ export class StreamChat {
     }
 
     this.clientID = `${this.userID}--${randomId()}`;
-    this.wsPromise = this._bindWsPromise(this.connect());
+    const wsPromise = this._bindWsPromise(this.connect());
     this._startCleaning();
-    return this.wsPromise;
+    return wsPromise;
   };
 
   /**
-   * Rejects the shared `wsPromise` and invalidates any in-flight connect attempt.
-   *
-   * Only `disconnectUser()` does this. `closeConnection()` deliberately leaves the
-   * promise pending: it means "closing for now, I will reopen" (the mobile
-   * background/foreground cycle), and the next `openConnection()` rebinds the very same
-   * promise to the new attempt. A `disconnectUser()` drops the user, so nothing will
-   * ever resolve it.
+   * Rejects the shared `wsPromise`, invalidates any in-flight connect attempt
    */
   private _rejectPendingWsPromise = (reason: Error) => {
-    if (this._wsPromiseSettled) return;
-
-    // invalidate in-flight attempts so a late settle cannot revive this promise
-    this._wsConnectId += 1;
-    this._wsPromiseSettled = true;
-    this._rejectWsPromise?.(reason);
+    if (!this._wsPromiseSettled) {
+      // invalidate in-flight attempts so a late settle cannot revive this promise
+      this._wsConnectId += 1;
+      this._wsPromiseSettled = true;
+      // Avoid unhandled promise rejection errors
+      this.wsPromise?.catch(() => {});
+      this._rejectWsPromise?.(reason);
+    }
   };
 
   /**
@@ -1123,6 +1120,7 @@ export class StreamChat {
     this._rejectPendingWsPromise(
       new Error('Connection was closed because disconnectUser() was called'),
     );
+    this.wsPromise = null;
 
     const closePromise = this.closeConnection(timeout);
 
@@ -1816,7 +1814,12 @@ export class StreamChat {
       } as Event);
     }
 
-    this.wsPromise = Promise.resolve();
+    // If state recovery happens afer a failed connect (for example on persistUserOnConnectionFailure: true) we need to flip the wsPromise from rejected to resolved
+    // Otherwise all API calls that wait for the promise will fail
+    // If promise is not yet settled - we leave it for the connect sequence to resolve the promise
+    if (this._wsPromiseSettled) {
+      this.wsPromise = Promise.resolve();
+    }
     this.setUserPromise = Promise.resolve();
   };
 

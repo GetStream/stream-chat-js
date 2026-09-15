@@ -374,6 +374,86 @@ describe('Client wsPromise close/reopen race', () => {
 		expect(outcome).to.equal('timeout');
 	});
 
+	it('should not raise an unhandled rejection when openConnection is fire-and-forget', async () => {
+		const { client } = createClientWithHangingConnect();
+		const unhandled = [];
+		const onUnhandled = (reason) => unhandled.push(reason);
+		process.on('unhandledRejection', onUnhandled);
+
+		try {
+			// no .catch() and no await - the shape a React Native AppState handler produces
+			client.openConnection();
+			await client.disconnectUser();
+			await timeout(50);
+		} finally {
+			process.off('unhandledRejection', onUnhandled);
+		}
+
+		expect(unhandled).to.be.empty;
+	});
+
+	it('should reset wsPromise to null on disconnectUser', async () => {
+		const { client, connectResolvers } = createClientWithHangingConnect();
+
+		client.openConnection().catch(() => {});
+		connectResolvers[0]({ connection_id: 'conn-1' });
+		await client.wsPromise;
+
+		await client.disconnectUser();
+
+		// back to the constructor state, so the client reads as fresh again
+		expect(client.wsPromise).to.be.null;
+	});
+
+	it('should not hand back a resolved wsPromise after recoverState settled an in-flight connect', async () => {
+		const { client, connectResolvers } = createClientWithHangingConnect();
+
+		client.openConnection().catch(() => {});
+		// StableWSConnection.connect() fires _reconnect({ refreshToken: true }) without
+		// awaiting it on TOKEN_EXPIRED, so recoverState() runs while connect() is pending
+		await client.recoverState();
+
+		await client.closeConnection();
+		const reopened = client.openConnection();
+		reopened.catch(() => {});
+
+		// a second connect was started and is still hanging, so the promise must not be
+		// settled yet - otherwise every `await client.wsPromise` fires with no handshake
+		expect(connectResolvers.length).to.equal(2);
+		expect(await Promise.race([reopened.then(() => 'resolved'), timeout(50)])).to.equal(
+			'timeout',
+		);
+
+		connectResolvers[1]({ connection_id: 'conn-2' });
+		expect(await Promise.race([reopened.then(() => 'resolved'), timeout(50)])).to.equal(
+			'resolved',
+		);
+	});
+
+	it('should not tear down an anonymous user when an older connectUser is rejected', async () => {
+		const { client } = createClientWithHangingConnect();
+		delete client.user;
+		delete client._user;
+		delete client.userID;
+		client._setToken = () => Promise.resolve('token');
+
+		const connectA = client.connectUser({ id: 'A' }, 'token').then(
+			() => 'resolved',
+			() => 'rejected',
+		);
+		client.disconnectUser();
+		const anonymousPromise = client.connectAnonymousUser();
+		anonymousPromise.catch(() => {});
+		const anonymousUserID = client.userID;
+
+		expect(await Promise.race([connectA, timeout(200)])).to.equal('rejected');
+		await timeout(20);
+
+		// A's cleanup must not have disconnected the anonymous user that took over
+		expect(client.userID).to.equal(anonymousUserID);
+		expect(client.anonymous).to.be.true;
+	});
+
 	it('should not tear down a newer connectUser when an older one is rejected', async () => {
 		const { client, connectResolvers } = createClientWithHangingConnect();
 		// the helper pre-sets a user; start from a clean slate for connectUser()
