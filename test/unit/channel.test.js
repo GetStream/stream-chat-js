@@ -2620,8 +2620,23 @@ describe('Uninitialized Channel', () => {
 			expect(channel._countMessageAsUnread({ user: otherUser })).to.be.false;
 		});
 
-		it('public muteStatus() still throws (intentional API contract)', () => {
-			expect(() => channel.muteStatus()).to.throw(/hasn't been initialized/);
+		// muteStatus() is now gated on the channel having an id rather than on loaded state:
+		// `client.mutedChannels` is populated at connect (`connection.ok`/`health.check`), not by
+		// `watch()`, so the answer is already correct here. What it cannot answer for is a channel
+		// with no id, whose `cid` reads `"<type>:undefined"` and matches no mute.
+		it('public muteStatus() answers for an id-ful channel that was never watched', () => {
+			expect(() => channel.muteStatus()).not.to.throw();
+			expect(channel.muteStatus().muted).to.be.false;
+
+			client.mutedChannels = [{ user, channel }];
+			expect(channel.muteStatus().muted).to.be.true;
+		});
+
+		it('public muteStatus() throws for a channel with no id yet', () => {
+			const distinct = client.channel('messaging', undefined, {
+				members: [user.id, otherUser.id],
+			});
+			expect(() => distinct.muteStatus()).to.throw(/isn't yet created/);
 		});
 	});
 });

@@ -684,6 +684,8 @@ export class Channel extends ChannelApi {
    * @returns The server response.
    */
   override async sendMessage(...args: Parameters<ChannelApi['sendMessage']>) {
+    this._checkHasId();
+
     const [request] = args;
     const messageId = request.message?.id;
 
@@ -693,7 +695,7 @@ export class Channel extends ChannelApi {
       // Nothing to key a queue entry on without a message id, so it runs but is not queued.
       queue: !!messageId,
       task: {
-        channelId: this.id as string,
+        channelId: this.id,
         channelType: this.type,
         messageId,
         payload: args,
@@ -853,7 +855,6 @@ export class Channel extends ChannelApi {
     request: { event: Event },
     requestOptions?: StreamRequestOptions,
   ) {
-    this._checkInitialized();
     return await super.sendEvent(request, requestOptions);
   }
 
@@ -911,6 +912,8 @@ export class Channel extends ChannelApi {
    * @returns The server response.
    */
   async sendReaction(...args: Parameters<ChatApi['sendReaction']>) {
+    this._checkHasId();
+
     const [{ id: messageId }] = args;
 
     // The optimistic reaction row is written by the local-update layer (`applyReactionLocally`); here
@@ -919,7 +922,7 @@ export class Channel extends ChannelApi {
       channel: this,
       client: this.getClient(),
       task: {
-        channelId: this.id as string,
+        channelId: this.id,
         channelType: this.type,
         messageId,
         payload: args,
@@ -933,7 +936,8 @@ export class Channel extends ChannelApi {
   }
 
   async deleteReaction(...args: Parameters<ChatApi['deleteReaction']>) {
-    this._checkInitialized();
+    this._checkHasId();
+
     const [request] = args;
 
     // The optimistic reaction-row removal is handled by the local-update layer
@@ -942,7 +946,7 @@ export class Channel extends ChannelApi {
       channel: this,
       client: this.getClient(),
       task: {
-        channelId: this.id as string,
+        channelId: this.id,
         channelType: this.type,
         messageId: request.id,
         payload: args,
@@ -1245,6 +1249,8 @@ export class Channel extends ChannelApi {
    * @returns The server response.
    */
   async mute(options?: Gen_MuteChannelRequest, requestOptions?: StreamRequestOptions) {
+    this._checkHasId();
+
     return await this.getClient().muteChannel(
       {
         channel_cids: [this.cid],
@@ -1271,6 +1277,8 @@ export class Channel extends ChannelApi {
     options?: Gen_UnmuteChannelRequest,
     requestOptions?: StreamRequestOptions,
   ) {
+    this._checkHasId();
+
     return await this.getClient().unmuteChannel(
       {
         channel_cids: [this.cid],
@@ -1343,7 +1351,7 @@ export class Channel extends ChannelApi {
    *   where the timestamps are unix nanoseconds as the API sends them.
    */
   muteStatus() {
-    this._checkInitialized();
+    this._checkHasId();
     return this.getClient()._muteStatus(this.cid);
   }
 
@@ -1373,7 +1381,6 @@ export class Channel extends ChannelApi {
     formData: Record<string, string>,
     requestOptions?: StreamRequestOptions,
   ) {
-    this._checkInitialized();
     return this.getClient().runMessageAction(
       {
         id: messageId,
@@ -1897,9 +1904,7 @@ export class Channel extends ChannelApi {
     }
 
     // FIXME: see #1265, adjust and count new messages even when the channel is muted
-    // Read mute state directly from the client to avoid _checkInitialized() — this method
-    // is invoked from _handleChannelEvent (e.g. message.new) before .watch() resolves.
-    if (this.getClient()._muteStatus(this.cid).muted) return false;
+    if (this.muteStatus().muted) return false;
 
     return true;
   }
@@ -2155,7 +2160,8 @@ export class Channel extends ChannelApi {
    * @returns The server response.
    */
   async banUser(targetUserId: string, options: Omit<BanUserOptions, 'channel_cid'>) {
-    this._checkInitialized();
+    this._checkHasId();
+
     return await this.getClient().moderation.ban({
       ...options,
       target_user_id: targetUserId,
@@ -2173,7 +2179,6 @@ export class Channel extends ChannelApi {
    * @returns The server response.
    */
   override async hide(...args: Parameters<ChannelApi['hide']>) {
-    this._checkInitialized();
     return await super.hide(...args);
   }
 
@@ -2186,7 +2191,6 @@ export class Channel extends ChannelApi {
    * @returns The server response.
    */
   override async show(...args: Parameters<ChannelApi['show']>) {
-    this._checkInitialized();
     return await super.show(...args);
   }
 
@@ -2198,7 +2202,8 @@ export class Channel extends ChannelApi {
    * @returns The server response.
    */
   async unbanUser(targetUserId: string, options?: UnBanUserOptions) {
-    this._checkInitialized();
+    this._checkHasId();
+
     return await this.getClient().unbanUser(targetUserId, {
       ...options,
       type: this.type,
@@ -2231,13 +2236,15 @@ export class Channel extends ChannelApi {
    * call is queued so it is replayed on reconnect.
    */
   override async createDraft(...args: Parameters<ChannelApi['createDraft']>) {
+    this._checkHasId();
+
     const [request] = args;
 
     return await queueOrRun({
       channel: this,
       client: this.getClient(),
       task: {
-        channelId: this.id as string,
+        channelId: this.id,
         channelType: this.type,
         threadId: request.message?.parent_id,
         payload: args,
@@ -2255,13 +2262,15 @@ export class Channel extends ChannelApi {
    * call is queued so it is replayed on reconnect.
    */
   override async deleteDraft(...args: Parameters<ChannelApi['deleteDraft']>) {
+    this._checkHasId();
+
     const [request] = args;
 
     return await queueOrRun({
       channel: this,
       client: this.getClient(),
       task: {
-        channelId: this.id as string,
+        channelId: this.id,
         channelType: this.type,
         threadId: request?.parent_id,
         payload: args,
@@ -2957,6 +2966,23 @@ export class Channel extends ChannelApi {
     );
   };
 
+  /**
+   * Asserts that the channel has an id. Throws an error if not (happens when we init channel with members only and not id).
+   * Call this before calling any API method reading this.id or this.cid directly
+   *
+   * Note: only id is optional, cid is defined as string, so TS won't complain about a missing check there.
+   */
+  _checkHasId(): asserts this is this & { id: string } {
+    if (!this.id) {
+      throw new Error(
+        `Channel isn't yet created, call getOrCreateDistinctChannel() before this operation`,
+      );
+    }
+  }
+
+  /**
+   * Checks if channel has been queried/initialized. Call this when a method relies on data only available after channel is queried from API.
+   */
   _checkInitialized() {
     if (!this.initialized && !this.offlineMode) {
       throw Error(
