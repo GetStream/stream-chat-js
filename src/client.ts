@@ -877,7 +877,9 @@ export class StreamChat {
       this._wsConnectId += 1;
       this._wsPromiseSettled = true;
       // Avoid unhandled promise rejection errors
-      this.wsPromise?.catch(() => {});
+      this.wsPromise?.catch(() => {
+        // noop - real awaiters still observe the rejection
+      });
       this._rejectWsPromise?.(reason);
     }
   };
