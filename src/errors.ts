@@ -1,11 +1,20 @@
 import type { AxiosResponse } from 'axios';
 import type { APIErrorResponse } from './types';
 
+/**
+ * Server-side error codes, mirroring the canonical list the API defines.
+ *
+ * `retryable` says whether the same request is worth sending again: true for transient
+ * failures (overload, timeout, capacity), false for definitive rejections (bad input,
+ * missing resource, denied permission). Unknown codes are treated as non-retryable by
+ * {@link isErrorRetryable}, so a code missing here fails closed.
+ */
 export const APIErrorCodes: Record<string, { name: string; retryable: boolean }> = {
+  // General
   '-1': { name: 'InternalSystemError', retryable: true },
   '2': { name: 'AccessKeyError', retryable: false },
-  '3': { name: 'AuthenticationFailedError', retryable: true },
   '4': { name: 'InputError', retryable: false },
+  '5': { name: 'AuthenticationFailedError', retryable: true },
   '6': { name: 'DuplicateUsernameError', retryable: false },
   '9': { name: 'RateLimitError', retryable: true },
   '16': { name: 'DoesNotExistError', retryable: false },
@@ -15,20 +24,52 @@ export const APIErrorCodes: Record<string, { name: string; retryable: boolean }>
   '20': { name: 'MessageTooLongError', retryable: false },
   '21': { name: 'MultipleNestingLevelError', retryable: false },
   '22': { name: 'PayloadTooBigError', retryable: false },
-  '23': { name: 'RequestTimeoutError', retryable: true },
-  '24': { name: 'MaxHeaderSizeExceededError', retryable: false },
+  '48': { name: 'RequestTimeoutError', retryable: true },
+  '60': { name: 'CoolDownError', retryable: true },
+  '70': { name: 'ErrQueryChannelPermissions', retryable: false },
+  '99': { name: 'AppSuspendedError', retryable: false },
+  '107': { name: 'ProductSuspendedError', retryable: false },
+  '108': { name: 'RequestCanceledError', retryable: false },
+  '113': { name: 'UsersNotFoundError', retryable: false },
+
+  // Authentication
   '40': { name: 'AuthErrorTokenExpired', retryable: false },
   '41': { name: 'AuthErrorTokenNotValidYet', retryable: false },
   '42': { name: 'AuthErrorTokenUsedBeforeIssuedAt', retryable: false },
   '43': { name: 'AuthErrorTokenSignatureInvalid', retryable: false },
+
+  // Custom commands
   '44': { name: 'CustomCommandEndpointMissingError', retryable: false },
   '45': { name: 'CustomCommandEndpointCallError', retryable: true },
+
+  // Connection
   '46': { name: 'ConnectionIDNotFoundError', retryable: false },
-  '60': { name: 'CoolDownError', retryable: true },
-  '69': { name: 'ErrWrongRegion', retryable: false },
-  '70': { name: 'ErrQueryChannelPermissions', retryable: false },
   '71': { name: 'ErrTooManyConnections', retryable: true },
-  '99': { name: 'AppSuspendedError', retryable: false },
+
+  // Push
+  '72': { name: 'NotSupportedInPushV1Error', retryable: false },
+  '105': { name: 'SupportedInPushV3Error', retryable: false },
+
+  // Moderation
+  '73': { name: 'ModerationFailedError', retryable: false },
+  '111': { name: 'ModerationOverloadedError', retryable: true },
+
+  // Feeds
+  '112': { name: 'FeedsStorageUnavailableError', retryable: true },
+
+  // Video. Kept in sync with the API even though this client does not call the video
+  // endpoints, so the table stays a faithful mirror and lookups never silently miss.
+  '80': { name: 'VideoProviderNotConfiguredError', retryable: false },
+  '81': { name: 'VideoInvalidCallIDError', retryable: false },
+  '82': { name: 'VideoCreateCallFailedError', retryable: true },
+  '100': { name: 'VideoNoDatacentersAvailableError', retryable: true },
+  '101': { name: 'VideoJoinCallFailureError', retryable: true },
+  '102': { name: 'ErrQueryCallsPermissions', retryable: false },
+  '103': { name: 'AcceptRejectCallIsGoneError', retryable: false },
+  '104': { name: 'ErrQueryCallStatsPermissions', retryable: false },
+  '106': { name: 'VideoRestrictedRegionError', retryable: false },
+  '109': { name: 'VideoJoinMustRequestE2EEError', retryable: false },
+  '110': { name: 'VideoJoinE2EENotAvailableError', retryable: false },
 };
 
 export type APIError = Error & {
