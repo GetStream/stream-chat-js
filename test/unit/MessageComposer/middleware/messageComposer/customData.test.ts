@@ -45,7 +45,7 @@ describe('Custom Data Middleware', () => {
   let composer: MessageComposer;
 
   beforeEach(() => {
-    client = new StreamChat('apiKey', 'apiSecret');
+    client = new StreamChat('apiKey');
     client.user = { id: 'user-id', name: 'Test User' };
     channel = client.channel('channelType', 'channelId');
     composer = new MessageComposer({

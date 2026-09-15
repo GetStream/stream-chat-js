@@ -2,28 +2,12 @@
 
 You can use our logger functionality for the purpose of debugging.
 
-## Non-server client
-
 ```js
 const client = StreamChat.getInstance('api_key', {
   logger: (logLevel, message, extraData) => {
     console.log(message); // or any logging tool that you are using e.g. reactotron
   },
 });
-```
-
-## Server side client
-
-```js
-const client = StreamChat.getInstance(
-  'api_key',
-  'secret'
-  {
-    logger: (logLevel, message, extraData) => {
-      console.log(message);
-    }
-  }
-)
 ```
 
 extraData contains tags array attached to log message. Tags can have one/many of following values:

@@ -15,7 +15,6 @@ $ yarn install --immutable
 ### Run tests
 
 ```shell
-$ yarn test-types
 $ yarn run test-unit
 ```
 

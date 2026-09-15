@@ -2703,7 +2703,7 @@ describe('reactive channel mute status', () => {
 });
 
 describe('Channels - Constructor', function () {
-	const client = new StreamChat('key', 'secret');
+	const client = new StreamChat('key');
 	// client.channel() now requires a connected user (userId derives from client.user).
 	client.user = { id: 'thierry' };
 

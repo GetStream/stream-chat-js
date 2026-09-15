@@ -29,7 +29,7 @@ const setup = ({
   vi.clearAllMocks();
 
   // Setup mocks
-  const mockClient = new StreamChat('apiKey', 'apiSecret');
+  const mockClient = new StreamChat('apiKey');
   mockClient.user = user;
 
   const mockChannel = mockClient.channel('channelType', 'channelId');

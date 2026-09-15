@@ -331,9 +331,11 @@ describe('StreamChat construction', () => {
       expect(client.notifications).to.equal(notifications);
     });
 
-    it('constructs the TokenManager with no preloaded secret', () => {
+    it('constructs the TokenManager with no token', () => {
       const client = new StreamChat(API_KEY);
-      expect(client.tokenManager.secret).to.be.undefined;
+      expect(client.tokenManager.token).to.be.undefined;
+      expect(client.tokenManager.tokenProvider).to.be.undefined;
+      expect(client.tokenManager.isStatic()).to.be.true;
     });
 
     it('caps the message composer cache at 64 entries', () => {

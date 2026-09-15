@@ -24,9 +24,8 @@ Companion docs that apply to all agents: `AGENTS.md` (general agent rules) and `
 | Auto-fix lint/format                    | `yarn lint-fix`                          |
 | Unit tests (Vitest)                     | `yarn test` (alias for `yarn test-unit`) |
 | Coverage                                | `yarn test-coverage`                     |
-| API response type check (hits live API) | `yarn test-types`                        |
 
-Single test runs use Vitest's CLI directly: `yarn test-unit path/to/file.test.ts`, or filter by name with `yarn test-unit -t 'partial test name'`. Unit tests live in `test/unit/**/*.test.[jt]s` (see `vite.config.ts`). `yarn test-types` is integration-level and requires real Stream credentials — don't run it as part of routine local verification.
+Single test runs use Vitest's CLI directly: `yarn test-unit path/to/file.test.ts`, or filter by name with `yarn test-unit -t 'partial test name'`. Unit tests live in `test/unit/**/*.test.[jt]s` (see `vite.config.ts`). Vitest is the only test runner — the live-API `test/typescript/` harness (`yarn test-types`) was removed with the server-side surface, since every endpoint it drove needed an API secret.
 
 `STREAM_LOCAL_TEST_RUN=1` (or `STREAM_LOCAL_TEST_HOST=…`) makes the client point at a local backend; useful when running tests against a local Stream server. See `src/client.ts` constructor.
 
@@ -64,7 +63,7 @@ This is a single-package SDK with **no monorepo**. The public surface is everyth
 
 ### Module map of `src/`
 
-- **`client.ts` — `StreamChat` facade.** ~5k-line class. Prefer `StreamChat.getInstance(key, secret?, options?)` — the constructor exists for advanced uses but `getInstance` is what `connectUser` warnings and most docs assume. Owns: the axios instance, WS connection lifecycle, `TokenManager`, and a registry of subsystem managers (`threads`, `polls`, `notifications`, `reminders`, `moderation`, `uploadManager`, `messageDeliveryReporter`, plus an optional `offlineDb` injected via `setOfflineDBApi`). New REST endpoints are added here as methods that call `axiosInstance` and return a type from `types.ts`.
+- **`client.ts` — `StreamChat` facade.** ~5k-line class. Prefer `StreamChat.getInstance(key, options?)` — the constructor exists for advanced uses but `getInstance` is what `connectUser` warnings and most docs assume. Owns: the axios instance, WS connection lifecycle, `TokenManager`, and a registry of subsystem managers (`threads`, `polls`, `notifications`, `reminders`, `moderation`, `uploadManager`, `messageDeliveryReporter`, plus an optional `offlineDb` injected via `setOfflineDBApi`). New REST endpoints are added here as methods that call `axiosInstance` and return a type from `types.ts`.
 - **`channel.ts` (~2.5k lines) + `channel_state.ts` (~1.1k) + `channel_batch_updater.ts`** — per-channel object and its in-memory state. **Messages are NOT stored on `channel.state`.** The message list, thread replies, and pinned messages each live in a paginator — `channel.messagePaginator`, `thread.messagePaginator`, and `channel.pinnedMessagesPaginator` — which are the single source of truth (interval storage + a canonical `ItemIndex`). Read them via `channel.messagePaginator.state.items` / `.getItem(id)` / `.headmostItem` (newest loaded item), and mutate via the paginator (`ingestItem` / `removeItem`), never a legacy `channel.state.addMessageSorted()` / `state.messages` (removed). `channel.state.last_message_at` was **removed**; the channel's latest-message timestamp lives on `channel.messagePaginator.lastMessageAt` (its `aggregateState` store — seeded from `ChannelResponse.last_message_at`, then advanced monotonically as messages are ingested). See `docs/breaking-changes-v14-v15.md`.
 - **`ChannelManager.ts`** — channel _lists_. Holds one or more `ChannelPaginator`s (`state.paginators`), keeps them in sync with WS events through an `EventHandlerPipeline` per event type, and arbitrates ownership when a channel matches several lists (`ownershipResolver` / `createPriorityOwnershipResolver`). Replaced the old `channel_manager.ts` (single hand-sorted `state.channels` list with named handler overrides) in v10 — see `v9-to-v10-migration-guide-methods.md`. Filtering and ordering are the paginator's job: `matchesFilter()` runs the filter compiler over `Channel` field resolvers and ordering comes from a comparator compiled from `sort`. The manager is instantiated by the `StreamChat` constructor and lives as long as the client (`client.channelManager`) — it is not configurable through the client options; register lists with `insertPaginator({ paginator, index? })`, detach them with `removePaginator(paginatorOrId)` and set cross-list ownership with `setOwnershipResolver(resolverOrPriorityIds?)`. `setPaginators(paginators)` is the primitive the other two build on — use it (or `clearPaginators()`) for batches, since it publishes one state update instead of one per paginator, and skips the update entirely when the set is unchanged. Registration and loaded data have different owners: `disconnectUser` calls `resetPaginatorStates()`, which discards each list's channels (they belong to the user going away) while leaving the lists themselves registered, since which lists exist is the integrator's configuration. Event handling stays customizable: `ChannelManagerOptions.eventHandlers` replaces the default map wholesale at construction (start from `getDefaultHandlers()` to enrich it instead), and `addEventHandler` / `setEventHandlers` / `removeEventHandlers` adjust the pipelines afterwards — which is the only route for `client.channelManager`, since the client constructs it without options. The exported `ignoreEventsForUnknownChannels` handler, inserted at `index: 0`, is how a list opts out of pulling in channels it has not loaded.
 - **`connection.ts` (`StableWSConnection`)** — realtime transport, and the only one: the long-poll fallback (`connection_fallback.ts`, `enableWSFallback`, `transport.changed`) was removed in v10. It connects to `/api/v2/connect`, which authenticates off the **first frame the client sends** (`client._buildWSAuthMessage()`) rather than the query string, and answers with a `connection.ok` hello event instead of v1's `health.check`. It runs its own 25s ping / 35s health-check loop and reconnects on close/error/offline events, emitting `connection.changed` into the client's local event bus. `connection.ok` is not in the OpenAPI spec yet, so its type is hand-written in `types.ts` and decoded through a shim in `connection.ts` — both are marked for deletion once the backend publishes the event.
@@ -133,12 +132,12 @@ Both share a process-wide `pendingPromises` map; reuse the helpers rather than r
 
 The canonical flow is:
 
-1. `client = StreamChat.getInstance(key, secret?, options?)` — second call with the same key returns the cached instance (this matters: a new `new StreamChat(...)` would open a second WS connection).
+1. `client = StreamChat.getInstance(key, options?)` — second call with the same key returns the cached instance (this matters: a new `new StreamChat(...)` would open a second WS connection).
 2. `await client.connectUser(user, tokenOrProvider)` — sets the user, primes the `TokenManager`, opens WS. Calling it a second time with the **same** user logs a warning and returns the existing promise; calling it with a **different** user throws unless `disconnectUser()` ran first.
 3. `client.openConnection()` / `client.closeConnection()` — manage the WS without clearing the user (useful for mobile foreground/background transitions).
 4. `client.disconnectUser(timeout?)` — full teardown.
 
-Aliases to be aware of: `setUser` → `connectUser`, `disconnect` → `disconnectUser`. Both are deprecated but still present; new code should use the long names. Server-side use (no `window`, or `secret` provided) prints a warning unless `options.allowServerSideConnect: true` is set.
+Aliases to be aware of: `setUser` → `connectUser`, `disconnect` → `disconnectUser`. Both are deprecated but still present; new code should use the long names. Connecting from a non-browser environment (no `window`) prints a warning unless `options.allowServerSideConnect: true` is set — there is no secret to detect any more, so the guard is purely environmental.
 
 ## i18n
 
@@ -187,21 +186,18 @@ Tests live in `test/unit/**/*.test.[jt]s` (mixed JS/TS — both are accepted). H
 
 - `test/unit/test-utils/` contains `getClient`, generators (`generateChannel`, `generateMessage`, `generateMember`, `generateUser`, `generateThreadResponse`, `generateMessageDraft`, …), and `mockChannelQueryResponse`. **`getClientWithUser` monkey-patches `connectUser` to set the user without opening a WS connection** — mirror this pattern in new tests rather than mocking axios end-to-end.
 - `MockOfflineDB` lives in `test/unit/offline-support/` for tests that need an `AbstractOfflineDB` implementation.
-- `yarn test-types` is a separate Node script (`test/typescript/index.js`) that calls real Stream endpoints and writes a `data.ts` file whose types are then checked by `tsc`. It needs `API_KEY` / `API_SECRET` (and multitenancy variants) in env — the CI workflow `type.yml` injects them from GitHub secrets. Skip locally unless you have credentials.
 
 ## Release & CI
 
 GitHub workflows in `.github/workflows/`:
 
-| Workflow             | Trigger             | What it runs                                                   |
-| -------------------- | ------------------- | -------------------------------------------------------------- |
-| `lint.yml`           | PR                  | `yarn lint`                                                    |
-| `unit.yml`           | PR                  | `yarn test-coverage`                                           |
-| `type.yml`           | PR                  | `yarn test-types` (needs live-API secrets)                     |
-| `size.yml`           | PR (excludes tests) | `preactjs/compressed-size-action` — reports bundle-size diff   |
-| `pr-check.yml`       | PR title change     | `commitlint` on the PR title                                   |
-| `scheduled_test.yml` | Cron                | Periodic regression                                            |
-| `release.yml`        | `workflow_dispatch` | `yarn semantic-release` (with `HUSKY=0`, OIDC, npm provenance) |
+| Workflow       | Trigger             | What it runs                                                   |
+| -------------- | ------------------- | -------------------------------------------------------------- |
+| `lint.yml`     | PR                  | `yarn lint`                                                    |
+| `unit.yml`     | PR                  | `yarn test-coverage`                                           |
+| `size.yml`     | PR (excludes tests) | `preactjs/compressed-size-action` — reports bundle-size diff   |
+| `pr-check.yml` | PR title change     | `commitlint` on the PR title                                   |
+| `release.yml`  | `workflow_dispatch` | `yarn semantic-release` (with `HUSKY=0`, OIDC, npm provenance) |
 
 Bundle-size CI **runs on every non-test PR** — be mindful that adding heavy dependencies will be visible in the PR check. CI installs use `yarn install --immutable` via `.github/actions/setup-node` (which caches `.yarn/cache` keyed on `yarn.lock`).
 
@@ -215,7 +211,7 @@ Release branches (`.releaserc.json`):
   `startsWith(github.ref_name, 'release')`, so a v10 change has to land on `release-v10` before it can
   reach npm. The `rc` name survives only as a legacy allowance in that gate.
 
-Unlike the React and React Native repos, the PR workflows here (`lint`, `unit`, `type`, `size`) carry
+Unlike the React and React Native repos, the PR workflows here (`lint`, `unit`, `size`) carry
 **no branch filter**, so a PR into `release-v10` is fully gated with no workflow change needed.
 
 ## Things to double-check before claiming done

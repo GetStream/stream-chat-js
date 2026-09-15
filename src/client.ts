@@ -320,8 +320,6 @@ export class StreamChat extends ChatApi {
 
     this.persistUserOnConnectionFailure = this.options?.persistUserOnConnectionFailure;
 
-    // If its a server-side client, then lets initialize the tokenManager, since token will be
-    // generated from secret.
     this.tokenManager = new TokenManager();
     this.connectionIdManager = new ConnectionIdManager();
 

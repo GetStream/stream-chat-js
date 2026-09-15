@@ -115,7 +115,7 @@ describe('StreamChat getInstance', () => {
 
 describe('StreamChat config(s) store', () => {
 	it('initializes channelServerConfigsStore and keeps configs access backward compatible', () => {
-		const client = new StreamChat('key', 'secret');
+		const client = new StreamChat('key');
 
 		expect(client.channelServerConfigs).to.eql({});
 		expect(client.channelServerConfigsStore.getLatestValue()).to.eql({ configs: {} });
@@ -130,7 +130,7 @@ describe('StreamChat config(s) store', () => {
 	});
 
 	it('updates channelServerConfigsStore through _addChannelConfig when cache is enabled', () => {
-		const client = new StreamChat('key', 'secret');
+		const client = new StreamChat('key');
 
 		client._addChannelConfig({
 			cid: 'messaging:general',
