@@ -1,3 +1,14 @@
+## [9.53.0](https://github.com/GetStream/stream-chat-js/compare/v9.52.1...v9.53.0) (2026-09-15)
+
+### Bug Fixes
+
+* add missing app config fields to AppSettingsAPIResponse ([#1854](https://github.com/GetStream/stream-chat-js/issues/1854)) ([18bc3cf](https://github.com/GetStream/stream-chat-js/commit/18bc3cf7acbabdfd957f1e092821f68b81ea456e))
+* hanging wsPromise after closeConnection ([#1868](https://github.com/GetStream/stream-chat-js/issues/1868)) ([b4e7a89](https://github.com/GetStream/stream-chat-js/commit/b4e7a89459ae38ed025b1ae7ffe91f061cf22ecd)), closes [#1122](https://github.com/GetStream/stream-chat-js/issues/1122) [#1863](https://github.com/GetStream/stream-chat-js/issues/1863)
+
+### Features
+
+* **client:** support custom_set and custom_unset in batch channel update ([#1856](https://github.com/GetStream/stream-chat-js/issues/1856)) ([d05c2f5](https://github.com/GetStream/stream-chat-js/commit/d05c2f56d1264a884584657683e65eea8b1a5cc1))
+
 ## [9.52.1](https://github.com/GetStream/stream-chat-js/compare/v9.52.0...v9.52.1) (2026-09-07)
 
 ### Bug Fixes
