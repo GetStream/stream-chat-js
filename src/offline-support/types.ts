@@ -8,6 +8,7 @@ import type {
   GetApplicationResponse,
   LocalMessage,
   MessageResponse,
+  ParsedPredefinedFilterResponse,
   PollResponseData,
   QueryChannelsRequest,
   ReactionFilters,
@@ -46,6 +47,12 @@ export type DBUpsertCidsForQueryType = {
   options?: ChannelOptions;
   /** Whether to immediately execute the operation. */
   execute?: boolean;
+  /**
+   * The predefined-filter metadata the backend resolved for this query, stored alongside the cid
+   * order so a cache-seeded list can match and sort by the same rule that produced it. Absent for a
+   * plain `filter_conditions` query, in which case any previously stored metadata is cleared.
+   */
+  predefinedFilter?: ParsedPredefinedFilterResponse;
   /** Optional sorting applied to the channels. */
   sort?: SortParamRequest[];
 };
@@ -180,6 +187,18 @@ export type DBGetChannelsForQueryType = {
   userId: string;
   /** Optional filters for channels. */
   options?: QueryChannelsRequest;
+};
+
+/**
+ * A cached channel query: the channels in the order the query produced them, plus the rule that
+ * produced that order. Returned as one value because the two are written as one cache row - reading
+ * the order without the rule is what lets a cache-seeded list sort and match by the wrong one.
+ */
+export type DBGetChannelsForQueryResult = {
+  /** Channels in cached query order. */
+  channels: Omit<ChannelStateResponseFields, 'duration'>[];
+  /** The predefined-filter metadata this query was cached with, if it was a predefined-filter query. */
+  predefinedFilter?: ParsedPredefinedFilterResponse;
 };
 
 /**
@@ -373,7 +392,7 @@ export interface OfflineDBApi {
   ) => Promise<Omit<ChannelStateResponseFields, 'duration'>[] | null>;
   getChannelsForQuery: (
     options: DBGetChannelsForQueryType,
-  ) => Promise<Omit<ChannelStateResponseFields, 'duration'>[] | null>;
+  ) => Promise<DBGetChannelsForQueryResult | null>;
   getAllChannelCids: () => Promise<string[]>;
   getLastSyncedAt: (options: DBGetLastSyncedAtType) => Promise<string | undefined>;
   getAppSettings: (

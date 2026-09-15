@@ -534,6 +534,11 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
    * `predefined_filter` / `filter_values` / `sort_values` appear, without which two predefined-filter
    * lists cannot be told apart. The duplication goes away once `convertFilterSortToQuery` derives the
    * key from `options` (a change in that implementation plus a schema-version bump to flush stale rows).
+   *
+   * The resolved `predefinedFilter` rides along with the order it produced: a cache-seeded list has no
+   * response to learn it from, and without it `effectiveFilters` / `effectiveSort` fall back to the
+   * local filters and the default sort - i.e. it would match and order by a different rule than the
+   * one the cached order came from.
    */
   protected cacheCidsForQuery({
     cids,
@@ -548,6 +553,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
           cids,
           filters: request.filter_conditions,
           options: request,
+          predefinedFilter: this._predefinedFilter,
           sort: request.sort,
         }),
       { method: 'upsertCidsForQuery' },
@@ -581,13 +587,16 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     const { stateOptions: _, ...request } = queryShape;
 
     try {
-      const channelsFromDB = await this.client.offlineDb.getChannelsForQuery({
+      const cachedQuery = await this.client.offlineDb.getChannelsForQuery({
         userId: this.client.user.id,
         options: request,
       });
 
-      if (channelsFromDB) {
-        return this.client.hydrateActiveChannels(channelsFromDB, {
+      if (cachedQuery) {
+        if (cachedQuery.predefinedFilter) {
+          this.applyPredefinedFilterResponse(cachedQuery.predefinedFilter);
+        }
+        return this.client.hydrateActiveChannels(cachedQuery.channels, {
           offlineMode: true,
           skipInitialization: [], // passing empty array will clear out the existing messages from channel state, this removes the possibility of duplicate messages
         });
