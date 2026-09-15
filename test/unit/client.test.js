@@ -265,6 +265,225 @@ describe('Client openConnection', () => {
 	});
 });
 
+describe('Client wsPromise close/reopen race', () => {
+	const timeout = (ms) =>
+		new Promise((resolve) => setTimeout(() => resolve('timeout'), ms));
+
+	const createClientWithHangingConnect = () => {
+		const connectResolvers = [];
+		const wsConnection = new StableWSConnection({});
+		wsConnection.isConnecting = false;
+		wsConnection.isHealthy = false;
+		wsConnection.disconnect = function () {
+			this.isConnecting = false;
+			this.isHealthy = false;
+			return Promise.resolve();
+		};
+		wsConnection.connect = function () {
+			this.isConnecting = true;
+			return new Promise((resolve) => {
+				connectResolvers.push((connection) => {
+					this.isConnecting = false;
+					this.isHealthy = true;
+					this.connectionID = connection.connection_id;
+					resolve(connection);
+				});
+			});
+		};
+
+		const client = new StreamChat('key', {
+			allowServerSideConnect: true,
+			wsConnection,
+		});
+		client.userID = 'user';
+		client._setUser({ id: 'user' });
+
+		return { client, connectResolvers };
+	};
+
+	it('should resolve queryChannels after closeConnection and openConnection during connect', async () => {
+		const { client, connectResolvers } = createClientWithHangingConnect();
+		const postStub = sinon.stub(client, 'post').resolves({ channels: [] });
+
+		client.openConnection();
+		const queryPromise = client.queryChannels().then(() => 'resolved');
+
+		await client.closeConnection();
+		client.openConnection();
+
+		expect(connectResolvers.length).to.equal(2);
+		connectResolvers[1]({ connection_id: 'conn-2' });
+
+		const outcome = await Promise.race([queryPromise, timeout(200)]);
+		expect(outcome).to.equal('resolved');
+		expect(postStub.calledOnce).to.be.true;
+
+		await client.closeConnection();
+		postStub.restore();
+	});
+
+	it('should reject queryChannels when connect is closed and the next connect fails', async () => {
+		const { client } = createClientWithHangingConnect();
+
+		client.openConnection();
+		const queryPromise = client.queryChannels().then(
+			() => 'resolved',
+			(error) => error.message,
+		);
+
+		await client.closeConnection();
+		client.wsConnection.connect = function () {
+			this.isConnecting = true;
+			return Promise.reject(new Error('connect failed'));
+		};
+		client.openConnection();
+
+		const outcome = await Promise.race([queryPromise, timeout(200)]);
+		expect(outcome).to.equal('connect failed');
+	});
+
+	it('should reject the pending wsPromise on disconnectUser', async () => {
+		const { client } = createClientWithHangingConnect();
+
+		const connectPromise = client.openConnection().then(
+			() => 'resolved',
+			(error) => error.message,
+		);
+
+		// disconnectUser drops the user, so nothing will ever resolve this promise
+		await client.disconnectUser();
+
+		const outcome = await Promise.race([connectPromise, timeout(200)]);
+		expect(outcome).to.match(/disconnectUser\(\) was called/);
+	});
+
+	it('should leave the wsPromise pending on closeConnection alone', async () => {
+		const { client } = createClientWithHangingConnect();
+
+		const connectPromise = client.openConnection().then(
+			() => 'resolved',
+			() => 'rejected',
+		);
+
+		// closeConnection means "closing for now, I will reopen" - the promise is kept
+		// so the next openConnection() can settle it. This is what keeps the React
+		// Native AppState background/foreground cycle free of unhandled rejections.
+		await client.closeConnection();
+
+		const outcome = await Promise.race([connectPromise, timeout(200)]);
+		expect(outcome).to.equal('timeout');
+	});
+
+	it('should not raise an unhandled rejection when openConnection is fire-and-forget', async () => {
+		const { client } = createClientWithHangingConnect();
+		const unhandled = [];
+		const onUnhandled = (reason) => unhandled.push(reason);
+		process.on('unhandledRejection', onUnhandled);
+
+		try {
+			// no .catch() and no await - the shape a React Native AppState handler produces
+			client.openConnection();
+			await client.disconnectUser();
+			await timeout(50);
+		} finally {
+			process.off('unhandledRejection', onUnhandled);
+		}
+
+		expect(unhandled).to.be.empty;
+	});
+
+	it('should reset wsPromise to null on disconnectUser', async () => {
+		const { client, connectResolvers } = createClientWithHangingConnect();
+
+		client.openConnection().catch(() => {});
+		connectResolvers[0]({ connection_id: 'conn-1' });
+		await client.wsPromise;
+
+		await client.disconnectUser();
+
+		// back to the constructor state, so the client reads as fresh again
+		expect(client.wsPromise).to.be.null;
+	});
+
+	it('should not hand back a resolved wsPromise after recoverState settled an in-flight connect', async () => {
+		const { client, connectResolvers } = createClientWithHangingConnect();
+
+		client.openConnection().catch(() => {});
+		// StableWSConnection.connect() fires _reconnect({ refreshToken: true }) without
+		// awaiting it on TOKEN_EXPIRED, so recoverState() runs while connect() is pending
+		await client.recoverState();
+
+		await client.closeConnection();
+		const reopened = client.openConnection();
+		reopened.catch(() => {});
+
+		// a second connect was started and is still hanging, so the promise must not be
+		// settled yet - otherwise every `await client.wsPromise` fires with no handshake
+		expect(connectResolvers.length).to.equal(2);
+		expect(await Promise.race([reopened.then(() => 'resolved'), timeout(50)])).to.equal(
+			'timeout',
+		);
+
+		connectResolvers[1]({ connection_id: 'conn-2' });
+		expect(await Promise.race([reopened.then(() => 'resolved'), timeout(50)])).to.equal(
+			'resolved',
+		);
+	});
+
+	it('should not tear down an anonymous user when an older connectUser is rejected', async () => {
+		const { client } = createClientWithHangingConnect();
+		delete client.user;
+		delete client._user;
+		delete client.userID;
+		client._setToken = () => Promise.resolve('token');
+
+		const connectA = client.connectUser({ id: 'A' }, 'token').then(
+			() => 'resolved',
+			() => 'rejected',
+		);
+		client.disconnectUser();
+		const anonymousPromise = client.connectAnonymousUser();
+		anonymousPromise.catch(() => {});
+		const anonymousUserID = client.userID;
+
+		expect(await Promise.race([connectA, timeout(200)])).to.equal('rejected');
+		await timeout(20);
+
+		// A's cleanup must not have disconnected the anonymous user that took over
+		expect(client.userID).to.equal(anonymousUserID);
+		expect(client.anonymous).to.be.true;
+	});
+
+	it('should not tear down a newer connectUser when an older one is rejected', async () => {
+		const { client, connectResolvers } = createClientWithHangingConnect();
+		// the helper pre-sets a user; start from a clean slate for connectUser()
+		delete client.user;
+		delete client._user;
+		delete client.userID;
+		// the helper never sets a real token, and connectUser() validates it
+		client._setToken = () => Promise.resolve('token');
+
+		const connectA = client.connectUser({ id: 'A' }, 'token').then(
+			() => 'resolved',
+			() => 'rejected',
+		);
+		// not awaited - the tight interleaving an AppState/logout handler produces
+		client.disconnectUser();
+		const connectB = client.connectUser({ id: 'B' }, 'token').then(
+			() => 'resolved',
+			() => 'rejected',
+		);
+
+		await Promise.resolve();
+		connectResolvers[connectResolvers.length - 1]({ connection_id: 'conn-B' });
+
+		expect(await Promise.race([connectA, timeout(200)])).to.equal('rejected');
+		expect(await Promise.race([connectB, timeout(200)])).to.equal('resolved');
+		// A's cleanup must not have disconnected B
+		expect(client.userID).to.equal('B');
+	});
+});
+
 describe('Client connectUser', () => {
 	let client;
 	beforeEach(() => {
