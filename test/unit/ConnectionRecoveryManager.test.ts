@@ -283,6 +283,61 @@ describe('ConnectionRecoveryManager', () => {
     });
   });
 
+  describe('the socket dropping mid-recovery', () => {
+    it('withholds connection.recovered when the socket drops while the reloads run', async () => {
+      // The network half alone did not cover this. A socket dying on a working network is the more
+      // common of the two — a server close, an expired token, a health check timing out — and it
+      // fails every reload just the same, so announcing recovery afterwards is the same lie.
+      const recovered = vi.fn();
+      client.on('connection.recovered', recovered);
+      const { reload } = activeChannel('socket-drops-midway');
+      reload.mockImplementation(async () => {
+        client.wsConnection._setStatus({ isOnline: false });
+        throw new Error('socket is gone');
+      });
+      client.connectionRecovery.registerSubscriptions();
+
+      online();
+      await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(recovered).not.toHaveBeenCalled();
+    });
+
+    it('withholds it even when the socket drops and returns inside the recovery', async () => {
+      // Same reason the network half compares timestamps: a flap ends online while having failed
+      // the reloads.
+      const recovered = vi.fn();
+      client.on('connection.recovered', recovered);
+      const { reload } = activeChannel('socket-flaps');
+      reload.mockImplementation(async () => {
+        client.wsConnection._setStatus({ isOnline: false });
+        client.wsConnection._setStatus({ isOnline: true, connectionId: 'back-again' });
+      });
+      client.connectionRecovery.registerSubscriptions();
+
+      online();
+      await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(recovered).not.toHaveBeenCalled();
+    });
+
+    it('still dispatches when nothing dropped', async () => {
+      // The guard has to stay quiet on the ordinary path, including on a host with no network
+      // registrar, where the device's status is unknown rather than offline.
+      const recovered = vi.fn();
+      client.on('connection.recovered', recovered);
+      activeChannel('uneventful');
+      client.wsConnection._setStatus({ isOnline: true, connectionId: 'steady' });
+
+      await client.connectionRecovery.recover();
+
+      expect(client.networkConnection.isOnline).toBeUndefined();
+      expect(recovered).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('the device network', () => {
     it('withholds connection.recovered when the network drops mid-recovery', async () => {
       // The regression. `Promise.allSettled` means a network drop can fail every single reload while

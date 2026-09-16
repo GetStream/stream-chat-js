@@ -274,9 +274,16 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
 
     const channels = this.recoverableActiveChannels;
     const threads = this.recoverableActiveThreads;
-    // Captured before the reloads so a drop *during* them can be detected afterwards. The timestamp
-    // rather than the boolean, because a network that drops and returns inside the recovery window
-    // has still failed the reloads while ending up `isOnline: true`.
+    // Captured before the reloads so a drop *during* them can be detected afterwards. Timestamps
+    // rather than the booleans, because a connection that drops and returns inside the recovery
+    // window has still failed the reloads while ending up online again.
+    //
+    // Both connections, because either one failing invalidates the reloads. The socket's is the load
+    // bearing half: it is written on every status transition, including the deliberate close and the
+    // two error paths the event is silent about, and it is the only one of the two that exists on a
+    // host with no network registrar installed — React Native, Node, server-side rendering.
+    const socketDropBefore =
+      this.client.wsConnection.state.getLatestValue().lastOfflineAt;
     const networkDropBefore =
       this.client.networkConnection.state.getLatestValue().lastOfflineAt;
     this.isRecovering = true;
@@ -297,21 +304,26 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
 
     this.isRecovering = false;
 
-    // `allSettled` above means a network drop mid-recovery can fail every single reload while this
-    // still reaches the end. Dispatching then would tell consumers that what is on screen is fresh
-    // when none of it was refreshed — and the UI SDKs' mark-read-on-catch-up keys off this event, so
-    // it would mark messages read that were never fetched.
+    // `allSettled` above means a drop mid-recovery can fail every single reload while this still
+    // reaches the end. Dispatching then would tell consumers that what is on screen is fresh when
+    // none of it was refreshed — and the UI SDKs' mark-read-on-catch-up keys off this event, so it
+    // would mark messages read that were never fetched.
     //
-    // Withholding is safe rather than stranding: a network drop guarantees a later socket reconnect,
-    // and that recovery dispatches the event. With no registrar installed `lastOfflineAt` stays
-    // `null` and `isOnline` stays `undefined`, so neither condition can fire and this behaves exactly
-    // as it did before the network signal existed.
+    // Withholding is safe rather than stranding: a drop on either connection guarantees a later
+    // socket reconnect, and that recovery dispatches the event.
+    const socket = this.client.wsConnection.state.getLatestValue();
     const network = this.client.networkConnection.state.getLatestValue();
-    if (network.lastOfflineAt !== networkDropBefore || network.isOnline === false) {
+    const socketDropped = socket.lastOfflineAt !== socketDropBefore || !socket.isOnline;
+    // `=== false`, never `!isOnline`: an *unknown* network is not a failed one, and it is what every
+    // host with no registrar reports.
+    const networkDropped =
+      network.lastOfflineAt !== networkDropBefore || network.isOnline === false;
+
+    if (socketDropped || networkDropped) {
       logger
         .withExtraTags('connectionRecovery')
         .info(
-          'Recovery finished but the device network dropped while it ran; withholding connection.recovered.',
+          `Recovery finished but the ${socketDropped ? 'socket' : 'device network'} dropped while it ran; withholding connection.recovered.`,
         );
       return;
     }
