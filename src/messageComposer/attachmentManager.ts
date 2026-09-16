@@ -529,7 +529,10 @@ export class AttachmentManager {
     if (!attachment.localMetadata?.file) {
       this.client.notifications.addError({
         message: 'File is required for upload attachment',
-        origin: { emitter: 'AttachmentManager', context: { attachment } },
+        origin: {
+          emitter: 'AttachmentManager',
+          context: { attachment, composer: this.composer },
+        },
         options: { type: CORE_NOTIFICATION_TYPE.attachmentFileMissing },
       });
       return;
@@ -538,7 +541,10 @@ export class AttachmentManager {
     if (!attachment.localMetadata.id) {
       this.client.notifications.addError({
         message: 'Local upload attachment missing local id',
-        origin: { emitter: 'AttachmentManager', context: { attachment } },
+        origin: {
+          emitter: 'AttachmentManager',
+          context: { attachment, composer: this.composer },
+        },
         options: { type: CORE_NOTIFICATION_TYPE.attachmentIdMissing },
       });
       return;
@@ -638,7 +644,11 @@ export class AttachmentManager {
         message: `The attachment upload was blocked`,
         origin: {
           emitter: 'AttachmentManager',
-          context: { attachment, blockedAttachment: localAttachment },
+          context: {
+            attachment,
+            blockedAttachment: localAttachment,
+            composer: this.composer,
+          },
         },
         options: {
           type: CORE_NOTIFICATION_TYPE.attachmentUploadBlocked,
@@ -668,7 +678,7 @@ export class AttachmentManager {
         message: 'Error uploading attachment',
         origin: {
           emitter: 'AttachmentManager',
-          context: { attachment, failedAttachment },
+          context: { attachment, failedAttachment, composer: this.composer },
         },
         options: {
           type: CORE_NOTIFICATION_TYPE.attachmentUploadFailed,

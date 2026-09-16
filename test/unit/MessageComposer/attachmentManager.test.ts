@@ -9,6 +9,7 @@ import {
   DraftResponse,
   FileReference,
   LocalMessage,
+  MessageComposer,
   StreamChat,
 } from '../../../src';
 import { AppResponseFields } from '../../../src';
@@ -1431,6 +1432,7 @@ describe('AttachmentManager', () => {
           emitter: 'AttachmentManager',
           context: {
             attachment: expect.any(Object),
+            composer: expect.any(MessageComposer),
             failedAttachment: expect.any(Object),
           },
         },
@@ -1473,6 +1475,7 @@ describe('AttachmentManager', () => {
           context: {
             attachment: blockedAttachment,
             blockedAttachment: expect.any(Object),
+            composer: expect.any(MessageComposer),
           },
         },
         options: {
@@ -2064,6 +2067,7 @@ describe('AttachmentManager', () => {
           emitter: 'AttachmentManager',
           context: {
             attachment: expect.any(Object),
+            composer: expect.any(MessageComposer),
           },
         },
         options: {
@@ -2095,6 +2099,7 @@ describe('AttachmentManager', () => {
           emitter: 'AttachmentManager',
           context: {
             blockedAttachment,
+            composer: expect.any(MessageComposer),
           },
         },
         options: {
@@ -2174,6 +2179,7 @@ describe('AttachmentManager', () => {
                 id: 'test-id',
               },
             },
+            composer: expect.any(MessageComposer),
           },
         },
       });
@@ -2208,6 +2214,7 @@ describe('AttachmentManager', () => {
                 file,
               },
             },
+            composer: expect.any(MessageComposer),
           },
         },
       });
