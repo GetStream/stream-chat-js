@@ -223,6 +223,29 @@ describe('NetworkConnectionObserver', () => {
       expect(observer.isOnline).toBe(false);
     });
 
+    it('installs the registrar handed to updateConfig', () => {
+      // Storing it without installing it is indistinguishable from a host that has no registrar at
+      // all: no listener, no error, and `isOnline` unknown forever.
+      const source = fakeRegistrar();
+
+      observer.updateConfig({ statusListenerRegistrar: source.registrar });
+      source.emit(true);
+
+      expect(observer.isOnline).toBe(true);
+    });
+
+    it('releases the previous listener when updateConfig replaces it', () => {
+      const first = fakeRegistrar();
+      observer.updateConfig({ statusListenerRegistrar: first.registrar });
+
+      const second = fakeRegistrar();
+      observer.updateConfig({ statusListenerRegistrar: second.registrar });
+
+      expect(first.unsubscribe).toHaveBeenCalledTimes(1);
+      second.emit(false);
+      expect(observer.isOnline).toBe(false);
+    });
+
     it('exposes config as a store, so a consumer can react to a swap', () => {
       const onConfigChange = vi.fn();
       observer.configState.subscribe(onConfigChange);

@@ -84,9 +84,16 @@ export class NetworkConnectionObserver extends WithSubscriptions {
     return this.configState.getLatestValue();
   }
 
-  /** Merges a partial configuration into the resolved config and notifies subscribers. */
+  /**
+   * Merges a partial configuration into the resolved config and notifies subscribers.
+   *
+   * Installs whatever registrar the result names, so this is a real alternative to
+   * {@link setStatusListenerRegistrar} rather than a write nobody acts on. Without it the field was
+   * stored and never invoked, leaving `isOnline` `undefined` forever with no error anywhere.
+   */
   public updateConfig(config: Partial<NetworkConnectionObserverConfig>) {
     this.configController.patch(config);
+    this.installConfiguredRegistrar();
   }
 
   /**
@@ -99,6 +106,17 @@ export class NetworkConnectionObserver extends WithSubscriptions {
    */
   public initializeConfig(config?: Partial<NetworkConnectionObserverConfig>) {
     this.configController.initialize(config);
+    this.installConfiguredRegistrar();
+  }
+
+  /**
+   * Installs the registrar the resolved configuration names, falling back to the platform default.
+   *
+   * The single place installation happens, so every path that can change what should be installed —
+   * a derivation, a patch — goes through the same resolution instead of each reimplementing the
+   * fallback.
+   */
+  private installConfiguredRegistrar() {
     this.setStatusListenerRegistrar(
       this.config.statusListenerRegistrar ?? getDefaultNetworkStatusListenerRegistrar(),
     );
