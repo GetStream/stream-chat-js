@@ -335,6 +335,7 @@ export type DeclarativePaginatorConfig = {
   initialCursor?: PaginatorCursor;
   initialOffset?: number;
   lockItemOrder?: boolean;
+  maxLoadedItems?: number;
   pageSize?: number;
   retryCount?: number;
   stateThrottleMs?: number;
@@ -400,6 +401,17 @@ export type PaginatorOptions<T, Q> = {
    * It does not guarantee global stability across interval changes or page jumps.
    */
   lockItemOrder?: boolean;
+  /**
+   * Caps how many items this paginator keeps loaded. Once the head window holds more than this, the
+   * oldest are dropped from it as new ones arrive — the paginator's membership is released and the
+   * shared store garbage-collects whatever no other holder still references. Pagination stays intact:
+   * the window re-opens its tailward edge, so scrolling back simply re-fetches.
+   *
+   * Unset (the default) means unbounded — see {@link BasePaginator.pruneTailToLimit} for the
+   * preconditions a prune must meet. Values below `pageSize` are clamped up to it: a cap smaller than
+   * a page would have the next page pruned away the moment it lands.
+   */
+  maxLoadedItems?: number;
   /** The item page size to be requested from the server. */
   pageSize?: number;
   /**
@@ -414,6 +426,7 @@ export type PaginatorOptions<T, Q> = {
 
 type OptionalPaginatorConfigFields =
   | 'stateThrottleMs'
+  | 'maxLoadedItems'
   | 'deriveCursor'
   | 'doRequest'
   | 'initialCursor'
@@ -519,6 +532,19 @@ export abstract class BasePaginator<T, Q> {
    * the whole batch produces a single `state.items` emit — independent of state throttling.
    */
   private _windowPublishSuspendDepth = 0;
+  /**
+   * Set when a prune ({@link pruneTailToLimit}) moved the tailward edge inward, so the next
+   * `state.items` publish also carries the pagination fields that move with it instead of emitting
+   * one of their own — publishing those separately would cost a second notification per prune, the
+   * one thing the window cap must not do.
+   *
+   * A flag rather than the values themselves, on purpose. The same fields are written by the query
+   * path ({@link postQueryReconcile}), so a cached snapshot draining after a `toTail()` that landed
+   * inside the same throttle window would republish a pre-merge cursor and re-fetch the page that
+   * just merged. A flag cannot go stale that way: {@link takePrunedPaginationFields} re-derives from
+   * the committed interval at publish time, so whoever publishes last publishes the truth.
+   */
+  private _tailEdgePruned = false;
   /** Set by a suspended op that changed the active window, so {@link batch} publishes once on exit. */
   private _suspendedWindowDirty = false;
 
@@ -1031,11 +1057,11 @@ export abstract class BasePaginator<T, Q> {
   private flushWindowPublish(): void {
     const items = this.projectActiveWindow();
     if (items) {
-      this.state.partialNext({ items });
+      this.state.partialNext({ items, ...this.takePrunedPaginationFields() });
       return;
     }
     if ((this.state.getLatestValue().items?.length ?? 0) > 0) {
-      this.state.partialNext({ items: [] });
+      this.state.partialNext({ items: [], ...this.takePrunedPaginationFields() });
     }
   }
 
@@ -1055,6 +1081,207 @@ export abstract class BasePaginator<T, Q> {
   protected flushPendingPublishes(): void {
     this._windowPublishThrottle?.flush();
     this._viewPublishThrottle?.flush();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Window cap (pruning)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Whether the consumer currently considers pruning safe. `true` here: a paginator with no UI
+   * attached, or a UI that never reports, still gets its configured cap. A UI that knows the user is
+   * reading near the oldest edge overrides this to say "not right now" — see `MessageIntervalPaginator`.
+   */
+  protected get isPruningAllowed(): boolean {
+    return true;
+  }
+
+  /**
+   * Whether `item` can anchor pagination — i.e. the server knows it, so its id is a usable cursor.
+   * `true` for anything loaded here; subclasses holding locally-created items (an unsent message)
+   * narrow it. Drives both halves of a prune: such an item may be dropped, and only such an item may
+   * become the window's new tailward cursor.
+   */
+  protected isPaginationAnchorable(item: T | undefined): boolean {
+    return !!item;
+  }
+
+  /**
+   * The configured window cap, or `undefined` when unbounded. Clamped up to `pageSize`: a cap below a
+   * page would prune the page that a tailward query had just fetched, and `onEndReached` would fetch
+   * it again — a loop. Read fresh (both inputs are runtime-configurable), never cached.
+   */
+  protected get effectiveMaxLoadedItems(): number | undefined {
+    const { maxLoadedItems, pageSize } = this.config;
+    if (typeof maxLoadedItems !== 'number' || maxLoadedItems <= 0) return undefined;
+    return Math.max(maxLoadedItems, pageSize);
+  }
+
+  /**
+   * Drops the oldest items from `interval` until at most `maxLoadedItems` remain, releasing each from
+   * the item index so the shared store can garbage-collect whatever no other holder references.
+   *
+   * ## Where this is called from, and why that matters
+   *
+   * From `ingestItem`, on the interval `insertItemIdIntoInterval` just returned — a **copy that has
+   * not been committed yet**. So this mutates an object nothing can observe, the single
+   * `commitInterval` that follows stores and republishes the already-pruned interval, and the window
+   * emit after it projects from the same interval. A prune therefore costs **no publish of its own**:
+   * it rides the ones the ingest was going to make anyway. That is the whole design — see
+   * {@link _tailEdgePruned} for the pagination half.
+   *
+   * ## Preconditions
+   *
+   * All must hold, or this is a no-op:
+   * - a cap is configured
+   * - the consumer has not suspended pruning ({@link isPruningAllowed})
+   * - the interval is anchored, is the dataset head, and is the active one. A jumped-away window is
+   *   what the user is reading, and a logical interval has no pagination provenance — nothing dropped
+   *   from it could ever be fetched back
+   * - it actually holds more than the cap
+   *
+   * Assumes cursor pagination: it drops ids without going through `removeItem`, so
+   * {@link shrinkOffsetAfterRemoval} never runs and an offset-paginated list would drift. That is not
+   * a reachable configuration today — `maxLoadedItems` only reaches message paginators — so it is
+   * stated rather than guarded.
+   *
+   * Items the server does not know about ({@link isPaginationAnchorable}) are **skipped, not stopped
+   * at**: an unsent message sorts by the time it was composed, so a cap would otherwise destroy it.
+   * Skipping leaves the window a few items above the cap at worst, and the next arrival trims it again.
+   *
+   * @returns whether anything was pruned.
+   */
+  protected pruneTailToLimit(interval: AnyInterval): boolean {
+    const limit = this.effectiveMaxLoadedItems;
+    if (typeof limit === 'undefined' || !this.isPruningAllowed) return false;
+
+    // Anchored intervals only. A logical interval has no pagination provenance, so anything dropped
+    // from it could never be fetched back. Separated out because it is also the type guard the field
+    // reads below depend on — `LogicalInterval` declares no `isHead`/`isTail`/`hasMore*`, so folding
+    // it into the condition below would merely be redundant at runtime while still being required to
+    // compile.
+    if (isLogicalInterval(interval)) return false;
+
+    if (
+      !interval.isHead ||
+      this._activeIntervalId !== interval.id ||
+      interval.itemIds.length <= limit
+    )
+      return false;
+
+    const ids = interval.itemIds;
+    // The tail (oldest) edge is index 0 unless the interval stores ids head-first.
+    const tailEdgeIsFirst = !this.intervalItemIdsAreHeadFirst;
+    const step = tailEdgeIsFirst ? 1 : -1;
+    const dropped = new Set<string>();
+
+    let remaining = ids.length - limit;
+    for (
+      let i = tailEdgeIsFirst ? 0 : ids.length - 1;
+      remaining > 0 && i >= 0 && i < ids.length;
+      i += step
+    ) {
+      const id = ids[i];
+      const item = this._itemIndex.get(id);
+      if (item && !this.isPaginationAnchorable(item)) continue;
+      dropped.add(id);
+      remaining -= 1;
+    }
+
+    if (!dropped.size) return false;
+
+    // Rebuild rather than splice: skipped local items leave the dropped ids non-contiguous.
+    interval.itemIds = ids.filter((id) => !dropped.has(id));
+
+    // One store transaction, so sibling holders of these ids re-project once rather than per id.
+    // `remove` releases this paginator's reference and the store deletes the content only when the last
+    // holder lets go, so a pruned message still pinned or held by an open thread survives intact.
+    this._itemIndex.batch(() => {
+      for (const id of dropped) this._itemIndex.remove(id);
+    });
+
+    // Older messages provably exist on the server again, so re-open the tailward edge — even if this
+    // window had reached the start. Leaving `isTail` set would also mislead interval merging.
+    interval.isTail = false;
+    interval.hasMoreTail = true;
+
+    // Only flag it. The matching `state` fields are derived at publish time, from the interval as
+    // committed then — see {@link _tailEdgePruned}.
+    this._tailEdgePruned = true;
+
+    return true;
+  }
+
+  /**
+   * The id at one pagination edge of `interval` that is usable as a cursor — the edge-most item the
+   * server knows about. Not simply `itemIds[0]`: a prune skips locally-created items, so the outermost
+   * id can be one the server has never seen, and paginating from it would send a client-generated id
+   * as `id_lt`.
+   */
+  private getPaginationEdgeId(interval: Interval, edge: 'head' | 'tail'): string | null {
+    const ids = interval.itemIds;
+    const fromFirst =
+      edge === 'tail'
+        ? !this.intervalItemIdsAreHeadFirst
+        : this.intervalItemIdsAreHeadFirst;
+    const step = fromFirst ? 1 : -1;
+    for (let i = fromFirst ? 0 : ids.length - 1; i >= 0 && i < ids.length; i += step) {
+      const id = ids[i];
+      if (this.isPaginationAnchorable(this._itemIndex.get(id))) return id;
+    }
+    return null;
+  }
+
+  /**
+   * Filters `items` down to the members of `interval`, preserving their given order. Used by the
+   * order-locked emit path, which composes its array from the previously published one instead of
+   * re-projecting, and so needs pruned ids taken out explicitly.
+   */
+  private retainIntervalMembers(items: T[], interval: AnyInterval): T[] {
+    const members = new Set(interval.itemIds);
+    return items.filter((item) => members.has(this.getItemId(item)));
+  }
+
+  /**
+   * The `state` pagination fields that a prune moved, derived from the **committed** active interval
+   * at call time and cleared. Called by every path that publishes the active window, so they ride that
+   * publish instead of emitting their own ({@link _tailEdgePruned} explains why this derives rather
+   * than replaying what the prune saw).
+   *
+   * Returns only fields that actually changed, so an unchanged `cursor` keeps its object identity and
+   * consumers selecting it are not woken.
+   *
+   * Two things it deliberately leaves alone:
+   * - `cursor.headward`, which the prune never touched — carried over verbatim rather than re-derived,
+   *   so a `config.deriveCursor` hook's verdict on the head edge survives.
+   * - a null tail edge (a window whose every remaining item is locally-created). Publishing `null`
+   *   would read as "tailward exhausted"; the existing cursor still names a message the *server* has,
+   *   so leaving it in place keeps back-pagination working.
+   */
+  private takePrunedPaginationFields(): Partial<PaginatorState<T>> {
+    if (!this._tailEdgePruned) return {};
+    this._tailEdgePruned = false;
+
+    if (!this._activeIntervalId) return {};
+    const active = this._itemIntervals.get(this._activeIntervalId);
+    // A logical interval is never pruned, and an absent one has no window left to paginate.
+    if (!active || isLogicalInterval(active)) return {};
+
+    const current = this.state.getLatestValue();
+    const next: Partial<PaginatorState<T>> = {};
+
+    // From the interval, not hardcoded `true`: a tailward query landing between the prune and this
+    // publish may have legitimately reached the dataset start again.
+    if (current.hasMoreTail !== active.hasMoreTail) next.hasMoreTail = active.hasMoreTail;
+
+    if (this.isCursorPagination) {
+      const tailward = this.getPaginationEdgeId(active, 'tail');
+      if (tailward !== null && current.cursor?.tailward !== tailward) {
+        next.cursor = { headward: current.cursor?.headward, tailward };
+      }
+    }
+
+    return next;
   }
 
   /**
@@ -2345,6 +2572,12 @@ export abstract class BasePaginator<T, Q> {
       );
     }
 
+    // Enforce the window cap BEFORE committing: `targetInterval` is still the uncommitted copy
+    // `insertItemIdIntoInterval` returned, so the single `commitInterval` below stores and publishes
+    // the already-pruned interval, and the emit after it projects from that same interval. No-op
+    // unless a cap is configured — see {@link pruneTailToLimit}.
+    const prunedNow = this.pruneTailToLimit(targetInterval);
+
     const addedNewInterval = !this._itemIntervals.has(targetInterval.id);
     this.commitInterval(targetInterval);
 
@@ -2378,7 +2611,15 @@ export abstract class BasePaginator<T, Q> {
           const nextView = items.slice();
           const insertAt = Math.min(originalIndexInState, nextView.length);
           nextView.splice(insertAt, 0, ingestedItem);
-          this.state.partialNext({ items: nextView });
+          this.state.partialNext({
+            // This branch republishes the LAST PUBLISHED array rather than re-projecting, so a prune
+            // that just emptied ids out of the interval would resurrect them here. Drop them, keeping
+            // every survivor's relative position — which is the whole point of `lockItemOrder`.
+            items: prunedNow
+              ? this.retainIntervalMembers(nextView, targetInterval)
+              : nextView,
+            ...this.takePrunedPaginationFields(),
+          });
         } else {
           /**
            * Select a correct interval from which the state.items array is derived
@@ -2390,6 +2631,7 @@ export abstract class BasePaginator<T, Q> {
                 ? removedItemCoordinates.interval.interval
                 : targetInterval,
             ),
+            ...this.takePrunedPaginationFields(),
           });
         }
       }
