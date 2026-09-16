@@ -386,6 +386,12 @@ param at all. It is now attached only to the requests listed above.
 `client.wsConnection.connectionID`, so it correctly returns `undefined` once the socket is closed —
 in v9 the id outlived the socket it belonged to.
 
+`StableWSConnection.connectionID` is **removed** with it. Leaving the field in place would have
+recreated the same bug one level down: it was written on every handshake and never cleared, so it
+kept reporting an id for a socket that was gone. Read `client._getConnectionID()` (or
+`client.connectionIdManager.connectionId`) instead — both are dropped the moment the connection
+stops being healthy.
+
 The consequence for mobile apps: `closeConnection()` (the documented background/foreground seam)
 now makes the gated calls above throw until `openConnection()` has been called, even though the
 user is still set. Reopen the connection before issuing them, or pass `watch: false` for loads that
@@ -490,7 +496,7 @@ Beyond the three breaking effects above, the field sets shifted to match the API
 
 ### Removed — the hand-written filter building blocks
 
-`QueryFilter` and `PrimitiveFilter` are **removed**, along with `ExtendedQueryFilter`, `ExtendedQueryFilters` and `ExtendedQueryLogicalOperators` (`src/pagination/FilterBuilder.ts`). `Unpacked` goes with them — it existed only to let `QueryFilter` reach the element type of an array-valued key, and `Filters<>` takes the element type directly. `QueryFilters` and `RequireOnlyOne` remain exported.
+`QueryFilter` and `PrimitiveFilter` are **removed**, along with `ExtendedQueryFilter`, `ExtendedQueryFilters` and `ExtendedQueryLogicalOperators` (`src/pagination/FilterBuilder.ts`). `Unpacked` goes with them — it existed only to let `QueryFilter` reach the element type of an array-valued key, and `Filters<>` takes the element type directly. `QueryFilters` and `RequireOnlyOne` are still exported, but note that `QueryFilters` is now the **generated** type (`src/gen/models`) and takes a different parameter: v9's `QueryFilters<T>` took the item type and mapped its keys itself, whereas `QueryFilters<Operators>` takes an already-built operator map — the shape `Filters<>` produces. A v9 `QueryFilters<{ [K in keyof MyItem]?: ... }>` therefore does not mean the same thing any more; write the `Filters<>` form below instead.
 
 If you used `Unpacked` in your own code, it was a plain conditional type with no dependency on this SDK; copy it across rather than importing it:
 

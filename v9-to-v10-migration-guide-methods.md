@@ -664,7 +664,22 @@ Webhook verification is inherently server-side work: it needs the API secret, wh
 
 ### Constructor and lifecycle
 
-`getClient()`, `clean()`, `_checkInitialized()`, `_initializeState(...)`, `_disconnect()`, and `create(options?)` are unchanged.
+`getClient()`, `clean()`, `_initializeState(...)`, `_disconnect()`, and `create(options?)` are unchanged.
+
+#### `channel._checkInitialized()` / the new `channel._checkHasId()`
+
+`_checkInitialized()` itself is unchanged — same signature, same "channel hasn't been initialized" error. What changed is **which methods call it**. It was applied inconsistently in v9: to methods that needed nothing from the query response, and not to some that did. v10 splits the two questions apart.
+
+- **`_checkInitialized()`** — "has the channel been queried?" Now called by `markRead()` and `markUnread()` only. Both read the channel's `read_events` setting, which arrives with the query response, so answering without it would silently use a default.
+- **`_checkHasId()`** — **new**, and the weaker of the two: "does the channel have an id?" It throws `Channel isn't yet created, call getOrCreateDistinctChannel() before this operation`. A channel built from members alone (`client.channel(type, { members })`) has no id until it has been queried; every other channel has one immediately.
+
+Both are `@internal`. The consumer-visible effects:
+
+**No longer throw on an unqueried channel** (they never needed the query response): `sendEvent()`, `sendAction()`, `hide()`, `show()`. For `sendEvent`/`hide`/`show` the id is still required, and the generated `ChannelApi` raises the `isn't yet created` error itself — so on a members-only channel the error message changes from `hasn't been initialized` to `isn't yet created`. `sendAction()` is keyed by message id and now works on a channel that was never queried.
+
+**Relaxed from `_checkInitialized()` to `_checkHasId()`**: `deleteReaction()`, `banUser()`, `unbanUser()`, `muteStatus()`. These need an id or a cid, not the query response — so they now succeed on a channel that has an id but has not been queried yet.
+
+**Newly guarded with `_checkHasId()`**: `sendMessage()`, `sendReaction()`, `createDraft()`, `deleteDraft()`, `mute()`, `unmute()`. These previously asserted nothing and read `this.id`/`this.cid` regardless. On a members-only channel the first four wrote an offline-queue task keyed by an `undefined` channel id before failing further down, and `mute()`/`unmute()` sent the placeholder `type:!members-a,b` cid to the server. They now fail up front with the actionable error instead. Call `channel.create()` or `channel.watch()` first — that is what assigns the id.
 
 `channel._channelURL()` — **REMOVED after `10.0.0-rc.4`**, no replacement. It built a `{baseURL}/channels/{type}/{id}` string for the hand-rolled request layer that no longer exists; every request now goes through the generated API client, which resolves its own paths. Nothing in the SDK called it. If you were using it to build a URL yourself, construct it inline.
 

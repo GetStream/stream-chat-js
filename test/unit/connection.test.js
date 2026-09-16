@@ -313,12 +313,17 @@ describe('connection', function () {
 		afterEach(() => MockWebSocket.reset());
 
 		it('should resolve the connection and set the connection id', async () => {
-			const c = new StableWSConnection({ client: newStreamChat() });
+			const client = newStreamChat();
+			const c = new StableWSConnection({ client });
 			const health = await c.connect();
 
 			expect(health.type).to.equal('connection.ok');
 			expect(health.connection_id).to.equal('61112366-0a15-3891-0000-000000000009');
-			expect(c.connectionID).to.equal('61112366-0a15-3891-0000-000000000009');
+			// The manager is the only holder of the id - the connection keeps no copy.
+			expect(client.connectionIdManager.connectionId).to.equal(
+				'61112366-0a15-3891-0000-000000000009',
+			);
+			expect(client._getConnectionID()).to.equal('61112366-0a15-3891-0000-000000000009');
 			expect(c.isHealthy).to.be.true;
 		});
 

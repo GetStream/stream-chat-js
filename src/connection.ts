@@ -73,7 +73,6 @@ export class StableWSConnection {
   client: StreamChat;
 
   // local vars
-  connectionID?: string;
   connectionOpen?: ConnectAPIResponse;
   consecutiveFailures: number;
   pingInterval: number;
@@ -364,7 +363,9 @@ export class StableWSConnection {
       this.isConnecting = false;
 
       if (response) {
-        this.connectionID = response.connection_id;
+        // The id is published to the ConnectionIdManager and nowhere else. A copy kept here would
+        // outlive the socket it belongs to - `invalidate()` / `reset()` cannot reach it - which is
+        // exactly the staleness this manager exists to end.
         this.client.connectionIdManager.resolveConnectionId(response.connection_id);
         return response;
       }
