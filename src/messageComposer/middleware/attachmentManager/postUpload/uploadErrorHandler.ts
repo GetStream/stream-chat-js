@@ -25,7 +25,7 @@ export const createUploadErrorHandlerMiddleware = (
         message: 'Error uploading attachment',
         origin: {
           emitter: 'AttachmentManager',
-          context: { attachment },
+          context: { attachment, composer },
         },
         options: {
           type: CORE_NOTIFICATION_TYPE.attachmentUploadFailed,
