@@ -764,11 +764,10 @@ export class StableWSConnection {
    * so a consumer subscribes there rather than waiting to be told.
    *
    * This used to hold a five second delay before announcing a drop, so a brief flap did not strobe a
-   * "connection lost" banner. That is a presentation decision and belongs to whoever renders the
-   * banner; {@link WS_OFFLINE_ANNOUNCE_DELAY_MS} is still exported as the value to debounce by, so
-   * the UI SDKs do not each pick their own. Keeping it here also meant a timer that outlived the
-   * socket that armed it, reading a discarded socket's status and announcing a drop that a
-   * replacement had already recovered from.
+   * "connection lost" banner. That wait belongs to whoever renders the banner, and how long it
+   * should be is `offlineNotificationDisplayDelayMs` on this connection's configuration. Keeping the
+   * timer here also meant one that outlived the socket that armed it, reading a discarded socket's
+   * status and announcing a drop that a replacement had already recovered from.
    */
   _setOnline = (online: boolean) => {
     if (!this._applyOnline(online)) return;

@@ -480,6 +480,12 @@ const WS_CONNECTION_FIELDS: Record<keyof WSConnectionConfig, ConfigNode> = {
     kind: 'value',
     type: 'number',
   },
+  offlineNotificationDisplayDelayMs: {
+    description:
+      'How long a drop must last before a UI tells anyone about it. The socket retries on its own and most drops resolve in well under a second, so reporting them at once makes a working application look broken. Nothing in this package waits on it: it lives here so the UI SDKs do not each invent their own, and so there is one place to change it. Zero shows a drop immediately.',
+    kind: 'value',
+    type: 'number',
+  },
   healthCheckGracePeriodMs: {
     description:
       'Extra room on top of the ping interval before the socket is declared dead — the time a ping has to make its round trip. The connection check fires at `pingIntervalMs + healthCheckGracePeriodMs`, so changing the ping interval moves it too. Floored at 1s, below which the connection check would fire on a healthy connection.',
@@ -541,7 +547,7 @@ const CLIENT_FIELDS: Record<keyof ClientDeclarativeConfig, ConfigNode> = {
   },
   wsConnection: {
     description:
-      "This client's WebSocket: how long to wait for it, how often to ping it, and how long it may go quiet before being declared dead.",
+      "This client's WebSocket: how long to wait for it, how often to ping it, how long it may go quiet before being declared dead, and how long a drop must last before a UI reports it.",
     fields: WS_CONNECTION_FIELDS,
     kind: 'group',
   },

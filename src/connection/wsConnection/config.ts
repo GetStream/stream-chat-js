@@ -12,25 +12,11 @@ export const DEFAULT_WS_CONNECTION_CONFIG: WSConnectionConfig = deepFreezeConfig
   connectTimeoutMs: 15 * 1000,
   pingIntervalMs: 25 * 1000,
   healthCheckGracePeriodMs: 10 * 1000,
+  offlineNotificationDisplayDelayMs: 5 * 1000,
   webSocketImpl: undefined,
   urlParams: undefined,
   connection: undefined,
 });
-
-/**
- * How long a UI should sit on a drop before telling anyone about it.
- *
- * The socket retries on its own and most drops resolve in well under a second, so announcing them
- * immediately makes a working application look broken. A banner should therefore wait this long and
- * skip the announcement entirely if `client.wsConnection.state` reports the socket back inside the
- * window.
- *
- * Exported rather than left to each UI SDK to invent, so they do not drift apart. It is advice, not
- * machinery: nothing in this package waits on it. The socket used to, and that timer read a status
- * belonging to a socket that had since been discarded — whose value stays `false` forever — so a
- * replaced connection announced a drop the replacement had already recovered from.
- */
-export const WS_OFFLINE_ANNOUNCE_DELAY_MS = 5 * 1000;
 
 /**
  * How long to wait before retrying once the device reports its network is back.
@@ -39,8 +25,8 @@ export const WS_OFFLINE_ANNOUNCE_DELAY_MS = 5 * 1000;
  * returned is the one moment an immediate retry is likely to succeed. Not zero, so the retry lands in
  * a later task, after whatever else is reacting to the same edge.
  *
- * A constant for the same reason as {@link WS_OFFLINE_ANNOUNCE_DELAY_MS}: it was a bare
- * `_reconnect({ interval: 10 })` that nothing could configure.
+ * A constant rather than configuration: it was a bare `_reconnect({ interval: 10 })` that nothing
+ * could reach, so exposing it would be new surface rather than a preserved capability.
  */
 export const WS_NETWORK_RECOVERY_RETRY_MS = 10;
 
@@ -48,14 +34,17 @@ export const WS_NETWORK_RECOVERY_RETRY_MS = 10;
  * Bounds on the timing knobs, applied to every value that reaches the configuration — see
  * {@link clampWSConnectionConfig}.
  *
- * Two of the three fields are bounded, and both for the same reason: a value outside the range makes
+ * Three of the fields are bounded. Two of them for the same reason: a value outside the range makes
  * the socket fail by itself, with no bad network and nothing for the integrator to see but an
  * apparently random disconnect. `connectTimeoutMs` is deliberately unbounded — every value of it is a
  * legitimate trade-off rather than a self-inflicted failure, and tests set it absurdly low on
  * purpose.
  */
 export const WS_CONNECTION_CONFIG_BOUNDS: {
-  [Key in 'healthCheckGracePeriodMs' | 'pingIntervalMs']: { max?: number; min: number };
+  [Key in
+    | 'healthCheckGracePeriodMs'
+    | 'offlineNotificationDisplayDelayMs'
+    | 'pingIntervalMs']: { max?: number; min: number };
 } = {
   /**
    * A grace period of zero puts the connection check exactly on the moment the next ping is due, so the socket
@@ -63,6 +52,12 @@ export const WS_CONNECTION_CONFIG_BOUNDS: {
    * 1s is not a judgement about the right value; it is the point below which the loop cannot work.
    */
   healthCheckGracePeriodMs: { min: 1_000 },
+  /**
+   * Floored at zero rather than at some minimum wait, because zero is a legitimate setting: it means
+   * report a drop the moment it happens. A negative delay is not a faster setting, it is a
+   * `setTimeout` that fires immediately while reading as though it defers.
+   */
+  offlineNotificationDisplayDelayMs: { min: 0 },
   /**
    * **The maximum is the default**, which means this setting can only ever make the socket ping
    * more* often, never less. That is deliberate rather than an oversight: 25s is the interval the

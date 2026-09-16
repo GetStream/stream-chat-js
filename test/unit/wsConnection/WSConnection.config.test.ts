@@ -5,7 +5,6 @@ import { StableWSConnection } from '../../../src/connection';
 import {
   DEFAULT_WS_CONNECTION_CONFIG,
   WS_NETWORK_RECOVERY_RETRY_MS,
-  WS_OFFLINE_ANNOUNCE_DELAY_MS,
 } from '../../../src/connection';
 
 describe('client.wsConnection configuration', () => {
@@ -27,7 +26,7 @@ describe('client.wsConnection configuration', () => {
         new StableWSConnection({ wsConnection: client.wsConnection })
           .connectionCheckTimeout,
       ).toBe(35000);
-      expect(WS_OFFLINE_ANNOUNCE_DELAY_MS).toBe(5000);
+      expect(DEFAULT_WS_CONNECTION_CONFIG.offlineNotificationDisplayDelayMs).toBe(5000);
       expect(WS_NETWORK_RECOVERY_RETRY_MS).toBe(10);
     });
 
@@ -38,11 +37,12 @@ describe('client.wsConnection configuration', () => {
         connectTimeoutMs: 15_000,
         pingIntervalMs: 25_000,
         healthCheckGracePeriodMs: 10_000,
+        offlineNotificationDisplayDelayMs: 5_000,
         webSocketImpl: undefined,
         urlParams: undefined,
         connection: undefined,
       });
-      expect(Object.keys(client.wsConnection.config)).toHaveLength(6);
+      expect(Object.keys(client.wsConnection.config)).toHaveLength(7);
     });
 
     it('keeps the 25s ping / 35s connection check pair the socket documents', () => {
@@ -99,19 +99,22 @@ describe('client.wsConnection configuration', () => {
 
   describe('what is deliberately not configurable', () => {
     it('exposes every WebSocket input that was already reachable, and nothing invented', () => {
-      // The line this draws: everything the socket reads is here, and nothing that was previously
-      // unreachable is. The three timings were public mutable fields (`client.defaultWSTimeout`,
+      // The line this draws: everything the socket reads is here, plus the one value it does not.
+      // The three timings were public mutable fields (`client.defaultWSTimeout`,
       // `StableWSConnection.pingInterval`, `.connectionCheckTimeout`); `webSocketImpl`, `urlParams`
-      // and `connection` were `StreamChatOptions` entries read only by the socket. All six were
+      // and `connection` were `StreamChatOptions` entries read only by the socket. Those six were
       // already reachable — the change is that they are declared, typed and validated in one place.
       //
-      // Excluded: the going-offline announce delay and the network-recovery retry. Both were bare
-      // literals inside the socket that no caller could reach, so exposing them would be new surface
-      // rather than a preserved capability.
+      // `offlineNotificationDisplayDelayMs` is the deliberate exception: nothing here acts on it, and
+      // it is declared so the UI SDKs share one value rather than each inventing their own.
+      //
+      // Still excluded: the network-recovery retry, a bare literal inside the socket that no caller
+      // could reach, so exposing it would be new surface rather than a preserved capability.
       expect(Object.keys(client.wsConnection.config).sort()).toEqual([
         'connectTimeoutMs',
         'connection',
         'healthCheckGracePeriodMs',
+        'offlineNotificationDisplayDelayMs',
         'pingIntervalMs',
         'urlParams',
         'webSocketImpl',
@@ -202,6 +205,24 @@ describe('client.wsConnection configuration', () => {
 
       expect(client.wsConnection.config.connectTimeoutMs).toBe(20);
     });
+    it('floors the offline notification delay at zero', () => {
+      // Zero is a legitimate setting — report a drop at once — so the floor is not a minimum wait.
+      // A negative delay is not a faster setting; it is a timer that fires immediately while reading
+      // as though it defers.
+      client.config.set({
+        client: { wsConnection: { offlineNotificationDisplayDelayMs: -1 } },
+      });
+
+      expect(client.wsConnection.config.offlineNotificationDisplayDelayMs).toBe(0);
+    });
+
+    it('accepts zero unchanged', () => {
+      client.config.set({
+        client: { wsConnection: { offlineNotificationDisplayDelayMs: 0 } },
+      });
+
+      expect(client.wsConnection.config.offlineNotificationDisplayDelayMs).toBe(0);
+    });
   });
 
   describe('the going-offline announce delay', () => {
@@ -219,7 +240,9 @@ describe('client.wsConnection configuration', () => {
         socket._setOnline(false);
 
         expect(client.wsConnection.state.getLatestValue().isOnline).toBe(false);
-        vi.advanceTimersByTime(WS_OFFLINE_ANNOUNCE_DELAY_MS * 2);
+        vi.advanceTimersByTime(
+          DEFAULT_WS_CONNECTION_CONFIG.offlineNotificationDisplayDelayMs * 2,
+        );
         expect(dispatch).not.toHaveBeenCalled();
       } finally {
         vi.useRealTimers();

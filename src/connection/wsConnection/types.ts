@@ -30,16 +30,19 @@ export type WSConnectionState = {
 /**
  * The WebSocket's timing knobs.
  *
- * These three, and only these three, because each was already a public mutable field before it was
- * configuration — `client.defaultWSTimeout`, `StableWSConnection.pingInterval` and
+ * Three of them were already public mutable fields before they were configuration —
+ * `client.defaultWSTimeout`, `StableWSConnection.pingInterval` and
  * `StableWSConnection.connectionCheckTimeout`. Assigning to them worked, which is the only reason any
- * of this was tunable. So the change is that the capability is now declared, validated and durable
- * across the reconnects that used to silently reset it, rather than that new capability was added.
+ * of this was tunable. So for those the change is that the capability is now declared, validated and
+ * durable across the reconnects that used to silently reset it, rather than that new capability was
+ * added.
  *
- * Two further timings are deliberately **not** here — the delay before a drop is announced, and the
- * retry delay after the network returns. Both were bare literals inside the socket, reachable by
- * nobody, and inventing configuration for them would be adding surface rather than preserving it.
- * They live as constants in `src/wsConnection/config.ts`.
+ * {@link offlineNotificationDisplayDelayMs} is the exception, and genuinely new. It is the only one
+ * this package does not act on itself, which is why it was a constant first: see its own note.
+ *
+ * One timing is deliberately **not** here — the retry delay after the network returns. It was a bare
+ * literal inside the socket, reachable by nobody, and inventing configuration for it would be adding
+ * surface rather than preserving it. It lives as a constant in `src/wsConnection/config.ts`.
  *
  * All in **milliseconds**, and named with the unit, because a bare `pingInterval` reads equally well
  * as seconds and was in fact documented in seconds while being stored in milliseconds — for four
@@ -76,6 +79,25 @@ export type WSConnectionConfig = {
    * and do it again after every reconnect. A grace period cannot express that.
    */
   healthCheckGracePeriodMs: number;
+  /**
+   * How long a drop must last before a UI tells anyone about it. Defaults to 5s; zero shows it at
+   * once.
+   *
+   * The socket retries on its own and most drops resolve in well under a second, so reporting them
+   * immediately makes a working application look broken. A banner should wait this long and drop the
+   * notification entirely if `client.wsConnection.state` reports the socket back inside the window,
+   * which is what `stream-chat-react`'s `<Chat>` does.
+   *
+   * **Nothing in this package waits on it.** It is here rather than in each UI SDK so that they do
+   * not drift apart, and so an integrator has one place to change it. Read as a property of the
+   * connection — how long a drop must persist before it counts as one worth reporting — rather than
+   * as a property of the banner that happens to render it.
+   *
+   * The socket used to own this wait, holding the announcement behind a timer that outlived the
+   * socket that armed it. A discarded socket's status stays `false` forever, so a replaced connection
+   * announced a drop that its replacement had already recovered from.
+   */
+  offlineNotificationDisplayDelayMs: number;
   /**
    * The `WebSocket` constructor to open the socket with. Defaults to the global one.
    *
