@@ -63,8 +63,7 @@ export type ChannelWatchState = {
    *
    * It is truthful by construction: `channel.watch()` and `client.queryChannels()` wait for a live
    * socket rather than degrading, so a query carrying `watch: true` can only succeed against a
-   * connection ID that is actually current. They used to downgrade to a non-watching query instead,
-   * which is what made a false `Watching` possible.
+   * connection ID that is actually current.
    */
   watchStatus: ChannelWatchStatus;
 };

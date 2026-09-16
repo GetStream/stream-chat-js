@@ -76,11 +76,8 @@ class WSCloseError extends Error {
  * - if the servers fails to publish a message to the client, the WS connection is destroyed
  */
 export class StableWSConnection {
-  // global from constructor
   /**
-   * The `WSConnection` this socket belongs to. Held instead of the client, because everything the
-   * socket needs from the client it can reach through here — and the one thing it needs from the
-   * parent, the status store, it used to reach by going back out through `this.client.wsConnection`.
+   * The `WSConnection` this socket belongs to.
    */
   wsConnection: WSConnection;
 
@@ -149,9 +146,8 @@ export class StableWSConnection {
   /**
    * How long the connection check tolerates silence before tearing the socket down.
    *
-   * Derived at read time, not stored: it used to be computed once in the constructor from
-   * `pingInterval`, which meant changing the ping interval left the connection check behind and the socket
-   * killing itself between pings.
+   * Derived at read time rather than stored, so changing the ping interval moves the connection check
+   * with it instead of leaving the socket to kill itself between pings.
    */
   get connectionCheckTimeout(): number {
     return this.config.pingIntervalMs + this.config.healthCheckGracePeriodMs;
@@ -305,8 +301,7 @@ export class StableWSConnection {
     }
 
     // Through `_applyOnline`, not a bare assignment: the store must tell the truth on this path too.
-    // It is what `closeConnection()` uses, and it was one of the transitions the old event stayed
-    // silent about, which is a large part of why the store is worth having.
+    // It is what `closeConnection()` uses, and a deliberate shutdown is still a transition.
     this._applyOnline(false);
 
     let isClosedPromise: Promise<void>;
@@ -734,8 +729,7 @@ export class StableWSConnection {
    * else. Returns whether it changed.
    *
    * Every path that transitions the status goes through here — including `disconnect()`, which
-   * `closeConnection()` uses, and the two error paths. Those were the transitions the old event
-   * stayed silent about, and covering them is the reason the store exists.
+   * `closeConnection()` uses, and the two error paths. Covering all of them is why the store exists.
    *
    * Construction is not routed through here: initializing the field is not a transition, and stamping
    * `lastOfflineAt` because a socket object was built would be a lie.
@@ -745,9 +739,8 @@ export class StableWSConnection {
 
     this.isOnline = online;
 
-    // Straight to the parent. This used to go back out through `this.client.wsConnection` to reach
-    // the object that owns this one. Optional chaining because a socket supplied through
-    // `config.connection` is built before it has a parent, and adopts one later.
+    // Optional chaining because a socket supplied through `config.connection` is built before it has
+    // a parent, and adopts one later.
     this.wsConnection?._setStatus({
       isOnline: online,
       connectionId: this.connectionID,
@@ -763,11 +756,9 @@ export class StableWSConnection {
    * {@link _applyOnline} writes on every transition — including the ones that were always silent —
    * so a consumer subscribes there rather than waiting to be told.
    *
-   * This used to hold a five second delay before announcing a drop, so a brief flap did not strobe a
-   * "connection lost" banner. That wait belongs to whoever renders the banner, and how long it
-   * should be is `offlineNotificationDisplayDelayMs` on this connection's configuration. Keeping the
-   * timer here also meant one that outlived the socket that armed it, reading a discarded socket's
-   * status and announcing a drop that a replacement had already recovered from.
+   * The five-second wait before announcing a drop moved to whoever renders the banner, its length
+   * configurable as `offlineNotificationDisplayDelayMs`. The timer here outlived the socket that
+   * armed it, so a replaced connection announced a drop its replacement had already recovered from.
    */
   _setOnline = (online: boolean) => {
     if (!this._applyOnline(online)) return;

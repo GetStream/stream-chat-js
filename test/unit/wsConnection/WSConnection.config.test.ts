@@ -105,11 +105,9 @@ describe('client.wsConnection configuration', () => {
       // and `connection` were `StreamChatOptions` entries read only by the socket. Those six were
       // already reachable — the change is that they are declared, typed and validated in one place.
       //
-      // `offlineNotificationDisplayDelayMs` is the deliberate exception: nothing here acts on it, and
-      // it is declared so the UI SDKs share one value rather than each inventing their own.
-      //
-      // Still excluded: the network-recovery retry, a bare literal inside the socket that no caller
-      // could reach, so exposing it would be new surface rather than a preserved capability.
+      // `offlineNotificationDisplayDelayMs` is the deliberate exception: nothing here acts on it,
+      // and it is declared so the UI SDKs share one value. Still excluded: the network-recovery
+      // retry, a bare literal no caller could reach.
       expect(Object.keys(client.wsConnection.config).sort()).toEqual([
         'connectTimeoutMs',
         'connection',
@@ -206,9 +204,7 @@ describe('client.wsConnection configuration', () => {
       expect(client.wsConnection.config.connectTimeoutMs).toBe(20);
     });
     it('floors the offline notification delay at zero', () => {
-      // Zero is a legitimate setting — report a drop at once — so the floor is not a minimum wait.
-      // A negative delay is not a faster setting; it is a timer that fires immediately while reading
-      // as though it defers.
+      // Zero is legitimate — hold nothing back — so the floor only rejects a negative delay.
       client.config.set({
         client: { wsConnection: { offlineNotificationDisplayDelayMs: -1 } },
       });

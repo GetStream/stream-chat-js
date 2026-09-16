@@ -482,7 +482,7 @@ const WS_CONNECTION_FIELDS: Record<keyof WSConnectionConfig, ConfigNode> = {
   },
   offlineNotificationDisplayDelayMs: {
     description:
-      'How long a drop must last before a UI tells anyone about it. The socket retries on its own and most drops resolve in well under a second, so reporting them at once makes a working application look broken. Nothing in this package waits on it: it lives here so the UI SDKs do not each invent their own, and so there is one place to change it. Zero shows a drop immediately.',
+      'How long a drop must last before a UI reports it. Most drops resolve in under a second, so a banner showing all of them makes a working application look broken. Nothing in this package waits on it: it is here so the UI SDKs share one value. Zero holds nothing back, landing on the next task.',
     kind: 'value',
     type: 'number',
   },

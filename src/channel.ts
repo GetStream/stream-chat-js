@@ -1761,24 +1761,17 @@ export class Channel extends ChannelApi {
 
     const combined = { ...defaultOptions, ...options };
 
-    // Wait for a live socket rather than degrading. `watch: true` always goes out, exactly once, and
-    // always binds to a connection ID that is actually current — so `watchStatus = Watching` is
-    // truthful by construction rather than by a guard that could be wrong.
+    // Wait for a live socket rather than degrading, so `watch: true` always binds to a current
+    // connection ID and `watchStatus = Watching` is truthful by construction.
     //
-    // Only when this call needs a socket, which is why the options are merged first. Both `watch`
-    // and `presence` are server-side subscriptions keyed by connection ID and the server rejects
-    // either without one; a caller that asked for neither is doing a plain read, and making that
-    // wait turned an explicit `watch: false` into a request that could not be issued offline.
+    // Only when this call needs one, which is why the options are merged first: `watch` and
+    // `presence` are both server-side subscriptions keyed by that ID and the server rejects either
+    // without it, while a caller that asked for neither is doing a plain read and must be able to
+    // issue it offline.
     //
-    // This replaces `await client.wsPromise` plus a `watch: false` downgrade, which was wrong both
-    // ways: `wsPromise` is already resolved during a socket-internal reconnect so the wait did not
-    // cover that case, and the downgrade was gated on the connection ID, which at the time was never
-    // cleared — so during a reconnect it did not downgrade and sent `watch: true` against a dead
-    // connection.
-    //
-    // If the socket does not come back inside the timeout this throws, which is the correct existing
-    // path: the channel stays unwatched, offline support renders it from the local database, and
-    // `ConnectionRecoveryManager` reloads it on the next reconnect.
+    // Throwing on timeout is the intended outcome: the channel stays unwatched, offline support
+    // renders it from the local database, and `ConnectionRecoveryManager` reloads it on the next
+    // reconnect.
     if (combined.watch || combined.presence) await waitForWSConnection(this.getClient());
 
     const state = await this.query(combined, 'latest');

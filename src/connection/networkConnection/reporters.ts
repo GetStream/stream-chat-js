@@ -73,12 +73,9 @@ export const createWSConnectionNetworkStatusReporter =
  * {@link browserNetworkStatusReporter} in a browser, where the platform answers the question
  * properly, and {@link createWSConnectionNetworkStatusReporter} everywhere else.
  *
- * It never returns `undefined` any more. It used to, so that an unconfigured host reported `undefined`
- * rather than a made-up value — but in practice that meant a React Native integration with a missing
- * line of setup had no network signal at all and failed silently, which is harder to notice than a
- * signal that is merely coarse. The honesty is preserved where it matters: the stand-in reports
- * nothing until the socket has been up once, so a client that has never connected still answers
- * `undefined`.
+ * Always returns something, so an integration missing a line of setup gets a coarse signal rather
+ * than none at all, which would fail silently. Nothing is fabricated: the stand-in reports nothing
+ * until the socket has been up once, so a client that has never connected still answers `undefined`.
  */
 export const getDefaultNetworkStatusReporter = (
   wsConnection: WSConnection,

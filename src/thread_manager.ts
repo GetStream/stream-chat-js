@@ -264,25 +264,11 @@ export class ThreadManager extends WithSubscriptions {
   /**
    * Reloads the thread list once recovery after a reconnect has finished.
    *
-   * `connection.recovered` on its own is the whole condition. This used to be gated on a
-   * `lastConnectionDropAt` timestamp this class recorded itself from a connectivity event, and that
-   * gate was wrong in both directions:
+   * `connection.recovered` on its own is the whole condition, with no drop timestamp to gate on:
+   * `ConnectionRecoveryManager` dispatches it on every reconnect path, so it already implies a drop.
    *
-   * - It **missed** recoveries, because that event was not a reliable disconnect signal. Going
-   *   offline was announced late and dropped entirely if the socket returned inside the window, and
-   *   `closeConnection()` — the documented mobile background/foreground path — never announced it at
-   *   all. So a backgrounded app came back to a stale thread list.
-   * - Then it **stopped gating anything**, because the flag was written once and never cleared: the
-   *   setter kept the existing value if there was one, and `reload()` clears `isThreadOrderStale`
-   *   but never touched this.
-   *
-   * The gate is also unnecessary now. `connection.recovered` is dispatched by
-   * `ConnectionRecoveryManager` on every reconnect path, so it already implies a drop happened —
-   * which was not true when this code was written, back when only `_reconnect()` produced it.
-   *
-   * Anything that genuinely needs the drop timestamp should read
-   * `client.wsConnection.state.lastOfflineAt`, which is written on every status transition including
-   * the `disconnect()` path this event is silent about.
+   * Anything that does need the drop timestamp should read `client.wsConnection.state.lastOfflineAt`,
+   * which is written on every status transition.
    */
   private subscribeReloadOnConnectionRecovered = () => {
     const throttledHandleConnectionRecovered = throttle(

@@ -34,18 +34,12 @@ export type WaitForWSConnectionOptions = {
  * Resolves once this client's WebSocket is up, so a caller that needs a live connection ID can wait
  * for one instead of degrading.
  *
- * `channel.watch()` and `client.queryChannels()` used to `await client.wsPromise` and then downgrade
- * to `watch: false` if there was no connection ID. That did not work in either direction: `wsPromise`
- * is only a pending promise while `openConnection()` is in flight and is already resolved during a
- * socket-internal reconnect, so the wait covered the wrong case — and the guard read the connection
- * ID, which at the time was never cleared, so during a reconnect it did not downgrade at all and
- * sent `watch: true` against a dead connection. This waits on `client.wsConnection.state` instead,
- * which is written on every transition.
+ * Waits on `client.wsConnection.state`, which is written on every transition, rather than on
+ * `client.wsPromise`, which is already resolved during a socket-internal reconnect.
  *
  * **Rejects immediately when no socket is expected**, rather than burning the timeout: with no user
  * connected there is nothing to wait for, and after `client.closeConnection()` — the documented
- * mobile backgrounding path — the absence of a socket is deliberate. Without this, opening a channel
- * on a backgrounded app would block for the full timeout before failing.
+ * mobile backgrounding path — the absence of a socket is deliberate.
  *
  * On timeout it rejects too, and the caller is expected to let that propagate: a failed watch leaves
  * the channel unwatched, offline support renders it from the local database, and
@@ -63,18 +57,16 @@ export const waitForWSConnection = (
   }: WaitForWSConnectionOptions = {},
 ): Promise<void> => {
   // Both, not just `isOnline`. The callers need a connection **id** — it is what the server keys a
-  // watch by, and what `api-client` sends as `connection_id` — so resolving on the boolean alone let
-  // a watched query go out before the id existed, and the server rejected it with "Watch or
-  // ChatPresence requires an active websocket connection". The socket now assigns the id before
-  // announcing it is up, so these move together; requiring both means a future reordering surfaces
-  // as a wait that times out rather than as a 400.
+  // watch by, and what `api-client` sends as `connection_id`. The socket assigns the id before
+  // announcing it is up, so requiring both means a reordering surfaces here as a wait that times out
+  // rather than as a 400 from the server.
   const isReady = () =>
     client.wsConnection.isOnline && !!client.wsConnection.connectionID;
 
   if (isReady()) return Promise.resolve();
 
-  // Checked before the rejections below, so an already-abandoned call reports why it was abandoned
-  // rather than complaining about a connection nobody is waiting for any more.
+  // Before the rejections below, so an already-abandoned call reports the abort rather than
+  // complaining about a connection nobody is waiting for.
   if (signal?.aborted) return Promise.reject(abortError(signal));
 
   if (!client.userId) {

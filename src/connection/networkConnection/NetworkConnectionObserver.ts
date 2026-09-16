@@ -59,13 +59,12 @@ export class NetworkConnectionObserver extends WithSubscriptions {
    */
   private installedReporter?: NetworkStatusReporter;
   /**
-   * What {@link setStatusReporter} was last given — `null` when it was used to clear one,
-   * and `undefined` when it has never been called.
+   * What {@link setStatusReporter} was last given — `null` to clear one, `undefined` when it has
+   * never been called.
    *
-   * Held here rather than written into the resolved configuration because a derivation rebuilds that
-   * from the declarative tree, so an imperatively installed reporter was torn down by the next
-   * `client.config.set` on **any** `client` key and replaced by the platform default, which is
-   * nothing at all on React Native.
+   * Held here rather than written into the resolved configuration, which a derivation rebuilds from
+   * the declarative tree: a reporter set imperatively has to survive `client.config.set` on any
+   * `client` key.
    */
   private imperativeReporter?: NetworkStatusReporter | null;
   /**

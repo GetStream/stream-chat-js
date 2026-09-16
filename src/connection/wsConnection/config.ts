@@ -25,8 +25,8 @@ export const DEFAULT_WS_CONNECTION_CONFIG: WSConnectionConfig = deepFreezeConfig
  * returned is the one moment an immediate retry is likely to succeed. Not zero, so the retry lands in
  * a later task, after whatever else is reacting to the same edge.
  *
- * A constant rather than configuration: it was a bare `_reconnect({ interval: 10 })` that nothing
- * could reach, so exposing it would be new surface rather than a preserved capability.
+ * A constant rather than configuration: it was a bare `_reconnect({ interval: 10 })` nothing could
+ * reach, so exposing it would add surface rather than preserve it.
  */
 export const WS_NETWORK_RECOVERY_RETRY_MS = 10;
 
@@ -52,11 +52,7 @@ export const WS_CONNECTION_CONFIG_BOUNDS: {
    * 1s is not a judgement about the right value; it is the point below which the loop cannot work.
    */
   healthCheckGracePeriodMs: { min: 1_000 },
-  /**
-   * Floored at zero rather than at some minimum wait, because zero is a legitimate setting: it means
-   * report a drop the moment it happens. A negative delay is not a faster setting, it is a
-   * `setTimeout` that fires immediately while reading as though it defers.
-   */
+  /** Zero is legitimate — hold nothing back — so the floor only rejects a negative delay. */
   offlineNotificationDisplayDelayMs: { min: 0 },
   /**
    * **The maximum is the default**, which means this setting can only ever make the socket ping

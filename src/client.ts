@@ -335,9 +335,7 @@ export class StreamChat extends ChatApi {
       this.setBaseURL(`http://${streamLocalTestHost}`);
     }
 
-    // Before the WebSocket, which subscribes to this one's store. The dependency used to run through
-    // the client's event bus, which did not care about construction order; a direct store reference
-    // does.
+    // Before the WebSocket, which subscribes to this one's store.
     this.networkConnection = new NetworkConnectionObserver({ client: this });
     this.networkConnection.registerSubscriptions();
 
@@ -1407,20 +1405,15 @@ export class StreamChat extends ChatApi {
           ...restOptions,
         };
 
-    // Same treatment as `channel.watch()`: wait for a live socket rather than degrade, so
-    // `watch: true` always goes out and always binds to a current connection ID.
+    // Same treatment as `channel.watch()`: wait for a live socket rather than degrade, and only when
+    // this query needs one. `watch` and `presence` are both server-side subscriptions keyed by the
+    // connection ID and the server rejects either without it; a plain read must be issuable offline.
     //
-    // Only when this query actually needs one. Both `watch` and `presence` are server-side
-    // subscriptions keyed by connection ID — the server rejects either without one — while a plain
-    // read needs no socket at all, and making it wait for one turned `watch: false` into a request
-    // that could not be issued offline.
+    // Waiting is safe rather than a hang because v10 has no server-side surface — the constructor
+    // takes no `secret` — so there is no client that can never open a socket.
     //
-    // The `TODO: probably serverside only thing` that guarded the old downgrade is gone with it.
-    // There is no server-side surface in v10 — the constructor takes no `secret` — so there is no
-    // client that can never open a socket, which is what makes waiting safe here rather than a hang.
-    // The caller's signal reaches the wait as well as the request. Without it an abandoned query
-    // still held its timer for the whole connect budget, since the abort could only land on an HTTP
-    // call that had not been made yet.
+    // The caller's signal reaches the wait as well as the request, so an abandoned query does not
+    // hold its timer for the whole connect budget.
     if (payload.watch || payload.presence) {
       await waitForWSConnection(this, { signal: requestOptions?.signal });
     }
@@ -1576,10 +1569,8 @@ export class StreamChat extends ChatApi {
       // otherwise we watch only if there is a connection to watch on. Offline hydration populates
       // state without a live watch, so it never counts - and a query that did not watch leaves the
       // status untouched (it neither starts nor ends a watch).
-      // Kept as a backstop for a caller who passes `watch: true` explicitly. The default arm is now
-      // truthful rather than hopeful: `queryChannels` waits for a live socket, so by the time this
-      // runs the socket really is up. `isOnline` rather than the connection ID because the two now
-      // move together, and the boolean is the one that says what this is asking.
+      // A backstop for a caller who passes `watch: true` explicitly. The default arm reads `isOnline`
+      // rather than the connection ID, because the boolean is the one that says what this asks.
       if (!offlineMode && (queryChannelsOptions?.watch ?? this.wsConnection.isOnline)) {
         c.watchStatus = ChannelWatchStatus.Watching;
       }

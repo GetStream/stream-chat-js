@@ -162,9 +162,7 @@ export class WSConnection extends WithSubscriptions {
    * Records this WebSocket's status. Returns whether it changed.
    *
    * {@link StableWSConnection} is the only caller, and it routes **every** status transition through
-   * here — including `disconnect()`, which `closeConnection()` uses, and the two error paths. Those
-   * were the transitions the old connectivity event stayed silent about, and covering them is the
-   * reason this store is worth publishing at all.
+   * here — including `disconnect()`, which `closeConnection()` uses, and the two error paths.
    *
    * @internal
    */
@@ -182,11 +180,9 @@ export class WSConnection extends WithSubscriptions {
       isOnline
         ? // The socket assigns its `connectionID` before announcing it is up, so this is current here.
           { isOnline, connectionId, lastOnlineAt: now }
-        : // Cleared on the way down, because the id is dead the moment the socket is: the server keys
-          // watches by it and rejects a request carrying one it has closed. This object outlives every
-          // socket it wraps, so nothing else would clear it — before, `api-client` kept sending the
-          // previous id, including the previous *user's* after a `disconnectUser()`. The socket used
-          // to be rebuilt per connect, which is what used to reset this.
+        : // Cleared on the way down: the id is dead the moment the socket is, and the server rejects a
+          // request carrying one it has closed. This object outlives every socket it wraps, so
+          // nothing else would clear it.
           { isOnline, connectionId: undefined, lastOfflineAt: now },
     );
 
@@ -196,10 +192,9 @@ export class WSConnection extends WithSubscriptions {
   /**
    * Routes the device's network status to whichever socket is current.
    *
-   * One subscription, registered once with the client. The socket used to hold this itself, which
-   * leaked on every replacement and needed re-subscribing from both its constructor and `setClient` —
-   * because the injected-connection option allows a socket to be built before its client exists. None
-   * of that applies here: this object is created with the client and never replaced.
+   * One subscription, held here rather than on the socket: this object is created with the client and
+   * never replaced, while a socket is replaced on every connect and may be built before its client
+   * exists at all.
    *
    * Read from the store rather than from an event, so there is one description of the device's
    * network rather than two that can disagree.
