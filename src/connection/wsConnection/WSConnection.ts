@@ -45,7 +45,14 @@ export class WSConnection extends WithSubscriptions {
    * @internal
    */
   connection: StableWSConnection | null = null;
-  private client: StreamChat;
+  /**
+   * Readable by the socket this object owns, which reaches the client through its parent rather than
+   * holding one of its own. Not part of the public surface — `client.wsConnection.client` is a
+   * round trip back to where you started.
+   *
+   * @internal
+   */
+  readonly client: StreamChat;
   /** The shared configuration machinery — see {@link ConfigController}. */
   private readonly configController: ConfigController<WSConnectionConfig>;
   /**
@@ -261,17 +268,17 @@ export class WSConnection extends WithSubscriptions {
 
   /**
    * `config.connection` lets a caller supply a pre-built socket — used by unit tests, and the reason
-   * `StableWSConnection` accepts a client through `setClient` as well as its constructor.
+   * `StableWSConnection` accepts a parent through `setWSConnection` as well as its constructor.
    */
   private buildConnection(): StableWSConnection {
     const injected = this.config.connection;
 
     if (injected && this.client.node) {
-      injected.setClient(this.client);
+      injected.setWSConnection(this);
       return injected;
     }
 
-    return new StableWSConnection({ client: this.client });
+    return new StableWSConnection({ wsConnection: this });
   }
 
   disconnect(timeout?: number): Promise<void> | undefined {

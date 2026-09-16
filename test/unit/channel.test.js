@@ -410,7 +410,9 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 		// `watch()` used to send `watch: false` here and resolve with unwatched data, which is what made
 		// a false `Watching` possible elsewhere. It now waits for a live socket and throws if one does
 		// not arrive, leaving the status untouched.
-		client.wsConnection.connection = new StableWSConnection({ client });
+		client.wsConnection.connection = new StableWSConnection({
+			wsConnection: client.wsConnection,
+		});
 		client.wsConnection._setStatus({ isOnline: false });
 		// The wait defaults to the socket's own connect budget, so shortening that shortens the wait.
 		client.config.set({ client: { wsConnection: { connectTimeoutMs: 20 } } });
@@ -423,7 +425,9 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 	it('does not wait for a socket when the caller asked for no watch and no presence', async () => {
 		// A plain read needs no connection ID, so an explicit `watch: false` must not be made to wait
 		// for one — which is what turned it into a call that could not be issued offline.
-		client.wsConnection.connection = new StableWSConnection({ client });
+		client.wsConnection.connection = new StableWSConnection({
+			wsConnection: client.wsConnection,
+		});
 		client.wsConnection._setStatus({ isOnline: false });
 		client.config.set({ client: { wsConnection: { connectTimeoutMs: 60_000 } } });
 		const query = sinon
@@ -439,7 +443,7 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 	it('rejects at once after a deliberate closeConnection, not on the timeout', async () => {
 		// The mobile backgrounding path. The absence of a socket is intentional there, so opening a
 		// channel must fail immediately rather than block for the full wait.
-		const socket = new StableWSConnection({ client });
+		const socket = new StableWSConnection({ wsConnection: client.wsConnection });
 		socket.isDisconnected = true;
 		client.wsConnection.connection = socket;
 		client.wsConnection._setStatus({ isOnline: false });
@@ -449,7 +453,9 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 	});
 
 	it('issues exactly one watched request once a socket arrives while it waits', async () => {
-		client.wsConnection.connection = new StableWSConnection({ client });
+		client.wsConnection.connection = new StableWSConnection({
+			wsConnection: client.wsConnection,
+		});
 		client.wsConnection._setStatus({ isOnline: false });
 		const query = sinon.spy(channel, 'query');
 
@@ -594,7 +600,7 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 	it('is demoted when the WS connection reports itself unhealthy', async () => {
 		await channel.watch();
 		const sweep = vi.spyOn(client, '_markActiveChannelsWatchInterrupted');
-		const connection = new StableWSConnection({ client });
+		const connection = new StableWSConnection({ wsConnection: client.wsConnection });
 		connection.isOnline = true;
 
 		connection._setOnline(false);

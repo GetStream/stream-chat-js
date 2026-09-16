@@ -19,7 +19,9 @@ describe('client.queryChannels and the WebSocket', () => {
   let request: ReturnType<typeof vi.fn>;
 
   const socketDown = () => {
-    client.wsConnection.connection = new StableWSConnection({ client });
+    client.wsConnection.connection = new StableWSConnection({
+      wsConnection: client.wsConnection,
+    });
     client.wsConnection._setStatus({ isOnline: false });
   };
 
@@ -140,7 +142,7 @@ describe('client.queryChannels and the WebSocket', () => {
   });
 
   it('rejects at once after closeConnection rather than burning the timeout', async () => {
-    const socket = new StableWSConnection({ client });
+    const socket = new StableWSConnection({ wsConnection: client.wsConnection });
     socket.isDisconnected = true;
     client.wsConnection.connection = socket;
     client.wsConnection._setStatus({ isOnline: false });
@@ -183,7 +185,9 @@ describe('client.queryChannels and the WebSocket', () => {
       const { getChannel } = await import('../../src/pagination/utility.queryChannel');
       const channel = client.channel('messaging', 'shared');
       client.wsConnection._setStatus({ isOnline: false });
-      client.wsConnection.connection = new StableWSConnection({ client });
+      client.wsConnection.connection = new StableWSConnection({
+        wsConnection: client.wsConnection,
+      });
       vi.spyOn(channel, 'watch').mockResolvedValue(undefined as never);
 
       const both = Promise.all([
@@ -203,7 +207,9 @@ describe('client.queryChannels and the WebSocket', () => {
       const channel = client.channel('messaging', 'timed-out');
       channel.initialized = true;
       channel.activate();
-      client.wsConnection.connection = new StableWSConnection({ client });
+      client.wsConnection.connection = new StableWSConnection({
+        wsConnection: client.wsConnection,
+      });
       client.wsConnection._setStatus({ isOnline: false });
       client.config.set({ client: { wsConnection: { connectTimeoutMs: 20 } } });
 

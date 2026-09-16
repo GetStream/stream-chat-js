@@ -49,8 +49,12 @@ describe('client.wsConnection', () => {
       store.subscribe(onChange);
       onChange.mockClear();
 
-      client.wsConnection.connection = new StableWSConnection({ client });
-      client.wsConnection.connection = new StableWSConnection({ client });
+      client.wsConnection.connection = new StableWSConnection({
+        wsConnection: client.wsConnection,
+      });
+      client.wsConnection.connection = new StableWSConnection({
+        wsConnection: client.wsConnection,
+      });
 
       expect(client.wsConnection).toBe(wrapper);
       expect(client.wsConnection.state).toBe(store);
@@ -61,12 +65,16 @@ describe('client.wsConnection', () => {
     });
 
     it('answers isOnline from the store, not from the freshly-built socket', () => {
-      client.wsConnection.connection = new StableWSConnection({ client });
+      client.wsConnection.connection = new StableWSConnection({
+        wsConnection: client.wsConnection,
+      });
       client.wsConnection.connection._setOnline(true);
 
       // A replacement socket starts internally down. If `isOnline` read the socket we would
       // report a regression to `false` here, having never gone down.
-      client.wsConnection.connection = new StableWSConnection({ client });
+      client.wsConnection.connection = new StableWSConnection({
+        wsConnection: client.wsConnection,
+      });
 
       expect(client.wsConnection.isOnline).toBe(true);
     });
@@ -78,10 +86,10 @@ describe('client.wsConnection', () => {
       // overwrites `connection` *without* disconnecting the previous one. Held per socket, the old
       // subscription would survive and a dead socket would keep reacting to network-online by
       // calling `_reconnect()` on itself.
-      const stale = new StableWSConnection({ client });
+      const stale = new StableWSConnection({ wsConnection: client.wsConnection });
       client.wsConnection.connection = stale;
 
-      const current = new StableWSConnection({ client });
+      const current = new StableWSConnection({ wsConnection: client.wsConnection });
       client.wsConnection.connection = current;
 
       const staleApply = vi.spyOn(stale, '_applyNetworkStatus');
@@ -96,15 +104,21 @@ describe('client.wsConnection', () => {
     it('registers exactly one listener however many sockets come and go', () => {
       const before = client.listeners.get('connection.changed')?.size ?? 0;
 
-      client.wsConnection.connection = new StableWSConnection({ client });
-      client.wsConnection.connection = new StableWSConnection({ client });
-      client.wsConnection.connection = new StableWSConnection({ client });
+      client.wsConnection.connection = new StableWSConnection({
+        wsConnection: client.wsConnection,
+      });
+      client.wsConnection.connection = new StableWSConnection({
+        wsConnection: client.wsConnection,
+      });
+      client.wsConnection.connection = new StableWSConnection({
+        wsConnection: client.wsConnection,
+      });
 
       expect(client.listeners.get('connection.changed')?.size ?? 0).toBe(before);
     });
 
     it('stops routing once unregistered', () => {
-      const connection = new StableWSConnection({ client });
+      const connection = new StableWSConnection({ wsConnection: client.wsConnection });
       client.wsConnection.connection = connection;
       const apply = vi.spyOn(connection, '_applyNetworkStatus');
 
@@ -251,7 +265,9 @@ describe('client.wsConnection', () => {
 
   describe('delegated members', () => {
     beforeEach(() => {
-      client.wsConnection.connection = new StableWSConnection({ client });
+      client.wsConnection.connection = new StableWSConnection({
+        wsConnection: client.wsConnection,
+      });
     });
 
     it('forwards isConnecting', () => {

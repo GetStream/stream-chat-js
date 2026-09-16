@@ -24,7 +24,7 @@ const clientWithSocket = () => {
   const source = fakeReporter();
   client.networkConnection.setStatusReporter(source.reporter);
 
-  const connection = new StableWSConnection({ client });
+  const connection = new StableWSConnection({ wsConnection: client.wsConnection });
   client.wsConnection.connection = connection;
 
   return { client, connection, source };
@@ -37,7 +37,7 @@ describe('socket ↔ network wiring', () => {
       vi.stubGlobal('window', { addEventListener, removeEventListener: vi.fn() });
 
       const client = new StreamChat('api-key');
-      new StableWSConnection({ client });
+      new StableWSConnection({ wsConnection: client.wsConnection });
 
       const networkListeners = addEventListener.mock.calls.filter(([type]) =>
         ['online', 'offline'].includes(type as string),
@@ -58,7 +58,7 @@ describe('socket ↔ network wiring', () => {
       client.networkConnection.setStatusReporter(source.reporter);
       source.emit(true);
 
-      const connection = new StableWSConnection({ client });
+      const connection = new StableWSConnection({ wsConnection: client.wsConnection });
       const reconnect = vi.spyOn(connection, '_reconnect').mockResolvedValue(undefined);
 
       expect(reconnect).not.toHaveBeenCalled();

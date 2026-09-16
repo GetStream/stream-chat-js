@@ -152,7 +152,7 @@ describe('connection', function () {
 	describe('Connection _buildUrl', function () {
 		const client = newStreamChat();
 		client.wsBaseURL = 'https://stream-dummy-test.com';
-		const ws = new StableWSConnection({ client });
+		const ws = new StableWSConnection({ wsConnection: client.wsConnection });
 
 		it('should create the correct url', function () {
 			const { host, pathname, query } = url.parse(ws._buildUrl(), true);
@@ -183,7 +183,7 @@ describe('connection', function () {
 			anonClient.user = anonUser;
 			anonClient._user = anonUser;
 			const { query } = url.parse(
-				new StableWSConnection({ client: anonClient })._buildUrl(),
+				new StableWSConnection({ wsConnection: anonClient.wsConnection })._buildUrl(),
 				true,
 			);
 
@@ -223,7 +223,7 @@ describe('connection', function () {
 		afterEach(() => MockWebSocket.reset());
 
 		const connectAndGetFrame = async (client) => {
-			const c = new StableWSConnection({ client });
+			const c = new StableWSConnection({ wsConnection: client.wsConnection });
 			await c.connect();
 			const [socket] = MockWebSocket.instances;
 			return { c, socket, frame: JSON.parse(socket.sent[0]) };
@@ -296,7 +296,7 @@ describe('connection', function () {
 			const client = newStreamChat();
 			client.tokenManager = new TokenManager();
 
-			const c = new StableWSConnection({ client });
+			const c = new StableWSConnection({ wsConnection: client.wsConnection });
 			await expect(c.connect(200)).rejects.toThrow();
 			// Failing fast matters: an opened-but-unauthenticated socket would otherwise
 			// sit there until the server's 10s auth deadline killed it.
@@ -304,7 +304,7 @@ describe('connection', function () {
 		});
 
 		it('should not send the auth frame for a superseded socket', async () => {
-			const c = new StableWSConnection({ client: newStreamChat() });
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
 			const socket = {
 				readyState: MockWebSocket.OPEN,
 				OPEN: MockWebSocket.OPEN,
@@ -323,7 +323,7 @@ describe('connection', function () {
 		});
 
 		it('should not send the auth frame when the socket is already gone', async () => {
-			const c = new StableWSConnection({ client: newStreamChat() });
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
 			c.ws = undefined;
 
 			expect(() => c.onopen(c.wsID, '{"token":"t.oke.n"}')).to.not.throw();
@@ -331,7 +331,7 @@ describe('connection', function () {
 
 		it('should reject the connection when the auth frame cannot be sent', async () => {
 			MockWebSocket.sendThrows = true;
-			const c = new StableWSConnection({ client: newStreamChat() });
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
 
 			await expect(c.connect(200)).rejects.toThrow();
 		});
@@ -345,7 +345,7 @@ describe('connection', function () {
 		afterEach(() => MockWebSocket.reset());
 
 		it('should resolve the connection and set the connection id', async () => {
-			const c = new StableWSConnection({ client: newStreamChat() });
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
 			const health = await c.connect();
 
 			expect(health.type).to.equal('connection.ok');
@@ -355,7 +355,7 @@ describe('connection', function () {
 		});
 
 		it('passes wire timestamps through untouched', async () => {
-			const c = new StableWSConnection({ client: newStreamChat() });
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
 			const health = await c.connect();
 
 			// Nothing decodes frames any more: every timestamp stays the unix-nanosecond number the
@@ -365,7 +365,7 @@ describe('connection', function () {
 		});
 
 		it('should schedule the next ping', async () => {
-			const c = new StableWSConnection({ client: newStreamChat() });
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
 			const spy = sinon.spy(c, 'scheduleNextPing');
 			await c.connect();
 
@@ -377,7 +377,7 @@ describe('connection', function () {
 		it('should reject when the first frame is connection.error', async () => {
 			MockWebSocket.helloPayload =
 				'{"type":"connection.error","error":{"code":42,"message":"nope","StatusCode":401}}';
-			const c = new StableWSConnection({ client: newStreamChat() });
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
 
 			await expect(c.connect(200)).rejects.toThrow();
 		});
@@ -385,14 +385,14 @@ describe('connection', function () {
 
 	describe('isResolved flag', () => {
 		it('should set isResolved', async () => {
-			const c = new StableWSConnection({ client: newStreamChat() });
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
 			expect(c.isResolved).to.be.false;
 			await c.connect();
 			expect(c.isResolved).to.be.true;
 		});
 
 		it('onmessage should ignore calling isResolved after promise is resolved', () => {
-			const c = new StableWSConnection({ client: newStreamChat() });
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
 			expect(c.isResolved).to.be.false;
 			c.rejectPromise = sinon.spy();
 			c.resolvePromise = sinon.spy();
@@ -410,7 +410,7 @@ describe('connection', function () {
 		it('onmessage parses event.data once and dispatches the parsed payload', () => {
 			const client = newStreamChat();
 			client.dispatchEvent = sinon.spy();
-			const c = new StableWSConnection({ client });
+			const c = new StableWSConnection({ wsConnection: client.wsConnection });
 			c.isResolved = true;
 			c.scheduleConnectionCheck = () => null;
 
@@ -424,13 +424,13 @@ describe('connection', function () {
 
 	describe('isConnecting flag', () => {
 		it('connect should throw if already connecting', async () => {
-			const c = new StableWSConnection({ client: newStreamChat() });
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
 			c.isConnecting = true;
 			await expect(c.connect()).rejects.toThrow(/called connect twice/);
 		});
 
 		it('_recover should not call _connect if isConnecting is set', async () => {
-			const c = new StableWSConnection({ client: newStreamChat() });
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
 			c._connect = sinon.spy();
 			c.isConnecting = true;
 			await c._reconnect();
@@ -438,7 +438,7 @@ describe('connection', function () {
 		});
 
 		it('onclose should update isConnecting and call _reconnect', async () => {
-			const c = new StableWSConnection({ client: newStreamChat() });
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
 			c._reconnect = sinon.spy();
 			c.isConnecting = true;
 			c.onclose(c.wsID, {});
@@ -447,7 +447,7 @@ describe('connection', function () {
 		});
 
 		it('onerror should update isConnecting and call _reconnect', async () => {
-			const c = new StableWSConnection({ client: newStreamChat() });
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
 			c._reconnect = sinon.spy();
 			c.isConnecting = true;
 			c.onerror(c.wsID, {});
@@ -459,7 +459,7 @@ describe('connection', function () {
 			const client = newStreamChat();
 			client.wsConnection.updateConfig({ webSocketImpl: FailingWebSocket });
 			client.wsBaseURL = 'https://stream-dummy-test.com';
-			const c = new StableWSConnection({ client });
+			const c = new StableWSConnection({ wsConnection: client.wsConnection });
 
 			expect(c.isConnecting).to.be.false;
 			const connection = c.connect(1000);
@@ -471,7 +471,7 @@ describe('connection', function () {
 		});
 
 		it('should set and unset the flag correctly with opening WS', async () => {
-			const c = new StableWSConnection({ client: newStreamChat() });
+			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
 			expect(c.isConnecting).to.be.false;
 			let connection = c.connect();
 			expect(c.isConnecting).to.be.true;

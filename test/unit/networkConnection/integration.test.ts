@@ -36,7 +36,7 @@ const platformListener = () => {
 
 const clientWithSocket = () => {
   const client = new StreamChat('api-key-e2e');
-  const connection = new StableWSConnection({ client });
+  const connection = new StableWSConnection({ wsConnection: client.wsConnection });
   client.wsConnection.connection = connection;
   client.wsConnection.registerSubscriptions();
   const reconnect = vi.spyOn(connection, '_reconnect').mockResolvedValue(undefined);

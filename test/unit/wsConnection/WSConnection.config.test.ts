@@ -23,7 +23,10 @@ describe('client.wsConnection configuration', () => {
       // this test to be the thing that asks whether you meant to.
       expect(client.wsConnection.config.connectTimeoutMs).toBe(15000);
       expect(client.wsConnection.config.pingIntervalMs).toBe(25000);
-      expect(new StableWSConnection({ client }).connectionCheckTimeout).toBe(35000);
+      expect(
+        new StableWSConnection({ wsConnection: client.wsConnection })
+          .connectionCheckTimeout,
+      ).toBe(35000);
       expect(WS_OFFLINE_ANNOUNCE_DELAY_MS).toBe(5000);
       expect(WS_NETWORK_RECOVERY_RETRY_MS).toBe(10);
     });
@@ -43,7 +46,7 @@ describe('client.wsConnection configuration', () => {
     });
 
     it('keeps the 25s ping / 35s connection check pair the socket documents', () => {
-      const socket = new StableWSConnection({ client });
+      const socket = new StableWSConnection({ wsConnection: client.wsConnection });
 
       expect(socket.pingInterval).toBe(25_000);
       expect(socket.connectionCheckTimeout).toBe(35_000);
@@ -55,7 +58,7 @@ describe('client.wsConnection configuration', () => {
       // The trap this test exists for: `connectionCheckTimeout` used to be computed once in the
       // constructor, so changing the ping interval left the connection check behind.
       // Downward, because 25s is the ceiling as well as the default.
-      const socket = new StableWSConnection({ client });
+      const socket = new StableWSConnection({ wsConnection: client.wsConnection });
 
       client.config.set({ client: { wsConnection: { pingIntervalMs: 10_000 } } });
 
@@ -64,7 +67,7 @@ describe('client.wsConnection configuration', () => {
     });
 
     it('lets the grace period be widened without touching the ping interval', () => {
-      const socket = new StableWSConnection({ client });
+      const socket = new StableWSConnection({ wsConnection: client.wsConnection });
 
       client.wsConnection.updateConfig({ healthCheckGracePeriodMs: 30_000 });
 
@@ -75,7 +78,7 @@ describe('client.wsConnection configuration', () => {
 
   describe('reading live rather than snapshotting', () => {
     it('reaches a socket that is already built', () => {
-      const socket = new StableWSConnection({ client });
+      const socket = new StableWSConnection({ wsConnection: client.wsConnection });
 
       client.wsConnection.updateConfig({ connectTimeoutMs: 1234 });
 
@@ -126,7 +129,7 @@ describe('client.wsConnection configuration', () => {
           wsConnection: { networkRecoveryRetryMs: 999 },
         },
       });
-      const socket = new StableWSConnection({ client });
+      const socket = new StableWSConnection({ wsConnection: client.wsConnection });
       const reconnect = vi.spyOn(socket, '_reconnect').mockResolvedValue(undefined);
 
       socket._applyNetworkStatus(true);
@@ -161,7 +164,7 @@ describe('client.wsConnection configuration', () => {
       // The cap *is* the default, so this setting can only ever ping more often, never less — a
       // slower ping risks the connection being closed for idleness.
       const capped = new StreamChat('api-key-ws-cap');
-      const socket = new StableWSConnection({ client: capped });
+      const socket = new StableWSConnection({ wsConnection: capped.wsConnection });
 
       capped.config.set({ client: { wsConnection: { pingIntervalMs: 60_000 } } });
 
@@ -209,7 +212,7 @@ describe('client.wsConnection configuration', () => {
       // debounce by the same amount; the status itself is published the moment it changes.
       vi.useFakeTimers();
       try {
-        const socket = new StableWSConnection({ client });
+        const socket = new StableWSConnection({ wsConnection: client.wsConnection });
         socket._setOnline(true);
         const dispatch = vi.spyOn(client, 'dispatchEvent');
 
@@ -226,7 +229,7 @@ describe('client.wsConnection configuration', () => {
 
   describe('the network-recovery retry', () => {
     it('is what the network-online path schedules its reconnect with', () => {
-      const socket = new StableWSConnection({ client });
+      const socket = new StableWSConnection({ wsConnection: client.wsConnection });
       const reconnect = vi.spyOn(socket, '_reconnect').mockResolvedValue(undefined);
 
       socket._applyNetworkStatus(true);

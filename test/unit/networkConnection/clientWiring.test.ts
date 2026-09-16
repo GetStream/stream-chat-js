@@ -110,7 +110,9 @@ describe('client wiring — network + ws status', () => {
 
     beforeEach(() => {
       client = new StreamChat('api-key');
-      client.wsConnection.connection = new StableWSConnection({ client });
+      client.wsConnection.connection = new StableWSConnection({
+        wsConnection: client.wsConnection,
+      });
     });
 
     it('reports nothing before the socket has ever been up', () => {
@@ -183,8 +185,12 @@ describe('client wiring — network + ws status', () => {
       store.subscribe(onChange);
       onChange.mockClear();
 
-      client.wsConnection.connection = new StableWSConnection({ client });
-      client.wsConnection.connection = new StableWSConnection({ client });
+      client.wsConnection.connection = new StableWSConnection({
+        wsConnection: client.wsConnection,
+      });
+      client.wsConnection.connection = new StableWSConnection({
+        wsConnection: client.wsConnection,
+      });
 
       expect(client.wsConnection.state).toBe(store);
 

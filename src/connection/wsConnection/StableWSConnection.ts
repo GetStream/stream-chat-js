@@ -13,6 +13,7 @@ import {
 import { chatLoggerSystem } from '../../logger';
 import { DEFAULT_WS_CONNECTION_CONFIG, WS_NETWORK_RECOVERY_RETRY_MS } from './config';
 import type { ConnectAPIResponse, ConnectedEvent, ConnectionOpen } from '../../types';
+import type { WSConnection } from './WSConnection';
 import type { StreamChat } from '../../client';
 import type { APIError } from '../../errors';
 import type { WSEvent } from '../../gen/models';
@@ -76,7 +77,12 @@ class WSCloseError extends Error {
  */
 export class StableWSConnection {
   // global from constructor
-  client: StreamChat;
+  /**
+   * The `WSConnection` this socket belongs to. Held instead of the client, because everything the
+   * socket needs from the client it can reach through here — and the one thing it needs from the
+   * parent, the status store, it used to reach by going back out through `this.client.wsConnection`.
+   */
+  wsConnection: WSConnection;
 
   // local vars
   connectionID?: string;
@@ -102,9 +108,9 @@ export class StableWSConnection {
   ws?: WebSocket;
   wsID: number;
 
-  constructor({ client }: { client: StreamChat }) {
-    /** StreamChat client */
-    this.client = client;
+  constructor({ wsConnection }: { wsConnection: WSConnection }) {
+    /** The `WSConnection` that owns this socket */
+    this.wsConnection = wsConnection;
     /** consecutive failures influence the duration of the timeout */
     this.consecutiveFailures = 0;
     /** keep track of the total number of failures */
@@ -124,15 +130,15 @@ export class StableWSConnection {
   }
 
   /**
-   * The timing knobs, read from `client.wsConnection.config` **live** rather than snapshotted, so an
-   * `updateConfig` reaches the socket that is already open instead of only the next one.
+   * The timing knobs, read from the parent **live** rather than snapshotted, so an `updateConfig`
+   * reaches the socket that is already open instead of only the next one.
    *
-   * Falls back to the package defaults when there is no client to ask. That is not hypothetical:
-   * `options.wsConnection` lets a socket be constructed before its client exists and handed one later
-   * through {@link setClient}, so between those two moments there is nothing to read from.
+   * Falls back to the package defaults when there is no parent to ask. That is not hypothetical:
+   * `config.connection` lets a socket be constructed before the client that will own it exists, and
+   * adopt a parent later through {@link setWSConnection}.
    */
   private get config(): WSConnectionConfig {
-    return this.client?.wsConnection?.config ?? DEFAULT_WS_CONNECTION_CONFIG;
+    return this.wsConnection?.config ?? DEFAULT_WS_CONNECTION_CONFIG;
   }
 
   /** How often a health-check ping goes out. Configurable as `pingIntervalMs`. */
@@ -151,8 +157,17 @@ export class StableWSConnection {
     return this.config.pingIntervalMs + this.config.healthCheckGracePeriodMs;
   }
 
-  setClient(client: StreamChat) {
-    this.client = client;
+  /** The client, reached through the parent. See {@link wsConnection}. */
+  get client(): StreamChat {
+    return this.wsConnection?.client;
+  }
+
+  /**
+   * Adopts a parent after construction, for a socket supplied through `config.connection` and
+   * therefore built before the client that will own it exists.
+   */
+  setWSConnection(wsConnection: WSConnection) {
+    this.wsConnection = wsConnection;
   }
 
   /**
@@ -538,9 +553,9 @@ export class StableWSConnection {
   /**
    * Applies a reported change in the `'network'` connection to the `'ws'` connection this class owns.
    *
-   * The single body behind both entry points — the network-store subscription that
-   * `client.wsConnection` owns, and the deprecated {@link onlineStatusChanged} shim React Native still
-   * calls — so the two cannot drift.
+   * The single body behind both entry points — the network-store subscription the parent owns, and
+   * the deprecated {@link onlineStatusChanged} shim React Native still calls — so the two cannot
+   * drift.
    *
    * @internal
    */
@@ -730,9 +745,10 @@ export class StableWSConnection {
 
     this.isOnline = online;
 
-    // Optional chaining because `options.wsConnection` lets a socket be constructed before its
-    // client exists, and handed one later through `setClient`.
-    this.client?.wsConnection._setStatus({
+    // Straight to the parent. This used to go back out through `this.client.wsConnection` to reach
+    // the object that owns this one. Optional chaining because a socket supplied through
+    // `config.connection` is built before it has a parent, and adopts one later.
+    this.wsConnection?._setStatus({
       isOnline: online,
       connectionId: this.connectionID,
     });
