@@ -223,6 +223,57 @@ describe('NetworkConnectionObserver', () => {
       expect(observer.isOnline).toBe(false);
     });
 
+    it('keeps an imperatively installed registrar across a derivation', () => {
+      // `client.config.set` on any `client` key re-derives every manager. Before this, that tore the
+      // registrar down and installed the platform default in its place, which on React Native is
+      // nothing — so the device's status silently froze at whatever was last reported.
+      const source = fakeRegistrar();
+      observer.setStatusListenerRegistrar(source.registrar);
+
+      observer.initializeConfig();
+
+      expect(source.unsubscribe).not.toHaveBeenCalled();
+      source.emit(true);
+      expect(observer.isOnline).toBe(true);
+    });
+
+    it('keeps an imperative clear across a derivation', () => {
+      const source = fakeRegistrar();
+      observer.setStatusListenerRegistrar(source.registrar);
+      observer.setStatusListenerRegistrar(null);
+
+      observer.initializeConfig();
+
+      // Not resurrected as the platform default either: "explicitly none" is a decision, not an
+      // absence of one.
+      expect(observer.config.statusListenerRegistrar).toBeUndefined();
+      expect(observer.isOnline).toBeUndefined();
+    });
+
+    it('lets the declarative tree supersede an earlier imperative registrar', () => {
+      const imperative = fakeRegistrar();
+      observer.setStatusListenerRegistrar(imperative.registrar);
+
+      const declared = fakeRegistrar();
+      observer.initializeConfig({ statusListenerRegistrar: declared.registrar });
+
+      expect(imperative.unsubscribe).toHaveBeenCalledTimes(1);
+      declared.emit(false);
+      expect(observer.isOnline).toBe(false);
+    });
+
+    it('lets a later imperative registrar supersede the declared one', () => {
+      const declared = fakeRegistrar();
+      observer.initializeConfig({ statusListenerRegistrar: declared.registrar });
+
+      const imperative = fakeRegistrar();
+      observer.setStatusListenerRegistrar(imperative.registrar);
+
+      expect(declared.unsubscribe).toHaveBeenCalledTimes(1);
+      imperative.emit(true);
+      expect(observer.isOnline).toBe(true);
+    });
+
     it('installs the registrar handed to updateConfig', () => {
       // Storing it without installing it is indistinguishable from a host that has no registrar at
       // all: no listener, no error, and `isOnline` unknown forever.

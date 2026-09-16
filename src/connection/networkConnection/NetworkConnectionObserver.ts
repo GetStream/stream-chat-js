@@ -57,6 +57,22 @@ export class NetworkConnectionObserver extends WithSubscriptions {
    * identical is wasteful at best and, for something like `NetInfo`, a needless native round trip.
    */
   private installedRegistrar?: NetworkStatusListenerRegistrar;
+  /**
+   * What {@link setStatusListenerRegistrar} was last given — `null` when it was used to clear one,
+   * and `undefined` when it has never been called.
+   *
+   * Held here rather than written into the resolved configuration because a derivation rebuilds that
+   * from the declarative tree, so an imperatively installed registrar was torn down by the next
+   * `client.config.set` on **any** `client` key and replaced by the platform default, which is
+   * nothing at all on React Native.
+   */
+  private imperativeRegistrar?: NetworkStatusListenerRegistrar | null;
+  /**
+   * The declared registrar the last installation saw, so a *change* to it can be told apart from a
+   * re-derivation that named the same thing. Whichever source spoke last wins, and this is what makes
+   * that comparison possible.
+   */
+  private declaredRegistrar?: NetworkStatusListenerRegistrar;
 
   constructor({ client }: { client: StreamChat }) {
     super();
@@ -117,8 +133,19 @@ export class NetworkConnectionObserver extends WithSubscriptions {
    * fallback.
    */
   private installConfiguredRegistrar() {
-    this.setStatusListenerRegistrar(
-      this.config.statusListenerRegistrar ?? getDefaultNetworkStatusListenerRegistrar(),
+    const declared = this.config.statusListenerRegistrar;
+
+    if (declared !== this.declaredRegistrar) {
+      this.declaredRegistrar = declared;
+      // The declarative tree just named something different, which outranks an earlier imperative
+      // call: whichever source spoke last is what the integrator meant.
+      this.imperativeRegistrar = undefined;
+    }
+
+    this.installRegistrar(
+      this.imperativeRegistrar !== undefined
+        ? (this.imperativeRegistrar ?? undefined)
+        : (declared ?? getDefaultNetworkStatusListenerRegistrar()),
     );
   }
 
@@ -137,10 +164,23 @@ export class NetworkConnectionObserver extends WithSubscriptions {
    *
    * Available as a setter, not just a constructor option, because React Native registers its native
    * handlers *after* the client exists.
+   *
+   * What is set here survives every later configuration derivation, and is only superseded by the
+   * declarative tree naming a *different* registrar — `client.config.set({ client: { networkConnection:
+   * { statusListenerRegistrar } } })`.
    */
   public setStatusListenerRegistrar(
     registrar: NetworkStatusListenerRegistrar | null | undefined,
   ) {
+    // Recorded before installing, so the next derivation reinstalls this rather than the platform
+    // default. `null` is kept distinct from `undefined`: it means "explicitly none", which must
+    // survive a derivation too.
+    this.imperativeRegistrar = registrar ?? null;
+    this.installConfiguredRegistrar();
+  }
+
+  /** Installs one registrar, unsubscribing whatever was there. */
+  private installRegistrar(registrar: NetworkStatusListenerRegistrar | null | undefined) {
     if (registrar && registrar === this.installedRegistrar) return;
 
     this.unsubscribeStatusListener?.();
