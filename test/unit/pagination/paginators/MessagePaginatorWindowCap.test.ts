@@ -467,5 +467,83 @@ describe('MessagePaginator — window cap (pruning)', () => {
       expect(p.cursor?.tailward).not.toBe('m12');
       expect(p.cursor?.tailward).toBe(afterMerge);
     });
+
+    /**
+     * `state` tracks the ACTIVE interval, so a prune of the head says nothing about a window the user
+     * jumped to in the meantime. Draining onto it would rewrite that window's pagination from a prune
+     * it had nothing to do with — here, flipping an exhausted tail edge back to a cursor.
+     */
+    it('does not apply a pending prune to a window the consumer jumped to in the meantime', () => {
+      const THROTTLE = 200;
+      const p = new MessagePaginator({
+        channel,
+        paginatorOptions: { maxLoadedItems: 3, pageSize: 3, stateThrottleMs: THROTTLE },
+      });
+      p.ingestPage({
+        page: [msg('m10', 10), msg('m11', 11), msg('m12', 12)],
+        isHead: true,
+        isTail: false,
+        setActive: true,
+      });
+
+      p.ingestItem(msg('m13', 13)); // spends the leading edge
+      p.ingestItem(msg('m14', 14)); // prunes m11 — publish deferred to the trailing flush
+
+      // A jump-to-message: an older, already-exhausted window becomes the active one.
+      p.ingestPage({
+        page: [msg('o1', 1), msg('o2', 2)],
+        isHead: false,
+        isTail: true,
+        setActive: true,
+      });
+      expect(ids(p)).toEqual(['o1', 'o2']);
+      const jumpedCursor = p.cursor?.tailward;
+      expect(p.hasMoreTail).toBe(false);
+
+      vi.advanceTimersByTime(THROTTLE);
+
+      expect(p.cursor?.tailward).toBe(jumpedCursor);
+      expect(p.cursor?.tailward).not.toBe('o1');
+      expect(p.hasMoreTail).toBe(false);
+    });
+
+    /**
+     * An optimistic (local-user) write flushes this paginator's pending publish early so the send
+     * renders without the throttle delay — `channel.ts` → `EntityStore.flushSubscribers` →
+     * `flushState` → `flushPendingPublishes`. That lands mid-window, on a prune whose publish is still
+     * pending, so it is the path most likely to consume the pending fields without emitting them.
+     */
+    it('carries the pending pagination when an optimistic send flushes the throttle early', () => {
+      const THROTTLE = 200;
+      const p = new MessagePaginator({
+        channel,
+        paginatorOptions: { maxLoadedItems: 3, pageSize: 3, stateThrottleMs: THROTTLE },
+      });
+      p.ingestPage({
+        page: [msg('m10', 10), msg('m11', 11), msg('m12', 12)],
+        isHead: true,
+        isTail: false,
+        setActive: true,
+      });
+
+      p.ingestItem(msg('m13', 13)); // spends the leading edge; prunes m10
+      expect(p.cursor?.tailward).toBe('m11');
+
+      p.ingestItem(msg('m14', 14)); // prunes m11 — publish deferred to the trailing edge
+      expect(p.cursor?.tailward).toBe('m11');
+
+      // The send: ingested, then the store flushes this paginator so it renders immediately.
+      p.ingestItem(msg('m15', 15)); // prunes m12, still inside the same throttle window
+      store.flushSubscribers('m15');
+
+      // The early flush published the pagination as it drained it.
+      expect(ids(p)).toEqual(['m13', 'm14', 'm15']);
+      expect(p.cursor?.tailward).toBe('m13');
+      expect(p.hasMoreTail).toBe(true);
+
+      // ...and the trailing edge has nothing left to correct.
+      vi.advanceTimersByTime(THROTTLE);
+      expect(p.cursor?.tailward).toBe('m13');
+    });
   });
 });
