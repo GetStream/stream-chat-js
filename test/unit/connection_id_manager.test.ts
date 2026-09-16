@@ -106,6 +106,58 @@ describe('ConnectionIdManager', () => {
     });
   });
 
+  describe('invalidate', () => {
+    it('drops a known id so nothing is sent against the dead socket', () => {
+      manager.resolveConnectionId('id-1');
+
+      manager.invalidate();
+
+      expect(manager.connectionId).to.be.undefined;
+    });
+
+    // Dropping without arming would leave nothing to await, and `getConnectionId` would report
+    // "nothing is being opened" for a socket that is in fact about to be retried.
+    it('arms in the same step, so a request waits for the reconnect instead of rejecting', async () => {
+      manager.resolveConnectionId('id-1');
+
+      manager.invalidate();
+
+      expect(manager.loadConnectionIdPromise).to.be.instanceOf(Promise);
+      const waiter = manager.getConnectionId();
+      manager.resolveConnectionId('id-2');
+      await expect(waiter).resolves.to.equal('id-2');
+    });
+
+    it('is a no-op when there was no id to drop', () => {
+      manager.invalidate();
+
+      expect(manager.loadConnectionIdPromise).to.be.undefined;
+      expect(() => manager.getConnectionId()).to.throw('No connection id is available');
+    });
+
+    it('leaves a pending waiter alone - the retry it is waiting for is still coming', async () => {
+      manager.arm();
+      const waiter = manager.getConnectionId();
+
+      manager.invalidate();
+
+      expect(manager.loadConnectionIdPromise).to.be.instanceOf(Promise);
+      manager.resolveConnectionId('id-2');
+      await expect(waiter).resolves.to.equal('id-2');
+    });
+
+    it('leaves the connection attempt free to arm again, which an id would have blocked', async () => {
+      manager.resolveConnectionId('id-1');
+
+      manager.invalidate();
+      // `_connect()` arms too; it must find the deferred invalidate left and not replace it
+      const armed = manager.loadConnectionIdPromise;
+      manager.arm();
+
+      expect(manager.loadConnectionIdPromise).to.equal(armed);
+    });
+  });
+
   describe('reset', () => {
     it('drops a known id', () => {
       manager.resolveConnectionId('id-1');
@@ -123,7 +175,7 @@ describe('ConnectionIdManager', () => {
       manager.reset();
 
       await expect(waiter).rejects.toThrow(
-        'The connection was closed before a connection id could be resolved.',
+        'The WebSocket connection was closed before a connection id could be resolved.',
       );
     });
 

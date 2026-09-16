@@ -502,6 +502,63 @@ describe('connection', function () {
 			expect(await waiter).to.equal('61112366-0a15-3891-0000-000000000009');
 		});
 
+		it('drops the id the moment the socket stops being healthy', async () => {
+			const client = newStreamChat();
+			const c = new StableWSConnection({ client });
+			await c.connect();
+			expect(client._hasConnectionID()).to.be.true;
+
+			// what onclose / onerror / the 35s health check all funnel through
+			c._setHealth(false);
+
+			// the server tore the watches down with the socket, so the id is dead from here
+			expect(client.connectionIdManager.connectionId).to.be.undefined;
+			expect(client._hasConnectionID()).to.be.false;
+		});
+
+		it('arms in the same step, so a request never sees the socket down with nothing pending', async () => {
+			const client = newStreamChat();
+			const c = new StableWSConnection({ client });
+			await c.connect();
+
+			c._setHealth(false);
+
+			// no await in between: the id is gone and a deferred is already in its place
+			expect(client.connectionIdManager.loadConnectionIdPromise).to.be.instanceOf(
+				Promise,
+			);
+			expect(() => client.connectionIdManager.getConnectionId()).not.to.throw();
+
+			c.isDisconnected = true;
+		});
+
+		it('holds a watching request across the outage and sends it with the new id', async () => {
+			const client = newStreamChat();
+			const c = new StableWSConnection({ client });
+			client.wsConnection = c;
+			await c.connect();
+			const requestSpy = sinon
+				.stub(client.axiosInstance, 'request')
+				.resolves({ data: { channels: [] }, status: 200, headers: {} });
+
+			// an abnormal close - the socket died and a reconnect is on its way
+			c.onclose(c.wsID, { code: 1006, reason: '', wasClean: false });
+
+			const inFlight = client.queryChannels({ watch: true });
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(requestSpy.called).to.be.false;
+
+			client.connectionIdManager.resolveConnectionId('reconnected-id');
+			await inFlight;
+
+			// the dead id never reached the wire; the watch registers against the live connection
+			expect(requestSpy.firstCall.args[0].params.connection_id).to.equal(
+				'reconnected-id',
+			);
+			requestSpy.restore();
+			c.isDisconnected = true;
+		});
+
 		it('drops the id when the socket is closed', async () => {
 			const client = newStreamChat();
 			const c = new StableWSConnection({ client });
@@ -511,6 +568,27 @@ describe('connection', function () {
 
 			expect(client.connectionIdManager.connectionId).to.be.undefined;
 			expect(client._hasConnectionID()).to.be.false;
+		});
+
+		it('fails a request still waiting when a reconnect gives up', async () => {
+			const client = newStreamChat();
+			const c = new StableWSConnection({ client });
+			client.wsConnection = c;
+			await c.connect();
+
+			// a non-WS failure is the "don't reconnect, there is a code bug" branch: no retry follows,
+			// so the deferred armed when the socket went unhealthy has nothing left to settle it
+			c._connect = () =>
+				Promise.reject(Object.assign(new Error('boom'), { isWSFailure: false }));
+
+			c._setHealth(false);
+			const waiter = client.connectionIdManager.getConnectionId();
+
+			await c._reconnect({ interval: 1 });
+
+			await expect(waiter).rejects.toThrow('boom');
+			expect(client.connectionIdManager.loadConnectionIdPromise).to.be.undefined;
+			c.isDisconnected = true;
 		});
 
 		it('fails a request still waiting when the initial connect gives up', async () => {

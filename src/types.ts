@@ -52,14 +52,6 @@ export type RequireAtLeastOne<T> = {
   [K in keyof T]-?: Required<Pick<T, K>> & Partial<Omit<T, K>>;
 }[keyof T];
 
-export type Unpacked<T> = T extends (infer U)[]
-  ? U
-  : T extends (...args: any[]) => infer U
-    ? U
-    : T extends Promise<infer U>
-      ? U
-      : T;
-
 /**
  * Response Types
  */

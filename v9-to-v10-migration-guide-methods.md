@@ -574,9 +574,17 @@ manager you construct yourself; the client-owned one starts from
 
 Removed. Callers should not rely on these internals; `_setupConnection` was an alias for `openConnection`.
 
-#### `client.recoverState` / `client.connect` / `client._sayHi` / `client._buildWSPayload`
+#### `client.connect`
 
-Signatures unchanged.
+Signature unchanged.
+
+#### `client.recoverState` / `client._sayHi` / `client._buildWSPayload`
+
+Removed.
+
+- `recoverState` — connection recovery is owned by `client.connectionRecovery` (`ConnectionRecoveryManager`), which subscribes to the connection lifecycle itself. Configure it through `options.config.client.connectionRecovery` rather than calling a method.
+- `_sayHi` — the `GET /hi` warm-up request went with the [`warmUp`](./v9-to-v10-migration-guide-client-construction.md#warmup) option.
+- `_buildWSPayload` — replaced by `client._buildWSAuthMessage()`. `/api/v2/connect` authenticates off the first frame the client sends rather than off the query string, so this now returns the auth frame.
 
 #### `client.queryUserGroups`
 

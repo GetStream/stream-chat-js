@@ -28,9 +28,12 @@ export class ConnectionIdManager {
    * Arms the deferred a connection attempt will settle, so requests issued while the handshake is
    * in flight have something to await.
    *
-   * A no-op once an id is known: a reconnect keeps serving the previous id rather than blocking
-   * every request for the length of the outage, which is how `await client.wsPromise` behaved
-   * before this manager existed. The fresh id replaces it when the attempt succeeds.
+   * Called at the start of a connection attempt, and by {@link invalidate} the moment a live socket
+   * goes unhealthy - by then a reconnect is already on its way, and the requests that need an id
+   * have to wait for it rather than be sent with the dead one.
+   *
+   * A no-op while a deferred is already pending, so those two callers can overlap freely, and a
+   * no-op while an id is known, which by then means the socket is healthy and nothing needs to wait.
    */
   arm = () => {
     if (this.connectionId || this.loadConnectionIdPromise) return;
@@ -69,6 +72,34 @@ export class ConnectionIdManager {
   };
 
   /**
+   * Drops the connection id without failing anything waiting on one, for a socket that died but
+   * will be retried.
+   *
+   * The server tears a connection's watches down with the socket, so the id is dead the moment the
+   * connection stops being healthy - a request still carrying it registers a subscription against a
+   * connection that no longer exists, and is answered `200` for it. Dropping it here is what makes
+   * the next such request wait for the replacement instead of racing ahead with a dead one.
+   *
+   * Arms in the same step. Dropping without arming would leave the manager holding neither an id
+   * nor a deferred, which {@link getConnectionId} reports as "nothing is being opened" - the right
+   * answer for a client that never connected, the wrong one for a socket that is about to be
+   * retried. The waiters are released by the next handshake.
+   *
+   * Contrast {@link reset}, for a socket that will *not* come back: that one rejects the waiters
+   * rather than leaving them for a reconnect that is not coming.
+   */
+  invalidate = () => {
+    if (!this.connectionId) return;
+
+    logger
+      .withExtraTags('invalidate')
+      .debug('Dropping the connection id; the socket is no longer healthy.');
+
+    this.connectionId = undefined;
+    this.arm();
+  };
+
+  /**
    * Drops the connection id and fails any pending waiter. Called when the socket is deliberately
    * closed - the id is dead from that moment, and a request keyed by it would register a
    * subscription on a connection that no longer exists.
@@ -77,15 +108,17 @@ export class ConnectionIdManager {
     logger.withExtraTags('reset').debug('Dropping the connection id.');
 
     this.rejectConnectionId(
-      new Error('The connection was closed before a connection id could be resolved.'),
+      new Error(
+        'The WebSocket connection was closed before a connection id could be resolved. Call `client.openConnection()` to open a new one, or `client.connectUser()` if the user was disconnected.',
+      ),
     );
   };
 
   /**
    * Returns the current connection id, or a promise for one if the handshake is still in flight.
    *
-   * Throws when there is neither, because no amount of waiting would produce one - the caller
-   * needs a connected user first.
+   * Throws when there is neither, because no amount of waiting would produce one - there is no
+   * socket open and none being opened.
    */
   getConnectionId = (): string | Promise<string> => {
     if (this.connectionId) return this.connectionId;
@@ -93,7 +126,7 @@ export class ConnectionIdManager {
     if (this.loadConnectionIdPromise) return this.loadConnectionIdPromise;
 
     throw new Error(
-      'No connection id is available. Call and await `client.connectUser()` before issuing a request that watches a channel or subscribes to presence.',
+      'No connection id is available: there is no WebSocket connection, and none is being established. A request that watches a channel or subscribes to presence needs one. Call `client.connectUser()` if no user is connected, or `client.openConnection()` if the socket was closed with `client.closeConnection()`.',
     );
   };
 

@@ -129,7 +129,7 @@ describe('StreamChat config(s) store', () => {
 		});
 	});
 
-	it('updates channelServerConfigsStore through _addChannelConfig when cache is enabled', () => {
+	it('updates channelServerConfigsStore through _addChannelConfig', () => {
 		const client = new StreamChat('key');
 
 		client._addChannelConfig({

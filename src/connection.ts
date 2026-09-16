@@ -461,6 +461,11 @@ export class StableWSConnection {
           .warn('WebSocket connection failed. Retrying the reconnect.');
 
         this._reconnect();
+      } else {
+        // Giving up. `_setHealth(false)` armed a deferred on the assumption that a reconnect would
+        // settle it, and nothing else will now - leaving it pending hangs every request waiting for
+        // a connection id, with no retry coming and no error to show for it.
+        this.client.connectionIdManager.rejectConnectionId(error);
       }
     }
     logger.withExtraTags('_reconnect').debug('Reconnect attempt finished.');
@@ -633,6 +638,10 @@ export class StableWSConnection {
     // The server keys channel watches by connection ID, so they are gone the moment the socket is.
     // Done here rather than off the `connection.changed` event below, which is debounced by 5s.
     this.client._markActiveChannelsWatchInterrupted();
+    // Same fact, same moment, seen from the other side: the id those watches were keyed by is dead,
+    // so no further request may be sent with it. Invalidating arms a fresh deferred, so requests
+    // needing an id wait for the reconnect instead of racing ahead with the dead one.
+    this.client.connectionIdManager.invalidate();
 
     // we're offline, wait few seconds and fire and event if still offline
     setTimeout(() => {

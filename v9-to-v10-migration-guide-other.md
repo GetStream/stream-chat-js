@@ -332,12 +332,14 @@ accommodation that outlived the server-side surface (see
 [`v9-to-v10-migration-guide-server-side.md`](./v9-to-v10-migration-guide-server-side.md)).
 
 v10 removes the downgrade. Waiting for the connection id now happens centrally in the API client,
-for every request that carries a watch or presence subscription, and a request that cannot get one
-**throws** rather than quietly returning unwatched state:
+and a request that asks for a subscription it cannot get one for **throws** rather than quietly
+returning unwatched state:
 
 ```
-No connection id is available. Call and await `client.connectUser()` before issuing a request that
-watches a channel or subscribes to presence.
+No connection id is available: there is no WebSocket connection, and none is being established.
+A request that watches a channel or subscribes to presence needs one. Call `client.connectUser()`
+if no user is connected, or `client.openConnection()` if the socket was closed with
+`client.closeConnection()`.
 ```
 
 ```diff
@@ -349,21 +351,65 @@ watches a channel or subscribes to presence.
 ```
 
 You do **not** have to await `connectUser()` before issuing the request — a request made while the
-handshake is in flight waits for it and then goes out with the id. Only a client that has never
-connected (or has since disconnected) throws.
+handshake is in flight waits for it and then goes out with the id.
 
-Affected methods: `client.queryChannels()`, `client.groupedQueryChannels()`, `client.sync()`,
-`client.queryThreads()`, `client.getThread()`, `channel.query()`, `channel.watch()` and
-`channel.stopWatching()`. `client.queryUsers()` is affected only when the query asks for
-`presence: true`.
+#### Which requests are affected
 
-Two methods gained coverage they never had: `client.sync()` and `client.queryThreads()` were not
-gated at all in v9, so on a reconnect they could register their watches against a connection id
-that did not exist yet.
+Only requests that actually **ask** for a subscription. The gate reads the `watch` / `presence`
+flags, so a query that opts out is unaffected and still works with no connection at all:
 
-Related: `client._getConnectionID()` now reads through the new `client.connectionIdManager` rather
-than `client.wsConnection.connectionID`. The practical difference is that it correctly returns
-`undefined` after `closeConnection()` — in v9 the id survived the socket it belonged to.
+```ts
+// gated - waits for (or demands) a connection id
+await client.queryChannels({ filter_conditions: filters, watch: true });
+await channel.watch();
+
+// NOT gated - registers nothing, so it needs no connection
+await client.queryChannels({ filter_conditions: filters, watch: false });
+await channel.query({ watch: false });
+```
+
+Note that `client.queryChannels()` defaults to `watch: true`, so the bare call _is_ gated; pass
+`watch: false` explicitly for a read-only load.
+
+Affected when they ask for a watch or presence: `client.queryChannels()`,
+`client.groupedQueryChannels()`, `client.sync()`, `client.queryThreads()`, `client.getThread()`,
+`channel.query()`, `channel.watch()` and `client.queryUsers()`. `channel.stopWatching()` is always
+affected — it carries no flag and is connection-scoped by definition, since it tells the server
+which connection should stop watching.
+
+Every other request is unaffected, and — unlike v9 — no longer carries a `connection_id` query
+param at all. It is now attached only to the requests listed above.
+
+#### `closeConnection()` drops the id too
+
+`client._getConnectionID()` reads through the new `client.connectionIdManager` rather than
+`client.wsConnection.connectionID`, so it correctly returns `undefined` once the socket is closed —
+in v9 the id outlived the socket it belonged to.
+
+The consequence for mobile apps: `closeConnection()` (the documented background/foreground seam)
+now makes the gated calls above throw until `openConnection()` has been called, even though the
+user is still set. Reopen the connection before issuing them, or pass `watch: false` for loads that
+do not need a subscription.
+
+#### Reconnects drop the id too
+
+The id belongs to the socket, so it is dropped the moment the connection stops being healthy — not
+only on a deliberate `closeConnection()` / `disconnectUser()`. In v9 it outlived the socket on every
+path, so a `watch: true` issued during a reconnect went out carrying a dead id: the server answered
+`200`, registered the watch against a connection it had already torn down, and no event ever
+arrived. There was nothing to notice.
+
+Dropping the id and arming its replacement happen in the same step, so there is no moment at which
+the client reports "not connected" for a socket that is simply reconnecting. A gated request issued
+during the outage **waits** for the new handshake and then goes out with the new id.
+
+That wait is new, and it lasts as long as the reconnect does — the backoff grows to 25s per attempt
+and retries until the socket is back. It is not bounded by the axios `timeout`, which only starts
+once the request is actually issued. If a call must not block for the length of an outage, issue it
+with `watch: false`: requests that register nothing are never gated and keep flowing throughout.
+
+`client.connectionRecovery` still re-queries channel lists and active channels once the socket is
+healthy again, which is what restores the watches that were interrupted.
 
 ---
 
@@ -444,7 +490,19 @@ Beyond the three breaking effects above, the field sets shifted to match the API
 
 ### Removed — the hand-written filter building blocks
 
-`QueryFilter` and `PrimitiveFilter` are **removed**, along with `ExtendedQueryFilter`, `ExtendedQueryFilters` and `ExtendedQueryLogicalOperators` (`src/pagination/FilterBuilder.ts`). `QueryFilters` and `RequireOnlyOne` remain exported.
+`QueryFilter` and `PrimitiveFilter` are **removed**, along with `ExtendedQueryFilter`, `ExtendedQueryFilters` and `ExtendedQueryLogicalOperators` (`src/pagination/FilterBuilder.ts`). `Unpacked` goes with them — it existed only to let `QueryFilter` reach the element type of an array-valued key, and `Filters<>` takes the element type directly. `QueryFilters` and `RequireOnlyOne` remain exported.
+
+If you used `Unpacked` in your own code, it was a plain conditional type with no dependency on this SDK; copy it across rather than importing it:
+
+```ts
+type Unpacked<T> = T extends (infer U)[]
+  ? U
+  : T extends (...args: any[]) => infer U
+    ? U
+    : T extends Promise<infer U>
+      ? U
+      : T;
+```
 
 These were the v9 building blocks for hand-authoring a filter type — every alias in the table above used to be assembled from them. Nothing in the SDK uses them any more. If you composed your own filter type for `itemMatchesFilter`, a paginator or a `FilterBuilder`, declare it with the generated `Filters<>` helper instead: one entry per key, carrying the operators that key accepts.
 

@@ -179,7 +179,8 @@ describe('ApiClient header precedence', () => {
     expect(sentHeaders()['x-custom']).to.equal('kept');
   });
 
-  // `client._sayHi()` (src/client.ts:1206) threads its own id through doAxiosRequest.
+  // `doAxiosRequest` is the escape hatch for a caller that wants to correlate a request with its
+  // own id rather than the random one `populateRequestConfigWithDefaults` would mint.
   it('honours a caller-supplied x-client-request-id', async () => {
     await client.api.doAxiosRequest('get', `${client.baseURL}/hi`, null, {
       headers: { 'x-client-request-id': 'my-id' },
@@ -497,6 +498,25 @@ describe('ApiClient connection id gate', () => {
         .false;
     });
 
+    // The regression the `connection_id` fallback used to cause: the generator emits the key for
+    // every operation that *can* watch, so gating on its presence gated `watch: false` too.
+    it('does not gate a declared connection_id when the request opted out of watching', () => {
+      expect(requiresConnectionId({ connection_id: undefined }, { watch: false })).to.be
+        .false;
+      expect(requiresConnectionId({ connection_id: undefined, watch: false }, undefined))
+        .to.be.false;
+    });
+
+    // A left-unset flag is the request saying "no watch" - the server defaults both to false.
+    it('does not gate a declared connection_id when the flag is declared but unset', () => {
+      expect(
+        requiresConnectionId(
+          { connection_id: undefined },
+          { watch: undefined, presence: undefined, state: true },
+        ),
+      ).to.be.false;
+    });
+
     it('tolerates a body that is not a plain object', () => {
       expect(requiresConnectionId(undefined, new FormData())).to.be.false;
       expect(requiresConnectionId(undefined, 'raw')).to.be.false;
@@ -522,9 +542,15 @@ describe('ApiClient connection id gate', () => {
 
   it('gates queryThreads, getThread, sync and stopWatching, which had no gate before', async () => {
     const gated = [
-      () => client.queryThreads(),
-      () => client.getThread({ message_id: 'mid' }),
-      () => client.sync({ channel_cids: ['messaging:a'], last_sync_at: new Date() }),
+      () => client.queryThreads({ watch: true }),
+      () => client.getThread({ message_id: 'mid', watch: true }),
+      () =>
+        client.sync({
+          channel_cids: ['messaging:a'],
+          last_sync_at: new Date(),
+          watch: true,
+        }),
+      // stopWatching carries no flag at all - the declared `connection_id` is its only signal
       () => client.channel('messaging', 'id').stopWatching(),
     ];
 
@@ -551,6 +577,37 @@ describe('ApiClient connection id gate', () => {
     await client.createGuest({ user: { id: 'guest' } });
 
     expect(requestSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // These go through real generated endpoints on purpose: every one of them declares a
+  // `connection_id` query param, so a gate keyed on that param alone held them all back.
+  it('lets a non-watching query through with no connection at all', async () => {
+    client.connectionIdManager.reset();
+
+    await client.queryChannels({ watch: false, presence: false });
+    await client
+      .channel('messaging', 'id')
+      .getOrCreate({ watch: false, presence: false, state: true });
+    await client.sync({ channel_cids: ['messaging:a'], last_sync_at: new Date() });
+
+    expect(requestSpy).toHaveBeenCalledTimes(3);
+  });
+
+  // Not `haveOwnProperty`: the generator emits the key holding `undefined` for every operation
+  // that *can* watch, and axios drops an undefined param. What matters is that no id reaches it.
+  it('does not put a connection id on a request that registers nothing', async () => {
+    await client.queryChannels({ watch: false });
+    await client.getApp();
+
+    expect(sentParams().connection_id).to.be.undefined;
+    expect((requestSpy.mock.calls[1][0] as AxiosRequestConfig).params.connection_id).to.be
+      .undefined;
+  });
+
+  it('puts the connection id on a request that does register something', async () => {
+    await client.queryChannels({ watch: true });
+
+    expect(sentParams().connection_id).to.equal('mock-connection-id');
   });
 
   it('rejects a watching request when there is no id and nothing in flight', async () => {

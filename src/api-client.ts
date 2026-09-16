@@ -135,8 +135,6 @@ export class ApiClient {
         // that updates existing axios instance options instead
         ...this.client.options.axiosRequestConfig?.params,
         ...additonalConfig.params,
-        connection_id:
-          additonalConfig.params?.connection_id || this.client._getConnectionID(),
       },
     } satisfies AxiosRequestConfig;
   }
@@ -171,10 +169,15 @@ export class ApiClient {
     data?: unknown | null,
     additionalConfig: AxiosRequestConfig = {},
   ): Promise<{ body: T; metadata: RequestMetadata }> {
-    // Before `populateRequestConfigWithDefaults`, which snapshots `connection_id` synchronously -
-    // gating after it would capture the `undefined` this await exists to avoid.
+    // The only place a connection id is attached: a request that registers a server-side
+    // subscription cannot go out before the handshake produced one, and every other request has no
+    // business carrying it. See `requiresConnectionId`.
     if (requiresConnectionId(additionalConfig.params, data)) {
-      await this.client.connectionIdManager.getConnectionId();
+      const connectionId = await this.client.connectionIdManager.getConnectionId();
+      additionalConfig = {
+        ...additionalConfig,
+        params: { ...additionalConfig.params, connection_id: connectionId },
+      };
     }
 
     const initialRequestConfig = this.populateRequestConfigWithDefaults(additionalConfig);
@@ -261,39 +264,49 @@ export class ApiClient {
  * and answers 200 while registering nothing when it is missing, so a request that races the
  * handshake yields a channel that never receives an event.
  *
- * Two signals, because - checked against every operation in the client-side OpenAPI spec - neither
- * one alone is complete:
+ * The `watch`/`presence` flags are read from the three shapes the generator emits them in: a flat
+ * query param (`sync`), a nested `payload` query param (`queryUsers`), or the request body
+ * (`queryChannels`, `getOrCreate(Distinct)Channel`, `groupedQueryChannels`, `queryThreads`,
+ * `getThread`). A flag left `undefined` reads as "no subscription", which is the server's default
+ * for both.
  *
- * - an explicit `watch`/`presence` flag, in any of the three shapes the generator emits it: a flat
- *   query param (`sync`, `getThread`), a nested `payload` query param (`queryUsers`), or the
- *   request body (`queryChannels`, `getOrCreate(Distinct)Channel`, `groupedQueryChannels`,
- *   `queryThreads`). `queryUsers` is the only operation that needs an id without declaring the
- *   param, so this branch is the one keeping it gated;
- * - a declared `connection_id` query param, which is the spec saying the endpoint is
- *   connection-scoped. This is the only signal `stopWatchingChannel` and `longPoll` give, as
- *   neither carries a flag.
- *
- * The first branch is redundant for every operation but `queryUsers` today, since the rest also
- * declare the param. It is kept as defence in depth: should the generator stop emitting
- * `connection_id` keys holding `undefined`, the flags still catch seven of the nine.
+ * A declared `connection_id` query param is the spec saying an endpoint is connection-scoped, but
+ * it is emitted for every operation that *can* watch, not only the ones that are, so it cannot gate
+ * on its own - `queryChannels({ watch: false })` declares it too. It is the last resort, for
+ * `stopWatchingChannel` and `longPoll`: the two operations carrying no flag to read.
  */
 export const requiresConnectionId = (
   params: Record<string, unknown> | undefined,
   body: unknown,
 ) => {
-  if (params && 'connection_id' in params) return true;
-
   const payload = params?.payload as Record<string, unknown> | undefined;
-  const requestBody = (body ?? undefined) as Record<string, unknown> | undefined;
+  // Guarded rather than `body ?? undefined`: the `in` checks below would throw on a string body.
+  const requestBody = (typeof body === 'object' && body !== null ? body : undefined) as
+    | Record<string, unknown>
+    | undefined;
 
-  return Boolean(
+  if (
     params?.watch ||
     params?.presence ||
     payload?.watch ||
     payload?.presence ||
     requestBody?.watch ||
-    requestBody?.presence,
-  );
+    requestBody?.presence
+  ) {
+    return true;
+  }
+
+  // The generator emits the key holding `undefined` for every operation that declares the flag, so
+  // a declared-but-unset flag is the request saying "no subscription" - the server's default.
+  if (
+    [params, payload, requestBody].some(
+      (source) => source && ('watch' in source || 'presence' in source),
+    )
+  ) {
+    return false;
+  }
+
+  return Boolean(params && 'connection_id' in params);
 };
 
 /**
