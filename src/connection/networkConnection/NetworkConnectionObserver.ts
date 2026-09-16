@@ -36,9 +36,9 @@ export const DEFAULT_NETWORK_CONNECTION_OBSERVER_CONFIG: NetworkConnectionObserv
  * socket down" reads as *no network* or as *reconnecting* is copy taxonomy, and a boolean named for
  * reachability invites gating requests on it, which network status must never do. Read both and branch.
  *
- * Each store answers *what is the status now*; `connection.changed` — carrying the same
- * `ConnectionType` — says *it just changed*. For the network, both are written from the same setter,
- * so they cannot drift.
+ * The store is the whole interface. There is no companion event: a store already says both what the
+ * status is and that it just changed, and publishing the same fact twice only created the chance for
+ * the two to disagree.
  */
 export class NetworkConnectionObserver extends WithSubscriptions {
   client: StreamChat;
@@ -222,12 +222,6 @@ export class NetworkConnectionObserver extends WithSubscriptions {
     this.state.partialNext(
       isOnline ? { isOnline, lastOnlineAt: now } : { isOnline, lastOfflineAt: now },
     );
-
-    this.client.dispatchEvent({
-      type: 'connection.changed',
-      connection: 'network',
-      online: isOnline,
-    });
   }
 
   /**

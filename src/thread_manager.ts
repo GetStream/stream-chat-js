@@ -265,14 +265,13 @@ export class ThreadManager extends WithSubscriptions {
    * Reloads the thread list once recovery after a reconnect has finished.
    *
    * `connection.recovered` on its own is the whole condition. This used to be gated on a
-   * `lastConnectionDropAt` timestamp this class recorded itself from
-   * `connection.changed { online: false }`, and that gate was wrong in both directions:
+   * `lastConnectionDropAt` timestamp this class recorded itself from a connectivity event, and that
+   * gate was wrong in both directions:
    *
-   * - It **missed** recoveries, because `connection.changed` is not a reliable disconnect signal.
-   *   Going offline is delayed by `WS_OFFLINE_ANNOUNCE_DELAY_MS` and dropped entirely if the socket
-   *   returns inside that window, and `closeConnection()` — the documented mobile
-   *   background/foreground path — never dispatches it at all. So a backgrounded app came back to a
-   *   stale thread list.
+   * - It **missed** recoveries, because that event was not a reliable disconnect signal. Going
+   *   offline was announced late and dropped entirely if the socket returned inside the window, and
+   *   `closeConnection()` — the documented mobile background/foreground path — never announced it at
+   *   all. So a backgrounded app came back to a stale thread list.
    * - Then it **stopped gating anything**, because the flag was written once and never cleared: the
    *   setter kept the existing value if there was one, and `reload()` clears `isThreadOrderStale`
    *   but never touched this.

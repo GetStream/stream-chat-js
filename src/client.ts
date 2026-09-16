@@ -332,6 +332,12 @@ export class StreamChat extends ChatApi {
       this.setBaseURL(`http://${streamLocalTestHost}`);
     }
 
+    // Before the WebSocket, which subscribes to this one's store. The dependency used to run through
+    // the client's event bus, which did not care about construction order; a direct store reference
+    // does.
+    this.networkConnection = new NetworkConnectionObserver({ client: this });
+    this.networkConnection.registerSubscriptions();
+
     // WS connection is initialized when setUser is called
     this.wsConnection = new WSConnection({ client: this });
     this.wsConnection.registerSubscriptions();
@@ -355,8 +361,6 @@ export class StreamChat extends ChatApi {
     this.channelManager = new ChannelManager({ client: this });
     this.connectionRecovery = new ConnectionRecoveryManager({ client: this });
     this.connectionRecovery.registerSubscriptions();
-    this.networkConnection = new NetworkConnectionObserver({ client: this });
-    this.networkConnection.registerSubscriptions();
     this.reminders = new ReminderManager({ client: this });
     this.messageDeliveryReporter = new MessageDeliveryReporter({ client: this });
     this.messageComposerCache = new FixedSizeQueueCache<string, MessageComposer>(64);
@@ -1216,9 +1220,7 @@ export class StreamChat extends ChatApi {
    * down, stays `NotWatching` and must not be resurrected by a reconnect.
    *
    * Invoked from two places, because neither covers the other: `StableWSConnection._setOnline(false)`
-   * for an abnormal close/error (immediately — NOT via the `connection.changed` event, which is
-   * 5s-debounced when going offline and is skipped entirely on a quick flap, both of which would
-   * leave the status lying), and `closeConnection()` for a deliberate shutdown (e.g. mobile
+   * for an abnormal close/error, and `closeConnection()` for a deliberate shutdown (e.g. mobile
    * backgrounding), which sets `isOnline` directly and so never reaches `_setOnline`.
    */
   _markActiveChannelsWatchInterrupted() {

@@ -72,10 +72,10 @@ describe('StreamChat construction', () => {
       const client = new StreamChat(API_KEY);
 
       expect(client.listeners).to.be.instanceOf(Map);
-      // The only listener a freshly constructed client registers is the connection-recovery
-      // subscription, which is wired up in the constructor because recovery is not opt-in
-      // (`client.connectionRecovery` config is the opt-out, read when a recovery actually runs).
-      expect([...client.listeners.keys()]).to.deep.equal(['connection.changed']);
+      // Nothing. Connectivity used to be wired through the event bus, so a freshly constructed
+      // client already carried the connection-recovery listener; recovery now subscribes to the
+      // socket's status store instead, which is not a client event listener.
+      expect([...client.listeners.keys()]).to.deep.equal([]);
       expect(client.mutedChannels).to.deep.equal([]);
       expect(client.mutedUsers).to.deep.equal([]);
       expect(client.activeChannels).to.deep.equal({});

@@ -103,17 +103,19 @@ describe('NetworkConnectionObserver', () => {
       expect(observer.state.getLatestValue().lastOfflineAt).toBe(offlineAt);
     });
 
-    it('dispatches connection.changed for the network, never for the socket', () => {
+    it('publishes into its store and dispatches no event', () => {
+      // The store is the whole interface. A companion event would say the same thing twice, and two
+      // descriptions of one fact can disagree — which is what the socket's own event did, by
+      // announcing a drop five seconds after the store had already published it.
       const source = fakeReporter();
       observer.setStatusReporter(source.reporter);
 
       source.emit(true);
       source.emit(false);
 
-      expect(dispatchEvent.mock.calls.flat()).toEqual([
-        { type: 'connection.changed', connection: 'network', online: true },
-        { type: 'connection.changed', connection: 'network', online: false },
-      ]);
+      expect(observer.isOnline).toBe(false);
+      expect(observer.state.getLatestValue().lastOnlineAt).toBeInstanceOf(Date);
+      expect(dispatchEvent).not.toHaveBeenCalled();
     });
 
     it('ignores a repeated identical status', () => {
@@ -146,11 +148,8 @@ describe('NetworkConnectionObserver', () => {
       observer.setStatus(false);
 
       expect(observer.isOnline).toBe(false);
-      expect(dispatchEvent).toHaveBeenCalledExactlyOnceWith({
-        type: 'connection.changed',
-        connection: 'network',
-        online: false,
-      });
+      expect(observer.state.getLatestValue().lastOfflineAt).toBeInstanceOf(Date);
+      expect(dispatchEvent).not.toHaveBeenCalled();
     });
   });
 

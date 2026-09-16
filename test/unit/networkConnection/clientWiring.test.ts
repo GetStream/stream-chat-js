@@ -81,17 +81,22 @@ describe('client wiring — network + ws status', () => {
       expect(configured.networkConnection.isOnline).toBe(true);
     });
 
-    it('dispatches the network variant of connection.changed, reaching client.on subscribers', () => {
+    it('reaches subscribers through the store, not the event bus', () => {
       const source = fakeReporter();
       client.networkConnection.setStatusReporter(source.reporter);
 
       const handler = vi.fn();
-      client.on('connection.changed', handler);
+      client.networkConnection.state.subscribeWithSelector(
+        ({ isOnline }) => ({ isOnline }),
+        handler,
+      );
+      handler.mockClear();
 
       source.emit(false);
 
       expect(handler).toHaveBeenCalledWith(
-        expect.objectContaining({ connection: 'network', online: false }),
+        expect.objectContaining({ isOnline: false }),
+        expect.anything(),
       );
     });
   });

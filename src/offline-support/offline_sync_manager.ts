@@ -5,6 +5,7 @@ import type { AxiosError } from 'axios';
 import { isAxiosError } from 'axios';
 import { chatLoggerSystem } from '../logger';
 import type { APIError } from '../types';
+import type { Unsubscribe } from '../store';
 
 const logger = chatLoggerSystem.getLogger('offline-db');
 
@@ -17,7 +18,11 @@ const logger = chatLoggerSystem.getLogger('offline-db');
  */
 export class OfflineDBSyncManager {
   public syncStatus = false;
-  public connectionChangedListener: { unsubscribe: () => void } | null = null;
+  /**
+   * Releases the subscription to the socket's status store. A bare unsubscribe now that this reads a
+   * store rather than an event, which no longer wraps it in an object.
+   */
+  public connectionChangedListener: Unsubscribe | null = null;
   private syncStatusListeners: Array<(status: boolean) => void> = [];
   private scheduledSyncStatusCallbacks: Map<string | symbol, () => Promise<void>> =
     new Map();
@@ -58,7 +63,7 @@ export class OfflineDBSyncManager {
     try {
       // If the WebSocket connection is already active, then call
       // the sync API straight away and also execute pending API calls.
-      // Otherwise wait for the `connection.changed` event.
+      // Otherwise wait for the socket's status store to report one.
       if (this.client.user?.id && this.client.wsConnection?.isOnline) {
         await this.syncAndExecutePendingTasks();
         await this.invokeSyncStatusListeners(true);
@@ -69,24 +74,30 @@ export class OfflineDBSyncManager {
       // different user or the component invoking the init() function gets
       // unmounted and then remounted again. This part of the code makes
       // sure the stale listener doesn't produce a memory leak.
-      if (this.connectionChangedListener) {
-        this.connectionChangedListener.unsubscribe();
-      }
+      this.connectionChangedListener?.();
 
-      this.connectionChangedListener = this.client.on(
-        'connection.changed',
-        async (event) => {
-          // Syncing is about reaching the server over this socket, so only its status matters here;
-          // the device's network status is reported through the same event under `'network'`.
-          if (event.connection !== 'ws') return;
-          if (event.online) {
-            await this.syncAndExecutePendingTasks();
-            await this.invokeSyncStatusListeners(true);
-          } else {
-            await this.invokeSyncStatusListeners(false);
-          }
-        },
-      );
+      // Syncing is about reaching the server over this socket, so this reads the socket's own store.
+      // The device's network status is a separate fact with its own store, and a device with a
+      // network but no socket has nothing to sync over.
+      let wasOnline: boolean | undefined;
+      this.connectionChangedListener =
+        this.client.wsConnection.state.subscribeWithSelector(
+          ({ isOnline }) => ({ isOnline }),
+          async ({ isOnline }) => {
+            // The immediate first call establishes the baseline. It is the current status rather than
+            // a change, and the block above has already acted on it.
+            const previous = wasOnline;
+            wasOnline = isOnline;
+            if (previous === undefined) return;
+
+            if (isOnline) {
+              await this.syncAndExecutePendingTasks();
+              await this.invokeSyncStatusListeners(true);
+            } else {
+              await this.invokeSyncStatusListeners(false);
+            }
+          },
+        );
     } catch (error) {
       logger
         .withExtraTags('init')
@@ -254,7 +265,7 @@ export class OfflineDBSyncManager {
    * Executes any tasks that were queued while offline and then performs a sync.
    *
    * Each step is isolated so a failure in one does not prevent the other, and
-   * neither can escape to the callers (init + the connection.changed handler).
+   * neither can escape to the callers (init + the status subscription).
    * This guarantees the subsequent invokeSyncStatusListeners(true) always runs,
    * so syncStatus recovers to true and gated channel queries are unblocked.
    * Failed syncs degrade to "possibly stale data until the next query" rather

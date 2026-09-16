@@ -120,25 +120,19 @@ describe('client.wsConnection configuration', () => {
       // tree copies unknown keys straight through — `layer()` writes every own entry of the slice — so
       // the declared-key boundary is enforced by the compiler, not at runtime. A plain-JS caller can
       // therefore land a dead key in the resolved config. What matters is that nothing reads it.
-      vi.useFakeTimers();
       client.config.set({
         client: {
           // @ts-expect-error not part of the config — the point of the test
-          wsConnection: { offlineAnnounceDelayMs: 1, networkRecoveryRetryMs: 999 },
+          wsConnection: { networkRecoveryRetryMs: 999 },
         },
       });
       const socket = new StableWSConnection({ client });
-      socket._setOnline(true);
-      const dispatch = vi.spyOn(client, 'dispatchEvent');
+      const reconnect = vi.spyOn(socket, '_reconnect').mockResolvedValue(undefined);
 
-      socket._setOnline(false);
-      vi.advanceTimersByTime(WS_OFFLINE_ANNOUNCE_DELAY_MS - 1);
+      socket._applyNetworkStatus(true);
 
-      // Still waiting the constant's window, not the 1ms the slice asked for.
-      expect(dispatch).not.toHaveBeenCalled();
-      vi.advanceTimersByTime(1);
-      expect(dispatch).toHaveBeenCalledTimes(1);
-      vi.useRealTimers();
+      // The constant, not the 999ms the slice asked for.
+      expect(reconnect).toHaveBeenCalledWith({ interval: WS_NETWORK_RECOVERY_RETRY_MS });
     });
   });
 
@@ -208,58 +202,25 @@ describe('client.wsConnection configuration', () => {
   });
 
   describe('the going-offline announce delay', () => {
-    beforeEach(() => {
+    it('is advice for the UI and nothing this package waits on', () => {
+      // The socket used to sit on a drop for this long before announcing it, so a brief flap did not
+      // strobe a "connection lost" banner. That is a presentation decision, and the timer that
+      // implemented it outlived the socket that armed it. The constant stays exported so the UI SDKs
+      // debounce by the same amount; the status itself is published the moment it changes.
       vi.useFakeTimers();
-    });
+      try {
+        const socket = new StableWSConnection({ client });
+        socket._setOnline(true);
+        const dispatch = vi.spyOn(client, 'dispatchEvent');
 
-    afterEach(() => {
-      vi.useRealTimers();
-    });
+        socket._setOnline(false);
 
-    it('delays connection.changed by the fixed window while the store publishes at once', () => {
-      const socket = new StableWSConnection({ client });
-      socket._setOnline(true);
-
-      const dispatch = vi.spyOn(client, 'dispatchEvent');
-      socket._setOnline(false);
-
-      // The store carries the drop immediately — that is the point of publishing it separately.
-      expect(client.wsConnection.state.getLatestValue().isOnline).toBe(false);
-      expect(dispatch).not.toHaveBeenCalled();
-
-      vi.advanceTimersByTime(WS_OFFLINE_ANNOUNCE_DELAY_MS - 1);
-      expect(dispatch).not.toHaveBeenCalled();
-
-      vi.advanceTimersByTime(1);
-      // `objectContaining` because `dispatchEvent` stamps `received_at` onto the object **in
-      // place**, so the argument the spy recorded is mutated after the call.
-      expect(dispatch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'connection.changed',
-          connection: 'ws',
-          online: false,
-        }),
-      );
-    });
-
-    it('still suppresses the event when the socket returns inside the window', () => {
-      const socket = new StableWSConnection({ client });
-      socket._setOnline(true);
-      socket._setOnline(false);
-
-      const dispatch = vi.spyOn(client, 'dispatchEvent');
-      socket._setOnline(true);
-      vi.advanceTimersByTime(WS_OFFLINE_ANNOUNCE_DELAY_MS * 2);
-
-      // One event, for coming back up — not a drop followed by a recovery.
-      expect(dispatch).toHaveBeenCalledTimes(1);
-      expect(dispatch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'connection.changed',
-          connection: 'ws',
-          online: true,
-        }),
-      );
+        expect(client.wsConnection.state.getLatestValue().isOnline).toBe(false);
+        vi.advanceTimersByTime(WS_OFFLINE_ANNOUNCE_DELAY_MS * 2);
+        expect(dispatch).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

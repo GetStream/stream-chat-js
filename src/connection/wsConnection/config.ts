@@ -18,18 +18,17 @@ export const DEFAULT_WS_CONNECTION_CONFIG: WSConnectionConfig = deepFreezeConfig
 });
 
 /**
- * How long a drop waits before `connection.changed` announces it, suppressed entirely if the socket
- * returns inside the window.
+ * How long a UI should sit on a drop before telling anyone about it.
  *
- * A constant rather than configuration, because it was a bare `setTimeout(…, 5000)` inside the socket
- * that no caller could reach — so making it settable would be new surface, not a preserved capability.
- * It is also the one timing here that UI actively depends on: the delay is what stops a brief flap
- * from strobing a "connection lost" banner, and `stream-chat-react`'s
- * `useReportLostConnectionSystemNotification` renders a persistent toast off that event.
+ * The socket retries on its own and most drops resolve in well under a second, so announcing them
+ * immediately makes a working application look broken. A banner should therefore wait this long and
+ * skip the announcement entirely if `client.wsConnection.state` reports the socket back inside the
+ * window.
  *
- * Anything wanting the drop *without* the wait should subscribe to `client.wsConnection.state`, which
- * publishes the raw edge immediately — that split is the point of publishing the status separately
- * from the event.
+ * Exported rather than left to each UI SDK to invent, so they do not drift apart. It is advice, not
+ * machinery: nothing in this package waits on it. The socket used to, and that timer read a status
+ * belonging to a socket that had since been discarded — whose value stays `false` forever — so a
+ * replaced connection announced a drop the replacement had already recovered from.
  */
 export const WS_OFFLINE_ANNOUNCE_DELAY_MS = 5 * 1000;
 

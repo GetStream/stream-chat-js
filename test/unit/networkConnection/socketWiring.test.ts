@@ -177,25 +177,22 @@ describe('socket ↔ network wiring', () => {
       expect(client.wsConnection.state.getLatestValue().lastOnlineAt).toBe(first);
     });
 
-    it('publishes immediately while connection.changed keeps its 5s going-offline delay', () => {
+    it('publishes a drop immediately, with nothing deferred behind it', () => {
       vi.useFakeTimers();
       try {
         connection._setOnline(true);
-
         const onEvent = vi.fn();
         client.on('connection.changed', onEvent);
 
         connection._setOnline(false);
 
-        // The store is the raw edge; the event keeps the anti-flicker debounce UI depends on. The
-        // two must not have been collapsed into one.
+        // The store is the only description of the status, and it carries the raw edge. The socket
+        // used to also announce the drop five seconds later, off a timer that outlived the socket
+        // that armed it; sitting on a drop to avoid strobing a banner is now the UI's own decision.
         expect(client.wsConnection.state.getLatestValue().isOnline).toBe(false);
-        expect(onEvent).not.toHaveBeenCalled();
 
-        vi.advanceTimersByTime(5000);
-        expect(onEvent).toHaveBeenCalledWith(
-          expect.objectContaining({ connection: 'ws', online: false }),
-        );
+        vi.advanceTimersByTime(60_000);
+        expect(onEvent).not.toHaveBeenCalled();
       } finally {
         vi.useRealTimers();
       }

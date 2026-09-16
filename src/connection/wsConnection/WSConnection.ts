@@ -155,9 +155,9 @@ export class WSConnection extends WithSubscriptions {
    * Records this WebSocket's status. Returns whether it changed.
    *
    * {@link StableWSConnection} is the only caller, and it routes **every** status transition through
-   * here — including the ones that deliberately dispatch no `connection.changed`: `disconnect()`,
-   * which `closeConnection()` uses, and the two error paths. That is what makes this store truthful
-   * on paths the event has always been silent about, and the reason it is worth publishing at all.
+   * here — including `disconnect()`, which `closeConnection()` uses, and the two error paths. Those
+   * were the transitions the old connectivity event stayed silent about, and covering them is the
+   * reason this store is worth publishing at all.
    *
    * @internal
    */
@@ -191,18 +191,24 @@ export class WSConnection extends WithSubscriptions {
    *
    * One subscription, registered once with the client. The socket used to hold this itself, which
    * leaked on every replacement and needed re-subscribing from both its constructor and `setClient` —
-   * because `options.wsConnection` allows a socket to be built before its client exists. None of
-   * that applies here: this object is created with the client and never replaced.
+   * because the injected-connection option allows a socket to be built before its client exists. None
+   * of that applies here: this object is created with the client and never replaced.
+   *
+   * Read from the store rather than from an event, so there is one description of the device's
+   * network rather than two that can disagree.
    */
   public registerSubscriptions = (): Unsubscribe => {
     if (!this.hasSubscriptions) {
       this.addUnsubscribeFunction(
-        this.client.on('connection.changed', (event) => {
-          // The socket also *dispatches* the `'ws'` variant, so without narrowing this would feed
-          // its own status back to it.
-          if (event.connection !== 'network') return;
-          this.connection?._applyNetworkStatus(event.online);
-        }).unsubscribe,
+        this.client.networkConnection.state.subscribeWithSelector(
+          ({ isOnline }) => ({ isOnline }),
+          ({ isOnline }) => {
+            // `undefined` is *unknown*, not offline: no reporter has said anything yet, and acting on
+            // it would tear down a healthy socket on every host that cannot answer the question.
+            if (typeof isOnline !== 'boolean') return;
+            this.connection?._applyNetworkStatus(isOnline);
+          },
+        ),
       );
     }
 

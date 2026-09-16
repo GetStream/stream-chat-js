@@ -55,19 +55,18 @@ export const DEFAULT_CONNECTION_RECOVERY_MANAGER_CONFIG: ConnectionRecoveryManag
  *
  * One per surface, mirroring what the React Native SDK arrived at:
  *
- * - **Lists** — `connection.changed` with `online: true`. `ChannelPaginator.executeQuery` carries its
+ * - **Lists** — the socket's status store going online. `ChannelPaginator.executeQuery` carries its
  *   own first-page deferral for the unsynced case, so the list query orders itself against the
  *   offline sync.
- * - **Active channels** — the offline DB's *sync-status edge* when offline support is enabled,
- *   `connection.changed` otherwise. `Channel.reload()` has no deferral of its own, so it has to be
+ * - **Active channels** — the offline DB's *sync-status edge* when offline support is enabled, and
+ *   that same store otherwise. `Channel.reload()` has no deferral of its own, so it has to be
  *   triggered by something that is already post-sync.
  *
  * The edge is what guarantees `executePendingTasks()` → `sync()` → query ordering, on every reconnect
  * path: `OfflineDBSyncManager` calls `invokeSyncStatusListeners(true)` **unconditionally** after
  * `syncAndExecutePendingTasks()` on each online transition — it does not require `syncStatus` to have
- * been `false` first. That matters because the going-offline `connection.changed` is 5s-debounced,
- * skipped entirely on a quick flap, and never dispatched at all by `closeConnection()` (mobile
- * backgrounding), so anything derived from *that* event is not a reliable signal. The edge is.
+ * been `false` first. That matters because the sync edge, unlike anything derived from a single
+ * transition, is guaranteed to land after the replay and the sync rather than alongside them.
  *
  * Recovery deliberately keeps no "did we drop?" flag of its own: `ChannelWatchStatus.WasWatching`
  * already records exactly that, written from both truthful hooks
@@ -119,46 +118,45 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
 
   public registerSubscriptions = () => {
     if (!this.hasSubscriptions) {
+      // Driven by the socket's own status store, and by nothing else. Recovery is about what this
+      // client missed while it could not reach the server, which is a fact the socket owns: the store
+      // is written on every transition, including the deliberate close and the two error paths that
+      // were always silent. The device's network is a separate signal that cannot start a recovery,
+      // because a device regaining a network has no reconnected socket and no fresh connection ID yet,
+      // so a query fired then would establish no watch.
+      let wasOnline: boolean | undefined;
       this.addUnsubscribeFunction(
-        this.client.on('connection.changed', (event) => {
-          // Only the socket coming back starts a recovery. The device regaining a network is too
-          // early: there is no reconnected socket and no fresh connection ID yet, so a query fired
-          // then would not establish a watch. See `Channel.reload` / `ChannelManager.recover`.
-          if (event.connection !== 'ws') return;
-          if (!event.online) return;
+        this.client.wsConnection.state.subscribeWithSelector(
+          ({ isOnline, lastOfflineAt }) => ({ isOnline, lastOfflineAt }),
+          ({ isOnline, lastOfflineAt }) => {
+            // The immediate first call is the current status rather than a change. Recovering off it
+            // would re-query on nothing more than someone registering subscriptions.
+            const previous = wasOnline;
+            wasOnline = isOnline;
+            if (previous === undefined || !isOnline) return;
 
-          // A socket that came back on a device with no network is not worth querying against: every
-          // reload would fail and the lists would end up exactly where they started. Skipping is safe
-          // rather than stranding — the network returning produces another socket reconnect, and that
-          // one starts a fresh recovery.
-          //
-          // `=== false`, never `!isOnline`: an *unknown* network — no reporter installed, which is
-          // React Native today, Node and server-side rendering — must not suppress recovery. Read
-          // from `client.networkConnection` rather than inferred from this event, because a network
-          // drop reaching us as a socket event is indistinguishable from a socket that died for its
-          // own reasons.
-          if (this.client.networkConnection.isOnline === false) {
-            logger
-              .withExtraTags('connectionRecovery')
-              .info('Skipping recovery: the device reports no network.');
-            return;
-          }
+            // A first connect is not a recovery: nothing was loaded to fall behind, so there is
+            // nothing to bring back in line. `lastOfflineAt` is written by every drop, including the
+            // deliberate `closeConnection()` that mobile backgrounding uses, so every real reconnect
+            // still qualifies.
+            if (!lastOfflineAt) return;
 
-          // The lists always recover off this event; their own deferral handles offline ordering.
-          runDetached(this.recoverChannelLists(), { context: 'recoverChannelLists' });
+            // The lists always recover off this edge; their own deferral handles offline ordering.
+            runDetached(this.recoverChannelLists(), { context: 'recoverChannelLists' });
 
-          // Active channels recover off the offline sync-status edge whenever there is one — it is the
-          // only signal guaranteed to be post-replay-post-sync. Exactly ONE of these two paths runs
-          // per reconnect: binding the subscription is what makes the edge the driver, so the same
-          // call reports which path applies. Deliberately not split into a separate predicate — two
-          // independent reads of "is there an edge?" could disagree with each other.
-          const syncEdgeDrivesActiveChannels = this.ensureSyncStatusSubscription();
-          if (!syncEdgeDrivesActiveChannels) {
-            runDetached(this.recoverActiveChannels(), {
-              context: 'recoverActiveChannels',
-            });
-          }
-        }).unsubscribe,
+            // Active channels recover off the offline sync-status edge whenever there is one — it is
+            // the only signal guaranteed to be post-replay-post-sync. Exactly ONE of these two paths
+            // runs per reconnect: binding the subscription is what makes the edge the driver, so the
+            // same call reports which path applies. Deliberately not split into a separate predicate
+            // — two independent reads of "is there an edge?" could disagree with each other.
+            const syncEdgeDrivesActiveChannels = this.ensureSyncStatusSubscription();
+            if (!syncEdgeDrivesActiveChannels) {
+              runDetached(this.recoverActiveChannels(), {
+                context: 'recoverActiveChannels',
+              });
+            }
+          },
+        ),
       );
 
       this.addUnsubscribeFunction(() => {
@@ -176,10 +174,10 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
    *
    * Resolved off `this.client` rather than injected: the DB is already reachable there, it is simply
    * attached after this manager is constructed (and initialized later still), so the binding has to be
-   * deferred rather than handed in. Doing it from the `connection.changed` handler is safe even when
-   * this manager's listener runs before the sync manager's: `OfflineDBSyncManager` awaits
+   * deferred rather than handed in. Doing it from the status handler is safe even when this manager's
+   * subscription runs before the sync manager's: `OfflineDBSyncManager` awaits
    * `syncAndExecutePendingTasks()` before publishing, so the edge cannot land in the same synchronous
-   * dispatch that registers us.
+   * notification that registers us.
    *
    * An offline DB whose `init()` never succeeded publishes no edge, so it must not be treated as the
    * trigger — hence the `initialized` check, which also means a later successful init is picked up on
@@ -274,18 +272,17 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
 
     const channels = this.recoverableActiveChannels;
     const threads = this.recoverableActiveThreads;
-    // Captured before the reloads so a drop *during* them can be detected afterwards. Timestamps
-    // rather than the booleans, because a connection that drops and returns inside the recovery
-    // window has still failed the reloads while ending up online again.
+    // Captured before the reloads so a drop *during* them can be detected afterwards. The timestamp
+    // rather than the boolean, because a socket that drops and returns inside the recovery window has
+    // still failed the reloads while ending up online again.
     //
-    // Both connections, because either one failing invalidates the reloads. The socket's is the load
-    // bearing half: it is written on every status transition, including the deliberate close and the
-    // two error paths the event is silent about, and it is the only one of the two that exists on a
-    // host with no network reporter installed — React Native, Node, server-side rendering.
+    // The socket alone. Every reload is a request over it, so it is the connection whose failure
+    // invalidates them, and its store records every transition including the deliberate close and the
+    // two error paths. A device that loses its network takes the socket with it and is caught here
+    // anyway, while a device whose network is merely unknown — every host without a reporter — would
+    // otherwise have no protection at all.
     const socketDropBefore =
       this.client.wsConnection.state.getLatestValue().lastOfflineAt;
-    const networkDropBefore =
-      this.client.networkConnection.state.getLatestValue().lastOfflineAt;
     this.isRecovering = true;
     logger
       .withExtraTags('connectionRecovery')
@@ -309,21 +306,15 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
     // none of it was refreshed — and the UI SDKs' mark-read-on-catch-up keys off this event, so it
     // would mark messages read that were never fetched.
     //
-    // Withholding is safe rather than stranding: a drop on either connection guarantees a later
-    // socket reconnect, and that recovery dispatches the event.
+    // Withholding is safe rather than stranding: a drop guarantees a later reconnect, and that
+    // recovery dispatches the event.
     const socket = this.client.wsConnection.state.getLatestValue();
-    const network = this.client.networkConnection.state.getLatestValue();
-    const socketDropped = socket.lastOfflineAt !== socketDropBefore || !socket.isOnline;
-    // `=== false`, never `!isOnline`: an *unknown* network is not a failed one, and it is what every
-    // host with no reporter reports.
-    const networkDropped =
-      network.lastOfflineAt !== networkDropBefore || network.isOnline === false;
 
-    if (socketDropped || networkDropped) {
+    if (socket.lastOfflineAt !== socketDropBefore || !socket.isOnline) {
       logger
         .withExtraTags('connectionRecovery')
         .info(
-          `Recovery finished but the ${socketDropped ? 'socket' : 'device network'} dropped while it ran; withholding connection.recovered.`,
+          'Recovery finished but the socket dropped while it ran; withholding connection.recovered.',
         );
       return;
     }

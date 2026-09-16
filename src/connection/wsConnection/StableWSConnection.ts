@@ -11,11 +11,7 @@ import {
   postInsights,
 } from '../../insights';
 import { chatLoggerSystem } from '../../logger';
-import {
-  DEFAULT_WS_CONNECTION_CONFIG,
-  WS_NETWORK_RECOVERY_RETRY_MS,
-  WS_OFFLINE_ANNOUNCE_DELAY_MS,
-} from './config';
+import { DEFAULT_WS_CONNECTION_CONFIG, WS_NETWORK_RECOVERY_RETRY_MS } from './config';
 import type { ConnectAPIResponse, ConnectedEvent, ConnectionOpen } from '../../types';
 import type { StreamChat } from '../../client';
 import type { APIError } from '../../errors';
@@ -293,10 +289,9 @@ export class StableWSConnection {
       clearInterval(this.connectionCheckTimeoutRef);
     }
 
-    // Through `_applyOnline`, not a bare assignment: this path deliberately does **not** dispatch
-    // `connection.changed` (it is what `closeConnection()` uses, and announcing a deliberate shutdown
-    // as a connection drop would be wrong), but the store must still tell the truth. That asymmetry
-    // is exactly why `client.wsConnection.state` is worth having.
+    // Through `_applyOnline`, not a bare assignment: the store must tell the truth on this path too.
+    // It is what `closeConnection()` uses, and it was one of the transitions the old event stayed
+    // silent about, which is a large part of why the store is worth having.
     this._applyOnline(false);
 
     let isClosedPromise: Promise<void>;
@@ -520,9 +515,8 @@ export class StableWSConnection {
    * Handles a change reported for the `'network'` connection — the device's own — and applies it to
    * the `'ws'` connection this class owns.
    *
-   * The logs name both by their {@link ConnectionType} value rather than by prose, so the words match
-   * what `connection.changed` carries and a reader is never left guessing which connection a line is
-   * about. The effect clause is conditional because there may not be an effect: `_setOnline` returns
+   * The logs name both by their {@link ConnectionType} value rather than by prose, so a reader is
+   * never left guessing which connection a line is about. The effect clause is conditional because there may not be an effect: `_setOnline` returns
    * early when the status is unchanged, and a `'network'` report commonly arrives after the socket has
    * already died on its own.
    *
@@ -544,7 +538,7 @@ export class StableWSConnection {
   /**
    * Applies a reported change in the `'network'` connection to the `'ws'` connection this class owns.
    *
-   * The single body behind both entry points — the `connection.changed` subscription that
+   * The single body behind both entry points — the network-store subscription that
    * `client.wsConnection` owns, and the deprecated {@link onlineStatusChanged} shim React Native still
    * calls — so the two cannot drift.
    *
@@ -709,11 +703,10 @@ export class StableWSConnection {
   };
 
   /**
-   * Marks this WebSocket up or down, and broadcasts the change if it is one.
+   * Marks this WebSocket up or down.
    *
-   * The event carries `connection: 'ws'`: `connection.changed` reports **either** connection, and a
-   * consumer that means the device's network wants `connection: 'network'` from `client.networkConnection`
-   * instead. Nothing here is a statement about the network.
+   * Nothing here is a statement about the device's network. That is a separate fact, with its own
+   * store on `client.networkConnection`.
    *
    * Note the asymmetry, which is deliberate and depended upon: going up dispatches immediately,
    * going down waits 5s and dispatches only if still down. That debounce suppresses flapping for
@@ -725,10 +718,9 @@ export class StableWSConnection {
    * Writes this connection's status to the field and to `client.wsConnection.state`, and nothing
    * else. Returns whether it changed.
    *
-   * Every path that transitions the status goes through here — including the ones that deliberately
-   * do **not** dispatch `connection.changed`: `disconnect()` (what `closeConnection()` uses) and the
-   * two error paths. That is what makes the store truthful on paths the event has always been silent
-   * about, which is the reason the store exists.
+   * Every path that transitions the status goes through here — including `disconnect()`, which
+   * `closeConnection()` uses, and the two error paths. Those were the transitions the old event
+   * stayed silent about, and covering them is the reason the store exists.
    *
    * Construction is not routed through here: initializing the field is not a transition, and stamping
    * `lastOfflineAt` because a socket object was built would be a lie.
@@ -748,32 +740,26 @@ export class StableWSConnection {
     return true;
   }
 
+  /**
+   * Applies a status change and does the bookkeeping that goes with it.
+   *
+   * Announcing it is not this class's job. The status lives in `client.wsConnection.state`, which
+   * {@link _applyOnline} writes on every transition — including the ones that were always silent —
+   * so a consumer subscribes there rather than waiting to be told.
+   *
+   * This used to hold a five second delay before announcing a drop, so a brief flap did not strobe a
+   * "connection lost" banner. That is a presentation decision and belongs to whoever renders the
+   * banner; {@link WS_OFFLINE_ANNOUNCE_DELAY_MS} is still exported as the value to debounce by, so
+   * the UI SDKs do not each pick their own. Keeping it here also meant a timer that outlived the
+   * socket that armed it, reading a discarded socket's status and announcing a drop that a
+   * replacement had already recovered from.
+   */
   _setOnline = (online: boolean) => {
     if (!this._applyOnline(online)) return;
-
-    if (this.isOnline) {
-      this.client.dispatchEvent({
-        type: 'connection.changed',
-        connection: 'ws',
-        online: this.isOnline,
-      });
-      return;
-    }
+    if (this.isOnline) return;
 
     // The server keys channel watches by connection ID, so they are gone the moment the socket is.
-    // Done here rather than off the `connection.changed` event below, which is debounced by
-    // `WS_OFFLINE_ANNOUNCE_DELAY_MS`.
     this.client._markActiveChannelsWatchInterrupted();
-
-    // we're down; wait a few seconds and fire the event only if still down
-    setTimeout(() => {
-      if (this.isOnline) return;
-      this.client.dispatchEvent({
-        type: 'connection.changed',
-        connection: 'ws',
-        online: this.isOnline,
-      });
-    }, WS_OFFLINE_ANNOUNCE_DELAY_MS);
   };
 
   /**

@@ -138,19 +138,21 @@ describe('network connection, end to end', () => {
     });
 
     it('drops and recovers the socket exactly as it would without this feature', () => {
-      vi.useFakeTimers();
       const { client, connection } = clientWithSocket();
-      const events: boolean[] = [];
-      client.on('connection.changed', (event) => {
-        if (event.connection === 'ws') events.push(event.online);
-      });
+      const published: (boolean | undefined)[] = [];
+      client.wsConnection.state.subscribeWithSelector(
+        ({ isOnline }) => ({ isOnline }),
+        ({ isOnline }) => published.push(isOnline),
+      );
+      published.length = 0;
 
       connection._setOnline(true);
       connection._setOnline(false);
-      vi.advanceTimersByTime(5_000);
       connection._setOnline(true);
 
-      expect(events).toEqual([true, false, true]);
+      // Every transition, as it happens. There is no delayed announcement to wait out any more: a UI
+      // that wants to sit on a drop debounces its own rendering.
+      expect(published).toEqual([true, false, true]);
       expect(client.wsConnection.isOnline).toBe(true);
       // Unknown throughout — nothing fabricated a value to make the socket work.
       expect(client.networkConnection.isOnline).toBeUndefined();

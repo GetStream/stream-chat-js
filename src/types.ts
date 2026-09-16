@@ -211,15 +211,14 @@ export type UnBanUserOptions = {
 export type UserOptions = Omit<QueryUsersPayload, 'filter_conditions' | 'sort'>;
 
 /**
- * Which connection a `connection.changed` / `connection.recovered` event is about.
+ * Which connection a `connection.recovered` event is about, and which of the two status stores a
+ * value came from.
  *
- * `'network'` is the device's own network status, reported by the platform listener registered on
+ * `'network'` is the device's own network status, reported by the platform reporter installed on
  * `client.networkConnection`. `'ws'` is this client's WebSocket. They are different facts and routinely
  * disagree: a socket dies on a working network (server close, expired token, health-check timeout),
- * and a device goes offline while the socket has not noticed yet.
- *
- * Handlers that mean one of them **must** narrow on `event.connection` — the payload shape is the
- * same for both, so nothing forces the check.
+ * and a device goes offline while the socket has not noticed yet — which is why each has its own
+ * store and neither is derived from the other.
  */
 export type ConnectionType = 'network' | 'ws';
 
@@ -234,7 +233,6 @@ type LocalEvent = (
         isLatestMessageSet: boolean;
       };
     })
-  | ({ type: 'connection.changed' } & { connection: ConnectionType; online: boolean })
   | ({ type: 'connection.recovered' } & { connection: ConnectionType })
   | ({ type: 'offline_reactions.queried' } & {
       offlineReactions: ReactionResponse[];
