@@ -461,7 +461,7 @@ const NETWORK_CONNECTION_FIELDS: Record<
 > = {
   statusReporter: {
     description:
-      "The platform listener that reports the device's network status. There is no default outside the browser, so React Native and other hosts must supply one or the status stays unknown.",
+      "The platform listener that reports the device's network status. A browser reporter is installed automatically; everywhere else a stand-in mirrors the WebSocket until a real one is supplied, so React Native should still install its own.",
     kind: 'value',
     type: 'function',
   },

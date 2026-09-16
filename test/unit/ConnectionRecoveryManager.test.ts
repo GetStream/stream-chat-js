@@ -362,7 +362,6 @@ describe('ConnectionRecoveryManager', () => {
 
       await client.connectionRecovery.recover();
 
-      expect(client.networkConnection.isOnline).toBeUndefined();
       expect(recovered).toHaveBeenCalledTimes(1);
     });
   });
@@ -427,8 +426,8 @@ describe('ConnectionRecoveryManager', () => {
       const { reload } = activeChannel('unknown-network');
       client.connectionRecovery.registerSubscriptions();
 
-      expect(client.networkConnection.isOnline).toBeUndefined();
-
+      // No reporter was supplied, so the device's status is whatever the socket-derived stand-in
+      // says. Recovery does not read it either way, which is the point.
       online();
       await vi.waitFor(() => expect(reload).toHaveBeenCalled());
       await vi.waitFor(() => expect(recovered).toHaveBeenCalled());

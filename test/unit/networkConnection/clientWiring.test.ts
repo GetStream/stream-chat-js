@@ -101,6 +101,62 @@ describe('client wiring — network + ws status', () => {
     });
   });
 
+  describe('with no reporter supplied', () => {
+    // The case an integration lands in by forgetting a line of setup, which used to leave the device
+    // status unknown forever and every consumer branching on it dead. A stand-in mirrors the socket
+    // instead. These assert that the stand-in is coarse without being wrong, and that it cannot feed
+    // back into the socket it is derived from.
+    let client: StreamChat;
+
+    beforeEach(() => {
+      client = new StreamChat('api-key');
+      client.wsConnection.connection = new StableWSConnection({ client });
+    });
+
+    it('reports nothing before the socket has ever been up', () => {
+      expect(client.networkConnection.isOnline).toBeUndefined();
+      expect(client.networkConnection.state.getLatestValue().lastOnlineAt).toBeNull();
+      expect(client.networkConnection.state.getLatestValue().lastOfflineAt).toBeNull();
+    });
+
+    it('follows the socket once it has been up', () => {
+      client.wsConnection._setStatus({ isOnline: true, connectionId: 'conn' });
+      expect(client.networkConnection.isOnline).toBe(true);
+
+      client.wsConnection._setStatus({ isOnline: false });
+      expect(client.networkConnection.isOnline).toBe(false);
+    });
+
+    it('does not tear the socket down by feeding its own status back to it', () => {
+      // The socket reads the network store and the stand-in reads the socket's, so the two are wired
+      // in a circle. It terminates because the derived value can never lead: applying a status the
+      // socket already holds changes nothing.
+      const socket = client.wsConnection.connection as StableWSConnection;
+      const reconnect = vi.spyOn(socket, '_reconnect').mockResolvedValue(undefined);
+      socket._setOnline(true);
+
+      socket._setOnline(false);
+
+      expect(client.networkConnection.isOnline).toBe(false);
+      expect(client.wsConnection.isOnline).toBe(false);
+      expect(reconnect).not.toHaveBeenCalled();
+    });
+
+    it('is replaced by a real reporter, which then wins', () => {
+      client.wsConnection._setStatus({ isOnline: true, connectionId: 'conn' });
+      expect(client.networkConnection.isOnline).toBe(true);
+
+      const source = fakeReporter();
+      client.networkConnection.setStatusReporter(source.reporter);
+      source.emit(false);
+
+      // The device says no network while the socket is still up, which is exactly the disagreement
+      // the stand-in cannot express.
+      expect(client.networkConnection.isOnline).toBe(false);
+      expect(client.wsConnection.isOnline).toBe(true);
+    });
+  });
+
   describe('client.wsConnection', () => {
     it('starts down, with no connection id', () => {
       const client = new StreamChat('api-key');

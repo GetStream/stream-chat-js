@@ -29,9 +29,10 @@ export const DEFAULT_NETWORK_CONNECTION_OBSERVER_CONFIG: NetworkConnectionObserv
  *
  * - the `network*` fields are written **only** via {@link setStatus}, from the platform
  *   listener the integrator registers ({@link NetworkStatusReporter}). The SDK cannot detect
- *   device network status itself — every platform reports it differently — so it has to be told. In a
- *   browser a listener is installed automatically; anywhere else, register one or `isOnline`
- *   stays `undefined`, meaning *unknown* rather than offline.
+ *   device network status itself — every platform reports it differently — so it has to be told. A
+ *   browser reports it properly and that reporter is installed automatically; everywhere else the
+ *   stand-in mirrors the WebSocket until a real reporter is installed, and `isOnline` stays
+ *   `undefined` — *unknown* rather than offline — until the socket has been up once.
  * Combining the two is a presentation decision and deliberately absent: whether "network down and
  * socket down" reads as *no network* or as *reconnecting* is copy taxonomy, and a boolean named for
  * reachability invites gating requests on it, which network status must never do. Read both and branch.
@@ -79,6 +80,12 @@ export class NetworkConnectionObserver extends WithSubscriptions {
    * reporter there on the first call could report a status into a half-built client.
    */
   private configInitialized = false;
+  /**
+   * The host default, built once. {@link getDefaultNetworkStatusReporter} returns a fresh closure for
+   * the socket-derived variant, and a fresh identity every derivation would defeat the
+   * re-installation guard below — tearing a platform listener down only to recreate it identical.
+   */
+  private defaultReporter?: NetworkStatusReporter;
 
   constructor({ client }: { client: StreamChat }) {
     super();
@@ -139,6 +146,12 @@ export class NetworkConnectionObserver extends WithSubscriptions {
    * a derivation, a patch — goes through the same resolution instead of each reimplementing the
    * fallback.
    */
+  private get hostDefaultReporter(): NetworkStatusReporter {
+    return (this.defaultReporter ??= getDefaultNetworkStatusReporter(
+      this.client.wsConnection,
+    ));
+  }
+
   private installConfiguredReporter() {
     const declared = this.config.statusReporter;
 
@@ -152,7 +165,7 @@ export class NetworkConnectionObserver extends WithSubscriptions {
     this.installReporter(
       this.imperativeReporter !== undefined
         ? (this.imperativeReporter ?? undefined)
-        : (declared ?? getDefaultNetworkStatusReporter()),
+        : (declared ?? this.hostDefaultReporter),
     );
   }
 

@@ -125,8 +125,8 @@ describe('network connection, end to end', () => {
     });
   });
 
-  describe('with no reporter, network status is an accelerator and not a precondition', () => {
-    it('keeps the network unknown rather than assuming either answer', () => {
+  describe('with no reporter supplied, the socket-derived stand-in takes over', () => {
+    it('keeps the network unknown until the socket has been up once', () => {
       const { client } = clientWithSocket();
 
       expect(client.networkConnection.isOnline).toBeUndefined();
@@ -154,8 +154,9 @@ describe('network connection, end to end', () => {
       // that wants to sit on a drop debounces its own rendering.
       expect(published).toEqual([true, false, true]);
       expect(client.wsConnection.isOnline).toBe(true);
-      // Unknown throughout — nothing fabricated a value to make the socket work.
-      expect(client.networkConnection.isOnline).toBeUndefined();
+      // The stand-in follows the socket once it has been up, which is all it can honestly say. It
+      // reported nothing before that, so nothing was fabricated to make the socket work.
+      expect(client.networkConnection.isOnline).toBe(true);
     });
 
     it('still notices a dead socket on its own connection check', () => {
@@ -172,7 +173,9 @@ describe('network connection, end to end', () => {
 
       expect(reconnect).toHaveBeenCalled();
       expect(client.wsConnection.isOnline).toBe(false);
-      expect(client.networkConnection.isOnline).toBeUndefined();
+      // The stand-in mirrors that, which cannot feed back: applying a network status the socket
+      // already has is a no-op, so nothing loops.
+      expect(client.networkConnection.isOnline).toBe(false);
     });
   });
 });

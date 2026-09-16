@@ -1,4 +1,5 @@
 import type { NetworkStatusReporter } from './types';
+import type { WSConnection } from '../wsConnection/WSConnection';
 
 /** Whether this host can both report a network status and tell us when it changes. */
 const hasBrowserNetworkStatus = () =>
@@ -36,15 +37,52 @@ export const browserNetworkStatusReporter: NetworkStatusReporter = (onStatusChan
 };
 
 /**
+ * The stand-in reporter for hosts that cannot report their own network status.
+ *
+ * It mirrors this client's WebSocket, which is **not** a measurement of the device's network: the two
+ * are different facts and routinely disagree. It exists because the alternative is worse. React
+ * Native has no built-in way to answer the question, so an integrator who forgets to install
+ * `@react-native-community/netinfo` would otherwise leave `isOnline` unknown forever, and every
+ * consumer branching on it dead. Mirroring the socket is wrong in the cases where the two disagree,
+ * and right in the common case where the device really did lose its network and took the socket with
+ * it.
+ *
+ * Nothing is reported until the socket has been up once. `isOnline` on the WebSocket store is `false`
+ * from construction, and forwarding that would claim the device is offline before anything had been
+ * attempted — a fabricated reading, which is the one thing this module refuses to produce. Until
+ * then the device's status stays `undefined`, meaning unknown.
+ *
+ * Install a real reporter wherever one exists. This one can only ever repeat what the socket already
+ * said, so it cannot tell you that the network came back before the socket noticed, which is the
+ * whole reason the network signal is worth having.
+ */
+export const createWSConnectionNetworkStatusReporter =
+  (wsConnection: WSConnection): NetworkStatusReporter =>
+  (onStatusChange) =>
+    wsConnection.state.subscribeWithSelector(
+      ({ isOnline, lastOnlineAt }) => ({ isOnline, lastOnlineAt }),
+      ({ isOnline, lastOnlineAt }) => {
+        if (!lastOnlineAt) return;
+        onStatusChange(isOnline);
+      },
+    );
+
+/**
  * The reporter to install when the integrator supplied none.
  *
- * Returns {@link browserNetworkStatusReporter} in a browser, and **`undefined` everywhere
- * else** — deliberately, rather than falling back to something that always reports "online". The
- * `isOnline()` helper in `utils.ts` did exactly that until Task 5 deleted it: it returned `true` when
- * it could not tell, including on React Native where `navigator.onLine` is not a boolean. A fabricated
- * value is worse than an absent one, because nothing downstream can distinguish it from a real
- * reading. With no reporter, `isOnline` stays `undefined` and consumers can see that they have not
- * been told.
+ * {@link browserNetworkStatusReporter} in a browser, where the platform answers the question
+ * properly, and {@link createWSConnectionNetworkStatusReporter} everywhere else.
+ *
+ * It never returns `undefined` any more. It used to, so that an unconfigured host reported `undefined`
+ * rather than a made-up value — but in practice that meant a React Native integration with a missing
+ * line of setup had no network signal at all and failed silently, which is harder to notice than a
+ * signal that is merely coarse. The honesty is preserved where it matters: the stand-in reports
+ * nothing until the socket has been up once, so a client that has never connected still answers
+ * `undefined`.
  */
-export const getDefaultNetworkStatusReporter = (): NetworkStatusReporter | undefined =>
-  hasBrowserNetworkStatus() ? browserNetworkStatusReporter : undefined;
+export const getDefaultNetworkStatusReporter = (
+  wsConnection: WSConnection,
+): NetworkStatusReporter =>
+  hasBrowserNetworkStatus()
+    ? browserNetworkStatusReporter
+    : createWSConnectionNetworkStatusReporter(wsConnection);

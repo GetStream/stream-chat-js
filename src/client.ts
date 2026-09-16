@@ -164,11 +164,14 @@ export class StreamChat extends ChatApi {
    * socket dies on a working network (server close, expired token, health-check timeout), and a
    * device goes offline while the socket has not noticed yet.
    *
-   * The SDK cannot detect this itself — every platform reports it differently — so it has to be told.
-   * In a browser a listener is installed automatically; anywhere else, register one:
+   * The SDK cannot detect this itself — every platform reports it differently — so it has to be told:
    * `client.config.set({ client: { networkConnection: { statusReporter } } })`, or
-   * `client.networkConnection.setStatusReporter(…)` afterwards. Without one, `isOnline`
-   * stays `undefined`, meaning *unknown* rather than offline.
+   * `client.networkConnection.setStatusReporter(…)` afterwards.
+   *
+   * A browser answers the question properly and its reporter is installed automatically. Everywhere
+   * else a stand-in mirrors the WebSocket until a real one arrives, which is coarse but better than
+   * nothing at all on an integration that forgot the line of setup. Either way `isOnline` is
+   * `undefined` — *unknown*, not offline — until something has reported.
    */
   networkConnection: NetworkConnectionObserver;
   /**

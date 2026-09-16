@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   browserNetworkStatusReporter,
+  createWSConnectionNetworkStatusReporter,
   getDefaultNetworkStatusReporter,
 } from '../../../src/connection';
+import { StateStore } from '../../../src/store';
+import type { WSConnection, WSConnectionState } from '../../../src/connection';
 
 type Listener = () => void;
 
@@ -144,32 +147,133 @@ describe('browserNetworkStatusReporter off-browser', () => {
 });
 
 describe('getDefaultNetworkStatusReporter', () => {
+  /** A WebSocket store that a test drives directly, standing in for the real connection. */
+  const fakeWSConnection = () => {
+    const state = new StateStore<WSConnectionState>({
+      isOnline: false,
+      connectionId: undefined,
+      lastOnlineAt: null,
+      lastOfflineAt: null,
+    });
+    return {
+      wsConnection: { state } as unknown as WSConnection,
+      up: (connectionId = 'conn') =>
+        state.partialNext({ isOnline: true, connectionId, lastOnlineAt: new Date() }),
+      down: () =>
+        state.partialNext({
+          isOnline: false,
+          connectionId: undefined,
+          lastOfflineAt: new Date(),
+        }),
+    };
+  };
+
   it('picks the browser reporter when window listeners and a boolean onLine are both present', () => {
     stubBrowser(true);
-    expect(getDefaultNetworkStatusReporter()).toBe(browserNetworkStatusReporter);
+    expect(getDefaultNetworkStatusReporter(fakeWSConnection().wsConnection)).toBe(
+      browserNetworkStatusReporter,
+    );
   });
 
-  it('returns undefined when navigator.onLine is not a boolean (React Native)', () => {
-    // RN's navigator has no `onLine`. The answer must be `undefined` — "we have not been told" —
-    // and NOT a fabricated `true`, which is the mistake the old `isOnline()` helper in `utils.ts`
-    // made, and which nothing downstream could distinguish from a real reading.
-    vi.stubGlobal('window', { addEventListener: vi.fn(), removeEventListener: vi.fn() });
-    vi.stubGlobal('navigator', { userAgent: 'ReactNative' });
+  it.each([
+    [
+      'navigator.onLine is not a boolean (React Native)',
+      () => {
+        vi.stubGlobal('window', {
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+        });
+        vi.stubGlobal('navigator', { userAgent: 'ReactNative' });
+      },
+    ],
+    [
+      'window is absent (Node, SSR)',
+      () => {
+        vi.stubGlobal('window', undefined);
+        vi.stubGlobal('navigator', { onLine: true });
+      },
+    ],
+    [
+      'navigator is absent entirely',
+      () => {
+        vi.stubGlobal('window', {
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+        });
+        vi.stubGlobal('navigator', undefined);
+      },
+    ],
+  ])('falls back to the socket-derived reporter when %s', (_label, stub) => {
+    // It used to return `undefined` here, which left an integration with a missing line of setup
+    // with no network signal at all and nothing to notice it by. The stand-in is coarse rather than
+    // absent.
+    stub();
+    const fake = fakeWSConnection();
 
-    expect(getDefaultNetworkStatusReporter()).toBeUndefined();
+    const reporter = getDefaultNetworkStatusReporter(fake.wsConnection);
+
+    expect(reporter).not.toBe(browserNetworkStatusReporter);
+    expect(typeof reporter).toBe('function');
+  });
+});
+
+describe('createWSConnectionNetworkStatusReporter', () => {
+  const fakeWSConnection = () => {
+    const state = new StateStore<WSConnectionState>({
+      isOnline: false,
+      connectionId: undefined,
+      lastOnlineAt: null,
+      lastOfflineAt: null,
+    });
+    return {
+      wsConnection: { state } as unknown as WSConnection,
+      up: (connectionId = 'conn') =>
+        state.partialNext({ isOnline: true, connectionId, lastOnlineAt: new Date() }),
+      down: () =>
+        state.partialNext({
+          isOnline: false,
+          connectionId: undefined,
+          lastOfflineAt: new Date(),
+        }),
+    };
+  };
+
+  it('reports nothing before the socket has ever been up', () => {
+    // `isOnline` is `false` from construction. Forwarding that would claim the device is offline
+    // before anything had been attempted, which is the fabricated reading this module refuses to
+    // produce — so the status stays unknown instead.
+    const fake = fakeWSConnection();
+    const onStatusChange = vi.fn();
+
+    createWSConnectionNetworkStatusReporter(fake.wsConnection)(onStatusChange);
+
+    expect(onStatusChange).not.toHaveBeenCalled();
   });
 
-  it('returns undefined when window is absent (Node, SSR)', () => {
-    vi.stubGlobal('window', undefined);
-    vi.stubGlobal('navigator', { onLine: true });
+  it('mirrors the socket once it has been up', () => {
+    const fake = fakeWSConnection();
+    const onStatusChange = vi.fn();
+    createWSConnectionNetworkStatusReporter(fake.wsConnection)(onStatusChange);
 
-    expect(getDefaultNetworkStatusReporter()).toBeUndefined();
+    fake.up();
+    expect(onStatusChange).toHaveBeenLastCalledWith(true);
+
+    fake.down();
+    expect(onStatusChange).toHaveBeenLastCalledWith(false);
   });
 
-  it('returns undefined when navigator is absent entirely', () => {
-    vi.stubGlobal('window', { addEventListener: vi.fn(), removeEventListener: vi.fn() });
-    vi.stubGlobal('navigator', undefined);
+  it('stops reporting once unsubscribed', () => {
+    const fake = fakeWSConnection();
+    const onStatusChange = vi.fn();
+    const unsubscribe = createWSConnectionNetworkStatusReporter(fake.wsConnection)(
+      onStatusChange,
+    );
+    fake.up();
+    onStatusChange.mockClear();
 
-    expect(getDefaultNetworkStatusReporter()).toBeUndefined();
+    unsubscribe();
+    fake.down();
+
+    expect(onStatusChange).not.toHaveBeenCalled();
   });
 });
