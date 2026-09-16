@@ -2354,7 +2354,7 @@ describe('OfflineSupportApi', () => {
           expect(updatePendingTaskSpy).not.toHaveBeenCalled();
         });
 
-        it('does not persist non-replayable update-message tasks', async () => {
+        it('does not persist a non-replayable update-message task with nothing to fold into', async () => {
           const task = generatePendingTask(
             'update-message',
             1,
@@ -2366,15 +2366,62 @@ describe('OfflineSupportApi', () => {
               },
             },
           ) as PendingTask;
+          vi.spyOn(offlineDb, 'getPendingTasks').mockResolvedValue([]);
           const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
-          const getPendingTasksSpy = vi.spyOn(offlineDb, 'getPendingTasks');
           const updatePendingTaskSpy = vi.spyOn(offlineDb, 'updatePendingTask');
 
           await offlineDb.handleAddPendingTask({ task });
 
           expect(addPendingTaskSpy).not.toHaveBeenCalled();
-          expect(getPendingTasksSpy).not.toHaveBeenCalled();
           expect(updatePendingTaskSpy).not.toHaveBeenCalled();
+        });
+
+        // The replayability guard protects a STANDALONE `update-message` replay, which would send a
+        // `file://` path to the server verbatim. A fold issues no update at all - it rewrites a queued
+        // send that already carries those same local URIs - so running the guard first discarded edits
+        // that were safe.
+        it('folds a non-replayable edit into a queued send-message task rather than dropping it', async () => {
+          const task = generatePendingTask(
+            'update-message',
+            1,
+            {},
+            {
+              message: {
+                id: 'msg-123',
+                attachments: [{ type: 'image', image_url: 'file://local-image.jpg' }],
+                text: 'edited caption',
+              },
+            },
+          ) as PendingTask;
+          vi.spyOn(offlineDb, 'getPendingTasks').mockResolvedValue([
+            {
+              id: 7,
+              messageId: 'msg-123',
+              payload: [
+                {
+                  message: {
+                    id: 'msg-123',
+                    attachments: [{ type: 'image', image_url: 'file://local-image.jpg' }],
+                    text: 'original caption',
+                  },
+                },
+              ],
+              type: 'send-message',
+            } as PendingTask,
+          ]);
+          const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
+          const updatePendingTaskSpy = vi.spyOn(offlineDb, 'updatePendingTask');
+
+          await offlineDb.handleAddPendingTask({ task });
+
+          expect(addPendingTaskSpy).not.toHaveBeenCalled();
+          expect(updatePendingTaskSpy).toHaveBeenCalledWith({
+            id: 7,
+            task: expect.objectContaining({ id: 7, type: 'send-message' }),
+          });
+          expect(updatePendingTaskSpy.mock.calls[0][0].task.payload[0].message.text).toBe(
+            'edited caption',
+          );
         });
 
         // Both payloads reaching the queue have been through `localMessageToNewMessagePayload`, so

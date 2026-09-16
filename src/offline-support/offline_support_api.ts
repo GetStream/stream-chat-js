@@ -1466,6 +1466,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     // No queued send - or one with no row to rewrite, which a task read back from the DB never is.
     // Either way there is nothing to fold into, so the edit goes in as its own task.
     if (sendTask?.id === undefined) {
+      if (!isMessageUpdateReplayable(message)) return;
+
       await this.addPendingTask(task);
       return;
     }
@@ -1490,10 +1492,6 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    */
   public handleAddPendingTask = async ({ task }: { task: PendingTask }) => {
     if (task.type === 'update-message') {
-      if (!isMessageUpdateReplayable(task.payload[0].message)) {
-        return;
-      }
-
       await this.handleUpdateMessagePendingTask(task);
       return;
     }
