@@ -3,11 +3,11 @@ import { StateStore } from '../../store';
 import { ConfigController } from '../../configuration/ConfigController';
 import { deepFreezeConfig } from '../../configuration/utils/deepFreezeConfig';
 import { chatLoggerSystem } from '../../logger';
-import { getDefaultNetworkStatusListenerRegistrar } from './registrars';
+import { getDefaultNetworkStatusReporter } from './reporters';
 import type {
   NetworkConnectionObserverConfig,
   NetworkConnectionState,
-  NetworkStatusListenerRegistrar,
+  NetworkStatusReporter,
 } from './types';
 import type { StreamChat } from '../../client';
 import type { Unsubscribe } from '../../store';
@@ -15,7 +15,7 @@ import type { Unsubscribe } from '../../store';
 const logger = chatLoggerSystem.getLogger('client');
 
 export const DEFAULT_NETWORK_CONNECTION_OBSERVER_CONFIG: NetworkConnectionObserverConfig =
-  deepFreezeConfig({ statusListenerRegistrar: undefined });
+  deepFreezeConfig({ statusReporter: undefined });
 
 /**
  * The status of every connection this client depends on, as reactive state — one store per
@@ -28,7 +28,7 @@ export const DEFAULT_NETWORK_CONNECTION_OBSERVER_CONFIG: NetworkConnectionObserv
  * other:
  *
  * - the `network*` fields are written **only** via {@link setStatus}, from the platform
- *   listener the integrator registers ({@link NetworkStatusListenerRegistrar}). The SDK cannot detect
+ *   listener the integrator registers ({@link NetworkStatusReporter}). The SDK cannot detect
  *   device network status itself — every platform reports it differently — so it has to be told. In a
  *   browser a listener is installed automatically; anywhere else, register one or `isOnline`
  *   stays `undefined`, meaning *unknown* rather than offline.
@@ -49,34 +49,34 @@ export class NetworkConnectionObserver extends WithSubscriptions {
    * Held separately from `addUnsubscribeFunction` because it has to be **replaced**, not just torn
    * down: that set only clears on unregister, so it cannot express a swap.
    */
-  private unsubscribeStatusListener?: Unsubscribe;
+  private unsubscribeStatusReporter?: Unsubscribe;
   /**
-   * The registrar currently installed, so re-installing the same one is a no-op. Configuration is
+   * The reporter currently installed, so re-installing the same one is a no-op. Configuration is
    * re-derived more than once — the client calls `initializeConfig` directly and again through the
    * config store's immediate subscribe — and tearing a platform listener down only to recreate it
    * identical is wasteful at best and, for something like `NetInfo`, a needless native round trip.
    */
-  private installedRegistrar?: NetworkStatusListenerRegistrar;
+  private installedReporter?: NetworkStatusReporter;
   /**
-   * What {@link setStatusListenerRegistrar} was last given — `null` when it was used to clear one,
+   * What {@link setStatusReporter} was last given — `null` when it was used to clear one,
    * and `undefined` when it has never been called.
    *
    * Held here rather than written into the resolved configuration because a derivation rebuilds that
-   * from the declarative tree, so an imperatively installed registrar was torn down by the next
+   * from the declarative tree, so an imperatively installed reporter was torn down by the next
    * `client.config.set` on **any** `client` key and replaced by the platform default, which is
    * nothing at all on React Native.
    */
-  private imperativeRegistrar?: NetworkStatusListenerRegistrar | null;
+  private imperativeReporter?: NetworkStatusReporter | null;
   /**
-   * The declared registrar the last installation saw, so a *change* to it can be told apart from a
+   * The declared reporter the last installation saw, so a *change* to it can be told apart from a
    * re-derivation that named the same thing. Whichever source spoke last wins, and this is what makes
    * that comparison possible.
    */
-  private declaredRegistrar?: NetworkStatusListenerRegistrar;
+  private declaredReporter?: NetworkStatusReporter;
   /**
    * Whether configuration has been derived at least once. {@link registerSubscriptions} runs while
    * the client is still being constructed, before its event machinery exists, so installing a
-   * registrar there on the first call could report a status into a half-built client.
+   * reporter there on the first call could report a status into a half-built client.
    */
   private configInitialized = false;
 
@@ -109,13 +109,13 @@ export class NetworkConnectionObserver extends WithSubscriptions {
   /**
    * Merges a partial configuration into the resolved config and notifies subscribers.
    *
-   * Installs whatever registrar the result names, so this is a real alternative to
-   * {@link setStatusListenerRegistrar} rather than a write nobody acts on. Without it the field was
+   * Installs whatever reporter the result names, so this is a real alternative to
+   * {@link setStatusReporter} rather than a write nobody acts on. Without it the field was
    * stored and never invoked, leaving `isOnline` `undefined` forever with no error anywhere.
    */
   public updateConfig(config: Partial<NetworkConnectionObserverConfig>) {
     this.configController.patch(config);
-    this.installConfiguredRegistrar();
+    this.installConfiguredReporter();
   }
 
   /**
@@ -123,36 +123,36 @@ export class NetworkConnectionObserver extends WithSubscriptions {
    * derivation entry point every configurable entity exposes, so the client routes a slice here and
    * knows nothing about this class's defaults or merge semantics.
    *
-   * Installs whatever registrar the resolved config names, falling back to the platform default. This
-   * is what makes `client.config.set({ client: { connections: { statusListenerRegistrar } } })` work.
+   * Installs whatever reporter the resolved config names, falling back to the platform default. This
+   * is what makes `client.config.set({ client: { connections: { statusReporter } } })` work.
    */
   public initializeConfig(config?: Partial<NetworkConnectionObserverConfig>) {
     this.configController.initialize(config);
     this.configInitialized = true;
-    this.installConfiguredRegistrar();
+    this.installConfiguredReporter();
   }
 
   /**
-   * Installs the registrar the resolved configuration names, falling back to the platform default.
+   * Installs the reporter the resolved configuration names, falling back to the platform default.
    *
    * The single place installation happens, so every path that can change what should be installed —
    * a derivation, a patch — goes through the same resolution instead of each reimplementing the
    * fallback.
    */
-  private installConfiguredRegistrar() {
-    const declared = this.config.statusListenerRegistrar;
+  private installConfiguredReporter() {
+    const declared = this.config.statusReporter;
 
-    if (declared !== this.declaredRegistrar) {
-      this.declaredRegistrar = declared;
+    if (declared !== this.declaredReporter) {
+      this.declaredReporter = declared;
       // The declarative tree just named something different, which outranks an earlier imperative
       // call: whichever source spoke last is what the integrator meant.
-      this.imperativeRegistrar = undefined;
+      this.imperativeReporter = undefined;
     }
 
-    this.installRegistrar(
-      this.imperativeRegistrar !== undefined
-        ? (this.imperativeRegistrar ?? undefined)
-        : (declared ?? getDefaultNetworkStatusListenerRegistrar()),
+    this.installReporter(
+      this.imperativeReporter !== undefined
+        ? (this.imperativeReporter ?? undefined)
+        : (declared ?? getDefaultNetworkStatusReporter()),
     );
   }
 
@@ -173,36 +173,34 @@ export class NetworkConnectionObserver extends WithSubscriptions {
    * handlers *after* the client exists.
    *
    * What is set here survives every later configuration derivation, and is only superseded by the
-   * declarative tree naming a *different* registrar — `client.config.set({ client: { networkConnection:
-   * { statusListenerRegistrar } } })`.
+   * declarative tree naming a *different* reporter — `client.config.set({ client: { networkConnection:
+   * { statusReporter } } })`.
    */
-  public setStatusListenerRegistrar(
-    registrar: NetworkStatusListenerRegistrar | null | undefined,
-  ) {
+  public setStatusReporter(reporter: NetworkStatusReporter | null | undefined) {
     // Recorded before installing, so the next derivation reinstalls this rather than the platform
     // default. `null` is kept distinct from `undefined`: it means "explicitly none", which must
     // survive a derivation too.
-    this.imperativeRegistrar = registrar ?? null;
-    this.installConfiguredRegistrar();
+    this.imperativeReporter = reporter ?? null;
+    this.installConfiguredReporter();
   }
 
-  /** Installs one registrar, unsubscribing whatever was there. */
-  private installRegistrar(registrar: NetworkStatusListenerRegistrar | null | undefined) {
-    if (registrar && registrar === this.installedRegistrar) return;
+  /** Installs one reporter, unsubscribing whatever was there. */
+  private installReporter(reporter: NetworkStatusReporter | null | undefined) {
+    if (reporter && reporter === this.installedReporter) return;
 
-    this.unsubscribeStatusListener?.();
-    this.unsubscribeStatusListener = undefined;
-    this.installedRegistrar = undefined;
+    this.unsubscribeStatusReporter?.();
+    this.unsubscribeStatusReporter = undefined;
+    this.installedReporter = undefined;
 
-    if (!registrar) return;
+    if (!reporter) return;
 
     try {
-      this.unsubscribeStatusListener = registrar((isOnline) => this.setStatus(isOnline));
-      this.installedRegistrar = registrar;
+      this.unsubscribeStatusReporter = reporter((isOnline) => this.setStatus(isOnline));
+      this.installedReporter = reporter;
     } catch (error) {
       logger
         .withExtraTags('connections')
-        .error('The network status listener registrar threw; status stays unknown.', {
+        .error('The network status listener reporter threw; status stays unknown.', {
           error,
         });
     }
@@ -211,7 +209,7 @@ export class NetworkConnectionObserver extends WithSubscriptions {
   /**
    * Reports device network status.
    *
-   * The registrar calls this; so may a host with no listener API to register at all, and it is the
+   * The reporter calls this; so may a host with no listener API to register at all, and it is the
    * supported replacement for reaching into `client.wsConnection.onlineStatusChanged` with a
    * synthesized DOM event.
    */
@@ -233,7 +231,7 @@ export class NetworkConnectionObserver extends WithSubscriptions {
   }
 
   /**
-   * Nothing to subscribe to beyond the registrar, which {@link initializeConfig} installs — this
+   * Nothing to subscribe to beyond the reporter, which {@link initializeConfig} installs — this
    * class has no client events to listen to, by design: deriving either status from an event would
    * be the conflation it exists to prevent. Present because `WithSubscriptions` requires it, and so
    * that teardown releases the platform listener.
@@ -241,16 +239,16 @@ export class NetworkConnectionObserver extends WithSubscriptions {
   public registerSubscriptions = () => {
     if (!this.hasSubscriptions) {
       this.addUnsubscribeFunction(() => {
-        this.unsubscribeStatusListener?.();
-        this.unsubscribeStatusListener = undefined;
-        this.installedRegistrar = undefined;
+        this.unsubscribeStatusReporter?.();
+        this.unsubscribeStatusReporter = undefined;
+        this.installedReporter = undefined;
       });
 
       // Re-registering has to reinstall. The teardown above released the platform listener, and
       // nothing else puts it back — so an unregister/register cycle left the observer permanently
       // deaf, unlike `WSConnection` and `ConnectionRecoveryManager`, which both resubscribe here.
       // Skipped before the first derivation, when there is nothing resolved to install yet.
-      if (this.configInitialized) this.installConfiguredRegistrar();
+      if (this.configInitialized) this.installConfiguredReporter();
     }
 
     this.incrementRefCount();

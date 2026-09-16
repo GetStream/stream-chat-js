@@ -274,7 +274,7 @@ export class WSConnection extends WithSubscriptions {
 
   /**
    * @deprecated Report network status through `client.networkConnection.setStatus(isOnline)` instead,
-   *   or register a listener with `client.networkConnection.setStatusListenerRegistrar(…)`. Forwarded
+   *   or register a listener with `client.networkConnection.setStatusReporter(…)`. Forwarded
    *   here only because `stream-chat-react-native` calls it directly.
    */
   onlineStatusChanged(event: Event): void {

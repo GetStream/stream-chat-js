@@ -166,8 +166,8 @@ export class StreamChat extends ChatApi {
    *
    * The SDK cannot detect this itself — every platform reports it differently — so it has to be told.
    * In a browser a listener is installed automatically; anywhere else, register one:
-   * `client.config.set({ client: { networkConnection: { statusListenerRegistrar } } })`, or
-   * `client.networkConnection.setStatusListenerRegistrar(…)` afterwards. Without one, `isOnline`
+   * `client.config.set({ client: { networkConnection: { statusReporter } } })`, or
+   * `client.networkConnection.setStatusReporter(…)` afterwards. Without one, `isOnline`
    * stays `undefined`, meaning *unknown* rather than offline.
    */
   networkConnection: NetworkConnectionObserver;

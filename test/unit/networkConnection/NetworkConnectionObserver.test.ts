@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NetworkConnectionObserver } from '../../../src/connection';
 import type {
   NetworkConnectionState,
-  NetworkStatusListenerRegistrar,
+  NetworkStatusReporter,
 } from '../../../src/connection';
 import type { StreamChat } from '../../../src/client';
 
@@ -20,21 +20,21 @@ const fakeClient = () => {
   };
 };
 
-/** A registrar whose callback the test drives directly, standing in for any platform listener. */
-const fakeRegistrar = () => {
+/** A reporter whose callback the test drives directly, standing in for any platform listener. */
+const fakeReporter = () => {
   const unsubscribe = vi.fn();
   let emit: ((isOnline: boolean) => void) | undefined;
 
-  const registrar: NetworkStatusListenerRegistrar = (onStatusChange) => {
+  const reporter: NetworkStatusReporter = (onStatusChange) => {
     emit = onStatusChange;
     return unsubscribe;
   };
 
   return {
-    registrar,
+    reporter,
     unsubscribe,
     emit: (isOnline: boolean) => {
-      if (!emit) throw new Error('registrar was never installed');
+      if (!emit) throw new Error('reporter was never installed');
       emit(isOnline);
     },
   };
@@ -56,8 +56,8 @@ describe('NetworkConnectionObserver', () => {
 
   describe('initial state', () => {
     it('starts unknown rather than assuming online', () => {
-      // `undefined` is the honest answer before any registrar reports, and it is what every host
-      // without a built-in registrar keeps. Defaulting to `true` here would be indistinguishable
+      // `undefined` is the honest answer before any reporter reports, and it is what every host
+      // without a built-in reporter keeps. Defaulting to `true` here would be indistinguishable
       // from a real reading.
       expect(observer.isOnline).toBeUndefined();
       expect(observer.state.getLatestValue()).toEqual({
@@ -72,10 +72,10 @@ describe('NetworkConnectionObserver', () => {
     });
   });
 
-  describe('tracking a registrar', () => {
+  describe('tracking a reporter', () => {
     it('adopts the first reported status and stamps only the matching timestamp', () => {
-      const source = fakeRegistrar();
-      observer.setStatusListenerRegistrar(source.registrar);
+      const source = fakeReporter();
+      observer.setStatusReporter(source.reporter);
 
       source.emit(true);
 
@@ -86,8 +86,8 @@ describe('NetworkConnectionObserver', () => {
     });
 
     it('advances each timestamp independently across online → offline → online', () => {
-      const source = fakeRegistrar();
-      observer.setStatusListenerRegistrar(source.registrar);
+      const source = fakeReporter();
+      observer.setStatusReporter(source.reporter);
 
       source.emit(true);
       const firstOnlineAt = observer.state.getLatestValue().lastOnlineAt;
@@ -104,8 +104,8 @@ describe('NetworkConnectionObserver', () => {
     });
 
     it('dispatches connection.changed for the network, never for the socket', () => {
-      const source = fakeRegistrar();
-      observer.setStatusListenerRegistrar(source.registrar);
+      const source = fakeReporter();
+      observer.setStatusReporter(source.reporter);
 
       source.emit(true);
       source.emit(false);
@@ -117,8 +117,8 @@ describe('NetworkConnectionObserver', () => {
     });
 
     it('ignores a repeated identical status', () => {
-      const source = fakeRegistrar();
-      observer.setStatusListenerRegistrar(source.registrar);
+      const source = fakeReporter();
+      observer.setStatusReporter(source.reporter);
 
       const onStateChange = vi.fn();
       // `StateStore.subscribe` fires once with the current value, so that first call is the baseline.
@@ -140,7 +140,7 @@ describe('NetworkConnectionObserver', () => {
   });
 
   describe('setStatus', () => {
-    it('reports status without any registrar installed', () => {
+    it('reports status without any reporter installed', () => {
       // The supported replacement for reaching into `client.wsConnection.onlineStatusChanged` with a
       // synthesized DOM event, and the escape hatch for hosts with no listener API to register.
       observer.setStatus(false);
@@ -154,13 +154,13 @@ describe('NetworkConnectionObserver', () => {
     });
   });
 
-  describe('swapping the registrar', () => {
+  describe('swapping the reporter', () => {
     it('unsubscribes the previous one exactly once and adopts the new value immediately', () => {
-      const first = fakeRegistrar();
-      observer.setStatusListenerRegistrar(first.registrar);
+      const first = fakeReporter();
+      observer.setStatusReporter(first.reporter);
       first.emit(false);
 
-      observer.setStatusListenerRegistrar((onStatusChange) => {
+      observer.setStatusReporter((onStatusChange) => {
         onStatusChange(true);
         return vi.fn();
       });
@@ -170,11 +170,11 @@ describe('NetworkConnectionObserver', () => {
     });
 
     it('leaves the last known status alone when cleared with null', () => {
-      const source = fakeRegistrar();
-      observer.setStatusListenerRegistrar(source.registrar);
+      const source = fakeReporter();
+      observer.setStatusReporter(source.reporter);
       source.emit(true);
 
-      observer.setStatusListenerRegistrar(null);
+      observer.setStatusReporter(null);
 
       // Clearing the listener is not "forget what we were told" — an edge is not a state, and
       // reverting to unknown would lose information rather than reset it.
@@ -182,9 +182,9 @@ describe('NetworkConnectionObserver', () => {
       expect(observer.isOnline).toBe(true);
     });
 
-    it('survives a registrar that throws, leaving status unknown', () => {
-      observer.setStatusListenerRegistrar(() => {
-        throw new Error('registrar exploded');
+    it('survives a reporter that throws, leaving status unknown', () => {
+      observer.setStatusReporter(() => {
+        throw new Error('reporter exploded');
       });
 
       expect(observer.isOnline).toBeUndefined();
@@ -192,13 +192,13 @@ describe('NetworkConnectionObserver', () => {
   });
 
   describe('configuration', () => {
-    it('installs the registrar named by the declarative config', () => {
-      const source = fakeRegistrar();
+    it('installs the reporter named by the declarative config', () => {
+      const source = fakeReporter();
 
-      observer.initializeConfig({ statusListenerRegistrar: source.registrar });
+      observer.initializeConfig({ statusReporter: source.reporter });
       source.emit(true);
 
-      expect(observer.config.statusListenerRegistrar).toBe(source.registrar);
+      expect(observer.config.statusReporter).toBe(source.reporter);
       expect(observer.isOnline).toBe(true);
     });
 
@@ -207,28 +207,28 @@ describe('NetworkConnectionObserver', () => {
       // status stays unknown — the same outcome as React Native.
       observer.initializeConfig();
 
-      expect(observer.config.statusListenerRegistrar).toBeUndefined();
+      expect(observer.config.statusReporter).toBeUndefined();
       expect(observer.isOnline).toBeUndefined();
     });
 
-    it('replaces a previously installed registrar on re-initialization', () => {
-      const first = fakeRegistrar();
-      observer.initializeConfig({ statusListenerRegistrar: first.registrar });
+    it('replaces a previously installed reporter on re-initialization', () => {
+      const first = fakeReporter();
+      observer.initializeConfig({ statusReporter: first.reporter });
 
-      const second = fakeRegistrar();
-      observer.initializeConfig({ statusListenerRegistrar: second.registrar });
+      const second = fakeReporter();
+      observer.initializeConfig({ statusReporter: second.reporter });
 
       expect(first.unsubscribe).toHaveBeenCalledTimes(1);
       second.emit(false);
       expect(observer.isOnline).toBe(false);
     });
 
-    it('keeps an imperatively installed registrar across a derivation', () => {
+    it('keeps an imperatively installed reporter across a derivation', () => {
       // `client.config.set` on any `client` key re-derives every manager. Before this, that tore the
-      // registrar down and installed the platform default in its place, which on React Native is
+      // reporter down and installed the platform default in its place, which on React Native is
       // nothing — so the device's status silently froze at whatever was last reported.
-      const source = fakeRegistrar();
-      observer.setStatusListenerRegistrar(source.registrar);
+      const source = fakeReporter();
+      observer.setStatusReporter(source.reporter);
 
       observer.initializeConfig();
 
@@ -238,59 +238,59 @@ describe('NetworkConnectionObserver', () => {
     });
 
     it('keeps an imperative clear across a derivation', () => {
-      const source = fakeRegistrar();
-      observer.setStatusListenerRegistrar(source.registrar);
-      observer.setStatusListenerRegistrar(null);
+      const source = fakeReporter();
+      observer.setStatusReporter(source.reporter);
+      observer.setStatusReporter(null);
 
       observer.initializeConfig();
 
       // Not resurrected as the platform default either: "explicitly none" is a decision, not an
       // absence of one.
-      expect(observer.config.statusListenerRegistrar).toBeUndefined();
+      expect(observer.config.statusReporter).toBeUndefined();
       expect(observer.isOnline).toBeUndefined();
     });
 
-    it('lets the declarative tree supersede an earlier imperative registrar', () => {
-      const imperative = fakeRegistrar();
-      observer.setStatusListenerRegistrar(imperative.registrar);
+    it('lets the declarative tree supersede an earlier imperative reporter', () => {
+      const imperative = fakeReporter();
+      observer.setStatusReporter(imperative.reporter);
 
-      const declared = fakeRegistrar();
-      observer.initializeConfig({ statusListenerRegistrar: declared.registrar });
+      const declared = fakeReporter();
+      observer.initializeConfig({ statusReporter: declared.reporter });
 
       expect(imperative.unsubscribe).toHaveBeenCalledTimes(1);
       declared.emit(false);
       expect(observer.isOnline).toBe(false);
     });
 
-    it('lets a later imperative registrar supersede the declared one', () => {
-      const declared = fakeRegistrar();
-      observer.initializeConfig({ statusListenerRegistrar: declared.registrar });
+    it('lets a later imperative reporter supersede the declared one', () => {
+      const declared = fakeReporter();
+      observer.initializeConfig({ statusReporter: declared.reporter });
 
-      const imperative = fakeRegistrar();
-      observer.setStatusListenerRegistrar(imperative.registrar);
+      const imperative = fakeReporter();
+      observer.setStatusReporter(imperative.reporter);
 
       expect(declared.unsubscribe).toHaveBeenCalledTimes(1);
       imperative.emit(true);
       expect(observer.isOnline).toBe(true);
     });
 
-    it('installs the registrar handed to updateConfig', () => {
-      // Storing it without installing it is indistinguishable from a host that has no registrar at
+    it('installs the reporter handed to updateConfig', () => {
+      // Storing it without installing it is indistinguishable from a host that has no reporter at
       // all: no listener, no error, and `isOnline` unknown forever.
-      const source = fakeRegistrar();
+      const source = fakeReporter();
 
-      observer.updateConfig({ statusListenerRegistrar: source.registrar });
+      observer.updateConfig({ statusReporter: source.reporter });
       source.emit(true);
 
       expect(observer.isOnline).toBe(true);
     });
 
     it('releases the previous listener when updateConfig replaces it', () => {
-      const first = fakeRegistrar();
-      observer.updateConfig({ statusListenerRegistrar: first.registrar });
+      const first = fakeReporter();
+      observer.updateConfig({ statusReporter: first.reporter });
 
-      const second = fakeRegistrar();
-      observer.updateConfig({ statusListenerRegistrar: second.registrar });
+      const second = fakeReporter();
+      observer.updateConfig({ statusReporter: second.reporter });
 
       expect(first.unsubscribe).toHaveBeenCalledTimes(1);
       second.emit(false);
@@ -302,11 +302,11 @@ describe('NetworkConnectionObserver', () => {
       observer.configState.subscribe(onConfigChange);
       onConfigChange.mockClear();
 
-      const source = fakeRegistrar();
-      observer.updateConfig({ statusListenerRegistrar: source.registrar });
+      const source = fakeReporter();
+      observer.updateConfig({ statusReporter: source.reporter });
 
       expect(onConfigChange).toHaveBeenCalled();
-      expect(observer.config.statusListenerRegistrar).toBe(source.registrar);
+      expect(observer.config.statusReporter).toBe(source.reporter);
     });
   });
 
@@ -315,26 +315,26 @@ describe('NetworkConnectionObserver', () => {
       // The teardown releases the listener, so without reinstalling here the observer would go
       // permanently deaf after one unregister/register cycle while still looking healthy.
       //
-      // Asserted on the registrar being *invoked* again rather than on a status arriving: a fake
-      // registrar's emitter still holds the callback it was handed, so driving it would pass even
+      // Asserted on the reporter being *invoked* again rather than on a status arriving: a fake
+      // reporter's emitter still holds the callback it was handed, so driving it would pass even
       // with nothing installed.
       const unsubscribe = vi.fn();
-      const registrar = vi.fn((() => unsubscribe) as NetworkStatusListenerRegistrar);
-      observer.initializeConfig({ statusListenerRegistrar: registrar });
+      const reporter = vi.fn((() => unsubscribe) as NetworkStatusReporter);
+      observer.initializeConfig({ statusReporter: reporter });
       observer.registerSubscriptions();
-      expect(registrar).toHaveBeenCalledTimes(1);
+      expect(reporter).toHaveBeenCalledTimes(1);
 
       observer.unregisterSubscriptions();
       expect(unsubscribe).toHaveBeenCalledTimes(1);
 
       observer.registerSubscriptions();
 
-      expect(registrar).toHaveBeenCalledTimes(2);
+      expect(reporter).toHaveBeenCalledTimes(2);
     });
 
     it('releases the platform listener on the last unregister, not the first', () => {
-      const source = fakeRegistrar();
-      observer.setStatusListenerRegistrar(source.registrar);
+      const source = fakeReporter();
+      observer.setStatusReporter(source.reporter);
 
       const unregisterA = observer.registerSubscriptions();
       const unregisterB = observer.registerSubscriptions();
@@ -354,8 +354,8 @@ describe('NetworkConnectionObserver', () => {
     });
 
     it('keeps the last known status after teardown', () => {
-      const source = fakeRegistrar();
-      observer.setStatusListenerRegistrar(source.registrar);
+      const source = fakeReporter();
+      observer.setStatusReporter(source.reporter);
       source.emit(true);
 
       observer.registerSubscriptions()();
@@ -367,7 +367,7 @@ describe('NetworkConnectionObserver', () => {
 });
 
 describe('NetworkConnectionObserver — idempotent installation', () => {
-  it('re-installing the same registrar is a no-op', () => {
+  it('re-installing the same reporter is a no-op', () => {
     // Configuration is re-derived more than once at construction (the client calls
     // `initializeConfig` directly, and again through the config store's immediate subscribe), so a
     // naive implementation tore the platform listener down and recreated it identical.
@@ -375,22 +375,22 @@ describe('NetworkConnectionObserver — idempotent installation', () => {
     const observer = new NetworkConnectionObserver({ client });
 
     const unsubscribe = vi.fn();
-    const registrar: NetworkStatusListenerRegistrar = () => unsubscribe;
+    const reporter: NetworkStatusReporter = () => unsubscribe;
 
-    observer.setStatusListenerRegistrar(registrar);
-    observer.setStatusListenerRegistrar(registrar);
-    observer.setStatusListenerRegistrar(registrar);
+    observer.setStatusReporter(reporter);
+    observer.setStatusReporter(reporter);
+    observer.setStatusReporter(reporter);
 
     expect(unsubscribe).not.toHaveBeenCalled();
   });
 
-  it('still swaps when handed a different registrar', () => {
+  it('still swaps when handed a different reporter', () => {
     const { client } = { client: { dispatchEvent: vi.fn() } as never };
     const observer = new NetworkConnectionObserver({ client });
 
     const firstUnsubscribe = vi.fn();
-    observer.setStatusListenerRegistrar(() => firstUnsubscribe);
-    observer.setStatusListenerRegistrar(() => vi.fn());
+    observer.setStatusReporter(() => firstUnsubscribe);
+    observer.setStatusReporter(() => vi.fn());
 
     expect(firstUnsubscribe).toHaveBeenCalledTimes(1);
   });

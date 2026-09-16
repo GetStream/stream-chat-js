@@ -1,4 +1,4 @@
-import type { NetworkStatusListenerRegistrar } from './types';
+import type { NetworkStatusReporter } from './types';
 
 /** Whether this host can both report a network status and tell us when it changes. */
 const hasBrowserNetworkStatus = () =>
@@ -8,16 +8,14 @@ const hasBrowserNetworkStatus = () =>
   typeof navigator.onLine === 'boolean';
 
 /**
- * The built-in registrar for browsers: `navigator.onLine` plus one `online`/`offline` listener pair.
- * Installed automatically where {@link getDefaultNetworkStatusListenerRegistrar} can pick it.
+ * The built-in reporter for browsers: `navigator.onLine` plus one `online`/`offline` listener pair.
+ * Installed automatically where {@link getDefaultNetworkStatusReporter} can pick it.
  *
  * Feature-detects rather than trusting its own name. It is exported, so it can be handed to
  * `client.config.set` on any host — a Node process, a server-side render of code written for the
- * browser — and dereferencing `window` there threw, where a registrar is meant to fail quietly.
+ * browser — and dereferencing `window` there threw, where a reporter is meant to fail quietly.
  */
-export const browserNetworkStatusListenerRegistrar: NetworkStatusListenerRegistrar = (
-  onStatusChange,
-) => {
+export const browserNetworkStatusReporter: NetworkStatusReporter = (onStatusChange) => {
   // Both halves, because reporting a status off one without the other would mean inventing the
   // value this module exists not to invent. Nothing installed means `isOnline` stays `undefined`,
   // the same honest answer every non-browser host already gets.
@@ -38,17 +36,15 @@ export const browserNetworkStatusListenerRegistrar: NetworkStatusListenerRegistr
 };
 
 /**
- * The registrar to install when the integrator supplied none.
+ * The reporter to install when the integrator supplied none.
  *
- * Returns {@link browserNetworkStatusListenerRegistrar} in a browser, and **`undefined` everywhere
+ * Returns {@link browserNetworkStatusReporter} in a browser, and **`undefined` everywhere
  * else** — deliberately, rather than falling back to something that always reports "online". The
  * `isOnline()` helper in `utils.ts` did exactly that until Task 5 deleted it: it returned `true` when
  * it could not tell, including on React Native where `navigator.onLine` is not a boolean. A fabricated
  * value is worse than an absent one, because nothing downstream can distinguish it from a real
- * reading. With no registrar, `isOnline` stays `undefined` and consumers can see that they have not
+ * reading. With no reporter, `isOnline` stays `undefined` and consumers can see that they have not
  * been told.
  */
-export const getDefaultNetworkStatusListenerRegistrar = ():
-  | NetworkStatusListenerRegistrar
-  | undefined =>
-  hasBrowserNetworkStatus() ? browserNetworkStatusListenerRegistrar : undefined;
+export const getDefaultNetworkStatusReporter = (): NetworkStatusReporter | undefined =>
+  hasBrowserNetworkStatus() ? browserNetworkStatusReporter : undefined;

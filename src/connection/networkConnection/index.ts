@@ -1,3 +1,3 @@
 export * from './NetworkConnectionObserver';
-export * from './registrars';
+export * from './reporters';
 export * from './types';

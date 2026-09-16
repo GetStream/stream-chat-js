@@ -527,7 +527,7 @@ export class StableWSConnection {
    * already died on its own.
    *
    * @deprecated Report network status through `client.networkConnection.setStatus(isOnline)` instead, or
-   *   register a listener with `client.networkConnection.setStatusListenerRegistrar(…)`. This entry point takes
+   *   register a listener with `client.networkConnection.setStatusReporter(…)`. This entry point takes
    *   a DOM-shaped object and reaches into the socket, neither of which a caller should need. Kept
    *   for one major because `stream-chat-react-native` calls it directly.
    *

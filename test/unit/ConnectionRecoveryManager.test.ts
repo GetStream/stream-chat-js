@@ -346,7 +346,7 @@ describe('ConnectionRecoveryManager', () => {
 
     it('still dispatches when nothing dropped', async () => {
       // The guard has to stay quiet on the ordinary path, including on a host with no network
-      // registrar, where the device's status is unknown rather than offline.
+      // reporter, where the device's status is unknown rather than offline.
       const recovered = vi.fn();
       client.on('connection.recovered', recovered);
       activeChannel('uneventful');
@@ -443,7 +443,7 @@ describe('ConnectionRecoveryManager', () => {
       expect(reload).not.toHaveBeenCalled();
     });
 
-    it('behaves exactly as before when no registrar is installed', async () => {
+    it('behaves exactly as before when no reporter is installed', async () => {
       // The guard against the unknown-network case silently disabling recovery on React Native,
       // Node and SSR. `isOnline` stays `undefined` and `lastOfflineAt` stays `null`, so neither the
       // pre-start guard nor the withholding condition can fire.

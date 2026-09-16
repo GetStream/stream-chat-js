@@ -459,7 +459,7 @@ const NETWORK_CONNECTION_FIELDS: Record<
   keyof NetworkConnectionObserverConfig,
   ConfigNode
 > = {
-  statusListenerRegistrar: {
+  statusReporter: {
     description:
       "The platform listener that reports the device's network status. There is no default outside the browser, so React Native and other hosts must supply one or the status stays unknown.",
     kind: 'value',

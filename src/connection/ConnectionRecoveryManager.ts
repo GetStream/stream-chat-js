@@ -132,7 +132,7 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
           // rather than stranding — the network returning produces another socket reconnect, and that
           // one starts a fresh recovery.
           //
-          // `=== false`, never `!isOnline`: an *unknown* network — no registrar installed, which is
+          // `=== false`, never `!isOnline`: an *unknown* network — no reporter installed, which is
           // React Native today, Node and server-side rendering — must not suppress recovery. Read
           // from `client.networkConnection` rather than inferred from this event, because a network
           // drop reaching us as a socket event is indistinguishable from a socket that died for its
@@ -281,7 +281,7 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
     // Both connections, because either one failing invalidates the reloads. The socket's is the load
     // bearing half: it is written on every status transition, including the deliberate close and the
     // two error paths the event is silent about, and it is the only one of the two that exists on a
-    // host with no network registrar installed — React Native, Node, server-side rendering.
+    // host with no network reporter installed — React Native, Node, server-side rendering.
     const socketDropBefore =
       this.client.wsConnection.state.getLatestValue().lastOfflineAt;
     const networkDropBefore =
@@ -315,7 +315,7 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
     const network = this.client.networkConnection.state.getLatestValue();
     const socketDropped = socket.lastOfflineAt !== socketDropBefore || !socket.isOnline;
     // `=== false`, never `!isOnline`: an *unknown* network is not a failed one, and it is what every
-    // host with no registrar reports.
+    // host with no reporter reports.
     const networkDropped =
       network.lastOfflineAt !== networkDropBefore || network.isOnline === false;
 

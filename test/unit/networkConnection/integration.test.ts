@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StreamChat } from '../../../src';
 import { StableWSConnection } from '../../../src/connection';
 import { WS_NETWORK_RECOVERY_RETRY_MS } from '../../../src/connection';
-import type { NetworkStatusListenerRegistrar } from '../../../src';
+import type { NetworkStatusReporter } from '../../../src';
 
 /**
  * The whole chain, through public API only: an integrator-supplied registration function reports the
@@ -20,15 +20,15 @@ import type { NetworkStatusListenerRegistrar } from '../../../src';
 const platformListener = () => {
   const unsubscribe = vi.fn();
   let report: ((isOnline: boolean) => void) | undefined;
-  const registrar: NetworkStatusListenerRegistrar = (onStatusChange) => {
+  const reporter: NetworkStatusReporter = (onStatusChange) => {
     report = onStatusChange;
     return unsubscribe;
   };
   return {
-    registrar,
+    reporter,
     unsubscribe,
     report: (isOnline: boolean) => {
-      if (!report) throw new Error('the registrar was never installed');
+      if (!report) throw new Error('the reporter was never installed');
       report(isOnline);
     },
   };
@@ -48,14 +48,14 @@ describe('network connection, end to end', () => {
     vi.useRealTimers();
   });
 
-  describe('a registrar supplied through declarative configuration', () => {
+  describe('a reporter supplied through declarative configuration', () => {
     it('carries the device going offline and back through to a reconnect', () => {
       const { client, connection, reconnect } = clientWithSocket();
       const platform = platformListener();
 
       // The supported route in: no setter call, no private member, no DOM event.
       client.config.set({
-        client: { networkConnection: { statusListenerRegistrar: platform.registrar } },
+        client: { networkConnection: { statusReporter: platform.reporter } },
       });
 
       // Nothing has been reported yet, so the network is *unknown* rather than online.
@@ -84,7 +84,7 @@ describe('network connection, end to end', () => {
       const { client, connection, reconnect } = clientWithSocket();
       const platform = platformListener();
       client.config.set({
-        client: { networkConnection: { statusListenerRegistrar: platform.registrar } },
+        client: { networkConnection: { statusReporter: platform.reporter } },
       });
 
       connection._setOnline(true);
@@ -98,7 +98,7 @@ describe('network connection, end to end', () => {
       const client = new StreamChat('api-key-teardown');
       const platform = platformListener();
       client.config.set({
-        client: { networkConnection: { statusListenerRegistrar: platform.registrar } },
+        client: { networkConnection: { statusReporter: platform.reporter } },
       });
 
       // No `registerSubscriptions()` here: the client's constructor already made the one reference,
@@ -111,11 +111,11 @@ describe('network connection, end to end', () => {
   });
 
   describe('setStatus, the migration target for React Native', () => {
-    it('reaches the socket the same way a registrar does', () => {
+    it('reaches the socket the same way a reporter does', () => {
       const { client, connection, reconnect } = clientWithSocket();
       connection._setOnline(true);
 
-      // No registrar at all here. This is the replacement for reaching into
+      // No reporter at all here. This is the replacement for reaching into
       // `client.wsConnection.onlineStatusChanged` with a synthesized DOM event.
       client.networkConnection.setStatus(false);
       expect(client.wsConnection.isOnline).toBe(false);
@@ -125,7 +125,7 @@ describe('network connection, end to end', () => {
     });
   });
 
-  describe('with no registrar, network status is an accelerator and not a precondition', () => {
+  describe('with no reporter, network status is an accelerator and not a precondition', () => {
     it('keeps the network unknown rather than assuming either answer', () => {
       const { client } = clientWithSocket();
 
@@ -159,7 +159,7 @@ describe('network connection, end to end', () => {
     it('still notices a dead socket on its own connection check', () => {
       // The guard that matters: every network check in the socket tests `=== false`, so an unknown
       // network must not read as offline *or* keep the socket from tearing itself down. This is the
-      // recovery path that exists with or without a registrar.
+      // recovery path that exists with or without a reporter.
       vi.useFakeTimers();
       const { client, connection, reconnect } = clientWithSocket();
       connection._setOnline(true);

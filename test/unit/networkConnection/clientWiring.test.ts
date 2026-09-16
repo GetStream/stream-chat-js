@@ -1,21 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StreamChat } from '../../../src';
 import { StableWSConnection } from '../../../src/connection';
-import type { NetworkStatusListenerRegistrar } from '../../../src/connection';
+import type { NetworkStatusReporter } from '../../../src/connection';
 
-/** A registrar whose callback the test drives, standing in for any platform listener. */
-const fakeRegistrar = () => {
+/** A reporter whose callback the test drives, standing in for any platform listener. */
+const fakeReporter = () => {
   const unsubscribe = vi.fn();
   let emit: ((isOnline: boolean) => void) | undefined;
-  const registrar: NetworkStatusListenerRegistrar = (onStatusChange) => {
+  const reporter: NetworkStatusReporter = (onStatusChange) => {
     emit = onStatusChange;
     return unsubscribe;
   };
   return {
-    registrar,
+    reporter,
     unsubscribe,
     emit: (isOnline: boolean) => {
-      if (!emit) throw new Error('registrar was never installed');
+      if (!emit) throw new Error('reporter was never installed');
       emit(isOnline);
     },
   };
@@ -44,39 +44,37 @@ describe('client wiring — network + ws status', () => {
       expect(client.networkConnection.isOnline).toBe(true);
     });
 
-    it('installs no registrar in a non-browser host, leaving status unknown', () => {
+    it('installs no reporter in a non-browser host, leaving status unknown', () => {
       // Node has no `window` and `navigator.onLine` is not a boolean — the same shape React Native
       // presents. `undefined` is the honest answer, and must not be a fabricated `true`.
-      expect(client.networkConnection.config.statusListenerRegistrar).toBeUndefined();
+      expect(client.networkConnection.config.statusReporter).toBeUndefined();
       expect(client.networkConnection.isOnline).toBeUndefined();
     });
 
-    it('installs a registrar supplied through options.config, and no default alongside it', () => {
-      const source = fakeRegistrar();
+    it('installs a reporter supplied through options.config, and no default alongside it', () => {
+      const source = fakeReporter();
       const configured = new StreamChat('api-key-2', {
         config: {
-          client: { networkConnection: { statusListenerRegistrar: source.registrar } },
+          client: { networkConnection: { statusReporter: source.reporter } },
         },
       });
 
-      expect(configured.networkConnection.config.statusListenerRegistrar).toBe(
-        source.registrar,
-      );
+      expect(configured.networkConnection.config.statusReporter).toBe(source.reporter);
 
       source.emit(false);
       expect(configured.networkConnection.isOnline).toBe(false);
     });
 
-    it('lets setStatusListenerRegistrar replace a config-supplied one cleanly', () => {
-      const first = fakeRegistrar();
+    it('lets setStatusReporter replace a config-supplied one cleanly', () => {
+      const first = fakeReporter();
       const configured = new StreamChat('api-key-3', {
         config: {
-          client: { networkConnection: { statusListenerRegistrar: first.registrar } },
+          client: { networkConnection: { statusReporter: first.reporter } },
         },
       });
 
-      const second = fakeRegistrar();
-      configured.networkConnection.setStatusListenerRegistrar(second.registrar);
+      const second = fakeReporter();
+      configured.networkConnection.setStatusReporter(second.reporter);
 
       expect(first.unsubscribe).toHaveBeenCalledTimes(1);
       second.emit(true);
@@ -84,8 +82,8 @@ describe('client wiring — network + ws status', () => {
     });
 
     it('dispatches the network variant of connection.changed, reaching client.on subscribers', () => {
-      const source = fakeRegistrar();
-      client.networkConnection.setStatusListenerRegistrar(source.registrar);
+      const source = fakeReporter();
+      client.networkConnection.setStatusReporter(source.reporter);
 
       const handler = vi.fn();
       client.on('connection.changed', handler);

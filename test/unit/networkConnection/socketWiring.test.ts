@@ -1,18 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StreamChat } from '../../../src';
 import { StableWSConnection } from '../../../src/connection';
-import type { NetworkStatusListenerRegistrar } from '../../../src';
+import type { NetworkStatusReporter } from '../../../src';
 
-const fakeRegistrar = () => {
+const fakeReporter = () => {
   let emit: ((isOnline: boolean) => void) | undefined;
-  const registrar: NetworkStatusListenerRegistrar = (onStatusChange) => {
+  const reporter: NetworkStatusReporter = (onStatusChange) => {
     emit = onStatusChange;
     return vi.fn();
   };
   return {
-    registrar,
+    reporter,
     emit: (isOnline: boolean) => {
-      if (!emit) throw new Error('registrar was never installed');
+      if (!emit) throw new Error('reporter was never installed');
       emit(isOnline);
     },
   };
@@ -21,8 +21,8 @@ const fakeRegistrar = () => {
 /** A client with a live socket, without opening a socket. */
 const clientWithSocket = () => {
   const client = new StreamChat('api-key');
-  const source = fakeRegistrar();
-  client.networkConnection.setStatusListenerRegistrar(source.registrar);
+  const source = fakeReporter();
+  client.networkConnection.setStatusReporter(source.reporter);
 
   const connection = new StableWSConnection({ client });
   client.wsConnection.connection = connection;
@@ -32,7 +32,7 @@ const clientWithSocket = () => {
 
 describe('socket ↔ network wiring', () => {
   describe('no window listeners', () => {
-    it('the socket registers none — the browser registrar is the only place that touches window', () => {
+    it('the socket registers none — the browser reporter is the only place that touches window', () => {
       const addEventListener = vi.fn();
       vi.stubGlobal('window', { addEventListener, removeEventListener: vi.fn() });
 
@@ -54,8 +54,8 @@ describe('socket ↔ network wiring', () => {
       // `StateStore.subscribe` fires synchronously with the current value, so a store subscription
       // would call `_reconnect` during construction.
       const client = new StreamChat('api-key');
-      const source = fakeRegistrar();
-      client.networkConnection.setStatusListenerRegistrar(source.registrar);
+      const source = fakeReporter();
+      client.networkConnection.setStatusReporter(source.reporter);
       source.emit(true);
 
       const connection = new StableWSConnection({ client });

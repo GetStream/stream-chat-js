@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  browserNetworkStatusListenerRegistrar,
-  getDefaultNetworkStatusListenerRegistrar,
+  browserNetworkStatusReporter,
+  getDefaultNetworkStatusReporter,
 } from '../../../src/connection';
 
 type Listener = () => void;
@@ -45,14 +45,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('browserNetworkStatusListenerRegistrar', () => {
+describe('browserNetworkStatusReporter', () => {
   it.each([true, false])(
     'emits the current navigator.onLine (%s) on registration',
     (onLine) => {
       stubBrowser(onLine);
       const onStatusChange = vi.fn();
 
-      browserNetworkStatusListenerRegistrar(onStatusChange);
+      browserNetworkStatusReporter(onStatusChange);
 
       // The contract requires the initial value, not just subsequent changes: a consumer that
       // registers while already offline must be told so.
@@ -63,7 +63,7 @@ describe('browserNetworkStatusListenerRegistrar', () => {
   it('adds exactly one online/offline pair', () => {
     const browser = stubBrowser(true);
 
-    browserNetworkStatusListenerRegistrar(vi.fn());
+    browserNetworkStatusReporter(vi.fn());
 
     expect(browser.count('online')).toBe(1);
     expect(browser.count('offline')).toBe(1);
@@ -74,7 +74,7 @@ describe('browserNetworkStatusListenerRegistrar', () => {
     const browser = stubBrowser(true);
     const onStatusChange = vi.fn();
 
-    browserNetworkStatusListenerRegistrar(onStatusChange);
+    browserNetworkStatusReporter(onStatusChange);
     onStatusChange.mockClear();
 
     browser.goOffline();
@@ -87,7 +87,7 @@ describe('browserNetworkStatusListenerRegistrar', () => {
     const browser = stubBrowser(true);
     const onStatusChange = vi.fn();
 
-    const unsubscribe = browserNetworkStatusListenerRegistrar(onStatusChange);
+    const unsubscribe = browserNetworkStatusReporter(onStatusChange);
     unsubscribe();
 
     expect(browser.count('online')).toBe(0);
@@ -103,8 +103,8 @@ describe('browserNetworkStatusListenerRegistrar', () => {
     const first = vi.fn();
     const second = vi.fn();
 
-    const unsubscribeFirst = browserNetworkStatusListenerRegistrar(first);
-    browserNetworkStatusListenerRegistrar(second);
+    const unsubscribeFirst = browserNetworkStatusReporter(first);
+    browserNetworkStatusReporter(second);
     unsubscribeFirst();
 
     expect(browser.count('online')).toBe(1);
@@ -116,14 +116,14 @@ describe('browserNetworkStatusListenerRegistrar', () => {
   });
 });
 
-describe('browserNetworkStatusListenerRegistrar off-browser', () => {
+describe('browserNetworkStatusReporter off-browser', () => {
   // It is exported, so it reaches hosts its name does not describe — a Node process, or a
   // server-side render of code written for the browser. It used to throw there on the first
-  // dereference of `window`, where a registrar is meant to fail quietly.
+  // dereference of `window`, where a reporter is meant to fail quietly.
   it('reports nothing instead of throwing when there is no window', () => {
     const onStatusChange = vi.fn();
 
-    const unsubscribe = browserNetworkStatusListenerRegistrar(onStatusChange);
+    const unsubscribe = browserNetworkStatusReporter(onStatusChange);
 
     expect(onStatusChange).not.toHaveBeenCalled();
     expect(() => unsubscribe()).not.toThrow();
@@ -136,19 +136,17 @@ describe('browserNetworkStatusListenerRegistrar off-browser', () => {
 
     // Half a browser is not a browser: reporting a status off one of the two halves would mean
     // inventing the value this module exists not to invent.
-    browserNetworkStatusListenerRegistrar(onStatusChange);
+    browserNetworkStatusReporter(onStatusChange);
 
     expect(onStatusChange).not.toHaveBeenCalled();
     expect(window.addEventListener).not.toHaveBeenCalled();
   });
 });
 
-describe('getDefaultNetworkStatusListenerRegistrar', () => {
-  it('picks the browser registrar when window listeners and a boolean onLine are both present', () => {
+describe('getDefaultNetworkStatusReporter', () => {
+  it('picks the browser reporter when window listeners and a boolean onLine are both present', () => {
     stubBrowser(true);
-    expect(getDefaultNetworkStatusListenerRegistrar()).toBe(
-      browserNetworkStatusListenerRegistrar,
-    );
+    expect(getDefaultNetworkStatusReporter()).toBe(browserNetworkStatusReporter);
   });
 
   it('returns undefined when navigator.onLine is not a boolean (React Native)', () => {
@@ -158,20 +156,20 @@ describe('getDefaultNetworkStatusListenerRegistrar', () => {
     vi.stubGlobal('window', { addEventListener: vi.fn(), removeEventListener: vi.fn() });
     vi.stubGlobal('navigator', { userAgent: 'ReactNative' });
 
-    expect(getDefaultNetworkStatusListenerRegistrar()).toBeUndefined();
+    expect(getDefaultNetworkStatusReporter()).toBeUndefined();
   });
 
   it('returns undefined when window is absent (Node, SSR)', () => {
     vi.stubGlobal('window', undefined);
     vi.stubGlobal('navigator', { onLine: true });
 
-    expect(getDefaultNetworkStatusListenerRegistrar()).toBeUndefined();
+    expect(getDefaultNetworkStatusReporter()).toBeUndefined();
   });
 
   it('returns undefined when navigator is absent entirely', () => {
     vi.stubGlobal('window', { addEventListener: vi.fn(), removeEventListener: vi.fn() });
     vi.stubGlobal('navigator', undefined);
 
-    expect(getDefaultNetworkStatusListenerRegistrar()).toBeUndefined();
+    expect(getDefaultNetworkStatusReporter()).toBeUndefined();
   });
 });
