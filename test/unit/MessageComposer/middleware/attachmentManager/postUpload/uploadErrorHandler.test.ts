@@ -77,7 +77,10 @@ describe('createUploadErrorHandlerMiddleware', () => {
       message: 'Error uploading attachment',
       origin: {
         emitter: 'AttachmentManager',
-        context: { attachment },
+        context: {
+          attachment,
+          composer,
+        },
       },
       options: {
         type: 'api:attachment:upload:failed',
