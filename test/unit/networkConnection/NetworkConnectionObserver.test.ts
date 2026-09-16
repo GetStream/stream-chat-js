@@ -311,6 +311,27 @@ describe('NetworkConnectionObserver', () => {
   });
 
   describe('subscription lifecycle', () => {
+    it('reinstalls the platform listener when subscriptions are re-registered', () => {
+      // The teardown releases the listener, so without reinstalling here the observer would go
+      // permanently deaf after one unregister/register cycle while still looking healthy.
+      //
+      // Asserted on the registrar being *invoked* again rather than on a status arriving: a fake
+      // registrar's emitter still holds the callback it was handed, so driving it would pass even
+      // with nothing installed.
+      const unsubscribe = vi.fn();
+      const registrar = vi.fn((() => unsubscribe) as NetworkStatusListenerRegistrar);
+      observer.initializeConfig({ statusListenerRegistrar: registrar });
+      observer.registerSubscriptions();
+      expect(registrar).toHaveBeenCalledTimes(1);
+
+      observer.unregisterSubscriptions();
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+
+      observer.registerSubscriptions();
+
+      expect(registrar).toHaveBeenCalledTimes(2);
+    });
+
     it('releases the platform listener on the last unregister, not the first', () => {
       const source = fakeRegistrar();
       observer.setStatusListenerRegistrar(source.registrar);

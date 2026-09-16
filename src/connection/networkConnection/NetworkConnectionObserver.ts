@@ -73,6 +73,12 @@ export class NetworkConnectionObserver extends WithSubscriptions {
    * that comparison possible.
    */
   private declaredRegistrar?: NetworkStatusListenerRegistrar;
+  /**
+   * Whether configuration has been derived at least once. {@link registerSubscriptions} runs while
+   * the client is still being constructed, before its event machinery exists, so installing a
+   * registrar there on the first call could report a status into a half-built client.
+   */
+  private configInitialized = false;
 
   constructor({ client }: { client: StreamChat }) {
     super();
@@ -122,6 +128,7 @@ export class NetworkConnectionObserver extends WithSubscriptions {
    */
   public initializeConfig(config?: Partial<NetworkConnectionObserverConfig>) {
     this.configController.initialize(config);
+    this.configInitialized = true;
     this.installConfiguredRegistrar();
   }
 
@@ -238,6 +245,12 @@ export class NetworkConnectionObserver extends WithSubscriptions {
         this.unsubscribeStatusListener = undefined;
         this.installedRegistrar = undefined;
       });
+
+      // Re-registering has to reinstall. The teardown above released the platform listener, and
+      // nothing else puts it back — so an unregister/register cycle left the observer permanently
+      // deaf, unlike `WSConnection` and `ConnectionRecoveryManager`, which both resubscribe here.
+      // Skipped before the first derivation, when there is nothing resolved to install yet.
+      if (this.configInitialized) this.installConfiguredRegistrar();
     }
 
     this.incrementRefCount();
