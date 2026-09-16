@@ -1,3 +1,24 @@
+## [10.0.0-rc.11](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.10...v10.0.0-rc.11) (2026-09-16)
+
+### ⚠ BREAKING CHANGES
+
+* **SearchController:** remove InternalSearchControllerState (#1866)
+
+### Bug Fixes
+
+* offline db hydration race conditions ([#1865](https://github.com/GetStream/stream-chat-js/issues/1865)) ([a4587e1](https://github.com/GetStream/stream-chat-js/commit/a4587e10c9a51eb684881d1eb8ba2ce01a9e73d0))
+* pending task folding ([#1873](https://github.com/GetStream/stream-chat-js/issues/1873)) ([028f6e8](https://github.com/GetStream/stream-chat-js/commit/028f6e834345be7d6fcd95501dee4c450a2112e7))
+* respect predefined filters from db ([#1869](https://github.com/GetStream/stream-chat-js/issues/1869)) ([cbc7707](https://github.com/GetStream/stream-chat-js/commit/cbc77072170329deb4f9ce22314db6a8743d9b75))
+
+### Features
+
+* **MessageComposer:** reference the composer on upload notifications ([#1871](https://github.com/GetStream/stream-chat-js/issues/1871)) ([d520fc1](https://github.com/GetStream/stream-chat-js/commit/d520fc1e14849bddb00703d10262f0b3ac22a0a0))
+* **NotificationManager:** add ensureTimeout for callers that cannot know if notification was already triggered ([#1872](https://github.com/GetStream/stream-chat-js/issues/1872)) ([e5d06aa](https://github.com/GetStream/stream-chat-js/commit/e5d06aa598b34d18f9714025d71849418742c1ab))
+
+### Refactors
+
+* **SearchController:** remove InternalSearchControllerState ([#1866](https://github.com/GetStream/stream-chat-js/issues/1866)) ([fc64f7f](https://github.com/GetStream/stream-chat-js/commit/fc64f7fba9f0956840decfe69f3588bbb58d1eda))
+
 ## [10.0.0-rc.10](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.9...v10.0.0-rc.10) (2026-09-11)
 
 ### Bug Fixes
