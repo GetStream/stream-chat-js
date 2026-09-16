@@ -283,6 +283,168 @@ describe('MessageOperations', () => {
     expect(sendCalls[2].options).toBeUndefined();
   });
 
+  // The Resend path: `send()` caches the exact payload it failed with, and `retry()` prefers that
+  // cache over the message's current state. Without a rewrite on edit, tapping Resend after editing a
+  // failed message re-sends the PRE-EDIT text while the bubble shows the edited one.
+  it('rewrites the cached failed-send payload on edit, so a later retry sends the edit', async () => {
+    const store: Store = new Map();
+    const sendCalls: Array<{ message: Message; options: unknown }> = [];
+
+    const ops = new MessageOperations({
+      ...stateHooks(store),
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      handlers: () => ({}),
+      defaults: {
+        delete: defaultDelete,
+        send: async (message, options) => {
+          sendCalls.push({ message, options });
+          if (sendCalls.length === 1) {
+            throw new Error('send failed');
+          }
+          return { message: makeMessageResponse({ id: 'm1', text: 'retried' }) };
+        },
+        update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+      },
+    });
+
+    await expect(
+      ops.send({ localMessage: makeLocalMessage({ id: 'm1', text: 'AAA' }) }),
+    ).rejects.toThrow('send failed');
+
+    const edited = makeLocalMessage({ id: 'm1', text: 'AAA EDITED' });
+    await ops.update({ localMessage: edited });
+    await ops.retry({ localMessage: edited });
+
+    expect(sendCalls[1].message.text).toBe('AAA EDITED');
+  });
+
+  // The case that actually reaches users: offline, so the edit request fails too (it is queued
+  // instead). The cache still has to carry the edit.
+  it('rewrites the cached failed-send payload even when the edit request itself fails', async () => {
+    const store: Store = new Map();
+    const sendCalls: Array<{ message: Message; options: unknown }> = [];
+
+    const ops = new MessageOperations({
+      ...stateHooks(store),
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      handlers: () => ({}),
+      defaults: {
+        delete: defaultDelete,
+        send: async (message, options) => {
+          sendCalls.push({ message, options });
+          if (sendCalls.length === 1) {
+            throw new Error('send failed');
+          }
+          return { message: makeMessageResponse({ id: 'm1', text: 'retried' }) };
+        },
+        update: async () => {
+          throw new Error('offline');
+        },
+      },
+    });
+
+    await expect(
+      ops.send({ localMessage: makeLocalMessage({ id: 'm1', text: 'AAA' }) }),
+    ).rejects.toThrow('send failed');
+
+    const edited = makeLocalMessage({ id: 'm1', text: 'AAA EDITED' });
+    await expect(ops.update({ localMessage: edited })).rejects.toThrow('offline');
+    await ops.retry({ localMessage: edited });
+
+    expect(sendCalls[1].message.text).toBe('AAA EDITED');
+  });
+
+  // The edit is merged OVER the cached payload rather than replacing it, so anything the send layer
+  // resolved and the local message never carried survives the rewrite.
+  it('preserves cached-only fields the edit does not mention', async () => {
+    const store: Store = new Map();
+    const sendCalls: Array<{ message: Message; options: unknown }> = [];
+
+    const ops = new MessageOperations({
+      ...stateHooks(store),
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      handlers: () => ({}),
+      defaults: {
+        delete: defaultDelete,
+        send: async (message, options) => {
+          sendCalls.push({ message, options });
+          if (sendCalls.length === 1) {
+            throw new Error('send failed');
+          }
+          return { message: makeMessageResponse({ id: 'm1', text: 'retried' }) };
+        },
+        update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+      },
+    });
+
+    await expect(
+      ops.send({
+        localMessage: makeLocalMessage({ id: 'm1', text: 'AAA' }),
+        message: { id: 'm1', silent: true, text: 'AAA', type: 'regular' } as Message,
+        options: { skip_push: true },
+      }),
+    ).rejects.toThrow('send failed');
+
+    const edited = makeLocalMessage({ id: 'm1', text: 'AAA EDITED' });
+    await ops.update({ localMessage: edited });
+    await ops.retry({ localMessage: edited });
+
+    expect(sendCalls[1].message.text).toBe('AAA EDITED');
+    expect(sendCalls[1].message.silent).toBe(true);
+    // Options are cached separately and are not what the edit rewrites.
+    expect(sendCalls[1].options).toEqual({ skip_push: true });
+  });
+
+  // An edit must not buy the stale payload another full TTL - `cachedAt` stays where the failed send
+  // put it, so the entry still expires on schedule.
+  it('does not refresh the cache TTL when rewriting on edit', async () => {
+    vi.useFakeTimers();
+    try {
+      const store: Store = new Map();
+      const sendCalls: Array<{ message: Message; options: unknown }> = [];
+
+      const ops = new MessageOperations({
+        ...stateHooks(store),
+        ingest: (m) => store.set(m.id, m),
+        get: (id) => store.get(id),
+        handlers: () => ({}),
+        defaults: {
+          delete: defaultDelete,
+          send: async (message, options) => {
+            sendCalls.push({ message, options });
+            if (sendCalls.length === 1) {
+              throw new Error('send failed');
+            }
+            return { message: makeMessageResponse({ id: 'm1', text: 'retried' }) };
+          },
+          update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+        },
+      });
+
+      await expect(
+        ops.send({
+          localMessage: makeLocalMessage({ id: 'm1', text: 'AAA' }),
+          message: { id: 'm1', silent: true, text: 'AAA', type: 'regular' } as Message,
+        }),
+      ).rejects.toThrow('send failed');
+
+      const edited = makeLocalMessage({ id: 'm1', text: 'AAA EDITED' });
+      vi.advanceTimersByTime(4 * 60 * 1000);
+      await ops.update({ localMessage: edited });
+      vi.advanceTimersByTime(2 * 60 * 1000);
+      await ops.retry({ localMessage: edited });
+
+      // Past the 5-minute TTL measured from the SEND, so the entry is gone and the retry rebuilds
+      // from the local message - which carries no `silent`.
+      expect(sendCalls[1].message.silent).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('normalizes outgoing message for send', async () => {
     const store: Store = new Map();
 
@@ -626,6 +788,53 @@ describe('MessageOperations — optimistic lifecycle', () => {
       expect(store.get('m1')?.text).toBe('after');
       expect(store.get('m1')?.status).not.toBe('failed');
       expect(store.get('m1')?.error).toBeUndefined();
+    });
+
+    // A folded edit leaves NO `update-message` row - it lives inside the queued `send-message` task -
+    // so asking only for the operation's own task type reported "not queued" and re-recorded a failure
+    // on a message that was already failed, overwriting the send's error with the edit's.
+    it('treats an edit folded into a queued send-message task as pending, not failed', async () => {
+      const sendError = { message: 'send failed' } as LocalMessage['error'];
+      const seed = makeLocalMessage({
+        error: sendError,
+        id: 'm1',
+        status: 'failed',
+        text: 'before',
+      });
+      const askedFor: string[][] = [];
+      const store: Store = new Map([['m1', seed]]);
+      const persisted: LocalMessage[] = [];
+
+      const ops = new MessageOperations({
+        defaults: {
+          delete: defaultDelete,
+          send: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+          update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+        },
+        get: (id: string) => store.get(id),
+        handlers: () => ({}),
+        ingest: (m: LocalMessage) => store.set(m.id, m),
+        // Only the send is queued, which is exactly what a fold leaves behind.
+        isQueued: async (_id: string, types: readonly string[]) => {
+          askedFor.push([...types]);
+          return types.includes('send-message');
+        },
+        persist: (m: LocalMessage) => persisted.push(m),
+        purge: () => {},
+        remove: (id: string) => store.delete(id),
+      });
+
+      await rejects(
+        ops.update({ localMessage: { ...seed, text: 'after' } }, async () => {
+          throw new Error('offline');
+        }),
+      );
+
+      expect(askedFor[0]).toContain('send-message');
+      expect(store.get('m1')?.text).toBe('after');
+      // The send's error survives; the edit does not overwrite it, and writes nothing of its own.
+      expect(store.get('m1')?.error).toBe(sendError);
+      expect(persisted).toHaveLength(1);
     });
 
     it('keeps the edit and records the failure when the request was NOT queued', async () => {
