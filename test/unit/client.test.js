@@ -553,17 +553,17 @@ describe('Client connectUser', () => {
 		expect(connection).to.equal('openConnection');
 	});
 
-	it('exposes the connection id, which is never cleared', () => {
+	it('exposes the connection id, and clears it when the socket goes down', () => {
 		expect(client.wsConnection.connectionID).to.equal(undefined);
 
 		client.wsConnection._setStatus({ isOnline: true, connectionId: 'ID' });
 		expect(client.wsConnection.connectionID).to.equal('ID');
 
-		// Left alone when the socket goes down, which is why a value here means "connected at some
-		// point" rather than "connected now" — read `isOnline` for the latter.
+		// The server keys watches by this id and rejects a request carrying one it has closed, so a
+		// value here always names a connection the server still holds.
 		client.wsConnection._setStatus({ isOnline: false });
 		expect(client.wsConnection.isOnline).to.be.false;
-		expect(client.wsConnection.connectionID).to.equal('ID');
+		expect(client.wsConnection.connectionID).to.equal(undefined);
 	});
 });
 

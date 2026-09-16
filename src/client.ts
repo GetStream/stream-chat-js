@@ -1568,8 +1568,8 @@ export class StreamChat extends ChatApi {
       // status untouched (it neither starts nor ends a watch).
       // Kept as a backstop for a caller who passes `watch: true` explicitly. The default arm is now
       // truthful rather than hopeful: `queryChannels` waits for a live socket, so by the time this
-      // runs the socket really is up. `isOnline`, not the connection ID — the ID is never cleared and
-      // so stays truthy right through a drop.
+      // runs the socket really is up. `isOnline` rather than the connection ID because the two now
+      // move together, and the boolean is the one that says what this is asking.
       if (!offlineMode && (queryChannelsOptions?.watch ?? this.wsConnection.isOnline)) {
         c.watchStatus = ChannelWatchStatus.Watching;
       }

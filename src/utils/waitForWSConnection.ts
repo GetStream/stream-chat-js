@@ -18,9 +18,9 @@ export type WaitForWSConnectionOptions = {
  * to `watch: false` if there was no connection ID. That did not work in either direction: `wsPromise`
  * is only a pending promise while `openConnection()` is in flight and is already resolved during a
  * socket-internal reconnect, so the wait covered the wrong case — and the guard read the connection
- * ID, which is never cleared, so during a reconnect it did not downgrade at all and sent
- * `watch: true` against a dead connection. This waits on `client.wsConnection.state` instead, which
- * is written on every transition.
+ * ID, which at the time was never cleared, so during a reconnect it did not downgrade at all and
+ * sent `watch: true` against a dead connection. This waits on `client.wsConnection.state` instead,
+ * which is written on every transition.
  *
  * **Rejects immediately when no socket is expected**, rather than burning the timeout: with no user
  * connected there is nothing to wait for, and after `client.closeConnection()` — the documented

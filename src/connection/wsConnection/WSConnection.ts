@@ -141,7 +141,7 @@ export class WSConnection extends WithSubscriptions {
     return this.state.getLatestValue().isOnline;
   }
 
-  /** The id the server keys watches by. Never cleared — see {@link WSConnectionState.connectionId}. */
+  /** The id the server keys watches by, or `undefined` while the socket is down. */
   get connectionID(): string | undefined {
     return this.state.getLatestValue().connectionId;
   }
@@ -173,11 +173,14 @@ export class WSConnection extends WithSubscriptions {
     const now = new Date();
     this.state.partialNext(
       isOnline
-        ? // The socket assigns its `connectionID` before announcing it is up, so this is current
-          // here. It is never cleared, which is why going down leaves it alone rather than
-          // pretending to.
+        ? // The socket assigns its `connectionID` before announcing it is up, so this is current here.
           { isOnline, connectionId, lastOnlineAt: now }
-        : { isOnline, lastOfflineAt: now },
+        : // Cleared on the way down, because the id is dead the moment the socket is: the server keys
+          // watches by it and rejects a request carrying one it has closed. This object outlives every
+          // socket it wraps, so nothing else would clear it — before, `api-client` kept sending the
+          // previous id, including the previous *user's* after a `disconnectUser()`. The socket used
+          // to be rebuilt per connect, which is what used to reset this.
+          { isOnline, connectionId: undefined, lastOfflineAt: now },
     );
 
     return true;

@@ -158,14 +158,14 @@ describe('socket ↔ network wiring', () => {
       expect(onEvent).not.toHaveBeenCalled();
     });
 
-    it('leaves the connection id alone when going down', () => {
-      // `connectionID` is never cleared anywhere, so blanking it here would misrepresent the field
-      // rather than reflect it. Its own doc says a value does not imply the socket is up.
+    it('clears the connection id when going down', () => {
+      // The id is dead the moment the socket is. This object outlives every socket it wraps, so if
+      // it did not clear here nothing would, and `api-client` would keep sending a closed id.
       connection.connectionID = 'conn-2';
       connection._setOnline(true);
       connection._setOnline(false);
 
-      expect(client.wsConnection.state.getLatestValue().connectionId).toBe('conn-2');
+      expect(client.wsConnection.state.getLatestValue().connectionId).toBeUndefined();
     });
 
     it('does not stamp a timestamp for a repeated identical status', () => {

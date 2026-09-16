@@ -1772,8 +1772,9 @@ export class Channel extends ChannelApi {
     //
     // This replaces `await client.wsPromise` plus a `watch: false` downgrade, which was wrong both
     // ways: `wsPromise` is already resolved during a socket-internal reconnect so the wait did not
-    // cover that case, and the downgrade was gated on the connection ID, which is never cleared — so
-    // during a reconnect it did not downgrade and sent `watch: true` against a dead connection.
+    // cover that case, and the downgrade was gated on the connection ID, which at the time was never
+    // cleared — so during a reconnect it did not downgrade and sent `watch: true` against a dead
+    // connection.
     //
     // If the socket does not come back inside the timeout this throws, which is the correct existing
     // path: the channel stays unwatched, offline support renders it from the local database, and

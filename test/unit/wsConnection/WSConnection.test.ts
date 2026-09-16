@@ -322,13 +322,23 @@ describe('client.wsConnection', () => {
       expect(state.lastOfflineAt).toBeNull();
     });
 
-    it('leaves the connection id alone when going down', () => {
-      // It is never cleared anywhere in the SDK, so blanking it here would misrepresent the field
-      // rather than reflect it.
+    it('clears the connection id when going down', () => {
+      // The id names a connection the server has closed, and it rejects requests carrying one. This
+      // wrapper outlives every socket it holds, so clearing here is the only thing that clears it.
       client.wsConnection._setStatus({ isOnline: true, connectionId: 'conn-2' });
       client.wsConnection._setStatus({ isOnline: false });
 
-      expect(client.wsConnection.state.getLatestValue().connectionId).toBe('conn-2');
+      expect(client.wsConnection.state.getLatestValue().connectionId).toBeUndefined();
+    });
+
+    it("does not send a previous user's connection id after disconnectUser", () => {
+      // The socket used to be rebuilt on every connect, which is what reset this. Now the wrapper
+      // persists, so without clearing, requests between reopening and the server hello carried the
+      // id from the previous connection — the previous *user's*, after a disconnect.
+      client.wsConnection._setStatus({ isOnline: true, connectionId: 'user-a' });
+      client.wsConnection._setStatus({ isOnline: false });
+
+      expect(client.wsConnection.connectionID).toBeUndefined();
     });
 
     it('returns false and publishes nothing for an unchanged status', () => {

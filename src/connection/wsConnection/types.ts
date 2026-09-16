@@ -13,10 +13,14 @@ export type WSConnectionState = {
   /**
    * The id the server keys channel watches by.
    *
-   * Only ever assigned on a successful connect and **never cleared**, so a value here does *not* mean
-   * the socket is up — read `isOnline` for that. That distinction matters: `client._hasConnectionID()`
-   * stays truthy through a drop, so it separates "never connected" from "connected at some point",
-   * not "connected now".
+   * Assigned when the socket announces itself and cleared when it goes down, so it always names a
+   * connection the server still holds. It has to be: the server keys channel watches by this id and
+   * rejects a request carrying one it has already closed, and this object outlives every socket it
+   * wraps, so nothing else would clear it.
+   *
+   * `undefined` therefore means "no live connection", which is `isOnline === false` said a second
+   * way. Both are required by `waitForWSConnection`, whose callers need the id rather than the
+   * boolean.
    */
   connectionId: string | undefined;
   lastOnlineAt: Date | null;

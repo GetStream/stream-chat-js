@@ -7,7 +7,7 @@ import { getClientWithUser } from './test-utils/getClient';
 /**
  * `client.queryChannels()` had the same defect as `channel.watch()`, verbatim: it awaited
  * `client.wsPromise` — already resolved during a socket-internal reconnect — and then downgraded to
- * `watch: false` if there was no connection ID, a value that is never cleared and so stays truthy
+ * `watch: false` if there was no connection ID, a value that back then was never cleared and stayed truthy
  * right through a drop. The result was a query that sent `watch: true` against a dead connection, or
  * one that returned unwatched data a second query had to follow.
  *
@@ -129,7 +129,7 @@ describe('client.queryChannels and the WebSocket', () => {
 
     it('does not record Watching while the socket is down', async () => {
       // The backstop behind the wait: it now reads `isOnline` rather than the connection ID, which is
-      // never cleared and so stayed truthy through a drop — the bug that made a false `Watching`
+      // back then never cleared and so stayed truthy through a drop — the bug that made a false `Watching`
       // possible in the first place.
       client.wsConnection._setStatus({ isOnline: false });
       const response = generateChannel({ channel: { id: 'socket-down' } });
