@@ -420,6 +420,22 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 		expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
 	});
 
+	it('does not wait for a socket when the caller asked for no watch and no presence', async () => {
+		// A plain read needs no connection ID, so an explicit `watch: false` must not be made to wait
+		// for one — which is what turned it into a call that could not be issued offline.
+		client.wsConnection.connection = new StableWSConnection({ client });
+		client.wsConnection._setStatus({ isOnline: false });
+		client.config.set({ client: { wsConnection: { connectTimeoutMs: 60_000 } } });
+		const query = sinon
+			.stub(channel, 'query')
+			.resolves({ channel: {}, members: [], messages: [] });
+
+		await channel.watch({ watch: false, presence: false });
+
+		expect(query.calledOnce).to.be.true;
+		expect(query.firstCall.args[0]).to.include({ watch: false });
+	});
+
 	it('rejects at once after a deliberate closeConnection, not on the timeout', async () => {
 		// The mobile backgrounding path. The absence of a socket is intentional there, so opening a
 		// channel must fail immediately rather than block for the full wait.

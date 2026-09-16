@@ -71,6 +71,30 @@ describe('client.queryChannels and the WebSocket', () => {
     expect(request.mock.calls[0][0].data).toMatchObject({ watch: false });
   });
 
+  it('does not wait for a socket when the caller asked for no watch and no presence', async () => {
+    // A plain read needs no connection ID. Waiting for one made `watch: false` unusable exactly
+    // where it is most useful — offline, or before the socket is up.
+    socketDown();
+    client.config.set({ client: { wsConnection: { connectTimeoutMs: 60_000 } } });
+
+    await client.queryChannels({ watch: false, presence: false });
+
+    expect(request.mock.calls[0][0].data).toMatchObject({ watch: false });
+  });
+
+  it('still waits when the caller asked for presence without watch', async () => {
+    // Presence is a server-side subscription keyed by connection ID too, so it is rejected without
+    // a socket exactly as a watch is.
+    socketDown();
+    client.config.set({ client: { wsConnection: { connectTimeoutMs: 20 } } });
+
+    await expect(client.queryChannels({ watch: false, presence: true })).rejects.toThrow(
+      /Timed out after 20ms/,
+    );
+
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it('rejects rather than querying unwatched when the socket does not come back', async () => {
     socketDown();
     client.config.set({ client: { wsConnection: { connectTimeoutMs: 20 } } });

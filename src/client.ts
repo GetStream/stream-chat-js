@@ -1379,14 +1379,6 @@ export class StreamChat extends ChatApi {
       presence: false,
     };
 
-    // Same treatment as `channel.watch()`: wait for a live socket rather than degrade, so
-    // `watch: true` always goes out and always binds to a current connection ID.
-    //
-    // The `TODO: probably serverside only thing` that guarded the downgrade is gone with it. There is
-    // no server-side surface in v10 — the constructor takes no `secret` — so there is no client that
-    // can never open a socket, which is what makes waiting safe here rather than a hang.
-    await waitForWSConnection(this);
-
     const {
       predefined_filter,
       filter_values,
@@ -1409,6 +1401,19 @@ export class StreamChat extends ChatApi {
           ...defaultOptions,
           ...restOptions,
         };
+
+    // Same treatment as `channel.watch()`: wait for a live socket rather than degrade, so
+    // `watch: true` always goes out and always binds to a current connection ID.
+    //
+    // Only when this query actually needs one. Both `watch` and `presence` are server-side
+    // subscriptions keyed by connection ID — the server rejects either without one — while a plain
+    // read needs no socket at all, and making it wait for one turned `watch: false` into a request
+    // that could not be issued offline.
+    //
+    // The `TODO: probably serverside only thing` that guarded the old downgrade is gone with it.
+    // There is no server-side surface in v10 — the constructor takes no `secret` — so there is no
+    // client that can never open a socket, which is what makes waiting safe here rather than a hang.
+    if (payload.watch || payload.presence) await waitForWSConnection(this);
 
     return await super.queryChannels(payload, requestOptions);
   }

@@ -1759,9 +1759,16 @@ export class Channel extends ChannelApi {
       presence: false,
     };
 
+    const combined = { ...defaultOptions, ...options };
+
     // Wait for a live socket rather than degrading. `watch: true` always goes out, exactly once, and
     // always binds to a connection ID that is actually current — so `watchStatus = Watching` is
     // truthful by construction rather than by a guard that could be wrong.
+    //
+    // Only when this call needs a socket, which is why the options are merged first. Both `watch`
+    // and `presence` are server-side subscriptions keyed by connection ID and the server rejects
+    // either without one; a caller that asked for neither is doing a plain read, and making that
+    // wait turned an explicit `watch: false` into a request that could not be issued offline.
     //
     // This replaces `await client.wsPromise` plus a `watch: false` downgrade, which was wrong both
     // ways: `wsPromise` is already resolved during a socket-internal reconnect so the wait did not
@@ -1771,9 +1778,8 @@ export class Channel extends ChannelApi {
     // If the socket does not come back inside the timeout this throws, which is the correct existing
     // path: the channel stays unwatched, offline support renders it from the local database, and
     // `ConnectionRecoveryManager` reloads it on the next reconnect.
-    await waitForWSConnection(this.getClient());
+    if (combined.watch || combined.presence) await waitForWSConnection(this.getClient());
 
-    const combined = { ...defaultOptions, ...options };
     const state = await this.query(combined, 'latest');
     this.initialized = true;
     const previousData = this.data;
