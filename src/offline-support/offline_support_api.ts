@@ -5,7 +5,6 @@ import type {
   EventPayload,
   EventType,
   LocalMessage,
-  MessageRequest,
   MessageResponse,
   UserResponse,
 } from '../types';
@@ -30,7 +29,6 @@ import {
   channelHasReadEvents,
   channelTracksReadLocally,
   formatMessage,
-  localMessageToNewMessagePayload,
   runDetached,
 } from '../utils';
 import { nowNs } from '../utils/time';
@@ -1436,97 +1434,67 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    */
   private shouldSkipQueueingTask = (error: AxiosError<APIError>) => !isEphemeral(error);
 
-  private mergeFailedMessageUpdateIntoPendingSendMessage = ({
-    editedMessage,
-    pendingMessage,
-  }: {
-    editedMessage: LocalMessage | Partial<MessageResponse>;
-    pendingMessage: MessageRequest;
-  }) => {
-    const normalizedEditedMessage = localMessageToNewMessagePayload(
-      editedMessage as LocalMessage,
-    );
-    const pendingMessageStatus = (pendingMessage as { status?: string }).status;
-
-    return {
-      ...pendingMessage,
-      ...normalizedEditedMessage,
-      ...(typeof pendingMessageStatus !== 'undefined'
-        ? { status: pendingMessageStatus }
-        : {}),
-    } as MessageRequest;
-  };
-
   private isPendingSendMessageTask = (
     task: PendingTask,
   ): task is Extract<PendingTask, { type: 'send-message' }> =>
     task.type === 'send-message';
 
-  private handleOfflineFailedUpdateMessagePendingTask = async (
+  /**
+   * Folds an edit of a message the server has never seen into that message's queued `send-message`
+   * task, so a replay sends the edited text once instead of sending the original and then editing it.
+   * The send task keeps its row, and with it its place in the queue, which is what keeps the edited
+   * message ordered against everything queued after it.
+   *
+   * Keyed on a queued `send-message` task existing for this id - the only reliable statement of "the
+   * server has never seen this message". NOT on the edited message's status: both payloads are built
+   * by `localMessageToNewMessagePayload`, which strips `status` along with every other client-only
+   * field, so nothing arriving here carries one.
+   *
+   * That same normalization is why the two merge by a plain spread: both are already `MessageRequest`s,
+   * and normalizing again would map an already-flattened `mentioned_users` back over itself as
+   * `[undefined]`.
+   *
+   * With nothing to fold into, the edit is queued on its own and replays as an ordinary update.
+   */
+  private handleUpdateMessagePendingTask = async (
     task: Extract<PendingTask, { type: 'update-message' }>,
   ) => {
     const [{ id, message }] = task.payload;
-    if (!id) {
-      return;
-    }
-
     const pendingTasks = await this.getPendingTasks({ messageId: id });
-    const pendingSendMessageTask = pendingTasks.find(this.isPendingSendMessageTask);
+    const sendTask = pendingTasks.find(this.isPendingSendMessageTask);
 
-    if (!pendingSendMessageTask) {
+    // No queued send - or one with no row to rewrite, which a task read back from the DB never is.
+    // Either way there is nothing to fold into, so the edit goes in as its own task.
+    if (sendTask?.id === undefined) {
+      await this.addPendingTask(task);
       return;
     }
 
-    const updatedPendingSendMessage = this.mergeFailedMessageUpdateIntoPendingSendMessage(
-      {
-        // TODO: this is not good, we have too many message types, should probably only have two (request, response)
-        editedMessage: message as unknown as LocalMessage,
-        pendingMessage: pendingSendMessageTask.payload[0].message as MessageRequest,
+    const [sendRequest, ...sendRequestOptions] = sendTask.payload;
+
+    await this.updatePendingTask({
+      id: sendTask.id,
+      task: {
+        ...sendTask,
+        payload: [
+          { ...sendRequest, message: { ...sendRequest.message, ...message } },
+          ...sendRequestOptions,
+        ],
       },
-    );
-
-    const updatedPendingTask: Extract<PendingTask, { type: 'send-message' }> = {
-      ...pendingSendMessageTask,
-      payload: [
-        {
-          ...pendingSendMessageTask.payload[0],
-          message: updatedPendingSendMessage,
-        },
-      ],
-    };
-
-    if (pendingSendMessageTask.id) {
-      await this.updatePendingTask({
-        id: pendingSendMessageTask.id,
-        task: updatedPendingTask,
-      });
-      return;
-    }
-
-    await this.addPendingTask({
-      ...updatedPendingTask,
-      id: undefined,
     });
   };
 
   /**
-   * Central ingress for persisting pending tasks. It either stores the task as-is
-   * or rewrites an existing pending `send-message` task for offline edits of failed messages.
+   * Central ingress for persisting pending tasks. It either stores the task as-is or folds an edit of
+   * a message that has not been sent yet into that message's queued `send-message` task.
    */
   public handleAddPendingTask = async ({ task }: { task: PendingTask }) => {
-    if (
-      task.type === 'update-message' &&
-      !isMessageUpdateReplayable(task.payload[0].message ?? {})
-    ) {
-      return;
-    }
+    if (task.type === 'update-message') {
+      if (!isMessageUpdateReplayable(task.payload[0].message)) {
+        return;
+      }
 
-    if (
-      task.type === 'update-message' &&
-      !this.client.wsConnection?.isHealthy &&
-      (task.payload[0].message as { status?: string } | undefined)?.status === 'failed'
-    ) {
-      await this.handleOfflineFailedUpdateMessagePendingTask(task);
+      await this.handleUpdateMessagePendingTask(task);
       return;
     }
 
