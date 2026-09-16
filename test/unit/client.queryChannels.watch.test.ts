@@ -104,6 +104,41 @@ describe('client.queryChannels and the WebSocket', () => {
     expect(request).not.toHaveBeenCalled();
   });
 
+  it('abandons the wait when the caller aborts', async () => {
+    // The signal reached the HTTP call but not the wait that precedes it, so an abandoned query sat
+    // on its timer for the full connect budget before anyone heard about it.
+    socketDown();
+    client.config.set({ client: { wsConnection: { connectTimeoutMs: 60_000 } } });
+    const controller = new AbortController();
+
+    const querying = client.queryChannels({}, { signal: controller.signal });
+    controller.abort();
+
+    await expect(querying).rejects.toThrow();
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('rejects with the reason the caller aborted with', async () => {
+    socketDown();
+    client.config.set({ client: { wsConnection: { connectTimeoutMs: 60_000 } } });
+    const controller = new AbortController();
+    const reason = new Error('the search moved on');
+
+    const querying = client.queryChannels({}, { signal: controller.signal });
+    controller.abort(reason);
+
+    await expect(querying).rejects.toBe(reason);
+  });
+
+  it('rejects immediately for a signal that was already aborted', async () => {
+    socketDown();
+    client.config.set({ client: { wsConnection: { connectTimeoutMs: 60_000 } } });
+
+    await expect(
+      client.queryChannels({}, { signal: AbortSignal.abort(new Error('gone')) }),
+    ).rejects.toThrow('gone');
+  });
+
   it('rejects at once after closeConnection rather than burning the timeout', async () => {
     const socket = new StableWSConnection({ client });
     socket.isDisconnected = true;

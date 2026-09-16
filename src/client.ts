@@ -1413,7 +1413,12 @@ export class StreamChat extends ChatApi {
     // The `TODO: probably serverside only thing` that guarded the old downgrade is gone with it.
     // There is no server-side surface in v10 — the constructor takes no `secret` — so there is no
     // client that can never open a socket, which is what makes waiting safe here rather than a hang.
-    if (payload.watch || payload.presence) await waitForWSConnection(this);
+    // The caller's signal reaches the wait as well as the request. Without it an abandoned query
+    // still held its timer for the whole connect budget, since the abort could only land on an HTTP
+    // call that had not been made yet.
+    if (payload.watch || payload.presence) {
+      await waitForWSConnection(this, { signal: requestOptions?.signal });
+    }
 
     return await super.queryChannels(payload, requestOptions);
   }

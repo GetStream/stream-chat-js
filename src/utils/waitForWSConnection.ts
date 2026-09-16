@@ -1,5 +1,20 @@
 import type { StreamChat } from '../client';
 
+/**
+ * The rejection an aborted wait produces.
+ *
+ * Shaped like the one `fetch` and `axios` raise for the same signal, so a caller that already
+ * recognises an abort keeps recognising it whether the abort landed on the wait or on the request
+ * the wait was for.
+ */
+const abortError = (signal: AbortSignal) => {
+  const reason: unknown = signal.reason;
+  if (reason instanceof Error) return reason;
+  const error = new Error('The wait for a WebSocket connection was aborted.');
+  error.name = 'AbortError';
+  return error;
+};
+
 export type WaitForWSConnectionOptions = {
   /**
    * How long to wait, in milliseconds. Defaults to `client.wsConnection.config.connectTimeoutMs`
@@ -8,6 +23,11 @@ export type WaitForWSConnectionOptions = {
    * setting is changed.
    */
   timeout?: number;
+  /**
+   * Aborts the wait. The same signal the caller passes to the request it is waiting to issue, so
+   * abandoning that request abandons the wait with it rather than leaving a timer to run out.
+   */
+  signal?: AbortSignal;
 };
 
 /**
@@ -38,6 +58,7 @@ export type WaitForWSConnectionOptions = {
 export const waitForWSConnection = (
   client: StreamChat,
   {
+    signal,
     timeout = client.wsConnection.config.connectTimeoutMs,
   }: WaitForWSConnectionOptions = {},
 ): Promise<void> => {
@@ -51,6 +72,10 @@ export const waitForWSConnection = (
     client.wsConnection.isOnline && !!client.wsConnection.connectionID;
 
   if (isReady()) return Promise.resolve();
+
+  // Checked before the rejections below, so an already-abandoned call reports why it was abandoned
+  // rather than complaining about a connection nobody is waiting for any more.
+  if (signal?.aborted) return Promise.reject(abortError(signal));
 
   if (!client.userId) {
     return Promise.reject(
@@ -83,6 +108,7 @@ export const waitForWSConnection = (
 
   return new Promise<void>((resolve, reject) => {
     let settled = false;
+    let removeAbortListener = () => undefined as void;
     // Initialised to a no-op rather than left undefined, because `StateStore.subscribe` invokes the
     // handler synchronously before returning — so on that first call the real unsubscribe does not
     // exist yet and `finish` would have nothing to call.
@@ -93,6 +119,7 @@ export const waitForWSConnection = (
       settled = true;
       clearTimeout(timer);
       unsubscribe();
+      removeAbortListener();
       outcome();
     };
 
@@ -111,6 +138,12 @@ export const waitForWSConnection = (
     unsubscribe = client.wsConnection.state.subscribe(() => {
       if (isReady()) finish(resolve);
     });
+
+    if (signal) {
+      const onAbort = () => finish(() => reject(abortError(signal)));
+      signal.addEventListener('abort', onAbort);
+      removeAbortListener = () => signal.removeEventListener('abort', onAbort);
+    }
 
     // The synchronous first call cannot have resolved — the check above failed — but the socket can
     // have come up in between. Re-checked rather than assumed.
