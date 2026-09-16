@@ -169,9 +169,6 @@ export class ApiClient {
     data?: unknown | null,
     additionalConfig: AxiosRequestConfig = {},
   ): Promise<{ body: T; metadata: RequestMetadata }> {
-    // The only place a connection id is attached: a request that registers a server-side
-    // subscription cannot go out before the handshake produced one, and every other request has no
-    // business carrying it. See `requiresConnectionId`.
     if (requiresConnectionId(additionalConfig.params, data)) {
       const connectionId = await this.client.connectionIdManager.getConnectionId();
       additionalConfig = {
@@ -263,17 +260,6 @@ export class ApiClient {
  * handshake has produced a connection id. The server keys watches and presence by connection id
  * and answers 200 while registering nothing when it is missing, so a request that races the
  * handshake yields a channel that never receives an event.
- *
- * The `watch`/`presence` flags are read from the three shapes the generator emits them in: a flat
- * query param (`sync`), a nested `payload` query param (`queryUsers`), or the request body
- * (`queryChannels`, `getOrCreate(Distinct)Channel`, `groupedQueryChannels`, `queryThreads`,
- * `getThread`). A flag left `undefined` reads as "no subscription", which is the server's default
- * for both.
- *
- * A declared `connection_id` query param is the spec saying an endpoint is connection-scoped, but
- * it is emitted for every operation that *can* watch, not only the ones that are, so it cannot gate
- * on its own - `queryChannels({ watch: false })` declares it too. It is the last resort, for
- * `stopWatchingChannel` and `longPoll`: the two operations carrying no flag to read.
  */
 export const requiresConnectionId = (
   params: Record<string, unknown> | undefined,
@@ -296,8 +282,8 @@ export const requiresConnectionId = (
     return true;
   }
 
-  // The generator emits the key holding `undefined` for every operation that declares the flag, so
-  // a declared-but-unset flag is the request saying "no subscription" - the server's default.
+  // There are some requests that doesn't have watch/presence flags but require connection_id (stop watching for example)
+  // For those cases lets first check if the request has watch/presence flag, and return false...
   if (
     [params, payload, requestBody].some(
       (source) => source && ('watch' in source || 'presence' in source),
@@ -306,6 +292,7 @@ export const requiresConnectionId = (
     return false;
   }
 
+  // ...return true if the request doesn't have watch/presence flag but has connection_id
   return Boolean(params && 'connection_id' in params);
 };
 

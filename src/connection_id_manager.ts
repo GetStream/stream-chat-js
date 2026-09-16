@@ -27,13 +27,6 @@ export class ConnectionIdManager {
   /**
    * Arms the deferred a connection attempt will settle, so requests issued while the handshake is
    * in flight have something to await.
-   *
-   * Called at the start of a connection attempt, and by {@link invalidate} the moment a live socket
-   * goes unhealthy - by then a reconnect is already on its way, and the requests that need an id
-   * have to wait for it rather than be sent with the dead one.
-   *
-   * A no-op while a deferred is already pending, so those two callers can overlap freely, and a
-   * no-op while an id is known, which by then means the socket is healthy and nothing needs to wait.
    */
   arm = () => {
     if (this.connectionId || this.loadConnectionIdPromise) return;
@@ -74,19 +67,6 @@ export class ConnectionIdManager {
   /**
    * Drops the connection id without failing anything waiting on one, for a socket that died but
    * will be retried.
-   *
-   * The server tears a connection's watches down with the socket, so the id is dead the moment the
-   * connection stops being healthy - a request still carrying it registers a subscription against a
-   * connection that no longer exists, and is answered `200` for it. Dropping it here is what makes
-   * the next such request wait for the replacement instead of racing ahead with a dead one.
-   *
-   * Arms in the same step. Dropping without arming would leave the manager holding neither an id
-   * nor a deferred, which {@link getConnectionId} reports as "nothing is being opened" - the right
-   * answer for a client that never connected, the wrong one for a socket that is about to be
-   * retried. The waiters are released by the next handshake.
-   *
-   * Contrast {@link reset}, for a socket that will *not* come back: that one rejects the waiters
-   * rather than leaving them for a reconnect that is not coming.
    */
   invalidate = () => {
     if (!this.connectionId) return;
