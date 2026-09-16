@@ -283,6 +283,27 @@ describe('ConnectionRecoveryManager', () => {
     });
   });
 
+  describe('recover() while one is already running', () => {
+    it('does not start a second pass', async () => {
+      // The guard logged and then carried on. Two passes reload every active channel twice and race
+      // on the in-flight flag: the second clears it while the first is still going.
+      const { reload } = activeChannel('reloaded-twice');
+      let release = () => {};
+      reload.mockImplementation(
+        () => new Promise<void>((resolve) => (release = () => resolve())),
+      );
+
+      const first = client.connectionRecovery.recover();
+      await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+
+      await client.connectionRecovery.recover();
+
+      expect(reload).toHaveBeenCalledTimes(1);
+      release();
+      await first;
+    });
+  });
+
   describe('the socket dropping mid-recovery', () => {
     it('withholds connection.recovered when the socket drops while the reloads run', async () => {
       // The network half alone did not cover this. A socket dying on a working network is the more

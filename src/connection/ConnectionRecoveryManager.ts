@@ -338,12 +338,17 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
 
   /**
    * Run a full recovery now, without waiting for a connection event.
+   *
+   * A no-op while one is already running. Overlapping passes reload every active channel twice and
+   * race on {@link isRecovering}: the second clears it while the first is still going, so the flag
+   * stops describing anything and a third caller starts a third pass.
    */
   public recover = async () => {
     if (this.isRecovering) {
       logger
         .withExtraTags('connectionRecovery')
         .debug('A recovery is already in flight.');
+      return;
     }
     await Promise.allSettled([this.recoverChannelLists(), this.recoverActiveChannels()]);
   };
