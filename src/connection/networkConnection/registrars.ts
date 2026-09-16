@@ -1,12 +1,28 @@
 import type { NetworkStatusListenerRegistrar } from './types';
 
+/** Whether this host can both report a network status and tell us when it changes. */
+const hasBrowserNetworkStatus = () =>
+  typeof window !== 'undefined' &&
+  typeof window.addEventListener === 'function' &&
+  typeof navigator !== 'undefined' &&
+  typeof navigator.onLine === 'boolean';
+
 /**
  * The built-in registrar for browsers: `navigator.onLine` plus one `online`/`offline` listener pair.
  * Installed automatically where {@link getDefaultNetworkStatusListenerRegistrar} can pick it.
+ *
+ * Feature-detects rather than trusting its own name. It is exported, so it can be handed to
+ * `client.config.set` on any host — a Node process, a server-side render of code written for the
+ * browser — and dereferencing `window` there threw, where a registrar is meant to fail quietly.
  */
 export const browserNetworkStatusListenerRegistrar: NetworkStatusListenerRegistrar = (
   onStatusChange,
 ) => {
+  // Both halves, because reporting a status off one without the other would mean inventing the
+  // value this module exists not to invent. Nothing installed means `isOnline` stays `undefined`,
+  // the same honest answer every non-browser host already gets.
+  if (!hasBrowserNetworkStatus()) return () => undefined;
+
   const handle = () => onStatusChange(navigator.onLine);
 
   // Emit the current value before returning, as the contract requires.
@@ -34,13 +50,5 @@ export const browserNetworkStatusListenerRegistrar: NetworkStatusListenerRegistr
  */
 export const getDefaultNetworkStatusListenerRegistrar = ():
   | NetworkStatusListenerRegistrar
-  | undefined => {
-  const hasWindowListeners =
-    typeof window !== 'undefined' && typeof window.addEventListener === 'function';
-  const reportsOnLine =
-    typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean';
-
-  return hasWindowListeners && reportsOnLine
-    ? browserNetworkStatusListenerRegistrar
-    : undefined;
-};
+  | undefined =>
+  hasBrowserNetworkStatus() ? browserNetworkStatusListenerRegistrar : undefined;

@@ -116,6 +116,33 @@ describe('browserNetworkStatusListenerRegistrar', () => {
   });
 });
 
+describe('browserNetworkStatusListenerRegistrar off-browser', () => {
+  // It is exported, so it reaches hosts its name does not describe — a Node process, or a
+  // server-side render of code written for the browser. It used to throw there on the first
+  // dereference of `window`, where a registrar is meant to fail quietly.
+  it('reports nothing instead of throwing when there is no window', () => {
+    const onStatusChange = vi.fn();
+
+    const unsubscribe = browserNetworkStatusListenerRegistrar(onStatusChange);
+
+    expect(onStatusChange).not.toHaveBeenCalled();
+    expect(() => unsubscribe()).not.toThrow();
+  });
+
+  it('reports nothing when the host has no boolean onLine (React Native)', () => {
+    vi.stubGlobal('window', { addEventListener: vi.fn(), removeEventListener: vi.fn() });
+    vi.stubGlobal('navigator', { onLine: undefined });
+    const onStatusChange = vi.fn();
+
+    // Half a browser is not a browser: reporting a status off one of the two halves would mean
+    // inventing the value this module exists not to invent.
+    browserNetworkStatusListenerRegistrar(onStatusChange);
+
+    expect(onStatusChange).not.toHaveBeenCalled();
+    expect(window.addEventListener).not.toHaveBeenCalled();
+  });
+});
+
 describe('getDefaultNetworkStatusListenerRegistrar', () => {
   it('picks the browser registrar when window listeners and a boolean onLine are both present', () => {
     stubBrowser(true);
