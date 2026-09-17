@@ -533,10 +533,10 @@ export abstract class BasePaginator<T, Q> {
    */
   private _windowPublishSuspendDepth = 0;
   /**
-   * The interval whose tailward edge a prune ({@link pruneTailToLimit}) moved inward, so the next
-   * `state.items` publish also carries the pagination fields that move with it instead of emitting one
-   * of their own — publishing those separately would cost a second notification per prune, the one
-   * thing the window cap must not do.
+   * The interval a prune just shortened. A prune also moves `hasMoreTail` and `cursor` and those come with
+   * the next `state.items` publish rather than emitting their own. We use the id instead of direct values
+   * because that publish can be a throttle interval late, so {@link takePrunedPaginationFields} rereads them
+   * when it fires.
    */
   private _prunedIntervalId?: string;
   /** Set by a suspended op that changed the active window, so {@link batch} publishes once on exit. */
