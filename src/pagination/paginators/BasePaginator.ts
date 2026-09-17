@@ -535,7 +535,7 @@ export abstract class BasePaginator<T, Q> {
   /**
    * The interval a prune just shortened. A prune also moves `hasMoreTail` and `cursor` and those come with
    * the next `state.items` publish rather than emitting their own. We use the id instead of direct values
-   * because that publish can be a throttle interval late, so {@link takePrunedPaginationFields} rereads them
+   * because that publish can be a throttle interval late, so {@link consumePendingPrunePaginationState} rereads them
    * when it fires.
    */
   private _prunedIntervalId?: string;
@@ -1051,11 +1051,11 @@ export abstract class BasePaginator<T, Q> {
   private flushWindowPublish(): void {
     const items = this.projectActiveWindow();
     if (items) {
-      this.state.partialNext({ items, ...this.takePrunedPaginationFields() });
+      this.state.partialNext({ items, ...this.consumePendingPrunePaginationState() });
       return;
     }
     if ((this.state.getLatestValue().items?.length ?? 0) > 0) {
-      this.state.partialNext({ items: [], ...this.takePrunedPaginationFields() });
+      this.state.partialNext({ items: [], ...this.consumePendingPrunePaginationState() });
     }
   }
 
@@ -1255,7 +1255,7 @@ export abstract class BasePaginator<T, Q> {
    *   would read as "tailward exhausted"; the existing cursor still names a message the *server* has,
    *   so leaving it in place keeps back-pagination working.
    */
-  private takePrunedPaginationFields(): Partial<PaginatorState<T>> {
+  private consumePendingPrunePaginationState(): Partial<PaginatorState<T>> {
     const prunedIntervalId = this._prunedIntervalId;
     if (!prunedIntervalId) return {};
     this._prunedIntervalId = undefined;
@@ -2619,7 +2619,7 @@ export abstract class BasePaginator<T, Q> {
             items: prunedNow
               ? this.retainIntervalMembers(nextView, targetInterval)
               : nextView,
-            ...this.takePrunedPaginationFields(),
+            ...this.consumePendingPrunePaginationState(),
           });
         } else {
           /**
@@ -2632,7 +2632,7 @@ export abstract class BasePaginator<T, Q> {
                 ? removedItemCoordinates.interval.interval
                 : targetInterval,
             ),
-            ...this.takePrunedPaginationFields(),
+            ...this.consumePendingPrunePaginationState(),
           });
         }
       }
