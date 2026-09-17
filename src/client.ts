@@ -57,6 +57,8 @@ import type {
   UserMuteResponse,
   UserResponse,
 } from './types';
+import { isWSFailure } from './errors';
+import type { APIError } from './errors';
 import { InsightMetrics, postInsights } from './insights';
 import { chatLoggerSystem } from './logger';
 import { queueOrRun } from './offline-support/queueableOperations';
@@ -550,11 +552,14 @@ export class StreamChat extends ChatApi {
     try {
       return await this.setUserPromise;
     } catch (err) {
-      if (this.persistUserOnConnectionFailure) {
-        // cleanup client to allow the user to retry connectUser again
-        this.closeConnection();
-      } else {
+      if (!this.persistUserOnConnectionFailure) {
+        // No user is kept, so there is nothing left to reconnect as. Tearing the socket down with
+        // it is the point: the application is expected to call `connectUser` again.
         this.disconnectUser();
+      } else if (!isWSFailure(err as APIError)) {
+        // A terminal failure, so a rejected token or a bad API key will not fix itself, thus we close the
+        // socket instead of leaving `StableWSConnection` retrying against it.
+        this.closeConnection();
       }
       throw err;
     }
