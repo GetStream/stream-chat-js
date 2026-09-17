@@ -66,17 +66,17 @@ describe('socket ↔ network wiring', () => {
 
     it('marks itself down when the network goes offline', () => {
       const { connection, source } = clientWithSocket();
-      connection.isOnline = true;
+      connection.isHealthy = true;
 
       source.emit(false);
 
-      expect(connection.isOnline).toBe(false);
+      expect(connection.isHealthy).toBe(false);
     });
 
     it('reconnects with the fast interval when the network returns and the socket is down', () => {
       const { connection, source } = clientWithSocket();
       const reconnect = vi.spyOn(connection, '_reconnect').mockResolvedValue(undefined);
-      connection.isOnline = false;
+      connection.isHealthy = false;
 
       source.emit(true);
 
@@ -88,7 +88,7 @@ describe('socket ↔ network wiring', () => {
     it('leaves a healthy socket alone when the network returns', () => {
       const { connection, source } = clientWithSocket();
       const reconnect = vi.spyOn(connection, '_reconnect').mockResolvedValue(undefined);
-      connection.isOnline = true;
+      connection.isHealthy = true;
 
       source.emit(true);
 
@@ -101,7 +101,7 @@ describe('socket ↔ network wiring', () => {
       // same payload shape.
       const { client, connection } = clientWithSocket();
       const reconnect = vi.spyOn(connection, '_reconnect').mockResolvedValue(undefined);
-      connection.isOnline = false;
+      connection.isHealthy = false;
 
       client.dispatchEvent({
         type: 'connection.changed',
@@ -114,11 +114,11 @@ describe('socket ↔ network wiring', () => {
 
     it('still works through the deprecated DOM-shaped entry point React Native calls', () => {
       const { connection } = clientWithSocket();
-      connection.isOnline = true;
+      connection.isHealthy = true;
 
       connection.onlineStatusChanged({ type: 'offline' } as Event);
 
-      expect(connection.isOnline).toBe(false);
+      expect(connection.isHealthy).toBe(false);
     });
   });
 
@@ -130,29 +130,27 @@ describe('socket ↔ network wiring', () => {
       ({ client, connection } = clientWithSocket());
     });
 
-    it('reports going up, with the connection id', () => {
-      connection.connectionID = 'conn-1';
-      connection._setOnline(true);
+    it('reports going up', () => {
+      connection._setHealth(true);
 
       const state = client.wsConnection.state.getLatestValue();
-      expect(state.isOnline).toBe(true);
-      expect(state.connectionId).toBe('conn-1');
-      expect(state.lastOnlineAt).toBeInstanceOf(Date);
+      expect(state.isHealthy).toBe(true);
+      expect(state.lastHealthyAt).toBeInstanceOf(Date);
     });
 
     it('reports going down after disconnect(), which dispatches no event at all', async () => {
       // The case the store exists for. `closeConnection()` calls `disconnect()`, which sets the
-      // status directly and never reaches `_setOnline` — so `connection.changed` stays silent while
+      // status directly and never reaches `_setHealth` — so `connection.changed` stays silent while
       // the store still tells the truth.
-      connection._setOnline(true);
+      connection._setHealth(true);
 
       const onEvent = vi.fn();
       client.on('connection.changed', onEvent);
 
       await connection.disconnect(0);
 
-      expect(client.wsConnection.state.getLatestValue().isOnline).toBe(false);
-      expect(client.wsConnection.state.getLatestValue().lastOfflineAt).toBeInstanceOf(
+      expect(client.wsConnection.state.getLatestValue().isHealthy).toBe(false);
+      expect(client.wsConnection.state.getLatestValue().lastUnhealthyAt).toBeInstanceOf(
         Date,
       );
       expect(onEvent).not.toHaveBeenCalled();
@@ -162,34 +160,34 @@ describe('socket ↔ network wiring', () => {
       // The id is dead the moment the socket is. This object outlives every socket it wraps, so if
       // it did not clear here nothing would, and `api-client` would keep sending a closed id.
       connection.connectionID = 'conn-2';
-      connection._setOnline(true);
-      connection._setOnline(false);
+      connection._setHealth(true);
+      connection._setHealth(false);
 
       expect(client.wsConnection.state.getLatestValue().connectionId).toBeUndefined();
     });
 
     it('does not stamp a timestamp for a repeated identical status', () => {
-      connection._setOnline(true);
-      const first = client.wsConnection.state.getLatestValue().lastOnlineAt;
+      connection._setHealth(true);
+      const first = client.wsConnection.state.getLatestValue().lastHealthyAt;
 
-      connection._setOnline(true);
+      connection._setHealth(true);
 
-      expect(client.wsConnection.state.getLatestValue().lastOnlineAt).toBe(first);
+      expect(client.wsConnection.state.getLatestValue().lastHealthyAt).toBe(first);
     });
 
     it('publishes a drop immediately, with nothing deferred behind it', () => {
       vi.useFakeTimers();
       try {
-        connection._setOnline(true);
+        connection._setHealth(true);
         const onEvent = vi.fn();
         client.on('connection.changed', onEvent);
 
-        connection._setOnline(false);
+        connection._setHealth(false);
 
         // The store is the only description of the status, and it carries the raw edge. The socket
         // used to also announce the drop five seconds later, off a timer that outlived the socket
         // that armed it; sitting on a drop to avoid strobing a banner is now the UI's own decision.
-        expect(client.wsConnection.state.getLatestValue().isOnline).toBe(false);
+        expect(client.wsConnection.state.getLatestValue().isHealthy).toBe(false);
 
         vi.advanceTimersByTime(60_000);
         expect(onEvent).not.toHaveBeenCalled();

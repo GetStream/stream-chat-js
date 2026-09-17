@@ -2240,7 +2240,7 @@ describe('Threads 2.0', () => {
         // which marks the socket down without announcing it (pinned in
         // `test/unit/wsConnection/WSConnection.test.ts`), so a backgrounded app came back to a stale
         // thread list.
-        client.dispatchEvent({ type: 'connection.recovered', connection: 'ws' });
+        client.dispatchEvent({ type: 'connection.recovered' });
         clock.runAll();
 
         expect(stub.calledOnce).to.be.true;
@@ -2263,36 +2263,11 @@ describe('Threads 2.0', () => {
         const clock = sinon.useFakeTimers();
 
         for (let i = 0; i < 5; i++) {
-          client.dispatchEvent({ type: 'connection.recovered', connection: 'ws' });
+          client.dispatchEvent({ type: 'connection.recovered' });
         }
         clock.runAll();
 
         expect(stub.calledOnce).to.be.true;
-
-        threadManager.unregisterSubscriptions();
-        clock.restore();
-      });
-
-      it('ignores a recovery reported for the network rather than the socket', () => {
-        const thread = createTestThread();
-        threadManager.state.partialNext({
-          threads: [thread],
-          wasActivatedAtLeastOnce: true,
-        });
-        threadManager.registerSubscriptions();
-        const stub = sinon.stub(client, 'queryThreads').resolves({
-          threads: [],
-          next: undefined,
-        });
-        const clock = sinon.useFakeTimers();
-
-        // Nothing dispatches this today — `ConnectionRecoveryManager` only reports `'ws'`. The test
-        // pins the narrowing so that if recovery ever reports for the network too, requerying the
-        // thread list off it is a deliberate decision rather than a silent behaviour change.
-        client.dispatchEvent({ type: 'connection.recovered', connection: 'network' });
-        clock.runAll();
-
-        expect(stub.called).to.be.false;
 
         threadManager.unregisterSubscriptions();
         clock.restore();
@@ -2308,7 +2283,7 @@ describe('Threads 2.0', () => {
         });
         const clock = sinon.useFakeTimers();
 
-        client.dispatchEvent({ type: 'connection.recovered', connection: 'ws' });
+        client.dispatchEvent({ type: 'connection.recovered' });
         clock.runAll();
 
         expect(stub.called).to.be.false;

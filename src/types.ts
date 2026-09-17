@@ -211,8 +211,7 @@ export type UnBanUserOptions = {
 export type UserOptions = Omit<QueryUsersPayload, 'filter_conditions' | 'sort'>;
 
 /**
- * Which connection a `connection.recovered` event is about, and which of the two status stores a
- * value came from.
+ * Which of the two connections a status refers to, and so which store it came from.
  *
  * `'network'` is the device's own network status, reported by the platform reporter installed on
  * `client.networkConnection`. `'ws'` is this client's WebSocket. They are different facts and routinely
@@ -233,7 +232,7 @@ type LocalEvent = (
         isLatestMessageSet: boolean;
       };
     })
-  | ({ type: 'connection.recovered' } & { connection: ConnectionType })
+  | { type: 'connection.recovered' }
   | ({ type: 'offline_reactions.queried' } & {
       offlineReactions: ReactionResponse[];
     })

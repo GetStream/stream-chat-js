@@ -267,7 +267,7 @@ export class ThreadManager extends WithSubscriptions {
    * `connection.recovered` on its own is the whole condition, with no drop timestamp to gate on:
    * `ConnectionRecoveryManager` dispatches it on every reconnect path, so it already implies a drop.
    *
-   * Anything that does need the drop timestamp should read `client.wsConnection.state.lastOfflineAt`,
+   * Anything that does need the drop timestamp should read `client.wsConnection.state.lastUnhealthyAt`,
    * which is written on every status transition.
    */
   private subscribeReloadOnConnectionRecovered = () => {
@@ -280,12 +280,8 @@ export class ThreadManager extends WithSubscriptions {
       { trailing: true },
     ).throttledFn;
 
-    return this.client.on('connection.recovered', (event) => {
-      // The socket going down is what invalidates the loaded list. If recovery ever reports for the
-      // device's network as well, that is a different fact and not a reason to requery.
-      if (event.connection !== 'ws') return;
-      throttledHandleConnectionRecovered();
-    }).unsubscribe;
+    return this.client.on('connection.recovered', throttledHandleConnectionRecovered)
+      .unsubscribe;
   };
 
   public unregisterSubscriptions = () => {

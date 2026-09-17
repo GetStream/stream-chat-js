@@ -29,10 +29,10 @@ describe('ConnectionRecoveryManager', () => {
    * been online has nothing to recover.
    */
   const online = () => {
-    client.wsConnection._setStatus({ isOnline: false });
-    client.wsConnection._setStatus({ isOnline: true, connectionId: 'reconnected-id' });
+    client.wsConnection._setStatus({ isHealthy: false });
+    client.wsConnection._setStatus({ isHealthy: true, connectionId: 'reconnected-id' });
   };
-  const offline = () => client.wsConnection._setStatus({ isOnline: false });
+  const offline = () => client.wsConnection._setStatus({ isHealthy: false });
 
   /** A channel a consumer has declared it is reading, i.e. what recovery reloads. */
   const activeChannel = (id: string) => {
@@ -291,6 +291,52 @@ describe('ConnectionRecoveryManager', () => {
     });
   });
 
+  describe('a reconnect landing mid-recovery', () => {
+    it('does not start a second pass alongside the first', async () => {
+      // The trigger is a subscription to the socket's status store, so a reload that moves that
+      // status calls straight back in before the first `await`. Without the guard that recurses
+      // until the stack gives out.
+      const { reload } = activeChannel('re-entrant');
+      let reloads = 0;
+      reload.mockImplementation(async () => {
+        reloads += 1;
+        client.wsConnection._setStatus({ isHealthy: false });
+        client.wsConnection._setStatus({ isHealthy: true, connectionId: 'flapped' });
+      });
+      client.connectionRecovery.registerSubscriptions();
+
+      online();
+      await vi.waitFor(() => expect(reloads).toBeGreaterThan(0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // One pass, plus the single deferred retry the reconnect earns. Never more, however many
+      // times the reload moves the socket.
+      expect(reloads).toBe(2);
+    });
+
+    it('runs once more so the reconnect is not stranded', async () => {
+      // The pass in flight withholds its event because the socket moved under it, so without the
+      // retry nothing would bring the newer connection's state back in line.
+      const recovered = vi.fn();
+      client.on('connection.recovered', recovered);
+      const { reload } = activeChannel('deferred');
+      let reloads = 0;
+      reload.mockImplementation(async () => {
+        reloads += 1;
+        // Only the first pass flaps; the retry then runs against a steady socket.
+        if (reloads > 1) return;
+        client.wsConnection._setStatus({ isHealthy: false });
+        client.wsConnection._setStatus({ isHealthy: true, connectionId: 'flapped' });
+      });
+      client.connectionRecovery.registerSubscriptions();
+
+      online();
+
+      await vi.waitFor(() => expect(reloads).toBe(2));
+      await vi.waitFor(() => expect(recovered).toHaveBeenCalledTimes(1));
+    });
+  });
+
   describe('recover() while one is already running', () => {
     it('does not start a second pass', async () => {
       // The guard logged and then carried on. Two passes reload every active channel twice and race
@@ -321,7 +367,7 @@ describe('ConnectionRecoveryManager', () => {
       client.on('connection.recovered', recovered);
       const { reload } = activeChannel('socket-drops-midway');
       reload.mockImplementation(async () => {
-        client.wsConnection._setStatus({ isOnline: false });
+        client.wsConnection._setStatus({ isHealthy: false });
         throw new Error('socket is gone');
       });
       client.connectionRecovery.registerSubscriptions();
@@ -340,8 +386,8 @@ describe('ConnectionRecoveryManager', () => {
       client.on('connection.recovered', recovered);
       const { reload } = activeChannel('socket-flaps');
       reload.mockImplementation(async () => {
-        client.wsConnection._setStatus({ isOnline: false });
-        client.wsConnection._setStatus({ isOnline: true, connectionId: 'back-again' });
+        client.wsConnection._setStatus({ isHealthy: false });
+        client.wsConnection._setStatus({ isHealthy: true, connectionId: 'back-again' });
       });
       client.connectionRecovery.registerSubscriptions();
 
@@ -358,7 +404,7 @@ describe('ConnectionRecoveryManager', () => {
       const recovered = vi.fn();
       client.on('connection.recovered', recovered);
       activeChannel('uneventful');
-      client.wsConnection._setStatus({ isOnline: true, connectionId: 'steady' });
+      client.wsConnection._setStatus({ isHealthy: true, connectionId: 'steady' });
 
       await client.connectionRecovery.recover();
 

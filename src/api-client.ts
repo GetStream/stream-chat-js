@@ -135,8 +135,6 @@ export class ApiClient {
         // that updates existing axios instance options instead
         ...this.client.options.axiosRequestConfig?.params,
         ...additonalConfig.params,
-        connection_id:
-          additonalConfig.params?.connection_id || this.client.wsConnection.connectionID,
       },
     } satisfies AxiosRequestConfig;
   }
@@ -171,6 +169,19 @@ export class ApiClient {
     data?: unknown | null,
     additionalConfig: AxiosRequestConfig = {},
   ): Promise<{ body: T; metadata: RequestMetadata }> {
+    if (requiresConnectionId(additionalConfig.params, data)) {
+      // Axios types the signal structurally, so it accepts shapes a real `AbortSignal` would not —
+      // an offline-db task revived from JSON, for one. The wait only needs `aborted` and the event.
+      const signal = additionalConfig.signal as AbortSignal | undefined;
+      const connectionId = await this.client.connectionIdManager.getConnectionId(
+        typeof signal?.addEventListener === 'function' ? signal : undefined,
+      );
+      additionalConfig = {
+        ...additionalConfig,
+        params: { ...additionalConfig.params, connection_id: connectionId },
+      };
+    }
+
     const initialRequestConfig = this.populateRequestConfigWithDefaults(additionalConfig);
 
     const clientRequestId = initialRequestConfig.headers?.[
@@ -248,6 +259,49 @@ export class ApiClient {
     }
   }
 }
+
+/**
+ * Whether a request registers a server-side subscription, and so must not be sent before the
+ * handshake has produced a connection id.
+ *
+ * The server keys watches and presence by that id and answers `200` while registering nothing when it
+ * is missing, so a request that races the handshake yields a channel that never receives an event.
+ */
+export const requiresConnectionId = (
+  params: Record<string, unknown> | undefined,
+  body: unknown,
+) => {
+  const payload = params?.payload as Record<string, unknown> | undefined;
+  // Guarded rather than `body ?? undefined`: the `in` checks below throw on a string body.
+  const requestBody = (typeof body === 'object' && body !== null ? body : undefined) as
+    | Record<string, unknown>
+    | undefined;
+
+  if (
+    params?.watch ||
+    params?.presence ||
+    payload?.watch ||
+    payload?.presence ||
+    requestBody?.watch ||
+    requestBody?.presence
+  ) {
+    return true;
+  }
+
+  // A flag that is present and false is a deliberate "do not subscribe", so it must not fall through
+  // to the parameter check below — that is what made an explicit `watch: false` wait for a socket.
+  if (
+    [params, payload, requestBody].some(
+      (source) => source && ('watch' in source || 'presence' in source),
+    )
+  ) {
+    return false;
+  }
+
+  // Some operations subscribe without carrying a flag — stop-watching and long polling — and are
+  // recognised by the generated `connection_id` parameter instead.
+  return Boolean(params && 'connection_id' in params);
+};
 
 /**
  * An `AbortSignal` that went through JSON persistence - as it does when an offline-db task

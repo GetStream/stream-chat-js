@@ -2,6 +2,7 @@ import type { AxiosRequestConfig } from 'axios';
 import { AxiosError } from 'axios';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { requiresConnectionId } from '../../src/api-client';
 import { getClientWithUser } from './test-utils/getClient';
 
 import type { StreamChat } from '../../src/client';
@@ -439,5 +440,65 @@ describe('upload methods', () => {
     expect((firstConfig().data as FormData).get('upload_sizes')).to.equal(
       '[{"height":100,"width":100}]',
     );
+  });
+});
+
+describe('requiresConnectionId', () => {
+  it('gates on a declared connection_id query param, even without a watch flag', () => {
+    // The only signal stop-watching and long polling give.
+    expect(requiresConnectionId({ connection_id: undefined }, undefined)).toBe(true);
+  });
+
+  it('gates on a watch or presence flag in the request body', () => {
+    expect(requiresConnectionId(undefined, { watch: true })).toBe(true);
+    expect(requiresConnectionId(undefined, { presence: true })).toBe(true);
+  });
+
+  it('gates on a watch flag in a flat query param', () => {
+    expect(requiresConnectionId({ watch: true }, undefined)).toBe(true);
+  });
+
+  it('gates on presence nested in a payload query param', () => {
+    // Querying users is the one operation that needs an id without declaring the parameter.
+    expect(requiresConnectionId({ payload: { presence: true } }, undefined)).toBe(true);
+  });
+
+  it('does not gate a request that asks for neither', () => {
+    expect(requiresConnectionId(undefined, undefined)).toBe(false);
+    expect(requiresConnectionId({ limit: 10 }, { message: {} })).toBe(false);
+    expect(requiresConnectionId({ payload: { query: 'x' } }, undefined)).toBe(false);
+  });
+
+  it('does not gate on an explicitly disabled flag', () => {
+    expect(requiresConnectionId(undefined, { watch: false, presence: false })).toBe(
+      false,
+    );
+  });
+
+  it('does not gate a declared connection_id when the request opted out of watching', () => {
+    // The generator emits the parameter for every operation that *can* watch, so gating on its
+    // presence alone would hold an explicit `watch: false` as well.
+    expect(requiresConnectionId({ connection_id: undefined }, { watch: false })).toBe(
+      false,
+    );
+    expect(
+      requiresConnectionId({ connection_id: undefined, watch: false }, undefined),
+    ).toBe(false);
+  });
+
+  it('does not gate a declared connection_id when the flag is declared but unset', () => {
+    // A left-unset flag is the request saying "no watch": the server defaults both to false.
+    expect(
+      requiresConnectionId(
+        { connection_id: undefined },
+        { watch: undefined, presence: undefined, state: true },
+      ),
+    ).toBe(false);
+  });
+
+  it('tolerates a body that is not a plain object', () => {
+    expect(requiresConnectionId(undefined, new FormData())).toBe(false);
+    expect(requiresConnectionId(undefined, 'raw')).toBe(false);
+    expect(requiresConnectionId(undefined, null)).toBe(false);
   });
 });

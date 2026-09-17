@@ -244,9 +244,11 @@ client.config.setSetupFunction('channel', ({ channel }) => {
 ```ts
 // 'client' — the client's own managers
 client.config.setSetupFunction('client', ({ client: c }) => {
-  // `client.on` returns `{ unsubscribe }`, so hand back the method itself as the teardown.
-  const { unsubscribe } = c.on('connection.changed', handleConnectionChange);
-  return unsubscribe;
+  // `StateStore.subscribe` returns the unsubscribe itself, so hand it back as the teardown.
+  return c.wsConnection.state.subscribeWithSelector(
+    ({ isOnline }) => ({ isOnline }),
+    handleConnectionChange,
+  );
 });
 ```
 

@@ -138,19 +138,19 @@ export class NetworkConnectionObserver extends WithSubscriptions {
     this.installConfiguredReporter();
   }
 
-  /**
-   * Installs the reporter the resolved configuration names, falling back to the platform default.
-   *
-   * The single place installation happens, so every path that can change what should be installed —
-   * a derivation, a patch — goes through the same resolution instead of each reimplementing the
-   * fallback.
-   */
+  /** The reporter for this host, resolved once. See {@link defaultReporter}. */
   private get hostDefaultReporter(): NetworkStatusReporter {
     return (this.defaultReporter ??= getDefaultNetworkStatusReporter(
       this.client.wsConnection,
     ));
   }
 
+  /**
+   * Installs the reporter the resolved configuration names, falling back to the host default.
+   *
+   * The single place installation happens, so every path that can change what should be installed —
+   * a derivation, a patch — goes through the same resolution instead of each reimplementing it.
+   */
   private installConfiguredReporter() {
     const declared = this.config.statusReporter;
 

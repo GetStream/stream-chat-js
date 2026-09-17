@@ -61,15 +61,15 @@ describe('network connection, end to end', () => {
       // Nothing has been reported yet, so the network is *unknown* rather than online.
       expect(client.networkConnection.isOnline).toBeUndefined();
 
-      connection._setOnline(true);
-      expect(client.wsConnection.isOnline).toBe(true);
+      connection._setHealth(true);
+      expect(client.wsConnection.isHealthy).toBe(true);
 
       platform.report(false);
 
       expect(client.networkConnection.isOnline).toBe(false);
       // The socket is marked down off the device's report, without waiting for its own 35s
       // connection check to notice.
-      expect(client.wsConnection.isOnline).toBe(false);
+      expect(client.wsConnection.isHealthy).toBe(false);
       expect(reconnect).not.toHaveBeenCalled();
 
       platform.report(true);
@@ -87,11 +87,11 @@ describe('network connection, end to end', () => {
         client: { networkConnection: { statusReporter: platform.reporter } },
       });
 
-      connection._setOnline(true);
+      connection._setHealth(true);
       platform.report(true);
 
       expect(reconnect).not.toHaveBeenCalled();
-      expect(client.wsConnection.isOnline).toBe(true);
+      expect(client.wsConnection.isHealthy).toBe(true);
     });
 
     it('releases the platform listener when the client tears its subscriptions down', () => {
@@ -113,12 +113,12 @@ describe('network connection, end to end', () => {
   describe('setStatus, the migration target for React Native', () => {
     it('reaches the socket the same way a reporter does', () => {
       const { client, connection, reconnect } = clientWithSocket();
-      connection._setOnline(true);
+      connection._setHealth(true);
 
       // No reporter at all here. This is the replacement for reaching into
       // `client.wsConnection.onlineStatusChanged` with a synthesized DOM event.
       client.networkConnection.setStatus(false);
-      expect(client.wsConnection.isOnline).toBe(false);
+      expect(client.wsConnection.isHealthy).toBe(false);
 
       client.networkConnection.setStatus(true);
       expect(reconnect).toHaveBeenCalledWith({ interval: WS_NETWORK_RECOVERY_RETRY_MS });
@@ -141,19 +141,19 @@ describe('network connection, end to end', () => {
       const { client, connection } = clientWithSocket();
       const published: (boolean | undefined)[] = [];
       client.wsConnection.state.subscribeWithSelector(
-        ({ isOnline }) => ({ isOnline }),
-        ({ isOnline }) => published.push(isOnline),
+        ({ isHealthy }) => ({ isHealthy }),
+        ({ isHealthy }) => published.push(isHealthy),
       );
       published.length = 0;
 
-      connection._setOnline(true);
-      connection._setOnline(false);
-      connection._setOnline(true);
+      connection._setHealth(true);
+      connection._setHealth(false);
+      connection._setHealth(true);
 
       // Every transition, as it happens. There is no delayed announcement to wait out any more: a UI
       // that wants to sit on a drop debounces its own rendering.
       expect(published).toEqual([true, false, true]);
-      expect(client.wsConnection.isOnline).toBe(true);
+      expect(client.wsConnection.isHealthy).toBe(true);
       // The stand-in follows the socket once it has been up, which is all it can honestly say. It
       // reported nothing before that, so nothing was fabricated to make the socket work.
       expect(client.networkConnection.isOnline).toBe(true);
@@ -165,14 +165,14 @@ describe('network connection, end to end', () => {
       // recovery path that exists with or without a reporter.
       vi.useFakeTimers();
       const { client, connection, reconnect } = clientWithSocket();
-      connection._setOnline(true);
+      connection._setHealth(true);
       connection.lastEvent = new Date(0);
 
       connection.scheduleConnectionCheck();
       vi.advanceTimersByTime(connection.connectionCheckTimeout + 1);
 
       expect(reconnect).toHaveBeenCalled();
-      expect(client.wsConnection.isOnline).toBe(false);
+      expect(client.wsConnection.isHealthy).toBe(false);
       // The stand-in mirrors that, which cannot feed back: applying a network status the socket
       // already has is a no-op, so nothing loops.
       expect(client.networkConnection.isOnline).toBe(false);

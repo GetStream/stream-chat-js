@@ -122,10 +122,10 @@ describe('client wiring — network + ws status', () => {
     });
 
     it('follows the socket once it has been up', () => {
-      client.wsConnection._setStatus({ isOnline: true, connectionId: 'conn' });
+      client.wsConnection._setStatus({ isHealthy: true, connectionId: 'conn' });
       expect(client.networkConnection.isOnline).toBe(true);
 
-      client.wsConnection._setStatus({ isOnline: false });
+      client.wsConnection._setStatus({ isHealthy: false });
       expect(client.networkConnection.isOnline).toBe(false);
     });
 
@@ -135,17 +135,17 @@ describe('client wiring — network + ws status', () => {
       // socket already holds changes nothing.
       const socket = client.wsConnection.connection as StableWSConnection;
       const reconnect = vi.spyOn(socket, '_reconnect').mockResolvedValue(undefined);
-      socket._setOnline(true);
+      socket._setHealth(true);
 
-      socket._setOnline(false);
+      socket._setHealth(false);
 
       expect(client.networkConnection.isOnline).toBe(false);
-      expect(client.wsConnection.isOnline).toBe(false);
+      expect(client.wsConnection.isHealthy).toBe(false);
       expect(reconnect).not.toHaveBeenCalled();
     });
 
     it('is replaced by a real reporter, which then wins', () => {
-      client.wsConnection._setStatus({ isOnline: true, connectionId: 'conn' });
+      client.wsConnection._setStatus({ isHealthy: true, connectionId: 'conn' });
       expect(client.networkConnection.isOnline).toBe(true);
 
       const source = fakeReporter();
@@ -155,22 +155,18 @@ describe('client wiring — network + ws status', () => {
       // The device says no network while the socket is still up, which is exactly the disagreement
       // the stand-in cannot express.
       expect(client.networkConnection.isOnline).toBe(false);
-      expect(client.wsConnection.isOnline).toBe(true);
+      expect(client.wsConnection.isHealthy).toBe(true);
     });
   });
 
   describe('client.wsConnection', () => {
-    it('starts down, with no connection id', () => {
+    it('starts unhealthy', () => {
       const client = new StreamChat('api-key');
 
       expect(client.wsConnection.state.getLatestValue()).toEqual({
-        isOnline: undefined,
-        lastOnlineAt: null,
-        lastOfflineAt: null,
-        isOnline: false,
-        connectionId: undefined,
-        lastOnlineAt: null,
-        lastOfflineAt: null,
+        isHealthy: false,
+        lastHealthyAt: null,
+        lastUnhealthyAt: null,
       });
     });
 

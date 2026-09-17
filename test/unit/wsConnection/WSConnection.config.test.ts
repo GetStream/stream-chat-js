@@ -87,13 +87,11 @@ describe('client.wsConnection configuration', () => {
       expect(client.wsConnection.config.connectTimeoutMs).toBe(1234);
     });
 
-    it('falls back to the package defaults when the socket has no client yet', () => {
-      // `options.wsConnection` allows this: a socket built before its client, handed one later
-      // through `setClient`. Between those two moments there is nothing to read configuration from.
-      const orphan = new StableWSConnection({} as never);
+    it('reads the package defaults through its parent', () => {
+      const socket = new StableWSConnection({ wsConnection: client.wsConnection });
 
-      expect(orphan.pingInterval).toBe(DEFAULT_WS_CONNECTION_CONFIG.pingIntervalMs);
-      expect(orphan.connectionCheckTimeout).toBe(35_000);
+      expect(socket.pingInterval).toBe(DEFAULT_WS_CONNECTION_CONFIG.pingIntervalMs);
+      expect(socket.connectionCheckTimeout).toBe(35_000);
     });
   });
 
@@ -230,12 +228,12 @@ describe('client.wsConnection configuration', () => {
       vi.useFakeTimers();
       try {
         const socket = new StableWSConnection({ wsConnection: client.wsConnection });
-        socket._setOnline(true);
+        socket._setHealth(true);
         const dispatch = vi.spyOn(client, 'dispatchEvent');
 
-        socket._setOnline(false);
+        socket._setHealth(false);
 
-        expect(client.wsConnection.state.getLatestValue().isOnline).toBe(false);
+        expect(client.wsConnection.state.getLatestValue().isHealthy).toBe(false);
         vi.advanceTimersByTime(
           DEFAULT_WS_CONNECTION_CONFIG.offlineNotificationDisplayDelayMs * 2,
         );

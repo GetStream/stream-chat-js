@@ -11,7 +11,7 @@ import {
   postInsights,
 } from '../../insights';
 import { chatLoggerSystem } from '../../logger';
-import { DEFAULT_WS_CONNECTION_CONFIG, WS_NETWORK_RECOVERY_RETRY_MS } from './config';
+import { WS_NETWORK_RECOVERY_RETRY_MS } from './config';
 import type { ConnectAPIResponse, ConnectedEvent, ConnectionOpen } from '../../types';
 import type { WSConnection } from './WSConnection';
 import type { StreamChat } from '../../client';
@@ -77,18 +77,18 @@ class WSCloseError extends Error {
  */
 export class StableWSConnection {
   /**
-   * The `WSConnection` this socket belongs to.
+   * The `WSConnection` this socket belongs to. Held instead of the client, because the status store
+   * lives here and everything the socket needs from the client is reachable through it.
    */
   wsConnection: WSConnection;
 
   // local vars
-  connectionID?: string;
   connectionOpen?: ConnectAPIResponse;
   consecutiveFailures: number;
   healthCheckTimeoutRef?: NodeJS.Timeout;
   isConnecting: boolean;
   isDisconnected: boolean;
-  isOnline: boolean;
+  isHealthy: boolean;
   isResolved?: boolean;
   lastEvent: Date | null;
   connectionCheckTimeoutRef?: NodeJS.Timeout;
@@ -119,7 +119,7 @@ export class StableWSConnection {
     /** Boolean that indicates if the connection promise is resolved */
     this.isResolved = false;
     /** Boolean that indicates if we have a working connection to the server */
-    this.isOnline = false;
+    this.isHealthy = false;
     /** Incremented when a new WS connection is made */
     this.wsID = 1;
     /** Store the last event time for health checks */
@@ -129,13 +129,9 @@ export class StableWSConnection {
   /**
    * The timing knobs, read from the parent **live** rather than snapshotted, so an `updateConfig`
    * reaches the socket that is already open instead of only the next one.
-   *
-   * Falls back to the package defaults when there is no parent to ask. That is not hypothetical:
-   * `config.connection` lets a socket be constructed before the client that will own it exists, and
-   * adopt a parent later through {@link setWSConnection}.
    */
   private get config(): WSConnectionConfig {
-    return this.wsConnection?.config ?? DEFAULT_WS_CONNECTION_CONFIG;
+    return this.wsConnection.config;
   }
 
   /** How often a health-check ping goes out. Configurable as `pingIntervalMs`. */
@@ -155,12 +151,12 @@ export class StableWSConnection {
 
   /** The client, reached through the parent. See {@link wsConnection}. */
   get client(): StreamChat {
-    return this.wsConnection?.client;
+    return this.wsConnection.client;
   }
 
   /**
-   * Adopts a parent after construction, for a socket supplied through `config.connection` and
-   * therefore built before the client that will own it exists.
+   * Re-parents this socket, for one supplied through `config.connection` and built against a
+   * different `WSConnection` than the client adopting it.
    */
   setWSConnection(wsConnection: WSConnection) {
     this.wsConnection = wsConnection;
@@ -190,7 +186,7 @@ export class StableWSConnection {
         .withExtraTags('connect')
         .info(`Established a WebSocket connection. Health check: ${healthCheck}.`);
     } catch (error: any) {
-      this._applyOnline(false);
+      this._applyHealth(false);
       this.consecutiveFailures += 1;
 
       const e = error as APIError;
@@ -291,6 +287,12 @@ export class StableWSConnection {
     this.wsID += 1;
     this.isConnecting = false;
     this.isDisconnected = true;
+    // This close is deliberate, so no reconnect will follow it: anything waiting for a connection id
+    // has to be failed rather than left waiting forever.
+    //
+    // Before `_applyHealth(false)` below, whose invalidation arms a fresh deferred for the reconnect
+    // it assumes is coming. Resetting first leaves it nothing to arm.
+    this.client.connectionIdManager.reset();
 
     // start by removing all the listeners
     if (this.healthCheckTimeoutRef) {
@@ -300,9 +302,9 @@ export class StableWSConnection {
       clearInterval(this.connectionCheckTimeoutRef);
     }
 
-    // Through `_applyOnline`, not a bare assignment: the store must tell the truth on this path too.
+    // Through `_applyHealth`, not a bare assignment: the store must tell the truth on this path too.
     // It is what `closeConnection()` uses, and a deliberate shutdown is still a transition.
-    this._applyOnline(false);
+    this._applyHealth(false);
 
     let isClosedPromise: Promise<void>;
     // and finally close...
@@ -357,6 +359,9 @@ export class StableWSConnection {
     if (this.isConnecting || this.isDisconnected) return;
     this.isConnecting = true;
     this.requestID = randomId();
+    // Before anything can await an id. A no-op on a reconnect that still holds one, so those
+    // requests keep flowing against it rather than blocking for the whole outage.
+    this.client.connectionIdManager.arm();
     this.client.insightMetrics.connectionStartTimestamp = new Date().getTime();
     let isTokenReady = false;
     try {
@@ -397,10 +402,9 @@ export class StableWSConnection {
       this.isConnecting = false;
 
       if (response) {
-        // Already set in `onmessage`, from the same hello event this promise resolved with. Kept so
-        // the field is still assigned on any path that resolves `connectionOpen` without going
-        // through `onmessage`.
-        this.connectionID = response.connection_id;
+        // Already published from `onmessage`, from the same hello event this promise resolved with.
+        // Repeated for any path that resolves `connectionOpen` without going through it.
+        this.client.connectionIdManager.resolveConnectionId(response.connection_id);
         if (
           this.client.insightMetrics.wsConsecutiveFailures > 0 &&
           this.client.options.enableInsights
@@ -445,7 +449,7 @@ export class StableWSConnection {
     logger.withExtraTags('_reconnect').info('Initiating a reconnect.');
 
     // only allow 1 connection at the time
-    if (this.isConnecting || this.isOnline) {
+    if (this.isConnecting || this.isHealthy) {
       logger
         .withExtraTags('_reconnect')
         .debug('Aborting reconnect: already connecting or healthy (check 1).');
@@ -463,7 +467,7 @@ export class StableWSConnection {
 
     // Check once again if by some other call to _reconnect is active or connection is
     // already restored, then no need to proceed.
-    if (this.isConnecting || this.isOnline) {
+    if (this.isConnecting || this.isHealthy) {
       logger
         .withExtraTags('_reconnect')
         .debug('Aborting reconnect: already connecting or healthy (check 2).');
@@ -494,7 +498,7 @@ export class StableWSConnection {
 
       this.consecutiveFailures = 0;
     } catch (error: any) {
-      this._applyOnline(false);
+      this._applyHealth(false);
       this.consecutiveFailures += 1;
       if (
         error.code === chatCodes.TOKEN_EXPIRED &&
@@ -516,6 +520,11 @@ export class StableWSConnection {
           .warn('WebSocket connection failed. Retrying the reconnect.');
 
         this._reconnect();
+      } else {
+        // Giving up. Going down armed a deferred on the assumption that a reconnect would settle it,
+        // and nothing will now — leaving it pending hangs every request waiting for an id, with no
+        // retry coming and no error to show for it.
+        this.client.connectionIdManager.rejectConnectionId(error);
       }
     }
     logger.withExtraTags('_reconnect').debug('Reconnect attempt finished.');
@@ -526,7 +535,7 @@ export class StableWSConnection {
    * the `'ws'` connection this class owns.
    *
    * The logs name both by their {@link ConnectionType} value rather than by prose, so a reader is
-   * never left guessing which connection a line is about. The effect clause is conditional because there may not be an effect: `_setOnline` returns
+   * never left guessing which connection a line is about. The effect clause is conditional because there may not be an effect: `_setHealth` returns
    * early when the status is unchanged, and a `'network'` report commonly arrives after the socket has
    * already died on its own.
    *
@@ -559,7 +568,7 @@ export class StableWSConnection {
       logger
         .withExtraTags('onlineStatusChanged')
         .info(`The 'network' connection went offline.`);
-      this._setOnline(false);
+      this._setHealth(false);
       return;
     }
 
@@ -569,13 +578,13 @@ export class StableWSConnection {
       .withExtraTags('onlineStatusChanged')
       .info(
         `The 'network' connection went online; ${
-          this.isOnline
+          this.isHealthy
             ? `leaving the 'ws' connection as it is`
             : `reconnecting the 'ws' connection now`
         }.`,
       );
 
-    if (!this.isOnline) {
+    if (!this.isHealthy) {
       this._reconnect({ interval: WS_NETWORK_RECOVERY_RETRY_MS });
     }
   }
@@ -626,17 +635,13 @@ export class StableWSConnection {
         return;
       }
 
-      // Assigned before going online, not after, because "the socket is up" has to imply "we have
-      // an id to watch on". `_connect()` also sets this from the resolved promise, but that runs a
-      // microtask later — so anything reacting to the status change saw `connectionID` as
-      // `undefined`, and `client.wsConnection.connectionID` (which `api-client` sends as
-      // `connection_id`) stayed that way, because `_setStatus` ignores a repeat of the same
-      // `isOnline`. Every watched request then failed with "Watch or ChatPresence requires an
-      // active websocket connection".
-      this.connectionID = (decodedData as ConnectionOpen).connection_id;
+      // Published before going online, so "the socket is up" implies "there is an id to watch on".
+      this.client.connectionIdManager.resolveConnectionId(
+        (decodedData as ConnectionOpen).connection_id,
+      );
 
       this.resolvePromise?.(decodedData as ConnectionOpen);
-      this._setOnline(true);
+      this._setHealth(true);
     }
 
     // trigger the event..
@@ -680,7 +685,7 @@ export class StableWSConnection {
     } else {
       this.consecutiveFailures += 1;
       this.totalFailures += 1;
-      this._setOnline(false);
+      this._setHealth(false);
       this.isConnecting = false;
 
       this.rejectPromise?.(this._errorFromWSEvent(event));
@@ -701,7 +706,7 @@ export class StableWSConnection {
 
     this.consecutiveFailures += 1;
     this.totalFailures += 1;
-    this._setOnline(false);
+    this._setHealth(false);
     this.isConnecting = false;
 
     this.rejectPromise?.(this._errorFromWSEvent(event));
@@ -713,38 +718,29 @@ export class StableWSConnection {
   };
 
   /**
-   * Marks this WebSocket up or down.
-   *
-   * Nothing here is a statement about the device's network. That is a separate fact, with its own
-   * store on `client.networkConnection`.
-   *
-   * Note the asymmetry, which is deliberate and depended upon: going up dispatches immediately,
-   * going down waits 5s and dispatches only if still down. That debounce suppresses flapping for
-   * UI, which is also why the watch bookkeeping below does **not** go through the event.
-   *
-   * @param online - Whether this WebSocket is up.
-   */
-  /**
-   * Writes this connection's status to the field and to `client.wsConnection.state`, and nothing
-   * else. Returns whether it changed.
+   * Writes this connection's status to the field and to `client.wsConnection.state`, and drops the
+   * connection id when it goes down. Returns whether the status changed.
    *
    * Every path that transitions the status goes through here — including `disconnect()`, which
-   * `closeConnection()` uses, and the two error paths. Covering all of them is why the store exists.
+   * `closeConnection()` uses, and the two error paths. Covering all of them is why the store exists,
+   * and why invalidating the id belongs here rather than beside any one of those paths.
    *
    * Construction is not routed through here: initializing the field is not a transition, and stamping
-   * `lastOfflineAt` because a socket object was built would be a lie.
+   * `lastUnhealthyAt` because a socket object was built would be a lie.
    */
-  private _applyOnline(online: boolean): boolean {
-    if (online === this.isOnline) return false;
+  private _applyHealth(healthy: boolean): boolean {
+    if (healthy === this.isHealthy) return false;
 
-    this.isOnline = online;
+    this.isHealthy = healthy;
 
-    // Optional chaining because a socket supplied through `config.connection` is built before it has
-    // a parent, and adopts one later.
-    this.wsConnection?._setStatus({
-      isOnline: online,
-      connectionId: this.connectionID,
-    });
+    if (!healthy) {
+      // The id those watches were keyed by is dead, so no further request may carry it. Invalidating
+      // arms a fresh deferred, so requests needing one wait for the reconnect instead of racing
+      // ahead with the old one.
+      this.client.connectionIdManager.invalidate();
+    }
+
+    this.wsConnection._setStatus({ isHealthy: healthy });
 
     return true;
   }
@@ -753,16 +749,16 @@ export class StableWSConnection {
    * Applies a status change and does the bookkeeping that goes with it.
    *
    * Announcing it is not this class's job. The status lives in `client.wsConnection.state`, which
-   * {@link _applyOnline} writes on every transition — including the ones that were always silent —
+   * {@link _applyHealth} writes on every transition — including the ones that were always silent —
    * so a consumer subscribes there rather than waiting to be told.
    *
    * The five-second wait before announcing a drop moved to whoever renders the banner, its length
    * configurable as `offlineNotificationDisplayDelayMs`. The timer here outlived the socket that
    * armed it, so a replaced connection announced a drop its replacement had already recovered from.
    */
-  _setOnline = (online: boolean) => {
-    if (!this._applyOnline(online)) return;
-    if (this.isOnline) return;
+  _setHealth = (healthy: boolean) => {
+    if (!this._applyHealth(healthy)) return;
+    if (this.isHealthy) return;
 
     // The server keys channel watches by connection ID, so they are gone the moment the socket is.
     this.client._markActiveChannelsWatchInterrupted();
@@ -883,7 +879,7 @@ export class StableWSConnection {
         logger
           .withExtraTags('scheduleConnectionCheck')
           .warn('No events received within the health-check window. Reconnecting.');
-        this._setOnline(false);
+        this._setHealth(false);
         this._reconnect();
       }
     }, this.connectionCheckTimeout);
