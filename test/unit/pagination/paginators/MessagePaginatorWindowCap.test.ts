@@ -281,12 +281,12 @@ describe('MessagePaginator — window cap (pruning)', () => {
       const p = make(3);
       seedHead(p, 3);
 
-      p.setPruningAllowed(false);
+      p.setPruningSuspended(true);
       p.ingestItem(msg('m4', 4));
       p.ingestItem(msg('m5', 5));
       expect(ids(p)).toEqual(['m1', 'm2', 'm3', 'm4', 'm5']);
 
-      p.setPruningAllowed(true);
+      p.setPruningSuspended(false);
       p.ingestItem(msg('m6', 6));
       expect(ids(p)).toEqual(['m4', 'm5', 'm6']);
     });
@@ -307,12 +307,12 @@ describe('MessagePaginator — window cap (pruning)', () => {
       seedHead(p, 5);
 
       // Grow past the cap with pruning suspended, as scrolling up does.
-      p.setPruningAllowed(false);
+      p.setPruningSuspended(true);
       for (let i = 6; i <= 8; i++) p.ingestItem(msg(`m${i}`, i));
       expect(ids(p)).toEqual(['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8']);
 
       // Back at the live edge, then an UPDATE to an already-visible message — the order-locked path.
-      p.setPruningAllowed(true);
+      p.setPruningSuspended(false);
       p.ingestItem(msg('m7', 7, { text: 'edited' }));
 
       expect(ids(p)).toHaveLength(5);

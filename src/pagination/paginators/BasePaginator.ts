@@ -1082,12 +1082,12 @@ export abstract class BasePaginator<T, Q> {
   // ---------------------------------------------------------------------------
 
   /**
-   * Whether the consumer currently considers pruning safe. `true` here: a paginator with no UI
-   * attached, or a UI that never reports, still gets its configured cap. A UI that knows the user is
-   * reading near the oldest edge overrides this to say "not right now" — see `MessageIntervalPaginator`.
+   * Whether pruning is on hold. `false` here means a paginator with no UI attached or a UI that
+   * never reports, still gets its configured cap. For example, a specific UI can ask pruning
+   * to not happen unless we are near to the tailing edge.
    */
-  protected get isPruningAllowed(): boolean {
-    return true;
+  protected get isPruningSuspended(): boolean {
+    return false;
   }
 
   /**
@@ -1128,7 +1128,7 @@ export abstract class BasePaginator<T, Q> {
    *
    * All must hold, or this is a no-op:
    * - a cap is configured
-   * - the consumer has not suspended pruning ({@link isPruningAllowed})
+   * - the consumer has not suspended pruning ({@link isPruningSuspended})
    * - the interval is anchored, is the dataset head, and is the active one. A jumped-away window is
    *   what the user is reading, and a logical interval has no pagination provenance — nothing dropped
    *   from it could ever be fetched back
@@ -1147,7 +1147,7 @@ export abstract class BasePaginator<T, Q> {
    */
   protected pruneTailToLimit(interval: AnyInterval): boolean {
     const limit = this.effectiveMaxLoadedItems;
-    if (typeof limit === 'undefined' || !this.isPruningAllowed) return false;
+    if (typeof limit === 'undefined' || this.isPruningSuspended) return false;
 
     // Anchored intervals only. A logical interval has no pagination provenance, so anything dropped
     // from it could never be fetched back. Separated out because it is also the type guard the field

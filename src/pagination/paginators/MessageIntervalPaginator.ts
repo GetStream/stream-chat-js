@@ -261,26 +261,26 @@ export class MessageIntervalPaginator extends BasePaginator<
   }
 
   /**
-   * UI-driven "it is safe to prune right now" signal, set via {@link setPruningAllowed}. Defaults to
-   * allowed, so a paginator with no UI attached still honours its configured cap.
+   * UI-driven "hold off on pruning" signal, set via {@link setPruningSuspended}. Defaults to not
+   * suspended, so a paginator with no UI attached still honours its configured cap.
    */
-  protected get isPruningAllowed(): boolean {
-    return this._pruningAllowed;
+  protected get isPruningSuspended(): boolean {
+    return this._pruningSuspended;
   }
 
-  private _pruningAllowed = true;
+  private _pruningSuspended = false;
 
   /**
-   * Tells the paginator whether dropping the oldest loaded messages is currently safe. The SDK calls
-   * this from its viewability tracking: while the user is reading near the oldest loaded message,
-   * pruning there would pull content out from under them, so the window is allowed to grow past its
-   * cap until they scroll back. Only meaningful alongside `maxLoadedItems`.
+   * Tells the paginator to hold off on dropping the oldest loaded messages. The SDK calls this from
+   * its viewability tracking: while the user is reading near the oldest loaded message, pruning there
+   * would pull content out from under them, so the window is allowed to grow past its cap until they
+   * scroll back. Only meaningful alongside `maxLoadedItems`.
    *
    * Deliberately a plain field rather than a `StateStore` — nothing observes it, and a scroll-driven
    * signal must not be able to cost a render.
    */
-  setPruningAllowed = (allowed: boolean) => {
-    this._pruningAllowed = allowed;
+  setPruningSuspended = (suspended: boolean) => {
+    this._pruningSuspended = suspended;
   };
 
   /**
