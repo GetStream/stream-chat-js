@@ -1270,8 +1270,9 @@ export abstract class BasePaginator<T, Q> {
     const current = this.state.getLatestValue();
     const next: Partial<PaginatorState<T>> = {};
 
-    // From the interval, not hardcoded `true`: a tailward query landing between the prune and this
-    // publish may have legitimately reached the dataset start again.
+    // Read this off the interval instead of assuming the prune's `true`. Pruning reopens the
+    // tailward (older) edge, but this publish can run a throttle interval later and a `toTail()` in
+    // between may have loaded the rest of the history - so there may be nothing older left after all.
     if (current.hasMoreTail !== active.hasMoreTail) next.hasMoreTail = active.hasMoreTail;
 
     if (this.isCursorPagination) {
