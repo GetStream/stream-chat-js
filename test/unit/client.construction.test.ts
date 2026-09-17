@@ -86,7 +86,7 @@ describe('StreamChat construction', () => {
       // transport underneath is what does not exist yet.
       expect(client.wsConnection).to.not.be.null;
       expect(client.wsConnection.connection).to.be.null;
-      expect(client.wsConnection.isOnline).to.equal(false);
+      expect(client.wsConnection.isHealthy).to.equal(false);
       expect(client.wsPromise).to.be.null;
       expect(client.setUserPromise).to.be.null;
 

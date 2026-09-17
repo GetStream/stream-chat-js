@@ -58,7 +58,6 @@ import type {
 } from './types';
 import { InsightMetrics, postInsights } from './insights';
 import { chatLoggerSystem } from './logger';
-import { waitForWSConnection } from './utils/waitForWSConnection';
 import { queueOrRun } from './offline-support/queueableOperations';
 import { Thread } from './thread';
 import { Moderation } from './moderation';
@@ -68,6 +67,7 @@ import { PollManager } from './poll_manager';
 import { EntityStore } from './entityStore/EntityStore';
 import { ChannelManager } from './ChannelManager';
 import {
+  ConnectionIdManager,
   ConnectionRecoveryManager,
   NetworkConnectionObserver,
   WSConnection,
@@ -174,6 +174,14 @@ export class StreamChat extends ChatApi {
    * `undefined` — *unknown*, not offline — until something has reported.
    */
   networkConnection: NetworkConnectionObserver;
+  /**
+   * The WebSocket connection id, and the one place it lives.
+   *
+   * The server keys channel watches and presence subscriptions by it, so a request carrying either
+   * waits here for the handshake rather than racing it. See `requiresConnectionId` in
+   * `api-client.ts`.
+   */
+  connectionIdManager: ConnectionIdManager;
   /**
    * Client-global, normalized store holding one canonical copy of each message. The channel main
    * list and thread reply paginators read/write message content through it, so a message held in
@@ -335,7 +343,8 @@ export class StreamChat extends ChatApi {
       this.setBaseURL(`http://${streamLocalTestHost}`);
     }
 
-    // Before the WebSocket, which subscribes to this one's store.
+    // Both before the WebSocket, which subscribes to the network store and drives the id's lifecycle.
+    this.connectionIdManager = new ConnectionIdManager();
     this.networkConnection = new NetworkConnectionObserver({ client: this });
     this.networkConnection.registerSubscriptions();
 
@@ -370,10 +379,11 @@ export class StreamChat extends ChatApi {
     // the managers above. `'client'` is the one key that cannot be configured after construction —
     // this registry is born here, so there is no earlier moment for a caller to register anything.
     if (this.options.config) this.config.set(this.options.config);
-    this.initializeManagerConfig();
 
-    // Last statement: everything a setup function might reach now exists. `StateStore.subscribe` fires
-    // immediately, so a function registered later still applies at once.
+    // Last statement: everything a setup function might reach now exists. Subscribing applies the
+    // current configuration on the spot, which is the managers' one derivation — deriving here as
+    // well would run every `initializeConfig` twice per construction. `StateStore.subscribe` fires
+    // immediately, so a setup function registered later still applies at once.
     this.wireClientConfiguration();
   }
 
@@ -662,7 +672,7 @@ export class StreamChat extends ChatApi {
       return this.wsPromise;
     }
 
-    if (this.wsConnection?.isOnline && this.wsConnection.connectionID) {
+    if (this.wsConnection?.isHealthy && this.connectionIdManager.connectionId) {
       logger
         .withExtraTags('openConnection')
         .debug('openConnection was called twice; a healthy connection already exists.');
@@ -1284,7 +1294,7 @@ export class StreamChat extends ChatApi {
     logger
       .withExtraTags('_settleConnectPromises')
       .info(
-        `Connection re-established with connection ID ${this.wsConnection.connectionID}.`,
+        `Connection re-established with connection ID ${this.connectionIdManager.connectionId}.`,
       );
 
     this.wsPromise = Promise.resolve();
@@ -1405,19 +1415,8 @@ export class StreamChat extends ChatApi {
           ...restOptions,
         };
 
-    // Same treatment as `channel.watch()`: wait for a live socket rather than degrade, and only when
-    // this query needs one. `watch` and `presence` are both server-side subscriptions keyed by the
-    // connection ID and the server rejects either without it; a plain read must be issuable offline.
-    //
-    // Waiting is safe rather than a hang because v10 has no server-side surface — the constructor
-    // takes no `secret` — so there is no client that can never open a socket.
-    //
-    // The caller's signal reaches the wait as well as the request, so an abandoned query does not
-    // hold its timer for the whole connect budget.
-    if (payload.watch || payload.presence) {
-      await waitForWSConnection(this, { signal: requestOptions?.signal });
-    }
-
+    // No wait here either — see `channel.watch()`. `ApiClient` gates on the flags this payload
+    // carries, so a watched query waits for a connection id and a plain read does not.
     return await super.queryChannels(payload, requestOptions);
   }
 
@@ -1571,7 +1570,7 @@ export class StreamChat extends ChatApi {
       // status untouched (it neither starts nor ends a watch).
       // A backstop for a caller who passes `watch: true` explicitly. The default arm reads `isOnline`
       // rather than the connection ID, because the boolean is the one that says what this asks.
-      if (!offlineMode && (queryChannelsOptions?.watch ?? this.wsConnection.isOnline)) {
+      if (!offlineMode && (queryChannelsOptions?.watch ?? this.wsConnection.isHealthy)) {
         c.watchStatus = ChannelWatchStatus.Watching;
       }
       c.push_preferences = channelState.push_preferences;

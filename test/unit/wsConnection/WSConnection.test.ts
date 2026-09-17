@@ -20,7 +20,7 @@ describe('client.wsConnection', () => {
 
     it('answers isOnline as false rather than throwing', () => {
       // Read from `state`, not from `connection` — which is null here.
-      expect(client.wsConnection.isOnline).toBe(false);
+      expect(client.wsConnection.isHealthy).toBe(false);
     });
 
     it('is subscribable before any socket exists', () => {
@@ -59,16 +59,16 @@ describe('client.wsConnection', () => {
       expect(client.wsConnection).toBe(wrapper);
       expect(client.wsConnection.state).toBe(store);
 
-      client.wsConnection.connection?._setOnline(true);
+      client.wsConnection.connection?._setHealth(true);
       expect(onChange).toHaveBeenCalledTimes(1);
-      expect(client.wsConnection.isOnline).toBe(true);
+      expect(client.wsConnection.isHealthy).toBe(true);
     });
 
     it('answers isOnline from the store, not from the freshly-built socket', () => {
       client.wsConnection.connection = new StableWSConnection({
         wsConnection: client.wsConnection,
       });
-      client.wsConnection.connection._setOnline(true);
+      client.wsConnection.connection._setHealth(true);
 
       // A replacement socket starts internally down. If `isOnline` read the socket we would
       // report a regression to `false` here, having never gone down.
@@ -76,7 +76,7 @@ describe('client.wsConnection', () => {
         wsConnection: client.wsConnection,
       });
 
-      expect(client.wsConnection.isOnline).toBe(true);
+      expect(client.wsConnection.isHealthy).toBe(true);
     });
   });
 
@@ -179,10 +179,10 @@ describe('client.wsConnection', () => {
       if (!first) throw new Error('socket missing');
 
       // The state a health-check timeout leaves behind: down, timers running, never disconnected.
-      first._setOnline(true);
+      first._setHealth(true);
       first.scheduleNextPing();
       first.scheduleConnectionCheck();
-      first._setOnline(false);
+      first._setHealth(false);
       expect(first.isDisconnected).toBe(false);
 
       const reconnect = vi.spyOn(first, '_reconnect').mockResolvedValue(undefined);
@@ -232,7 +232,7 @@ describe('client.wsConnection', () => {
       // `buildConnection` hands back the same instance every time when one is injected, so the
       // replacement check must compare identity — disconnecting it here would shut down the very
       // socket about to be connected.
-      const injected = new StableWSConnection({} as never);
+      const injected = new StableWSConnection({ wsConnection: client.wsConnection });
       injected.connect = vi.fn().mockResolvedValue(undefined) as never;
       const disconnect = vi.spyOn(injected, 'disconnect');
       const reusing = new StreamChat('api-key-reuse', { allowServerSideConnect: true });
@@ -246,7 +246,7 @@ describe('client.wsConnection', () => {
     });
 
     it('uses a socket supplied through options.wsConnection instead of building one', () => {
-      const injected = new StableWSConnection({} as never);
+      const injected = new StableWSConnection({ wsConnection: client.wsConnection });
       injected.connect = vi.fn().mockResolvedValue(undefined) as never;
 
       const withInjected = new StreamChat('api-key-injected', {
@@ -290,13 +290,13 @@ describe('client.wsConnection', () => {
       // after a backgrounded app came back.
       const socket = client.wsConnection.connection;
       if (!socket) throw new Error('socket missing');
-      socket._setOnline(true);
+      socket._setHealth(true);
 
       const dispatch = vi.spyOn(client, 'dispatchEvent');
       await client.wsConnection.disconnect(0);
 
-      expect(client.wsConnection.state.getLatestValue().isOnline).toBe(false);
-      expect(client.wsConnection.state.getLatestValue().lastOfflineAt).toBeInstanceOf(
+      expect(client.wsConnection.state.getLatestValue().isHealthy).toBe(false);
+      expect(client.wsConnection.state.getLatestValue().lastUnhealthyAt).toBeInstanceOf(
         Date,
       );
       expect(
@@ -319,50 +319,51 @@ describe('client.wsConnection', () => {
       // `client.wsConnection.onlineStatusChanged({ type: … })` with a synthesized DOM event.
       const connection = client.wsConnection.connection;
       if (!connection) throw new Error('socket missing');
-      connection._setOnline(true);
+      connection._setHealth(true);
 
       client.wsConnection.onlineStatusChanged({ type: 'offline' } as Event);
 
-      expect(client.wsConnection.isOnline).toBe(false);
+      expect(client.wsConnection.isHealthy).toBe(false);
     });
   });
 
   describe('_setStatus', () => {
-    it('stamps only the matching timestamp and carries the connection id up', () => {
-      client.wsConnection._setStatus({ isOnline: true, connectionId: 'conn-1' });
+    it('stamps only the matching timestamp', () => {
+      client.wsConnection._setStatus({ isHealthy: true });
 
       const state = client.wsConnection.state.getLatestValue();
-      expect(state.isOnline).toBe(true);
-      expect(state.connectionId).toBe('conn-1');
-      expect(state.lastOnlineAt).toBeInstanceOf(Date);
-      expect(state.lastOfflineAt).toBeNull();
+      expect(state.isHealthy).toBe(true);
+      expect(state.lastHealthyAt).toBeInstanceOf(Date);
+      expect(state.lastUnhealthyAt).toBeNull();
     });
 
-    it('clears the connection id when going down', () => {
-      // The id names a connection the server has closed, and it rejects requests carrying one. This
-      // wrapper outlives every socket it holds, so clearing here is the only thing that clears it.
-      client.wsConnection._setStatus({ isOnline: true, connectionId: 'conn-2' });
-      client.wsConnection._setStatus({ isOnline: false });
+    it('carries no connection id at all', () => {
+      // The id lives on `client.connectionIdManager` and nowhere else. A copy here could not be
+      // invalidated by a socket that had already been replaced, which is the staleness that manager
+      // exists to end.
+      client.wsConnection._setStatus({ isHealthy: true });
 
-      expect(client.wsConnection.state.getLatestValue().connectionId).toBeUndefined();
+      expect(client.wsConnection.state.getLatestValue()).not.toHaveProperty(
+        'connectionId',
+      );
     });
 
     it("does not send a previous user's connection id after disconnectUser", () => {
       // The socket used to be rebuilt on every connect, which is what reset this. Now the wrapper
       // persists, so without clearing, requests between reopening and the server hello carried the
       // id from the previous connection — the previous *user's*, after a disconnect.
-      client.wsConnection._setStatus({ isOnline: true, connectionId: 'user-a' });
-      client.wsConnection._setStatus({ isOnline: false });
+      client.wsConnection._setStatus({ isHealthy: true });
+      client.wsConnection._setStatus({ isHealthy: false });
 
       expect(client.wsConnection.connectionID).toBeUndefined();
     });
 
     it('returns false and publishes nothing for an unchanged status', () => {
-      client.wsConnection._setStatus({ isOnline: true, connectionId: 'conn-3' });
-      const first = client.wsConnection.state.getLatestValue().lastOnlineAt;
+      client.wsConnection._setStatus({ isHealthy: true });
+      const first = client.wsConnection.state.getLatestValue().lastHealthyAt;
 
-      expect(client.wsConnection._setStatus({ isOnline: true })).toBe(false);
-      expect(client.wsConnection.state.getLatestValue().lastOnlineAt).toBe(first);
+      expect(client.wsConnection._setStatus({ isHealthy: true })).toBe(false);
+      expect(client.wsConnection.state.getLatestValue().lastHealthyAt).toBe(first);
     });
   });
 
@@ -370,7 +371,7 @@ describe('client.wsConnection', () => {
     it('assigns into the wrapper rather than replacing it', async () => {
       // A socket can be built before its client exists and handed one later via `setClient`,
       // which is why this path must keep working.
-      const injected = new StableWSConnection({} as never);
+      const injected = new StableWSConnection({ wsConnection: client.wsConnection });
       injected.isConnecting = false;
       injected.connect = vi.fn().mockResolvedValue({ connection_id: 'x' }) as never;
 

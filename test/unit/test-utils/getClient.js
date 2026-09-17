@@ -11,19 +11,15 @@ export const getClientWithUser = (user) => {
 
 		chatClient.wsPromise = Promise.resolve();
 
-		// Mark the socket up as well as the user connected. This helper exists to produce a connected
-		// client without touching the network, and in the real SDK "connected" means there is a live
-		// socket with a connection id — so leaving the WS status down was an incomplete fiction. It
-		// became load-bearing once `channel.watch()` and `client.queryChannels()` started waiting for
-		// a live socket instead of degrading to `watch: false`: without this every one of them would
-		// wait out its timeout.
+		// Mark the socket up and publish a connection id, because in the real SDK "connected" means
+		// both. It is load-bearing: `ApiClient` holds any request that watches or subscribes to
+		// presence until an id exists, so without this every one of them would wait forever.
 		//
 		// A test that wants the socket *down* should say so explicitly with
-		// `client.wsConnection._setStatus({ isOnline: false })`.
-		chatClient.wsConnection._setStatus({
-			isOnline: true,
-			connectionId: 'test-connection-id',
-		});
+		// `client.wsConnection._setStatus({ isHealthy: false })`, and one that wants no connection id
+		// with `client.connectionIdManager.reset()`.
+		chatClient.wsConnection._setStatus({ isHealthy: true });
+		chatClient.connectionIdManager.resolveConnectionId('test-connection-id');
 
 		// sending a promise, since connectUser in actual SDK is an async function.
 		return chatClient;

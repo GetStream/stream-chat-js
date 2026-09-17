@@ -235,21 +235,21 @@ describe('connection', function () {
 		 * `client.wsConnection.state`, which is what `api-client` sends as `connection_id`.
 		 *
 		 * It was broken: `connectionID` was assigned from the resolved `connectionOpen` promise, a
-		 * microtask after `onmessage` had already called `_setOnline(true)`. So the store went online
+		 * microtask after `onmessage` had already called `_setHealth(true)`. So the store went online
 		 * carrying `connectionId: undefined`, and `_setStatus` ignores a repeat of the same `isOnline`,
 		 * so nothing ever filled it in. Every watched query then came back 400 with "Watch or
 		 * ChatPresence requires an active websocket connection".
 		 */
-		it('has a connection id in the store by the time it reports online', async () => {
+		it('has a connection id by the time it reports online', async () => {
 			const client = newStreamChat();
 			const { c } = await connectAndGetFrame(client);
 			client.wsConnection.connection = c;
 
-			expect(c.isOnline).to.be.true;
-			expect(c.connectionID).to.equal('61112366-0a15-3891-0000-000000000009');
-			// The store, not just the socket: this is the one `api-client` reads.
-			expect(client.wsConnection.isOnline).to.be.true;
-			expect(client.wsConnection.connectionID).to.equal(
+			expect(c.isHealthy).to.be.true;
+			expect(client.wsConnection.isHealthy).to.be.true;
+			// Published before the status goes up, so "the socket is up" implies there is an id to
+			// watch on. `ApiClient` holds every subscribing request until this exists.
+			expect(client.connectionIdManager.connectionId).to.equal(
 				'61112366-0a15-3891-0000-000000000009',
 			);
 		});
@@ -344,14 +344,17 @@ describe('connection', function () {
 		});
 		afterEach(() => MockWebSocket.reset());
 
-		it('should resolve the connection and set the connection id', async () => {
-			const c = new StableWSConnection({ wsConnection: newStreamChat().wsConnection });
+		it('should resolve the connection and publish the connection id', async () => {
+			const client = newStreamChat();
+			const c = new StableWSConnection({ wsConnection: client.wsConnection });
 			const health = await c.connect();
 
 			expect(health.type).to.equal('connection.ok');
 			expect(health.connection_id).to.equal('61112366-0a15-3891-0000-000000000009');
-			expect(c.connectionID).to.equal('61112366-0a15-3891-0000-000000000009');
-			expect(c.isOnline).to.be.true;
+			expect(client.connectionIdManager.connectionId).to.equal(
+				'61112366-0a15-3891-0000-000000000009',
+			);
+			expect(c.isHealthy).to.be.true;
 		});
 
 		it('passes wire timestamps through untouched', async () => {

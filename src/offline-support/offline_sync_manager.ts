@@ -64,7 +64,7 @@ export class OfflineDBSyncManager {
       // If the WebSocket connection is already active, then call
       // the sync API straight away and also execute pending API calls.
       // Otherwise wait for the socket's status store to report one.
-      if (this.client.user?.id && this.client.wsConnection?.isOnline) {
+      if (this.client.user?.id && this.client.wsConnection?.isHealthy) {
         await this.syncAndExecutePendingTasks();
         await this.invokeSyncStatusListeners(true);
       }
@@ -79,18 +79,18 @@ export class OfflineDBSyncManager {
       // Syncing is about reaching the server over this socket, so this reads the socket's own store.
       // The device's network status is a separate fact with its own store, and a device with a
       // network but no socket has nothing to sync over.
-      let wasOnline: boolean | undefined;
+      let wasHealthy: boolean | undefined;
       this.connectionChangedListener =
         this.client.wsConnection.state.subscribeWithSelector(
-          ({ isOnline }) => ({ isOnline }),
-          async ({ isOnline }) => {
+          ({ isHealthy }) => ({ isHealthy }),
+          async ({ isHealthy }) => {
             // The immediate first call establishes the baseline. It is the current status rather than
             // a change, and the block above has already acted on it.
-            const previous = wasOnline;
-            wasOnline = isOnline;
+            const previous = wasHealthy;
+            wasHealthy = isHealthy;
             if (previous === undefined) return;
 
-            if (isOnline) {
+            if (isHealthy) {
               await this.syncAndExecutePendingTasks();
               await this.invokeSyncStatusListeners(true);
             } else {

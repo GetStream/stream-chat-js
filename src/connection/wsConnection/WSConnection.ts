@@ -27,7 +27,7 @@ const logger = chatLoggerSystem.getLogger('client');
  * documented mobile background/foreground flow — would strand anyone already subscribed.
  *
  * The members below forward to the current socket so existing call sites keep working, with one
- * deliberate exception: {@link isOnline} is answered from `state`, not from `connection`, so it stays
+ * deliberate exception: {@link isHealthy} is answered from `state`, not from `connection`, so it stays
  * correct across a replacement and while no socket exists yet.
  *
  * It also owns the **network-status subscription**, for the same reason it owns the store: subscribing
@@ -40,7 +40,7 @@ export class WSConnection extends WithSubscriptions {
   state: StateStore<WSConnectionState>;
   /**
    * The live socket, or `null` before the first {@link connect}. Built and replaced here, not from
-   * outside — reach for {@link isOnline} / {@link connectionID} rather than this.
+   * outside — reach for {@link isHealthy} rather than this.
    *
    * @internal
    */
@@ -72,10 +72,9 @@ export class WSConnection extends WithSubscriptions {
     });
     this.client = client;
     this.state = new StateStore<WSConnectionState>({
-      isOnline: false,
-      connectionId: undefined,
-      lastOnlineAt: null,
-      lastOfflineAt: null,
+      isHealthy: false,
+      lastHealthyAt: null,
+      lastUnhealthyAt: null,
     });
   }
 
@@ -144,13 +143,8 @@ export class WSConnection extends WithSubscriptions {
    * survives the socket being replaced and answers `false` rather than throwing before the first
    * connect.
    */
-  get isOnline(): boolean {
-    return this.state.getLatestValue().isOnline;
-  }
-
-  /** The id the server keys watches by, or `undefined` while the socket is down. */
-  get connectionID(): string | undefined {
-    return this.state.getLatestValue().connectionId;
+  get isHealthy(): boolean {
+    return this.state.getLatestValue().isHealthy;
   }
 
   /** Whether a connection attempt is in flight. */
@@ -166,24 +160,12 @@ export class WSConnection extends WithSubscriptions {
    *
    * @internal
    */
-  _setStatus({
-    isOnline,
-    connectionId,
-  }: {
-    isOnline: boolean;
-    connectionId?: string;
-  }): boolean {
-    if (this.isOnline === isOnline) return false;
+  _setStatus({ isHealthy }: { isHealthy: boolean }): boolean {
+    if (this.isHealthy === isHealthy) return false;
 
     const now = new Date();
     this.state.partialNext(
-      isOnline
-        ? // The socket assigns its `connectionID` before announcing it is up, so this is current here.
-          { isOnline, connectionId, lastOnlineAt: now }
-        : // Cleared on the way down: the id is dead the moment the socket is, and the server rejects a
-          // request carrying one it has closed. This object outlives every socket it wraps, so
-          // nothing else would clear it.
-          { isOnline, connectionId: undefined, lastOfflineAt: now },
+      isHealthy ? { isHealthy, lastHealthyAt: now } : { isHealthy, lastUnhealthyAt: now },
     );
 
     return true;

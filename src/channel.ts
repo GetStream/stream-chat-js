@@ -22,7 +22,6 @@ import { msToNs, nowNs } from './utils/time';
 import { normalizeUploadFile } from './upload-utils';
 import type { StreamChat } from './client';
 import { chatLoggerSystem } from './logger';
-import { waitForWSConnection } from './utils/waitForWSConnection';
 import { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
 import { ConfigController } from './configuration/ConfigController';
 import { copyConfigPatch } from './configuration/utils/copyConfigPatch';
@@ -1538,7 +1537,7 @@ export class Channel extends ChannelApi {
     // with what the integrator registered, so a client-side `typingEvents.enabled: false` is honoured
     // too. The other two axes are runtime facts no configuration can express.
     const { typingEvents } = this.configController.value;
-    if (!typingEvents.enabled || !this.getClient().wsConnection?.isOnline) {
+    if (!typingEvents.enabled || !this.getClient().wsConnection?.isHealthy) {
       return false;
     }
     return this.getClient().user?.privacy_settings?.typing_indicators?.enabled ?? true;
@@ -1741,7 +1740,7 @@ export class Channel extends ChannelApi {
     // path clears the indicator itself. Gate on health, not staleness — a healthy connection must
     // never cut off a long-running response.
     const client = this.getClient();
-    if (!client.wsConnection?.isOnline) {
+    if (!client.wsConnection?.isHealthy) {
       this.state.resetAIState();
     }
   }
@@ -1750,9 +1749,15 @@ export class Channel extends ChannelApi {
    * Loads the initial channel state and watches for changes.
    *
    * @param options - Additional options for the query endpoint (optional).
+   * @param requestOptions - Per-request options such as an abort `signal` (optional). The signal
+   *   reaches the wait for a live socket as well as the request, so abandoning the call abandons the
+   *   wait with it.
    * @returns The server response.
    */
-  async watch(options?: ChannelGetOrCreateRequest) {
+  async watch(
+    options?: ChannelGetOrCreateRequest,
+    requestOptions?: StreamRequestOptions,
+  ) {
     const defaultOptions = {
       state: true,
       watch: true,
@@ -1761,20 +1766,11 @@ export class Channel extends ChannelApi {
 
     const combined = { ...defaultOptions, ...options };
 
-    // Wait for a live socket rather than degrading, so `watch: true` always binds to a current
-    // connection ID and `watchStatus = Watching` is truthful by construction.
-    //
-    // Only when this call needs one, which is why the options are merged first: `watch` and
-    // `presence` are both server-side subscriptions keyed by that ID and the server rejects either
-    // without it, while a caller that asked for neither is doing a plain read and must be able to
-    // issue it offline.
-    //
-    // Throwing on timeout is the intended outcome: the channel stays unwatched, offline support
-    // renders it from the local database, and `ConnectionRecoveryManager` reloads it on the next
-    // reconnect.
-    if (combined.watch || combined.presence) await waitForWSConnection(this.getClient());
-
-    const state = await this.query(combined, 'latest');
+    // No wait here. `ApiClient` holds any request that watches or subscribes to presence until the
+    // handshake has produced a connection id, so `watch: true` always binds to a current one and
+    // `watchStatus = Watching` is truthful by construction — while a call asking for neither goes out
+    // with no socket at all.
+    const state = await this.query(combined, 'latest', requestOptions);
     this.initialized = true;
     const previousData = this.data;
     this.data = state.channel;

@@ -5,24 +5,28 @@ import { generateChannel } from './test-utils/generateChannel';
 import { getClientWithUser } from './test-utils/getClient';
 
 /**
- * `client.queryChannels()` had the same defect as `channel.watch()`, verbatim: it awaited
- * `client.wsPromise` — already resolved during a socket-internal reconnect — and then downgraded to
- * `watch: false` if there was no connection ID, a value that back then was never cleared and stayed truthy
- * right through a drop. The result was a query that sent `watch: true` against a dead connection, or
- * one that returned unwatched data a second query had to follow.
- *
- * It now waits for a live socket, so `watch: true` always goes out exactly once and always binds to a
- * connection ID that is current.
+ * `client.queryChannels()` sends `watch: true` exactly once and always against a current connection
+ * id, because `ApiClient` holds any subscribing request until one exists. A query that asks for
+ * neither a watch nor presence is not held at all.
  */
 describe('client.queryChannels and the WebSocket', () => {
   let client: StreamChat;
   let request: ReturnType<typeof vi.fn>;
 
+  /** A socket that has dropped: the id is invalidated and a fresh deferred armed for the reconnect. */
   const socketDown = () => {
-    client.wsConnection.connection = new StableWSConnection({
-      wsConnection: client.wsConnection,
-    });
-    client.wsConnection._setStatus({ isOnline: false });
+    const socket = new StableWSConnection({ wsConnection: client.wsConnection });
+    client.wsConnection.connection = socket;
+    socket._setHealth(true);
+    socket._setHealth(false);
+  };
+
+  /** A socket that was closed deliberately, so nothing is coming. */
+  const socketClosed = () => {
+    const socket = new StableWSConnection({ wsConnection: client.wsConnection });
+    socket.isDisconnected = true;
+    client.wsConnection.connection = socket;
+    client.connectionIdManager.reset();
   };
 
   beforeEach(() => {
@@ -47,7 +51,7 @@ describe('client.queryChannels and the WebSocket', () => {
     // The old code would already have sent an unwatched query by now.
     expect(request).not.toHaveBeenCalled();
 
-    client.wsConnection._setStatus({ isOnline: true, connectionId: 'reconnected-id' });
+    client.connectionIdManager.resolveConnectionId('reconnected-id');
     await querying;
 
     // One request, watched, after the socket came up — not one unwatched then one watched.
@@ -57,8 +61,8 @@ describe('client.queryChannels and the WebSocket', () => {
 
   it('never sends watch: false of its own accord', async () => {
     await client.queryChannels({});
-    client.wsConnection._setStatus({ isOnline: false });
-    client.wsConnection._setStatus({ isOnline: true, connectionId: 'again' });
+    socketDown();
+    client.connectionIdManager.resolveConnectionId('again');
     await client.queryChannels({});
 
     for (const call of request.mock.calls) {
@@ -74,10 +78,8 @@ describe('client.queryChannels and the WebSocket', () => {
   });
 
   it('does not wait for a socket when the caller asked for no watch and no presence', async () => {
-    // A plain read needs no connection ID. Waiting for one made `watch: false` unusable exactly
-    // where it is most useful — offline, or before the socket is up.
+    // A plain read needs no connection id, which is what makes it usable offline.
     socketDown();
-    client.config.set({ client: { wsConnection: { connectTimeoutMs: 60_000 } } });
 
     await client.queryChannels({ watch: false, presence: false });
 
@@ -85,32 +87,31 @@ describe('client.queryChannels and the WebSocket', () => {
   });
 
   it('still waits when the caller asked for presence without watch', async () => {
-    // Presence is a server-side subscription keyed by connection ID too, so it is rejected without
-    // a socket exactly as a watch is.
+    // Presence is a server-side subscription keyed by connection id too, so it is held exactly as a
+    // watch is.
     socketDown();
-    client.config.set({ client: { wsConnection: { connectTimeoutMs: 20 } } });
 
-    await expect(client.queryChannels({ watch: false, presence: true })).rejects.toThrow(
-      /Timed out after 20ms/,
-    );
-
+    const querying = client.queryChannels({ watch: false, presence: true });
+    await Promise.resolve();
     expect(request).not.toHaveBeenCalled();
+
+    client.connectionIdManager.resolveConnectionId('back');
+    await querying;
+    expect(request).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects rather than querying unwatched when the socket does not come back', async () => {
+  it('holds the query rather than sending it unwatched while the socket is down', async () => {
     socketDown();
-    client.config.set({ client: { wsConnection: { connectTimeoutMs: 20 } } });
 
-    await expect(client.queryChannels({})).rejects.toThrow(/Timed out after 20ms/);
+    void client.queryChannels({});
+    await Promise.resolve();
 
     expect(request).not.toHaveBeenCalled();
   });
 
   it('abandons the wait when the caller aborts', async () => {
-    // The signal reached the HTTP call but not the wait that precedes it, so an abandoned query sat
-    // on its timer for the full connect budget before anyone heard about it.
+    // The signal reaches the wait for a connection id, not only the HTTP call it precedes.
     socketDown();
-    client.config.set({ client: { wsConnection: { connectTimeoutMs: 60_000 } } });
     const controller = new AbortController();
 
     const querying = client.queryChannels({}, { signal: controller.signal });
@@ -122,7 +123,6 @@ describe('client.queryChannels and the WebSocket', () => {
 
   it('rejects with the reason the caller aborted with', async () => {
     socketDown();
-    client.config.set({ client: { wsConnection: { connectTimeoutMs: 60_000 } } });
     const controller = new AbortController();
     const reason = new Error('the search moved on');
 
@@ -134,21 +134,20 @@ describe('client.queryChannels and the WebSocket', () => {
 
   it('rejects immediately for a signal that was already aborted', async () => {
     socketDown();
-    client.config.set({ client: { wsConnection: { connectTimeoutMs: 60_000 } } });
 
     await expect(
       client.queryChannels({}, { signal: AbortSignal.abort(new Error('gone')) }),
     ).rejects.toThrow('gone');
   });
 
-  it('rejects at once after closeConnection rather than burning the timeout', async () => {
-    const socket = new StableWSConnection({ wsConnection: client.wsConnection });
-    socket.isDisconnected = true;
-    client.wsConnection.connection = socket;
-    client.wsConnection._setStatus({ isOnline: false });
-    client.config.set({ client: { wsConnection: { connectTimeoutMs: 60_000 } } });
+  it('rejects at once after closeConnection rather than waiting for a reconnect', async () => {
+    socketClosed();
 
-    await expect(client.queryChannels({})).rejects.toThrow(/closed deliberately/);
+    // Not a wait: there is no socket and none is being opened, so the error says what to do about
+    // it rather than leaving the caller to guess why nothing happened.
+    await expect(client.queryChannels({})).rejects.toThrow(
+      /No connection id is available/,
+    );
   });
 
   describe('watchStatus truthfulness', () => {
@@ -168,7 +167,7 @@ describe('client.queryChannels and the WebSocket', () => {
       // The backstop behind the wait: it now reads `isOnline` rather than the connection ID, which is
       // back then never cleared and so stayed truthy through a drop — the bug that made a false `Watching`
       // possible in the first place.
-      client.wsConnection._setStatus({ isOnline: false });
+      client.wsConnection._setStatus({ isHealthy: false });
       const response = generateChannel({ channel: { id: 'socket-down' } });
 
       const [hydrated] = client.hydrateActiveChannels([response]);
@@ -184,7 +183,7 @@ describe('client.queryChannels and the WebSocket', () => {
       // request — the "no duplicate requests" property now actually held rather than approximated.
       const { getChannel } = await import('../../src/pagination/utility.queryChannel');
       const channel = client.channel('messaging', 'shared');
-      client.wsConnection._setStatus({ isOnline: false });
+      client.wsConnection._setStatus({ isHealthy: false });
       client.wsConnection.connection = new StableWSConnection({
         wsConnection: client.wsConnection,
       });
@@ -194,36 +193,32 @@ describe('client.queryChannels and the WebSocket', () => {
         getChannel({ client, channel }),
         getChannel({ client, channel }),
       ]);
-      client.wsConnection._setStatus({ isOnline: true, connectionId: 'shared-id' });
+      client.wsConnection._setStatus({ isHealthy: true, connectionId: 'shared-id' });
       await both;
 
       expect(channel.watch).toHaveBeenCalledTimes(1);
     });
 
-    it('a channel whose watch timed out is still recovered on the next reconnect', async () => {
+    it('a channel whose watch failed is still recovered on the next reconnect', async () => {
       // Why a throwing `watch()` is an acceptable outcome rather than a dead end:
       // `recoverableActiveChannels` filters on `active`, never on `watchStatus`, precisely so a
       // channel that failed to watch is picked up by the next recovery.
-      const channel = client.channel('messaging', 'timed-out');
+      const channel = client.channel('messaging', 'failed-watch');
       channel.initialized = true;
       channel.activate();
-      client.wsConnection.connection = new StableWSConnection({
-        wsConnection: client.wsConnection,
-      });
-      client.wsConnection._setStatus({ isOnline: false });
-      client.config.set({ client: { wsConnection: { connectTimeoutMs: 20 } } });
+      socketClosed();
 
-      await expect(channel.watch()).rejects.toThrow(/Timed out/);
+      await expect(channel.watch()).rejects.toThrow(/No connection id is available/);
       expect(channel.watchStatus).toBe(ChannelWatchStatus.NotWatching);
 
       const reload = vi.spyOn(channel, 'reload').mockResolvedValue(undefined);
       client.connectionRecovery.registerSubscriptions();
-      client.wsConnection._setStatus({ isOnline: true, connectionId: 'back' });
-      client.dispatchEvent({
-        type: 'connection.changed',
-        connection: 'ws',
-        online: true,
-      });
+      const socket = new StableWSConnection({ wsConnection: client.wsConnection });
+      client.wsConnection.connection = socket;
+      socket._setHealth(true);
+      socket._setHealth(false);
+      client.connectionIdManager.resolveConnectionId('back');
+      socket._setHealth(true);
 
       await vi.waitFor(() => expect(reload).toHaveBeenCalled());
     });

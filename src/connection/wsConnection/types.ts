@@ -7,24 +7,11 @@ export type WSConnectionState = {
    * Deliberately the same field name as `client.networkConnection.state`'s — both answer the same
    * question about a different connection, which is why the two objects are named as parallels. The
    * types differ only where they must: this one is never `undefined`, because a socket always has a
-   * state, so `!isOnline` is safe here where the network's equivalent needs `=== false`.
+   * state, so `!isHealthy` is safe here where the network's `isOnline` needs `=== false`.
    */
-  isOnline: boolean;
-  /**
-   * The id the server keys channel watches by.
-   *
-   * Assigned when the socket announces itself and cleared when it goes down, so it always names a
-   * connection the server still holds. It has to be: the server keys channel watches by this id and
-   * rejects a request carrying one it has already closed, and this object outlives every socket it
-   * wraps, so nothing else would clear it.
-   *
-   * `undefined` therefore means "no live connection", which is `isOnline === false` said a second
-   * way. Both are required by `waitForWSConnection`, whose callers need the id rather than the
-   * boolean.
-   */
-  connectionId: string | undefined;
-  lastOnlineAt: Date | null;
-  lastOfflineAt: Date | null;
+  isHealthy: boolean;
+  lastHealthyAt: Date | null;
+  lastUnhealthyAt: Date | null;
 };
 
 /**
@@ -84,7 +71,7 @@ export type WSConnectionConfig = {
    */
   urlParams: URLSearchParams | undefined;
   /**
-   * A pre-built socket to use instead of constructing one, adopted through
+   * A pre-built socket to use instead of constructing one, re-parented through
    * {@link StableWSConnection.setWSConnection} when {@link WSConnection.connect} first runs.
    *
    * An instance is safe to hold here: `copyConfigPatch` passes class instances by reference so

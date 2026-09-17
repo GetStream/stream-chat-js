@@ -150,21 +150,14 @@ describe('getDefaultNetworkStatusReporter', () => {
   /** A WebSocket store that a test drives directly, standing in for the real connection. */
   const fakeWSConnection = () => {
     const state = new StateStore<WSConnectionState>({
-      isOnline: false,
-      connectionId: undefined,
-      lastOnlineAt: null,
-      lastOfflineAt: null,
+      isHealthy: false,
+      lastHealthyAt: null,
+      lastUnhealthyAt: null,
     });
     return {
       wsConnection: { state } as unknown as WSConnection,
-      up: (connectionId = 'conn') =>
-        state.partialNext({ isOnline: true, connectionId, lastOnlineAt: new Date() }),
-      down: () =>
-        state.partialNext({
-          isOnline: false,
-          connectionId: undefined,
-          lastOfflineAt: new Date(),
-        }),
+      up: () => state.partialNext({ isHealthy: true, lastHealthyAt: new Date() }),
+      down: () => state.partialNext({ isHealthy: false, lastUnhealthyAt: new Date() }),
     };
   };
 
@@ -220,26 +213,19 @@ describe('getDefaultNetworkStatusReporter', () => {
 describe('createWSConnectionNetworkStatusReporter', () => {
   const fakeWSConnection = () => {
     const state = new StateStore<WSConnectionState>({
-      isOnline: false,
-      connectionId: undefined,
-      lastOnlineAt: null,
-      lastOfflineAt: null,
+      isHealthy: false,
+      lastHealthyAt: null,
+      lastUnhealthyAt: null,
     });
     return {
       wsConnection: { state } as unknown as WSConnection,
-      up: (connectionId = 'conn') =>
-        state.partialNext({ isOnline: true, connectionId, lastOnlineAt: new Date() }),
-      down: () =>
-        state.partialNext({
-          isOnline: false,
-          connectionId: undefined,
-          lastOfflineAt: new Date(),
-        }),
+      up: () => state.partialNext({ isHealthy: true, lastHealthyAt: new Date() }),
+      down: () => state.partialNext({ isHealthy: false, lastUnhealthyAt: new Date() }),
     };
   };
 
   it('reports nothing before the socket has ever been up', () => {
-    // `isOnline` is `false` from construction. Forwarding that would claim the device is offline
+    // `isHealthy` is `false` from construction. Forwarding that would claim the device is offline
     // before anything had been attempted, which is the fabricated reading this module refuses to
     // produce — so the status stays unknown instead.
     const fake = fakeWSConnection();

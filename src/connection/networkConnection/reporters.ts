@@ -60,10 +60,10 @@ export const createWSConnectionNetworkStatusReporter =
   (wsConnection: WSConnection): NetworkStatusReporter =>
   (onStatusChange) =>
     wsConnection.state.subscribeWithSelector(
-      ({ isOnline, lastOnlineAt }) => ({ isOnline, lastOnlineAt }),
-      ({ isOnline, lastOnlineAt }) => {
-        if (!lastOnlineAt) return;
-        onStatusChange(isOnline);
+      ({ isHealthy, lastHealthyAt }) => ({ isHealthy, lastHealthyAt }),
+      ({ isHealthy, lastHealthyAt }) => {
+        if (!lastHealthyAt) return;
+        onStatusChange(isHealthy);
       },
     );
 

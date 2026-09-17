@@ -553,17 +553,18 @@ describe('Client connectUser', () => {
 		expect(connection).to.equal('openConnection');
 	});
 
-	it('exposes the connection id, and clears it when the socket goes down', () => {
-		expect(client.wsConnection.connectionID).to.equal(undefined);
-
-		client.wsConnection._setStatus({ isOnline: true, connectionId: 'ID' });
-		expect(client.wsConnection.connectionID).to.equal('ID');
+	it('drops the connection id when the socket goes down', () => {
+		const socket = new StableWSConnection({ wsConnection: client.wsConnection });
+		client.wsConnection.connection = socket;
+		socket._setHealth(true);
+		client.connectionIdManager.resolveConnectionId('ID');
+		expect(client.connectionIdManager.connectionId).to.equal('ID');
 
 		// The server keys watches by this id and rejects a request carrying one it has closed, so a
 		// value here always names a connection the server still holds.
-		client.wsConnection._setStatus({ isOnline: false });
-		expect(client.wsConnection.isOnline).to.be.false;
-		expect(client.wsConnection.connectionID).to.equal(undefined);
+		socket._setHealth(false);
+		expect(client.wsConnection.isHealthy).to.be.false;
+		expect(client.connectionIdManager.connectionId).to.equal(undefined);
 	});
 });
 
@@ -826,7 +827,7 @@ describe('message update', () => {
 			});
 			const request = { id: failedEditedMessage.id, message: failedEditedMessage };
 
-			client.wsConnection = { isOnline: false };
+			client.wsConnection = { isHealthy: false };
 			queueTaskSpy.mockRejectedValue(new Error('Offline failure'));
 			_updateMessageSpy.mockResolvedValue({ message: failedEditedMessage });
 

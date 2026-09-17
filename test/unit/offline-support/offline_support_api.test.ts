@@ -300,7 +300,7 @@ describe('OfflineSupportApi', () => {
       // tasks rather than about that sync — the mock DB is not set up to serve it. Previously the
       // socket happened to be down because `getClientWithUser` left it that way; now that the helper
       // marks a connected client's socket up, a test that wants it down has to say so.
-      client.wsConnection._setStatus({ isOnline: false });
+      client.wsConnection._setStatus({ isHealthy: false });
       await offlineDb.init(client.userId as unknown as string);
     });
 
@@ -2269,7 +2269,7 @@ describe('OfflineSupportApi', () => {
           shouldSkipSpy = vi.spyOn(offlineDb as any, 'shouldSkipQueueingTask');
           addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
           handleAddPendingTaskSpy = vi.spyOn(offlineDb, 'handleAddPendingTask');
-          client.wsConnection = { isOnline: true } as StableWSConnection;
+          client.wsConnection = { isHealthy: true } as StableWSConnection;
         });
 
         afterEach(() => {
@@ -2287,7 +2287,7 @@ describe('OfflineSupportApi', () => {
         });
 
         it('should add the task as pending immediately and not try to execute if we are offline', async () => {
-          client.wsConnection = { isOnline: false } as StableWSConnection;
+          client.wsConnection = { isHealthy: false } as StableWSConnection;
           const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
 
           let result;
@@ -2380,7 +2380,7 @@ describe('OfflineSupportApi', () => {
         });
 
         it('rewrites a queued send-message task for offline failed update-message tasks', async () => {
-          client.wsConnection = { isOnline: false } as StableWSConnection;
+          client.wsConnection = { isHealthy: false } as StableWSConnection;
           const task = generatePendingTask(
             'update-message',
             1,
@@ -2436,7 +2436,7 @@ describe('OfflineSupportApi', () => {
         });
 
         it('re-adds the rewritten send-message task if the pending task does not have an id', async () => {
-          client.wsConnection = { isOnline: false } as StableWSConnection;
+          client.wsConnection = { isHealthy: false } as StableWSConnection;
           const task = generatePendingTask(
             'update-message',
             1,
@@ -2480,7 +2480,7 @@ describe('OfflineSupportApi', () => {
         });
 
         it('does nothing for failed offline update-message tasks without a matching pending send task', async () => {
-          client.wsConnection = { isOnline: false } as StableWSConnection;
+          client.wsConnection = { isHealthy: false } as StableWSConnection;
           const task = generatePendingTask(
             'update-message',
             1,
@@ -2606,7 +2606,7 @@ describe('OfflineSupportApi', () => {
           const handleAddPendingTaskSpy = vi
             .spyOn(offlineDb as any, 'handleAddPendingTask')
             .mockResolvedValue(undefined);
-          (client as any).wsConnection = { isOnline: true };
+          (client as any).wsConnection = { isHealthy: true };
           (mockChannel._sendReaction as unknown as MockInstance).mockRejectedValue(
             new CanceledError('canceled'),
           );
@@ -2622,7 +2622,7 @@ describe('OfflineSupportApi', () => {
           const handleAddPendingTaskSpy = vi
             .spyOn(offlineDb as any, 'handleAddPendingTask')
             .mockResolvedValue(undefined);
-          (client as any).wsConnection = { isOnline: true };
+          (client as any).wsConnection = { isHealthy: true };
           (mockChannel._sendReaction as unknown as MockInstance).mockRejectedValue(
             new Error('network down'),
           );
@@ -2781,7 +2781,7 @@ describe('OfflineDBSyncManager', () => {
     // The real wrapper, driven through its store. It used to be swapped for `{ isOnline }`, which
     // was enough while the manager read a client event; it now subscribes to
     // `client.wsConnection.state`, so it needs the store that fixture had no room for.
-    client.wsConnection._setStatus({ isOnline: false });
+    client.wsConnection._setStatus({ isHealthy: false });
     offlineDb = new MockOfflineDB({ client });
     client.setOfflineDBApi(offlineDb);
     syncManager = new OfflineDBSyncManager({ client, offlineDb });
@@ -2811,7 +2811,7 @@ describe('OfflineDBSyncManager', () => {
     });
 
     it('calls sync and sets sync status if already connected', async () => {
-      client.wsConnection = { isOnline: true } as StableWSConnection;
+      client.wsConnection = { isHealthy: true } as StableWSConnection;
 
       await syncManager.init();
 
@@ -2830,7 +2830,7 @@ describe('OfflineDBSyncManager', () => {
     });
 
     it('does not call sync if the ws connection is not healthy', async () => {
-      client.wsConnection._setStatus({ isOnline: false });
+      client.wsConnection._setStatus({ isHealthy: false });
 
       await syncManager.init();
 
@@ -2851,12 +2851,12 @@ describe('OfflineDBSyncManager', () => {
       // Driven by `client.wsConnection.state` rather than an event: the store is written on every
       // transition, including the deliberate close that mobile backgrounding uses, which the event
       // never announced.
-      client.wsConnection._setStatus({ isOnline: true, connectionId: 'conn' });
+      client.wsConnection._setStatus({ isHealthy: true, connectionId: 'conn' });
 
       await syncManager.init();
 
-      client.wsConnection._setStatus({ isOnline: false });
-      client.wsConnection._setStatus({ isOnline: true, connectionId: 'conn-2' });
+      client.wsConnection._setStatus({ isHealthy: false });
+      client.wsConnection._setStatus({ isHealthy: true, connectionId: 'conn-2' });
 
       await vi.waitFor(() =>
         expect(syncAndExecutePendingTasksSpy).toHaveBeenCalledTimes(2),
@@ -2865,11 +2865,11 @@ describe('OfflineDBSyncManager', () => {
     });
 
     it('sets sync status to false when the socket store reports a drop', async () => {
-      client.wsConnection._setStatus({ isOnline: true, connectionId: 'conn' });
+      client.wsConnection._setStatus({ isHealthy: true, connectionId: 'conn' });
       await syncManager.init();
       syncAndExecutePendingTasksSpy.mockClear();
 
-      client.wsConnection._setStatus({ isOnline: false });
+      client.wsConnection._setStatus({ isHealthy: false });
 
       await vi.waitFor(() =>
         expect(invokeSyncStatusListenersSpy).toHaveBeenCalledWith(false),
@@ -2878,7 +2878,7 @@ describe('OfflineDBSyncManager', () => {
     });
 
     it('handles errors in init gracefully', async () => {
-      client.wsConnection._setStatus({ isOnline: true, connectionId: 'conn' });
+      client.wsConnection._setStatus({ isHealthy: true, connectionId: 'conn' });
 
       const error = new Error('Sync failed');
       syncAndExecutePendingTasksSpy.mockRejectedValueOnce(error);
@@ -2905,7 +2905,7 @@ describe('OfflineDBSyncManager', () => {
       offlineDb.getPendingTasks.mockResolvedValue([]);
       offlineDb.getAllChannelCids.mockResolvedValue([]);
       offlineDb.resetDB.mockResolvedValue(undefined);
-      client.wsConnection._setStatus({ isOnline: true, connectionId: 'conn' });
+      client.wsConnection._setStatus({ isHealthy: true, connectionId: 'conn' });
     });
 
     it('recovers syncStatus to true when executePendingTasks() rejects, and still runs sync()', async () => {
@@ -2950,7 +2950,7 @@ describe('OfflineDBSyncManager', () => {
 
     it('recovers syncStatus to true on reconnect even when the sync fails', async () => {
       // Not connected at init time, so init() only subscribes.
-      client.wsConnection._setStatus({ isOnline: false });
+      client.wsConnection._setStatus({ isHealthy: false });
       offlineDb.getPendingTasks.mockRejectedValue(new Error('db failure on reconnect'));
 
       await syncManager.init();
@@ -2958,7 +2958,7 @@ describe('OfflineDBSyncManager', () => {
       expect(syncManager.syncStatus).toBe(false);
       expect(syncManager.connectionChangedListener).not.toBeNull();
 
-      client.wsConnection._setStatus({ isOnline: true, connectionId: 'reconnected' });
+      client.wsConnection._setStatus({ isHealthy: true, connectionId: 'reconnected' });
 
       // The subscription handler is async and nobody awaits it, so poll until it settles.
       await vi.waitFor(() => expect(syncManager.syncStatus).toBe(true));
