@@ -251,10 +251,7 @@ export class StableWSConnection {
     this.wsID += 1;
     this.isConnecting = false;
     this.isDisconnected = true;
-    // The connection id dies with the socket. Dropping it here fails anything still waiting on one
-    // instead of letting it hang, and stops a later request from registering a watch against a
-    // connection the server has already torn down.
-    this.client.connectionIdManager.reset();
+    this.client.connectionIdManager.invalidate();
 
     // start by removing all the listeners
     if (this.healthCheckTimeoutRef) {

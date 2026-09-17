@@ -491,18 +491,54 @@ describe('Client openConnection', () => {
 });
 
 describe('Client watching requests across close/reopen', () => {
-	// The #1868 successors. Those two cases asserted that queryChannels() gates on `wsPromise`;
+	// The #1868 successors. Those cases asserted that queryChannels() gates on `wsPromise`;
 	// `1ebdf6d5 feat!: move wait for connection id to api client` moved the gate to
-	// ConnectionIdManager, so the same two scenarios are pinned here against the mechanism that
-	// replaced it. Note the outcome inverted: closeConnection() now *fails* an in-flight watching
-	// request (ConnectionIdManager.reset) instead of preserving it across the reopen.
-	const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+	// ConnectionIdManager, so the same scenarios are pinned here against the mechanism that
+	// replaced it. The contract is the one `wsPromise` has had since #1868: a close suspends,
+	// a reopen finishes the work, and only a teardown fails it.
+	const flush = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
+
+	// Opens immediately but answers the handshake only when told, so a connect can be held in
+	// flight across a closeConnection() the way a backgrounding app holds one.
+	class HeldWebSocket {
+		static instances = [];
+		static OPEN = 1;
+
+		constructor() {
+			this.OPEN = 1;
+			this.readyState = 1;
+			HeldWebSocket.instances.push(this);
+			queueMicrotask(() => this.onopen?.({ type: 'open' }));
+		}
+
+		send() {}
+
+		close() {
+			this.readyState = 3;
+		}
+
+		hello(connectionId) {
+			this.onmessage?.({
+				data: JSON.stringify({
+					type: 'connection.ok',
+					connection_id: connectionId,
+					created_at: 1628678564222203145,
+					me: { id: 'user', role: 'user', created_at: 1627391903293696000 },
+				}),
+			});
+		}
+	}
 
 	const setup = () => {
-		const client = new StreamChat('key', { allowServerSideConnect: true });
-		client._setUser({ id: 'user' });
+		HeldWebSocket.instances = [];
+		const client = new StreamChat('key', {
+			allowServerSideConnect: true,
+			WebSocketImpl: HeldWebSocket,
+		});
 		client.tokenManager.getToken = () => 'mock-token';
 		client.tokenManager.tokenReady = () => Promise.resolve();
+		client.tokenManager.loadToken = () => Promise.resolve('mock-token');
+		client._setToken = () => Promise.resolve('mock-token');
 
 		// stubbed below _doRequest so the connection-id gate itself still runs
 		const request = vi
@@ -512,81 +548,85 @@ describe('Client watching requests across close/reopen', () => {
 		return { client, request };
 	};
 
-	const stubConnect = (onConnect) =>
-		vi
-			.spyOn(StableWSConnection.prototype, 'connect')
-			.mockImplementation(async function () {
-				this.isDisconnected = false;
-				// mirrors _connect(), which arms before anything can await a connection id
-				this.client.connectionIdManager.arm();
-				return await onConnect.call(this);
-			});
+	const settled = (promise) => Promise.race([promise, flush(40).then(() => 'pending')]);
+	const lastSocket = () => HeldWebSocket.instances[HeldWebSocket.instances.length - 1];
 
-	const settled = (promise) => Promise.race([promise, flush().then(() => 'pending')]);
-
-	it('fails an in-flight watching request on closeConnection, and serves the next one after the reopen', async () => {
+	it('finishes an in-flight watching request against the reopened socket', async () => {
 		const { client, request } = setup();
-		stubConnect(() => new Promise(() => {}));
 
-		client.openConnection().catch(() => {});
-		const inFlight = client.queryChannels().then(
+		const connecting = client.connectUser({ id: 'user' }, 'mock-token').then(
 			() => 'resolved',
 			(error) => 'rejected: ' + error.message,
 		);
-		expect(await settled(inFlight)).to.equal('pending');
-
-		// the id dies with the socket, so the request is failed rather than left hanging
-		await client.closeConnection();
-		expect(await settled(inFlight)).to.match(
-			/^rejected: .*closed before a connection id/,
-		);
-
-		// and the client recovers: a request issued after the reopen rides the new id
-		client.openConnection().catch(() => {});
-		const afterReopen = client.queryChannels();
 		await flush();
+		const query = client.queryChannels().then(
+			() => 'resolved',
+			(error) => 'rejected: ' + error.message,
+		);
+		await flush();
+
+		// the app backgrounds mid-handshake
+		await client.closeConnection();
+		expect(await settled(query)).to.equal('pending');
+		expect(await settled(connecting)).to.equal('pending');
 		expect(request).not.toHaveBeenCalled();
 
-		client.connectionIdManager.resolveConnectionId('conn-2');
-		await afterReopen;
+		// and foregrounds; the reopened socket completes its handshake
+		client.openConnection().catch(() => {});
+		await flush();
+		lastSocket().hello('conn-2');
+
+		expect(await settled(query)).to.equal('resolved');
+		expect(await settled(connecting)).to.equal('resolved');
+		// the request rode the *new* socket's id, never the one it was issued under
 		expect(request.mock.calls[0][0].params.connection_id).to.equal('conn-2');
+	});
+
+	it('rejects an in-flight watching request on disconnectUser', async () => {
+		const { client, request } = setup();
+
+		client.connectUser({ id: 'user' }, 'mock-token').catch(() => {});
+		await flush();
+		const query = client.queryChannels().then(
+			() => 'resolved',
+			(error) => 'rejected: ' + error.message,
+		);
+		await flush();
+
+		// nothing will reopen after a teardown, so the request is told rather than left hanging
+		await client.disconnectUser();
+		expect(await settled(query)).to.match(/^rejected: .*disconnectUser\(\) was called/);
+		expect(request).not.toHaveBeenCalled();
+
+		// and the next one gets the actionable error rather than a silent wait
+		expect(() => client.connectionIdManager.getConnectionId()).to.throw(
+			/No connection id is available/,
+		);
 	});
 
 	it('leaves the next watching request waiting when the reopen fails and the socket is retrying', async () => {
 		const { client, request } = setup();
-		let failNext = false;
-		stubConnect(function () {
-			if (failNext) {
-				return Promise.reject(
-					new Error(JSON.stringify({ message: 'connect failed', isWSFailure: true })),
-				);
-			}
-			return new Promise(() => {});
-		});
+		client._setUser({ id: 'user' });
 
-		client.openConnection().catch(() => {});
-		const inFlight = client.queryChannels().then(
-			() => 'resolved',
-			(error) => 'rejected: ' + error.message,
+		vi.spyOn(StableWSConnection.prototype, 'connect').mockImplementation(
+			async function () {
+				this.isDisconnected = false;
+				this.client.connectionIdManager.arm();
+				throw new Error(JSON.stringify({ message: 'connect failed', isWSFailure: true }));
+			},
 		);
 
-		await client.closeConnection();
-		expect(await settled(inFlight)).to.match(
-			/^rejected: .*closed before a connection id/,
-		);
-
-		failNext = true;
 		client.openConnection().catch(() => {});
 		await flush();
 
-		// a WS failure leaves StableWSConnection retrying, so the next request waits for that
-		// rather than being told no connection is being established
-		const afterFailure = client.queryChannels();
-		expect(await settled(afterFailure)).to.equal('pending');
+		// a WS failure leaves StableWSConnection retrying, so the request waits for that rather
+		// than being told no connection is being established
+		const query = client.queryChannels();
+		expect(await settled(query)).to.equal('pending');
 		expect(request).not.toHaveBeenCalled();
 
 		client.connectionIdManager.resolveConnectionId('conn-3');
-		await afterFailure;
+		await query;
 		expect(request.mock.calls[0][0].params.connection_id).to.equal('conn-3');
 	});
 });

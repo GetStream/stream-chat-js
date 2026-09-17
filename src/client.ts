@@ -764,10 +764,13 @@ export class StreamChat extends ChatApi {
     delete this.user;
     delete this._user;
 
-    this._rejectPendingWsPromise(
-      new Error('Connection was closed because disconnectUser() was called'),
+    const teardownReason = new Error(
+      'Connection was closed because disconnectUser() was called',
     );
+
+    this._rejectPendingWsPromise(teardownReason);
     this.wsPromise = null;
+    this.connectionIdManager.rejectConnectionId(teardownReason);
 
     const closePromise = this.closeConnection(timeout);
 
@@ -1372,6 +1375,7 @@ export class StreamChat extends ChatApi {
     try {
       return await this.wsConnection.connect(this.defaultWSTimeout);
     } catch (error) {
+      // We can't recover from this error, so reject connection id promise
       if (!isWSFailure(error as APIError)) {
         this.connectionIdManager.rejectConnectionId(error);
       }

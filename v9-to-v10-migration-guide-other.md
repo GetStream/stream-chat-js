@@ -353,6 +353,30 @@ if no user is connected, or `client.openConnection()` if the socket was closed w
 You do **not** have to await `connectUser()` before issuing the request — a request made while the
 handshake is in flight waits for it and then goes out with the id.
 
+#### Closing the connection does not fail the request
+
+`closeConnection()` suspends the wait rather than ending it, which is what the React Native
+background/foreground cycle needs: a watching request that is already in flight stays pending while
+the socket is closed and completes against the **reopened** socket, carrying the new connection id.
+This matches the contract `wsPromise` has had since
+[#1868](https://github.com/GetStream/stream-chat-js/pull/1868) — the promise survives the gap so the
+reopen settles it.
+
+```ts
+const channels = client.queryChannels(filters); // watches, so it waits for an id
+client.closeConnection(); // app backgrounds - the request is not failed
+await client.openConnection(); // app foregrounds
+await channels; // finishes, against the new connection id
+```
+
+`disconnectUser()` is the opposite case: nothing will reopen, so anything still waiting is rejected
+with `Connection was closed because disconnectUser() was called` rather than left pending. The same
+split applies to `wsPromise`.
+
+Note the consequence of the first half: a `closeConnection()` that is never followed by an
+`openConnection()` leaves such a request pending indefinitely. Call `disconnectUser()` if you are
+tearing the client down rather than backgrounding it.
+
 #### Which requests are affected
 
 Only requests that actually **ask** for a subscription. The gate reads the `watch` / `presence`
