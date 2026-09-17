@@ -206,6 +206,34 @@ docs/breaking-changes-v14-v15.md for the full migration guide.
 * integrate OpenAPI generated clients ([#1760](https://github.com/GetStream/stream-chat-js/issues/1760)) ([0776bc4](https://github.com/GetStream/stream-chat-js/commit/0776bc460598a91afb91d4d04d3281a562073f13))
 * v10 ([cd3141e](https://github.com/GetStream/stream-chat-js/commit/cd3141efe47b49cf83d3d58725bb8ed3b4f88f08))
 
+## [9.53.0](https://github.com/GetStream/stream-chat-js/compare/v9.52.1...v9.53.0) (2026-09-15)
+
+### Bug Fixes
+
+* add missing app config fields to AppSettingsAPIResponse ([#1854](https://github.com/GetStream/stream-chat-js/issues/1854)) ([18bc3cf](https://github.com/GetStream/stream-chat-js/commit/18bc3cf7acbabdfd957f1e092821f68b81ea456e))
+* hanging wsPromise after closeConnection ([#1868](https://github.com/GetStream/stream-chat-js/issues/1868)) ([b4e7a89](https://github.com/GetStream/stream-chat-js/commit/b4e7a89459ae38ed025b1ae7ffe91f061cf22ecd)), closes [#1122](https://github.com/GetStream/stream-chat-js/issues/1122) [#1863](https://github.com/GetStream/stream-chat-js/issues/1863)
+
+### Features
+
+* **client:** support custom_set and custom_unset in batch channel update ([#1856](https://github.com/GetStream/stream-chat-js/issues/1856)) ([d05c2f5](https://github.com/GetStream/stream-chat-js/commit/d05c2f56d1264a884584657683e65eea8b1a5cc1))
+
+## [9.52.1](https://github.com/GetStream/stream-chat-js/compare/v9.52.0...v9.52.1) (2026-09-07)
+
+### Bug Fixes
+
+* isolate event listener errors from the dispatch loop ([#1850](https://github.com/GetStream/stream-chat-js/issues/1850)) ([dc56e57](https://github.com/GetStream/stream-chat-js/commit/dc56e57e5610b9fc02094080554964967707b3a8))
+* send the read request regardless of read receipt privacy settings ([#1853](https://github.com/GetStream/stream-chat-js/issues/1853)) ([59d8f31](https://github.com/GetStream/stream-chat-js/commit/59d8f3138c386a518dfefbda6bd66aebc1237c35))
+
+## [9.52.0](https://github.com/GetStream/stream-chat-js/compare/v9.51.0...v9.52.0) (2026-08-28)
+
+### Bug Fixes
+
+* do not reset channel unread count on thread read ([#1835](https://github.com/GetStream/stream-chat-js/issues/1835)) ([79fbf54](https://github.com/GetStream/stream-chat-js/commit/79fbf54c56cad9979c9fe44f8ca299c6d53d39d7))
+
+### Features
+
+* **MessageComposer:** add composition middleware for pending attachment uploads ([#1845](https://github.com/GetStream/stream-chat-js/issues/1845)) ([68e5d69](https://github.com/GetStream/stream-chat-js/commit/68e5d69336a400434db76a34b46fc0efcd781e85))
+
 ## [9.51.0](https://github.com/GetStream/stream-chat-js/compare/v9.50.3...v9.51.0) (2026-08-14)
 
 ### Chores

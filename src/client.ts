@@ -17,8 +17,10 @@ import {
   formatMessage,
   generateChannelTempCid,
   getEnv,
+  invokeEventListener,
   isOwnUserBaseProperty,
   randomId,
+  sanitizeOutgoingAttachments,
 } from './utils';
 import { nowNs } from './utils/time';
 import { normalizeUploadFile } from './upload-utils';
@@ -202,6 +204,10 @@ export class StreamChat extends ChatApi {
   wsBaseURL?: string;
   wsConnection: StableWSConnection | null;
   wsPromise: ConnectAPIResponse | null;
+  private _wsPromiseSettled = true;
+  private _wsConnectId = 0;
+  private _resolveWsPromise?: (value: Awaited<ConnectAPIResponse>) => void;
+  private _rejectWsPromise?: (reason?: unknown) => void;
 
   get anonymous(): boolean {
     return this.tokenManager.isAnonymous;
@@ -545,21 +551,29 @@ export class StreamChat extends ChatApi {
 
     const wsPromise = this.openConnection();
 
-    this.setUserPromise = Promise.all([setTokenPromise, wsPromise]).then(
+    const setUserPromise = Promise.all([setTokenPromise, wsPromise]).then(
       (result) => result[1], // We only return connection promise;
     );
+    this.setUserPromise = setUserPromise;
 
     try {
-      return await this.setUserPromise;
+      return await setUserPromise;
     } catch (err) {
-      if (!this.persistUserOnConnectionFailure) {
-        // No user is kept, so there is nothing left to reconnect as. Tearing the socket down with
-        // it is the point: the application is expected to call `connectUser` again.
-        this.disconnectUser();
-      } else if (!isWSFailure(err as APIError)) {
-        // A terminal failure, so a rejected token or a bad API key will not fix itself, thus we close the
-        // socket instead of leaving `StableWSConnection` retrying against it.
-        this.closeConnection();
+      // disconnectUser() rejects an in-flight handshake, so this catch can run *after* something
+      // else has taken over. Cleaning up then would tear down whatever replaced us.
+      // `setUserPromise` catches a newer connectUser(); `userId` additionally catches
+      // connectAnonymousUser(), which never sets setUserPromise, and a bare disconnectUser()
+      // that already cleaned up.
+      if (this.setUserPromise === setUserPromise && this.userId === user.id) {
+        if (!this.persistUserOnConnectionFailure) {
+          // No user is kept, so there is nothing left to reconnect as. Tearing the socket down with
+          // it is the point: the application is expected to call `connectUser` again.
+          this.disconnectUser();
+        } else if (!isWSFailure(err as APIError)) {
+          // A terminal failure, so a rejected token or a bad API key will not fix itself, thus we close the
+          // socket instead of leaving `StableWSConnection` retrying against it.
+          this.closeConnection();
+        }
       }
       throw err;
     }
@@ -659,10 +673,60 @@ export class StreamChat extends ChatApi {
     }
 
     this.clientId = `${this.userId}--${randomId()}`;
-    this.wsPromise = this.connect();
+    const wsPromise = this._bindWsPromise(this.connect());
     this._startCleaning();
-    return this.wsPromise;
+    return wsPromise;
   };
+
+  /**
+   * Rejects the shared `wsPromise`, invalidates any in-flight connect attempt
+   */
+  private _rejectPendingWsPromise = (reason: Error) => {
+    if (!this._wsPromiseSettled) {
+      // invalidate in-flight attempts so a late settle cannot revive this promise
+      this._wsConnectId += 1;
+      this._wsPromiseSettled = true;
+      // Avoid unhandled promise rejection errors
+      this.wsPromise?.catch(() => {
+        // noop - real awaiters still observe the rejection
+      });
+      this._rejectWsPromise?.(reason);
+    }
+  };
+
+  /**
+   * Keep a single pending `wsPromise` across close/reopen so callers that already
+   * `await this.wsPromise` are not stranded when `openConnection` starts a new connect.
+   */
+  private _bindWsPromise = (connectPromise: ConnectAPIResponse): ConnectAPIResponse => {
+    const connectId = ++this._wsConnectId;
+
+    let pending = this.wsPromise;
+    if (this._wsPromiseSettled || !pending) {
+      this._wsPromiseSettled = false;
+      pending = new Promise((resolve, reject) => {
+        this._resolveWsPromise = resolve;
+        this._rejectWsPromise = reject;
+      });
+      this.wsPromise = pending;
+    }
+
+    connectPromise.then(
+      (value) => {
+        if (connectId !== this._wsConnectId) return;
+        this._wsPromiseSettled = true;
+        this._resolveWsPromise?.(value);
+      },
+      (error) => {
+        if (connectId !== this._wsConnectId) return;
+        this._wsPromiseSettled = true;
+        this._rejectWsPromise?.(error);
+      },
+    );
+
+    return pending;
+  };
+
   /**
    * Revokes tokens for a connected user issued before the given time.
    *
@@ -713,6 +777,11 @@ export class StreamChat extends ChatApi {
     // remove the user specific fields
     delete this.user;
     delete this._user;
+
+    this._rejectPendingWsPromise(
+      new Error('Connection was closed because disconnectUser() was called'),
+    );
+    this.wsPromise = null;
 
     const closePromise = this.closeConnection(timeout);
 
@@ -1251,12 +1320,17 @@ export class StreamChat extends ChatApi {
   }
 
   _callClientListeners = (event: Event) => {
-    const allSet = this.listeners.get('all');
-    const targetSet = this.listeners.get(event.type);
+    // Snapshot before dispatching: `on` adds to these sets in place and `Set.forEach` visits
+    // entries appended mid-iteration, so a listener that subscribes while handling an event
+    // must not be invoked for it.
+    const listeners = [
+      ...(this.listeners.get('all') ?? []),
+      ...(this.listeners.get(event.type) ?? []),
+    ];
 
-    [allSet, targetSet].forEach((set) =>
-      set?.forEach((handleEvent) => handleEvent(event)),
-    );
+    for (const listener of listeners) {
+      invokeEventListener(listener, event, logger);
+    }
   };
 
   /**
@@ -1275,7 +1349,12 @@ export class StreamChat extends ChatApi {
       .withExtraTags('_settleConnectPromises')
       .info(`Connection re-established with connection ID ${this._getConnectionID()}.`);
 
-    this.wsPromise = Promise.resolve();
+    // If state recovery happens afer a failed connect (for example on persistUserOnConnectionFailure: true) we need to flip the wsPromise from rejected to resolved
+    // Otherwise all API calls that wait for the promise will fail
+    // If promise is not yet settled - we leave it for the connect sequence to resolve the promise
+    if (this._wsPromiseSettled) {
+      this.wsPromise = Promise.resolve();
+    }
     this.setUserPromise = Promise.resolve();
   };
 
@@ -2037,7 +2116,14 @@ export class StreamChat extends ChatApi {
   }
 
   async _updateMessage(...args: Parameters<ChatApi['updateMessage']>) {
-    return await super.updateMessage(...args);
+    const [request, requestOptions] = args;
+
+    // Sanitized at the point of sending, which is the only place every path converges: the
+    // offline replay of a queued `update-message` task calls this method directly.
+    return await super.updateMessage(
+      { ...request, message: sanitizeOutgoingAttachments(request.message) },
+      requestOptions,
+    );
   }
 
   /**

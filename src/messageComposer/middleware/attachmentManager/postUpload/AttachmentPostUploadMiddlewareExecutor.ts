@@ -14,7 +14,7 @@ export class AttachmentPostUploadMiddlewareExecutor extends MiddlewareExecutor<
     super();
     this.use([
       createUploadErrorHandlerMiddleware(composer),
-      createPostUploadAttachmentEnrichmentMiddleware(),
+      createPostUploadAttachmentEnrichmentMiddleware(composer),
     ]);
   }
 }

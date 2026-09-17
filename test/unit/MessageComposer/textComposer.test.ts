@@ -33,7 +33,8 @@ vi.mock('../.././src/messageComposer/middleware', () => ({
 }));
 
 // Mock dependencies
-vi.mock('../../../src/utils', () => ({
+vi.mock('../../../src/utils', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/utils')>()),
   axiosParamsSerializer: vi.fn(),
   isFunction: vi.fn(),
   isString: vi.fn(),

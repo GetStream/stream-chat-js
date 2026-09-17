@@ -1,4 +1,5 @@
 import type {
+  Attachment,
   LocalMessage,
   MessageRequest,
   MessageResponse,
@@ -12,6 +13,7 @@ import type { Channel } from './channel';
 import type { AxiosRequestConfig } from 'axios';
 import { LOCAL_MESSAGE_FIELDS, RESERVED_UPDATED_MESSAGE_FIELDS } from './constants';
 import { chatLoggerSystem } from './logger';
+import type { ScopedLogger } from './logger';
 import { nowNs, nsToDate } from './utils/time';
 
 const logger = chatLoggerSystem.getLogger('utils');
@@ -30,6 +32,36 @@ export function logChatPromiseExecution<T>(promise: Promise<T>, name: string) {
       .error(`Failed to execute "${name}".`, { error });
   });
 }
+
+const logListenerError = <T>(scopedLogger: ScopedLogger, error: unknown, event: T) =>
+  scopedLogger
+    .withExtraTags('invokeEventListener')
+    .error('Unhandled error in event listener', { error, event });
+
+/**
+ * Invokes a single event listener in isolation, so that a faulty listener cannot
+ * abort the dispatch loop or the bookkeeping that follows it.
+ *
+ * Reports two failure modes: a synchronous throw, and a rejected promise from an `async`
+ * listener — async handlers are assignable to the void-returning `EventHandler` type, so
+ * without this they would be silent unhandled rejections.
+ */
+export const invokeEventListener = <T>(
+  listener: (event: T) => unknown,
+  event: T,
+  scopedLogger: ScopedLogger,
+) => {
+  try {
+    const result = listener(event);
+    if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
+      Promise.resolve(result).catch((error) =>
+        logListenerError(scopedLogger, error, event),
+      );
+    }
+  } catch (error) {
+    logListenerError(scopedLogger, error, event);
+  }
+};
 
 export const sleep = (m: number): Promise<void> => new Promise((r) => setTimeout(r, m));
 
@@ -432,6 +464,74 @@ const toRequestDateFields = ({
       }
     : {}),
 });
+
+/**
+ * Whether a URL points at something the API and other devices can actually fetch.
+ */
+const isRemoteUrl = (url?: string) => !!url && /^https?:\/\//i.test(url.trim());
+
+/**
+ * Strips composer-internal state from a message's attachments, and drops any whose upload never
+ * resolved.
+ *
+ * `localMetadata` is how `AttachmentManager` tracks an upload (its id, the `File`, the local
+ * preview); it must never reach the API. An attachment that still carries it and has no remote
+ * URL was never settled — which is what happens when
+ * `createSendWithPendingUploadsAttachmentsMiddleware` is installed by a UI SDK that does not
+ * implement the rest of the flow (awaiting those uploads before sending). Sending it would store
+ * an attachment pointing at nothing, so it is dropped and logged instead.
+ *
+ * Returns the same message object when there was nothing to change.
+ */
+export const sanitizeOutgoingAttachments = <T extends { attachments?: Attachment[] }>(
+  message: T,
+): T => {
+  const attachments = message.attachments;
+  if (!attachments?.length) return message;
+
+  const unresolved: Attachment[] = [];
+  let changed = false;
+
+  const sanitized = attachments.reduce<Attachment[]>((acc, attachment) => {
+    const { localMetadata, ...rest } = attachment as Attachment & {
+      localMetadata?: Record<string, unknown>;
+    };
+
+    if (!localMetadata) {
+      acc.push(attachment);
+      return acc;
+    }
+
+    changed = true;
+
+    // Any of these pointing at a remote URL means the attachment resolved to something the API
+    // can store and other devices can load.
+    const hasRemoteSource =
+      isRemoteUrl(rest.asset_url) ||
+      isRemoteUrl(rest.image_url) ||
+      isRemoteUrl(rest.og_scrape_url) ||
+      isRemoteUrl(rest.title_link);
+
+    if (hasRemoteSource) {
+      acc.push(rest as Attachment);
+    } else {
+      unresolved.push(rest as Attachment);
+    }
+
+    return acc;
+  }, []);
+
+  if (unresolved.length) {
+    logger
+      .withExtraTags('sanitizeOutgoingAttachments', 'attachments')
+      .warn(
+        `Dropped ${unresolved.length} attachment(s) whose upload never completed. Composing with pending uploads requires awaiting them before sending.`,
+        { attachments: unresolved, message },
+      );
+  }
+
+  return changed ? { ...message, attachments: sanitized } : message;
+};
 
 export const localMessageToNewMessagePayload = (
   localMessage: LocalMessage,

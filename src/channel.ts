@@ -15,8 +15,10 @@ import {
   channelHasReadEvents,
   formatMessage,
   generateChannelTempCid,
+  invokeEventListener,
   localMessageToNewMessagePayload,
   logChatPromiseExecution,
+  sanitizeOutgoingAttachments,
 } from './utils';
 import { msToNs, nowNs } from './utils/time';
 import { normalizeUploadFile } from './upload-utils';
@@ -672,7 +674,14 @@ export class Channel extends ChannelApi {
   }
 
   _sendMessage(...args: Parameters<ChannelApi['sendMessage']>) {
-    return super.sendMessage(...args);
+    const [request, requestOptions] = args;
+
+    // Sanitized at the point of sending, which is the only place every path converges: the
+    // offline replay of a queued `send-message` task calls this method directly.
+    return super.sendMessage(
+      { ...request, message: sanitizeOutgoingAttachments(request.message) },
+      requestOptions,
+    );
   }
 
   /**
@@ -2484,8 +2493,12 @@ export class Channel extends ChannelApi {
         if (
           event.user?.id &&
           event.created_at != null &&
-          // the same event announces a thread read, which says nothing about the channel
-          !(event.type === 'notification.mark_read' && event.thread_id)
+          // A thread read says nothing about the channel, and is handled by the reactive
+          // `thread` object instead. `notification.mark_read` announces one with `thread_id`,
+          // `message.read` with the thread itself; reading the channel off either would reset
+          // its unread count.
+          !(event.type === 'notification.mark_read' && event.thread_id) &&
+          !('thread' in event && event.thread)
         ) {
           const eventUser = event.user;
           const readAt = event.created_at;
@@ -2964,12 +2977,17 @@ export class Channel extends ChannelApi {
   }
 
   _callChannelListeners = (event: WSEvent) => {
-    const allSet = this.listeners.get('all');
-    const targetSet = this.listeners.get(event.type);
+    // Snapshot before dispatching: `on` adds to these sets in place and `Set.forEach` visits
+    // entries appended mid-iteration, so a listener that subscribes while handling an event
+    // must not be invoked for it.
+    const listeners = [
+      ...(this.listeners.get('all') ?? []),
+      ...(this.listeners.get(event.type) ?? []),
+    ];
 
-    [allSet, targetSet].forEach((set) =>
-      set?.forEach((handleEvent) => handleEvent(event)),
-    );
+    for (const listener of listeners) {
+      invokeEventListener(listener, event, logger);
+    }
   };
 
   _checkInitialized() {
