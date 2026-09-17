@@ -1091,10 +1091,11 @@ export abstract class BasePaginator<T, Q> {
   }
 
   /**
-   * Whether `item` can anchor pagination — i.e. the server knows it, so its id is a usable cursor.
-   * `true` for anything loaded here; subclasses holding locally-created items (an unsent message)
-   * narrow it. Drives both halves of a prune: such an item may be dropped, and only such an item may
-   * become the window's new tailward cursor.
+   * Whether the server knows about `item`. That is what makes its id safe to send as a cursor, and it
+   * is all this checks — the id itself is never looked at. `true` here for anything present;
+   * subclasses holding locally-created items (an unsent message) narrow it. Both halves of a prune
+   * ask: an item the server knows may be dropped, and only such an item may become the window's new
+   * tailward cursor.
    */
   protected isPaginationAnchorable(item: T | undefined): boolean {
     return !!item;
