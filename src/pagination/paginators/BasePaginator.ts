@@ -533,18 +533,12 @@ export abstract class BasePaginator<T, Q> {
    */
   private _windowPublishSuspendDepth = 0;
   /**
-   * Set when a prune ({@link pruneTailToLimit}) moved the tailward edge inward, so the next
-   * `state.items` publish also carries the pagination fields that move with it instead of emitting
-   * one of their own — publishing those separately would cost a second notification per prune, the
-   * one thing the window cap must not do.
-   *
-   * A flag rather than the values themselves, on purpose. The same fields are written by the query
-   * path ({@link postQueryReconcile}), so a cached snapshot draining after a `toTail()` that landed
-   * inside the same throttle window would republish a pre-merge cursor and re-fetch the page that
-   * just merged. A flag cannot go stale that way: {@link takePrunedPaginationFields} re-derives from
-   * the committed interval at publish time, so whoever publishes last publishes the truth.
+   * The interval a prune just shortened. A prune also moves `hasMoreTail` and `cursor` and those come with
+   * the next `state.items` publish rather than emitting their own. We use the id instead of direct values
+   * because that publish can be a throttle interval late, so {@link consumePendingPrunePaginationState} rereads them
+   * when it fires.
    */
-  private _tailEdgePruned = false;
+  private _prunedIntervalId?: string;
   /** Set by a suspended op that changed the active window, so {@link batch} publishes once on exit. */
   private _suspendedWindowDirty = false;
 
@@ -1057,11 +1051,11 @@ export abstract class BasePaginator<T, Q> {
   private flushWindowPublish(): void {
     const items = this.projectActiveWindow();
     if (items) {
-      this.state.partialNext({ items, ...this.takePrunedPaginationFields() });
+      this.state.partialNext({ items, ...this.consumePendingPrunePaginationState() });
       return;
     }
     if ((this.state.getLatestValue().items?.length ?? 0) > 0) {
-      this.state.partialNext({ items: [], ...this.takePrunedPaginationFields() });
+      this.state.partialNext({ items: [], ...this.consumePendingPrunePaginationState() });
     }
   }
 
@@ -1088,19 +1082,20 @@ export abstract class BasePaginator<T, Q> {
   // ---------------------------------------------------------------------------
 
   /**
-   * Whether the consumer currently considers pruning safe. `true` here: a paginator with no UI
-   * attached, or a UI that never reports, still gets its configured cap. A UI that knows the user is
-   * reading near the oldest edge overrides this to say "not right now" — see `MessageIntervalPaginator`.
+   * Whether pruning is on hold. `false` here means a paginator with no UI attached or a UI that
+   * never reports, still gets its configured cap. For example, a specific UI can ask pruning
+   * to not happen unless we are near to the tailing edge.
    */
-  protected get isPruningAllowed(): boolean {
-    return true;
+  protected get isPruningSuspended(): boolean {
+    return false;
   }
 
   /**
-   * Whether `item` can anchor pagination — i.e. the server knows it, so its id is a usable cursor.
-   * `true` for anything loaded here; subclasses holding locally-created items (an unsent message)
-   * narrow it. Drives both halves of a prune: such an item may be dropped, and only such an item may
-   * become the window's new tailward cursor.
+   * Whether the server knows about `item`. That is what makes its id safe to send as a cursor, and it
+   * is all this checks — the id itself is never looked at. `true` here for anything present;
+   * subclasses holding locally-created items (an unsent message) narrow it. Both halves of a prune
+   * ask: an item the server knows may be dropped, and only such an item may become the window's new
+   * tailward cursor.
    */
   protected isPaginationAnchorable(item: T | undefined): boolean {
     return !!item;
@@ -1128,13 +1123,13 @@ export abstract class BasePaginator<T, Q> {
    * `commitInterval` that follows stores and republishes the already-pruned interval, and the window
    * emit after it projects from the same interval. A prune therefore costs **no publish of its own**:
    * it rides the ones the ingest was going to make anyway. That is the whole design — see
-   * {@link _tailEdgePruned} for the pagination half.
+   * {@link _prunedIntervalId} for the pagination half.
    *
    * ## Preconditions
    *
    * All must hold, or this is a no-op:
    * - a cap is configured
-   * - the consumer has not suspended pruning ({@link isPruningAllowed})
+   * - the consumer has not suspended pruning ({@link isPruningSuspended})
    * - the interval is anchored, is the dataset head, and is the active one. A jumped-away window is
    *   what the user is reading, and a logical interval has no pagination provenance — nothing dropped
    *   from it could ever be fetched back
@@ -1153,7 +1148,7 @@ export abstract class BasePaginator<T, Q> {
    */
   protected pruneTailToLimit(interval: AnyInterval): boolean {
     const limit = this.effectiveMaxLoadedItems;
-    if (typeof limit === 'undefined' || !this.isPruningAllowed) return false;
+    if (typeof limit === 'undefined' || this.isPruningSuspended) return false;
 
     // Anchored intervals only. A logical interval has no pagination provenance, so anything dropped
     // from it could never be fetched back. Separated out because it is also the type guard the field
@@ -1205,9 +1200,9 @@ export abstract class BasePaginator<T, Q> {
     interval.isTail = false;
     interval.hasMoreTail = true;
 
-    // Only flag it. The matching `state` fields are derived at publish time, from the interval as
-    // committed then — see {@link _tailEdgePruned}.
-    this._tailEdgePruned = true;
+    // Only record which interval it was. The matching `state` fields are derived at publish time,
+    // from this interval as committed then — see {@link _prunedIntervalId}.
+    this._prunedIntervalId = interval.id;
 
     return true;
   }
@@ -1245,33 +1240,39 @@ export abstract class BasePaginator<T, Q> {
   /**
    * The `state` pagination fields that a prune moved, derived from the **committed** active interval
    * at call time and cleared. Called by every path that publishes the active window, so they ride that
-   * publish instead of emitting their own ({@link _tailEdgePruned} explains why this derives rather
+   * publish instead of emitting their own ({@link _prunedIntervalId} explains why this derives rather
    * than replaying what the prune saw).
    *
    * Returns only fields that actually changed, so an unchanged `cursor` keeps its object identity and
    * consumers selecting it are not woken.
    *
-   * Two things it deliberately leaves alone:
+   * Three things it deliberately leaves alone:
+   * - a window that is no longer the pruned one. `state` tracks the active interval, so once the
+   *   consumer has jumped elsewhere the prune says nothing about what is being published.
    * - `cursor.headward`, which the prune never touched — carried over verbatim rather than re-derived,
    *   so a `config.deriveCursor` hook's verdict on the head edge survives.
    * - a null tail edge (a window whose every remaining item is locally-created). Publishing `null`
    *   would read as "tailward exhausted"; the existing cursor still names a message the *server* has,
    *   so leaving it in place keeps back-pagination working.
    */
-  private takePrunedPaginationFields(): Partial<PaginatorState<T>> {
-    if (!this._tailEdgePruned) return {};
-    this._tailEdgePruned = false;
+  private consumePendingPrunePaginationState(): Partial<PaginatorState<T>> {
+    const prunedIntervalId = this._prunedIntervalId;
+    if (!prunedIntervalId) return {};
+    this._prunedIntervalId = undefined;
 
-    if (!this._activeIntervalId) return {};
-    const active = this._itemIntervals.get(this._activeIntervalId);
+    // Whatever is being published now is a window the prune never touched.
+    if (this._activeIntervalId !== prunedIntervalId) return {};
+
+    const active = this._itemIntervals.get(prunedIntervalId);
     // A logical interval is never pruned, and an absent one has no window left to paginate.
     if (!active || isLogicalInterval(active)) return {};
 
     const current = this.state.getLatestValue();
     const next: Partial<PaginatorState<T>> = {};
 
-    // From the interval, not hardcoded `true`: a tailward query landing between the prune and this
-    // publish may have legitimately reached the dataset start again.
+    // Read this off the interval instead of assuming the prune's `true`. Pruning reopens the
+    // tailward (older) edge, but this publish can run a throttle interval later and a `toTail()` in
+    // between may have loaded the rest of the history - so there may be nothing older left after all.
     if (current.hasMoreTail !== active.hasMoreTail) next.hasMoreTail = active.hasMoreTail;
 
     if (this.isCursorPagination) {
@@ -2618,7 +2619,7 @@ export abstract class BasePaginator<T, Q> {
             items: prunedNow
               ? this.retainIntervalMembers(nextView, targetInterval)
               : nextView,
-            ...this.takePrunedPaginationFields(),
+            ...this.consumePendingPrunePaginationState(),
           });
         } else {
           /**
@@ -2631,7 +2632,7 @@ export abstract class BasePaginator<T, Q> {
                 ? removedItemCoordinates.interval.interval
                 : targetInterval,
             ),
-            ...this.takePrunedPaginationFields(),
+            ...this.consumePendingPrunePaginationState(),
           });
         }
       }
