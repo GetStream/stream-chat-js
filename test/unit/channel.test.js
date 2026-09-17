@@ -349,8 +349,7 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 		client.user = { id: user.id };
 		client.wsPromise = Promise.resolve();
 		// a connection id is what makes a watch possible at all
-		client._hasConnectionID = () => true;
-		client.connectionId = 'connection-id';
+		client.connectionIdManager.resolveConnectionId('connection-id');
 		channel = client.channel('messaging', 'watching-id');
 		client.activeChannels[channel.cid] = channel;
 		mockQueryResponse(generateChannel({ channel: { id: 'watching-id' } }));
@@ -394,14 +393,6 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 		await channel.query({ watch: false });
 
 		expect(channel.watchStatus).to.equal(ChannelWatchStatus.Watching);
-	});
-
-	it('stays NotWatching when watch() downgrades for lack of a connection id', async () => {
-		client._hasConnectionID = () => false;
-
-		await channel.watch();
-
-		expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
 	});
 
 	it('goes to NotWatching on stopWatching() — a deliberate stop is not restored', async () => {
@@ -502,15 +493,6 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 
 		// a non-watching hydrate neither starts nor ends a watch
 		expect(channel.watchStatus).to.equal(ChannelWatchStatus.WasWatching);
-	});
-
-	it('is NOT set by hydration without a connection id', () => {
-		client._hasConnectionID = () => false;
-		const response = generateChannel({ channel: { id: 'no-connection-id' } });
-
-		const [hydrated] = client.hydrateActiveChannels([response]);
-
-		expect(hydrated.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
 	});
 
 	it('is NOT set by offline hydration (state without a live watch)', () => {
@@ -2696,8 +2678,23 @@ describe('Uninitialized Channel', () => {
 			expect(channel._countMessageAsUnread({ user: otherUser })).to.be.false;
 		});
 
-		it('public muteStatus() still throws (intentional API contract)', () => {
-			expect(() => channel.muteStatus()).to.throw(/hasn't been initialized/);
+		// muteStatus() is now gated on the channel having an id rather than on loaded state:
+		// `client.mutedChannels` is populated at connect (`connection.ok`/`health.check`), not by
+		// `watch()`, so the answer is already correct here. What it cannot answer for is a channel
+		// with no id, whose `cid` reads `"<type>:undefined"` and matches no mute.
+		it('public muteStatus() answers for an id-ful channel that was never watched', () => {
+			expect(() => channel.muteStatus()).not.to.throw();
+			expect(channel.muteStatus().muted).to.be.false;
+
+			client.mutedChannels = [{ user, channel }];
+			expect(channel.muteStatus().muted).to.be.true;
+		});
+
+		it('public muteStatus() throws for a channel with no id yet', () => {
+			const distinct = client.channel('messaging', undefined, {
+				members: [user.id, otherUser.id],
+			});
+			expect(() => distinct.muteStatus()).to.throw(/isn't yet created/);
 		});
 	});
 });
@@ -2764,7 +2761,7 @@ describe('reactive channel mute status', () => {
 });
 
 describe('Channels - Constructor', function () {
-	const client = new StreamChat('key', 'secret');
+	const client = new StreamChat('key');
 	// client.channel() now requires a connected user (userId derives from client.user).
 	client.user = { id: 'thierry' };
 
@@ -3456,30 +3453,6 @@ describe('Channel _initializeState', () => {
 });
 
 describe('Channel.query', async () => {
-	it('should not populate client.activeChannels if caching is disabled', async () => {
-		const client = await getClientWithUser();
-		client._cacheEnabled = () => false;
-		const channel = client.channel('messaging', uuidv4());
-		const mockedChannelQueryResponse = {
-			...mockChannelQueryResponse,
-			messages: Array.from(
-				{ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE },
-				(_, i) =>
-					generateMsg({
-						created_at: convertDateToTimestamp(
-							new Date(1700000000000 + i * 1000).toISOString(),
-						),
-					}),
-			),
-		};
-		const stub = sinon
-			.stub(client.api, 'sendRequest')
-			.resolves({ body: mockedChannelQueryResponse, metadata: {} });
-		await channel.query();
-		expect(Object.keys(client.activeChannels).length).to.be.equal(0);
-		stub.restore();
-	});
-
 	it('seeds the message paginator with the full latest page on query', async () => {
 		const client = await getClientWithUser();
 		const channel = client.channel('messaging', uuidv4());

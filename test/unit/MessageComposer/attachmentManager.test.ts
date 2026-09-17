@@ -99,7 +99,7 @@ const setup = ({
   vi.clearAllMocks();
 
   // Setup mocks
-  const mockClient = new StreamChat('apiKey', 'apiSecret');
+  const mockClient = new StreamChat('apiKey');
   mockClient.appSettingsPromise = Promise.resolve(
     appSettings ? { app: appSettings } : defaultAppSettings,
   );

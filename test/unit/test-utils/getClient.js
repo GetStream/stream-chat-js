@@ -10,6 +10,9 @@ export const getClientWithUser = (user) => {
 		chatClient.user = clientUser;
 
 		chatClient.wsPromise = Promise.resolve();
+		// Requests that watch or subscribe to presence wait on this, so a client that claims to have
+		// a connected user has to carry one - see ConnectionIdManager.
+		chatClient.connectionIdManager.resolveConnectionId('mock-connection-id');
 
 		// sending a promise, since connectUser in actual SDK is an async function.
 		return chatClient;

@@ -143,7 +143,7 @@ export class TokenManager {
     }
 
     throw new Error(
-      `Both secret and user tokens are not set. Either client.connectUser wasn't called or client.disconnect was called`,
+      `User token is not set. Either client.connectUser wasn't called or client.disconnectUser was called`,
     );
   };
 

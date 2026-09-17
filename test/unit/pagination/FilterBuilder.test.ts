@@ -1,16 +1,13 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import {
-  FilterBuilder,
-  FilterBuilderGenerators,
-  ExtendedQueryFilter,
-  ExtendedQueryFilters,
-} from '../../../src';
+import { FilterBuilder, FilterBuilderGenerators, Filters } from '../../../src';
 
-type BasicFilterFieldsSchema = {
-  name: ExtendedQueryFilter<string>;
-  age: ExtendedQueryFilter<number>;
-  tags: ExtendedQueryFilter<string[]>;
-};
+// Array-valued keys are declared with the *element* type, the way the OpenAPI spec models
+// `members` / `teams` / `mentioned_users.id` — that is what makes `$contains` take an element.
+type BasicFilterFieldsSchema = Filters<{
+  name: { type: string; operators: '$autocomplete' };
+  age: { type: number; operators: '$gt' | '$gte' | '$lt' };
+  tags: { type: string; operators: '$contains' };
+}>;
 
 type SearchContext = {
   searchQuery?: string;
@@ -44,9 +41,7 @@ describe('FilterBuilder', () => {
       },
       age: {
         enabled: false,
-        generate: (ctx) => ({
-          age: ctx.isAdmin ? { $gt: 18 } : {},
-        }),
+        generate: (ctx) => (ctx.isAdmin ? { age: { $gt: 18 } } : {}),
       },
       tags: {
         enabled: true,
@@ -163,21 +158,26 @@ describe('FilterBuilder', () => {
   });
 
   describe('complex nested filters', () => {
-    type ComplexFilterFieldsSchema = ExtendedQueryFilters<{
-      loadingPlaces_countryCodes: string;
-      loadingPlaces_cities: string;
-      loadingPlaces_postcodes: string;
-      startAddress_countryCode: string;
-      startAddress_city: string;
-      startAddress_postcode: string;
-      destinationAddresses_countryCodes: string;
-      destinationAddresses_cities: string;
-      destinationAddresses_postcodes: string;
-      name: string;
-      'member.user.name': string;
-      last_message_at: Date;
-      members: string;
+    type TextOps = {
       type: string;
+      operators: '$autocomplete' | '$contains' | '$eq' | '$in';
+    };
+
+    type ComplexFilterFieldsSchema = Filters<{
+      loadingPlaces_countryCodes: TextOps;
+      loadingPlaces_cities: TextOps;
+      loadingPlaces_postcodes: TextOps;
+      startAddress_countryCode: TextOps;
+      startAddress_city: TextOps;
+      startAddress_postcode: TextOps;
+      destinationAddresses_countryCodes: TextOps;
+      destinationAddresses_cities: TextOps;
+      destinationAddresses_postcodes: TextOps;
+      name: TextOps;
+      'member.user.name': TextOps;
+      last_message_at: { type: Date; operators: '$exists' | '$gt' | '$lt' };
+      members: TextOps;
+      type: TextOps;
     }>;
 
     const filterConfig: FilterBuilderGenerators<

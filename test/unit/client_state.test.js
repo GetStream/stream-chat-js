@@ -26,16 +26,4 @@ describe('ClientState', () => {
 			user3: { ch1: true, ch4: true },
 		});
 	});
-
-	it('should not populate client.state if caching is disabled', () => {
-		client._cacheEnabled = () => false;
-		const newUser = { id: 'user-1' };
-		const channelId = 'channel-1';
-
-		state.updateUser(newUser);
-		state.updateUserReference(newUser, channelId);
-
-		expect(state.users).to.deep.equal({});
-		expect(state.userChannelReferences).to.deep.equal({});
-	});
 });

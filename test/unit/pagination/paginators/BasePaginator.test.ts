@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   BasePaginator,
   DEFAULT_PAGINATION_OPTIONS,
+  Filters,
   ItemCoordinates,
   LOGICAL_HEAD_INTERVAL_ID,
   LOGICAL_TAIL_INTERVAL_ID,
@@ -10,10 +11,7 @@ import {
   PaginatorCursor,
   type PaginatorOptions,
   PaginatorState,
-  PrimitiveFilter,
-  QueryFilter,
   QueryFilters,
-  RequireOnlyOne,
   SortParamRequest,
   ZERO_PAGE_CURSOR,
 } from '../../../../src';
@@ -39,11 +37,19 @@ type TestItem = {
 };
 
 type QueryShape = {
-  filters: {
-    [Key in keyof TestItem]:
-      | RequireOnlyOne<QueryFilter<TestItem[Key]>>
-      | PrimitiveFilter<TestItem[Key]>;
-  };
+  filters: Filters<{
+    id: { type: string; operators: '$autocomplete' | '$eq' | '$in' };
+    name: { type: string; operators: '$autocomplete' | '$eq' | '$in' };
+    // element type + an `$eq` override for the whole array, the way the spec models `members`
+    teams: {
+      type: string;
+      operators: '$contains' | '$eq' | '$in';
+      valueTypes: { $eq: Array<string> };
+    };
+    blocked: { type: boolean; operators: '$eq' | '$ne' };
+    createdAt: { type: string; operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte' };
+    age: { type: number; operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte' };
+  }>;
   sort: SortParamRequest[];
 };
 

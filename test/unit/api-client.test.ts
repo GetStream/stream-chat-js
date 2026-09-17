@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getClientWithUser } from './test-utils/getClient';
 
+import { requiresConnectionId } from '../../src/api-client';
+
 import type { StreamChat } from '../../src/client';
 import type { StreamRequestOptions } from '../../src/types';
 
@@ -177,7 +179,8 @@ describe('ApiClient header precedence', () => {
     expect(sentHeaders()['x-custom']).to.equal('kept');
   });
 
-  // `client._sayHi()` (src/client.ts:1206) threads its own id through doAxiosRequest.
+  // `doAxiosRequest` is the escape hatch for a caller that wants to correlate a request with its
+  // own id rather than the random one `populateRequestConfigWithDefaults` would mint.
   it('honours a caller-supplied x-client-request-id', async () => {
     await client.api.doAxiosRequest('get', `${client.baseURL}/hi`, null, {
       headers: { 'x-client-request-id': 'my-id' },
@@ -439,5 +442,191 @@ describe('upload methods', () => {
     expect((firstConfig().data as FormData).get('upload_sizes')).to.equal(
       '[{"height":100,"width":100}]',
     );
+  });
+});
+
+describe('ApiClient connection id gate', () => {
+  let client: StreamChat;
+  let requestSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    client = getClientWithUser();
+    requestSpy = vi
+      .spyOn(client.axiosInstance, 'request')
+      .mockResolvedValue({ data: {}, status: 200, headers: {} });
+  });
+
+  const sentParams = () =>
+    (requestSpy.mock.calls[0][0] as AxiosRequestConfig).params as Record<string, unknown>;
+
+  /**
+   * Drains the microtask queue AND yields a macrotask turn. A single `await Promise.resolve()` is
+   * not enough to prove a request was held: `_doRequest` awaits `tokenReady()` inside
+   * `runWithRetry` before it ever reaches axios, so an ungated request would still not have landed
+   * after one tick and the assertion would pass for the wrong reason.
+   */
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  describe('requiresConnectionId', () => {
+    it('gates on a declared connection_id query param, even without a watch flag', () => {
+      // the only signal stopWatchingChannel and longPoll give
+      expect(requiresConnectionId({ connection_id: undefined }, undefined)).to.be.true;
+    });
+
+    it('gates on a watch or presence flag in the request body', () => {
+      expect(requiresConnectionId(undefined, { watch: true })).to.be.true;
+      expect(requiresConnectionId(undefined, { presence: true })).to.be.true;
+    });
+
+    it('gates on a watch flag in a flat query param', () => {
+      expect(requiresConnectionId({ watch: true }, undefined)).to.be.true;
+    });
+
+    it('gates on presence nested in a payload query param', () => {
+      // queryUsers is the one operation that needs an id without declaring the param
+      expect(requiresConnectionId({ payload: { presence: true } }, undefined)).to.be.true;
+    });
+
+    it('does not gate a request that asks for neither', () => {
+      expect(requiresConnectionId(undefined, undefined)).to.be.false;
+      expect(requiresConnectionId({ limit: 10 }, { message: {} })).to.be.false;
+      expect(requiresConnectionId({ payload: { query: 'x' } }, undefined)).to.be.false;
+    });
+
+    it('does not gate on an explicitly disabled flag', () => {
+      expect(requiresConnectionId(undefined, { watch: false, presence: false })).to.be
+        .false;
+    });
+
+    // The regression the `connection_id` fallback used to cause: the generator emits the key for
+    // every operation that *can* watch, so gating on its presence gated `watch: false` too.
+    it('does not gate a declared connection_id when the request opted out of watching', () => {
+      expect(requiresConnectionId({ connection_id: undefined }, { watch: false })).to.be
+        .false;
+      expect(requiresConnectionId({ connection_id: undefined, watch: false }, undefined))
+        .to.be.false;
+    });
+
+    // A left-unset flag is the request saying "no watch" - the server defaults both to false.
+    it('does not gate a declared connection_id when the flag is declared but unset', () => {
+      expect(
+        requiresConnectionId(
+          { connection_id: undefined },
+          { watch: undefined, presence: undefined, state: true },
+        ),
+      ).to.be.false;
+    });
+
+    it('tolerates a body that is not a plain object', () => {
+      expect(requiresConnectionId(undefined, new FormData())).to.be.false;
+      expect(requiresConnectionId(undefined, 'raw')).to.be.false;
+      expect(requiresConnectionId(undefined, null)).to.be.false;
+    });
+  });
+
+  it('holds a watching request until the handshake produces an id', async () => {
+    client.connectionIdManager.reset();
+    client.connectionIdManager.arm();
+
+    const inFlight = client.queryChannels({ watch: true });
+    await flush();
+
+    expect(requestSpy).not.toHaveBeenCalled();
+
+    client.connectionIdManager.resolveConnectionId('late-id');
+    await inFlight;
+
+    expect(requestSpy).toHaveBeenCalledTimes(1);
+    expect(sentParams().connection_id).to.equal('late-id');
+  });
+
+  it('gates queryThreads, getThread, sync and stopWatching, which had no gate before', async () => {
+    const gated = [
+      () => client.queryThreads({ watch: true }),
+      () => client.getThread({ message_id: 'mid', watch: true }),
+      () =>
+        client.sync({
+          channel_cids: ['messaging:a'],
+          last_sync_at: new Date(),
+          watch: true,
+        }),
+      // stopWatching carries no flag at all - the declared `connection_id` is its only signal
+      () => client.channel('messaging', 'id').stopWatching(),
+    ];
+
+    for (const call of gated) {
+      client.connectionIdManager.reset();
+      client.connectionIdManager.arm();
+      requestSpy.mockClear();
+
+      const inFlight = call();
+      await flush();
+      expect(requestSpy, call.toString()).not.toHaveBeenCalled();
+
+      client.connectionIdManager.resolveConnectionId('late-id');
+      await inFlight;
+      expect(requestSpy, call.toString()).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('lets a request that needs no id through while the handshake is still in flight', async () => {
+    client.connectionIdManager.reset();
+    client.connectionIdManager.arm();
+
+    // createGuest runs before a connection exists and must never wait on one
+    await client.createGuest({ user: { id: 'guest' } });
+
+    expect(requestSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // These go through real generated endpoints on purpose: every one of them declares a
+  // `connection_id` query param, so a gate keyed on that param alone held them all back.
+  it('lets a non-watching query through with no connection at all', async () => {
+    client.connectionIdManager.reset();
+
+    await client.queryChannels({ watch: false, presence: false });
+    await client
+      .channel('messaging', 'id')
+      .getOrCreate({ watch: false, presence: false, state: true });
+    await client.sync({ channel_cids: ['messaging:a'], last_sync_at: new Date() });
+
+    expect(requestSpy).toHaveBeenCalledTimes(3);
+  });
+
+  // Not `haveOwnProperty`: the generator emits the key holding `undefined` for every operation
+  // that *can* watch, and axios drops an undefined param. What matters is that no id reaches it.
+  it('does not put a connection id on a request that registers nothing', async () => {
+    await client.queryChannels({ watch: false });
+    await client.getApp();
+
+    expect(sentParams().connection_id).to.be.undefined;
+    expect((requestSpy.mock.calls[1][0] as AxiosRequestConfig).params.connection_id).to.be
+      .undefined;
+  });
+
+  it('puts the connection id on a request that does register something', async () => {
+    await client.queryChannels({ watch: true });
+
+    expect(sentParams().connection_id).to.equal('mock-connection-id');
+  });
+
+  it('rejects a watching request when there is no id and nothing in flight', async () => {
+    client.connectionIdManager.reset();
+
+    await expect(client.queryChannels({ watch: true })).rejects.toThrow(
+      'No connection id is available',
+    );
+    expect(requestSpy).not.toHaveBeenCalled();
+  });
+
+  it('propagates a failed handshake to the requests waiting on it', async () => {
+    client.connectionIdManager.reset();
+    client.connectionIdManager.arm();
+
+    const inFlight = client.queryChannels({ watch: true });
+    client.connectionIdManager.rejectConnectionId(new Error('ws handshake failed'));
+
+    await expect(inFlight).rejects.toThrow('ws handshake failed');
+    expect(requestSpy).not.toHaveBeenCalled();
   });
 });

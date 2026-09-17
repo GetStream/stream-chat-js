@@ -135,8 +135,6 @@ export class ApiClient {
         // that updates existing axios instance options instead
         ...this.client.options.axiosRequestConfig?.params,
         ...additonalConfig.params,
-        connection_id:
-          additonalConfig.params?.connection_id || this.client._getConnectionID(),
       },
     } satisfies AxiosRequestConfig;
   }
@@ -171,6 +169,14 @@ export class ApiClient {
     data?: unknown | null,
     additionalConfig: AxiosRequestConfig = {},
   ): Promise<{ body: T; metadata: RequestMetadata }> {
+    if (requiresConnectionId(additionalConfig.params, data)) {
+      const connectionId = await this.client.connectionIdManager.getConnectionId();
+      additionalConfig = {
+        ...additionalConfig,
+        params: { ...additionalConfig.params, connection_id: connectionId },
+      };
+    }
+
     const initialRequestConfig = this.populateRequestConfigWithDefaults(additionalConfig);
 
     const clientRequestId = initialRequestConfig.headers?.[
@@ -248,6 +254,47 @@ export class ApiClient {
     }
   }
 }
+
+/**
+ * Whether a request registers a server-side subscription and so must not be sent before the WS
+ * handshake has produced a connection id. The server keys watches and presence by connection id
+ * and answers 200 while registering nothing when it is missing, so a request that races the
+ * handshake yields a channel that never receives an event.
+ */
+export const requiresConnectionId = (
+  params: Record<string, unknown> | undefined,
+  body: unknown,
+) => {
+  const payload = params?.payload as Record<string, unknown> | undefined;
+  // Guarded rather than `body ?? undefined`: the `in` checks below would throw on a string body.
+  const requestBody = (typeof body === 'object' && body !== null ? body : undefined) as
+    | Record<string, unknown>
+    | undefined;
+
+  if (
+    params?.watch ||
+    params?.presence ||
+    payload?.watch ||
+    payload?.presence ||
+    requestBody?.watch ||
+    requestBody?.presence
+  ) {
+    return true;
+  }
+
+  // There are some requests that doesn't have watch/presence flags but require connection_id (stop watching for example)
+  // For those cases lets first check if the request has watch/presence flag, and return false...
+  if (
+    [params, payload, requestBody].some(
+      (source) => source && ('watch' in source || 'presence' in source),
+    )
+  ) {
+    return false;
+  }
+
+  // ...return true if the request doesn't have watch/presence flag but has connection_id
+  return Boolean(params && 'connection_id' in params);
+};
 
 /**
  * An `AbortSignal` that went through JSON persistence - as it does when an offline-db task

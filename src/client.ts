@@ -9,6 +9,7 @@ import type { ChannelMuteStatus } from './channel_state';
 import { ChannelWatchStatus } from './channel_state';
 import { ClientState } from './client_state';
 import { StableWSConnection } from './connection';
+import { ConnectionIdManager } from './connection_id_manager';
 import { UploadManager } from './uploadManager';
 import { TokenManager, type TokenManagerMinimalUser } from './token_manager';
 import { ApiClient } from './api-client';
@@ -61,7 +62,6 @@ import type {
 } from './types';
 import { isWSFailure } from './errors';
 import type { APIError } from './errors';
-import { InsightMetrics, postInsights } from './insights';
 import { chatLoggerSystem } from './logger';
 import { queueOrRun } from './offline-support/queueableOperations';
 import { Thread } from './thread';
@@ -199,6 +199,7 @@ export class StreamChat extends ChatApi {
   setUserPromise: ConnectAPIResponse | null;
   state: ClientState;
   tokenManager: TokenManager;
+  connectionIdManager: ConnectionIdManager;
   user?: ClientUser;
   userAgent?: string;
   wsBaseURL?: string;
@@ -233,7 +234,6 @@ export class StreamChat extends ChatApi {
   get api() {
     return this.apiClient;
   }
-  insightMetrics: InsightMetrics;
   defaultWSTimeout: number;
   sdkIdentifier?: SdkIdentifier;
   deviceIdentifier?: DeviceIdentifier;
@@ -258,19 +258,14 @@ export class StreamChat extends ChatApi {
    *
    * @example <caption>initialize the client in user mode</caption>
    * new StreamChat('api_key')
-   * @example <caption>initialize the client in user mode with options</caption>
-   * new StreamChat('api_key', { warmUp: true, timeout: 5000 })
-   * @example <caption>secret is optional and only used in server side mode</caption>
-   * new StreamChat('api_key', 'secret', { httpsAgent: customAgent })
+   * @example <caption>initialize the client with options</caption>
+   * new StreamChat('api_key', { axiosRequestConfig: { timeout: 5000 } })
    *
    * @param key - The API key.
-   * @param options - Additional options; here you can pass custom options to the axios instance (optional).
+   * @param options - Additional options (optional).
    * @param options.browser - Enforce the client to be in browser mode (optional).
-   * @param options.warmUp - If `true`, the client will open a connection as soon as possible to speed up following requests (optional, defaults to `false`).
-   * @param options.logLevel - Minimum log level for the default sink (optional, defaults to `'info'`).
-   * @param options.logOptions - Per-scope sink/level overrides for `chatLoggerSystem` (optional).
-   * @param options.timeout - Request timeout (optional, defaults to `3000`).
-   * @param options.httpsAgent - Custom `httpsAgent` (optional).
+   * @param options.axiosRequestConfig - Axios-level request configuration such as `timeout`,
+   *   `headers` or `httpsAgent`, spread into the client's axios instance (optional).
    */
   constructor(key: string, options: StreamChatOptions = {}) {
     // generated client requires ApiClient right away
@@ -301,8 +296,6 @@ export class StreamChat extends ChatApi {
     this.node = !this.browser;
 
     this.options = {
-      warmUp: false,
-      disableCache: false,
       isLocalUnreadCountEnabled: false,
       wsUrlParams: new URLSearchParams({}),
       ...options,
@@ -335,10 +328,8 @@ export class StreamChat extends ChatApi {
 
     this.persistUserOnConnectionFailure = this.options?.persistUserOnConnectionFailure;
 
-    // If its a server-side client, then lets initialize the tokenManager, since token will be
-    // generated from secret.
     this.tokenManager = new TokenManager();
-    this.insightMetrics = new InsightMetrics();
+    this.connectionIdManager = new ConnectionIdManager();
 
     this.defaultWSTimeout = 15 * 1000;
 
@@ -454,19 +445,14 @@ export class StreamChat extends ChatApi {
    *
    * @example <caption>initialize the client in user mode</caption>
    * StreamChat.getInstance('api_key')
-   * @example <caption>initialize the client in user mode with options</caption>
-   * StreamChat.getInstance('api_key', { timeout: 5000 })
-   * @example <caption>secret is optional and only used in server side mode</caption>
-   * StreamChat.getInstance('api_key', 'secret', { httpsAgent: customAgent })
+   * @example <caption>initialize the client with options</caption>
+   * StreamChat.getInstance('api_key', { axiosRequestConfig: { timeout: 5000 } })
    *
    * @param key - The API key.
-   * @param options - Additional options; here you can pass custom options to the axios instance (optional).
+   * @param options - Additional options (optional).
    * @param options.browser - Enforce the client to be in browser mode (optional).
-   * @param options.warmUp - If `true`, the client will open a connection as soon as possible to speed up following requests (optional, defaults to `false`).
-   * @param options.logLevel - Minimum log level for the default sink (optional, defaults to `'info'`).
-   * @param options.logOptions - Per-scope sink/level overrides for `chatLoggerSystem` (optional).
-   * @param options.timeout - Request timeout (optional, defaults to `3000`).
-   * @param options.httpsAgent - Custom `httpsAgent` (optional, in Node defaults to `https.agent()`).
+   * @param options.axiosRequestConfig - Axios-level request configuration such as `timeout`,
+   *   `headers` or `httpsAgent`, spread into the client's axios instance (optional).
    * @returns The shared client instance.
    */
   public static getInstance(key: string, options?: StreamChatOptions): StreamChat {
@@ -494,7 +480,7 @@ export class StreamChat extends ChatApi {
     this.wsBaseURL = this.baseURL.replace('http', 'ws').replace(':3030', ':8800');
   }
 
-  _getConnectionID = () => this.wsConnection?.connectionID;
+  _getConnectionID = () => this.connectionIdManager.connectionId;
 
   _hasConnectionID = () => Boolean(this._getConnectionID());
 
@@ -778,10 +764,13 @@ export class StreamChat extends ChatApi {
     delete this.user;
     delete this._user;
 
-    this._rejectPendingWsPromise(
-      new Error('Connection was closed because disconnectUser() was called'),
+    const teardownReason = new Error(
+      'Connection was closed because disconnectUser() was called',
     );
+
+    this._rejectPendingWsPromise(teardownReason);
     this.wsPromise = null;
+    this.connectionIdManager.rejectConnectionId(teardownReason);
 
     const closePromise = this.closeConnection(timeout);
 
@@ -1334,8 +1323,12 @@ export class StreamChat extends ChatApi {
   };
 
   /**
-   * Settles the connect promises after a successful reconnect, so the `await this.wsPromise` gates
-   * spread across the client stop resolving against a superseded (possibly rejected) attempt.
+   * Settles the connect promises after a successful reconnect, so `connectUser()` and the
+   * `wsPromise`/`setUserPromise` a caller may still be holding stop resolving against a superseded
+   * (possibly rejected) attempt.
+   *
+   * Requests no longer settle against these: waiting for a connection id is the
+   * {@link ConnectionIdManager}'s job, applied centrally in `ApiClient`.
    *
    * Called by `StableWSConnection._reconnect()`. Recovery itself is owned by
    * {@link ConnectionRecoveryManager}, which subscribes to the connection lifecycle and so covers
@@ -1374,40 +1367,20 @@ export class StreamChat extends ChatApi {
       throw Error('Property clientId is not set');
     }
 
-    if (!this.wsConnection && (this.options.warmUp || this.options.enableInsights)) {
-      this._sayHi();
-    }
     // The StableWSConnection handles all the reconnection logic.
-    if (this.options.wsConnection && this.node) {
-      // Intentionally avoiding adding ts generics on wsConnection in options since its only useful for unit test purpose.
-      (this.options.wsConnection as unknown as StableWSConnection).setClient(this);
-      this.wsConnection = this.options.wsConnection as unknown as StableWSConnection;
-    } else {
-      this.wsConnection = new StableWSConnection({
-        client: this,
-      });
-    }
-
-    return await this.wsConnection.connect(this.defaultWSTimeout);
-  }
-
-  /**
-   * Checks connectivity with the server for warmup purposes.
-   *
-   * @private
-   */
-  _sayHi() {
-    const client_request_id = randomId();
-    const opts = { headers: { 'x-client-request-id': client_request_id } };
-    this.api.doAxiosRequest('get', this.baseURL + '/hi', null, opts).catch((e) => {
-      if (this.options.enableInsights) {
-        postInsights('http_hi_failed', {
-          api_key: this.key,
-          err: e,
-          client_request_id,
-        });
-      }
+    this.wsConnection = new StableWSConnection({
+      client: this,
     });
+
+    try {
+      return await this.wsConnection.connect(this.defaultWSTimeout);
+    } catch (error) {
+      // We can't recover from this error, so reject connection id promise
+      if (!isWSFailure(error as APIError)) {
+        this.connectionIdManager.rejectConnectionId(error);
+      }
+      throw error;
+    }
   }
 
   /**
@@ -1421,9 +1394,6 @@ export class StreamChat extends ChatApi {
    */
   override async queryUsers(...args: Parameters<ChatApi['queryUsers']>) {
     const [request, requestOptions] = args;
-    // Make sure we wait for the connect promise if there is a pending one
-    await this.wsPromise;
-
     const data = await super.queryUsers(request ?? {}, requestOptions);
     this.state.updateUsers(data.users);
 
@@ -1452,14 +1422,6 @@ export class StreamChat extends ChatApi {
       watch: true,
       presence: false,
     };
-
-    // Make sure we wait for the connect promise if there is a pending one
-    await this.wsPromise;
-
-    // TODO: probably serverside only thing, remove at some point
-    if (!this._hasConnectionID()) {
-      defaultOptions.watch = false;
-    }
 
     const {
       predefined_filter,
@@ -1606,9 +1568,6 @@ export class StreamChat extends ChatApi {
       }
     }
 
-    // Make sure we wait for the connect promise if there is a pending one
-    await this.wsPromise;
-
     return await this.queryReactions(request, requestOptions);
   }
 
@@ -1632,10 +1591,11 @@ export class StreamChat extends ChatApi {
       c.offlineMode = offlineMode;
       c.initialized = !offlineMode;
       // Same precedence `queryChannels` applies to the request: an explicit caller choice wins,
-      // otherwise we watch only if there is a connection to watch on. Offline hydration populates
-      // state without a live watch, so it never counts - and a query that did not watch leaves the
-      // status untouched (it neither starts nor ends a watch).
-      if (!offlineMode && (queryChannelsOptions?.watch ?? this._hasConnectionID())) {
+      // otherwise the query watched, because that is `queryChannels`' default and a request that
+      // reached the server got a connection id to watch on (`ApiClient` gates on one). Offline
+      // hydration populates state without a live watch, so it never counts - and a query that did
+      // not watch leaves the status untouched (it neither starts nor ends a watch).
+      if (!offlineMode && (queryChannelsOptions?.watch ?? true)) {
         c.watchStatus = ChannelWatchStatus.Watching;
       }
       c.push_preferences = channelState.push_preferences;
@@ -1707,9 +1667,6 @@ export class StreamChat extends ChatApi {
       throw Error(`Cannot specify "offset" with "next"`);
     }
 
-    // Make sure we wait for the connect promise if there is a pending one
-    await this.wsPromise;
-
     return await super.search(request, requestOptions);
   }
 
@@ -1728,7 +1685,6 @@ export class StreamChat extends ChatApi {
    */
   _addChannelConfig({ cid, config }: Pick<ChannelResponse, 'cid' | 'config'>) {
     if (!config) return;
-    if (!this._cacheEnabled()) return;
     if (isEqual(this.channelServerConfigs[cid], config)) return;
 
     this.channelServerConfigs = {
@@ -1850,9 +1806,7 @@ export class StreamChat extends ChatApi {
 
     // For the time being set the key as membersStr, since we don't know the cid yet.
     // In channel.query, we will replace it with 'cid'.
-    if (this._cacheEnabled()) {
-      this.activeChannels[tempCid] = channel;
-    }
+    this.activeChannels[tempCid] = channel;
 
     return channel;
   };
@@ -1900,9 +1854,7 @@ export class StreamChat extends ChatApi {
       return channel;
     }
     const channel = new Channel(this, channelType, channelId, custom);
-    if (this._cacheEnabled()) {
-      this.activeChannels[channel.cid] = channel;
-    }
+    this.activeChannels[channel.cid] = channel;
 
     return channel;
   };
@@ -1928,21 +1880,17 @@ export class StreamChat extends ChatApi {
       },
       requestOptions,
     );
-    if (this._cacheEnabled()) {
-      this.blockedUsers.next(({ userIds }) => ({
-        userIds: userIds.concat(blockedUserId),
-      }));
-    }
+    this.blockedUsers.next(({ userIds }) => ({
+      userIds: userIds.concat(blockedUserId),
+    }));
     return result;
   }
 
   override async getBlockedUsers(...args: Parameters<ChatApi['getBlockedUsers']>) {
     const result = await super.getBlockedUsers(...args);
-    if (this._cacheEnabled()) {
-      this.blockedUsers.partialNext({
-        userIds: result.blocks.map(({ blocked_user_id }) => blocked_user_id),
-      });
-    }
+    this.blockedUsers.partialNext({
+      userIds: result.blocks.map(({ blocked_user_id }) => blocked_user_id),
+    });
     return result;
   }
 
@@ -1953,11 +1901,9 @@ export class StreamChat extends ChatApi {
       },
       requestOptions,
     );
-    if (this._cacheEnabled()) {
-      this.blockedUsers.next(({ userIds }) => ({
-        userIds: userIds.filter((id) => id !== blockedUserId),
-      }));
-    }
+    this.blockedUsers.next(({ userIds }) => ({
+      userIds: userIds.filter((id) => id !== blockedUserId),
+    }));
     return result;
   }
 
@@ -2300,8 +2246,6 @@ export class StreamChat extends ChatApi {
   setUserAgent(userAgent: string) {
     this.userAgent = userAgent;
   }
-
-  _cacheEnabled = () => !this.options.disableCache;
 
   _startCleaning() {
     // eslint-disable-next-line @typescript-eslint/no-this-alias

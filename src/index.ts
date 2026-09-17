@@ -48,8 +48,8 @@ export type {
   ConfigValueType,
 } from './configuration/shape';
 export * from './connection';
+export * from './connection_id_manager';
 export { type CooldownTimerState } from './CooldownTimer';
-export * from './insights';
 export * from './logger';
 export * from './messageComposer';
 export * from './messageDelivery';

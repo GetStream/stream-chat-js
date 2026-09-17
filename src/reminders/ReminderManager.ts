@@ -148,9 +148,6 @@ export class ReminderManager extends WithSubscriptions {
     data: ReminderResponseBaseOrResponse;
     overwrite?: boolean;
   }) => {
-    if (!this.client._cacheEnabled()) {
-      return;
-    }
     const cachedReminder = this.getFromState(data.message_id);
     if (!cachedReminder) {
       const reminder = new Reminder({

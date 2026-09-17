@@ -116,9 +116,6 @@ export class PollManager extends WithSubscriptions {
     pollResponse: PollResponseData,
     overwriteState?: boolean,
   ) => {
-    if (!this.client._cacheEnabled()) {
-      return;
-    }
     const pollFromCache = this.fromState(pollResponse.id);
     if (!pollFromCache) {
       const poll = new Poll({ client: this.client, poll: pollResponse });

@@ -1,17 +1,11 @@
 import {
   addConnectionEventListeners,
   chatCodes,
-  convertErrorToJson,
   randomId,
   removeConnectionEventListeners,
   retryInterval,
   sleep,
 } from './utils';
-import {
-  buildWsFatalInsight,
-  buildWsSuccessAfterFailureInsight,
-  postInsights,
-} from './insights';
 import { chatLoggerSystem } from './logger';
 import type { ConnectAPIResponse, ConnectedEvent, ConnectionOpen } from './types';
 import type { StreamChat } from './client';
@@ -79,7 +73,6 @@ export class StableWSConnection {
   client: StreamChat;
 
   // local vars
-  connectionID?: string;
   connectionOpen?: ConnectAPIResponse;
   consecutiveFailures: number;
   pingInterval: number;
@@ -258,6 +251,7 @@ export class StableWSConnection {
     this.wsID += 1;
     this.isConnecting = false;
     this.isDisconnected = true;
+    this.client.connectionIdManager.invalidate();
 
     // start by removing all the listeners
     if (this.healthCheckTimeoutRef) {
@@ -324,7 +318,9 @@ export class StableWSConnection {
     if (this.isConnecting || this.isDisconnected) return;
     this.isConnecting = true;
     this.requestID = randomId();
-    this.client.insightMetrics.connectionStartTimestamp = new Date().getTime();
+    // Arm before anything can await a connection id. A no-op on a reconnect that still holds one -
+    // those requests keep flowing against the old id rather than blocking for the whole outage.
+    this.client.connectionIdManager.arm();
     let isTokenReady = false;
     try {
       logger.withExtraTags('_connect').debug('Waiting for the auth token.');
@@ -364,17 +360,10 @@ export class StableWSConnection {
       this.isConnecting = false;
 
       if (response) {
-        this.connectionID = response.connection_id;
-        if (
-          this.client.insightMetrics.wsConsecutiveFailures > 0 &&
-          this.client.options.enableInsights
-        ) {
-          postInsights(
-            'ws_success_after_failure',
-            buildWsSuccessAfterFailureInsight(this as unknown as StableWSConnection),
-          );
-          this.client.insightMetrics.wsConsecutiveFailures = 0;
-        }
+        // The id is published to the ConnectionIdManager and nowhere else. A copy kept here would
+        // outlive the socket it belongs to - `invalidate()` / `reset()` cannot reach it - which is
+        // exactly the staleness this manager exists to end.
+        this.client.connectionIdManager.resolveConnectionId(response.connection_id);
         return response;
       }
     } catch (error: any) {
@@ -382,16 +371,6 @@ export class StableWSConnection {
       logger
         .withExtraTags('_connect')
         .warn('An error occurred while connecting.', { error });
-      if (this.client.options.enableInsights) {
-        this.client.insightMetrics.wsConsecutiveFailures++;
-        this.client.insightMetrics.wsTotalFailures++;
-
-        const insights = buildWsFatalInsight(
-          this as unknown as StableWSConnection,
-          convertErrorToJson(error as Error),
-        );
-        postInsights?.('ws_fatal', insights);
-      }
       throw error;
     }
   }
@@ -480,6 +459,11 @@ export class StableWSConnection {
           .warn('WebSocket connection failed. Retrying the reconnect.');
 
         this._reconnect();
+      } else {
+        // Giving up. `_setHealth(false)` armed a deferred on the assumption that a reconnect would
+        // settle it, and nothing else will now - leaving it pending hangs every request waiting for
+        // a connection id, with no retry coming and no error to show for it.
+        this.client.connectionIdManager.rejectConnectionId(error);
       }
     }
     logger.withExtraTags('_reconnect').debug('Reconnect attempt finished.');
@@ -652,6 +636,10 @@ export class StableWSConnection {
     // The server keys channel watches by connection ID, so they are gone the moment the socket is.
     // Done here rather than off the `connection.changed` event below, which is debounced by 5s.
     this.client._markActiveChannelsWatchInterrupted();
+    // Same fact, same moment, seen from the other side: the id those watches were keyed by is dead,
+    // so no further request may be sent with it. Invalidating arms a fresh deferred, so requests
+    // needing an id wait for the reconnect instead of racing ahead with the dead one.
+    this.client.connectionIdManager.invalidate();
 
     // we're offline, wait few seconds and fire and event if still offline
     setTimeout(() => {

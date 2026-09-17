@@ -17,7 +17,7 @@ describe('CustomDataManager', () => {
     vi.clearAllMocks();
 
     // Setup mocks
-    mockClient = new StreamChat('apiKey', 'apiSecret');
+    mockClient = new StreamChat('apiKey');
     mockClient.user = { id: 'user-id', name: 'Test User' };
 
     mockChannel = mockClient.channel('channelType', 'channelId');
