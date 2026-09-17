@@ -1372,9 +1372,9 @@ export class StreamChat extends ChatApi {
     try {
       return await this.wsConnection.connect(this.defaultWSTimeout);
     } catch (error) {
-      // The single funnel for a failed *initial* connect. `_reconnect()` failures deliberately do
-      // not land here: it keeps retrying, so waiters should keep waiting rather than be rejected.
-      this.connectionIdManager.rejectConnectionId(error);
+      if (!isWSFailure(error as APIError)) {
+        this.connectionIdManager.rejectConnectionId(error);
+      }
       throw error;
     }
   }
