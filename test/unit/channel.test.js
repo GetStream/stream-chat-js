@@ -16,6 +16,7 @@ import { formatMessage, generateUUIDv4 as uuidv4 } from '../../src/utils';
 import { describe, beforeEach, afterEach, it, expect, vi } from 'vitest';
 import { convertDateToTimestamp } from './test-utils/time';
 import { msToNs } from '../../src/utils/time';
+import { chatLoggerSystem } from '../../src/logger';
 
 // Seed the channel's messagePaginator "latest" (head) window from raw generated messages.
 // The unread/last-message readers now source from `messagePaginator.headItems`/`headmostItem`,
@@ -2047,6 +2048,63 @@ describe('Channel _handleChannelEvent', function () {
 			expect(changes[0].next).to.not.equal(changes[0].prev);
 			expect(changes[0].next.last_read).toBe(messageReadEvent.created_at);
 		});
+
+		// Tests against this issue: https://github.com/GetStream/stream-chat-js/issues/1676
+		it('should not touch channel read state for a thread read', () => {
+			seedOwnUnreadCount(channel, initialCountUnread);
+			channel.state.read[user.id] = initialReadState;
+			const onMessageRead = vi.spyOn(channel.messageReceiptsTracker, 'onMessageRead');
+
+			channel._handleChannelEvent({
+				...messageReadEvent,
+				thread: { parent_message_id: 'parent-message-id' },
+			});
+
+			expect(channel.state.unreadCount).toBe(initialCountUnread);
+			expect(channel.state.read[user.id].last_read).toBe(initialReadState.last_read);
+			expect(channel.state.read[user.id].last_read_message_id).toBe(
+				initialReadState.last_read_message_id,
+			);
+			expect(channel.state.read[user.id].unread_messages).toBe(initialCountUnread);
+			expect(onMessageRead).not.toHaveBeenCalled();
+		});
+
+		it('should not touch channel read state for another user\u2019s thread read', () => {
+			const anotherUser = { id: 'another-user' };
+			seedOwnUnreadCount(channel, initialCountUnread);
+			channel.state.read[anotherUser.id] = initialReadState;
+			const onMessageRead = vi.spyOn(channel.messageReceiptsTracker, 'onMessageRead');
+
+			channel._handleChannelEvent({
+				...messageReadEvent,
+				user: anotherUser,
+				thread: { parent_message_id: 'parent-message-id' },
+			});
+
+			expect(channel.state.unreadCount).toBe(initialCountUnread);
+			expect(channel.state.read[anotherUser.id].last_read).toBe(
+				initialReadState.last_read,
+			);
+			expect(channel.state.read[anotherUser.id].last_read_message_id).toBe(
+				initialReadState.last_read_message_id,
+			);
+			expect(channel.state.read[anotherUser.id].unread_messages).toBe(initialCountUnread);
+			expect(onMessageRead).not.toHaveBeenCalled();
+		});
+
+		// Skipping the case also skips the delivery sync at its tail. Pinned because it is a
+		// deliberate behaviour change, not an oversight: the next `message.new` /
+		// `message.delivered` / channel query supersedes the report anyway.
+		it('should not sync delivery report candidates on a thread read', () => {
+			const syncDeliveredCandidates = vi.spyOn(client, 'syncDeliveredCandidates');
+
+			channel._handleChannelEvent({
+				...messageReadEvent,
+				thread: { parent_message_id: 'parent-message-id' },
+			});
+
+			expect(syncDeliveredCandidates).not.toHaveBeenCalled();
+		});
 	});
 
 	describe('notification.mark_read', () => {
@@ -3749,6 +3807,98 @@ describe('message sending flow', () => {
 
 	afterEach(() => {
 		vi.resetAllMocks();
+	});
+
+	describe('_sendMessage attachment sanitization', () => {
+		let sendRequestSpy;
+		let sink;
+
+		const sentMessage = () => sendRequestSpy.mock.calls[0][4].message;
+
+		beforeEach(() => {
+			sendRequestSpy = vi
+				.spyOn(client.api, 'sendRequest')
+				.mockResolvedValue({ body: {}, metadata: {} });
+			sink = vi.fn();
+			chatLoggerSystem.configureLoggers({ utils: { sink, level: 'trace' } });
+		});
+
+		afterEach(() => {
+			chatLoggerSystem.restoreDefaults();
+		});
+
+		// Sanitization lives here rather than in `sendMessage` because this is where every path
+		// converges - including the offline replay of a queued task, which calls it directly.
+		it('strips composer-internal localMetadata from outgoing attachments', async () => {
+			await channel._sendMessage({
+				message: {
+					...message,
+					attachments: [
+						{
+							asset_url: 'https://cdn.example.com/f.pdf',
+							localMetadata: { file: {}, id: 'a1', uploadState: 'finished' },
+							type: 'file',
+						},
+					],
+				},
+			});
+
+			const sent = sentMessage();
+			expect(sent.attachments).toHaveLength(1);
+			expect(sent.attachments[0]).not.toHaveProperty('localMetadata');
+			expect(sent.attachments[0].asset_url).toBe('https://cdn.example.com/f.pdf');
+		});
+
+		it('drops an attachment whose upload never resolved, and warns', async () => {
+			// Reachable when a UI installs createSendWithPendingUploadsAttachmentsMiddleware but
+			// does not await the uploads: without this the API would store an attachment pointing
+			// at nothing.
+			await channel._sendMessage({
+				message: {
+					...message,
+					attachments: [
+						{ asset_url: 'https://cdn.example.com/ok.pdf', type: 'file' },
+						{
+							localMetadata: { file: {}, id: 'a2', uploadState: 'uploading' },
+							type: 'file',
+						},
+					],
+				},
+			});
+
+			const sent = sentMessage();
+			expect(sent.attachments).toHaveLength(1);
+			expect(sent.attachments[0].asset_url).toBe('https://cdn.example.com/ok.pdf');
+			expect(sink).toHaveBeenCalledWith(
+				'warn',
+				expect.stringContaining('Dropped 1 attachment(s)'),
+				expect.objectContaining({ attachments: expect.any(Array) }),
+			);
+		});
+
+		it('keeps a scraped-link attachment that has no asset_url', async () => {
+			// og_scrape_url / title_link are valid sources; only a missing source counts as unresolved.
+			await channel._sendMessage({
+				message: {
+					...message,
+					attachments: [
+						{
+							localMetadata: { id: 'a3', uploadState: 'finished' },
+							og_scrape_url: 'https://example.com',
+							type: 'image',
+						},
+					],
+				},
+			});
+
+			expect(sentMessage().attachments).toHaveLength(1);
+		});
+
+		it('leaves a message without attachments untouched', async () => {
+			await channel._sendMessage({ message });
+
+			expect(sentMessage()).toBe(message);
+		});
 	});
 
 	describe('sendMessage', () => {

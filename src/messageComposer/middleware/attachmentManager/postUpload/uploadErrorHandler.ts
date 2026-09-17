@@ -5,6 +5,7 @@ import type {
   AttachmentPostUploadMiddleware,
   AttachmentPostUploadMiddlewareState,
 } from '../types';
+import { isUploadCancellation } from '../../../../uploadManager';
 
 export const createUploadErrorHandlerMiddleware = (
   composer: MessageComposer,
@@ -19,13 +20,16 @@ export const createUploadErrorHandlerMiddleware = (
       const { attachment, error } = state;
       if (!error) return forward();
       if (!attachment) return discard();
+      // A cancellation is the user getting what they asked for, so it gets no error
+      // notification. `ApiClient.doAxiosRequest` draws the same line for the same reason.
+      if (isUploadCancellation(error)) return forward();
 
       const reason = error instanceof Error ? error.message : 'unknown error';
       composer.client.notifications.addError({
         message: 'Error uploading attachment',
         origin: {
           emitter: 'AttachmentManager',
-          context: { attachment },
+          context: { attachment, composer },
         },
         options: {
           type: CORE_NOTIFICATION_TYPE.attachmentUploadFailed,

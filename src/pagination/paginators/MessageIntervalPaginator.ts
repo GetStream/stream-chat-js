@@ -260,6 +260,39 @@ export class MessageIntervalPaginator extends BasePaginator<
     this.flushPendingPublishes();
   }
 
+  /**
+   * UI-driven "hold off on pruning" signal, set via {@link setPruningSuspended}. Defaults to not
+   * suspended, so a paginator with no UI attached still honours its configured cap.
+   */
+  protected get isPruningSuspended(): boolean {
+    return this._pruningSuspended;
+  }
+
+  private _pruningSuspended = false;
+
+  /**
+   * Tells the paginator to hold off on dropping the oldest loaded messages. The SDK calls this from
+   * its viewability tracking: while the user is reading near the oldest loaded message, pruning there
+   * would pull content out from under them, so the window is allowed to grow past its cap until they
+   * scroll back. Only meaningful alongside `maxLoadedItems`.
+   *
+   * Deliberately a plain field rather than a `StateStore` — nothing observes it, and a scroll-driven
+   * signal must not be able to cost a render.
+   */
+  setPruningSuspended = (suspended: boolean) => {
+    this._pruningSuspended = suspended;
+  };
+
+  /**
+   * A message can anchor pagination once the server has acknowledged it. Narrowing this is what keeps
+   * an unsent message out of both halves of a prune: it is skipped rather than dropped, and it can
+   * never become the window's tailward cursor (its id would go out as `id_lt` and mean nothing to the
+   * server).
+   */
+  protected isPaginationAnchorable(item: LocalMessage | undefined): boolean {
+    return !!item && this.isServerConfirmedMessage(item);
+  }
+
   protected get intervalItemIdsAreHeadFirst(): boolean {
     // Messages are stored in chronological order (created_at asc) within an interval.
     // Pagination "head" (newest side) is therefore at the END of the `itemIds` array.

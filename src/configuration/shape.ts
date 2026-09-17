@@ -69,7 +69,16 @@ export type ConfigShape = { readonly [field: string]: ConfigNode };
  * to `DeclarativePaginatorConfig` fails the build here until it is described. Same guard as
  * `INSTANCE_CONFIG_TREE_KEY_PRESENCE` uses for the top-level keys.
  */
-const PAGINATOR_FIELDS: Record<keyof DeclarativePaginatorConfig, ConfigNode> = {
+/**
+ * `maxLoadedItems` is excluded here and documented only under {@link MESSAGE_PAGINATOR_FIELDS}: the
+ * type allows it on any paginator, but a bounded window only makes sense for a message list — that is
+ * the only paginator whose declarative config reaches it, and the only one whose pruned items can be
+ * fetched back by cursor.
+ */
+const PAGINATOR_FIELDS: Record<
+  Exclude<keyof DeclarativePaginatorConfig, 'maxLoadedItems'>,
+  ConfigNode
+> = {
   debounceMs: {
     description:
       'Delay before a queued page request fires, collapsing rapid scrolling into one query.',
@@ -129,6 +138,12 @@ const MESSAGE_PAGINATOR_FIELDS: Record<
   ConfigNode
 > = {
   ...PAGINATOR_FIELDS,
+  maxLoadedItems: {
+    description:
+      'Caps how many messages stay loaded. Past it the oldest are dropped as new ones arrive, and scrolling back re-fetches them. Unset means unbounded. Values below the page size are raised to it.',
+    kind: 'value',
+    type: 'number',
+  },
   unreadReferencePolicy: {
     description:
       "'snapshot' freezes the unread divider where the user opened the channel until it is explicitly cleared; 'read-state-only' follows the server read state, so the divider moves as messages are marked read.",

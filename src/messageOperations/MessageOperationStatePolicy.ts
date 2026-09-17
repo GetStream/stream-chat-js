@@ -233,14 +233,18 @@ export class MessageOperationStatePolicy {
     //
     // Deliberately scoped to update/delete. A send that never reached the server has to settle as
     // `failed` even when its task is queued, because the retry affordance is the only way the user can
-    // get that message out — this is the v9 behaviour, and treating a queued send as merely "pending"
-    // would leave it spinning forever.
+    // get that message out.
+    //
+    // An update also accepts `send-message`, because an edit of a message the server has never seen is
+    // folded into that message's queued send (`AbstractOfflineDB.handleUpdateMessagePendingTask`) and
+    // so leaves no `update-message` row of its own.
     const queued =
       kind !== 'send' &&
       kind !== 'retry' &&
-      (await this.ctx.isQueued(messageId, [
-        kind === 'delete' ? 'delete-message' : 'update-message',
-      ]));
+      (await this.ctx.isQueued(
+        messageId,
+        kind === 'delete' ? ['delete-message'] : ['update-message', 'send-message'],
+      ));
 
     if (kind === 'delete') {
       if (!queued) this.revertDelete({ messageId, optimistic, options });

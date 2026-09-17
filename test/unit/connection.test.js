@@ -629,6 +629,58 @@ describe('connection', function () {
 			);
 		});
 
+		it('reconnects when the network returns after the initial connect timed out', async function () {
+			// Cold start with no network: `connectUser` rejects once `_waitForHealthy` gives up,
+			// and the SDKs then hand that failure to `closeConnection()` (what
+			// `persistUserOnConnectionFailure` selects). The retry loop must survive that, because
+			// nothing else re-opens the socket when connectivity comes back — the UI SDKs only
+			// forward the network change via `onlineStatusChanged`.
+			const client = new StreamChat('apiKey', {
+				allowServerSideConnect: true,
+				baseURL: 'http://localhost:1111',
+				WebSocketImpl: FailingWebSocket,
+			});
+			client.defaultWSTimeout = 1000;
+			client.persistUserOnConnectionFailure = true;
+
+			await expect(client.connectUser({ id: 'amin' }, token)).rejects.toThrow(
+				/initial WS connection could not be established/,
+			);
+
+			// The network comes back, well after the initial attempt gave up.
+			client.options.WebSocketImpl = MockWebSocket;
+			client.setBaseURL(wsBaseURL);
+
+			client.wsConnection.onlineStatusChanged({ type: 'online' });
+
+			for (let i = 0; i < 100 && !client.wsConnection.isHealthy; i++) {
+				await sleep(50);
+			}
+
+			expect(client.wsConnection.isHealthy).to.be.true;
+		});
+
+		it('closes the connection when the initial connect fails for a non-WebSocket reason', async function () {
+			// The counterpart of the test above: a failure the retry loop cannot fix must still be
+			// cleaned up, so nothing is left retrying against a connection that will never succeed.
+			const client = new StreamChat('apiKey', {
+				allowServerSideConnect: true,
+				baseURL: 'http://localhost:1111',
+				WebSocketImpl: MockWebSocket,
+			});
+			client.wsBaseURL = wsBaseURL;
+			client.persistUserOnConnectionFailure = true;
+			const closeConnection = sinon.spy(client, 'closeConnection');
+
+			await expect(
+				client.connectUser({ id: 'amin' }, () =>
+					Promise.reject(new Error('token provider exploded')),
+				),
+			).rejects.toThrow();
+
+			expect(closeConnection.called).to.be.true;
+		});
+
 		it('should retry until connection is established', async function () {
 			const client = new StreamChat('apiKey', {
 				allowServerSideConnect: true,

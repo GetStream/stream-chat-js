@@ -2207,6 +2207,35 @@ describe('OfflineSupportApi', () => {
             expect(result).toEqual([]);
           });
         });
+
+        describe('thread reads', () => {
+          const threadEvent = (type: string) =>
+            ({
+              ...dummyEvent,
+              type,
+              thread: { parent_message_id: 'parent-message-id' },
+            }) as unknown as Event;
+
+          it('is a no-op for message.read carrying a thread', async () => {
+            const event = threadEvent('message.read');
+
+            const result = await offlineDb.handleEvent({ event });
+
+            expect(offlineDb.handleRead).not.toHaveBeenCalled();
+            expect(result).toEqual([]);
+          });
+
+          // `handleRead` writes `unread_messages: 0` for this event type too, so a
+          // thread-scoped `notification.mark_read` would zero the whole channel just the same.
+          it('is a no-op for notification.mark_read carrying a thread', async () => {
+            const event = threadEvent('notification.mark_read');
+
+            const result = await offlineDb.handleEvent({ event });
+
+            expect(offlineDb.handleRead).not.toHaveBeenCalled();
+            expect(result).toEqual([]);
+          });
+        });
       });
     });
 
@@ -2339,18 +2368,22 @@ describe('OfflineSupportApi', () => {
           expect(addPendingTaskSpy).toHaveBeenCalledWith(task);
         });
 
-        it('adds replayable update-message tasks as-is', async () => {
+        it('adds replayable update-message tasks as-is when nothing is queued for the message', async () => {
           const task = generatePendingTask('update-message') as PendingTask;
           const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
-          const getPendingTasksSpy = vi.spyOn(offlineDb, 'getPendingTasks');
+          const getPendingTasksSpy = vi
+            .spyOn(offlineDb, 'getPendingTasks')
+            .mockResolvedValue([]);
+          const updatePendingTaskSpy = vi.spyOn(offlineDb, 'updatePendingTask');
 
           await offlineDb.handleAddPendingTask({ task });
 
+          expect(getPendingTasksSpy).toHaveBeenCalled();
           expect(addPendingTaskSpy).toHaveBeenCalledWith(task);
-          expect(getPendingTasksSpy).not.toHaveBeenCalled();
+          expect(updatePendingTaskSpy).not.toHaveBeenCalled();
         });
 
-        it('does not persist non-replayable update-message tasks', async () => {
+        it('does not persist a non-replayable update-message task with nothing to fold into', async () => {
           const task = generatePendingTask(
             'update-message',
             1,
@@ -2362,19 +2395,21 @@ describe('OfflineSupportApi', () => {
               },
             },
           ) as PendingTask;
+          vi.spyOn(offlineDb, 'getPendingTasks').mockResolvedValue([]);
           const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
-          const getPendingTasksSpy = vi.spyOn(offlineDb, 'getPendingTasks');
           const updatePendingTaskSpy = vi.spyOn(offlineDb, 'updatePendingTask');
 
           await offlineDb.handleAddPendingTask({ task });
 
           expect(addPendingTaskSpy).not.toHaveBeenCalled();
-          expect(getPendingTasksSpy).not.toHaveBeenCalled();
           expect(updatePendingTaskSpy).not.toHaveBeenCalled();
         });
 
-        it('rewrites a queued send-message task for offline failed update-message tasks', async () => {
-          client.wsConnection = { isHealthy: false } as StableWSConnection;
+        // The replayability guard protects a STANDALONE `update-message` replay, which would send a
+        // `file://` path to the server verbatim. A fold issues no update at all - it rewrites a queued
+        // send that already carries those same local URIs - so running the guard first discarded edits
+        // that were safe.
+        it('folds a non-replayable edit into a queued send-message task rather than dropping it', async () => {
           const task = generatePendingTask(
             'update-message',
             1,
@@ -2382,11 +2417,8 @@ describe('OfflineSupportApi', () => {
             {
               message: {
                 id: 'msg-123',
-                status: 'failed',
-                text: 'edited',
-                message_text_updated_at: convertDateToTimestamp(
-                  '2026-04-01T20:48:43.886269Z',
-                ),
+                attachments: [{ type: 'image', image_url: 'file://local-image.jpg' }],
+                text: 'edited caption',
               },
             },
           ) as PendingTask;
@@ -2396,7 +2428,55 @@ describe('OfflineSupportApi', () => {
               messageId: 'msg-123',
               payload: [
                 {
-                  message: { id: 'msg-123', status: 'sending', text: 'original' },
+                  message: {
+                    id: 'msg-123',
+                    attachments: [{ type: 'image', image_url: 'file://local-image.jpg' }],
+                    text: 'original caption',
+                  },
+                },
+              ],
+              type: 'send-message',
+            } as PendingTask,
+          ]);
+          const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
+          const updatePendingTaskSpy = vi.spyOn(offlineDb, 'updatePendingTask');
+
+          await offlineDb.handleAddPendingTask({ task });
+
+          expect(addPendingTaskSpy).not.toHaveBeenCalled();
+          expect(updatePendingTaskSpy).toHaveBeenCalledWith({
+            id: 7,
+            task: expect.objectContaining({ id: 7, type: 'send-message' }),
+          });
+          expect(updatePendingTaskSpy.mock.calls[0][0].task.payload[0].message.text).toBe(
+            'edited caption',
+          );
+        });
+
+        // Both payloads reaching the queue have been through `localMessageToNewMessagePayload`, so
+        // `mentioned_users` is already a list of ids. Normalizing a second time inside the fold would
+        // map `.id` over those strings and write `[undefined]` - silently dropping the mentions from a
+        // message that has not been sent yet.
+        it('folds the edit without re-normalizing an already-flattened payload', async () => {
+          const task = generatePendingTask(
+            'update-message',
+            1,
+            {},
+            {
+              message: {
+                id: 'msg-123',
+                mentioned_users: ['alice'],
+                text: 'edited @alice',
+              },
+            },
+          ) as PendingTask;
+          vi.spyOn(offlineDb, 'getPendingTasks').mockResolvedValue([
+            {
+              id: 7,
+              messageId: 'msg-123',
+              payload: [
+                {
+                  message: { id: 'msg-123', mentioned_users: [], text: 'original' },
                   skip_enrich_url: true,
                 },
               ],
@@ -2416,42 +2496,32 @@ describe('OfflineSupportApi', () => {
               type: 'send-message',
             }),
           });
-          expect(
-            updatePendingTaskSpy.mock.calls[0][0].task.payload[0].message,
-          ).toMatchObject({
-            id: 'msg-123',
-            status: 'sending',
-            text: 'edited',
+          // `skip_enrich_url` survives: the fold rewrites the message, not the send request.
+          expect(updatePendingTaskSpy.mock.calls[0][0].task.payload[0]).toEqual({
+            message: {
+              id: 'msg-123',
+              mentioned_users: ['alice'],
+              text: 'edited @alice',
+            },
+            skip_enrich_url: true,
           });
-          expect(
-            updatePendingTaskSpy.mock.calls[0][0].task.payload[0].message,
-          ).not.toHaveProperty('message_text_updated_at');
           expect(addPendingTaskSpy).not.toHaveBeenCalled();
         });
 
-        it('re-adds the rewritten send-message task if the pending task does not have an id', async () => {
-          client.wsConnection = { isHealthy: false } as StableWSConnection;
+        // A task read back from the DB always carries its row id, so this is unreachable in practice.
+        // It is asserted because the alternative - re-adding the rewritten task - would queue a SECOND
+        // send for a message that already has one.
+        it('queues the edit rather than duplicating a send task that has no row to rewrite', async () => {
           const task = generatePendingTask(
             'update-message',
             1,
             {},
-            {
-              message: {
-                id: 'msg-123',
-                status: 'failed',
-                text: 'edited',
-                message_text_updated_at: convertDateToTimestamp(
-                  '2026-04-01T20:48:43.886269Z',
-                ),
-              },
-            },
+            { message: { id: 'msg-123', text: 'edited' } },
           ) as PendingTask;
           vi.spyOn(offlineDb, 'getPendingTasks').mockResolvedValue([
             {
               messageId: 'msg-123',
-              payload: [
-                { message: { id: 'msg-123', status: 'sending', text: 'original' } },
-              ],
+              payload: [{ message: { id: 'msg-123', text: 'original' } }],
               type: 'send-message',
             } as PendingTask,
           ]);
@@ -2461,19 +2531,10 @@ describe('OfflineSupportApi', () => {
           await offlineDb.handleAddPendingTask({ task });
 
           expect(updatePendingTaskSpy).not.toHaveBeenCalled();
-          expect(addPendingTaskSpy).toHaveBeenCalledWith(
-            expect.objectContaining({
-              messageId: 'msg-123',
-              payload: [
-                { message: { id: 'msg-123', status: 'sending', text: 'edited' } },
-              ],
-              type: 'send-message',
-              id: undefined,
-            }),
-          );
+          expect(addPendingTaskSpy).toHaveBeenCalledWith(task);
         });
 
-        it('does nothing for failed offline update-message tasks without a matching pending send task', async () => {
+        it('queues the edit on its own when the message has no pending send-message task', async () => {
           client.wsConnection = { isHealthy: false } as StableWSConnection;
           const task = generatePendingTask(
             'update-message',
@@ -2482,7 +2543,6 @@ describe('OfflineSupportApi', () => {
             {
               message: {
                 id: 'msg-123',
-                status: 'failed',
                 text: 'edited',
               },
             },
@@ -2497,8 +2557,96 @@ describe('OfflineSupportApi', () => {
 
           await offlineDb.handleAddPendingTask({ task });
 
-          expect(addPendingTaskSpy).not.toHaveBeenCalled();
+          expect(addPendingTaskSpy).toHaveBeenCalledWith(task);
           expect(updatePendingTaskSpy).not.toHaveBeenCalled();
+        });
+
+        // The regression this guards: a task payload is built by `localMessageToNewMessagePayload`,
+        // which strips `status`. Keying the fold on the payload's status meant it never fired outside
+        // of hand-written tests, and a replay sent the original text and then edited it.
+        it('folds the edit into a queued send-message task whose payload carries no status', async () => {
+          const task = generatePendingTask(
+            'update-message',
+            1,
+            {},
+            { message: { id: 'msg-123', text: 'edited' } },
+          ) as PendingTask;
+          vi.spyOn(offlineDb, 'getPendingTasks').mockResolvedValue([
+            {
+              id: 7,
+              messageId: 'msg-123',
+              payload: [
+                { message: { id: 'msg-123', text: 'original' }, skip_enrich_url: true },
+              ],
+              type: 'send-message',
+            } as PendingTask,
+          ]);
+          const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
+          const updatePendingTaskSpy = vi.spyOn(offlineDb, 'updatePendingTask');
+
+          await offlineDb.handleAddPendingTask({ task });
+
+          expect(addPendingTaskSpy).not.toHaveBeenCalled();
+          expect(updatePendingTaskSpy).toHaveBeenCalledWith({
+            id: 7,
+            task: expect.objectContaining({
+              id: 7,
+              type: 'send-message',
+              payload: [
+                { message: { id: 'msg-123', text: 'edited' }, skip_enrich_url: true },
+              ],
+            }),
+          });
+        });
+
+        // The same fold, driven through the production chain rather than a hand-built payload:
+        // `Channel`'s default update handler normalizes the message with
+        // `localMessageToNewMessagePayload` before `client.updateMessage` turns it into a task.
+        it('folds an edit made through client.updateMessage into the queued send-message task', async () => {
+          client.setOfflineDBApi(offlineDb);
+          client.wsConnection = { isHealthy: false } as StableWSConnection;
+          // The fallback direct call `queueOrRun` makes once queueing has thrown - stubbed so the
+          // test does not reach the network.
+          vi.spyOn(client, '_updateMessage').mockRejectedValue(new Error('offline'));
+          const editedMessage = {
+            id: 'msg-123',
+            cid: 'messaging:channel123',
+            created_at: new Date(),
+            pinned_at: null,
+            status: 'failed',
+            text: 'A edited',
+            type: 'regular',
+            updated_at: new Date(),
+          } as unknown as LocalMessage;
+          vi.spyOn(offlineDb, 'getPendingTasks').mockResolvedValue([
+            {
+              id: 7,
+              messageId: 'msg-123',
+              payload: [{ message: { id: 'msg-123', text: 'A' } }],
+              type: 'send-message',
+            } as PendingTask,
+          ]);
+          const addPendingTaskSpy = vi.spyOn(offlineDb, 'addPendingTask');
+          const updatePendingTaskSpy = vi.spyOn(offlineDb, 'updatePendingTask');
+
+          await client
+            .updateMessage({
+              id: editedMessage.id,
+              message: utils.localMessageToNewMessagePayload(editedMessage),
+            } as Parameters<StreamChat['updateMessage']>[0])
+            .catch(() => undefined);
+
+          expect(addPendingTaskSpy).not.toHaveBeenCalled();
+          expect(updatePendingTaskSpy).toHaveBeenCalledWith({
+            id: 7,
+            task: expect.objectContaining({
+              id: 7,
+              type: 'send-message',
+              payload: [
+                { message: expect.objectContaining({ id: 'msg-123', text: 'A edited' }) },
+              ],
+            }),
+          });
         });
       });
 
