@@ -1431,6 +1431,7 @@ export class MessageIntervalPaginator extends BasePaginator<
     this.batch(() => {
       for (const message of this._itemIndex.values()) {
         if (message.user?.id !== user.id) continue;
+        if (message.user === user) continue;
         this._itemIndex.setOne({ ...message, user });
         if (activeIds.has(this.getItemId(message))) activeAffected = true;
       }

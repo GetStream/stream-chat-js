@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ZERO_PAGE_CURSOR } from '../../../../src/pagination/paginators/BasePaginator';
 import type { Interval } from '../../../../src/pagination/paginators/BasePaginator';
 import { MessagePaginator } from '../../../../src/pagination/paginators/MessagePaginator';
+import { EntityStore } from '../../../../src/entityStore/EntityStore';
 import { StoreBackedItemIndex } from '../../../../src/entityStore/StoreBackedItemIndex';
 import type { Channel } from '../../../../src/channel';
 import type {
@@ -1368,6 +1369,53 @@ describe('MessagePaginator', () => {
       expect(paginator.getItem('b1')?.user?.name).not.toBe('Renamed A');
       // the active window is re-emitted with the updated user object
       expect(paginator.items?.find((m) => m.id === 'a1')?.user?.name).toBe('Renamed A');
+    });
+
+    it('skips messages already carrying the same user object, so siblings are not dirtied back', () => {
+      // Two collections over ONE store, as channel.messagePaginator and pinnedMessagesPaginator
+      // are. Both run reflectUserUpdate for the same event; without the reference guard the second
+      // re-spreads every message into a fresh snapshot whose only effect is to dirty the first.
+      //
+      // The paginators must build their OWN index so each registers itself as the store's
+      // subscriber — passing `itemIndex` in would use NOOP_OWNER and no fan-out could occur at all,
+      // which makes the assertion pass vacuously.
+      const store = new EntityStore<LocalMessage>({ getEntityId: (m) => m.id });
+      const linkedChannel = {
+        ...channel,
+        getClient: () => ({ messageStore: store, userId: 'me' }),
+      } as unknown as Channel;
+      const make = () => new MessagePaginator({ channel: linkedChannel });
+      const first = make();
+      const second = make();
+      const page = [
+        createMessage({
+          cid: linkedChannel.cid,
+          id: 'a1',
+          user: { id: 'A' },
+          created_at: convertDateToTimestamp('2021-01-01T00:00:00.000Z'),
+        }),
+      ];
+      first.ingestPage({ page, isHead: true, isTail: true, setActive: true });
+      second.ingestPage({ page, isHead: true, isTail: true, setActive: true });
+      expect(first.items).toHaveLength(1);
+      expect(second.items).toHaveLength(1);
+
+      let firstEmits = 0;
+      const unsubscribe = first.state.subscribe(() => {
+        firstEmits += 1;
+      });
+      firstEmits = 0;
+
+      const renamed = { id: 'A', name: 'Renamed A' };
+      first.reflectUserUpdate(renamed);
+      second.reflectUserUpdate(renamed);
+
+      // One emit for its own write; the sibling's pass is a no-op rather than a second round trip.
+      expect(firstEmits).toBe(1);
+      expect(first.getItem('a1')?.user?.name).toBe('Renamed A');
+      expect(second.getItem('a1')?.user?.name).toBe('Renamed A');
+
+      unsubscribe();
     });
   });
 
