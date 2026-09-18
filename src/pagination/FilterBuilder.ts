@@ -1,25 +1,4 @@
-import { StateStore } from '../store';
-import type { QueryFilter } from '../types';
-
-type ElementType<T> = T extends (infer U)[] ? U : T;
-
-// redeclared because QueryFilter does not account for the additional operators
-export type ExtendedQueryFilter<T = string> = QueryFilter<T> & {
-  $autocomplete?: T extends string ? string : never;
-  $contains?: ElementType<T>;
-  $in?: ElementType<T>[];
-  $q?: T extends string ? string : never;
-};
-
-export type ExtendedQueryLogicalOperators<T> = {
-  $and?: Array<ExtendedQueryFilters<T>>;
-  $nor?: Array<ExtendedQueryFilters<T>>;
-  $or?: Array<ExtendedQueryFilters<T>>;
-};
-
-export type ExtendedQueryFilters<T> = {
-  [K in keyof T]?: ExtendedQueryFilter<T[K]>;
-} & ExtendedQueryLogicalOperators<T>;
+import { StateStore } from '@stream-io/state-store';
 
 export type FilterBuilderGenerators<
   TFilters,

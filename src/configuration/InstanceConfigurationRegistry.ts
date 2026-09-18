@@ -22,7 +22,7 @@
  * clients, which breaks tests and apps that connect as more than one user.
  */
 
-import { StateStore } from '../store';
+import { StateStore } from '@stream-io/state-store';
 import { chatLoggerSystem } from '../logger';
 import { mergeWith } from '../utils/mergeWith';
 import { isEqual } from '../utils/mergeWith/mergeWithCore';

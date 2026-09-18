@@ -111,20 +111,11 @@ describe('StreamChat getInstance', () => {
 		);
 		expect(requestSpy.mock.calls[0][0].headers).to.haveOwnProperty('Pragma', 'no-cache');
 	});
-
-	it('should correctly resolve _cacheEnabled', async () => {
-		const client1 = new StreamChat('key', { disableCache: true });
-		expect(client1._cacheEnabled()).to.be.equal(false);
-		const client2 = new StreamChat('key', { disableCache: false });
-		expect(client2._cacheEnabled()).to.be.equal(true);
-		const client3 = new StreamChat('key');
-		expect(client3._cacheEnabled()).to.be.equal(true);
-	});
 });
 
 describe('StreamChat config(s) store', () => {
 	it('initializes channelServerConfigsStore and keeps configs access backward compatible', () => {
-		const client = new StreamChat('key', 'secret');
+		const client = new StreamChat('key');
 
 		expect(client.channelServerConfigs).to.eql({});
 		expect(client.channelServerConfigsStore.getLatestValue()).to.eql({ configs: {} });
@@ -138,8 +129,8 @@ describe('StreamChat config(s) store', () => {
 		});
 	});
 
-	it('updates channelServerConfigsStore through _addChannelConfig when cache is enabled', () => {
-		const client = new StreamChat('key', 'secret');
+	it('updates channelServerConfigsStore through _addChannelConfig', () => {
+		const client = new StreamChat('key');
 
 		client._addChannelConfig({
 			cid: 'messaging:general',
@@ -152,18 +143,6 @@ describe('StreamChat config(s) store', () => {
 				'messaging:general': { replies: true },
 			},
 		});
-	});
-
-	it('does not update channelServerConfigsStore through _addChannelConfig when cache is disabled', () => {
-		const client = new StreamChat('key', 'secret');
-		client._cacheEnabled = () => false;
-
-		client._addChannelConfig({
-			cid: 'messaging:general',
-			config: { replies: true },
-		});
-
-		expect(client.channelServerConfigsStore.getLatestValue()).to.eql({ configs: {} });
 	});
 });
 
@@ -477,9 +456,10 @@ describe('Client openConnection', () => {
 	let client;
 
 	beforeEach(() => {
-		const wsConnection = new StableWSConnection({});
-		wsConnection.isConnecting = false;
-		wsConnection.connect = function () {
+		// `connect()` always builds its own StableWSConnection, so the seam is the prototype.
+		// `isConnecting` has to flip synchronously — that is what the second `openConnection()`
+		// call reads to decide it should hand back the in-flight promise.
+		sinon.stub(StableWSConnection.prototype, 'connect').callsFake(function () {
 			this.isConnecting = true;
 			return new Promise((resolve) => {
 				setTimeout(() => {
@@ -488,10 +468,13 @@ describe('Client openConnection', () => {
 					});
 				}, 1000);
 			});
-		};
+		});
 
 		client = new StreamChat('', { allowServerSideConnect: true });
-		client.wsConnection.updateConfig({ connection: wsConnection });
+	});
+
+	afterEach(() => {
+		sinon.restore();
 	});
 
 	it('should return same promise in case of multiple calls', async () => {
@@ -504,6 +487,396 @@ describe('Client openConnection', () => {
 		const promise2 = client.openConnection();
 
 		expect(await promise2).to.equal(await promise1);
+	});
+});
+
+describe('Client watching requests across close/reopen', () => {
+	// The #1868 successors. Those cases asserted that queryChannels() gates on `wsPromise`;
+	// `1ebdf6d5 feat!: move wait for connection id to api client` moved the gate to
+	// ConnectionIdManager, so the same scenarios are pinned here against the mechanism that
+	// replaced it. The contract is the one `wsPromise` has had since #1868: a close suspends,
+	// a reopen finishes the work, and only a teardown fails it.
+	const flush = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
+
+	// Opens immediately but answers the handshake only when told, so a connect can be held in
+	// flight across a closeConnection() the way a backgrounding app holds one.
+	class HeldWebSocket {
+		static instances = [];
+		static OPEN = 1;
+
+		constructor() {
+			this.OPEN = 1;
+			this.readyState = 1;
+			HeldWebSocket.instances.push(this);
+			queueMicrotask(() => this.onopen?.({ type: 'open' }));
+		}
+
+		send() {}
+
+		close() {
+			this.readyState = 3;
+		}
+
+		hello(connectionId) {
+			this.onmessage?.({
+				data: JSON.stringify({
+					type: 'connection.ok',
+					connection_id: connectionId,
+					created_at: 1628678564222203145,
+					me: { id: 'user', role: 'user', created_at: 1627391903293696000 },
+				}),
+			});
+		}
+	}
+
+	const setup = () => {
+		HeldWebSocket.instances = [];
+		const client = new StreamChat('key', {
+			allowServerSideConnect: true,
+		});
+		client.wsConnection.updateConfig({ webSocketImpl: HeldWebSocket });
+		client.tokenManager.getToken = () => 'mock-token';
+		client.tokenManager.tokenReady = () => Promise.resolve();
+		client.tokenManager.loadToken = () => Promise.resolve('mock-token');
+		client._setToken = () => Promise.resolve('mock-token');
+
+		// stubbed below _doRequest so the connection-id gate itself still runs
+		const request = vi
+			.spyOn(client.axiosInstance, 'request')
+			.mockResolvedValue({ data: { channels: [] }, status: 200, headers: {} });
+
+		return { client, request };
+	};
+
+	const settled = (promise) => Promise.race([promise, flush(40).then(() => 'pending')]);
+	const lastSocket = () => HeldWebSocket.instances[HeldWebSocket.instances.length - 1];
+
+	it('finishes an in-flight watching request against the reopened socket', async () => {
+		const { client, request } = setup();
+
+		const connecting = client.connectUser({ id: 'user' }, 'mock-token').then(
+			() => 'resolved',
+			(error) => 'rejected: ' + error.message,
+		);
+		await flush();
+		const query = client.queryChannels().then(
+			() => 'resolved',
+			(error) => 'rejected: ' + error.message,
+		);
+		await flush();
+
+		// the app backgrounds mid-handshake
+		await client.closeConnection();
+		expect(await settled(query)).to.equal('pending');
+		expect(await settled(connecting)).to.equal('pending');
+		expect(request).not.toHaveBeenCalled();
+
+		// and foregrounds; the reopened socket completes its handshake
+		client.openConnection().catch(() => {});
+		await flush();
+		lastSocket().hello('conn-2');
+
+		expect(await settled(query)).to.equal('resolved');
+		expect(await settled(connecting)).to.equal('resolved');
+		// the request rode the *new* socket's id, never the one it was issued under
+		expect(request.mock.calls[0][0].params.connection_id).to.equal('conn-2');
+	});
+
+	it('rejects an in-flight watching request on disconnectUser', async () => {
+		const { client, request } = setup();
+
+		client.connectUser({ id: 'user' }, 'mock-token').catch(() => {});
+		await flush();
+		const query = client.queryChannels().then(
+			() => 'resolved',
+			(error) => 'rejected: ' + error.message,
+		);
+		await flush();
+
+		// nothing will reopen after a teardown, so the request is told rather than left hanging
+		await client.disconnectUser();
+		expect(await settled(query)).to.match(/^rejected: .*disconnectUser\(\) was called/);
+		expect(request).not.toHaveBeenCalled();
+
+		// and the next one gets the actionable error rather than a silent wait
+		expect(() => client.connectionIdManager.getConnectionId()).to.throw(
+			/No connection id is available/,
+		);
+	});
+
+	it('leaves the next watching request waiting when the reopen fails and the socket is retrying', async () => {
+		const { client, request } = setup();
+		client._setUser({ id: 'user' });
+
+		vi.spyOn(StableWSConnection.prototype, 'connect').mockImplementation(
+			async function () {
+				this.isDisconnected = false;
+				this.client.connectionIdManager.arm();
+				throw new Error(JSON.stringify({ message: 'connect failed', isWSFailure: true }));
+			},
+		);
+
+		client.openConnection().catch(() => {});
+		await flush();
+
+		// a WS failure leaves StableWSConnection retrying, so the request waits for that rather
+		// than being told no connection is being established
+		const query = client.queryChannels();
+		expect(await settled(query)).to.equal('pending');
+		expect(request).not.toHaveBeenCalled();
+
+		client.connectionIdManager.resolveConnectionId('conn-3');
+		await query;
+		expect(request.mock.calls[0][0].params.connection_id).to.equal('conn-3');
+	});
+});
+
+describe('Client connection id after a failed initial connect', () => {
+	// what `_waitForHealthy` throws: the flag rides in the JSON message, not as a property
+	const connectError = (isWSFailure) =>
+		new Error(
+			JSON.stringify({
+				code: '',
+				StatusCode: '',
+				message: 'initial WS connection could not be established',
+				isWSFailure,
+			}),
+		);
+
+	const openConnectionFailingWith = async (error) => {
+		const client = new StreamChat('key', { allowServerSideConnect: true });
+		client._setUser({ id: 'user' });
+
+		vi.spyOn(StableWSConnection.prototype, 'connect').mockImplementation(
+			async function () {
+				// mirrors _connect(), which arms before anything can await a connection id
+				this.client.connectionIdManager.arm();
+				throw error;
+			},
+		);
+
+		await client.openConnection().catch(() => {});
+		return client;
+	};
+
+	it('keeps waiters waiting when the socket failed and StableWSConnection is retrying', async () => {
+		const client = await openConnectionFailingWith(connectError(true));
+
+		// onerror/onclose fired _reconnect() before this rejected, so the retry owns recovery:
+		// a watching request has to wait for it, not be told nothing is being established
+		const pending = client.connectionIdManager.getConnectionId();
+		expect(pending).to.be.instanceOf(Promise);
+
+		client.connectionIdManager.resolveConnectionId('conn-1');
+		expect(await pending).to.equal('conn-1');
+	});
+
+	it('rejects waiters when the failure is terminal', async () => {
+		const client = await openConnectionFailingWith(connectError(false));
+
+		// a rejected token or a bad API key will not fix itself, so waiters are told rather than
+		// left hanging on a retry that is not coming
+		expect(() => client.connectionIdManager.getConnectionId()).to.throw(
+			/No connection id is available/,
+		);
+	});
+});
+
+describe('Client wsPromise close/reopen race', () => {
+	const timeout = (ms) =>
+		new Promise((resolve) => setTimeout(() => resolve('timeout'), ms));
+
+	// `client.connect()` builds its own StableWSConnection unconditionally, so the seam is
+	// `connect` itself rather than an injected socket: the stub installs the object the rest of
+	// the client reads (`isConnecting` / `isHealthy` / `disconnect`), drives the connection-id
+	// lifecycle the way StableWSConnection does, and hands back a promise the test settles by hand.
+	const createClientWithHangingConnect = () => {
+		const connectResolvers = [];
+		let failNext = false;
+
+		const client = new StreamChat('key', { allowServerSideConnect: true });
+
+		const wsConnection = {
+			isConnecting: false,
+			isHealthy: false,
+			disconnect() {
+				this.isConnecting = false;
+				this.isHealthy = false;
+				// mirrors StableWSConnection.disconnect(): the id dies with the socket
+				client.connectionIdManager.reset();
+				return Promise.resolve();
+			},
+		};
+		client.wsConnection = wsConnection;
+
+		client.connect = function () {
+			wsConnection.isConnecting = true;
+			this.connectionIdManager.arm();
+
+			if (failNext) {
+				failNext = false;
+				wsConnection.isConnecting = false;
+				return Promise.reject(new Error('connect failed'));
+			}
+
+			return new Promise((resolve) => {
+				connectResolvers.push((connection) => {
+					wsConnection.isConnecting = false;
+					wsConnection.isHealthy = true;
+					this.connectionIdManager.resolveConnectionId(connection.connection_id);
+					resolve(connection);
+				});
+			});
+		};
+
+		client._setUser({ id: 'user' });
+
+		return {
+			client,
+			connectResolvers,
+			failNextConnect: () => {
+				failNext = true;
+			},
+		};
+	};
+
+	it('should reject the pending wsPromise on disconnectUser', async () => {
+		const { client } = createClientWithHangingConnect();
+
+		const connectPromise = client.openConnection().then(
+			() => 'resolved',
+			(error) => error.message,
+		);
+
+		// disconnectUser drops the user, so nothing will ever resolve this promise
+		await client.disconnectUser();
+
+		const outcome = await Promise.race([connectPromise, timeout(200)]);
+		expect(outcome).to.match(/disconnectUser\(\) was called/);
+	});
+
+	it('should leave the wsPromise pending on closeConnection alone', async () => {
+		const { client } = createClientWithHangingConnect();
+
+		const connectPromise = client.openConnection().then(
+			() => 'resolved',
+			() => 'rejected',
+		);
+
+		// closeConnection means "closing for now, I will reopen" - the promise is kept
+		// so the next openConnection() can settle it. This is what keeps the React
+		// Native AppState background/foreground cycle free of unhandled rejections.
+		await client.closeConnection();
+
+		const outcome = await Promise.race([connectPromise, timeout(200)]);
+		expect(outcome).to.equal('timeout');
+	});
+
+	it('should not raise an unhandled rejection when openConnection is fire-and-forget', async () => {
+		const { client } = createClientWithHangingConnect();
+		const unhandled = [];
+		const onUnhandled = (reason) => unhandled.push(reason);
+		process.on('unhandledRejection', onUnhandled);
+
+		try {
+			// no .catch() and no await - the shape a React Native AppState handler produces
+			client.openConnection();
+			await client.disconnectUser();
+			await timeout(50);
+		} finally {
+			process.off('unhandledRejection', onUnhandled);
+		}
+
+		expect(unhandled).to.be.empty;
+	});
+
+	it('should reset wsPromise to null on disconnectUser', async () => {
+		const { client, connectResolvers } = createClientWithHangingConnect();
+
+		client.openConnection().catch(() => {});
+		connectResolvers[0]({ connection_id: 'conn-1' });
+		await client.wsPromise;
+
+		await client.disconnectUser();
+
+		// back to the constructor state, so the client reads as fresh again
+		expect(client.wsPromise).to.be.null;
+	});
+
+	it('should not hand back a resolved wsPromise after a settle raced an in-flight connect', async () => {
+		const { client, connectResolvers } = createClientWithHangingConnect();
+
+		client.openConnection().catch(() => {});
+		// StableWSConnection._reconnect() settles the connect promises on every successful
+		// reconnect, so this can land while the original connect() is still pending
+		client._settleConnectPromises();
+
+		await client.closeConnection();
+		const reopened = client.openConnection();
+		reopened.catch(() => {});
+
+		// a second connect was started and is still hanging, so the promise must not be
+		// settled yet - otherwise every `await client.wsPromise` fires with no handshake
+		expect(connectResolvers.length).to.equal(2);
+		expect(await Promise.race([reopened.then(() => 'resolved'), timeout(50)])).to.equal(
+			'timeout',
+		);
+
+		connectResolvers[1]({ connection_id: 'conn-2' });
+		expect(await Promise.race([reopened.then(() => 'resolved'), timeout(50)])).to.equal(
+			'resolved',
+		);
+	});
+
+	it('should not tear down an anonymous user when an older connectUser is rejected', async () => {
+		const { client } = createClientWithHangingConnect();
+		delete client.user;
+		delete client._user;
+		client._setToken = () => Promise.resolve('token');
+
+		const connectA = client.connectUser({ id: 'A' }, 'token').then(
+			() => 'resolved',
+			() => 'rejected',
+		);
+		client.disconnectUser();
+		const anonymousPromise = client.connectAnonymousUser();
+		anonymousPromise.catch(() => {});
+		const anonymousUserID = client.userID;
+
+		expect(await Promise.race([connectA, timeout(200)])).to.equal('rejected');
+		await timeout(20);
+
+		// A's cleanup must not have disconnected the anonymous user that took over
+		expect(client.userID).to.equal(anonymousUserID);
+		expect(client.user?.anon).to.be.true;
+	});
+
+	it('should not tear down a newer connectUser when an older one is rejected', async () => {
+		const { client, connectResolvers } = createClientWithHangingConnect();
+		// the helper pre-sets a user; start from a clean slate for connectUser()
+		delete client.user;
+		delete client._user;
+		// the helper never sets a real token, and connectUser() validates it
+		client._setToken = () => Promise.resolve('token');
+
+		const connectA = client.connectUser({ id: 'A' }, 'token').then(
+			() => 'resolved',
+			() => 'rejected',
+		);
+		// not awaited - the tight interleaving an AppState/logout handler produces
+		client.disconnectUser();
+		const connectB = client.connectUser({ id: 'B' }, 'token').then(
+			() => 'resolved',
+			() => 'rejected',
+		);
+
+		await Promise.resolve();
+		connectResolvers[connectResolvers.length - 1]({ connection_id: 'conn-B' });
+
+		expect(await Promise.race([connectA, timeout(200)])).to.equal('rejected');
+		expect(await Promise.race([connectB, timeout(200)])).to.equal('resolved');
+		// A's cleanup must not have disconnected B
+		expect(client.userID).to.equal('B');
 	});
 });
 
@@ -565,6 +938,31 @@ describe('Client connectUser', () => {
 		socket._setHealth(false);
 		expect(client.wsConnection.isHealthy).to.be.false;
 		expect(client.connectionIdManager.connectionId).to.equal(undefined);
+	});
+
+	it('_getConnectionID, _hasConnectionID read through the connection id manager', () => {
+		expect(client._hasConnectionID()).to.be.false;
+		expect(client._getConnectionID()).to.equal(undefined);
+
+		client.connectionIdManager.resolveConnectionId('ID');
+
+		expect(client._getConnectionID()).to.equal('ID');
+		expect(client._hasConnectionID()).to.be.true;
+	});
+
+	it('drops the connection id when the socket closes', async () => {
+		client.connectionIdManager.resolveConnectionId('ID');
+		const socket = new StableWSConnection({ wsConnection: client.wsConnection });
+		client.wsConnection.connection = socket;
+		// the socket was never opened, so disconnect() only has to run its teardown
+		socket.ws = undefined;
+
+		await client.closeConnection();
+
+		// the server tears the watch down with the connection - keeping the id would let the next
+		// request register a subscription against one that no longer exists
+		expect(client._getConnectionID()).to.equal(undefined);
+		expect(client._hasConnectionID()).to.be.false;
 	});
 });
 
@@ -679,6 +1077,64 @@ describe('message update', () => {
 	afterEach(() => {
 		chatLoggerSystem.restoreDefaults();
 		vi.resetAllMocks();
+	});
+
+	describe('_updateMessage', () => {
+		// Sanitization lives here rather than in `updateMessage` because this is where every path
+		// converges - including the offline replay of a queued `update-message` task, and the
+		// replay of a `send-message` task that a failed edit was merged into.
+		let sendRequestSpy;
+
+		const sentMessage = () => sendRequestSpy.mock.calls[0][4].message;
+
+		beforeEach(() => {
+			_updateMessageSpy.mockRestore();
+			sendRequestSpy = vi
+				.spyOn(client.api, 'sendRequest')
+				.mockResolvedValue({ body: {}, metadata: {} });
+		});
+
+		it('strips composer-internal localMetadata from outgoing attachments', async () => {
+			const message = generateMsg({
+				id: 'msg-123',
+				attachments: [
+					{
+						type: 'image',
+						image_url: 'https://example.com/image.jpg',
+						localMetadata: { file: {}, id: 'local-1', uploadState: 'finished' },
+					},
+				],
+			});
+
+			await client._updateMessage({ id: message.id, message });
+
+			const sent = sentMessage();
+			expect(sent.attachments).toHaveLength(1);
+			expect(sent.attachments[0]).not.toHaveProperty('localMetadata');
+			expect(sent.attachments[0].image_url).toBe('https://example.com/image.jpg');
+		});
+
+		it('drops an attachment whose upload never resolved, and warns', async () => {
+			const message = generateMsg({
+				id: 'msg-123',
+				attachments: [
+					{
+						type: 'image',
+						image_url: 'blob:http://localhost/9f3c',
+						localMetadata: { id: 'local-1', uploadState: 'uploading' },
+					},
+				],
+			});
+
+			await client._updateMessage({ id: message.id, message });
+
+			expect(sentMessage().attachments).toEqual([]);
+			expect(loggerSpy).toHaveBeenCalledWith(
+				'warn',
+				expect.stringContaining('Dropped 1 attachment(s)'),
+				expect.objectContaining({ attachments: expect.any(Array) }),
+			);
+		});
 	});
 
 	describe('updateMessage', () => {
@@ -872,25 +1328,6 @@ describe('StreamChat.queryChannels', async () => {
 			),
 		};
 	};
-
-	it('should not hydrate activeChannels and channel configs when disableCache is true', async () => {
-		const client = await getClientWithUser();
-		client._cacheEnabled = () => false;
-		const mockedChannelsQueryResponse = Array.from({ length: 10 }, () => ({
-			...mockChannelQueryResponse,
-			messages: Array.from(
-				{ length: DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE },
-				generateMsg,
-			),
-		}));
-		sinon
-			.stub(client, 'queryChannels')
-			.resolves({ channels: mockedChannelsQueryResponse });
-		await client.queryChannelsAndHydrate();
-		expect(Object.keys(client.activeChannels).length).to.be.equal(0);
-		expect(Object.keys(client.channelServerConfigs).length).to.be.equal(0);
-		sinon.restore();
-	});
 
 	it('should return hydrated channels as Channel instances from queryChannels', async () => {
 		const client = await getClientWithUser();

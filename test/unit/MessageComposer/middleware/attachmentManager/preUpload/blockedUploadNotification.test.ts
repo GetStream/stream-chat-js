@@ -76,7 +76,10 @@ describe('createBlockedAttachmentUploadNotificationMiddleware', () => {
       message: `The attachment upload was blocked`,
       origin: {
         emitter: 'AttachmentManager',
-        context: { blockedAttachment: attachment },
+        context: {
+          blockedAttachment: attachment,
+          composer,
+        },
       },
       options: {
         type: 'validation:attachment:upload:blocked',

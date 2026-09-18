@@ -11,15 +11,19 @@ export const getClientWithUser = (user) => {
 
 		chatClient.wsPromise = Promise.resolve();
 
-		// Mark the socket up and publish a connection id, because in the real SDK "connected" means
-		// both. It is load-bearing: `ApiClient` holds any request that watches or subscribes to
-		// presence until an id exists, so without this every one of them would wait forever.
+		// A connected user means both an id and a healthy socket, and both are load-bearing here.
+		// `ApiClient` holds every request that watches or subscribes to presence until an id exists,
+		// so without the first line each of those waits forever; connection recovery and the offline
+		// sync manager read the socket's status, so without the second they never fire.
 		//
-		// A test that wants the socket *down* should say so explicitly with
+		// In that order, matching the real handshake: the id is published before the socket announces
+		// itself, so "the socket is up" implies there is an id to watch on.
+		//
+		// A test that wants the socket *down* says so with
 		// `client.wsConnection._setStatus({ isHealthy: false })`, and one that wants no connection id
 		// with `client.connectionIdManager.reset()`.
+		chatClient.connectionIdManager.resolveConnectionId('mock-connection-id');
 		chatClient.wsConnection._setStatus({ isHealthy: true });
-		chatClient.connectionIdManager.resolveConnectionId('test-connection-id');
 
 		// sending a promise, since connectUser in actual SDK is an async function.
 		return chatClient;

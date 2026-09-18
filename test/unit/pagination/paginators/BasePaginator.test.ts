@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   BasePaginator,
   DEFAULT_PAGINATION_OPTIONS,
+  Filters,
   ItemCoordinates,
   LOGICAL_HEAD_INTERVAL_ID,
   LOGICAL_TAIL_INTERVAL_ID,
@@ -10,10 +11,7 @@ import {
   PaginatorCursor,
   type PaginatorOptions,
   PaginatorState,
-  PrimitiveFilter,
-  QueryFilter,
   QueryFilters,
-  RequireOnlyOne,
   SortParamRequest,
   ZERO_PAGE_CURSOR,
 } from '../../../../src';
@@ -39,11 +37,19 @@ type TestItem = {
 };
 
 type QueryShape = {
-  filters: {
-    [Key in keyof TestItem]:
-      | RequireOnlyOne<QueryFilter<TestItem[Key]>>
-      | PrimitiveFilter<TestItem[Key]>;
-  };
+  filters: Filters<{
+    id: { type: string; operators: '$autocomplete' | '$eq' | '$in' };
+    name: { type: string; operators: '$autocomplete' | '$eq' | '$in' };
+    // element type + an `$eq` override for the whole array, the way the spec models `members`
+    teams: {
+      type: string;
+      operators: '$contains' | '$eq' | '$in';
+      valueTypes: { $eq: Array<string> };
+    };
+    blocked: { type: boolean; operators: '$eq' | '$ne' };
+    createdAt: { type: string; operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte' };
+    age: { type: number; operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte' };
+  }>;
   sort: SortParamRequest[];
 };
 
@@ -104,6 +110,20 @@ const y: TestItem = { id: 'y', age: 4, name: 'Y' };
 const z: TestItem = { id: 'z', age: 1, name: 'Z' };
 
 describe('BasePaginator', () => {
+  describe('window cap (pruning)', () => {
+    /**
+     * Polarity guard. This getter is the UI's "hold off" latch, and every paginator that actually
+     * prunes today overrides it — so the BASE value is read by nothing, and a flipped default would
+     * pass the whole window-cap suite while silently disabling pruning for any paginator that does
+     * not override. It was in fact inverted once, by a rename.
+     */
+    it('does not suspend pruning by default, so a paginator with no UI still honours its cap', () => {
+      const paginator = new Paginator();
+      // @ts-expect-error accessing protected property
+      expect(paginator.isPruningSuspended).toBe(false);
+    });
+  });
+
   describe('constructor', () => {
     it('initiates with the defaults', () => {
       const paginator = new Paginator();

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PollComposer } from '../../../src/messageComposer/pollComposer';
-import { StateStore } from '../../../src/store';
+import { StateStore } from '@stream-io/state-store';
 
 // Mock dependencies
 vi.mock('../../../src/utils', () => ({

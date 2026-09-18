@@ -5,7 +5,7 @@ import type { AxiosError } from 'axios';
 import { isAxiosError } from 'axios';
 import { chatLoggerSystem } from '../logger';
 import type { APIError } from '../types';
-import type { Unsubscribe } from '../store';
+import type { Unsubscribe } from '@stream-io/state-store';
 
 const logger = chatLoggerSystem.getLogger('offline-db');
 
@@ -17,7 +17,7 @@ const logger = chatLoggerSystem.getLogger('offline-db');
  * consistent with the server once connectivity is restored.
  */
 export class OfflineDBSyncManager {
-  public syncStatus = false;
+  public isSynced = false;
   /**
    * Releases the subscription to the socket's status store. A bare unsubscribe now that this reads a
    * store rather than an event, which no longer wraps it in an object.
@@ -142,7 +142,7 @@ export class OfflineDBSyncManager {
    * @param status - The new sync status (`true` or `false`).
    */
   private invokeSyncStatusListeners = async (status: boolean) => {
-    this.syncStatus = status;
+    this.isSynced = status;
     this.syncStatusListeners.forEach((l) => {
       try {
         l(status);
@@ -267,7 +267,7 @@ export class OfflineDBSyncManager {
    * Each step is isolated so a failure in one does not prevent the other, and
    * neither can escape to the callers (init + the status subscription).
    * This guarantees the subsequent invokeSyncStatusListeners(true) always runs,
-   * so syncStatus recovers to true and gated channel queries are unblocked.
+   * so isSynced recovers to true and gated channel queries are unblocked.
    * Failed syncs degrade to "possibly stale data until the next query" rather
    * than freezing all future queries. See issue #1816.
    */

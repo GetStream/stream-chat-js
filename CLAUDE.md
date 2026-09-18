@@ -24,9 +24,8 @@ Companion docs that apply to all agents: `AGENTS.md` (general agent rules) and `
 | Auto-fix lint/format                    | `yarn lint-fix`                          |
 | Unit tests (Vitest)                     | `yarn test` (alias for `yarn test-unit`) |
 | Coverage                                | `yarn test-coverage`                     |
-| API response type check (hits live API) | `yarn test-types`                        |
 
-Single test runs use Vitest's CLI directly: `yarn test-unit path/to/file.test.ts`, or filter by name with `yarn test-unit -t 'partial test name'`. Unit tests live in `test/unit/**/*.test.[jt]s` (see `vite.config.ts`). `yarn test-types` is integration-level and requires real Stream credentials — don't run it as part of routine local verification.
+Single test runs use Vitest's CLI directly: `yarn test-unit path/to/file.test.ts`, or filter by name with `yarn test-unit -t 'partial test name'`. Unit tests live in `test/unit/**/*.test.[jt]s` (see `vite.config.ts`). Vitest is the only test runner — the live-API `test/typescript/` harness (`yarn test-types`) was removed with the server-side surface, since every endpoint it drove needed an API secret.
 
 `STREAM_LOCAL_TEST_RUN=1` (or `STREAM_LOCAL_TEST_HOST=…`) makes the client point at a local backend; useful when running tests against a local Stream server. See `src/client.ts` constructor.
 
@@ -35,12 +34,14 @@ Single test runs use Vitest's CLI directly: `yarn test-unit path/to/file.test.ts
 `yarn build` runs two things concurrently:
 
 1. `tsc` — emits **declarations only** (`emitDeclarationOnly: true`) to `dist/types`. `rootDir` is `src/`.
-2. `scripts/bundle.mts` (esbuild) — produces bundles for **three entry points**:
-   - `index` (the root): `dist/cjs/index.node.js` (Node CJS, externalizes deps + Node builtins), `dist/cjs/index.browser.js` (browser CJS), `dist/esm/index.mjs` (browser ESM)
-   - `i18n` (`stream-chat/i18n`): the same three variants, `i18n.node.js` / `i18n.browser.js` / `i18n.mjs`
-   - `i18n-codegen` (`stream-chat/i18n/codegen`), built from `codegen/i18n/`: **ESM only, Node only** — one artifact, `dist/esm/i18n-codegen.mjs`. No browser variant because it reads the filesystem; no CJS variant because nothing needs one (it is invoked by a build script, never bundled, never loaded by a test runner). The CJS flavours of the other two entries exist for React Native's Jest, which loads the _runtime_ in CJS; the generator never enters that path.
+2. `scripts/bundle.mts` (esbuild) — produces bundles for the **single entry point**, `index` (the
+   root): `dist/cjs/index.node.js` (Node CJS, externalizes deps + Node builtins),
+   `dist/cjs/index.browser.js` (browser CJS), `dist/esm/index.mjs` (browser ESM).
 
-   After building, `assertBundleBoundaries` reads esbuild's `metafile` and fails the build if an entry reached something it must not (see the i18n section). Adding a new entry point without declaring its boundary in `ENTRY_BOUNDARIES` is itself an error.
+   After building, `assertBundleBoundaries` reads esbuild's `metafile` and fails the build if an entry
+   reached something it must not. Nothing is forbidden today — the translation layer that used to sit
+   behind `stream-chat/i18n` now ships as **`@stream-io/i18n`** — but adding a new entry point without
+   declaring its boundary in `ENTRY_BOUNDARIES` is still an error, which is the point of keeping it.
 
 `package.json#exports` routes consumers to the right bundle by condition: `node` → node-cjs, `browser`/`react-native` → browser-cjs (require) or esm (import), default → esm. The `react-native` + `require` branch must stay pointed at CJS — React Native's Jest runs CJS with `customConditions: ["react-native"]` and does not transform `node_modules`, so an `.mjs` there is a syntax error across every RN suite that touches the module. `typesVersions` mirrors the subpaths for consumers still on `moduleResolution: "node"`. There is **no `package.json#browser` field** — it used to zero Node-only deps (`crypto`, `https`, `jsonwebtoken`, `ws`, `zlib`) for browser/RN builds, but the SDK no longer imports any of them (`src/index.ts` is platform-agnostic: global `WebSocket`, global `FormData`, global `atob`). `scripts/bundle.mts` keeps a `browserIgnoreModules` hook, currently an empty array, for the day that changes. Prefer a platform global or a browser-safe dep over reintroducing a Node-only one.
 
@@ -54,7 +55,7 @@ Three separate things cover `scripts/`, and each was scoped to miss it at some p
 
 - **Types:** `tsconfig.scripts.json`, run by `yarn types:scripts` and folded into `yarn types`. Without it `.mts` annotations are stripped but never checked, which is worse than the JSDoc `@type` comments they replaced.
 - **Format:** the `yarn prettier` glob had to gain `mts` — it listed `js,mjs,ts` only, so every `.mts` in the repo silently escaped the format gate.
-- **Lint:** `eslint.config.mjs`'s rule blocks list `scripts/**/*.mts` alongside `src/**` and `codegen/**`. Turning this on found `generate-filter-types.mts` importing `yaml` while nothing declared it — it resolved only because `lint-staged` happens to depend on it. `.lintstagedrc.json` has its **own** globs, which also omitted `mts`; both are widened, and note the eslint entry runs with `--max-warnings 0`, so a file matching no config block fails the hook with "no matching configuration was supplied" rather than passing silently.
+- **Lint:** `eslint.config.mjs`'s rule blocks list `scripts/**/*.mts` alongside `src/**`. Turning this on found `generate-filter-types.mts` importing `yaml` while nothing declared it — it resolved only because `lint-staged` happens to depend on it. `.lintstagedrc.json` has its **own** globs, which also omitted `mts`; both are widened, and note the eslint entry runs with `--max-warnings 0`, so a file matching no config block fails the hook with "no matching configuration was supplied" rather than passing silently.
 
 ## Architecture
 
@@ -62,22 +63,21 @@ This is a single-package SDK with **no monorepo**. The public surface is everyth
 
 ### Module map of `src/`
 
-- **`client.ts` — `StreamChat` facade.** ~5k-line class. Prefer `StreamChat.getInstance(key, secret?, options?)` — the constructor exists for advanced uses but `getInstance` is what `connectUser` warnings and most docs assume. Owns: the axios instance, WS connection lifecycle, `TokenManager`, and a registry of subsystem managers (`threads`, `polls`, `notifications`, `reminders`, `moderation`, `uploadManager`, `messageDeliveryReporter`, plus an optional `offlineDb` injected via `setOfflineDBApi`). New REST endpoints are added here as methods that call `axiosInstance` and return a type from `types.ts`.
+- **`client.ts` — `StreamChat` facade.** ~5k-line class. Prefer `StreamChat.getInstance(key, options?)` — the constructor exists for advanced uses but `getInstance` is what `connectUser` warnings and most docs assume. Owns: the axios instance, WS connection lifecycle, `TokenManager`, and a registry of subsystem managers (`threads`, `polls`, `notifications`, `reminders`, `moderation`, `uploadManager`, `messageDeliveryReporter`, plus an optional `offlineDb` injected via `setOfflineDBApi`). New REST endpoints are added here as methods that call `axiosInstance` and return a type from `types.ts`.
 - **`channel.ts` (~2.5k lines) + `channel_state.ts` (~1.1k) + `channel_batch_updater.ts`** — per-channel object and its in-memory state. **Messages are NOT stored on `channel.state`.** The message list, thread replies, and pinned messages each live in a paginator — `channel.messagePaginator`, `thread.messagePaginator`, and `channel.pinnedMessagesPaginator` — which are the single source of truth (interval storage + a canonical `ItemIndex`). Read them via `channel.messagePaginator.state.items` / `.getItem(id)` / `.headmostItem` (newest loaded item), and mutate via the paginator (`ingestItem` / `removeItem`), never a legacy `channel.state.addMessageSorted()` / `state.messages` (removed). `channel.state.last_message_at` was **removed**; the channel's latest-message timestamp lives on `channel.messagePaginator.lastMessageAt` (its `aggregateState` store — seeded from `ChannelResponse.last_message_at`, then advanced monotonically as messages are ingested). See `docs/breaking-changes-v14-v15.md`.
 - **`ChannelManager.ts`** — channel _lists_. Holds one or more `ChannelPaginator`s (`state.paginators`), keeps them in sync with WS events through an `EventHandlerPipeline` per event type, and arbitrates ownership when a channel matches several lists (`ownershipResolver` / `createPriorityOwnershipResolver`). Replaced the old `channel_manager.ts` (single hand-sorted `state.channels` list with named handler overrides) in v10 — see `v9-to-v10-migration-guide-methods.md`. Filtering and ordering are the paginator's job: `matchesFilter()` runs the filter compiler over `Channel` field resolvers and ordering comes from a comparator compiled from `sort`. The manager is instantiated by the `StreamChat` constructor and lives as long as the client (`client.channelManager`) — it is not configurable through the client options; register lists with `insertPaginator({ paginator, index? })`, detach them with `removePaginator(paginatorOrId)` and set cross-list ownership with `setOwnershipResolver(resolverOrPriorityIds?)`. `setPaginators(paginators)` is the primitive the other two build on — use it (or `clearPaginators()`) for batches, since it publishes one state update instead of one per paginator, and skips the update entirely when the set is unchanged. Registration and loaded data have different owners: `disconnectUser` calls `resetPaginatorStates()`, which discards each list's channels (they belong to the user going away) while leaving the lists themselves registered, since which lists exist is the integrator's configuration. Event handling stays customizable: `ChannelManagerOptions.eventHandlers` replaces the default map wholesale at construction (start from `getDefaultHandlers()` to enrich it instead), and `addEventHandler` / `setEventHandlers` / `removeEventHandlers` adjust the pipelines afterwards — which is the only route for `client.channelManager`, since the client constructs it without options. The exported `ignoreEventsForUnknownChannels` handler, inserted at `index: 0`, is how a list opts out of pulling in channels it has not loaded.
-- **`StableWSConnection.ts` (`StableWSConnection`)** — the realtime socket, and the only transport: the long-poll fallback (`connection_fallback.ts`, `enableWSFallback`, `transport.changed`) was removed in v10. It connects to `/api/v2/connect`, which authenticates off the **first frame the client sends** (`client._buildWSAuthMessage()`) rather than the query string, and answers with a `connection.ok` hello event instead of v1's `health.check`. It runs a 25s ping and a 35s connection check, and reconnects on close/error, publishing every status transition into `client.wsConnection.state`. `connection.ok` is not in the OpenAPI spec yet, so its type is hand-written in `types.ts` and decoded through a shim in `StableWSConnection.ts` — both are marked for deletion once the backend publishes the event.
+- **`connection/wsConnection/StableWSConnection.ts` (`StableWSConnection`)** — the realtime socket, and the only transport: the long-poll fallback (`connection_fallback.ts`, `enableWSFallback`, `transport.changed`) was removed in v10. It connects to `/api/v2/connect`, which authenticates off the **first frame the client sends** (`client._buildWSAuthMessage()`) rather than the query string, and answers with a `connection.ok` hello event instead of v1's `health.check`. It runs a 25s ping and a 35s connection check, and reconnects on close/error, publishing every status transition into `client.wsConnection.state`. `connection.ok` is not in the OpenAPI spec yet, so its type is hand-written in `types.ts` and decoded through a shim in `StableWSConnection.ts` — both are marked for deletion once the backend publishes the event.
   **It no longer registers `window` listeners.** The offline/online edge now arrives from `client.networkConnection` (see below), which inverts the old dependency: the socket is a _consumer_ of network status rather than the thing that detects it. Its own settings — connect timeout, ping interval, connection-check grace period, the UI's offline-notification delay, `webSocketImpl`, `urlParams` and an injectable socket — live in `client.wsConnection.config`, not in `StreamChatOptions`; `client.defaultWSTimeout` is gone. Every instance is created by `WSConnection.connect()`, which also disconnects the one it replaces, and read live from that config so an `updateConfig` reaches an already-open socket. It holds its `WSConnection` parent rather than the client, and reaches the client through it.
 - **`networkConnection/` — `NetworkConnectionObserver` (`client.networkConnection`).** The device's own network status, as a `StateStore`, written by a `NetworkStatusReporter` — a function that installs a platform listener and returns an unsubscribe, supplied as `statusReporter` config or through `setStatusReporter()`. `isOnline` is `boolean | undefined`, and `undefined` means _unknown_ rather than offline, so guards must test `=== false`. It is an accelerator, never a precondition — nothing in the SDK requires it.
   **The default reporter is a compromise worth knowing.** A browser gets the real one. Every other host gets a stand-in that **mirrors the WebSocket**, so an integration that forgets the setup has a coarse signal rather than none; it reports nothing until the socket has been up once. Under it the two facts cannot disagree, which is exactly what the separation exists to express — so `isOnline === false` there also means "the socket died for its own reasons". React Native should wrap NetInfo and install it. See `docs/network-connection.md`.
-- **`ConnectionIdManager.ts` (`client.connectionIdManager`).** The WebSocket connection id, and the only place it lives. The server keys watches and presence by it and answers `200` while registering nothing when it is missing, so `ApiClient._doRequest` holds any request `requiresConnectionId` recognises until one exists — the `watch` / `presence` flags, falling back to a declared `connection_id` param for `stopWatchingChannel` and `longPoll`, which carry no flag. `StableWSConnection` drives the lifecycle: `arm()` before a socket opens, `resolveConnectionId()` on the hello frame, `invalidate()` from `_applyOnline(false)` (every status transition, so the deliberate close and the error paths are covered), `reset()` from `disconnect()`, and a reject when a reconnect gives up. A caller's abort signal reaches the wait, so an abandoned request does not hold it.
+- **`connection/ConnectionIdManager.ts` (`client.connectionIdManager`).** The WebSocket connection id, and the only place it lives — `client._getConnectionID()` / `_hasConnectionID()` read through it and keep no copy. The server keys watches and presence by it and answers `200` while registering nothing when it is missing, so `ApiClient._doRequest` holds any request `requiresConnectionId` recognises until one exists — the `watch` / `presence` flags, falling back to a declared `connection_id` param for `stopWatchingChannel` and `longPoll`, which carry no flag; `test/unit/codegen/connectionIdEndpoints.test.ts` pins that generated endpoint set. `StableWSConnection` drives the lifecycle: `arm()` before a socket opens, `resolveConnectionId()` on the hello frame, `invalidate()` from `_applyHealth(false)` (every status transition, so the error paths are covered) and again from `disconnect()`, and a reject when a reconnect gives up. A deliberate close invalidates rather than rejects: `closeConnection()` exists for mobile backgrounding, so a request already waiting keeps waiting for the socket `openConnection()` will build. `reset()` is the harder variant that fails those waiters instead; nothing in the SDK calls it. A caller's abort signal reaches the wait, so an abandoned request does not hold it.
 - **`wsConnection/` — `WSConnection` (`client.wsConnection`).** A stable wrapper created with the client and never replaced, owning the socket's reactive status (`state`: `isHealthy`, `lastHealthyAt`, `lastUnhealthyAt`; the connection id lives on `client.connectionIdManager`), its configuration, and the one network-status subscription. The live `StableWSConnection` hangs off `.connection` and _is_ replaced per connect, which is why the store cannot live there — it would be unreadable before `connectUser` and would strand subscribers on every `closeConnection()` → `openConnection()` cycle. The store is written on **every** transition, including `disconnect()` and the error paths. It is the only description of the socket's status: there is no companion event.
-- **`store.ts` — `StateStore`.** Reactive primitive (see "State and subscription patterns" below).
+- **No `store.ts`** — `StateStore` comes from `@stream-io/state-store`, imported directly wherever it is used and **not** re-exported from the root barrel (see "State and subscription patterns" below).
 - **`signing.ts` — one function, `UserFromToken`.** Decodes a JWT payload with the global `atob` and returns `user_id`. Everything else this module used to hold was server-side (JWT minting via `jsonwebtoken`, webhook/SQS/SNS verification via `crypto` + `zlib`) and was removed along with those deps — see `v9-to-v10-migration-guide-server-side.md`. Do not reintroduce secret-holding or HMAC code here; that surface lives in `@stream-io/node-sdk`.
 - **`middleware.ts`** — `MiddlewareExecutor` (see "Middleware pipelines" below). Used by composer pipelines, not by client request lifecycle.
 - **`token_manager.ts`** — handles static tokens and async token providers. Tracks a `loadTokenPromise` so concurrent calls await the same fetch. The constructor takes no arguments: there is no `secret` and no local JWT signing — every token comes from the caller (a string or a `TokenProvider`). Anonymous users may have no token at all; anyone else without one now fails at `getToken()` rather than at `setTokenOrProvider()`.
-- **Event types.** There is no `events.ts` / `EVENT_MAP` any more (removed in v10). Wire events come from the generated `WSEvent` union (`src/gen/models`) so adding one means regenerating rather than hand-editing. There is no runtime decoder layer any more: `--opt response_dates_as_number` types every server-sent date as the unix-nanosecond number the wire already carries, so `src/gen/model-decoders/` (including `event-decoder-mapping.ts`) is no longer emitted at all, and `src/StableWSConnection.ts` decodes frames with a plain cast. The unit invariant and its traps live in `src/utils/time.ts`; the consumer-facing delta is `v9-to-v10-migration-guide-dates.md`. `src/types.ts` overlays two non-generated members onto the public `Event` union: `LocalEvent` — `channels.queried`, `connection.recovered`, `capabilities.changed`, `message.read_locally`, `offline_reactions.queried`, `live_location_sharing.*`, all dispatched client-side only and never received over the wire — and `ConnectedEvent` (`connection.ok`), which _is_ a wire event but is not published in the OpenAPI spec yet.
+- **Event types.** There is no `events.ts` / `EVENT_MAP` any more (removed in v10). Wire events come from the generated `WSEvent` union (`src/gen/models`) so adding one means regenerating rather than hand-editing. There is no runtime decoder layer any more: `--opt response_dates_as_number` types every server-sent date as the unix-nanosecond number the wire already carries, so `src/gen/model-decoders/` (including `event-decoder-mapping.ts`) is no longer emitted at all, and `src/connection/wsConnection/StableWSConnection.ts` decodes frames with a plain cast. The unit invariant and its traps live in `src/utils/time.ts`; the consumer-facing delta is `v9-to-v10-migration-guide-dates.md`. `src/types.ts` overlays two non-generated members onto the public `Event` union: `LocalEvent` — `channels.queried`, `connection.recovered`, `capabilities.changed`, `message.read_locally`, `offline_reactions.queried`, `live_location_sharing.*`, all dispatched client-side only and never received over the wire — and `ConnectedEvent` (`connection.ok`), which _is_ a wire event but is not published in the OpenAPI spec yet.
   **There is no `connection.changed`.** Connectivity is published as two stores — `client.wsConnection.state` and `client.networkConnection.state` — and nothing else. Publishing it twice meant two descriptions that disagreed: the event was silent on `closeConnection()` and two error paths, and held a drop for five seconds. `connection.recovered` survives, reports that a recovery pass finished rather than a status, and carries no payload. A UI that renders a "connection lost" banner holds a drop for `wsConnection.offlineNotificationDisplayDelayMs` itself, which the event used to do.
-- **`insights.ts` — `InsightMetrics` + `postInsights`.** WS-health telemetry sent to `https://chat-insights.getstream.io`. This is internal; do not call from end-user code paths. The fields captured by `buildWsBaseInsight` include token and connection metadata — treat changes here as security-sensitive.
 - **`uploadManager.ts` / `LiveLocationManager.ts` / `CooldownTimer.ts`** — feature controllers, each owns its own `StateStore` slice.
 - **Domain subsystems** (each a folder with its own `index.ts` barrel):
   - `messageComposer/` — biggest subsystem (≈3.5k lines). Composer + sub-composers (text, attachment, link previews, poll, location, custom-data) wired together by `MessageComposer` and driven by the middleware executor. Composition can target a `Channel`, `Thread`, or an existing local message (edit flow). Server-side composer config from `getConfig()` is merged on top of `DEFAULT_COMPOSER_CONFIG` via `mergeServerRestrictions` (`src/configuration/serverAuthority.ts`), which prevents enabling features the server has disabled and is re-applied on every route that resolves configuration, not only at construction.
@@ -87,8 +87,7 @@ This is a single-package SDK with **no monorepo**. The public surface is everyth
   - `pagination/` — `BasePaginator` (cursor-or-offset, debounced, exposes `state: StateStore<PaginatorState>`), plus `FilterBuilder` and `ReminderPaginator`.
   - `reminders/` — `Reminder`, `ReminderManager`, `ReminderTimer` (scheduled-offset reminders with debounced refresh).
   - `search/` — `BaseSearchSource` + concrete `MessageSearchSource`, `ChannelSearchSource`, `UserSearchSource` orchestrated by `SearchController`.
-  - `i18n/` — the translation layer shared by the React and React Native SDKs. **Not exported from `src/index.ts`** — see the i18n section below.
-  - the build-time translation-catalog generator is **not here** — it lives at `codegen/i18n/`, outside `src/` entirely, so the runtime layer physically cannot reach `node:fs`. See the i18n section.
+  - **No `i18n/`** — the translation runtime and its catalog generator moved to `@stream-io/i18n`. See the i18n section below.
 - Top-level subsystem files: `poll`, `poll_manager`, `thread`, `thread_manager`, `moderation`, `campaign`, `segment`, `permissions`.
 - **`types.ts` (~5k lines) + `custom_types.ts` + `types.utility.ts`** — public type surface. **Custom data is extended via module augmentation on the `Custom*Data` interfaces in `custom_types.ts`** (generics were removed in v9; see README). When adding a field that callers may want to extend, expose it through a `Custom*Data` interface rather than reintroducing a generic.
 
@@ -96,7 +95,11 @@ This is a single-package SDK with **no monorepo**. The public surface is everyth
 
 Most subsystems share two small abstractions; using them keeps integrations behaving consistently.
 
-**`StateStore<T>` (`src/store.ts`)** is the reactive primitive. Key semantics that surprise newcomers:
+**`StateStore<T>` (`@stream-io/state-store`)** is the reactive primitive. Import it directly — there
+is no local re-export, and adding one back would be a mistake: TypeScript compares classes with
+`protected` members nominally, so a second declaration breaks assignability against every other SDK
+that holds a `StateStore`. It is deliberately **not** part of this package's public API either; a UI
+SDK depends on `@stream-io/state-store` itself. Key semantics that surprise newcomers:
 
 - `subscribe(handler)` fires the handler synchronously once with the current value before returning the unsubscribe. Treat first-call as initial state, not as a change event.
 - `next(valueOrPatch)` is no-op when the new reference equals the old (`===`). To force a change, return a new object from your patch function.
@@ -135,73 +138,41 @@ Both share a process-wide `pendingPromises` map; reuse the helpers rather than r
 
 The canonical flow is:
 
-1. `client = StreamChat.getInstance(key, secret?, options?)` — second call with the same key returns the cached instance (this matters: a new `new StreamChat(...)` would open a second WS connection).
+1. `client = StreamChat.getInstance(key, options?)` — second call with the same key returns the cached instance (this matters: a new `new StreamChat(...)` would open a second WS connection).
 2. `await client.connectUser(user, tokenOrProvider)` — sets the user, primes the `TokenManager`, opens WS. Calling it a second time with the **same** user logs a warning and returns the existing promise; calling it with a **different** user throws unless `disconnectUser()` ran first.
 3. `client.openConnection()` / `client.closeConnection()` — manage the WS without clearing the user (useful for mobile foreground/background transitions).
 4. `client.disconnectUser(timeout?)` — full teardown.
 
-Aliases to be aware of: `setUser` → `connectUser`, `disconnect` → `disconnectUser`. Both are deprecated but still present; new code should use the long names. Server-side use (no `window`, or `secret` provided) prints a warning unless `options.allowServerSideConnect: true` is set.
+Aliases to be aware of: `setUser` → `connectUser`, `disconnect` → `disconnectUser`. Both are deprecated but still present; new code should use the long names. Connecting from a non-browser environment (no `window`) prints a warning unless `options.allowServerSideConnect: true` is set — there is no secret to detect any more, so the guard is purely environmental.
 
 ## i18n
 
-`src/i18n/` holds the translation runtime shared by `stream-chat-react` and
-`stream-chat-react-native` — one `Streami18n`, one set of formatters, one date layer. Before this, both
-SDKs carried ~1,300 lines of near-duplicate runtime plus a duplicated codegen. See
-`specs/i18n-to-core/` for the initiative and `v9-to-v10-migration-guide-i18n.md` for the consumer delta.
+**The translation layer is not in this repo any more.** `Streami18n`, the formatters, the date layer,
+`TranslationBuilder` and the catalog generator all live in **`@stream-io/i18n`** (in the `js-toolkit`
+repo), published as `@stream-io/i18n`, `@stream-io/i18n/react` and `@stream-io/i18n/codegen`. It was
+moved out because translation is not a Chat concern: hosting it here made it unreachable for Video,
+Feeds and Moderation without depending on Chat, and put `i18next` + `dayjs` (~2.3 MB installed) on
+every `stream-chat` consumer who never translates anything.
 
-**Three entry points, and the boundaries between them are enforced by the build.** `src/index.ts` must
-**never** `export * from './i18n'` — that is the one reflex to resist. `scripts/bundle.mts` asserts from
-esbuild's metafile that the root bundle cannot reach `src/i18n/`, `i18next` or `dayjs`, and that
-`src/i18n/` cannot reach the Node-only `codegen/`. Both leaks fail invisibly (everything works, the
-bundle is just bigger), which is why they are machine-checked. `dist/esm/index.mjs` is expected to stay
-byte-identical when only i18n changes.
+Do **not** reintroduce a `src/i18n/` here, and do not add `i18next` or `dayjs` back as dependencies.
 
-**The generator lives at `codegen/i18n/`, outside `src/`.** It is Node-only build tooling that reads the
-filesystem — the one thing the SDK's own source must never do — so it is not library source, even though
-it _is_ published (two other repos import `stream-chat/i18n/codegen` from their build scripts). Being
-outside the library tsconfig is what makes the boundary type-enforced: an import from `src/i18n/` fails
-at `tsc` before the metafile assertion ever runs, though the error is an oblique TS6059 "not under
-rootDir" rather than something self-explanatory.
+What core still owns, because each is Chat's to define:
 
-Three things are scoped to `src/` by default and had to be widened for it — check all three if you ever
-add another directory beside it, because each fails silently:
+- **`src/languageNames.ts`** — `LANGUAGE_NAMES` / `LanguageNameCatalog` / `languageNameDefaults`, the
+  display names of the languages the API can auto-translate into. Root-exported. The
+  `satisfies Record<TranslationLanguage, string>` gate works in both directions: a language added to
+  the generated union fails to compile until a name is supplied, and a name for a language the union
+  does not contain is rejected.
+- **`src/notifications/types.ts`** — `CORE_NOTIFICATION_TYPE` / `CoreNotificationType`. Emit through
+  the map, never a raw literal; a test enforces that and its reverse, so a dead identifier cannot
+  linger. UI SDKs map these identifiers to translation keys, which is what replaced matching on
+  English prose.
+- **`src/messageComposer/middleware/pollComposer/validation.ts`** — `POLL_COMPOSER_VALIDATION_CODE`.
+  These deliberately keep a `message` alongside the `code` so an integrator with no i18n layer still
+  gets readable text.
 
-- `tsconfig.codegen.json` emits its declarations to `dist/types/i18n-codegen/`, where `exports` and
-  `typesVersions` point. `rootDir` must stay `./codegen/i18n` or that path shifts.
-- `yarn types` runs **both** projects; `yarn build` runs both `tsc` invocations.
-- `eslint.config.mjs` rule blocks list `codegen/**/*.{js,ts}` alongside `src/**/*.{js,ts}`. Without it
-  the generator inherits no rules at all.
-
-- **`stream-chat/i18n`** — `Streami18n`, three formatters, `getDateString`, catalog-generic type helpers,
-  `TranslationBuilder`, generated `LANGUAGE_NAMES`.
-- **`stream-chat/i18n/codegen`** — the catalog generator. `typescript` is **injected** via config, never
-  imported, so core does not depend on the compiler.
-
-Things that will bite:
-
-- **Core ships no catalog.** Each UI SDK generates its own `keys.ts` from its `t()` call sites, so the
-  type helpers are generic over it (`StreamTFunctionFor<Catalog, Bundled>`). `Bundled` **must** default
-  to `never`; defaulting to `string` silently disables all key checking.
-- **`runtimeDefaults` is a constructor option**, not an import — the catalog belongs to the UI layer. It
-  is layered under _every_ language, which is what stops a partial dictionary from knocking out formatter
-  keys. That is guarantee G1 in `test/unit/i18n/Streami18nGuarantees.test.ts`, which is the acceptance
-  contract for this module: three behavioural guarantees, each written against a real bug.
-- **The layering itself lives in `TranslationStore`**, not in `Streami18n` — it needs neither i18next nor
-  dayjs, so it is tested directly (`test/unit/i18n/TranslationStore.test.ts`) rather than only through an
-  initialized instance. The store holds flat dictionaries; `Streami18n` adapts them to i18next's nested
-  `resources` shape, so nothing in the store has to know about namespaces.
-- **No module-scope side effects.** Every `Dayjs.extend` goes through `ensureDayjsPlugins()`. This is
-  what makes `sideEffects: false` accurate — do not reintroduce a top-level `extend` or locale import.
-- **`durationFormatter` must use the date library's `.duration()`**, not parse the value as a timestamp.
-  Parsing reads `600000` as ten minutes past the epoch and renders "57 years ago". This is why
-  `DateTimeParser` is the _module_, not a parse function.
-- **i18next post-processing is global.** A `TranslationTopic` is invoked for every key and must pass
-  through calls it does not recognize, or it silently rewrites unrelated copy.
-- **Vitest forces `TZ=UTC`** (`vite.config.ts`). Date assertions are timezone-sensitive; without it a
-  local run disagrees with CI by the host's offset.
-- Notification identity lives in `src/notifications/types.ts` (`CORE_NOTIFICATION_TYPE`). Emit through
-  the map, never a raw literal — a test enforces both that and the reverse (every declared identifier
-  must actually be emitted, so a dead one cannot linger).
+The consumer-facing delta is `v9-to-v10-migration-guide-i18n.md`; the initiative record is in
+`specs/i18n-to-core/`, which now also records this move.
 
 ## Conventions to preserve
 
@@ -221,21 +192,18 @@ Tests live in `test/unit/**/*.test.[jt]s` (mixed JS/TS — both are accepted). H
 
 - `test/unit/test-utils/` contains `getClient`, generators (`generateChannel`, `generateMessage`, `generateMember`, `generateUser`, `generateThreadResponse`, `generateMessageDraft`, …), and `mockChannelQueryResponse`. **`getClientWithUser` monkey-patches `connectUser` to set the user without opening a WS connection** — mirror this pattern in new tests rather than mocking axios end-to-end.
 - `MockOfflineDB` lives in `test/unit/offline-support/` for tests that need an `AbstractOfflineDB` implementation.
-- `yarn test-types` is a separate Node script (`test/typescript/index.js`) that calls real Stream endpoints and writes a `data.ts` file whose types are then checked by `tsc`. It needs `API_KEY` / `API_SECRET` (and multitenancy variants) in env — the CI workflow `type.yml` injects them from GitHub secrets. Skip locally unless you have credentials.
 
 ## Release & CI
 
 GitHub workflows in `.github/workflows/`:
 
-| Workflow             | Trigger             | What it runs                                                   |
-| -------------------- | ------------------- | -------------------------------------------------------------- |
-| `lint.yml`           | PR                  | `yarn lint`                                                    |
-| `unit.yml`           | PR                  | `yarn test-coverage`                                           |
-| `type.yml`           | PR                  | `yarn test-types` (needs live-API secrets)                     |
-| `size.yml`           | PR (excludes tests) | `preactjs/compressed-size-action` — reports bundle-size diff   |
-| `pr-check.yml`       | PR title change     | `commitlint` on the PR title                                   |
-| `scheduled_test.yml` | Cron                | Periodic regression                                            |
-| `release.yml`        | `workflow_dispatch` | `yarn semantic-release` (with `HUSKY=0`, OIDC, npm provenance) |
+| Workflow       | Trigger             | What it runs                                                   |
+| -------------- | ------------------- | -------------------------------------------------------------- |
+| `lint.yml`     | PR                  | `yarn lint`                                                    |
+| `unit.yml`     | PR                  | `yarn test-coverage`                                           |
+| `size.yml`     | PR (excludes tests) | `preactjs/compressed-size-action` — reports bundle-size diff   |
+| `pr-check.yml` | PR title change     | `commitlint` on the PR title                                   |
+| `release.yml`  | `workflow_dispatch` | `yarn semantic-release` (with `HUSKY=0`, OIDC, npm provenance) |
 
 Bundle-size CI **runs on every non-test PR** — be mindful that adding heavy dependencies will be visible in the PR check. CI installs use `yarn install --immutable` via `.github/actions/setup-node` (which caches `.yarn/cache` keyed on `yarn.lock`).
 
@@ -249,7 +217,7 @@ Release branches (`.releaserc.json`):
   `startsWith(github.ref_name, 'release')`, so a v10 change has to land on `release-v10` before it can
   reach npm. The `rc` name survives only as a legacy allowance in that gate.
 
-Unlike the React and React Native repos, the PR workflows here (`lint`, `unit`, `type`, `size`) carry
+Unlike the React and React Native repos, the PR workflows here (`lint`, `unit`, `size`) carry
 **no branch filter**, so a PR into `release-v10` is fully gated with no workflow change needed.
 
 ## Things to double-check before claiming done

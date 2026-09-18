@@ -15,8 +15,10 @@ import {
   channelHasReadEvents,
   formatMessage,
   generateChannelTempCid,
+  invokeEventListener,
   localMessageToNewMessagePayload,
   logChatPromiseExecution,
+  sanitizeOutgoingAttachments,
 } from './utils';
 import { msToNs, nowNs } from './utils/time';
 import { normalizeUploadFile } from './upload-utils';
@@ -71,8 +73,8 @@ import type {
   UserResponse,
 } from './types';
 import { AIStates } from './types';
-import type { StateStore } from './store';
-import type { Unsubscribe } from './store';
+import type { StateStore } from '@stream-io/state-store';
+import type { Unsubscribe } from '@stream-io/state-store';
 import type {
   ChannelMemberRequest as Gen_ChannelMemberRequest,
   ChannelPushPreferencesResponse as Gen_ChannelPushPreferencesResponse,
@@ -672,7 +674,14 @@ export class Channel extends ChannelApi {
   }
 
   _sendMessage(...args: Parameters<ChannelApi['sendMessage']>) {
-    return super.sendMessage(...args);
+    const [request, requestOptions] = args;
+
+    // Sanitized at the point of sending, which is the only place every path converges: the
+    // offline replay of a queued `send-message` task calls this method directly.
+    return super.sendMessage(
+      { ...request, message: sanitizeOutgoingAttachments(request.message) },
+      requestOptions,
+    );
   }
 
   /**
@@ -684,6 +693,8 @@ export class Channel extends ChannelApi {
    * @returns The server response.
    */
   override async sendMessage(...args: Parameters<ChannelApi['sendMessage']>) {
+    this._checkHasId();
+
     const [request] = args;
     const messageId = request.message?.id;
 
@@ -693,7 +704,7 @@ export class Channel extends ChannelApi {
       // Nothing to key a queue entry on without a message id, so it runs but is not queued.
       queue: !!messageId,
       task: {
-        channelId: this.id as string,
+        channelId: this.id,
         channelType: this.type,
         messageId,
         payload: args,
@@ -853,7 +864,6 @@ export class Channel extends ChannelApi {
     request: { event: Event },
     requestOptions?: StreamRequestOptions,
   ) {
-    this._checkInitialized();
     return await super.sendEvent(request, requestOptions);
   }
 
@@ -911,6 +921,8 @@ export class Channel extends ChannelApi {
    * @returns The server response.
    */
   async sendReaction(...args: Parameters<ChatApi['sendReaction']>) {
+    this._checkHasId();
+
     const [{ id: messageId }] = args;
 
     // The optimistic reaction row is written by the local-update layer (`applyReactionLocally`); here
@@ -919,7 +931,7 @@ export class Channel extends ChannelApi {
       channel: this,
       client: this.getClient(),
       task: {
-        channelId: this.id as string,
+        channelId: this.id,
         channelType: this.type,
         messageId,
         payload: args,
@@ -933,7 +945,8 @@ export class Channel extends ChannelApi {
   }
 
   async deleteReaction(...args: Parameters<ChatApi['deleteReaction']>) {
-    this._checkInitialized();
+    this._checkHasId();
+
     const [request] = args;
 
     // The optimistic reaction-row removal is handled by the local-update layer
@@ -942,7 +955,7 @@ export class Channel extends ChannelApi {
       channel: this,
       client: this.getClient(),
       task: {
-        channelId: this.id as string,
+        channelId: this.id,
         channelType: this.type,
         messageId: request.id,
         payload: args,
@@ -993,8 +1006,6 @@ export class Channel extends ChannelApi {
     requestOptions?: StreamRequestOptions,
   ) {
     const data = await this.updateChannelPartial(update, requestOptions);
-
-    if (!this.getClient()._cacheEnabled) return data;
 
     const channel = data.channel;
     const currentCapabilities = this.data?.own_capabilities ?? [];
@@ -1247,6 +1258,8 @@ export class Channel extends ChannelApi {
    * @returns The server response.
    */
   async mute(options?: Gen_MuteChannelRequest, requestOptions?: StreamRequestOptions) {
+    this._checkHasId();
+
     return await this.getClient().muteChannel(
       {
         channel_cids: [this.cid],
@@ -1273,6 +1286,8 @@ export class Channel extends ChannelApi {
     options?: Gen_UnmuteChannelRequest,
     requestOptions?: StreamRequestOptions,
   ) {
+    this._checkHasId();
+
     return await this.getClient().unmuteChannel(
       {
         channel_cids: [this.cid],
@@ -1345,7 +1360,7 @@ export class Channel extends ChannelApi {
    *   where the timestamps are unix nanoseconds as the API sends them.
    */
   muteStatus() {
-    this._checkInitialized();
+    this._checkHasId();
     return this.getClient()._muteStatus(this.cid);
   }
 
@@ -1375,7 +1390,6 @@ export class Channel extends ChannelApi {
     formData: Record<string, string>,
     requestOptions?: StreamRequestOptions,
   ) {
-    this._checkInitialized();
     return this.getClient().runMessageAction(
       {
         id: messageId,
@@ -1910,9 +1924,7 @@ export class Channel extends ChannelApi {
     }
 
     // FIXME: see #1265, adjust and count new messages even when the channel is muted
-    // Read mute state directly from the client to avoid _checkInitialized() — this method
-    // is invoked from _handleChannelEvent (e.g. message.new) before .watch() resolves.
-    if (this.getClient()._muteStatus(this.cid).muted) return false;
+    if (this.muteStatus().muted) return false;
 
     return true;
   }
@@ -2019,9 +2031,6 @@ export class Channel extends ChannelApi {
     // pagination/around pass their own cursors + limit.
     const requestedPageSize = options?.messages?.limit ?? this.messagePaginator.pageSize;
 
-    // Make sure we wait for the connect promise if there is a pending one
-    await this.getClient().wsPromise;
-
     const queryPayload: ChannelGetOrCreateRequest = {
       data: this._data,
       state: true,
@@ -2065,10 +2074,7 @@ export class Channel extends ChannelApi {
         delete this.getClient().activeChannels[tempChannelCid];
       }
 
-      if (
-        !(this.cid in this.getClient().activeChannels) &&
-        this.getClient()._cacheEnabled()
-      ) {
+      if (!(this.cid in this.getClient().activeChannels)) {
         this.getClient().activeChannels[this.cid] = this;
       }
     }
@@ -2174,7 +2180,8 @@ export class Channel extends ChannelApi {
    * @returns The server response.
    */
   async banUser(targetUserId: string, options: Omit<BanUserOptions, 'channel_cid'>) {
-    this._checkInitialized();
+    this._checkHasId();
+
     return await this.getClient().moderation.ban({
       ...options,
       target_user_id: targetUserId,
@@ -2192,7 +2199,6 @@ export class Channel extends ChannelApi {
    * @returns The server response.
    */
   override async hide(...args: Parameters<ChannelApi['hide']>) {
-    this._checkInitialized();
     return await super.hide(...args);
   }
 
@@ -2205,7 +2211,6 @@ export class Channel extends ChannelApi {
    * @returns The server response.
    */
   override async show(...args: Parameters<ChannelApi['show']>) {
-    this._checkInitialized();
     return await super.show(...args);
   }
 
@@ -2217,7 +2222,8 @@ export class Channel extends ChannelApi {
    * @returns The server response.
    */
   async unbanUser(targetUserId: string, options?: UnBanUserOptions) {
-    this._checkInitialized();
+    this._checkHasId();
+
     return await this.getClient().unbanUser(targetUserId, {
       ...options,
       type: this.type,
@@ -2250,13 +2256,15 @@ export class Channel extends ChannelApi {
    * call is queued so it is replayed on reconnect.
    */
   override async createDraft(...args: Parameters<ChannelApi['createDraft']>) {
+    this._checkHasId();
+
     const [request] = args;
 
     return await queueOrRun({
       channel: this,
       client: this.getClient(),
       task: {
-        channelId: this.id as string,
+        channelId: this.id,
         channelType: this.type,
         threadId: request.message?.parent_id,
         payload: args,
@@ -2274,13 +2282,15 @@ export class Channel extends ChannelApi {
    * call is queued so it is replayed on reconnect.
    */
   override async deleteDraft(...args: Parameters<ChannelApi['deleteDraft']>) {
+    this._checkHasId();
+
     const [request] = args;
 
     return await queueOrRun({
       channel: this,
       client: this.getClient(),
       task: {
-        channelId: this.id as string,
+        channelId: this.id,
         channelType: this.type,
         threadId: request?.parent_id,
         payload: args,
@@ -2488,8 +2498,12 @@ export class Channel extends ChannelApi {
         if (
           event.user?.id &&
           event.created_at != null &&
-          // the same event announces a thread read, which says nothing about the channel
-          !(event.type === 'notification.mark_read' && event.thread_id)
+          // A thread read says nothing about the channel, and is handled by the reactive
+          // `thread` object instead. `notification.mark_read` announces one with `thread_id`,
+          // `message.read` with the thread itself; reading the channel off either would reset
+          // its unread count.
+          !(event.type === 'notification.mark_read' && event.thread_id) &&
+          !('thread' in event && event.thread)
         ) {
           const eventUser = event.user;
           const readAt = event.created_at;
@@ -2968,14 +2982,36 @@ export class Channel extends ChannelApi {
   }
 
   _callChannelListeners = (event: WSEvent) => {
-    const allSet = this.listeners.get('all');
-    const targetSet = this.listeners.get(event.type);
+    // Snapshot before dispatching: `on` adds to these sets in place and `Set.forEach` visits
+    // entries appended mid-iteration, so a listener that subscribes while handling an event
+    // must not be invoked for it.
+    const listeners = [
+      ...(this.listeners.get('all') ?? []),
+      ...(this.listeners.get(event.type) ?? []),
+    ];
 
-    [allSet, targetSet].forEach((set) =>
-      set?.forEach((handleEvent) => handleEvent(event)),
-    );
+    for (const listener of listeners) {
+      invokeEventListener(listener, event, logger);
+    }
   };
 
+  /**
+   * Asserts that the channel has an id. Throws an error if not (happens when we init channel with members only and not id).
+   * Call this before calling any API method reading this.id or this.cid directly
+   *
+   * Note: only id is optional, cid is defined as string, so TS won't complain about a missing check there.
+   */
+  _checkHasId(): asserts this is this & { id: string } {
+    if (!this.id) {
+      throw new Error(
+        `Channel isn't yet created, call getOrCreateDistinctChannel() before this operation`,
+      );
+    }
+  }
+
+  /**
+   * Checks if channel has been queried/initialized. Call this when a method relies on data only available after channel is queried from API.
+   */
   _checkInitialized() {
     if (!this.initialized && !this.offlineMode) {
       throw Error(

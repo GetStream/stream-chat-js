@@ -11,7 +11,7 @@ import type {
 import { AIStates } from './types';
 import { formatMessage } from './utils';
 import { nowNs, nsToMs } from './utils/time';
-import { StateStore } from './store';
+import { StateStore } from '@stream-io/state-store';
 
 type ChannelReadStatus = Record<
   string,

@@ -1,3 +1,36 @@
+## [10.0.0-rc.11](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.10...v10.0.0-rc.11) (2026-09-16)
+
+### ⚠ BREAKING CHANGES
+
+* **SearchController:** remove InternalSearchControllerState (#1866)
+
+### Bug Fixes
+
+* offline db hydration race conditions ([#1865](https://github.com/GetStream/stream-chat-js/issues/1865)) ([a4587e1](https://github.com/GetStream/stream-chat-js/commit/a4587e10c9a51eb684881d1eb8ba2ce01a9e73d0))
+* pending task folding ([#1873](https://github.com/GetStream/stream-chat-js/issues/1873)) ([028f6e8](https://github.com/GetStream/stream-chat-js/commit/028f6e834345be7d6fcd95501dee4c450a2112e7))
+* respect predefined filters from db ([#1869](https://github.com/GetStream/stream-chat-js/issues/1869)) ([cbc7707](https://github.com/GetStream/stream-chat-js/commit/cbc77072170329deb4f9ce22314db6a8743d9b75))
+
+### Features
+
+* **MessageComposer:** reference the composer on upload notifications ([#1871](https://github.com/GetStream/stream-chat-js/issues/1871)) ([d520fc1](https://github.com/GetStream/stream-chat-js/commit/d520fc1e14849bddb00703d10262f0b3ac22a0a0))
+* **NotificationManager:** add ensureTimeout for callers that cannot know if notification was already triggered ([#1872](https://github.com/GetStream/stream-chat-js/issues/1872)) ([e5d06aa](https://github.com/GetStream/stream-chat-js/commit/e5d06aa598b34d18f9714025d71849418742c1ab))
+
+### Refactors
+
+* **SearchController:** remove InternalSearchControllerState ([#1866](https://github.com/GetStream/stream-chat-js/issues/1866)) ([fc64f7f](https://github.com/GetStream/stream-chat-js/commit/fc64f7fba9f0956840decfe69f3588bbb58d1eda))
+
+## [10.0.0-rc.10](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.9...v10.0.0-rc.10) (2026-09-11)
+
+### Bug Fixes
+
+* **paginator:** correct windows filled by hydration rather than by a query ([#1860](https://github.com/GetStream/stream-chat-js/issues/1860)) ([93b6fa0](https://github.com/GetStream/stream-chat-js/commit/93b6fa0d8148b1acff234c857a5a84268cfbfd4e))
+* **paginator:** do not issue the first-page query twice ([#1858](https://github.com/GetStream/stream-chat-js/issues/1858)) ([6462cef](https://github.com/GetStream/stream-chat-js/commit/6462cefea294d53a282a66bd08142345fa5279b3))
+* send the read request regardless of read receipt privacy settings in v10 ([#1855](https://github.com/GetStream/stream-chat-js/issues/1855)) ([3b24387](https://github.com/GetStream/stream-chat-js/commit/3b2438711e92d9861814b815f91e6bcfd3fdade2))
+
+### Refactors
+
+* **i18n:** move the translation runtime to @stream-io/i18n ([#1861](https://github.com/GetStream/stream-chat-js/issues/1861)) ([45f45bd](https://github.com/GetStream/stream-chat-js/commit/45f45bd579df7391eb9cbec14deccd695c204cd6))
+
 ## [10.0.0-rc.9](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.8...v10.0.0-rc.9) (2026-09-03)
 
 ### ⚠ BREAKING CHANGES
@@ -172,6 +205,34 @@ docs/breaking-changes-v14-v15.md for the full migration guide.
 * add message/channel paginator stack with thread minimal-init and state stores ([#1795](https://github.com/GetStream/stream-chat-js/issues/1795)) ([62f0507](https://github.com/GetStream/stream-chat-js/commit/62f050786dc153b89920d59aacecaf5f051fbaed))
 * integrate OpenAPI generated clients ([#1760](https://github.com/GetStream/stream-chat-js/issues/1760)) ([0776bc4](https://github.com/GetStream/stream-chat-js/commit/0776bc460598a91afb91d4d04d3281a562073f13))
 * v10 ([cd3141e](https://github.com/GetStream/stream-chat-js/commit/cd3141efe47b49cf83d3d58725bb8ed3b4f88f08))
+
+## [9.53.0](https://github.com/GetStream/stream-chat-js/compare/v9.52.1...v9.53.0) (2026-09-15)
+
+### Bug Fixes
+
+* add missing app config fields to AppSettingsAPIResponse ([#1854](https://github.com/GetStream/stream-chat-js/issues/1854)) ([18bc3cf](https://github.com/GetStream/stream-chat-js/commit/18bc3cf7acbabdfd957f1e092821f68b81ea456e))
+* hanging wsPromise after closeConnection ([#1868](https://github.com/GetStream/stream-chat-js/issues/1868)) ([b4e7a89](https://github.com/GetStream/stream-chat-js/commit/b4e7a89459ae38ed025b1ae7ffe91f061cf22ecd)), closes [#1122](https://github.com/GetStream/stream-chat-js/issues/1122) [#1863](https://github.com/GetStream/stream-chat-js/issues/1863)
+
+### Features
+
+* **client:** support custom_set and custom_unset in batch channel update ([#1856](https://github.com/GetStream/stream-chat-js/issues/1856)) ([d05c2f5](https://github.com/GetStream/stream-chat-js/commit/d05c2f56d1264a884584657683e65eea8b1a5cc1))
+
+## [9.52.1](https://github.com/GetStream/stream-chat-js/compare/v9.52.0...v9.52.1) (2026-09-07)
+
+### Bug Fixes
+
+* isolate event listener errors from the dispatch loop ([#1850](https://github.com/GetStream/stream-chat-js/issues/1850)) ([dc56e57](https://github.com/GetStream/stream-chat-js/commit/dc56e57e5610b9fc02094080554964967707b3a8))
+* send the read request regardless of read receipt privacy settings ([#1853](https://github.com/GetStream/stream-chat-js/issues/1853)) ([59d8f31](https://github.com/GetStream/stream-chat-js/commit/59d8f3138c386a518dfefbda6bd66aebc1237c35))
+
+## [9.52.0](https://github.com/GetStream/stream-chat-js/compare/v9.51.0...v9.52.0) (2026-08-28)
+
+### Bug Fixes
+
+* do not reset channel unread count on thread read ([#1835](https://github.com/GetStream/stream-chat-js/issues/1835)) ([79fbf54](https://github.com/GetStream/stream-chat-js/commit/79fbf54c56cad9979c9fe44f8ca299c6d53d39d7))
+
+### Features
+
+* **MessageComposer:** add composition middleware for pending attachment uploads ([#1845](https://github.com/GetStream/stream-chat-js/issues/1845)) ([68e5d69](https://github.com/GetStream/stream-chat-js/commit/68e5d69336a400434db76a34b46fc0efcd781e85))
 
 ## [9.51.0](https://github.com/GetStream/stream-chat-js/compare/v9.50.3...v9.51.0) (2026-08-14)
 

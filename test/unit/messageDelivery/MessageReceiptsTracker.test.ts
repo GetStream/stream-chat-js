@@ -5,7 +5,7 @@ import {
   ReadStateResponse,
   UserResponse,
 } from '../../../src';
-import { StateStore } from '../../../src/store';
+import { StateStore } from '@stream-io/state-store';
 import type { Channel } from '../../../src/channel';
 
 const ownUserId = 'author';

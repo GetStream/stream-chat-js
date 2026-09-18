@@ -389,6 +389,24 @@ describe('MessageDeliveryReporter', () => {
     expect(result).toBe(response);
   });
 
+  it('sends the thread read request when the user disabled read receipts', async () => {
+    (client as any).user.privacy_settings = { read_receipts: { enabled: false } };
+    const response = { event: {} } as any;
+    const markReadSpy = vi.spyOn(channel, 'markRead').mockResolvedValue(response);
+    const thread = new Thread({
+      client,
+      threadData: generateThreadResponse(
+        { type: channelType, id: channelId, cid: channel.cid },
+        mkMsg('parent', 1000),
+      ),
+    });
+
+    const result = await client.messageDeliveryReporter.markRead(thread);
+
+    expect(markReadSpy).toHaveBeenCalledWith({ thread_id: thread.id });
+    expect(result).toBe(response);
+  });
+
   it('removes the pending delivery candidate upon channel.markReadViaReporter', async () => {
     const markDeliveredSpy = vi
       .spyOn(client, 'markDelivered')

@@ -100,6 +100,29 @@ The per-parent slice wins field by field, so a slice naming only `pageSize` leav
 `stateThrottleMs` in place. `channel.pinnedMessagesPaginator` is deliberately **not** covered by the
 shared key: it has a single parent, and it is a different class with its own ordering and endpoint.
 
+#### Bounding the loaded window
+
+`maxLoadedItems` is the other field that genuinely differs per parent. It caps how many messages a
+list keeps loaded: past the cap, the oldest are dropped as new ones arrive, and scrolling back simply
+re-fetches them. Unset — the default — means unbounded, which is what you want for an ordinary
+conversation. A busy livestream is the case it exists for:
+
+```ts
+client.config.set({
+  channel: { messagePaginator: { maxLoadedItems: 200 } },
+  thread: { messagePaginator: { maxLoadedItems: 100 } },
+});
+```
+
+Three things worth knowing:
+
+- A value below that list's `pageSize` is raised to it. A cap smaller than a page would prune away the
+  page a "load older" query had just fetched, and the list would ask for it again.
+- Messages the server has not acknowledged — an unsent or failed send — are never dropped, so the
+  window can sit slightly above the cap while one is pending.
+- Only message lists act on it. It is accepted on any paginator path for type reasons, but a paginator
+  that cannot re-fetch what it dropped ignores it.
+
 `set` deep-merges, so a later call only touches what it names:
 
 ```ts
@@ -580,6 +603,7 @@ configurable — use a setup function.
       initialCursor: undefined,       // ⚑ construction-only
       initialOffset: undefined,       // ⚑ construction-only
       lockItemOrder: false,
+      maxLoadedItems: undefined,      // unbounded; see "Bounding the loaded window" below
       pageSize: 100,                  // channel message list default
       retryCount: 0,                  // i.e. one attempt
       stateThrottleMs: 500,           // ⟳ rebuild — raised from the base's `undefined`

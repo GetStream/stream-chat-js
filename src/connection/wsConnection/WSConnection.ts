@@ -1,4 +1,4 @@
-import { StateStore } from '../../store';
+import { StateStore } from '@stream-io/state-store';
 import { WithSubscriptions } from '../../utils/WithSubscriptions';
 import { StableWSConnection } from '../../connection';
 import { ConfigController } from '../../configuration/ConfigController';
@@ -11,7 +11,7 @@ import {
 import type { WSConnectionConfig, WSConnectionState } from './types';
 import type { StreamChat } from '../../client';
 import type { ConnectAPIResponse } from '../../types';
-import type { Unsubscribe } from '../../store';
+import type { Unsubscribe } from '@stream-io/state-store';
 
 const logger = chatLoggerSystem.getLogger('client');
 

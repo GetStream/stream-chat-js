@@ -52,14 +52,6 @@ export type RequireAtLeastOne<T> = {
   [K in keyof T]-?: Required<Pick<T, K>> & Partial<Omit<T, K>>;
 }[keyof T];
 
-export type Unpacked<T> = T extends (infer U)[]
-  ? U
-  : T extends (...args: any[]) => infer U
-    ? U
-    : T extends Promise<infer U>
-      ? U
-      : T;
-
 /**
  * Response Types
  */
@@ -157,16 +149,6 @@ export type StreamChatOptions = {
   baseURL?: string;
   browser?: boolean;
   /**
-   * Disables the hydration of all caches within the JS Client. This includes this.activeChannels,
-   * this.polls.pollCache and this.config.
-   * It is mainly meant to be used for integrations where stream-chat is used as a server-side service
-   * interacting with Stream's REST API, not depending on any state and purely serving as a wrapper
-   * around HTTP requests. Using this property on either the client side or a backend implementation
-   * that also relies on WS events will break these functionalities, so please use carefully.
-   */
-  disableCache?: boolean;
-  enableInsights?: boolean;
-  /**
    * When true, maintains a client-local unread count on channels that have read events disabled
    * (e.g. livestreams). The count increments on incoming messages and is reset via
    * `channel.markReadLocally()`. It is never sent to the backend, but is persisted to the offline DB.
@@ -194,7 +176,6 @@ export type StreamChatOptions = {
    * persist even if connectUser call fails.
    */
   persistUserOnConnectionFailure?: boolean;
-  warmUp?: boolean;
 };
 
 export type UnBanUserOptions = {
@@ -293,25 +274,6 @@ export type QueryPollsFilters = NonNullable<QueryPollsRequest['filter']>;
 export type QueryVotesFilters = NonNullable<QueryPollVotesRequest['filter']>;
 
 export type MessageFilters = NonNullable<SearchPayload['message_filter_conditions']>;
-
-export type PrimitiveFilter<ObjectType> = ObjectType | null;
-
-export type QueryFilter<ObjectType = string> =
-  NonNullable<ObjectType> extends string | number | boolean | Date
-    ? {
-        $eq?: PrimitiveFilter<ObjectType>;
-        $exists?: boolean;
-        $gt?: PrimitiveFilter<ObjectType>;
-        $gte?: PrimitiveFilter<ObjectType>;
-        $in?: PrimitiveFilter<ObjectType>[];
-        $lt?: PrimitiveFilter<ObjectType>;
-        $lte?: PrimitiveFilter<ObjectType>;
-      }
-    : {
-        $eq?: PrimitiveFilter<ObjectType>;
-        $exists?: boolean;
-        $in?: PrimitiveFilter<Unpacked<ObjectType>>[];
-      };
 
 export type UserFilters = QueryUsersPayload['filter_conditions'];
 

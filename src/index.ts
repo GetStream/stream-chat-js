@@ -49,7 +49,6 @@ export type {
 } from './configuration/shape';
 export * from './connection';
 export { type CooldownTimerState } from './CooldownTimer';
-export * from './insights';
 export * from './logger';
 export * from './messageComposer';
 export * from './messageDelivery';
@@ -68,7 +67,7 @@ export * from './poll_manager';
 export * from './reminders';
 export * from './search';
 export * from './signing';
-export * from './store';
+export * from './languageNames';
 export { Thread } from './thread';
 export type {
   CustomThreadMarkReadRequestFn,
@@ -117,5 +116,17 @@ export {
   nsToMs,
   nsToRfc3339,
 } from './utils/time';
+/**
+ * Tag-keyed async runners. Exported so the UI SDKs (and integrators) serialize their own
+ * actions with the same primitive the SDK uses internally instead of hand-rolling promise
+ * chains. Tags share one process-wide map, so namespace yours (`my-app/thing/${id}`) to avoid
+ * colliding with another caller's.
+ */
+export {
+  hasPending,
+  settled,
+  withCancellation,
+  withoutConcurrency,
+} from './utils/concurrency';
 export * from './ChannelManager';
 export * from './EventHandlerPipeline';

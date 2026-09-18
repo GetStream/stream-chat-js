@@ -4,7 +4,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    // Date/time formatting assertions (src/i18n) are timezone-sensitive. Without this they pass only
+    // Date/time assertions are timezone-sensitive. Without this they pass only
     // on a machine that happens to be in UTC, which is what CI is -- so a local run would disagree
     // with CI by exactly the host's offset.
     env: { TZ: 'UTC' },

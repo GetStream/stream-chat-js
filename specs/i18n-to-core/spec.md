@@ -1,7 +1,14 @@
 # i18n to core — one translation runtime for both UI SDKs
 
-Status: **core landed** (2026-08). Scope: `stream-chat-js` (this initiative), then
-`stream-chat-react` and `stream-chat-react-native` adopt.
+Status: **superseded** (2026-09). The shared runtime described below shipped into `stream-chat`
+behind a `stream-chat/i18n` subpath, then moved again — out of Chat entirely — into
+**`@stream-io/i18n`** (`js-toolkit`), because translation is not a Chat concern. The subpath was
+never published, so nothing was deprecated. The motivation, the invariants and the three behavioural
+guarantees below all still hold; only the package boundary changed. See `decisions.md`
+("Superseded") for what moved, what stayed in `stream-chat`, and why.
+
+Scope: `stream-chat-js` (this initiative), then `stream-chat-react` and `stream-chat-react-native`
+adopt — now against `@stream-io/i18n`.
 
 ## Why
 

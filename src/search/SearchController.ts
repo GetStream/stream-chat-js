@@ -1,6 +1,5 @@
-import { StateStore } from '../store';
-import type { Unsubscribe } from '../store';
-import type { MessageResponse } from '../types';
+import { StateStore } from '@stream-io/state-store';
+import type { Unsubscribe } from '@stream-io/state-store';
 import type { StreamChat } from '../client';
 import type { SearchSource } from './BaseSearchSource';
 import { ConfigController } from '../configuration/ConfigController';
@@ -11,12 +10,6 @@ export type SearchControllerState = {
   isActive: boolean;
   searchQuery: string;
   sources: SearchSource[];
-};
-
-export type InternalSearchControllerState = {
-  // FIXME: focusedMessage should live in a MessageListController class that does not exist yet.
-  //  This state prop should be then removed
-  focusedMessage?: MessageResponse;
 };
 
 export type SearchControllerConfig = {
@@ -43,11 +36,6 @@ export const DEFAULT_SEARCH_CONTROLLER_CONFIG: SearchControllerConfig = deepFree
 });
 
 export class SearchController {
-  /**
-   * Not intended for direct use by integrators, might be removed without notice resulting in
-   * broken integrations.
-   */
-  _internalState: StateStore<InternalSearchControllerState>;
   state: StateStore<SearchControllerState>;
 
   /** The shared configuration machinery — see {@link ConfigController}. */
@@ -69,7 +57,6 @@ export class SearchController {
       searchQuery: '',
       sources: sources ?? [],
     });
-    this._internalState = new StateStore<InternalSearchControllerState>({});
     this.configController = new ConfigController<SearchControllerConfig>({
       defaults: DEFAULT_SEARCH_CONTROLLER_CONFIG,
       constructorOptions: config,

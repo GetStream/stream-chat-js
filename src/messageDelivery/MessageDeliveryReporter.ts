@@ -1,6 +1,6 @@
 import type { StreamChat } from '../client';
 import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
-import type { StateStore } from '../store';
+import type { StateStore } from '@stream-io/state-store';
 import { ConfigController } from '../configuration/ConfigController';
 import { Channel } from '../channel';
 import type { ThreadUserReadState } from '../thread';
@@ -419,7 +419,10 @@ export class MessageDeliveryReporter {
         : await channel.markRead(requestOptions);
     }
 
-    this.removeCandidateFor(collection);
+    // A read implies delivery, so the candidate is only dropped once the request actually went
+    // out. A `markReadRequest` handler that declines returns nothing, and those candidates must
+    // survive for the next delivery report.
+    if (result) this.removeCandidateFor(collection);
     return result;
   };
 

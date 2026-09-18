@@ -11,7 +11,7 @@ import type {
   InstanceSetupTearDownFunction,
 } from '../types';
 import type { DeepPartial } from '../../types.utility';
-import type { Unsubscribe } from '../../store';
+import type { Unsubscribe } from '@stream-io/state-store';
 
 const logger = chatLoggerSystem.getLogger('instance-configuration');
 

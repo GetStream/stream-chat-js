@@ -1,5 +1,5 @@
 import type { ReadStateResponse, UserResponse } from '../types';
-import { StateStore } from '../store';
+import { StateStore } from '@stream-io/state-store';
 import type { Channel } from '../channel';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 

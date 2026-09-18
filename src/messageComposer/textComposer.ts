@@ -1,5 +1,5 @@
 import { TextComposerMiddlewareExecutor } from './middleware';
-import { StateStore } from '../store';
+import { StateStore } from '@stream-io/state-store';
 import { logChatPromiseExecution } from '../utils';
 import type { TextComposerMiddlewareExecutorState } from './middleware';
 import type { TextComposerSuggestion } from './middleware/textComposer/types';

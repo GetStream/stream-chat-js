@@ -4,13 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ClientState } from '../../src/client_state';
 import { FixedSizeQueueCache } from '../../src/utils/FixedSizeQueueCache';
-import { InsightMetrics } from '../../src/insights';
 import { MessageDeliveryReporter } from '../../src/messageDelivery';
 import { Moderation } from '../../src/moderation';
 import { NotificationManager } from '../../src/notifications';
 import { PollManager } from '../../src/poll_manager';
 import { ReminderManager } from '../../src/reminders';
-import { StateStore } from '../../src/store';
+import { StateStore } from '@stream-io/state-store';
 import { StreamChat } from '../../src/client';
 import { ThreadManager } from '../../src/thread_manager';
 import { TokenManager } from '../../src/token_manager';
@@ -62,8 +61,7 @@ describe('StreamChat construction', () => {
 
     it('treats an omitted options argument as an empty options object', () => {
       const client = new StreamChat(API_KEY);
-      expect(client.options.warmUp).to.equal(false);
-      expect(client.options.disableCache).to.equal(false);
+      expect(client.options.isLocalUnreadCountEnabled).to.equal(false);
     });
   });
 
@@ -119,8 +117,7 @@ describe('StreamChat construction', () => {
     it('applies defaults when no options are passed', () => {
       const client = new StreamChat(API_KEY);
 
-      expect(client.options.warmUp).to.equal(false);
-      expect(client.options.disableCache).to.equal(false);
+      expect(client.options.isLocalUnreadCountEnabled).to.equal(false);
       // No longer an empty `URLSearchParams` on `options` — the field moved to
       // `wsConnection.config.urlParams` and defaults to `undefined`. `_buildUrl` does
       // `new URLSearchParams(urlParams)`, which treats `undefined` and an empty instance
@@ -133,13 +130,11 @@ describe('StreamChat construction', () => {
 
     it('honors user-provided overrides', () => {
       const client = new StreamChat(API_KEY, {
-        warmUp: true,
-        disableCache: true,
+        isLocalUnreadCountEnabled: true,
         config: { client: { connectionRecovery: { enabled: false } } },
       });
 
-      expect(client.options.warmUp).to.equal(true);
-      expect(client.options.disableCache).to.equal(true);
+      expect(client.options.isLocalUnreadCountEnabled).to.equal(true);
       // Seeded from `options.config` before the managers are wired, so it applies from construction.
       expect(client.connectionRecovery.config.enabled).to.equal(false);
     });
@@ -336,7 +331,6 @@ describe('StreamChat construction', () => {
       expect(client.reminders).to.be.instanceOf(ReminderManager);
       expect(client.messageDeliveryReporter).to.be.instanceOf(MessageDeliveryReporter);
       expect(client.messageComposerCache).to.be.instanceOf(FixedSizeQueueCache);
-      expect(client.insightMetrics).to.be.instanceOf(InsightMetrics);
     });
 
     it('reuses an externally supplied NotificationManager instead of wrapping it', () => {
@@ -345,9 +339,11 @@ describe('StreamChat construction', () => {
       expect(client.notifications).to.equal(notifications);
     });
 
-    it('constructs the TokenManager with no preloaded secret', () => {
+    it('constructs the TokenManager with no token', () => {
       const client = new StreamChat(API_KEY);
-      expect(client.tokenManager.secret).to.be.undefined;
+      expect(client.tokenManager.token).to.be.undefined;
+      expect(client.tokenManager.tokenProvider).to.be.undefined;
+      expect(client.tokenManager.isStatic()).to.be.true;
     });
 
     it('caps the message composer cache at 64 entries', () => {
@@ -374,7 +370,6 @@ describe('StreamChat construction', () => {
       expect(a.uploadManager).to.not.equal(b.uploadManager);
       expect(a.messageDeliveryReporter).to.not.equal(b.messageDeliveryReporter);
       expect(a.messageComposerCache).to.not.equal(b.messageComposerCache);
-      expect(a.insightMetrics).to.not.equal(b.insightMetrics);
       expect(a.notifications).to.not.equal(b.notifications);
       expect(a.state).to.not.equal(b.state);
     });

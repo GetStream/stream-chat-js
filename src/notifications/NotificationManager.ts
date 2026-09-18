@@ -1,4 +1,4 @@
-import { StateStore } from '../store';
+import { StateStore } from '@stream-io/state-store';
 import { isEqual } from '../utils/mergeWith/mergeWithCore';
 import { generateUUIDv4 } from '../utils';
 import type {
@@ -166,6 +166,21 @@ export class NotificationManager {
     }, duration);
 
     this.timeouts.set(id, timeout);
+  }
+
+  /**
+   * Starts the notification's auto-dismiss countdown unless one is already running.
+   *
+   * The counterpart to {@link startTimeout}, which always restarts. Use this wherever the caller
+   * cannot know whether the countdown has been started already -- a UI component that remounts and
+   * has lost the record, or a second view displaying the same notification. Restarting there is
+   * invisible and open-ended: each call hands the notification another full lifetime, so it can
+   * outlive its duration indefinitely while looking like it is counting down.
+   */
+  ensureTimeout(id: string, durationOverride?: number): void {
+    if (this.timeouts.has(id)) return;
+
+    this.startTimeout(id, durationOverride);
   }
 
   remove(id: string): void {

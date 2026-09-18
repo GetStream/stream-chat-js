@@ -1,7 +1,7 @@
 import { Reminder } from './Reminder';
 import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
 import { DEFAULT_STOP_REFRESH_BOUNDARY_MS } from './ReminderTimer';
-import { StateStore } from '../store';
+import { StateStore } from '@stream-io/state-store';
 import { ConfigController } from '../configuration/ConfigController';
 import { ReminderPaginator } from '../pagination';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
@@ -148,9 +148,6 @@ export class ReminderManager extends WithSubscriptions {
     data: ReminderResponseBaseOrResponse;
     overwrite?: boolean;
   }) => {
-    if (!this.client._cacheEnabled()) {
-      return;
-    }
     const cachedReminder = this.getFromState(data.message_id);
     if (!cachedReminder) {
       const reminder = new Reminder({

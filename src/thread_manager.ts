@@ -1,6 +1,6 @@
 import { chatLoggerSystem } from './logger';
 import { deepFreezeConfig } from './configuration/utils/deepFreezeConfig';
-import { StateStore } from './store';
+import { StateStore } from '@stream-io/state-store';
 import { ConfigController } from './configuration/ConfigController';
 import { throttle } from './utils';
 

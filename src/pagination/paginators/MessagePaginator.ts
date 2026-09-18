@@ -13,7 +13,7 @@ import {
 } from './MessageIntervalPaginator';
 import type { LocalMessage } from '../../types';
 import { nsToDate } from '../../utils/time';
-import { StateStore } from '../../store';
+import { StateStore } from '@stream-io/state-store';
 
 export type {
   JumpToMessageOptions,

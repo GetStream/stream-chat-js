@@ -1,4 +1,4 @@
-import type { Unsubscribe } from '../store';
+import type { Unsubscribe } from '@stream-io/state-store';
 
 /**
  * A batch of entity-store changes delivered to a subscriber in a single notification.

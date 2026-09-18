@@ -3,8 +3,8 @@ import { WithSubscriptions } from './utils/WithSubscriptions';
 import type { EventType } from './types';
 import type { ChannelPaginator } from './pagination';
 import type { StreamChat } from './client';
-import type { Unsubscribe } from './store';
-import { StateStore } from './store';
+import type { Unsubscribe } from '@stream-io/state-store';
+import { StateStore } from '@stream-io/state-store';
 import type {
   EventHandlerPipelineHandler,
   FindEventHandlerParams,

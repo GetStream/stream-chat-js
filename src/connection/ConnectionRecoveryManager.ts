@@ -6,7 +6,7 @@ import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
 import type { StreamChat } from '../client';
 import type { Channel } from '../channel';
 import type { Thread } from '../thread';
-import type { StateStore, Unsubscribe } from '../store';
+import type { StateStore, Unsubscribe } from '@stream-io/state-store';
 
 const logger = chatLoggerSystem.getLogger('client');
 
@@ -64,13 +64,13 @@ export const DEFAULT_CONNECTION_RECOVERY_MANAGER_CONFIG: ConnectionRecoveryManag
  *
  * The edge is what guarantees `executePendingTasks()` → `sync()` → query ordering, on every reconnect
  * path: `OfflineDBSyncManager` calls `invokeSyncStatusListeners(true)` **unconditionally** after
- * `syncAndExecutePendingTasks()` on each online transition — it does not require `syncStatus` to have
+ * `syncAndExecutePendingTasks()` on each online transition — it does not require `isSynced` to have
  * been `false` first. That matters because the sync edge, unlike anything derived from a single
  * transition, is guaranteed to land after the replay and the sync rather than alongside them.
  *
  * Recovery deliberately keeps no "did we drop?" flag of its own: `ChannelWatchStatus.WasWatching`
  * already records exactly that, written from both truthful hooks
- * (`StableWSConnection._setOnline(false)` and `closeConnection()`).
+ * (`StableWSConnection._setHealth(false)` and `closeConnection()`).
  */
 export class ConnectionRecoveryManager extends WithSubscriptions {
   client: StreamChat;

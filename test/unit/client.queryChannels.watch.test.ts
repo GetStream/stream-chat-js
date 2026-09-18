@@ -22,7 +22,7 @@ describe('client.queryChannels and the WebSocket', () => {
   };
 
   /** A socket that was closed deliberately, so nothing is coming. */
-  const socketClosed = () => {
+  const noSocketInFlight = () => {
     const socket = new StableWSConnection({ wsConnection: client.wsConnection });
     socket.isDisconnected = true;
     client.wsConnection.connection = socket;
@@ -140,11 +140,12 @@ describe('client.queryChannels and the WebSocket', () => {
     ).rejects.toThrow('gone');
   });
 
-  it('rejects at once after closeConnection rather than waiting for a reconnect', async () => {
-    socketClosed();
+  it('rejects at once when no socket is being opened rather than waiting forever', async () => {
+    noSocketInFlight();
 
-    // Not a wait: there is no socket and none is being opened, so the error says what to do about
-    // it rather than leaving the caller to guess why nothing happened.
+    // Not a wait: nothing is armed, so the error says what to do about it rather than leaving the
+    // caller to guess why nothing happened. `closeConnection()` is not this state - it arms a fresh
+    // deferred for the reopen, so a request issued across it waits instead.
     await expect(client.queryChannels({})).rejects.toThrow(
       /No connection id is available/,
     );
@@ -206,7 +207,7 @@ describe('client.queryChannels and the WebSocket', () => {
       const channel = client.channel('messaging', 'failed-watch');
       channel.initialized = true;
       channel.activate();
-      socketClosed();
+      noSocketInFlight();
 
       await expect(channel.watch()).rejects.toThrow(/No connection id is available/);
       expect(channel.watchStatus).toBe(ChannelWatchStatus.NotWatching);

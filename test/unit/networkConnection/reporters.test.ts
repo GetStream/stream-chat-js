@@ -4,7 +4,7 @@ import {
   createWSConnectionNetworkStatusReporter,
   getDefaultNetworkStatusReporter,
 } from '../../../src/connection';
-import { StateStore } from '../../../src/store';
+import { StateStore } from '@stream-io/state-store';
 import type { WSConnection, WSConnectionState } from '../../../src/connection';
 
 type Listener = () => void;

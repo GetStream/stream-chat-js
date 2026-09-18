@@ -1,5 +1,5 @@
 import { WithSubscriptions } from '../../utils/WithSubscriptions';
-import { StateStore } from '../../store';
+import { StateStore } from '@stream-io/state-store';
 import { ConfigController } from '../../configuration/ConfigController';
 import { deepFreezeConfig } from '../../configuration/utils/deepFreezeConfig';
 import { chatLoggerSystem } from '../../logger';
@@ -10,7 +10,7 @@ import type {
   NetworkStatusReporter,
 } from './types';
 import type { StreamChat } from '../../client';
-import type { Unsubscribe } from '../../store';
+import type { Unsubscribe } from '@stream-io/state-store';
 
 const logger = chatLoggerSystem.getLogger('client');
 

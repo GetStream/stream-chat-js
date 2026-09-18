@@ -1,88 +1,31 @@
 # Logging
 
-You can use our logger functionality for the purpose of debugging.
+Logging is configured through `chatLoggerSystem`, a process-wide singleton exported from the
+package root. There is **no** `logger` client option — `new StreamChat(key, { logger: fn })` was a
+v9 API and no longer exists.
 
-## Non-server client
+Configure it before constructing the client:
 
-```js
-const client = StreamChat.getInstance('api_key', {
-  logger: (logLevel, message, extraData) => {
-    console.log(message); // or any logging tool that you are using e.g. reactotron
+```ts
+import { chatLoggerSystem, LogLevelEnum } from 'stream-chat';
+
+chatLoggerSystem.configureLoggers({
+  level: 'info',
+  sink: (logLevel, message, ...data) => {
+    console.log(message, ...data); // or any logging tool you use, e.g. reactotron
   },
 });
 ```
 
-## Server side client
+Levels are `'trace' | 'debug' | 'info' | 'warn' | 'error'`, defaulting to `'info'`. The default sink
+writes to the matching `console` method.
 
-```js
-const client = StreamChat.getInstance(
-  'api_key',
-  'secret'
-  {
-    logger: (logLevel, message, extraData) => {
-      console.log(message);
-    }
-  }
-)
-```
+Each internal module logs under a scope, so levels and sinks can be set per scope — `api-client`,
+`channel`, `channel-manager`, `client`, `connection`, `instance-configuration`, `message-composer`,
+`offline-db`, `state-store`, `text-composer`, `thread`, `thread-manager`, `token-manager`,
+`upload-manager`, `utils`. Messages also carry tags added via `withExtraTags(...)`, which name the
+method that emitted them.
 
-extraData contains tags array attached to log message. Tags can have one/many of following values:
-
-1. api
-2. api_request
-3. api_response
-4. client
-5. channel
-6. connection
-7. event
-
-It may also contains some extra data, some examples have been mentioned below:
-
-1.
-
-```
-{
-  "tags": ["api", "api_request", "client"],
-  "url": "https://chat.stream-io-api.com/channels",
-  "payload": { /** payload */ },
-  "config": { /** conig object */ }
-}
-```
-
-2.
-
-```
-{
-  "tags": ["api", "api_response", "client"],
-  "url": "https://chat.stream-io-api.com/channels",
-  "response": { /** object */ }
-}
-```
-
-3.
-
-```
-{
-  "tags": ["api", "api_response", "client"],
-  "url": "https://chat.stream-io-api.com/channels",
-  "error": { /** error object */ }
-}
-```
-
-4.
-
-```
-{
-  "tags": ["event", "client"],
-  "event": { /** event object */ }
-}
-```
-
-5.
-
-```
-{
-  "tags": ["channel"],
-  "channel": { /** channel object */ }
-}
-```
+For the full surface — per-scope configuration, the `Sink` / `LogLevel` / `ConfigureLoggersOptions`
+types, and the mapping from every v9 logging API to its v10 replacement — see
+[`v9-to-v10-migration-guide-logging.md`](../v9-to-v10-migration-guide-logging.md).

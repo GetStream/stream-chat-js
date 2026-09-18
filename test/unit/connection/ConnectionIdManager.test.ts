@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+
 import { ConnectionIdManager } from '../../../src/connection';
 
 describe('ConnectionIdManager', () => {
@@ -8,78 +9,236 @@ describe('ConnectionIdManager', () => {
     manager = new ConnectionIdManager();
   });
 
-  it('throws when no socket is open and none is being opened', () => {
-    // No amount of waiting would produce an id, so the error says what to do about it instead of
-    // hanging the caller.
-    expect(() => manager.getConnectionId()).toThrow(/No connection id is available/);
+  describe('getConnectionId', () => {
+    it('throws when there is no id and no attempt in flight', () => {
+      expect(() => manager.getConnectionId()).to.throw('No connection id is available');
+    });
+
+    it('returns a known id synchronously, without a promise to await', () => {
+      manager.resolveConnectionId('id-1');
+
+      expect(manager.getConnectionId()).to.equal('id-1');
+    });
+
+    it('returns the pending deferred while an attempt is in flight', async () => {
+      manager.arm();
+
+      const pending = manager.getConnectionId();
+      expect(pending).to.be.instanceOf(Promise);
+
+      manager.resolveConnectionId('id-1');
+
+      await expect(pending).resolves.to.equal('id-1');
+    });
+
+    it('releases every waiter that queued up during the handshake', async () => {
+      manager.arm();
+
+      const waiters = [
+        manager.getConnectionId(),
+        manager.getConnectionId(),
+        manager.getConnectionId(),
+      ];
+      manager.resolveConnectionId('id-1');
+
+      expect(await Promise.all(waiters)).to.eql(['id-1', 'id-1', 'id-1']);
+    });
+
+    it('throws again once a failed attempt has settled', async () => {
+      manager.arm();
+      const pending = manager.getConnectionId();
+      const failure = new Error('connect failed');
+
+      manager.rejectConnectionId(failure);
+
+      await expect(pending).rejects.toThrow('connect failed');
+      // the deferred is spent - a later caller gets the actionable error, not a dead promise
+      expect(() => manager.getConnectionId()).to.throw('No connection id is available');
+    });
+
+    describe('with an abort signal', () => {
+      it('abandons the wait with the reason the caller aborted with', async () => {
+        manager.arm();
+        const controller = new AbortController();
+        const reason = new Error('the search moved on');
+        const waiting = manager.getConnectionId(controller.signal);
+
+        controller.abort(reason);
+
+        await expect(waiting).rejects.toBe(reason);
+      });
+
+      it('rejects at once for a signal that was already aborted', async () => {
+        manager.arm();
+
+        await expect(
+          manager.getConnectionId(AbortSignal.abort(new Error('gone'))),
+        ).rejects.toThrow('gone');
+      });
+
+      it('leaves the other waiters alone when one abandons the wait', async () => {
+        manager.arm();
+        const controller = new AbortController();
+        const abandoned = manager.getConnectionId(controller.signal);
+        const patient = manager.getConnectionId();
+
+        controller.abort();
+        manager.resolveConnectionId('id-1');
+
+        await expect(abandoned).rejects.toThrow();
+        await expect(patient).resolves.to.equal('id-1');
+      });
+    });
   });
 
-  it('hands back an id it already holds without waiting', () => {
-    manager.resolveConnectionId('id-1');
+  describe('arm', () => {
+    it('creates a deferred when there is neither an id nor one pending', () => {
+      manager.arm();
 
-    expect(manager.getConnectionId()).toBe('id-1');
+      expect(manager.loadConnectionIdPromise).to.be.instanceOf(Promise);
+    });
+
+    it('is a no-op while a deferred is already pending, so waiters are not orphaned', async () => {
+      manager.arm();
+      const first = manager.loadConnectionIdPromise;
+      const waiter = manager.getConnectionId();
+
+      manager.arm();
+
+      expect(manager.loadConnectionIdPromise).to.equal(first);
+
+      manager.resolveConnectionId('id-1');
+      await expect(waiter).resolves.to.equal('id-1');
+    });
+
+    it('is a no-op while an id is known, so a reconnect keeps serving it', () => {
+      manager.resolveConnectionId('id-1');
+
+      manager.arm();
+
+      expect(manager.loadConnectionIdPromise).to.be.undefined;
+      // requests issued during the outage go out against the old id rather than blocking
+      expect(manager.getConnectionId()).to.equal('id-1');
+    });
   });
 
-  it('resolves waiters once the handshake answers', async () => {
-    manager.arm();
-    const waiting = manager.getConnectionId();
-    manager.resolveConnectionId('id-2');
+  describe('resolveConnectionId', () => {
+    it('replaces a previously known id', () => {
+      manager.resolveConnectionId('id-1');
 
-    await expect(waiting).resolves.toBe('id-2');
+      manager.resolveConnectionId('id-2');
+
+      expect(manager.connectionId).to.equal('id-2');
+    });
+
+    it('clears the deferred so the next attempt can arm a fresh one', () => {
+      manager.arm();
+
+      manager.resolveConnectionId('id-1');
+
+      expect(manager.loadConnectionIdPromise).to.be.undefined;
+    });
   });
 
-  it('keeps waiters waiting across a drop, rather than failing them', async () => {
-    // A socket that dropped will be retried, so the request should ride the reconnect out.
-    manager.resolveConnectionId('dead');
-    manager.invalidate();
+  describe('invalidate', () => {
+    it('drops a known id so nothing is sent against the dead socket', () => {
+      manager.resolveConnectionId('id-1');
 
-    const waiting = manager.getConnectionId();
-    expect(manager.connectionId).toBeUndefined();
+      manager.invalidate();
 
-    manager.resolveConnectionId('fresh');
-    await expect(waiting).resolves.toBe('fresh');
+      expect(manager.connectionId).to.be.undefined;
+    });
+
+    // Dropping without arming would leave nothing to await, and `getConnectionId` would report
+    // "nothing is being opened" for a socket that is in fact about to be retried.
+    it('arms in the same step, so a request waits for the reconnect instead of rejecting', async () => {
+      manager.resolveConnectionId('id-1');
+
+      manager.invalidate();
+
+      expect(manager.loadConnectionIdPromise).to.be.instanceOf(Promise);
+      const waiter = manager.getConnectionId();
+      manager.resolveConnectionId('id-2');
+      await expect(waiter).resolves.to.equal('id-2');
+    });
+
+    it('is a no-op when there was no id to drop', () => {
+      manager.invalidate();
+
+      expect(manager.loadConnectionIdPromise).to.be.undefined;
+      expect(() => manager.getConnectionId()).to.throw('No connection id is available');
+    });
+
+    it('leaves a pending waiter alone - the retry it is waiting for is still coming', async () => {
+      manager.arm();
+      const waiter = manager.getConnectionId();
+
+      manager.invalidate();
+
+      expect(manager.loadConnectionIdPromise).to.be.instanceOf(Promise);
+      manager.resolveConnectionId('id-2');
+      await expect(waiter).resolves.to.equal('id-2');
+    });
+
+    it('leaves the connection attempt free to arm again, which an id would have blocked', async () => {
+      manager.resolveConnectionId('id-1');
+
+      manager.invalidate();
+      // `_connect()` arms too; it must find the deferred invalidate left and not replace it
+      const armed = manager.loadConnectionIdPromise;
+      manager.arm();
+
+      expect(manager.loadConnectionIdPromise).to.equal(armed);
+    });
   });
 
-  it('fails waiters when the connection is closed deliberately', async () => {
-    manager.arm();
-    const waiting = manager.getConnectionId();
+  describe('reset', () => {
+    it('drops a known id', () => {
+      manager.resolveConnectionId('id-1');
 
-    manager.reset();
+      manager.reset();
 
-    await expect(waiting).rejects.toThrow(
-      /closed before a connection id could be resolved/,
-    );
+      expect(manager.connectionId).to.be.undefined;
+      expect(() => manager.getConnectionId()).to.throw('No connection id is available');
+    });
+
+    it('fails anything still waiting rather than letting it hang', async () => {
+      manager.arm();
+      const waiter = manager.getConnectionId();
+
+      manager.reset();
+
+      await expect(waiter).rejects.toThrow(
+        'The WebSocket connection was closed before a connection id could be resolved.',
+      );
+    });
+
+    it('re-arms cleanly afterwards', async () => {
+      manager.resolveConnectionId('id-1');
+      manager.reset();
+
+      manager.arm();
+      const waiter = manager.getConnectionId();
+      manager.resolveConnectionId('id-2');
+
+      await expect(waiter).resolves.to.equal('id-2');
+    });
   });
 
-  it('abandons a wait when the caller aborts, with their own reason', async () => {
-    manager.arm();
-    const controller = new AbortController();
-    const reason = new Error('the search moved on');
-    const waiting = manager.getConnectionId(controller.signal);
+  it('does not raise an unhandled rejection for a deferred nobody awaited', async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (event: PromiseRejectionEvent) => unhandled.push(event.reason);
+    process.on('unhandledRejection', onUnhandled);
 
-    controller.abort(reason);
+    try {
+      manager.arm();
+      manager.rejectConnectionId(new Error('connect failed'));
+      // let the microtask queue drain, which is when an unhandled rejection would surface
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
 
-    await expect(waiting).rejects.toBe(reason);
-  });
-
-  it('rejects at once for a signal that was already aborted', async () => {
-    manager.arm();
-
-    await expect(
-      manager.getConnectionId(AbortSignal.abort(new Error('gone'))),
-    ).rejects.toThrow('gone');
-  });
-
-  it('leaves other waiters alone when one aborts', async () => {
-    manager.arm();
-    const controller = new AbortController();
-    const abandoned = manager.getConnectionId(controller.signal);
-    const patient = manager.getConnectionId();
-
-    controller.abort();
-    manager.resolveConnectionId('id-3');
-
-    await expect(abandoned).rejects.toThrow();
-    await expect(patient).resolves.toBe('id-3');
+    expect(unhandled).to.eql([]);
   });
 });

@@ -3,7 +3,7 @@ import {
   PollComposerStateMiddlewareExecutor,
   VALID_MAX_VOTES_VALUE_REGEX,
 } from './middleware/pollComposer';
-import { StateStore } from '../store';
+import { StateStore } from '@stream-io/state-store';
 import { generateUUIDv4 } from '../utils';
 import type { MessageComposer } from './messageComposer';
 import type {

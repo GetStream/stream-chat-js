@@ -19,6 +19,7 @@ import {
   runDetached,
   sleep,
   computeOwnReactions,
+  sanitizeOutgoingAttachments,
 } from '../../src/utils';
 import { nsToMs } from '../../src/utils/time';
 
@@ -777,5 +778,140 @@ describe('request-payload date direction', () => {
         false,
       );
     });
+  });
+});
+
+describe('sanitizeOutgoingAttachments', () => {
+  let sink;
+
+  beforeEach(() => {
+    sink = vi.fn();
+    chatLoggerSystem.configureLoggers({ utils: { sink, level: 'trace' } });
+  });
+
+  afterEach(() => {
+    chatLoggerSystem.restoreDefaults();
+  });
+
+  const expectWarned = () =>
+    expect(sink).toHaveBeenCalledWith(
+      'warn',
+      expect.stringContaining('Dropped 1 attachment(s)'),
+      expect.objectContaining({ attachments: expect.any(Array) }),
+    );
+
+  it('returns the same message when there are no attachments', () => {
+    const message = { text: 'hi' };
+
+    expect(sanitizeOutgoingAttachments(message)).toBe(message);
+  });
+
+  it('returns the same message when no attachment carries localMetadata', () => {
+    const message = {
+      attachments: [{ asset_url: 'https://cdn.example.com/f.pdf', type: 'file' }],
+      text: 'hi',
+    };
+
+    expect(sanitizeOutgoingAttachments(message)).toBe(message);
+  });
+
+  it('strips localMetadata from an attachment that resolved', () => {
+    const message = {
+      attachments: [
+        {
+          asset_url: 'https://cdn.example.com/f.pdf',
+          localMetadata: { id: 'a1', uploadState: 'finished' },
+          type: 'file',
+        },
+      ],
+    };
+
+    const result = sanitizeOutgoingAttachments(message);
+
+    expect(result).not.toBe(message);
+    expect(result.attachments).toEqual([
+      { asset_url: 'https://cdn.example.com/f.pdf', type: 'file' },
+    ]);
+    expect(sink).not.toHaveBeenCalled();
+  });
+
+  it('drops an attachment that never resolved, and warns', () => {
+    const message = {
+      attachments: [
+        { asset_url: 'https://cdn.example.com/ok.pdf', type: 'file' },
+        { localMetadata: { id: 'a2', uploadState: 'uploading' }, type: 'file' },
+      ],
+    };
+
+    const result = sanitizeOutgoingAttachments(message);
+
+    expect(result.attachments).toEqual([
+      { asset_url: 'https://cdn.example.com/ok.pdf', type: 'file' },
+    ]);
+    expectWarned();
+  });
+
+  it.each([
+    ['a blob: preview (web)', 'blob:http://localhost/9f3c'],
+    ['a file: URI (React Native)', 'file:///var/mobile/tmp/IMG_0001.HEIC'],
+    ['a content: URI (Android)', 'content://media/external/images/media/42'],
+    ['an inline data: payload', 'data:image/png;base64,iVBORw0KGgo='],
+  ])('drops an attachment whose only source is %s', (_label, image_url) => {
+    // These resolve only on the device that produced them. React Native keeps the picked file's
+    // URI in `image_url` from selection onwards, so a presence check would call this resolved.
+    const message = {
+      attachments: [
+        {
+          image_url,
+          localMetadata: { id: 'a4', uploadState: 'uploading' },
+          type: 'image',
+        },
+      ],
+    };
+
+    const result = sanitizeOutgoingAttachments(message);
+
+    expect(result.attachments).toEqual([]);
+    expectWarned();
+  });
+
+  it('keeps an attachment whose local URL sits next to a remote one', () => {
+    // A finished upload can still carry the local preview alongside the CDN URL.
+    const message = {
+      attachments: [
+        {
+          asset_url: 'https://cdn.example.com/v.mp4',
+          image_url: 'file:///var/mobile/tmp/thumb.jpg',
+          localMetadata: { id: 'a5', uploadState: 'finished' },
+          type: 'video',
+        },
+      ],
+    };
+
+    const result = sanitizeOutgoingAttachments(message);
+
+    expect(result.attachments).toHaveLength(1);
+    expect(sink).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['image_url', { image_url: 'https://cdn.example.com/i.png' }],
+    ['og_scrape_url', { og_scrape_url: 'https://example.com' }],
+    ['title_link', { title_link: 'https://example.com' }],
+  ])('keeps an attachment whose only source is %s', (_label, source) => {
+    const message = {
+      attachments: [
+        {
+          ...source,
+          localMetadata: { id: 'a3', uploadState: 'finished' },
+          type: 'image',
+        },
+      ],
+    };
+
+    const result = sanitizeOutgoingAttachments(message);
+
+    expect(result.attachments).toHaveLength(1);
+    expect(sink).not.toHaveBeenCalled();
   });
 });

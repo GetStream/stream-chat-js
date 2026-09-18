@@ -13,7 +13,7 @@
 > - `v9-to-v10-migration-guide-sort.md` (`SortParamRequest[]` shape)
 > - `v9-to-v10-migration-guide-server-side.md` (server-side surface removal)
 > - `v9-to-v10-migration-guide-type-renames.md` (hand-rolled type aliases → generated names)
-> - `v9-to-v10-migration-guide-i18n.md` (notification identity, the `stream-chat/i18n` subpath)
+> - `v9-to-v10-migration-guide-i18n.md` (notification identity, the `@stream-io/i18n` package)
 > - `v9-to-v10-migration-guide-other.md` (everything else)
 
 ## TL;DR
@@ -308,13 +308,13 @@ be** the wire unit. Epoch milliseconds — which worked in v9 — resolve to 197
 
 ## Rendering timestamps: the one path the compiler does not guard
 
-`stream-chat/i18n` exposes two ways to render a timestamp, and only one of them is type-safe.
+`@stream-io/i18n` exposes two ways to render a timestamp, and only one of them is type-safe.
 
 **`getDateString({ messageCreatedAt })` is typed `string | Date`.** A raw number is a compile error,
 so this path guides you to the conversion:
 
 ```ts
-import { getDateString } from 'stream-chat/i18n';
+import { getDateString } from '@stream-io/i18n';
 import { convertTimestampToDate } from 'stream-chat';
 
 getDateString({
@@ -416,7 +416,7 @@ Renames — these do **not** fail as a type error if you were reading them off a
 Removed:
 
 - `isDate` is gone from `src/utils`. It was never exported from the package root. The `isDate` in
-  `stream-chat/i18n` is unrelated and still there — but note it correctly reports that a wire number
+  `@stream-io/i18n` is unrelated and still there — but note it correctly reports that a wire number
   is not a `Date`, so `timestamp && isDate(timestamp) ? … : undefined` now yields `undefined` for
   every timestamp. Convert instead of guarding.
 - `RESERVED_UPDATED_MESSAGE_FIELDS` no longer lists `pinned_at` and now lists

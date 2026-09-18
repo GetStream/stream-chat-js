@@ -1,6 +1,6 @@
 import type { MessageRequest, UpdateMessageOptions } from '../types';
 import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
-import type { StateStore } from '../store';
+import type { StateStore } from '@stream-io/state-store';
 import { ConfigController } from '../configuration/ConfigController';
 import { localMessageToNewMessagePayload } from '../utils';
 import { MessageOperationStatePolicy } from './MessageOperationStatePolicy';
@@ -145,6 +145,25 @@ export class MessageOperations {
   }
 
   /**
+   * Folds an edit into the payload cached for this message's failed send, so `retry` resends what the
+   * message contains now rather than what it contained when the send failed.
+   *
+   * This exists so a retry while offline for example is also persisted, rather than just disappearing.
+   */
+  private rewriteCachedFailedSend(localMessage: OperationParams<'send'>['localMessage']) {
+    const cached = this.getCachedFailedSend(localMessage.id);
+    if (!cached) return;
+
+    this.failedSendCache.set(localMessage.id, {
+      ...cached,
+      message: {
+        ...cached.message,
+        ...localMessageToNewMessagePayload(localMessage),
+      },
+    });
+  }
+
+  /**
    * The shared lifecycle: apply the optimistic state, fire the request, then reconcile or record the
    * failure. `kind` is threaded through because the three operations want materially different state
    * transitions — see {@link MessageOperationStatePolicy}.
@@ -260,6 +279,8 @@ export class MessageOperations {
     params: OperationParams<'update'>,
     requestFn?: OperationRequestFn<'update'>,
   ): Promise<void> {
+    this.rewriteCachedFailedSend(params.localMessage);
+
     const handlers = this.ctx.handlers();
     let updateOptions: UpdateMessageOptions | undefined;
     if (params.options) {

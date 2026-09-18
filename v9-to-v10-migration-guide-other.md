@@ -8,7 +8,7 @@
 > - `v9-to-v10-migration-guide-sort.md` (`SortParamRequest[]` shape)
 > - `v9-to-v10-migration-guide-server-side.md` (server-side surface removal, dropped Node-only deps)
 > - `v9-to-v10-migration-guide-type-renames.md` (hand-rolled type aliases → generated names)
-> - `v9-to-v10-migration-guide-i18n.md` (notification identity, poll-composer field errors, the `stream-chat/i18n` subpath)
+> - `v9-to-v10-migration-guide-i18n.md` (notification identity, poll-composer field errors, the `@stream-io/i18n` package)
 > - `v9-to-v10-migration-guide-dates.md` (server-sent dates as unix-nanosecond numbers)
 >
 > Read those first. This guide covers **exports, removed feature modules, event-type shape, filter constraints, small state/composer shape changes, and residual type/property renames** that the topic guides do not.
@@ -80,6 +80,7 @@ supported. If you are on Node 18 or 20 and rely on that path, plan the upgrade t
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `export * from './events'` | `src/events.ts` deleted along with `EVENT_MAP`. Event-type set is now derived from the generated event decoders, no longer a hand-rolled map.                                                                                               |
 | `export * from './base64'` | `src/base64.ts` deleted along with the `base64-js` dependency. `encodeBase64` / `decodeBase64` are gone; `UserFromToken` now decodes through the global `atob`. Take base64 helpers from a package of your own if you were importing these. |
+| `export * from './store'`  | `src/store.ts` deleted. `StateStore`, `MergedStateStore`, `isPatch` and their types now come from **`@stream-io/state-store`**, which this package depends on rather than vendoring. See below.                                             |
 
 | Emptied module (barrel still present, no named exports) | Reason                                                        |
 | ------------------------------------------------------- | ------------------------------------------------------------- |
@@ -100,6 +101,50 @@ The barrel is still there, but it holds a **single** function: `UserFromToken`. 
 `UserFromToken` itself changed implementation: it decodes the JWT payload with the global `atob` instead of the removed `base64-js` helpers. It runs on the `connectUser` path, so older React Native / Hermes targets — Hermes only gained `atob` / `btoa` around React Native 0.74 — must install a base64 polyfill before the first `connectUser`, or connecting throws `ReferenceError: atob is not defined`. Verify with `typeof atob` on the target rather than by version number; browsers, Node 16+, Bun, and Deno all have it natively.
 
 ---
+
+### `StateStore` moved to `@stream-io/state-store`
+
+`stream-chat` used to carry its own copy of `StateStore` and re-export it. It is now a dependency,
+and the class is **no longer part of this package's public API**.
+
+```diff
+- import { StateStore } from 'stream-chat';
++ import { StateStore } from '@stream-io/state-store';
+```
+
+Add the package to your own dependencies:
+
+```sh
+npm install @stream-io/state-store
+```
+
+`MergedStateStore`, `isPatch`, and the `Handler` / `Patch` / `Preprocessor` / `RemovePreprocessor` /
+`Unsubscribe` / `ValueOrPatch` types move with it. The runtime behaviour is unchanged — the store
+instances on `channel.messagePaginator.state`, `client.state`, composer state and so on are the same
+objects; only where you import the class from changes.
+
+**Why it matters beyond tidiness:** TypeScript compares classes with `protected` members
+_nominally_, so two copies of `StateStore` are not assignable to one another even when byte-identical.
+A single shared declaration is what lets `stream-chat`, `@stream-io/i18n` and the UI SDKs pass stores
+across package boundaries at all.
+
+**That makes one resolved copy a hard requirement, not a preference.** `stream-chat`,
+`@stream-io/i18n`, `stream-chat-react` and `stream-chat-react-native` each declare
+`@stream-io/state-store` at `^1.1.6`, which dedupes to one install. Declare the same range yourself. If
+you ever end up with two — a nested copy from a pinned or bumped range — the symptom is a compile
+error rather than a runtime one, typically `TS2345` when you pass `client.state` into a hook the SDK
+exported:
+
+```
+Argument of type 'StateStore<ClientState>' is not assignable to parameter of type 'StateStore<ClientState>'.
+  Types have separate declarations of a private property 'handlers'.
+```
+
+Two identical-looking types in one message is the tell. Check with:
+
+```bash
+find . -maxdepth 5 -path '*node_modules/@stream-io/state-store' -type d
+```
 
 ## Removed feature modules / subsystems
 
@@ -531,6 +576,125 @@ with it:
 The WebSocket's own reconnect and health-check loop is unchanged and still handles transient
 network failures. If you need to react to connectivity, subscribe to `client.wsConnection.state`.
 
+### Watching a channel now requires a connected user
+
+The server keys channel watches and presence subscriptions by **WebSocket connection id**, and
+answers `200` while registering nothing when a request that needs one arrives without it. v9 papered
+over this: `queryChannels()` and `channel.watch()` checked `client._hasConnectionID()` and silently
+downgraded `watch: true` to `watch: false` when there was no connection — a server-side
+accommodation that outlived the server-side surface (see
+[`v9-to-v10-migration-guide-server-side.md`](./v9-to-v10-migration-guide-server-side.md)).
+
+v10 removes the downgrade. Waiting for the connection id now happens centrally in the API client,
+and a request that asks for a subscription it cannot get one for **throws** rather than quietly
+returning unwatched state:
+
+```
+No connection id is available: there is no WebSocket connection, and none is being established.
+A request that watches a channel or subscribes to presence needs one. Call `client.connectUser()`
+if no user is connected, or `client.openConnection()` if the socket was closed with
+`client.closeConnection()`.
+```
+
+```diff
+  const client = StreamChat.getInstance(API_KEY);
+- // v9: resolved, but the channels were never watched - no events ever arrived
+- const channels = await client.queryChannels(filters, sort);
++ await client.connectUser(user, token);
++ const channels = await client.queryChannels(filters, sort);
+```
+
+You do **not** have to await `connectUser()` before issuing the request — a request made while the
+handshake is in flight waits for it and then goes out with the id.
+
+#### Closing the connection does not fail the request
+
+`closeConnection()` suspends the wait rather than ending it, which is what the React Native
+background/foreground cycle needs: a watching request that is already in flight stays pending while
+the socket is closed and completes against the **reopened** socket, carrying the new connection id.
+This matches the contract `wsPromise` has had since
+[#1868](https://github.com/GetStream/stream-chat-js/pull/1868) — the promise survives the gap so the
+reopen settles it.
+
+```ts
+const channels = client.queryChannels(filters); // watches, so it waits for an id
+client.closeConnection(); // app backgrounds - the request is not failed
+await client.openConnection(); // app foregrounds
+await channels; // finishes, against the new connection id
+```
+
+`disconnectUser()` is the opposite case: nothing will reopen, so anything still waiting is rejected
+with `Connection was closed because disconnectUser() was called` rather than left pending. The same
+split applies to `wsPromise`.
+
+Note the consequence of the first half: a `closeConnection()` that is never followed by an
+`openConnection()` leaves such a request pending indefinitely. Call `disconnectUser()` if you are
+tearing the client down rather than backgrounding it.
+
+#### Which requests are affected
+
+Only requests that actually **ask** for a subscription. The gate reads the `watch` / `presence`
+flags, so a query that opts out is unaffected and still works with no connection at all:
+
+```ts
+// gated - waits for (or demands) a connection id
+await client.queryChannels({ filter_conditions: filters, watch: true });
+await channel.watch();
+
+// NOT gated - registers nothing, so it needs no connection
+await client.queryChannels({ filter_conditions: filters, watch: false });
+await channel.query({ watch: false });
+```
+
+Note that `client.queryChannels()` defaults to `watch: true`, so the bare call _is_ gated; pass
+`watch: false` explicitly for a read-only load.
+
+Affected when they ask for a watch or presence: `client.queryChannels()`,
+`client.groupedQueryChannels()`, `client.sync()`, `client.queryThreads()`, `client.getThread()`,
+`channel.query()`, `channel.watch()` and `client.queryUsers()`. `channel.stopWatching()` is always
+affected — it carries no flag and is connection-scoped by definition, since it tells the server
+which connection should stop watching.
+
+Every other request is unaffected, and — unlike v9 — no longer carries a `connection_id` query
+param at all. It is now attached only to the requests listed above.
+
+#### `closeConnection()` drops the id too
+
+`client._getConnectionID()` reads through the new `client.connectionIdManager` rather than
+`client.wsConnection.connectionID`, so it correctly returns `undefined` once the socket is closed —
+in v9 the id outlived the socket it belonged to.
+
+`StableWSConnection.connectionID` is **removed** with it. Leaving the field in place would have
+recreated the same bug one level down: it was written on every handshake and never cleared, so it
+kept reporting an id for a socket that was gone. Read `client._getConnectionID()` (or
+`client.connectionIdManager.connectionId`) instead — both are dropped the moment the connection
+stops being healthy.
+
+The consequence for mobile apps: `closeConnection()` (the documented background/foreground seam)
+now makes the gated calls above throw until `openConnection()` has been called, even though the
+user is still set. Reopen the connection before issuing them, or pass `watch: false` for loads that
+do not need a subscription.
+
+#### Reconnects drop the id too
+
+The id belongs to the socket, so it is dropped the moment the connection stops being healthy — not
+only on a deliberate `closeConnection()` / `disconnectUser()`. In v9 it outlived the socket on every
+path, so a `watch: true` issued during a reconnect went out carrying a dead id: the server answered
+`200`, registered the watch against a connection it had already torn down, and no event ever
+arrived. There was nothing to notice.
+
+Dropping the id and arming its replacement happen in the same step, so there is no moment at which
+the client reports "not connected" for a socket that is simply reconnecting. A gated request issued
+during the outage **waits** for the new handshake and then goes out with the new id.
+
+That wait is new, and it lasts as long as the reconnect does — the backoff grows to 25s per attempt
+and retries until the socket is back. It is not bounded by the axios `timeout`, which only starts
+once the request is actually issued. If a call must not block for the length of an outage, issue it
+with `watch: false`: requests that register nothing are never gated and keep flowing throughout.
+
+`client.connectionRecovery` still re-queries channel lists and active channels once the socket is
+healthy again, which is what restores the watches that were interrupted.
+
 ---
 
 ## Filter payloads — per-endpoint operator constraints
@@ -608,7 +772,49 @@ Beyond the three breaking effects above, the field sets shifted to match the API
 - **Removed** — `ReminderFilters.user_id`, `QueryPollsFilters.user_id`, `QueryVotesFilters.created_by_id`. These were never declared by the endpoints; filter on a supported field instead (e.g. `created_by_id` for polls).
 - **Added** — `QueryVotesFilters` gains `poll_id`, and `QueryPollsFilters` gains a `custom.${string}` index signature for filtering on custom poll data.
 
-The legacy building blocks (`QueryFilter`, `PrimitiveFilter`, `QueryFilters`, `RequireOnlyOne`) remain exported for callers who compose their own filter types against `itemMatchesFilter` and the paginators.
+### Removed — the hand-written filter building blocks
+
+`QueryFilter` and `PrimitiveFilter` are **removed**, along with `ExtendedQueryFilter`, `ExtendedQueryFilters` and `ExtendedQueryLogicalOperators` (`src/pagination/FilterBuilder.ts`). `Unpacked` goes with them — it existed only to let `QueryFilter` reach the element type of an array-valued key, and `Filters<>` takes the element type directly. `QueryFilters` and `RequireOnlyOne` are still exported, but note that `QueryFilters` is now the **generated** type (`src/gen/models`) and takes a different parameter: v9's `QueryFilters<T>` took the item type and mapped its keys itself, whereas `QueryFilters<Operators>` takes an already-built operator map — the shape `Filters<>` produces. A v9 `QueryFilters<{ [K in keyof MyItem]?: ... }>` therefore does not mean the same thing any more; write the `Filters<>` form below instead.
+
+If you used `Unpacked` in your own code, it was a plain conditional type with no dependency on this SDK; copy it across rather than importing it:
+
+```ts
+type Unpacked<T> = T extends (infer U)[]
+  ? U
+  : T extends (...args: any[]) => infer U
+    ? U
+    : T extends Promise<infer U>
+      ? U
+      : T;
+```
+
+These were the v9 building blocks for hand-authoring a filter type — every alias in the table above used to be assembled from them. Nothing in the SDK uses them any more. If you composed your own filter type for `itemMatchesFilter`, a paginator or a `FilterBuilder`, declare it with the generated `Filters<>` helper instead: one entry per key, carrying the operators that key accepts.
+
+```ts
+// v9
+type MyFilters = QueryFilters<{
+  [Key in keyof MyItem]?:
+    | RequireOnlyOne<QueryFilter<MyItem[Key]>>
+    | PrimitiveFilter<MyItem[Key]>;
+}>;
+
+// v10
+type MyFilters = Filters<{
+  id: { type: string; operators: '$autocomplete' | '$eq' | '$in' };
+  age: { type: number; operators: '$gt' | '$lt' };
+  // Array-valued keys take the *element* type, with a `valueTypes` override where the
+  // backend also accepts the whole array — the way the spec models `members` / `teams`.
+  teams: {
+    type: string;
+    operators: '$contains' | '$eq' | '$in';
+    valueTypes: { $eq: Array<string> };
+  };
+}>;
+```
+
+`Filters<>` is what the generated request types themselves are built from, so it is strictly more expressive than what it replaces: operators are constrained per key (`$autocomplete` on a numeric field is now a compile error), `$ne` and `$nin` are available on the keys that declare them, `RequireOnlyOne` is applied for you, and the bare-value shorthand (`{ id: 'u1' }`) still works wherever `$eq` is allowed.
+
+One shape does not survive the move: an all-optional operator object. `QueryFilter` made every operator optional, so `{}` type-checked; `Filters<>` requires exactly one. Express "no constraint" by omitting the key.
 
 ### Removed — `ArrayOneOrMore` and `ArrayTwoOrMore`
 
@@ -655,7 +861,7 @@ type MyLogicalOperators<T> = {
 };
 ```
 
-This mirrors what the SDK itself now does in `ExtendedQueryLogicalOperators` (`src/pagination/FilterBuilder.ts`). The change is widening, not narrowing: everything that compiled in v9 still compiles, and the array-variable cases above now compile too. The only thing you lose is the compile error on an empty (or single-element `$or`) array, which the API rejects at runtime anyway.
+This mirrors the generated `QueryLogicalOperators` (`src/gen/models`), which types all three as plain arrays. The change is widening, not narrowing: everything that compiled in v9 still compiles, and the array-variable cases above now compile too. The only thing you lose is the compile error on an empty (or single-element `$or`) array, which the API rejects at runtime anyway.
 
 ---
 
