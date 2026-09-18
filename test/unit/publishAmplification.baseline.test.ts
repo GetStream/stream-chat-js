@@ -9,6 +9,7 @@ import { formatMessage, Thread } from '../../src';
 import { generateChannel } from './test-utils/generateChannel';
 import { generateMsg } from './test-utils/generateMessage';
 import { getClientWithUser } from './test-utils/getClient';
+import { convertDateToTimestamp } from './test-utils/time';
 import type { MessageResponse } from '../../src/types';
 import { EntityStore } from '../../src/entityStore/EntityStore';
 import { MessagePaginator } from '../../src/pagination/paginators/MessagePaginator';
@@ -32,9 +33,20 @@ import type { LocalMessage } from '../../src/types';
  * client's message list rides a 500ms throttle and shows lower numbers for the same work; the two
  * are not comparable and must never be quoted interchangeably.
  */
-describe('publish amplification — one event, real collections', () => {
-  // The synthetic curves below measure the mechanism. This measures the thing that actually
-  // happens: one WS event reaching a channel's main list, its pinned list, and an open thread.
+/**
+ * One inbound event must cost each collection holding the message exactly one publish.
+ *
+ * Every row here was measured above that floor at some point, and each is held down by a different
+ * change, so a regression shows up as a named row rather than a total that is merely wrong. Adding
+ * a new collection means adding it to `linked()`; if it amplifies, a row fails.
+ *
+ * Unthrottled, since Vitest disables state throttling — these are the un-coalesced counts. A real
+ * client's message list rides a 500ms throttle and shows fewer, so the two are not comparable.
+ */
+describe('publish amplification — one event, one publish per collection', () => {
+  const PARENT_ID = 'parent-1';
+
+  /** A channel whose main list, pinned list and open thread all hold the same message. */
   const linked = () => {
     const client = getClientWithUser({ id: 'me' });
     const { channel: channelResponse } = generateChannel();
@@ -44,15 +56,26 @@ describe('publish amplification — one event, real collections', () => {
       channel.cid
     ] = channel;
 
-    const parentId = 'parent-1';
-    const seeded = generateMsg({
+    // pinned AND show_in_channel, so all three collections genuinely hold it
+    const held = {
       cid: channel.cid,
-      id: 'seed',
-      parent_id: parentId,
+      parent_id: PARENT_ID,
       pinned: true,
+      pinned_at: 1,
       show_in_channel: true,
-    }) as MessageResponse;
-    const page = [formatMessage(seeded)];
+      user: { id: 'author' },
+    };
+    // Several messages by one author: a sweep (user.updated / user.deleted) that publishes per
+    // message instead of once for the whole pass is only visible with more than one.
+    const page = ['seed', 'seed2', 'seed3', 'seed4', 'seed5'].map((id, i) =>
+      formatMessage(
+        generateMsg({
+          ...held,
+          created_at: convertDateToTimestamp(`2020-01-0${i + 1}T00:00:00.000Z`),
+          id,
+        }) as MessageResponse,
+      ),
+    );
     channel.messagePaginator.ingestPage({
       isHead: true,
       isTail: true,
@@ -69,7 +92,7 @@ describe('publish amplification — one event, real collections', () => {
     const thread = new Thread({
       channel,
       client,
-      parentMessage: generateMsg({ cid: channel.cid, id: parentId }) as never,
+      parentMessage: generateMsg({ cid: channel.cid, id: PARENT_ID }) as never,
     });
     thread.messagePaginator.ingestPage({
       isHead: true,
@@ -88,43 +111,83 @@ describe('publish amplification — one event, real collections', () => {
       pinned: channel.pinnedMessagesPaginator,
       thread: thread.messagePaginator,
     });
-    return { channel, client, parentId, recorder, seeded };
+    return { channel, client, held, recorder };
   };
 
-  it('message.new publishes once per collection', () => {
-    const { channel, client, parentId, recorder } = linked();
-    client.dispatchEvent({
-      cid: channel.cid,
-      message: generateMsg({
-        cid: channel.cid,
-        id: 'new-1',
-        parent_id: parentId,
-        pinned: true,
-        show_in_channel: true,
+  const FLOOR = { main: 1, pinned: 1, thread: 1 };
+
+  it.each([
+    [
+      'message.new',
+      (held: Record<string, unknown>) => ({
+        message: generateMsg({ ...held, id: 'arrived' }),
+        type: 'message.new',
       }),
-      type: 'message.new',
-    } as never);
-
-    expect(recorder.stateCounts()).toEqual({ main: 1, pinned: 1, thread: 1 });
-    recorder.stop();
-  });
-
-  it('message.deleted publishes once per collection', () => {
-    const { channel, client, parentId, recorder } = linked();
-    client.dispatchEvent({
-      cid: channel.cid,
-      message: generateMsg({
-        cid: channel.cid,
-        id: 'seed',
-        parent_id: parentId,
-        pinned: true,
-        show_in_channel: true,
-        type: 'deleted',
+    ],
+    [
+      'message.updated',
+      (held: Record<string, unknown>) => ({
+        message: generateMsg({ ...held, id: 'seed', text: 'edited' }),
+        type: 'message.updated',
       }),
-      type: 'message.deleted',
-    } as never);
+    ],
+    [
+      'message.deleted (soft)',
+      (held: Record<string, unknown>) => ({
+        message: generateMsg({ ...held, id: 'seed', type: 'deleted' }),
+        type: 'message.deleted',
+      }),
+    ],
+    [
+      'message.deleted (hard)',
+      (held: Record<string, unknown>) => ({
+        hard_delete: true,
+        message: generateMsg({ ...held, id: 'seed' }),
+        type: 'message.deleted',
+      }),
+    ],
+    [
+      'reaction.new',
+      (held: Record<string, unknown>) => ({
+        message: generateMsg({ ...held, id: 'seed' }),
+        reaction: {
+          created_at: 0,
+          message_id: 'seed',
+          type: 'love',
+          updated_at: 0,
+          user_id: 'other',
+        },
+        type: 'reaction.new',
+      }),
+    ],
+    [
+      'reaction.deleted',
+      (held: Record<string, unknown>) => ({
+        message: generateMsg({ ...held, id: 'seed' }),
+        reaction: {
+          created_at: 0,
+          message_id: 'seed',
+          type: 'love',
+          updated_at: 0,
+          user_id: 'other',
+        },
+        type: 'reaction.deleted',
+      }),
+    ],
+    [
+      'user.updated (renames the author of a held message)',
+      () => ({ type: 'user.updated', user: { id: 'author', name: 'Renamed' } }),
+    ],
+    [
+      'user.deleted (sweeps every message by the author)',
+      () => ({ created_at: 0, type: 'user.deleted', user: { id: 'author' } }),
+    ],
+  ])('%s publishes once per collection', (_label, buildEvent) => {
+    const { channel, client, held, recorder } = linked();
 
-    expect(recorder.stateCounts()).toEqual({ main: 1, pinned: 1, thread: 1 });
+    client.dispatchEvent({ cid: channel.cid, ...buildEvent(held) } as never);
+
+    expect(recorder.stateCounts()).toEqual(FLOOR);
     recorder.stop();
   });
 });
