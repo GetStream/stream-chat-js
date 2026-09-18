@@ -987,6 +987,13 @@ export class Thread extends WithSubscriptions {
       this.failedRepliesMap.delete(message.id);
     }
 
+    // Already showing this exact snapshot because a holder sharing the store wrote it first and the
+    // fanout reprojected us. Ingesting would re-emit an identical window for nothing.
+    // TODO: This can probably be generalized as a safeguard up in ingestItem or maybe even EntityStore
+    //       (so if a collection exists that holds this referential entity already, just use that or maybe
+    //       even skip ingestion sometimes when it makes sense). But leaving that for a separate change.
+    if (this.messagePaginator.getItem(formattedMessage.id) === formattedMessage) return;
+
     // The reply messagePaginator is the reply list source.
     this.messagePaginator.ingestItem(formattedMessage);
   };

@@ -2624,8 +2624,12 @@ export class Channel extends ChannelApi {
               this.messagePaginator.removeItem({ id: event.message.id });
               this.pinnedMessagesPaginator.removeItem({ id: event.message.id });
             } else {
-              this.messagePaginator.ingestItem(formattedMessage);
-              this.pinnedMessagesPaginator.ingestItem(formattedMessage);
+              // A soft delete changes content only — it moves neither `created_at` nor `pinned`, so
+              // no collection's membership or sort position changes. One id-addressed write
+              // therefore reaches every holder through the store, where an `ingestItem` per
+              // collection would make each of them re-emit its own window on top of the fan-out.
+              const store = this.getClient().messageStore;
+              if (store.has(event.message.id)) store.upsert(formattedMessage);
             }
           }
           this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
@@ -2660,9 +2664,10 @@ export class Channel extends ChannelApi {
             // ingestItem advances the paginator's tracked latest message (→ last_message_at). A
             // message that arrives while the viewer has scrolled to an older window lands in the
             // head interval, not the active one, so the view is preserved without an isUpToDate flag.
-            this.messagePaginator.ingestItem(formatMessage(event.message));
+            const formattedMessage = formatMessage(event.message);
+            this.messagePaginator.ingestItem(formattedMessage);
             // ingestItem auto-adds when pinned (matchesFilter { pinned: true }).
-            this.pinnedMessagesPaginator.ingestItem(formatMessage(event.message));
+            this.pinnedMessagesPaginator.ingestItem(formattedMessage);
           }
 
           // do not increase the unread count - the back-end does not increase the count neither in the following cases:
@@ -2776,8 +2781,9 @@ export class Channel extends ChannelApi {
 
         // system messages don't increment unread counts
         if (event.message) {
-          this.messagePaginator.ingestItem(formatMessage(event.message));
-          this.pinnedMessagesPaginator.ingestItem(formatMessage(event.message));
+          const formattedMessage = formatMessage(event.message);
+          this.messagePaginator.ingestItem(formattedMessage);
+          this.pinnedMessagesPaginator.ingestItem(formattedMessage);
         }
 
         break;

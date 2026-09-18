@@ -12,6 +12,7 @@ import type {
 import type { Channel } from './channel';
 import type { AxiosRequestConfig } from 'axios';
 import { LOCAL_MESSAGE_FIELDS, RESERVED_UPDATED_MESSAGE_FIELDS } from './constants';
+import { getMemoizedFormat, memoizeFormat } from './formatMessageMemo';
 import { chatLoggerSystem } from './logger';
 import type { ScopedLogger } from './logger';
 import { nowNs, nsToDate } from './utils/time';
@@ -211,6 +212,11 @@ export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (pa
  * @param message - message object
  */
 export function formatMessage(message: MessageResponse | LocalMessage): LocalMessage {
+  // Every consumer of one source object gets the same `LocalMessage`, so the message store's
+  // reference bail fires and siblings are not re-projected once per consumer.
+  const memoized = getMemoizedFormat(message);
+  if (memoized) return memoized;
+
   const toLocalMessageBase = (
     msg: MessageResponse | LocalMessage | null | undefined,
   ): LocalMessage | null => {
@@ -233,12 +239,15 @@ export function formatMessage(message: MessageResponse | LocalMessage): LocalMes
     };
   };
 
-  return {
+  const formatted = {
     ...toLocalMessageBase(message),
     error: (message as LocalMessage).error ?? undefined,
     quoted_message:
       toLocalMessageBase((message as MessageResponse).quoted_message) ?? undefined,
   } as LocalMessage;
+
+  memoizeFormat(message, formatted);
+  return formatted;
 }
 
 /**

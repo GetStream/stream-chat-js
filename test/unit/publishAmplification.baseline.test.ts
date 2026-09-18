@@ -5,6 +5,11 @@ import {
   recordPublishes,
   seedWindow,
 } from './test-utils/publishAmplification';
+import { formatMessage, Thread } from '../../src';
+import { generateChannel } from './test-utils/generateChannel';
+import { generateMsg } from './test-utils/generateMessage';
+import { getClientWithUser } from './test-utils/getClient';
+import type { MessageResponse } from '../../src/types';
 import { EntityStore } from '../../src/entityStore/EntityStore';
 import { MessagePaginator } from '../../src/pagination/paginators/MessagePaginator';
 import type { LocalMessage } from '../../src/types';
@@ -27,6 +32,103 @@ import type { LocalMessage } from '../../src/types';
  * client's message list rides a 500ms throttle and shows lower numbers for the same work; the two
  * are not comparable and must never be quoted interchangeably.
  */
+describe('publish amplification — one event, real collections', () => {
+  // The synthetic curves below measure the mechanism. This measures the thing that actually
+  // happens: one WS event reaching a channel's main list, its pinned list, and an open thread.
+  const linked = () => {
+    const client = getClientWithUser({ id: 'me' });
+    const { channel: channelResponse } = generateChannel();
+    const channel = client.channel(channelResponse.type, channelResponse.id);
+    channel.initialized = true;
+    (client as unknown as { activeChannels: Record<string, unknown> }).activeChannels[
+      channel.cid
+    ] = channel;
+
+    const parentId = 'parent-1';
+    const seeded = generateMsg({
+      cid: channel.cid,
+      id: 'seed',
+      parent_id: parentId,
+      pinned: true,
+      show_in_channel: true,
+    }) as MessageResponse;
+    const page = [formatMessage(seeded)];
+    channel.messagePaginator.ingestPage({
+      isHead: true,
+      isTail: true,
+      page,
+      setActive: true,
+    });
+    channel.pinnedMessagesPaginator.ingestPage({
+      isHead: true,
+      isTail: true,
+      page,
+      setActive: true,
+    });
+
+    const thread = new Thread({
+      channel,
+      client,
+      parentMessage: generateMsg({ cid: channel.cid, id: parentId }) as never,
+    });
+    thread.messagePaginator.ingestPage({
+      isHead: true,
+      isTail: true,
+      page,
+      setActive: true,
+    });
+    client.threads.state.next((current) => ({
+      ...current,
+      threads: [thread, ...current.threads],
+    }));
+    thread.registerSubscriptions();
+
+    const recorder = recordPublishes({
+      main: channel.messagePaginator,
+      pinned: channel.pinnedMessagesPaginator,
+      thread: thread.messagePaginator,
+    });
+    return { channel, client, parentId, recorder, seeded };
+  };
+
+  it('message.new publishes once per collection', () => {
+    const { channel, client, parentId, recorder } = linked();
+    client.dispatchEvent({
+      cid: channel.cid,
+      message: generateMsg({
+        cid: channel.cid,
+        id: 'new-1',
+        parent_id: parentId,
+        pinned: true,
+        show_in_channel: true,
+      }),
+      type: 'message.new',
+    } as never);
+
+    expect(recorder.stateCounts()).toEqual({ main: 1, pinned: 1, thread: 1 });
+    recorder.stop();
+  });
+
+  it('message.deleted publishes once per collection', () => {
+    const { channel, client, parentId, recorder } = linked();
+    client.dispatchEvent({
+      cid: channel.cid,
+      message: generateMsg({
+        cid: channel.cid,
+        id: 'seed',
+        parent_id: parentId,
+        pinned: true,
+        show_in_channel: true,
+        type: 'deleted',
+      }),
+      type: 'message.deleted',
+    } as never);
+
+    expect(recorder.stateCounts()).toEqual({ main: 1, pinned: 1, thread: 1 });
+    recorder.stop();
+  });
+});
+
 describe('publish amplification — baseline (unthrottled)', () => {
   const seed = [msg('m1', 1), msg('m2', 2), msg('m3', 3)];
   const edited = (overrides: Partial<LocalMessage> = {}) =>
