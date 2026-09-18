@@ -1763,9 +1763,15 @@ export class Channel extends ChannelApi {
    * Loads the initial channel state and watches for changes.
    *
    * @param options - Additional options for the query endpoint (optional).
+   * @param requestOptions - Per-request options such as an abort `signal` (optional). The signal
+   *   reaches the wait for a live socket as well as the request, so abandoning the call abandons the
+   *   wait with it.
    * @returns The server response.
    */
-  async watch(options?: ChannelGetOrCreateRequest) {
+  async watch(
+    options?: ChannelGetOrCreateRequest,
+    requestOptions?: StreamRequestOptions,
+  ) {
     const defaultOptions = {
       state: true,
       watch: true,
@@ -1773,7 +1779,12 @@ export class Channel extends ChannelApi {
     };
 
     const combined = { ...defaultOptions, ...options };
-    const state = await this.query(combined, 'latest');
+
+    // No wait here. `ApiClient` holds any request that watches or subscribes to presence until the
+    // handshake has produced a connection id, so `watch: true` always binds to a current one and
+    // `watchStatus = Watching` is truthful by construction — while a call asking for neither goes out
+    // with no socket at all.
+    const state = await this.query(combined, 'latest', requestOptions);
     this.initialized = true;
     const previousData = this.data;
     this.data = state.channel;

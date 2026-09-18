@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { ConnectionIdManager } from '../../src/connection_id_manager';
+import { ConnectionIdManager } from '../../../src/connection';
 
 describe('ConnectionIdManager', () => {
   let manager: ConnectionIdManager;
@@ -54,6 +54,40 @@ describe('ConnectionIdManager', () => {
       await expect(pending).rejects.toThrow('connect failed');
       // the deferred is spent - a later caller gets the actionable error, not a dead promise
       expect(() => manager.getConnectionId()).to.throw('No connection id is available');
+    });
+
+    describe('with an abort signal', () => {
+      it('abandons the wait with the reason the caller aborted with', async () => {
+        manager.arm();
+        const controller = new AbortController();
+        const reason = new Error('the search moved on');
+        const waiting = manager.getConnectionId(controller.signal);
+
+        controller.abort(reason);
+
+        await expect(waiting).rejects.toBe(reason);
+      });
+
+      it('rejects at once for a signal that was already aborted', async () => {
+        manager.arm();
+
+        await expect(
+          manager.getConnectionId(AbortSignal.abort(new Error('gone'))),
+        ).rejects.toThrow('gone');
+      });
+
+      it('leaves the other waiters alone when one abandons the wait', async () => {
+        manager.arm();
+        const controller = new AbortController();
+        const abandoned = manager.getConnectionId(controller.signal);
+        const patient = manager.getConnectionId();
+
+        controller.abort();
+        manager.resolveConnectionId('id-1');
+
+        await expect(abandoned).rejects.toThrow();
+        await expect(patient).resolves.to.equal('id-1');
+      });
     });
   });
 

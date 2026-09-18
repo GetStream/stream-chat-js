@@ -48,7 +48,6 @@ export type {
   ConfigValueType,
 } from './configuration/shape';
 export * from './connection';
-export * from './connection_id_manager';
 export { type CooldownTimerState } from './CooldownTimer';
 export * from './logger';
 export * from './messageComposer';
@@ -130,5 +129,4 @@ export {
   withoutConcurrency,
 } from './utils/concurrency';
 export * from './ChannelManager';
-export * from './ConnectionRecoveryManager';
 export * from './EventHandlerPipeline';

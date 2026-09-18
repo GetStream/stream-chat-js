@@ -41,7 +41,6 @@ export const THREAD_MANAGER_INITIAL_STATE = {
   threads: [],
   unreadThreadCount: 0,
   unseenThreadIds: [],
-  lastConnectionDropAt: null,
   pagination: {
     isLoading: false,
     isLoadingNext: false,
@@ -59,7 +58,6 @@ export type ThreadManagerState = {
    */
   wasActivatedAtLeastOnce: boolean;
   isThreadOrderStale: boolean;
-  lastConnectionDropAt: Date | null;
   pagination: ThreadManagerPagination;
   ready: boolean;
   threads: Thread[];
@@ -180,7 +178,7 @@ export class ThreadManager extends WithSubscriptions {
     this.addUnsubscribeFunction(this.subscribeManageThreadSubscriptions());
     this.addUnsubscribeFunction(this.subscribeReloadOnActivation());
     this.addUnsubscribeFunction(this.subscribeNewReplies());
-    this.addUnsubscribeFunction(this.subscribeRecoverAfterConnectionDrop());
+    this.addUnsubscribeFunction(this.subscribeReloadOnConnectionRecovered());
     this.addUnsubscribeFunction(this.subscribeChannelDeleted());
   };
 
@@ -263,40 +261,27 @@ export class ThreadManager extends WithSubscriptions {
       }
     }).unsubscribe;
 
-  private subscribeRecoverAfterConnectionDrop = () => {
-    const unsubscribeConnectionDropped = this.client.on('connection.changed', (event) => {
-      if (event.online === false) {
-        this.state.next((current) =>
-          current.lastConnectionDropAt
-            ? current
-            : {
-                ...current,
-                lastConnectionDropAt: new Date(),
-              },
-        );
-      }
-    }).unsubscribe;
-
+  /**
+   * Reloads the thread list once recovery after a reconnect has finished.
+   *
+   * `connection.recovered` on its own is the whole condition, with no drop timestamp to gate on:
+   * `ConnectionRecoveryManager` dispatches it on every reconnect path, so it already implies a drop.
+   *
+   * Anything that does need the drop timestamp should read `client.wsConnection.state.lastUnhealthyAt`,
+   * which is written on every status transition.
+   */
+  private subscribeReloadOnConnectionRecovered = () => {
     const throttledHandleConnectionRecovered = throttle(
       () => {
-        const { lastConnectionDropAt, wasActivatedAtLeastOnce } =
-          this.state.getLatestValue();
-        if (!lastConnectionDropAt || !wasActivatedAtLeastOnce) return;
+        if (!this.state.getLatestValue().wasActivatedAtLeastOnce) return;
         this.reload({ force: true });
       },
       this.config.connectionRecoveryThrottleMs,
       { trailing: true },
     ).throttledFn;
 
-    const unsubscribeConnectionRecovered = this.client.on(
-      'connection.recovered',
-      throttledHandleConnectionRecovered,
-    ).unsubscribe;
-
-    return () => {
-      unsubscribeConnectionDropped();
-      unsubscribeConnectionRecovered();
-    };
+    return this.client.on('connection.recovered', throttledHandleConnectionRecovered)
+      .unsubscribe;
   };
 
   public unregisterSubscriptions = () => {

@@ -62,30 +62,34 @@ describe('StreamChat construction', () => {
     it('treats an omitted options argument as an empty options object', () => {
       const client = new StreamChat(API_KEY);
       expect(client.options.isLocalUnreadCountEnabled).to.equal(false);
-      expect(client.options.wsUrlParams).to.be.instanceOf(URLSearchParams);
     });
   });
 
   describe('initial instance state', () => {
-    it('initializes empty collections and null connection refs', () => {
+    it('initializes empty collections and unstarted connection refs', () => {
       const client = new StreamChat(API_KEY);
 
       expect(client.listeners).to.be.instanceOf(Map);
-      // The only listener a freshly constructed client registers is the connection-recovery
-      // subscription, which is wired up in the constructor because recovery is not opt-in
-      // (`client.connectionRecovery` config is the opt-out, read when a recovery actually runs).
-      expect([...client.listeners.keys()]).to.deep.equal(['connection.changed']);
+      // Nothing. Connectivity used to be wired through the event bus, so a freshly constructed
+      // client already carried the connection-recovery listener; recovery now subscribes to the
+      // socket's status store instead, which is not a client event listener.
+      expect([...client.listeners.keys()]).to.deep.equal([]);
       expect(client.mutedChannels).to.deep.equal([]);
       expect(client.mutedUsers).to.deep.equal([]);
       expect(client.activeChannels).to.deep.equal({});
       expect(client.channelServerConfigs).to.deep.equal({});
 
-      expect(client.wsConnection).to.be.null;
+      // `wsConnection` is a stable wrapper created with the client, not the transport itself — that
+      // is what lets a consumer subscribe to `wsConnection.state` before `connectUser` resolves. The
+      // transport underneath is what does not exist yet.
+      expect(client.wsConnection).to.not.be.null;
+      expect(client.wsConnection.connection).to.be.null;
+      expect(client.wsConnection.isHealthy).to.equal(false);
       expect(client.wsPromise).to.be.null;
       expect(client.setUserPromise).to.be.null;
 
       expect(client.anonymous).to.equal(false);
-      expect(client.defaultWSTimeout).to.equal(15000);
+      expect(client.wsConnection.config.connectTimeoutMs).to.equal(15000);
     });
 
     it('initializes blockedUsers as a StateStore with empty userIds', () => {
@@ -114,7 +118,11 @@ describe('StreamChat construction', () => {
       const client = new StreamChat(API_KEY);
 
       expect(client.options.isLocalUnreadCountEnabled).to.equal(false);
-      expect(client.options.wsUrlParams).to.be.instanceOf(URLSearchParams);
+      // No longer an empty `URLSearchParams` on `options` — the field moved to
+      // `wsConnection.config.urlParams` and defaults to `undefined`. `_buildUrl` does
+      // `new URLSearchParams(urlParams)`, which treats `undefined` and an empty instance
+      // identically, so the URL it builds is unchanged.
+      expect(client.wsConnection.config.urlParams).to.be.undefined;
       // Recovery is on by default, and now says so through its own configuration rather than a
       // client option.
       expect(client.connectionRecovery.config.enabled).to.equal(true);

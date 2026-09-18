@@ -8,8 +8,6 @@ import { Channel } from './channel';
 import type { ChannelMuteStatus } from './channel_state';
 import { ChannelWatchStatus } from './channel_state';
 import { ClientState } from './client_state';
-import { StableWSConnection } from './connection';
-import { ConnectionIdManager } from './connection_id_manager';
 import { UploadManager } from './uploadManager';
 import { TokenManager, type TokenManagerMinimalUser } from './token_manager';
 import { ApiClient } from './api-client';
@@ -71,7 +69,12 @@ import { DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import { PollManager } from './poll_manager';
 import { EntityStore } from './entityStore/EntityStore';
 import { ChannelManager } from './ChannelManager';
-import { ConnectionRecoveryManager } from './ConnectionRecoveryManager';
+import {
+  ConnectionIdManager,
+  ConnectionRecoveryManager,
+  NetworkConnectionObserver,
+  WSConnection,
+} from './connection';
 import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
 import { ReminderManager } from './reminders';
@@ -158,6 +161,30 @@ export class StreamChat extends ChatApi {
    */
   connectionRecovery: ConnectionRecoveryManager;
   /**
+   * The device's own network status — whether this machine has a network at all, which is a different
+   * fact from whether our WebSocket is up ({@link wsConnection}). The two disagree routinely: a
+   * socket dies on a working network (server close, expired token, health-check timeout), and a
+   * device goes offline while the socket has not noticed yet.
+   *
+   * The SDK cannot detect this itself — every platform reports it differently — so it has to be told:
+   * `client.config.set({ client: { networkConnection: { statusReporter } } })`, or
+   * `client.networkConnection.setStatusReporter(…)` afterwards.
+   *
+   * A browser answers the question properly and its reporter is installed automatically. Everywhere
+   * else a stand-in mirrors the WebSocket until a real one arrives, which is coarse but better than
+   * nothing at all on an integration that forgot the line of setup. Either way `isOnline` is
+   * `undefined` — *unknown*, not offline — until something has reported.
+   */
+  networkConnection: NetworkConnectionObserver;
+  /**
+   * The WebSocket connection id, and the one place it lives.
+   *
+   * The server keys channel watches and presence subscriptions by it, so a request carrying either
+   * waits here for the handshake rather than racing it. See `requiresConnectionId` in
+   * `api-client.ts`.
+   */
+  connectionIdManager: ConnectionIdManager;
+  /**
    * Client-global, normalized store holding one canonical copy of each message. The channel main
    * list and thread reply paginators read/write message content through it, so a message held in
    * more than one of them stays consistent without copy-to-copy fan-out.
@@ -199,11 +226,10 @@ export class StreamChat extends ChatApi {
   setUserPromise: ConnectAPIResponse | null;
   state: ClientState;
   tokenManager: TokenManager;
-  connectionIdManager: ConnectionIdManager;
   user?: ClientUser;
   userAgent?: string;
   wsBaseURL?: string;
-  wsConnection: StableWSConnection | null;
+  wsConnection: WSConnection;
   wsPromise: ConnectAPIResponse | null;
   private _wsPromiseSettled = true;
   private _wsConnectId = 0;
@@ -234,7 +260,6 @@ export class StreamChat extends ChatApi {
   get api() {
     return this.apiClient;
   }
-  defaultWSTimeout: number;
   sdkIdentifier?: SdkIdentifier;
   deviceIdentifier?: DeviceIdentifier;
   appIdentifier?: AppIdentifier;
@@ -297,7 +322,6 @@ export class StreamChat extends ChatApi {
 
     this.options = {
       isLocalUnreadCountEnabled: false,
-      wsUrlParams: new URLSearchParams({}),
       ...options,
     };
 
@@ -319,8 +343,14 @@ export class StreamChat extends ChatApi {
       this.setBaseURL(`http://${streamLocalTestHost}`);
     }
 
+    // Both before the WebSocket, which subscribes to the network store and drives the id's lifecycle.
+    this.connectionIdManager = new ConnectionIdManager();
+    this.networkConnection = new NetworkConnectionObserver({ client: this });
+    this.networkConnection.registerSubscriptions();
+
     // WS connection is initialized when setUser is called
-    this.wsConnection = null;
+    this.wsConnection = new WSConnection({ client: this });
+    this.wsConnection.registerSubscriptions();
     this.wsPromise = null;
     this.setUserPromise = null;
     // keeps a reference to all the channels that are in use
@@ -329,9 +359,6 @@ export class StreamChat extends ChatApi {
     this.persistUserOnConnectionFailure = this.options?.persistUserOnConnectionFailure;
 
     this.tokenManager = new TokenManager();
-    this.connectionIdManager = new ConnectionIdManager();
-
-    this.defaultWSTimeout = 15 * 1000;
 
     this.messageStore = new EntityStore<LocalMessage>({
       getEntityId: (message) => message.id,
@@ -349,10 +376,11 @@ export class StreamChat extends ChatApi {
     // the managers above. `'client'` is the one key that cannot be configured after construction —
     // this registry is born here, so there is no earlier moment for a caller to register anything.
     if (this.options.config) this.config.set(this.options.config);
-    this.initializeManagerConfig();
 
-    // Last statement: everything a setup function might reach now exists. `StateStore.subscribe` fires
-    // immediately, so a function registered later still applies at once.
+    // Last statement: everything a setup function might reach now exists. Subscribing applies the
+    // current configuration on the spot, which is the managers' one derivation — deriving here as
+    // well would run every `initializeConfig` twice per construction. `StateStore.subscribe` fires
+    // immediately, so a setup function registered later still applies at once.
     this.wireClientConfiguration();
   }
 
@@ -394,6 +422,9 @@ export class StreamChat extends ChatApi {
     const config = this.config.getConfig('client');
 
     this.connectionRecovery.initializeConfig(config?.connectionRecovery);
+    // Installs the platform listener named by the slice, falling back to the browser default.
+    this.networkConnection.initializeConfig(config?.networkConnection);
+    this.wsConnection.initializeConfig(config?.wsConnection);
     this.reminders.initializeConfig(config?.reminders);
     this.threads.initializeConfig(config?.threads);
     this.messageDeliveryReporter.initializeConfig(config?.messageDelivery);
@@ -650,7 +681,7 @@ export class StreamChat extends ChatApi {
       return this.wsPromise;
     }
 
-    if (this.wsConnection?.isHealthy && this._hasConnectionID()) {
+    if (this.wsConnection?.isHealthy && this.connectionIdManager.connectionId) {
       logger
         .withExtraTags('openConnection')
         .debug('openConnection was called twice; a healthy connection already exists.');
@@ -1267,10 +1298,9 @@ export class StreamChat extends ChatApi {
    * down, stays `NotWatching` and must not be resurrected by a reconnect.
    *
    * Invoked from two places, because neither covers the other: `StableWSConnection._setHealth(false)`
-   * for an abnormal close/error (immediately — NOT via the `connection.changed` event, which is
-   * 5s-debounced when going offline and is skipped entirely on a quick flap, both of which would
-   * leave the status lying), and `closeConnection()` for a deliberate shutdown (e.g. mobile
-   * backgrounding), which sets `isHealthy` directly and so never reaches `_setHealth`.
+   * for an abnormal close/error, and `closeConnection()` for a deliberate shutdown (e.g. mobile
+   * backgrounding), whose `disconnect()` writes the status through `_applyHealth` and so never
+   * reaches `_setHealth`.
    */
   _markActiveChannelsWatchInterrupted() {
     for (const cid in this.activeChannels) {
@@ -1340,7 +1370,9 @@ export class StreamChat extends ChatApi {
   _settleConnectPromises = () => {
     logger
       .withExtraTags('_settleConnectPromises')
-      .info(`Connection re-established with connection ID ${this._getConnectionID()}.`);
+      .info(
+        `Connection re-established with connection ID ${this.connectionIdManager.connectionId}.`,
+      );
 
     // If state recovery happens afer a failed connect (for example on persistUserOnConnectionFailure: true) we need to flip the wsPromise from rejected to resolved
     // Otherwise all API calls that wait for the promise will fail
@@ -1367,15 +1399,12 @@ export class StreamChat extends ChatApi {
       throw Error('Property clientId is not set');
     }
 
-    // The StableWSConnection handles all the reconnection logic.
-    this.wsConnection = new StableWSConnection({
-      client: this,
-    });
-
     try {
-      return await this.wsConnection.connect(this.defaultWSTimeout);
+      // `wsConnection` builds and owns the socket; the reconnection logic and the connect timeout
+      // (`config.connectTimeoutMs`) live in there.
+      return await this.wsConnection.connect();
     } catch (error) {
-      // We can't recover from this error, so reject connection id promise
+      // A failure the socket does not retry leaves nothing else to settle the pending connection id.
       if (!isWSFailure(error as APIError)) {
         this.connectionIdManager.rejectConnectionId(error);
       }
@@ -1446,6 +1475,8 @@ export class StreamChat extends ChatApi {
           ...restOptions,
         };
 
+    // No wait here either — see `channel.watch()`. `ApiClient` gates on the flags this payload
+    // carries, so a watched query waits for a connection id and a plain read does not.
     return await super.queryChannels(payload, requestOptions);
   }
 
@@ -1591,11 +1622,11 @@ export class StreamChat extends ChatApi {
       c.offlineMode = offlineMode;
       c.initialized = !offlineMode;
       // Same precedence `queryChannels` applies to the request: an explicit caller choice wins,
-      // otherwise the query watched, because that is `queryChannels`' default and a request that
-      // reached the server got a connection id to watch on (`ApiClient` gates on one). Offline
+      // otherwise we watch only if there is a connection to watch on: `hydrateActiveChannels` is
+      // public, so a direct caller has no gated request behind it to imply a watch. Offline
       // hydration populates state without a live watch, so it never counts - and a query that did
       // not watch leaves the status untouched (it neither starts nor ends a watch).
-      if (!offlineMode && (queryChannelsOptions?.watch ?? true)) {
+      if (!offlineMode && (queryChannelsOptions?.watch ?? this.wsConnection.isHealthy)) {
         c.watchStatus = ChannelWatchStatus.Watching;
       }
       c.push_preferences = channelState.push_preferences;

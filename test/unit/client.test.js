@@ -533,8 +533,8 @@ describe('Client watching requests across close/reopen', () => {
 		HeldWebSocket.instances = [];
 		const client = new StreamChat('key', {
 			allowServerSideConnect: true,
-			WebSocketImpl: HeldWebSocket,
 		});
+		client.wsConnection.updateConfig({ webSocketImpl: HeldWebSocket });
 		client.tokenManager.getToken = () => 'mock-token';
 		client.tokenManager.tokenReady = () => Promise.resolve();
 		client.tokenManager.loadToken = () => Promise.resolve('mock-token');
@@ -926,6 +926,20 @@ describe('Client connectUser', () => {
 		expect(connection).to.equal('openConnection');
 	});
 
+	it('drops the connection id when the socket goes down', () => {
+		const socket = new StableWSConnection({ wsConnection: client.wsConnection });
+		client.wsConnection.connection = socket;
+		socket._setHealth(true);
+		client.connectionIdManager.resolveConnectionId('ID');
+		expect(client.connectionIdManager.connectionId).to.equal('ID');
+
+		// The server keys watches by this id and rejects a request carrying one it has closed, so a
+		// value here always names a connection the server still holds.
+		socket._setHealth(false);
+		expect(client.wsConnection.isHealthy).to.be.false;
+		expect(client.connectionIdManager.connectionId).to.equal(undefined);
+	});
+
 	it('_getConnectionID, _hasConnectionID read through the connection id manager', () => {
 		expect(client._hasConnectionID()).to.be.false;
 		expect(client._getConnectionID()).to.equal(undefined);
@@ -938,9 +952,10 @@ describe('Client connectUser', () => {
 
 	it('drops the connection id when the socket closes', async () => {
 		client.connectionIdManager.resolveConnectionId('ID');
-		client.wsConnection = new StableWSConnection({ client });
+		const socket = new StableWSConnection({ wsConnection: client.wsConnection });
+		client.wsConnection.connection = socket;
 		// the socket was never opened, so disconnect() only has to run its teardown
-		client.wsConnection.ws = undefined;
+		socket.ws = undefined;
 
 		await client.closeConnection();
 

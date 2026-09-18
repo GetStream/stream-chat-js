@@ -1,0 +1,396 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { NetworkConnectionObserver } from '../../../src/connection';
+import type {
+  NetworkConnectionState,
+  NetworkStatusReporter,
+} from '../../../src/connection';
+import type { StreamChat } from '../../../src/client';
+
+/**
+ * A stand-in for the client, carrying only what the observer touches. Nothing in this suite
+ * constructs a `StreamChat` or opens a WebSocket — deliberately: the observer's whole point is that
+ * device network status is independent of the socket, and a test that needed a client would mean
+ * that independence had been lost.
+ */
+const fakeClient = () => {
+  const dispatchEvent = vi.fn();
+  return {
+    client: { dispatchEvent } as unknown as StreamChat,
+    dispatchEvent,
+  };
+};
+
+/** A reporter whose callback the test drives directly, standing in for any platform listener. */
+const fakeReporter = () => {
+  const unsubscribe = vi.fn();
+  let emit: ((isOnline: boolean) => void) | undefined;
+
+  const reporter: NetworkStatusReporter = (onStatusChange) => {
+    emit = onStatusChange;
+    return unsubscribe;
+  };
+
+  return {
+    reporter,
+    unsubscribe,
+    emit: (isOnline: boolean) => {
+      if (!emit) throw new Error('reporter was never installed');
+      emit(isOnline);
+    },
+  };
+};
+
+describe('NetworkConnectionObserver', () => {
+  let observer: NetworkConnectionObserver;
+  let dispatchEvent: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    const fake = fakeClient();
+    dispatchEvent = fake.dispatchEvent;
+    observer = new NetworkConnectionObserver({ client: fake.client });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  describe('initial state', () => {
+    it('starts unknown rather than assuming online', () => {
+      // `undefined` is the honest answer before any reporter reports, and it is what every host
+      // without a built-in reporter keeps. Defaulting to `true` here would be indistinguishable
+      // from a real reading.
+      expect(observer.isOnline).toBeUndefined();
+      expect(observer.state.getLatestValue()).toEqual({
+        isOnline: undefined,
+        lastOnlineAt: null,
+        lastOfflineAt: null,
+      });
+    });
+
+    it('dispatches nothing before it is told anything', () => {
+      expect(dispatchEvent).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('tracking a reporter', () => {
+    it('adopts the first reported status and stamps only the matching timestamp', () => {
+      const source = fakeReporter();
+      observer.setStatusReporter(source.reporter);
+
+      source.emit(true);
+
+      const state = observer.state.getLatestValue();
+      expect(state.isOnline).toBe(true);
+      expect(state.lastOnlineAt).toBeInstanceOf(Date);
+      expect(state.lastOfflineAt).toBeNull();
+    });
+
+    it('advances each timestamp independently across online → offline → online', () => {
+      const source = fakeReporter();
+      observer.setStatusReporter(source.reporter);
+
+      source.emit(true);
+      const firstOnlineAt = observer.state.getLatestValue().lastOnlineAt;
+
+      source.emit(false);
+      const offlineAt = observer.state.getLatestValue().lastOfflineAt;
+      expect(offlineAt).toBeInstanceOf(Date);
+      // Going offline must not disturb the record of when we were last online.
+      expect(observer.state.getLatestValue().lastOnlineAt).toBe(firstOnlineAt);
+
+      source.emit(true);
+      expect(observer.state.getLatestValue().lastOnlineAt).not.toBe(firstOnlineAt);
+      expect(observer.state.getLatestValue().lastOfflineAt).toBe(offlineAt);
+    });
+
+    it('publishes into its store and dispatches no event', () => {
+      // The store is the whole interface. A companion event would say the same thing twice, and two
+      // descriptions of one fact can disagree — which is what the socket's own event did, by
+      // announcing a drop five seconds after the store had already published it.
+      const source = fakeReporter();
+      observer.setStatusReporter(source.reporter);
+
+      source.emit(true);
+      source.emit(false);
+
+      expect(observer.isOnline).toBe(false);
+      expect(observer.state.getLatestValue().lastOnlineAt).toBeInstanceOf(Date);
+      expect(dispatchEvent).not.toHaveBeenCalled();
+    });
+
+    it('ignores a repeated identical status', () => {
+      const source = fakeReporter();
+      observer.setStatusReporter(source.reporter);
+
+      const onStateChange = vi.fn();
+      // `StateStore.subscribe` fires once with the current value, so that first call is the baseline.
+      observer.state.subscribe(onStateChange);
+      expect(onStateChange).toHaveBeenCalledTimes(1);
+
+      source.emit(true);
+      expect(onStateChange).toHaveBeenCalledTimes(2);
+
+      dispatchEvent.mockClear();
+      source.emit(true);
+      source.emit(true);
+
+      // No store update and no event: a repeat is not an edge. Without the guard the timestamp
+      // write alone would defeat `StateStore.next`'s equality check and publish anyway.
+      expect(onStateChange).toHaveBeenCalledTimes(2);
+      expect(dispatchEvent).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('setStatus', () => {
+    it('reports status without any reporter installed', () => {
+      // The supported replacement for reaching into `client.wsConnection.onlineStatusChanged` with a
+      // synthesized DOM event, and the escape hatch for hosts with no listener API to register.
+      observer.setStatus(false);
+
+      expect(observer.isOnline).toBe(false);
+      expect(observer.state.getLatestValue().lastOfflineAt).toBeInstanceOf(Date);
+      expect(dispatchEvent).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('swapping the reporter', () => {
+    it('unsubscribes the previous one exactly once and adopts the new value immediately', () => {
+      const first = fakeReporter();
+      observer.setStatusReporter(first.reporter);
+      first.emit(false);
+
+      observer.setStatusReporter((onStatusChange) => {
+        onStatusChange(true);
+        return vi.fn();
+      });
+
+      expect(first.unsubscribe).toHaveBeenCalledTimes(1);
+      expect(observer.isOnline).toBe(true);
+    });
+
+    it('leaves the last known status alone when cleared with null', () => {
+      const source = fakeReporter();
+      observer.setStatusReporter(source.reporter);
+      source.emit(true);
+
+      observer.setStatusReporter(null);
+
+      // Clearing the listener is not "forget what we were told" — an edge is not a state, and
+      // reverting to unknown would lose information rather than reset it.
+      expect(source.unsubscribe).toHaveBeenCalledTimes(1);
+      expect(observer.isOnline).toBe(true);
+    });
+
+    it('survives a reporter that throws, leaving status unknown', () => {
+      observer.setStatusReporter(() => {
+        throw new Error('reporter exploded');
+      });
+
+      expect(observer.isOnline).toBeUndefined();
+    });
+  });
+
+  describe('configuration', () => {
+    it('installs the reporter named by the declarative config', () => {
+      const source = fakeReporter();
+
+      observer.initializeConfig({ statusReporter: source.reporter });
+      source.emit(true);
+
+      expect(observer.config.statusReporter).toBe(source.reporter);
+      expect(observer.isOnline).toBe(true);
+    });
+
+    it('falls back to the platform default when none is configured', () => {
+      // In this environment (`node`) there is no default to pick, so nothing is installed and the
+      // status stays unknown — the same outcome as React Native.
+      observer.initializeConfig();
+
+      expect(observer.config.statusReporter).toBeUndefined();
+      expect(observer.isOnline).toBeUndefined();
+    });
+
+    it('replaces a previously installed reporter on re-initialization', () => {
+      const first = fakeReporter();
+      observer.initializeConfig({ statusReporter: first.reporter });
+
+      const second = fakeReporter();
+      observer.initializeConfig({ statusReporter: second.reporter });
+
+      expect(first.unsubscribe).toHaveBeenCalledTimes(1);
+      second.emit(false);
+      expect(observer.isOnline).toBe(false);
+    });
+
+    it('keeps an imperatively installed reporter across a derivation', () => {
+      // `client.config.set` on any `client` key re-derives every manager. Before this, that tore the
+      // reporter down and installed the platform default in its place, which on React Native is
+      // nothing — so the device's status silently froze at whatever was last reported.
+      const source = fakeReporter();
+      observer.setStatusReporter(source.reporter);
+
+      observer.initializeConfig();
+
+      expect(source.unsubscribe).not.toHaveBeenCalled();
+      source.emit(true);
+      expect(observer.isOnline).toBe(true);
+    });
+
+    it('keeps an imperative clear across a derivation', () => {
+      const source = fakeReporter();
+      observer.setStatusReporter(source.reporter);
+      observer.setStatusReporter(null);
+
+      observer.initializeConfig();
+
+      // Not resurrected as the platform default either: "explicitly none" is a decision, not an
+      // absence of one.
+      expect(observer.config.statusReporter).toBeUndefined();
+      expect(observer.isOnline).toBeUndefined();
+    });
+
+    it('lets the declarative tree supersede an earlier imperative reporter', () => {
+      const imperative = fakeReporter();
+      observer.setStatusReporter(imperative.reporter);
+
+      const declared = fakeReporter();
+      observer.initializeConfig({ statusReporter: declared.reporter });
+
+      expect(imperative.unsubscribe).toHaveBeenCalledTimes(1);
+      declared.emit(false);
+      expect(observer.isOnline).toBe(false);
+    });
+
+    it('lets a later imperative reporter supersede the declared one', () => {
+      const declared = fakeReporter();
+      observer.initializeConfig({ statusReporter: declared.reporter });
+
+      const imperative = fakeReporter();
+      observer.setStatusReporter(imperative.reporter);
+
+      expect(declared.unsubscribe).toHaveBeenCalledTimes(1);
+      imperative.emit(true);
+      expect(observer.isOnline).toBe(true);
+    });
+
+    it('installs the reporter handed to updateConfig', () => {
+      // Storing it without installing it is indistinguishable from a host that has no reporter at
+      // all: no listener, no error, and `isOnline` unknown forever.
+      const source = fakeReporter();
+
+      observer.updateConfig({ statusReporter: source.reporter });
+      source.emit(true);
+
+      expect(observer.isOnline).toBe(true);
+    });
+
+    it('releases the previous listener when updateConfig replaces it', () => {
+      const first = fakeReporter();
+      observer.updateConfig({ statusReporter: first.reporter });
+
+      const second = fakeReporter();
+      observer.updateConfig({ statusReporter: second.reporter });
+
+      expect(first.unsubscribe).toHaveBeenCalledTimes(1);
+      second.emit(false);
+      expect(observer.isOnline).toBe(false);
+    });
+
+    it('exposes config as a store, so a consumer can react to a swap', () => {
+      const onConfigChange = vi.fn();
+      observer.configState.subscribe(onConfigChange);
+      onConfigChange.mockClear();
+
+      const source = fakeReporter();
+      observer.updateConfig({ statusReporter: source.reporter });
+
+      expect(onConfigChange).toHaveBeenCalled();
+      expect(observer.config.statusReporter).toBe(source.reporter);
+    });
+  });
+
+  describe('subscription lifecycle', () => {
+    it('reinstalls the platform listener when subscriptions are re-registered', () => {
+      // The teardown releases the listener, so without reinstalling here the observer would go
+      // permanently deaf after one unregister/register cycle while still looking healthy.
+      //
+      // Asserted on the reporter being *invoked* again rather than on a status arriving: a fake
+      // reporter's emitter still holds the callback it was handed, so driving it would pass even
+      // with nothing installed.
+      const unsubscribe = vi.fn();
+      const reporter = vi.fn((() => unsubscribe) as NetworkStatusReporter);
+      observer.initializeConfig({ statusReporter: reporter });
+      observer.registerSubscriptions();
+      expect(reporter).toHaveBeenCalledTimes(1);
+
+      observer.unregisterSubscriptions();
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+
+      observer.registerSubscriptions();
+
+      expect(reporter).toHaveBeenCalledTimes(2);
+    });
+
+    it('releases the platform listener on the last unregister, not the first', () => {
+      const source = fakeReporter();
+      observer.setStatusReporter(source.reporter);
+
+      const unregisterA = observer.registerSubscriptions();
+      const unregisterB = observer.registerSubscriptions();
+
+      unregisterA();
+      expect(source.unsubscribe).not.toHaveBeenCalled();
+
+      unregisterB();
+      expect(source.unsubscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it('is idempotent — registering twice does not stack teardown', () => {
+      observer.registerSubscriptions();
+      observer.registerSubscriptions();
+
+      expect(observer.hasSubscriptions).toBe(true);
+    });
+
+    it('keeps the last known status after teardown', () => {
+      const source = fakeReporter();
+      observer.setStatusReporter(source.reporter);
+      source.emit(true);
+
+      observer.registerSubscriptions()();
+
+      const state: NetworkConnectionState = observer.state.getLatestValue();
+      expect(state.isOnline).toBe(true);
+    });
+  });
+});
+
+describe('NetworkConnectionObserver — idempotent installation', () => {
+  it('re-installing the same reporter is a no-op', () => {
+    // Configuration is re-derived more than once at construction (the client calls
+    // `initializeConfig` directly, and again through the config store's immediate subscribe), so a
+    // naive implementation tore the platform listener down and recreated it identical.
+    const { client } = { client: { dispatchEvent: vi.fn() } as never };
+    const observer = new NetworkConnectionObserver({ client });
+
+    const unsubscribe = vi.fn();
+    const reporter: NetworkStatusReporter = () => unsubscribe;
+
+    observer.setStatusReporter(reporter);
+    observer.setStatusReporter(reporter);
+    observer.setStatusReporter(reporter);
+
+    expect(unsubscribe).not.toHaveBeenCalled();
+  });
+
+  it('still swaps when handed a different reporter', () => {
+    const { client } = { client: { dispatchEvent: vi.fn() } as never };
+    const observer = new NetworkConnectionObserver({ client });
+
+    const firstUnsubscribe = vi.fn();
+    observer.setStatusReporter(() => firstUnsubscribe);
+    observer.setStatusReporter(() => vi.fn());
+
+    expect(firstUnsubscribe).toHaveBeenCalledTimes(1);
+  });
+});

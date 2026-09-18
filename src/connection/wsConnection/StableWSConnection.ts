@@ -1,16 +1,12 @@
-import {
-  addConnectionEventListeners,
-  chatCodes,
-  randomId,
-  removeConnectionEventListeners,
-  retryInterval,
-  sleep,
-} from './utils';
-import { chatLoggerSystem } from './logger';
-import type { ConnectAPIResponse, ConnectedEvent, ConnectionOpen } from './types';
-import type { StreamChat } from './client';
-import type { APIError } from './errors';
-import type { WSEvent } from './gen/models';
+import { chatCodes, randomId, retryInterval, sleep } from '../../utils';
+import { chatLoggerSystem } from '../../logger';
+import { WS_NETWORK_RECOVERY_RETRY_MS } from './config';
+import type { ConnectAPIResponse, ConnectedEvent, ConnectionOpen } from '../../types';
+import type { WSConnection } from './WSConnection';
+import type { StreamChat } from '../../client';
+import type { APIError } from '../../errors';
+import type { WSEvent } from '../../gen/models';
+import type { WSConnectionConfig } from './types';
 
 const logger = chatLoggerSystem.getLogger('connection');
 
@@ -53,36 +49,37 @@ class WSCloseError extends Error {
 /**
  * A WS connection that reconnects upon failure.
  *
- * - the browser will sometimes report that you're online or offline
- * - the WS connection can break and fail (there is a 30s health check)
- * - sometimes your WS connection will seem to work while the user is in fact offline
- * - to speed up online/offline detection you can use the `window.addEventListener('offline')`
+ * - the WS connection can break and fail; a ping goes out every 25s (`pingInterval`)
+ * - sometimes the WS connection seems to work while the device is in fact offline
+ * - the device's own network status is a separate fact, owned by `client.networkConnection` and fed by a
+ *   platform listener the integrator registers; this class consumes it, it does not detect it
  *
- * There are 4 ways in which a connection can become unhealthy:
+ * There are 4 ways in which this connection can go down:
  * - WebSocket.onerror is called
  * - WebSocket.onclose is called
- * - the health check fails and no event is received for ~40 seconds
- * - the browser indicates the connection is now offline
+ * - no frame arrives for 35s, so the health-check loop gives up (`connectionCheckTimeout`)
+ * - the device reports its network went offline
  *
  * There are 2 assumptions we make about the server:
  * - state can be recovered by querying the channel again
  * - if the servers fails to publish a message to the client, the WS connection is destroyed
  */
 export class StableWSConnection {
-  // global from constructor
-  client: StreamChat;
+  /**
+   * The `WSConnection` this socket belongs to. Held instead of the client, because the status store
+   * lives here and everything the socket needs from the client is reachable through it.
+   */
+  wsConnection: WSConnection;
 
   // local vars
   connectionOpen?: ConnectAPIResponse;
   consecutiveFailures: number;
-  pingInterval: number;
   healthCheckTimeoutRef?: NodeJS.Timeout;
   isConnecting: boolean;
   isDisconnected: boolean;
   isHealthy: boolean;
   isResolved?: boolean;
   lastEvent: Date | null;
-  connectionCheckTimeout: number;
   connectionCheckTimeoutRef?: NodeJS.Timeout;
   rejectPromise?: (
     reason?: Error & {
@@ -97,9 +94,9 @@ export class StableWSConnection {
   ws?: WebSocket;
   wsID: number;
 
-  constructor({ client }: { client: StreamChat }) {
-    /** StreamChat client */
-    this.client = client;
+  constructor({ wsConnection }: { wsConnection: WSConnection }) {
+    /** The `WSConnection` that owns this socket */
+    this.wsConnection = wsConnection;
     /** consecutive failures influence the duration of the timeout */
     this.consecutiveFailures = 0;
     /** keep track of the total number of failures */
@@ -116,24 +113,52 @@ export class StableWSConnection {
     this.wsID = 1;
     /** Store the last event time for health checks */
     this.lastEvent = null;
-    /** Send a health check message every 25 seconds */
-    this.pingInterval = 25 * 1000;
-    this.connectionCheckTimeout = this.pingInterval + 10 * 1000;
-
-    addConnectionEventListeners(this.onlineStatusChanged);
-  }
-
-  setClient(client: StreamChat) {
-    this.client = client;
   }
 
   /**
-   * Connects to the WS URL. The default 15s timeout allows between 2 and 3 tries.
-   *
-   * @param timeout - Connect timeout in milliseconds (optional, defaults to `15000`).
-   * @returns A promise that resolves once the first health check message is received.
+   * The timing knobs, read from the parent **live** rather than snapshotted, so an `updateConfig`
+   * reaches the socket that is already open instead of only the next one.
    */
-  async connect(timeout = 15000) {
+  private get config(): WSConnectionConfig {
+    return this.wsConnection.config;
+  }
+
+  /** How often a health-check ping goes out. Configurable as `pingIntervalMs`. */
+  get pingInterval(): number {
+    return this.config.pingIntervalMs;
+  }
+
+  /**
+   * How long the connection check tolerates silence before tearing the socket down.
+   *
+   * Derived at read time rather than stored, so changing the ping interval moves the connection check
+   * with it instead of leaving the socket to kill itself between pings.
+   */
+  get connectionCheckTimeout(): number {
+    return this.config.pingIntervalMs + this.config.healthCheckGracePeriodMs;
+  }
+
+  /** The client, reached through the parent. See {@link wsConnection}. */
+  get client(): StreamChat {
+    return this.wsConnection.client;
+  }
+
+  /**
+   * Re-parents this socket, for one supplied through `config.connection` and built against a
+   * different `WSConnection` than the client adopting it.
+   */
+  setWSConnection(wsConnection: WSConnection) {
+    this.wsConnection = wsConnection;
+  }
+
+  /**
+   * Connects to the WS URL.
+   *
+   * @param timeout - Connect timeout in milliseconds. Defaults to `config.connectTimeoutMs` (15s),
+   *   which allows between 2 and 3 tries.
+   * @returns A promise that resolves once the server's `connection.ok` hello event arrives.
+   */
+  async connect(timeout: number = this.config.connectTimeoutMs) {
     if (this.isConnecting) {
       throw Error(
         `You've called connect twice, can only attempt 1 connection at the time`,
@@ -150,7 +175,7 @@ export class StableWSConnection {
         .withExtraTags('connect')
         .info(`Established a WebSocket connection. Health check: ${healthCheck}.`);
     } catch (error: any) {
-      this.isHealthy = false;
+      this._applyHealth(false);
       this.consecutiveFailures += 1;
 
       const e = error as APIError;
@@ -179,12 +204,12 @@ export class StableWSConnection {
   }
 
   /**
-   * _waitForHealthy polls the promise connection to see if its resolved until it times out
-   * the default 15s timeout allows between 2~3 tries
+   * _waitForHealthy polls the promise connection to see if its resolved until it times out.
    *
-   * @param timeout - duration (ms)
+   * @param timeout - duration (ms). Defaults to `config.connectTimeoutMs` (15s), which allows
+   *   between 2~3 tries.
    */
-  _waitForHealthy(timeout = 15000) {
+  _waitForHealthy(timeout: number = this.config.connectTimeoutMs) {
     return Promise.race([
       (async () => {
         const interval = 50; // ms
@@ -228,7 +253,7 @@ export class StableWSConnection {
    * @returns url string
    */
   _buildUrl = () => {
-    const params = new URLSearchParams(this.client.options.wsUrlParams);
+    const params = new URLSearchParams(this.config.urlParams);
     params.set('api_key', this.client.key);
     params.set('stream-auth-type', this.client.getAuthType());
     // Browsers cannot set headers on the WS handshake, so the server reads this
@@ -251,6 +276,9 @@ export class StableWSConnection {
     this.wsID += 1;
     this.isConnecting = false;
     this.isDisconnected = true;
+    // A deliberate close still expects a reopen - mobile backgrounding is the reason this method
+    // exists - so anything already waiting for a connection id keeps waiting. Invalidating drops the
+    // dead id and arms a fresh deferred for the socket `openConnection()` will build.
     this.client.connectionIdManager.invalidate();
 
     // start by removing all the listeners
@@ -261,9 +289,9 @@ export class StableWSConnection {
       clearInterval(this.connectionCheckTimeoutRef);
     }
 
-    removeConnectionEventListeners(this.onlineStatusChanged);
-
-    this.isHealthy = false;
+    // Through `_applyHealth`, not a bare assignment: the store must tell the truth on this path too.
+    // It is what `closeConnection()` uses, and a deliberate shutdown is still a transition.
+    this._applyHealth(false);
 
     let isClosedPromise: Promise<void>;
     // and finally close...
@@ -311,7 +339,7 @@ export class StableWSConnection {
   /**
    * Connects to the WS endpoint.
    *
-   * @returns A promise that resolves once the first health check message is received.
+   * @returns A promise that resolves once the server's `connection.ok` hello event arrives.
    */
   async _connect() {
     // simply ignore _connect if it's currently connecting, or if disconnect() was called
@@ -349,7 +377,7 @@ export class StableWSConnection {
         requestID: this.requestID,
       });
 
-      const WS = this.client.options.WebSocketImpl ?? WebSocket;
+      const WS = this.config.webSocketImpl ?? WebSocket;
       this.ws = new WS(wsURL);
 
       this.ws.onopen = this.onopen.bind(this, this.wsID, authMessage);
@@ -437,7 +465,7 @@ export class StableWSConnection {
 
       this.consecutiveFailures = 0;
     } catch (error: any) {
-      this.isHealthy = false;
+      this._applyHealth(false);
       this.consecutiveFailures += 1;
       if (
         error.code === chatCodes.TOKEN_EXPIRED &&
@@ -460,9 +488,9 @@ export class StableWSConnection {
 
         this._reconnect();
       } else {
-        // Giving up. `_setHealth(false)` armed a deferred on the assumption that a reconnect would
-        // settle it, and nothing else will now - leaving it pending hangs every request waiting for
-        // a connection id, with no retry coming and no error to show for it.
+        // Giving up. Going down armed a deferred on the assumption that a reconnect would settle it,
+        // and nothing will now — leaving it pending hangs every request waiting for an id, with no
+        // retry coming and no error to show for it.
         this.client.connectionIdManager.rejectConnectionId(error);
       }
     }
@@ -470,30 +498,63 @@ export class StableWSConnection {
   }
 
   /**
-   * Called when the browser connects or disconnects from the internet.
+   * Handles a change reported for the `'network'` connection — the device's own — and applies it to
+   * the `'ws'` connection this class owns.
    *
-   * @param event - The DOM event whose `type` is `'online'` or `'offline'`.
+   * The logs name both by their {@link ConnectionType} value rather than by prose, so a reader is
+   * never left guessing which connection a line is about. The effect clause is conditional because there may not be an effect: `_setHealth` returns
+   * early when the status is unchanged, and a `'network'` report commonly arrives after the socket has
+   * already died on its own.
+   *
+   * @deprecated Report network status through `client.networkConnection.setStatus(isOnline)` instead, or
+   *   register a listener with `client.networkConnection.setStatusReporter(…)`. This entry point takes
+   *   a DOM-shaped object and reaches into the socket, neither of which a caller should need. Kept
+   *   for one major because `stream-chat-react-native` calls it directly.
+   *
+   * @param event - A DOM-shaped object whose `type` is `'online'` or `'offline'`. It carries no
+   *   connection identifier and never has: it was fed by `window`'s own `online`/`offline` events,
+   *   which are always about the device's network, and React Native synthesizes the same shape from
+   *   `NetInfo`.
    */
   onlineStatusChanged = (event: Event) => {
-    if (event.type === 'offline') {
-      // mark the connection as down
-      logger
-        .withExtraTags('onlineStatusChanged')
-        .info('Network status changed to offline.');
-      this._setHealth(false);
-    } else if (event.type === 'online') {
-      // retry right now...
-      // We check this.isHealthy, not sure if it's always
-      // smart to create a new WS connection if the old one is still up and running.
-      // it's possible we didn't miss any messages, so this process is just expensive and not needed.
-      logger
-        .withExtraTags('onlineStatusChanged')
-        .info(`Network status changed to online. isHealthy: ${this.isHealthy}.`);
-      if (!this.isHealthy) {
-        this._reconnect({ interval: 10 });
-      }
-    }
+    if (event.type === 'offline') this._applyNetworkStatus(false);
+    else if (event.type === 'online') this._applyNetworkStatus(true);
   };
+
+  /**
+   * Applies a reported change in the `'network'` connection to the `'ws'` connection this class owns.
+   *
+   * The single body behind both entry points — the network-store subscription the parent owns, and
+   * the deprecated {@link onlineStatusChanged} shim React Native still calls — so the two cannot
+   * drift.
+   *
+   * @internal
+   */
+  public _applyNetworkStatus(online: boolean) {
+    if (!online) {
+      logger
+        .withExtraTags('onlineStatusChanged')
+        .info(`The 'network' connection went offline.`);
+      this._setHealth(false);
+      return;
+    }
+
+    // A socket still carrying traffic has probably missed nothing, so replacing it would cost a
+    // handshake and a fresh connection ID for no gain. Only reconnect if it is actually down.
+    logger
+      .withExtraTags('onlineStatusChanged')
+      .info(
+        `The 'network' connection went online; ${
+          this.isHealthy
+            ? `leaving the 'ws' connection as it is`
+            : `reconnecting the 'ws' connection now`
+        }.`,
+      );
+
+    if (!this.isHealthy) {
+      this._reconnect({ interval: WS_NETWORK_RECOVERY_RETRY_MS });
+    }
+  }
 
   onopen = (wsId: number, authMessage: string) => {
     if (this.wsID !== wsId) return;
@@ -540,6 +601,11 @@ export class StableWSConnection {
         this.rejectPromise?.(this._errorFromWSEvent(data, false));
         return;
       }
+
+      // Published before going online, so "the socket is up" implies "there is an id to watch on".
+      this.client.connectionIdManager.resolveConnectionId(
+        (decodedData as ConnectionOpen).connection_id,
+      );
 
       this.resolvePromise?.(decodedData as ConnectionOpen);
       this._setHealth(true);
@@ -619,33 +685,50 @@ export class StableWSConnection {
   };
 
   /**
-   * Sets the connection to healthy or unhealthy. Broadcasts an event if the connection status changed.
+   * Writes this connection's status to the field and to `client.wsConnection.state`, and drops the
+   * connection id when it goes down. Returns whether the status changed.
    *
-   * @param healthy - Whether the connection is healthy.
+   * Every path that transitions the status goes through here — including `disconnect()`, which
+   * `closeConnection()` uses, and the two error paths. Covering all of them is why the store exists,
+   * and why invalidating the id belongs here rather than beside any one of those paths.
+   *
+   * Construction is not routed through here: initializing the field is not a transition, and stamping
+   * `lastUnhealthyAt` because a socket object was built would be a lie.
    */
-  _setHealth = (healthy: boolean) => {
-    if (healthy === this.isHealthy) return;
+  private _applyHealth(healthy: boolean): boolean {
+    if (healthy === this.isHealthy) return false;
 
     this.isHealthy = healthy;
 
-    if (this.isHealthy) {
-      this.client.dispatchEvent({ type: 'connection.changed', online: this.isHealthy });
-      return;
+    if (!healthy) {
+      // The id those watches were keyed by is dead, so no further request may carry it. Invalidating
+      // arms a fresh deferred, so requests needing one wait for the reconnect instead of racing
+      // ahead with the old one.
+      this.client.connectionIdManager.invalidate();
     }
 
-    // The server keys channel watches by connection ID, so they are gone the moment the socket is.
-    // Done here rather than off the `connection.changed` event below, which is debounced by 5s.
-    this.client._markActiveChannelsWatchInterrupted();
-    // Same fact, same moment, seen from the other side: the id those watches were keyed by is dead,
-    // so no further request may be sent with it. Invalidating arms a fresh deferred, so requests
-    // needing an id wait for the reconnect instead of racing ahead with the dead one.
-    this.client.connectionIdManager.invalidate();
+    this.wsConnection._setStatus({ isHealthy: healthy });
 
-    // we're offline, wait few seconds and fire and event if still offline
-    setTimeout(() => {
-      if (this.isHealthy) return;
-      this.client.dispatchEvent({ type: 'connection.changed', online: this.isHealthy });
-    }, 5000);
+    return true;
+  }
+
+  /**
+   * Applies a status change and does the bookkeeping that goes with it.
+   *
+   * Announcing it is not this class's job. The status lives in `client.wsConnection.state`, which
+   * {@link _applyHealth} writes on every transition — including the ones that were always silent —
+   * so a consumer subscribes there rather than waiting to be told.
+   *
+   * The five-second wait before announcing a drop moved to whoever renders the banner, its length
+   * configurable as `offlineNotificationDisplayDelayMs`. The timer here outlived the socket that
+   * armed it, so a replaced connection announced a drop its replacement had already recovered from.
+   */
+  _setHealth = (healthy: boolean) => {
+    if (!this._applyHealth(healthy)) return;
+    if (this.isHealthy) return;
+
+    // The server keys channel watches by connection ID, so they are gone the moment the socket is.
+    this.client._markActiveChannelsWatchInterrupted();
   };
 
   /**
@@ -731,7 +814,7 @@ export class StableWSConnection {
       clearTimeout(this.healthCheckTimeoutRef);
     }
 
-    // 30 seconds is the recommended interval (messenger uses this)
+    // Sent every `config.pingIntervalMs` (25s by default); the server answers with a health check event.
     this.healthCheckTimeoutRef = setTimeout(() => {
       // send the healthcheck.., server replies with a health check event
       const data = [{ type: 'health.check', client_id: this.client.clientId }];

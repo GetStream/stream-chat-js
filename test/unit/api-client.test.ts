@@ -2,9 +2,8 @@ import type { AxiosRequestConfig } from 'axios';
 import { AxiosError } from 'axios';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { getClientWithUser } from './test-utils/getClient';
-
 import { requiresConnectionId } from '../../src/api-client';
+import { getClientWithUser } from './test-utils/getClient';
 
 import type { StreamChat } from '../../src/client';
 import type { StreamRequestOptions } from '../../src/types';

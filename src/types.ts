@@ -176,17 +176,6 @@ export type StreamChatOptions = {
    * persist even if connectUser call fails.
    */
   persistUserOnConnectionFailure?: boolean;
-  /**
-   * Overrides the `WebSocket` constructor used by `StableWSConnection`. Intended purely for
-   * testing so a mock/drivable WebSocket can be swapped in; production code should leave this
-   * unset and rely on the platform's global `WebSocket`.
-   */
-  WebSocketImpl?: typeof WebSocket;
-  /**
-   * Sets a suffix to the wsUrl when it is being built in `wsConnection`. Is meant to be
-   * used purely in testing suites and should not be used in production apps.
-   */
-  wsUrlParams?: URLSearchParams;
 };
 
 export type UnBanUserOptions = {
@@ -202,6 +191,17 @@ export type UnBanUserOptions = {
 /** Everything `queryUsers()` accepts apart from the filter and the sort. */
 export type UserOptions = Omit<QueryUsersPayload, 'filter_conditions' | 'sort'>;
 
+/**
+ * Which of the two connections a status refers to, and so which store it came from.
+ *
+ * `'network'` is the device's own network status, reported by the platform reporter installed on
+ * `client.networkConnection`. `'ws'` is this client's WebSocket. They are different facts and routinely
+ * disagree: a socket dies on a working network (server close, expired token, health-check timeout),
+ * and a device goes offline while the socket has not noticed yet — which is why each has its own
+ * store and neither is derived from the other.
+ */
+export type ConnectionType = 'network' | 'ws';
+
 type LocalEvent = (
   | ({ type: 'live_location_sharing.started' } & { message: MessageResponse })
   | ({ type: 'live_location_sharing.stopped' } & {
@@ -213,7 +213,6 @@ type LocalEvent = (
         isLatestMessageSet: boolean;
       };
     })
-  | ({ type: 'connection.changed' } & { online: boolean })
   | { type: 'connection.recovered' }
   | ({ type: 'offline_reactions.queried' } & {
       offlineReactions: ReactionResponse[];
@@ -239,7 +238,7 @@ type LocalEvent = (
  *
  * Hand-written because the event is not published in the OpenAPI spec, so it cannot
  * come from `src/gen`. Remove this — along with the `decodeConnectionEvent` shim in
- * `connection.ts` — once the backend adds it to the spec and `src/gen` is regenerated.
+ * `StableWSConnection.ts` — once the backend adds it to the spec and `src/gen` is regenerated.
  */
 export type ConnectedEvent = {
   type: 'connection.ok';

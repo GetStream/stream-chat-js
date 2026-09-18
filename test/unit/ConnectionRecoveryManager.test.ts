@@ -21,9 +21,18 @@ import { MockOfflineDB } from './offline-support/MockOfflineDB';
 describe('ConnectionRecoveryManager', () => {
   let client: StreamChat;
 
-  const online = () => client.dispatchEvent({ type: 'connection.changed', online: true });
-  const offline = () =>
-    client.dispatchEvent({ type: 'connection.changed', online: false });
+  /**
+   * A reconnect, which is what starts a recovery: the socket drops and comes back.
+   *
+   * Both halves matter. Recovery is driven by the socket's status store rather than by an event, and
+   * it ignores a first connect — nothing was loaded to fall behind — so a client that has only ever
+   * been online has nothing to recover.
+   */
+  const online = () => {
+    client.wsConnection._setStatus({ isHealthy: false });
+    client.wsConnection._setStatus({ isHealthy: true, connectionId: 'reconnected-id' });
+  };
+  const offline = () => client.wsConnection._setStatus({ isHealthy: false });
 
   /** A channel a consumer has declared it is reading, i.e. what recovery reloads. */
   const activeChannel = (id: string) => {
@@ -279,6 +288,195 @@ describe('ConnectionRecoveryManager', () => {
       await client.connectionRecovery.recover();
 
       expect(recovered).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('a reconnect landing mid-recovery', () => {
+    it('does not start a second pass alongside the first', async () => {
+      // The trigger is a subscription to the socket's status store, so a reload that moves that
+      // status calls straight back in before the first `await`. Without the guard that recurses
+      // until the stack gives out.
+      const { reload } = activeChannel('re-entrant');
+      let reloads = 0;
+      reload.mockImplementation(async () => {
+        reloads += 1;
+        client.wsConnection._setStatus({ isHealthy: false });
+        client.wsConnection._setStatus({ isHealthy: true, connectionId: 'flapped' });
+      });
+      client.connectionRecovery.registerSubscriptions();
+
+      online();
+      await vi.waitFor(() => expect(reloads).toBeGreaterThan(0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // One pass, plus the single deferred retry the reconnect earns. Never more, however many
+      // times the reload moves the socket.
+      expect(reloads).toBe(2);
+    });
+
+    it('runs once more so the reconnect is not stranded', async () => {
+      // The pass in flight withholds its event because the socket moved under it, so without the
+      // retry nothing would bring the newer connection's state back in line.
+      const recovered = vi.fn();
+      client.on('connection.recovered', recovered);
+      const { reload } = activeChannel('deferred');
+      let reloads = 0;
+      reload.mockImplementation(async () => {
+        reloads += 1;
+        // Only the first pass flaps; the retry then runs against a steady socket.
+        if (reloads > 1) return;
+        client.wsConnection._setStatus({ isHealthy: false });
+        client.wsConnection._setStatus({ isHealthy: true, connectionId: 'flapped' });
+      });
+      client.connectionRecovery.registerSubscriptions();
+
+      online();
+
+      await vi.waitFor(() => expect(reloads).toBe(2));
+      await vi.waitFor(() => expect(recovered).toHaveBeenCalledTimes(1));
+    });
+  });
+
+  describe('recover() while one is already running', () => {
+    it('does not start a second pass', async () => {
+      // The guard logged and then carried on. Two passes reload every active channel twice and race
+      // on the in-flight flag: the second clears it while the first is still going.
+      const { reload } = activeChannel('reloaded-twice');
+      let release = () => {};
+      reload.mockImplementation(
+        () => new Promise<void>((resolve) => (release = () => resolve())),
+      );
+
+      const first = client.connectionRecovery.recover();
+      await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+
+      await client.connectionRecovery.recover();
+
+      expect(reload).toHaveBeenCalledTimes(1);
+      release();
+      await first;
+    });
+  });
+
+  describe('the socket dropping mid-recovery', () => {
+    it('withholds connection.recovered when the socket drops while the reloads run', async () => {
+      // The network half alone did not cover this. A socket dying on a working network is the more
+      // common of the two — a server close, an expired token, a health check timing out — and it
+      // fails every reload just the same, so announcing recovery afterwards is the same lie.
+      const recovered = vi.fn();
+      client.on('connection.recovered', recovered);
+      const { reload } = activeChannel('socket-drops-midway');
+      reload.mockImplementation(async () => {
+        client.wsConnection._setStatus({ isHealthy: false });
+        throw new Error('socket is gone');
+      });
+      client.connectionRecovery.registerSubscriptions();
+
+      online();
+      await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(recovered).not.toHaveBeenCalled();
+    });
+
+    it('withholds it even when the socket drops and returns inside the recovery', async () => {
+      // Same reason the network half compares timestamps: a flap ends online while having failed
+      // the reloads.
+      const recovered = vi.fn();
+      client.on('connection.recovered', recovered);
+      const { reload } = activeChannel('socket-flaps');
+      reload.mockImplementation(async () => {
+        client.wsConnection._setStatus({ isHealthy: false });
+        client.wsConnection._setStatus({ isHealthy: true, connectionId: 'back-again' });
+      });
+      client.connectionRecovery.registerSubscriptions();
+
+      online();
+      await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(recovered).not.toHaveBeenCalled();
+    });
+
+    it('still dispatches when nothing dropped', async () => {
+      // The guard has to stay quiet on the ordinary path, including on a host with no network
+      // reporter, where the device's status is unknown rather than offline.
+      const recovered = vi.fn();
+      client.on('connection.recovered', recovered);
+      activeChannel('uneventful');
+      client.wsConnection._setStatus({ isHealthy: true, connectionId: 'steady' });
+
+      await client.connectionRecovery.recover();
+
+      expect(recovered).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('the device network', () => {
+    // Recovery reads the socket and nothing else. Every reload is a request over that socket, so it
+    // is the connection whose failure invalidates them; a device that loses its network takes the
+    // socket with it and is caught that way. Reading the network as well meant a host that cannot
+    // report one — React Native without a reporter, Node, server-side rendering — got different
+    // behaviour from one that can, for a signal that adds nothing.
+
+    it('starts no recovery when only the network comes back', async () => {
+      // Recovery re-establishes channel *watches*, which are keyed by connection ID, so it has to
+      // wait for a reconnected socket. A network edge on its own is too early.
+      const { reload } = activeChannel('network-only');
+      client.connectionRecovery.registerSubscriptions();
+
+      client.networkConnection.setStatus(true);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(reload).not.toHaveBeenCalled();
+    });
+
+    it('recovers on a socket reconnect even while the device reports no network', async () => {
+      // The socket is up, which is all recovery needs. Blocking on a contradictory network reading
+      // would strand the client until something else happened to reconnect it.
+      const recovered = vi.fn();
+      client.on('connection.recovered', recovered);
+      const { reload } = activeChannel('contradictory');
+      client.connectionRecovery.registerSubscriptions();
+      client.networkConnection.setStatus(false);
+
+      online();
+
+      await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+      await vi.waitFor(() => expect(recovered).toHaveBeenCalled());
+    });
+
+    it('does not withhold connection.recovered for a network drop the socket survived', async () => {
+      // A network reading that flaps while the socket keeps carrying traffic has not failed
+      // anything, and the reloads it did not interrupt are as fresh as any other.
+      const recovered = vi.fn();
+      client.on('connection.recovered', recovered);
+      const { reload } = activeChannel('network-flaps');
+      reload.mockImplementation(async () => {
+        client.networkConnection.setStatus(false);
+        client.networkConnection.setStatus(true);
+      });
+      client.connectionRecovery.registerSubscriptions();
+
+      online();
+
+      await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+      await vi.waitFor(() => expect(recovered).toHaveBeenCalled());
+    });
+
+    it('behaves identically when no reporter is installed', async () => {
+      // The case the socket-derived stand-in exists for, and the one that used to differ: with the
+      // network unknown, recovery now takes exactly the path it takes when the network is known.
+      const recovered = vi.fn();
+      client.on('connection.recovered', recovered);
+      const { reload } = activeChannel('unknown-network');
+      client.connectionRecovery.registerSubscriptions();
+
+      // No reporter was supplied, so the device's status is whatever the socket-derived stand-in
+      // says. Recovery does not read it either way, which is the point.
+      online();
+      await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+      await vi.waitFor(() => expect(recovered).toHaveBeenCalled());
     });
   });
 

@@ -1,11 +1,11 @@
-import { WithSubscriptions } from './utils/WithSubscriptions';
-import { chatLoggerSystem } from './logger';
-import { runDetached } from './utils';
-import { ConfigController } from './configuration/ConfigController';
-import { deepFreezeConfig } from './configuration/utils/deepFreezeConfig';
-import type { StreamChat } from './client';
-import type { Channel } from './channel';
-import type { Thread } from './thread';
+import { WithSubscriptions } from '../utils/WithSubscriptions';
+import { chatLoggerSystem } from '../logger';
+import { runDetached } from '../utils';
+import { ConfigController } from '../configuration/ConfigController';
+import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
+import type { StreamChat } from '../client';
+import type { Channel } from '../channel';
+import type { Thread } from '../thread';
 import type { StateStore, Unsubscribe } from '@stream-io/state-store';
 
 const logger = chatLoggerSystem.getLogger('client');
@@ -55,19 +55,18 @@ export const DEFAULT_CONNECTION_RECOVERY_MANAGER_CONFIG: ConnectionRecoveryManag
  *
  * One per surface, mirroring what the React Native SDK arrived at:
  *
- * - **Lists** — `connection.changed` with `online: true`. `ChannelPaginator.executeQuery` carries its
+ * - **Lists** — the socket's status store going online. `ChannelPaginator.executeQuery` carries its
  *   own first-page deferral for the unsynced case, so the list query orders itself against the
  *   offline sync.
- * - **Active channels** — the offline DB's *sync-status edge* when offline support is enabled,
- *   `connection.changed` otherwise. `Channel.reload()` has no deferral of its own, so it has to be
+ * - **Active channels** — the offline DB's *sync-status edge* when offline support is enabled, and
+ *   that same store otherwise. `Channel.reload()` has no deferral of its own, so it has to be
  *   triggered by something that is already post-sync.
  *
  * The edge is what guarantees `executePendingTasks()` → `sync()` → query ordering, on every reconnect
  * path: `OfflineDBSyncManager` calls `invokeSyncStatusListeners(true)` **unconditionally** after
  * `syncAndExecutePendingTasks()` on each online transition — it does not require `isSynced` to have
- * been `false` first. That matters because the going-offline `connection.changed` is 5s-debounced,
- * skipped entirely on a quick flap, and never dispatched at all by `closeConnection()` (mobile
- * backgrounding), so anything derived from *that* event is not a reliable signal. The edge is.
+ * been `false` first. That matters because the sync edge, unlike anything derived from a single
+ * transition, is guaranteed to land after the replay and the sync rather than alongside them.
  *
  * Recovery deliberately keeps no "did we drop?" flag of its own: `ChannelWatchStatus.WasWatching`
  * already records exactly that, written from both truthful hooks
@@ -77,8 +76,21 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
   client: StreamChat;
   /** The shared configuration machinery — see {@link ConfigController}. */
   private readonly configController: ConfigController<ConnectionRecoveryManagerConfig>;
-  /** Set while a recovery is in flight; only used to keep the logs readable. */
+  /** Set while a pass over the active channels and threads is in flight. */
   private isRecovering = false;
+  /**
+   * A reconnect that arrived while a pass was already running, so the pass re-runs when it finishes.
+   *
+   * A second pass cannot start alongside the first: they would reload every active channel twice and
+   * race on {@link isRecovering}, the earlier one clearing it while the later is still going. Nor can
+   * the reconnect simply be dropped — the running pass will withhold its `connection.recovered`
+   * precisely because the socket moved under it, so nothing else would bring the newer connection's
+   * state back in line.
+   *
+   * Re-entry is not hypothetical. The trigger is a subscription to the socket's status store, and a
+   * reload that moves that status calls straight back into here before the first `await`.
+   */
+  private recoveryRequestedAgain = false;
   /** Undone by `unregisterSubscriptions`, so re-registering does not stack listeners. */
   private unsubscribeSyncStatus?: Unsubscribe;
 
@@ -119,25 +131,45 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
 
   public registerSubscriptions = () => {
     if (!this.hasSubscriptions) {
+      // Driven by the socket's own status store, and by nothing else. Recovery is about what this
+      // client missed while it could not reach the server, which is a fact the socket owns: the store
+      // is written on every transition, including the deliberate close and the two error paths that
+      // were always silent. The device's network is a separate signal that cannot start a recovery,
+      // because a device regaining a network has no reconnected socket and no fresh connection ID yet,
+      // so a query fired then would establish no watch.
+      let wasHealthy: boolean | undefined;
       this.addUnsubscribeFunction(
-        this.client.on('connection.changed', (event) => {
-          if (!event.online) return;
+        this.client.wsConnection.state.subscribeWithSelector(
+          ({ isHealthy, lastUnhealthyAt }) => ({ isHealthy, lastUnhealthyAt }),
+          ({ isHealthy, lastUnhealthyAt }) => {
+            // The immediate first call is the current status rather than a change. Recovering off it
+            // would re-query on nothing more than someone registering subscriptions.
+            const previous = wasHealthy;
+            wasHealthy = isHealthy;
+            if (previous === undefined || !isHealthy) return;
 
-          // The lists always recover off this event; their own deferral handles offline ordering.
-          runDetached(this.recoverChannelLists(), { context: 'recoverChannelLists' });
+            // A first connect is not a recovery: nothing was loaded to fall behind, so there is
+            // nothing to bring back in line. `lastUnhealthyAt` is written by every drop, including
+            // the deliberate `closeConnection()` that mobile backgrounding uses, so every real
+            // reconnect still qualifies.
+            if (!lastUnhealthyAt) return;
 
-          // Active channels recover off the offline sync-status edge whenever there is one — it is the
-          // only signal guaranteed to be post-replay-post-sync. Exactly ONE of these two paths runs
-          // per reconnect: binding the subscription is what makes the edge the driver, so the same
-          // call reports which path applies. Deliberately not split into a separate predicate — two
-          // independent reads of "is there an edge?" could disagree with each other.
-          const syncEdgeDrivesActiveChannels = this.ensureSyncStatusSubscription();
-          if (!syncEdgeDrivesActiveChannels) {
-            runDetached(this.recoverActiveChannels(), {
-              context: 'recoverActiveChannels',
-            });
-          }
-        }).unsubscribe,
+            // The lists always recover off this edge; their own deferral handles offline ordering.
+            runDetached(this.recoverChannelLists(), { context: 'recoverChannelLists' });
+
+            // Active channels recover off the offline sync-status edge whenever there is one — it is
+            // the only signal guaranteed to be post-replay-post-sync. Exactly ONE of these two paths
+            // runs per reconnect: binding the subscription is what makes the edge the driver, so the
+            // same call reports which path applies. Deliberately not split into a separate predicate
+            // — two independent reads of "is there an edge?" could disagree with each other.
+            const syncEdgeDrivesActiveChannels = this.ensureSyncStatusSubscription();
+            if (!syncEdgeDrivesActiveChannels) {
+              runDetached(this.recoverActiveChannels(), {
+                context: 'recoverActiveChannels',
+              });
+            }
+          },
+        ),
       );
 
       this.addUnsubscribeFunction(() => {
@@ -155,10 +187,10 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
    *
    * Resolved off `this.client` rather than injected: the DB is already reachable there, it is simply
    * attached after this manager is constructed (and initialized later still), so the binding has to be
-   * deferred rather than handed in. Doing it from the `connection.changed` handler is safe even when
-   * this manager's listener runs before the sync manager's: `OfflineDBSyncManager` awaits
+   * deferred rather than handed in. Doing it from the status handler is safe even when this manager's
+   * subscription runs before the sync manager's: `OfflineDBSyncManager` awaits
    * `syncAndExecutePendingTasks()` before publishing, so the edge cannot land in the same synchronous
-   * dispatch that registers us.
+   * notification that registers us.
    *
    * An offline DB whose `init()` never succeeded publishes no edge, so it must not be treated as the
    * trigger — hence the `initialized` check, which also means a later successful init is picked up on
@@ -248,11 +280,27 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
     await this.client.channelManager.recover();
   };
 
-  private recoverActiveChannels = async () => {
+  private recoverActiveChannels = async ({ isRetry = false } = {}): Promise<void> => {
     if (!this.config.enabled) return;
+
+    if (this.isRecovering) {
+      this.recoveryRequestedAgain = true;
+      return;
+    }
 
     const channels = this.recoverableActiveChannels;
     const threads = this.recoverableActiveThreads;
+    // Captured before the reloads so a drop *during* them can be detected afterwards. The timestamp
+    // rather than the boolean, because a socket that drops and returns inside the recovery window has
+    // still failed the reloads while ending up online again.
+    //
+    // The socket alone. Every reload is a request over it, so it is the connection whose failure
+    // invalidates them, and its store records every transition including the deliberate close and the
+    // two error paths. A device that loses its network takes the socket with it and is caught here
+    // anyway, while a device whose network is merely unknown — every host without a reporter — would
+    // otherwise have no protection at all.
+    const socketDropBefore =
+      this.client.wsConnection.state.getLatestValue().lastUnhealthyAt;
     this.isRecovering = true;
     logger
       .withExtraTags('connectionRecovery')
@@ -271,6 +319,35 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
 
     this.isRecovering = false;
 
+    // A reconnect landed while the reloads were in flight, so what they fetched belongs to a
+    // connection that is gone. Run once more against the current one: the check below withholds the
+    // event for the same reason, and this is what stops that withholding from stranding.
+    //
+    // Once, not until it settles. A reload that keeps moving the socket would otherwise recur without
+    // bound, and a connection still flapping after two passes is not one more query away from being
+    // caught up. The next up-edge starts a fresh pass anyway, because this one has finished by then.
+    const retryAfterReconnect = this.recoveryRequestedAgain && !isRetry;
+    this.recoveryRequestedAgain = false;
+    if (retryAfterReconnect) return await this.recoverActiveChannels({ isRetry: true });
+
+    // `allSettled` above means a drop mid-recovery can fail every single reload while this still
+    // reaches the end. Dispatching then would tell consumers that what is on screen is fresh when
+    // none of it was refreshed — and the UI SDKs' mark-read-on-catch-up keys off this event, so it
+    // would mark messages read that were never fetched.
+    //
+    // Withholding is safe rather than stranding: a drop guarantees a later reconnect, and that
+    // recovery dispatches the event.
+    const socket = this.client.wsConnection.state.getLatestValue();
+
+    if (socket.lastUnhealthyAt !== socketDropBefore || !socket.isHealthy) {
+      logger
+        .withExtraTags('connectionRecovery')
+        .info(
+          'Recovery finished but the socket dropped while it ran; withholding connection.recovered.',
+        );
+      return;
+    }
+
     // `connection.recovered` means "recovery finished". Dispatched from here so it fires on EVERY
     // reconnect path — the removed `recoverState()` was only ever called by
     // `StableWSConnection._reconnect()`, so a `closeConnection()` → `openConnection()` cycle (mobile
@@ -281,12 +358,16 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
 
   /**
    * Run a full recovery now, without waiting for a connection event.
+   *
+   * A no-op while one is already running: {@link recoverActiveChannels} defers the request to the
+   * end of the pass in flight rather than stacking a second one alongside it.
    */
   public recover = async () => {
     if (this.isRecovering) {
       logger
         .withExtraTags('connectionRecovery')
         .debug('A recovery is already in flight.');
+      return;
     }
     await Promise.allSettled([this.recoverChannelLists(), this.recoverActiveChannels()]);
   };

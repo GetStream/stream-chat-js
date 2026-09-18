@@ -335,12 +335,16 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 	let client;
 	let channel;
 
+	// Stubbed at the transport rather than at `client.api.sendRequest`, so the request layer's own
+	// gate on a connection id still runs — that gate is what half this suite is about.
+	let request;
+
 	const mockQueryResponse = (channelResponse) => {
-		client.api.sendRequest = () =>
-			Promise.resolve({
-				body: getOrCreateChannelApi(channelResponse).response.data,
-				metadata: {},
-			});
+		request = sinon.stub(client.axiosInstance, 'request').resolves({
+			data: getOrCreateChannelApi(channelResponse).response.data,
+			status: 200,
+			headers: {},
+		});
 	};
 
 	beforeEach(() => {
@@ -348,7 +352,11 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 		client.user = user;
 		client.user = { id: user.id };
 		client.wsPromise = Promise.resolve();
-		// a connection id is what makes a watch possible at all
+		client.tokenManager.getToken = () => 'mock-token';
+		client.tokenManager.tokenReady = () => Promise.resolve();
+		// A connection id is what makes a watch possible at all: the request layer holds any request
+		// that watches or subscribes to presence until one exists.
+		client.wsConnection._setStatus({ isHealthy: true });
 		client.connectionIdManager.resolveConnectionId('connection-id');
 		channel = client.channel('messaging', 'watching-id');
 		client.activeChannels[channel.cid] = channel;
@@ -392,6 +400,92 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 
 		await channel.query({ watch: false });
 
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.Watching);
+	});
+
+	/** A socket that dropped: the id is invalidated and a fresh deferred armed for the reconnect. */
+	const socketDown = () => {
+		const socket = new StableWSConnection({ wsConnection: client.wsConnection });
+		client.wsConnection.connection = socket;
+		socket._setHealth(true);
+		socket._setHealth(false);
+		return socket;
+	};
+
+	it('rejects at once when nothing is being opened, rather than waiting', async () => {
+		// No socket, and none being opened, so no amount of waiting would produce an id. The error says
+		// what to do about it instead.
+		client.wsConnection.connection = null;
+		client.connectionIdManager.reset();
+
+		await expect(channel.watch()).rejects.toThrow(/No connection id is available/);
+
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
+	});
+
+	it('holds the watch rather than downgrading while the socket is down', async () => {
+		// Asserted on the transport, not on `channel.query`: the hold lives in the request layer, so
+		// the query is entered and then waits inside it. The status is left untouched meanwhile,
+		// rather than recorded as Watching against a dead connection.
+		socketDown();
+
+		void channel.watch();
+		await Promise.resolve();
+
+		expect(request.called).to.be.false;
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
+	});
+
+	it('abandons the wait when the caller aborts', async () => {
+		// The signal reaches the wait for a connection id, not only the request it precedes.
+		socketDown();
+		const controller = new AbortController();
+
+		const watching = channel.watch({}, { signal: controller.signal });
+		controller.abort();
+
+		await expect(watching).rejects.toThrow();
+	});
+
+	it('does not wait for a socket when the caller asked for no watch and no presence', async () => {
+		// A plain read needs no connection id, so an explicit `watch: false` must not be made to wait
+		// for one — which is what would make it unusable offline.
+		socketDown();
+		const query = sinon
+			.stub(channel, 'query')
+			.resolves({ channel: {}, members: [], messages: [] });
+
+		await channel.watch({ watch: false, presence: false });
+
+		expect(query.calledOnce).to.be.true;
+		expect(query.firstCall.args[0]).to.include({ watch: false });
+	});
+
+	it('rejects at once after a deliberate closeConnection', async () => {
+		// The mobile backgrounding path. The absence of a socket is intentional there, so opening a
+		// channel must fail immediately rather than wait for a reconnect that is not coming.
+		const socket = new StableWSConnection({ wsConnection: client.wsConnection });
+		socket.isDisconnected = true;
+		client.wsConnection.connection = socket;
+		client.connectionIdManager.reset();
+
+		await expect(channel.watch()).rejects.toThrow(/No connection id is available/);
+	});
+
+	it('issues exactly one watched request once a connection id arrives', async () => {
+		socketDown();
+
+		const watching = channel.watch();
+		await Promise.resolve();
+		expect(request.called).to.be.false;
+
+		client.connectionIdManager.resolveConnectionId('reconnected-id');
+		await watching;
+
+		// One request, watched, carrying the id that arrived — not one unwatched then one watched.
+		expect(request.calledOnce).to.be.true;
+		expect(request.firstCall.args[0].data).to.include({ watch: true });
+		expect(request.firstCall.args[0].params.connection_id).to.equal('reconnected-id');
 		expect(channel.watchStatus).to.equal(ChannelWatchStatus.Watching);
 	});
 
@@ -495,6 +589,15 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 		expect(channel.watchStatus).to.equal(ChannelWatchStatus.WasWatching);
 	});
 
+	it('is NOT set by hydration while the socket is down', () => {
+		client.wsConnection._setStatus({ isHealthy: false });
+		const response = generateChannel({ channel: { id: 'no-connection-id' } });
+
+		const [hydrated] = client.hydrateActiveChannels([response]);
+
+		expect(hydrated.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
+	});
+
 	it('is NOT set by offline hydration (state without a live watch)', () => {
 		const response = generateChannel({ channel: { id: 'offline-id' } });
 
@@ -515,7 +618,7 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 	it('is demoted when the WS connection reports itself unhealthy', async () => {
 		await channel.watch();
 		const sweep = vi.spyOn(client, '_markActiveChannelsWatchInterrupted');
-		const connection = new StableWSConnection({ client });
+		const connection = new StableWSConnection({ wsConnection: client.wsConnection });
 		connection.isHealthy = true;
 
 		connection._setHealth(false);
@@ -538,6 +641,8 @@ describe('Channel AI indicator state (channel.state.aiState)', function () {
 	const setupChannel = () => {
 		const client = new StreamChat('apiKey');
 		client.user = { id: 'user' };
+		// `reload()` re-watches, and `watch()` waits for a live socket.
+		client.wsConnection._setStatus({ isHealthy: true, connectionId: 'connection-id' });
 		const channel = client.channel('messaging', 'ai-state-id');
 		channel.initialized = true;
 		return { channel };
@@ -2846,6 +2951,11 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		clientVish.user = user;
 		clientVish.user = { id: user.id };
 		clientVish.wsPromise = Promise.resolve();
+		// A connected client has a live socket; `watch()` waits for one.
+		clientVish.wsConnection._setStatus({
+			isHealthy: true,
+			connectionId: 'connection-id',
+		});
 	};
 
 	clientVish.connectUser();
@@ -4112,6 +4222,8 @@ describe('Channel.query — initial page size', () => {
 	beforeEach(() => {
 		client = new StreamChat('apiKey');
 		client.user = { id: 'user' };
+		// `reload()` re-watches, and `watch()` waits for a live socket.
+		client.wsConnection._setStatus({ isHealthy: true, connectionId: 'connection-id' });
 		const channelResponse = generateChannel();
 		channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
 		channel.initialized = true;
@@ -4168,6 +4280,8 @@ describe('Channel.reload', () => {
 	beforeEach(() => {
 		client = new StreamChat('apiKey');
 		client.user = { id: 'user' };
+		// `watch()` waits for a live socket; a connected client has one.
+		client.wsConnection._setStatus({ isHealthy: true, connectionId: 'connection-id' });
 		const channelResponse = generateChannel();
 		channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
 		channel.initialized = true;
