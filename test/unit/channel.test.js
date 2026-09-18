@@ -1059,7 +1059,7 @@ describe('Channel _handleChannelEvent', function () {
 		});
 
 		it('message.new ingests message into messagePaginator even for own messages', function () {
-			const message = generateMsg({ id: 'own-message-id', user });
+			const message = generateMsg({ cid: channel.cid, id: 'own-message-id', user });
 
 			channel._handleChannelEvent({
 				type: 'message.new',
@@ -1238,6 +1238,7 @@ describe('Channel _handleChannelEvent', function () {
 	describe('message.updated', () => {
 		it('message.updated syncs reply metadata into messagePaginator', function () {
 			const parentMessage = generateMsg({
+				cid: channel.cid,
 				id: 'parent-message-id',
 				reply_count: 1,
 				thread_participants: [{ id: 'user-1' }],
@@ -1548,7 +1549,7 @@ describe('Channel _handleChannelEvent', function () {
 
 	describe('message.deleted', () => {
 		it('message.delete removes quoted messages references', function () {
-			const originalMessage = generateMsg({ silent: true });
+			const originalMessage = generateMsg({ cid: channel.cid, silent: true });
 			channel._handleChannelEvent({
 				type: 'message.new',
 				user: { id: 'id' },
@@ -1556,6 +1557,7 @@ describe('Channel _handleChannelEvent', function () {
 			});
 
 			const quotingMessage = generateMsg({
+				cid: channel.cid,
 				silent: true,
 				quoted_message: originalMessage,
 				quoted_message_id: originalMessage.id,
@@ -1582,7 +1584,11 @@ describe('Channel _handleChannelEvent', function () {
 		});
 
 		it('message.deleted hard delete removes message from messagePaginator', function () {
-			const message = generateMsg({ id: 'hard-delete-message-id', silent: true });
+			const message = generateMsg({
+				cid: channel.cid,
+				id: 'hard-delete-message-id',
+				silent: true,
+			});
 			channel.messagePaginator.ingestItem(message);
 			expect(channel.messagePaginator.getItem(message.id)?.id).to.equal(message.id);
 
@@ -1600,6 +1606,7 @@ describe('Channel _handleChannelEvent', function () {
 
 		it('message.deleted soft delete updates message in messagePaginator', function () {
 			const message = generateMsg({
+				cid: channel.cid,
 				id: 'soft-delete-message-id',
 				text: 'before delete',
 			});
@@ -1638,8 +1645,12 @@ describe('Channel _handleChannelEvent', function () {
 		});
 
 		it('message.deleted (hard) ignores thread replies in messagePaginator', function () {
-			const parentMessage = generateMsg({ id: 'thread-parent-id-on-hard-delete' });
+			const parentMessage = generateMsg({
+				cid: channel.cid,
+				id: 'thread-parent-id-on-hard-delete',
+			});
 			const threadReply = generateMsg({
+				cid: channel.cid,
 				id: 'thread-reply-id-on-hard-delete',
 				parent_id: parentMessage.id,
 			});

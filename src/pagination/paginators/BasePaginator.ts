@@ -2504,9 +2504,12 @@ export abstract class BasePaginator<T, Q> {
     const itemHasBeenRemoved =
       !!removedItemCoordinates?.state && removedItemCoordinates.state.currentIndex > -1;
 
-    // 2. Update canonical storage (ItemIndex) to the *new* snapshot,
-    //    regardless of filters – this keeps the index authoritative.
-    this._itemIndex.setOne(ingestedItem);
+    // 2. Update canonical storage (ItemIndex) to the *new* snapshot.
+    //    Written only if it either already exists or matches the filter
+    //    of the paginator.
+    if (this._itemIndex.has(id) || this.matchesFilter(ingestedItem)) {
+      this._itemIndex.setOne(ingestedItem);
+    }
 
     // 3. If it no longer matches the filter, we’re done (it has been removed above).
     if (!this.matchesFilter(ingestedItem)) {
