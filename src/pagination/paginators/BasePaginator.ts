@@ -1402,12 +1402,24 @@ export abstract class BasePaginator<T, Q> {
     const activeInterval = this._itemIntervals.get(this._activeIntervalId);
     if (!activeInterval) return;
 
-    // Throttled (message list): the slot-swap fast path below reads the last-published `items`, which
-    // lags the live intervals while throttled — so skip it. Gate on membership only and schedule a
-    // single coalesced re-projection; the boundary re-derives the window fresh from the interval.
+    // Throttling happens, so `this.items` lags the live intervals and the slot-swap below is impossible
+    // so schedule a re-projection instead. Only when something actually differs, though a sibling may
+    // have written the very object this window is already showing.
     if (this.isStateThrottled) {
-      for (const id of activeInterval.itemIds) {
-        if (changedIds.has(id)) {
+      const currentItems = this.items;
+      if (!currentItems || currentItems.length !== activeInterval.itemIds.length) {
+        // Nothing to pair the interval against so window positions only line up with interval
+        // positions when the two have the same length and gate on membership alone.
+        if (this.intervalHoldsAnyChangedId(activeInterval, changedIds)) {
+          this.scheduleWindowPublish();
+        }
+        return;
+      }
+      for (let i = 0; i < currentItems.length; i++) {
+        const id = this.getItemId(currentItems[i]);
+        if (!changedIds.has(id)) continue;
+        const updated = this._itemIndex.get(id);
+        if (!updated || updated !== currentItems[i]) {
           this.scheduleWindowPublish();
           return;
         }
@@ -1452,11 +1464,8 @@ export abstract class BasePaginator<T, Q> {
 
     // Fallback: membership/order drifted (or no window to patch, or a boost is active). Re-project,
     // but only if a changed id is actually in the active interval.
-    for (const id of activeInterval.itemIds) {
-      if (changedIds.has(id)) {
-        this.state.partialNext({ items: this.intervalToItems(activeInterval) });
-        return;
-      }
+    if (this.intervalHoldsAnyChangedId(activeInterval, changedIds)) {
+      this.state.partialNext({ items: this.intervalToItems(activeInterval) });
     }
   }
 

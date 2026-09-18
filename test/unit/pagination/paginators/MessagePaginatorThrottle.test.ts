@@ -354,4 +354,54 @@ describe('MessagePaginator — interval-view (anchoredHead) publish throttling',
     stateUnsub();
     anchored.unsub();
   });
+
+  it('does not schedule a publish when a sibling wrote the object this window already shows', () => {
+    // The shape a store transaction produces: both collections converge on ONE object, so by the
+    // time the deferred notification lands the sibling is already showing it. The unthrottled fast
+    // path skips that case (`updated === currentItems[i]`); without the same check here the
+    // throttled list schedules a trailing-edge emit carrying an identical window.
+    const store = new EntityStore<LocalMessage>({ getEntityId: (m) => m.id });
+    const linked = () => {
+      const sharedChannel = {
+        cid: 'channel-id',
+        getReplies: vi.fn(),
+        query: vi.fn(),
+        getClient: () => ({ messageStore: store, user: { id: 'me' } }),
+        state: { read: {} },
+      } as unknown as Channel;
+      const paginator = new MessagePaginator({
+        channel: sharedChannel,
+        paginatorOptions: { stateThrottleMs: THROTTLE },
+      });
+      paginator.ingestPage({
+        page: [msg('m1', 1), msg('m2', 2), msg('m3', 3)],
+        isHead: true,
+        isTail: true,
+        setActive: true,
+      });
+      return paginator;
+    };
+    const writer = linked();
+    const sibling = linked();
+    vi.advanceTimersByTime(THROTTLE * 2);
+
+    let siblingEmits = 0;
+    const unsubscribe = sibling.state.subscribe(() => {
+      siblingEmits += 1;
+    });
+    siblingEmits = 0;
+
+    const shared = { ...msg('m2', 2), text: 'edited' } as LocalMessage;
+    store.transaction(() => {
+      writer.ingestItem(shared);
+      sibling.ingestItem(shared);
+    });
+    vi.advanceTimersByTime(THROTTLE * 2);
+
+    // One emit for the sibling's own ingest; none for the redundant sibling notification.
+    expect(siblingEmits).toBe(1);
+    expect(sibling.items?.find((m) => m.id === 'm2')?.text).toBe('edited');
+
+    unsubscribe();
+  });
 });
