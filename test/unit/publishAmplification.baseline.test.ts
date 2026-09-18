@@ -63,56 +63,53 @@ describe('publish amplification — baseline (unthrottled)', () => {
     // Distinct objects miss `EntityStore.upsert`'s `previous === entity` bail, so every write
     // dirties the other N-1 holders and each of those re-projects.
     //
-    // Measured shape: **n(n+1)** = the N² fan-out plus mechanism 2 doubling each writer's own
-    // publish. (`spec.md` §3 records a clean N² — 1/4/9/16 — because its harness counted one
-    // publish per ingest. Same quadratic, one term richer once mechanism 2 is included.)
+    // Measured shape: **n²**, now that the single-publish primitive has removed mechanism 2. (Before
+    // it this was n(n+1) — the same quadratic with each writer's own publish doubled.) This is the
+    // clean N² `spec.md` §3 records, and it is the term the dispatch scope removes.
     expect(curve({ shared: true, sameObject: false })).toEqual({
-      1: 2,
-      2: 6,
-      3: 12,
-      4: 20,
-      5: 30,
-      6: 42,
+      1: 1,
+      2: 4,
+      3: 9,
+      4: 16,
+      5: 25,
+      6: 36,
     });
   });
 
   it('mechanism 1 — N collections sharing ONE object (what the dispatch scope will produce)', () => {
-    // Measured shape: **3n - 1**, which decomposes as:
-    //   2n      each collection's own ingestItem, still publishing twice (mechanism 2)
+    // Measured shape: **2n - 1** (was 3n - 1 before the single-publish primitive), decomposing as:
+    //   n       each collection's own ingestItem, now exactly one publish each
     //   + (n-1) ONE markDirty round: only the first write actually lands, since writes 2..n hit the
     //           reference bail — so the siblings are dirtied once, not n-1 times.
     //
-    // The quadratic term is gone. What is left is the two remaining steps:
-    //   - the single-publish primitive takes 2n -> n, giving 2n - 1 (the figure `spec.md` predicts);
-    //   - the store transaction then defers that one markDirty round to scope exit, by which point
-    //     every sibling already holds the identical object, so `reconcileChangedIds`' fast path
-    //     (`updated === currentItems[i]`) skips them entirely — giving the floor of **n**.
+    // One step left. The store transaction defers that markDirty round to scope exit, by which point
+    // every sibling already holds the identical object, so `reconcileChangedIds`' fast path
+    // (`updated === currentItems[i]`) skips them entirely — giving the floor of **n**.
     //
     // That is also precisely why P8 is required rather than optional: the throttled branch of
     // `reconcileChangedIds` has no such content check, so a throttled message list cannot reach the
     // floor without it.
     expect(curve({ shared: true, sameObject: true })).toEqual({
-      1: 2,
-      2: 5,
-      3: 8,
-      4: 11,
-      5: 14,
-      6: 17,
+      1: 1,
+      2: 3,
+      3: 5,
+      4: 7,
+      5: 9,
+      6: 11,
     });
   });
 
   it('control — private stores, so cross-collection fan-out is structurally impossible', () => {
-    // Isolates mechanism 2 from mechanism 1: whatever remains here is NOT fan-out. Exactly **2n** —
-    // two publishes per replace, per collection, and nothing else. This is the number that proves
-    // the `3n - 1` above really does contain a fan-out term, and the number the single-publish
-    // primitive should halve.
+    // Isolates mechanism 2 from mechanism 1: whatever remains here is NOT fan-out. Exactly **n** —
+    // one publish per collection, which is the floor. Mechanism 2 is gone (this was 2n), so any
+    // future regression above n in this column is a new intra-operation publish, not fan-out.
     expect(curve({ shared: false, sameObject: false })).toEqual({
-      1: 2,
-      2: 4,
-      3: 6,
-      4: 8,
-      5: 10,
-      6: 12,
+      1: 1,
+      2: 2,
+      3: 3,
+      4: 4,
+      5: 5,
+      6: 6,
     });
   });
 
@@ -132,7 +129,7 @@ describe('publish amplification — baseline (unthrottled)', () => {
       return paginator;
     };
 
-    it('an INSERT of a new id publishes once; a REPLACE of a held id publishes twice', () => {
+    it('an INSERT of a new id and a REPLACE of a held id each publish exactly once', () => {
       const insert = makeSolo();
       const insertRecorder = recordPublishes({ p: insert });
       insert.ingestItem(msg('m4', 4));
@@ -145,11 +142,12 @@ describe('publish amplification — baseline (unthrottled)', () => {
       const replaceCount = replaceRecorder.counts().p.state;
       replaceRecorder.stop();
 
-      // A replace is internally remove-then-insert and each half publishes. The single-publish
-      // primitive in `BasePaginator` brings the replace to 1.
+      // A replace is internally remove-then-insert, and before the single-publish primitive each
+      // half emitted — 2 for one logical change. Both are 1 now, and a replace going back to 2 is
+      // the specific regression this guards.
       expect({ insert: insertCount, replace: replaceCount }).toEqual({
         insert: 1,
-        replace: 2,
+        replace: 1,
       });
     });
   });
