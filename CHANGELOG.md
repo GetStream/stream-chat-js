@@ -1,3 +1,55 @@
+## [10.0.0-rc.12](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.11...v10.0.0-rc.12) (2026-09-18)
+
+### ⚠ BREAKING CHANGES
+
+* `connection.changed` is removed. Connectivity is published as two state stores
+and nothing else: `client.networkConnection.state` for the device and `client.wsConnection.state`
+for this client's socket. The event was silent on `closeConnection()` and two error paths, and
+held a drop for five seconds; the stores are written on every transition and publish immediately.
+* `client.wsConnection` is now a `WSConnection` wrapper rather than the
+`StableWSConnection` itself, and is never null. The live socket is `client.wsConnection.connection`,
+replaced on every connect; read `isHealthy`, `isConnecting`, `connect()` and `disconnect()` from the
+wrapper. `StableWSConnection` is constructed with `{ wsConnection }` instead of `{ client }`.
+* `client.defaultWSTimeout` is removed, along with the `WebSocketImpl` and
+`wsUrlParams` client options. They move to the socket's configuration as `connectTimeoutMs`,
+`webSocketImpl` and `urlParams`, set with `client.config.set({ client: { wsConnection: { … } } })`.
+Unlike the fields and options they replace, these survive a reconnect.
+* `ThreadManagerState.lastConnectionDropAt` is removed. Read
+`client.wsConnection.state.lastUnhealthyAt`, which is written on every status transition,
+including the `disconnect()` path the old event was silent about.
+* requests that watch a channel or subscribe to presence now wait for a WebSocket
+connection id instead of silently returning unwatched data. The gate is in `ApiClient._doRequest`,
+so it covers every endpoint carrying `watch` or `presence`, plus `stopWatchingChannel` and
+`longPoll`. With no socket open and none being established the request rejects with "No connection
+id is available"; an explicit `watch: false` is still honoured, and a caller's `AbortSignal`
+abandons the wait. Test fixtures that fake a connected user without a live socket will now throw.
+* a UI that renders a "connection lost" banner must hold the drop itself. The
+socket's store publishes drops the moment they happen, where the old event delayed them by five
+seconds. `client.wsConnection.config.offlineNotificationDisplayDelayMs` (5s) is the shared value to
+wait for; nothing in this package acts on it.
+* `connection.recovered` is no longer dispatched when the socket drops while a
+recovery is running, because every reload in it can have failed. Work keyed off that event will
+correctly stop running for recoveries that recovered nothing.
+* openapi related clean up (#1870)
+
+### Bug Fixes
+
+* add missing app config fields to AppSettingsAPIResponse ([#1854](https://github.com/GetStream/stream-chat-js/issues/1854)) ([18bc3cf](https://github.com/GetStream/stream-chat-js/commit/18bc3cf7acbabdfd957f1e092821f68b81ea456e))
+* do not reset channel unread count on thread read ([#1835](https://github.com/GetStream/stream-chat-js/issues/1835)) ([79fbf54](https://github.com/GetStream/stream-chat-js/commit/79fbf54c56cad9979c9fe44f8ca299c6d53d39d7))
+* hanging wsPromise after closeConnection ([#1868](https://github.com/GetStream/stream-chat-js/issues/1868)) ([b4e7a89](https://github.com/GetStream/stream-chat-js/commit/b4e7a89459ae38ed025b1ae7ffe91f061cf22ecd)), closes [#1122](https://github.com/GetStream/stream-chat-js/issues/1122) [#1863](https://github.com/GetStream/stream-chat-js/issues/1863)
+* isolate event listener errors from the dispatch loop ([#1850](https://github.com/GetStream/stream-chat-js/issues/1850)) ([dc56e57](https://github.com/GetStream/stream-chat-js/commit/dc56e57e5610b9fc02094080554964967707b3a8))
+* reconnect past connection timeout ([#1874](https://github.com/GetStream/stream-chat-js/issues/1874)) ([2004a83](https://github.com/GetStream/stream-chat-js/commit/2004a831b7785efb2ae093a21188a02abd21a199)), closes [#1760](https://github.com/GetStream/stream-chat-js/issues/1760)
+* send the read request regardless of read receipt privacy settings ([#1853](https://github.com/GetStream/stream-chat-js/issues/1853)) ([59d8f31](https://github.com/GetStream/stream-chat-js/commit/59d8f3138c386a518dfefbda6bd66aebc1237c35))
+
+### Features
+
+* **client:** support custom_set and custom_unset in batch channel update ([#1856](https://github.com/GetStream/stream-chat-js/issues/1856)) ([d05c2f5](https://github.com/GetStream/stream-chat-js/commit/d05c2f56d1264a884584657683e65eea8b1a5cc1))
+* establish network connection observer services ([#1859](https://github.com/GetStream/stream-chat-js/issues/1859)) ([4c46949](https://github.com/GetStream/stream-chat-js/commit/4c4694964c244c6f16efa937b766f198685b3ce8))
+* message pruning ([696f56f](https://github.com/GetStream/stream-chat-js/commit/696f56fc1dd87515061a35f0204577c3e7ce9784))
+* message pruning ([#1875](https://github.com/GetStream/stream-chat-js/issues/1875)) ([d4d2c6c](https://github.com/GetStream/stream-chat-js/commit/d4d2c6cc0ab6a82681c83cc91b20069bd5a12406))
+* **MessageComposer:** add composition middleware for pending attachment uploads ([#1845](https://github.com/GetStream/stream-chat-js/issues/1845)) ([68e5d69](https://github.com/GetStream/stream-chat-js/commit/68e5d69336a400434db76a34b46fc0efcd781e85))
+* openapi related clean up ([#1870](https://github.com/GetStream/stream-chat-js/issues/1870)) ([b3fa906](https://github.com/GetStream/stream-chat-js/commit/b3fa90610bb0fe949bc13ab9e7b10fc71fb23d66))
+
 ## [10.0.0-rc.11](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.10...v10.0.0-rc.11) (2026-09-16)
 
 ### ⚠ BREAKING CHANGES
