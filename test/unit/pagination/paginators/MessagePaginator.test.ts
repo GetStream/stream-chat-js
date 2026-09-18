@@ -1186,6 +1186,42 @@ describe('MessagePaginator', () => {
   });
 
   describe('applyMessageDeletionForUser()', () => {
+    it('emits once for the whole sweep, not once per deleted message', () => {
+      const paginator = new MessagePaginator({ channel, itemIndex });
+      const bannedUser = { id: 'banned-user' };
+      paginator.setItems({
+        valueOrFactory: Array.from({ length: 10 }, (_, i) =>
+          createMessage({
+            cid: channel.cid,
+            id: `banned-${i}`,
+            user: bannedUser,
+            created_at: convertDateToTimestamp(`2025-02-01T14:0${i}:00.000Z`),
+          }),
+        ),
+        isFirstPage: true,
+        isLastPage: true,
+      });
+
+      let emits = 0;
+      const unsubscribe = paginator.state.subscribe(() => {
+        emits += 1;
+      });
+      emits = 0; // discard the synchronous initial emit
+
+      paginator.applyMessageDeletionForUser({
+        userId: bannedUser.id,
+        hardDelete: false,
+        deletedAt: convertDateToTimestamp('2025-02-01T14:01:30.000Z'),
+      });
+
+      // One logical operation, one emit — regardless of how many messages it touched.
+      expect(emits).toBe(1);
+      expect(paginator.items?.every((m) => m.type === 'deleted')).toBe(true);
+      expect(paginator.items).toHaveLength(10);
+
+      unsubscribe();
+    });
+
     it('soft deletes user messages and quoted messages in paginator items', () => {
       const paginator = new MessagePaginator({ channel, itemIndex });
       const deletedAt = new Date('2025-02-01T14:01:30.000Z');

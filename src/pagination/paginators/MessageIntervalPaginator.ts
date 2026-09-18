@@ -1350,40 +1350,44 @@ export class MessageIntervalPaginator extends BasePaginator<
   }) => {
     const loadedMessages = this.items ?? [];
 
-    // Batch: one logical operation touches many messages; coalesce the shared-store fan-out to a
-    // single flush (sibling holders are notified once) instead of once per affected message.
-    this.batch(() => {
-      for (const message of loadedMessages) {
-        if (message.user?.id === userId) {
-          if (hardDelete) {
-            this.removeItem({ id: message.id });
-          } else {
-            this.ingestItem(
-              toDeletedMessage({
-                message,
+    // One logical operation touching many messages so we `coalesce` so this paginator's own window
+    // emits once at the end rather than per message, and the shared-store fan-out folds into a
+    // single flush so sibling holders are notified once too.
+    this.batch(
+      () => {
+        for (const message of loadedMessages) {
+          if (message.user?.id === userId) {
+            if (hardDelete) {
+              this.removeItem({ id: message.id });
+            } else {
+              this.ingestItem(
+                toDeletedMessage({
+                  message,
+                  hardDelete,
+                  deletedAt,
+                }) as LocalMessage,
+              );
+            }
+            continue;
+          }
+
+          if (
+            message.quoted_message?.user?.id === userId &&
+            message.quoted_message.type !== 'deleted'
+          ) {
+            this.ingestItem({
+              ...message,
+              quoted_message: toDeletedMessage({
+                message: formatMessage(message.quoted_message),
                 hardDelete,
                 deletedAt,
               }) as LocalMessage,
-            );
+            });
           }
-          continue;
         }
-
-        if (
-          message.quoted_message?.user?.id === userId &&
-          message.quoted_message.type !== 'deleted'
-        ) {
-          this.ingestItem({
-            ...message,
-            quoted_message: toDeletedMessage({
-              message: formatMessage(message.quoted_message),
-              hardDelete,
-              deletedAt,
-            }) as LocalMessage,
-          });
-        }
-      }
-    });
+      },
+      { coalesce: true },
+    );
   };
 
   /**
