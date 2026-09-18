@@ -1913,16 +1913,24 @@ describe('Threads 2.0', () => {
           });
         });
 
-        it('ingests "reaction.new" message into thread messagePaginator when parent_id matches thread.id', () => {
+        it('applies "reaction.new" to a reply the thread paginator already holds', () => {
           const thread = createTestThread();
           thread.registerSubscriptions();
           const message = generateMsg({
             id: uuidv4(),
             parent_id: thread.id,
+            own_reactions: [],
           }) as MessageResponse;
+          thread.messagePaginator.ingestPage({
+            page: [formatMessage(message)],
+            isHead: true,
+            isTail: true,
+            setActive: true,
+          });
 
           client.dispatchEvent({
             type: 'reaction.new',
+            cid: thread.channel.cid,
             message,
             reaction: {
               type: 'love',
@@ -1932,7 +1940,8 @@ describe('Threads 2.0', () => {
             },
           });
 
-          expect(thread.messagePaginator.getItem(message.id)?.id).to.equal(message.id);
+          const item = thread.messagePaginator.getItem(message.id);
+          expect(item?.own_reactions?.some((r) => r.type === 'love')).to.be.true;
 
           thread.unregisterSubscriptions();
         });
@@ -1962,16 +1971,23 @@ describe('Threads 2.0', () => {
         });
 
         (['reaction.deleted', 'reaction.updated'] as const).forEach((eventType) => {
-          it(`ingests "${eventType}" message into thread messagePaginator when parent_id matches thread.id`, () => {
+          it(`applies "${eventType}" to a reply the thread paginator already holds`, () => {
             const thread = createTestThread();
             thread.registerSubscriptions();
             const message = generateMsg({
               id: uuidv4(),
               parent_id: thread.id,
             }) as MessageResponse;
+            thread.messagePaginator.ingestPage({
+              page: [formatMessage(message)],
+              isHead: true,
+              isTail: true,
+              setActive: true,
+            });
 
             client.dispatchEvent({
               type: eventType,
+              cid: thread.channel.cid,
               message,
               reaction: {
                 type: 'love',

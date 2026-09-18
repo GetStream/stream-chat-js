@@ -10,6 +10,7 @@ import {
   createMessageOperationsPersistence,
   deleteReactionOptimistically,
   MessageOperations,
+  reflectReactionEvent,
 } from './messageOperations';
 import {
   channelHasReadEvents,
@@ -2875,55 +2876,16 @@ export class Channel extends ChannelApi {
         }
         break;
       case 'reaction.new':
-        if (event.message && event.reaction) {
-          const { reaction } = event;
-          // Reflect main messages AND show_in_channel replies (both live in these paginators);
-          // pure replies are handled by the thread's own reaction subscription.
-          if (!event.message?.parent_id || event.message.show_in_channel) {
-            this.messagePaginator.reflectReaction({ message: event.message, reaction });
-            this.pinnedMessagesPaginator.reflectReaction({
-              message: event.message,
-              reaction,
-            });
-          }
-        }
-        break;
+      case 'reaction.updated':
       case 'reaction.deleted':
         if (event.message && event.reaction) {
-          const { reaction } = event;
-          if (
-            event.message &&
-            (!event.message.parent_id || event.message.show_in_channel)
-          ) {
-            this.messagePaginator.reflectReaction({
-              message: event.message,
-              reaction,
-              removed: true,
-            });
-            this.pinnedMessagesPaginator.reflectReaction({
-              message: event.message,
-              reaction,
-              removed: true,
-            });
-          }
-        }
-        break;
-      case 'reaction.updated':
-        if (event.message && event.reaction) {
-          const { reaction } = event;
-          // assuming reaction.updated is only called if enforce_unique is true
-          if (!event.message?.parent_id || event.message.show_in_channel) {
-            this.messagePaginator.reflectReaction({
-              enforceUnique: true,
-              message: event.message,
-              reaction,
-            });
-            this.pinnedMessagesPaginator.reflectReaction({
-              enforceUnique: true,
-              message: event.message,
-              reaction,
-            });
-          }
+          reflectReactionEvent(this.getClient(), {
+            // reaction.updated is only sent when enforce_unique is set
+            enforceUnique: event.type === 'reaction.updated',
+            message: event.message,
+            reaction: event.reaction,
+            removed: event.type === 'reaction.deleted',
+          });
         }
         break;
       case 'channel.hidden': {

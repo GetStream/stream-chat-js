@@ -1,9 +1,5 @@
 import { StateStore } from '@stream-io/state-store';
-import {
-  computeOwnReactions,
-  formatMessage,
-  localMessageToNewMessagePayload,
-} from './utils';
+import { formatMessage, localMessageToNewMessagePayload } from './utils';
 import type {
   DraftResponse,
   EventType,
@@ -890,32 +886,7 @@ export class Thread extends WithSubscriptions {
       (eventType) =>
         this.client.on(eventType, (event: PipelineEvent) => {
           if (!event.message || !event.reaction) return;
-          const { message, reaction } = event;
-          if (message.parent_id === this.id) {
-            // Preserve/apply the current user's `own_reactions` off the reply paginator itself,
-            // independently of the channel (mirrors the channel's main-list reflectReaction).
-            this.messagePaginator.reflectReaction({
-              enforceUnique: eventType === 'reaction.updated',
-              message,
-              reaction,
-              removed: eventType === 'reaction.deleted',
-            });
-          } else if (!message.parent_id && message.id === this.id) {
-            // Reaction on the PARENT. The parent isn't in a paginator, so apply the current user's
-            // own_reactions delta here (mirroring the reply path's reflectReaction) rather than
-            // copying the WS event verbatim — which would drop own_reactions the event omits.
-            const own_reactions = computeOwnReactions({
-              current:
-                this.state.getLatestValue().parentMessage?.own_reactions ??
-                message.own_reactions ??
-                [],
-              enforceUnique: eventType === 'reaction.updated',
-              reaction,
-              removed: eventType === 'reaction.deleted',
-              userId: this.client.userId,
-            });
-            this.updateParentMessageLocally({ message: { ...message, own_reactions } });
-          }
+          const { message } = event;
           this.messagePaginator.reflectQuotedMessageUpdate(formatMessage(message));
         }).unsubscribe,
     );

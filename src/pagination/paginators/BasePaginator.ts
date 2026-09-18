@@ -1402,9 +1402,9 @@ export abstract class BasePaginator<T, Q> {
     const activeInterval = this._itemIntervals.get(this._activeIntervalId);
     if (!activeInterval) return;
 
-    // Throttling happens, so `this.items` lags the live intervals and the slot-swap below is impossible
-    // so schedule a re-projection instead. Only when something actually differs, though a sibling may
-    // have written the very object this window is already showing.
+    // Throttling happens, so this.items lags the intervals and we can't slot swap here. Schedule a
+    // re-projection instead, but only if something actually changed — a sibling may have written the
+    // same object this window is already showing.
     if (this.isStateThrottled) {
       const currentItems = this.items;
       if (!currentItems || currentItems.length !== activeInterval.itemIds.length) {

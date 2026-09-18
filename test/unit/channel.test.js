@@ -1706,8 +1706,38 @@ describe('Channel _handleChannelEvent', function () {
 	});
 
 	describe('reaction.new', () => {
-		it('reaction.new ingests message into messagePaginator for non-thread messages', function () {
-			const message = generateMsg({ id: 'reaction-channel-message-id' });
+		it('reaction.new applies to a message the paginator already holds', function () {
+			const message = generateMsg({
+				id: 'reaction-channel-message-id',
+				own_reactions: [],
+			});
+			channel.messagePaginator.ingestPage({
+				page: [formatMessage(message)],
+				isHead: true,
+				isTail: true,
+				setActive: true,
+			});
+
+			channel._handleChannelEvent({
+				type: 'reaction.new',
+				message,
+				reaction: {
+					type: 'love',
+					user_id: user.id,
+					message_id: message.id,
+					created_at: convertDateToTimestamp(new Date().toISOString()),
+				},
+			});
+
+			const item = channel.messagePaginator.getItem(message.id);
+			expect(item?.own_reactions?.some((r) => r.type === 'love')).to.be.true;
+		});
+
+		it('reaction.new does NOT pull in a message no collection holds', function () {
+			// A reaction reports that a message's counts changed; it is not a signal to start
+			// displaying a message that was never loaded. The reflect is a single store write
+			// addressed by id, so with nothing holding it there is nothing to update.
+			const message = generateMsg({ id: 'reaction-unheld-message-id' });
 
 			channel._handleChannelEvent({
 				type: 'reaction.new',
@@ -1720,7 +1750,7 @@ describe('Channel _handleChannelEvent', function () {
 				},
 			});
 
-			expect(channel.messagePaginator.getItem(message.id)?.id).to.equal(message.id);
+			expect(channel.messagePaginator.getItem(message.id)).to.be.undefined;
 		});
 
 		it('reaction.new ignores thread replies in messagePaginator', function () {
@@ -1766,8 +1796,14 @@ describe('Channel _handleChannelEvent', function () {
 	describe('reaction.deleted', () => {
 		// The parametrized cases also cover reaction.updated.
 		['reaction.deleted', 'reaction.updated'].forEach((eventType) => {
-			it(`${eventType} ingests message into messagePaginator for non-thread messages`, function () {
+			it(`${eventType} applies to a message the paginator already holds`, function () {
 				const message = generateMsg({ id: `${eventType}-channel-message-id` });
+				channel.messagePaginator.ingestPage({
+					page: [formatMessage(message)],
+					isHead: true,
+					isTail: true,
+					setActive: true,
+				});
 
 				channel._handleChannelEvent({
 					type: eventType,

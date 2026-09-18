@@ -110,6 +110,5 @@ describe('PinnedMessagePaginator', () => {
     const paginator = new PinnedMessagePaginator({ channel: makeChannel() });
     expect(typeof paginator.jumpToMessage).toBe('function');
     expect(typeof paginator.jumpToTheLatestMessage).toBe('function');
-    expect(typeof paginator.reflectReaction).toBe('function');
   });
 });
