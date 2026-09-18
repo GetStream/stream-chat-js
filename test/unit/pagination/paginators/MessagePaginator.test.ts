@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ZERO_PAGE_CURSOR } from '../../../../src/pagination/paginators/BasePaginator';
 import type { Interval } from '../../../../src/pagination/paginators/BasePaginator';
 import { MessagePaginator } from '../../../../src/pagination/paginators/MessagePaginator';
+import { EntityStore } from '../../../../src/entityStore/EntityStore';
 import { StoreBackedItemIndex } from '../../../../src/entityStore/StoreBackedItemIndex';
 import type { Channel } from '../../../../src/channel';
 import type {
@@ -1186,6 +1187,42 @@ describe('MessagePaginator', () => {
   });
 
   describe('applyMessageDeletionForUser()', () => {
+    it('emits once for the whole sweep, not once per deleted message', () => {
+      const paginator = new MessagePaginator({ channel, itemIndex });
+      const bannedUser = { id: 'banned-user' };
+      paginator.setItems({
+        valueOrFactory: Array.from({ length: 10 }, (_, i) =>
+          createMessage({
+            cid: channel.cid,
+            id: `banned-${i}`,
+            user: bannedUser,
+            created_at: convertDateToTimestamp(`2025-02-01T14:0${i}:00.000Z`),
+          }),
+        ),
+        isFirstPage: true,
+        isLastPage: true,
+      });
+
+      let emits = 0;
+      const unsubscribe = paginator.state.subscribe(() => {
+        emits += 1;
+      });
+      emits = 0; // discard the synchronous initial emit
+
+      paginator.applyMessageDeletionForUser({
+        userId: bannedUser.id,
+        hardDelete: false,
+        deletedAt: convertDateToTimestamp('2025-02-01T14:01:30.000Z'),
+      });
+
+      // One logical operation, one emit — regardless of how many messages it touched.
+      expect(emits).toBe(1);
+      expect(paginator.items?.every((m) => m.type === 'deleted')).toBe(true);
+      expect(paginator.items).toHaveLength(10);
+
+      unsubscribe();
+    });
+
     it('soft deletes user messages and quoted messages in paginator items', () => {
       const paginator = new MessagePaginator({ channel, itemIndex });
       const deletedAt = new Date('2025-02-01T14:01:30.000Z');
@@ -1333,102 +1370,52 @@ describe('MessagePaginator', () => {
       // the active window is re-emitted with the updated user object
       expect(paginator.items?.find((m) => m.id === 'a1')?.user?.name).toBe('Renamed A');
     });
-  });
 
-  describe('reflectReaction()', () => {
-    const currentUserId = 'me';
-    const reaction = (type: string, userId: string) => ({
-      created_at: convertDateToTimestamp('2021-01-01T00:00:00.000Z'),
-      message_id: 'r1',
-      type,
-      user_id: userId,
-    });
-
-    beforeEach(() => {
-      (channel as unknown as { getClient: () => unknown }).getClient = () => ({
-        userId: currentUserId,
-        getReplies: channel.getReplies,
-      });
-    });
-
-    const seed = (
-      paginator: MessagePaginator,
-      ownReactions: ReturnType<typeof reaction>[],
-    ) => {
-      paginator.setItems({
-        valueOrFactory: [
-          createMessage({
-            created_at: convertDateToTimestamp('2021-01-01T00:00:00.000Z'),
-            id: 'r1',
-            latest_reactions: ownReactions,
-            own_reactions: ownReactions,
-          }),
-        ],
-        isFirstPage: true,
-        isLastPage: true,
-      });
-    };
-
-    it("preserves the current user's own_reactions when another user reacts", () => {
-      const paginator = new MessagePaginator({ channel, itemIndex });
-      seed(paginator, [reaction('love', currentUserId)]);
-
-      paginator.reflectReaction({
-        message: createMessage({
-          id: 'r1',
-          // server event omits our own_reactions and carries the merged groups
-          own_reactions: [],
-          reaction_groups: {
-            like: { count: 1, sum_scores: 1 } as never,
-            love: { count: 1, sum_scores: 1 } as never,
-          },
+    it('skips messages already carrying the same user object, so siblings are not dirtied back', () => {
+      // Two collections over ONE store, as channel.messagePaginator and pinnedMessagesPaginator
+      // are. Both run reflectUserUpdate for the same event; without the reference guard the second
+      // re-spreads every message into a fresh snapshot whose only effect is to dirty the first.
+      //
+      // The paginators must build their OWN index so each registers itself as the store's
+      // subscriber — passing `itemIndex` in would use NOOP_OWNER and no fan-out could occur at all,
+      // which makes the assertion pass vacuously.
+      const store = new EntityStore<LocalMessage>({ getEntityId: (m) => m.id });
+      const linkedChannel = {
+        ...channel,
+        getClient: () => ({ messageStore: store, userId: 'me' }),
+      } as unknown as Channel;
+      const make = () => new MessagePaginator({ channel: linkedChannel });
+      const first = make();
+      const second = make();
+      const page = [
+        createMessage({
+          cid: linkedChannel.cid,
+          id: 'a1',
+          user: { id: 'A' },
+          created_at: convertDateToTimestamp('2021-01-01T00:00:00.000Z'),
         }),
-        reaction: reaction('like', 'other'),
+      ];
+      first.ingestPage({ page, isHead: true, isTail: true, setActive: true });
+      second.ingestPage({ page, isHead: true, isTail: true, setActive: true });
+      expect(first.items).toHaveLength(1);
+      expect(second.items).toHaveLength(1);
+
+      let firstEmits = 0;
+      const unsubscribe = first.state.subscribe(() => {
+        firstEmits += 1;
       });
+      firstEmits = 0;
 
-      const updated = paginator.getItem('r1');
-      expect(updated?.own_reactions?.map((r) => r.type)).toEqual(['love']);
-      // the event's server-computed reaction_groups are applied as-is
-      expect(updated?.reaction_groups?.like).toBeDefined();
-    });
+      const renamed = { id: 'A', name: 'Renamed A' };
+      first.reflectUserUpdate(renamed);
+      second.reflectUserUpdate(renamed);
 
-    it("adds the current user's reaction to own_reactions", () => {
-      const paginator = new MessagePaginator({ channel, itemIndex });
-      seed(paginator, []);
+      // One emit for its own write; the sibling's pass is a no-op rather than a second round trip.
+      expect(firstEmits).toBe(1);
+      expect(first.getItem('a1')?.user?.name).toBe('Renamed A');
+      expect(second.getItem('a1')?.user?.name).toBe('Renamed A');
 
-      paginator.reflectReaction({
-        message: createMessage({ id: 'r1' }),
-        reaction: reaction('love', currentUserId),
-      });
-
-      expect(paginator.getItem('r1')?.own_reactions?.map((r) => r.type)).toEqual([
-        'love',
-      ]);
-    });
-
-    it('removes the reaction from own_reactions on reaction.deleted', () => {
-      const paginator = new MessagePaginator({ channel, itemIndex });
-      seed(paginator, [reaction('love', currentUserId)]);
-
-      paginator.reflectReaction({
-        message: createMessage({ id: 'r1', own_reactions: [] }),
-        reaction: reaction('love', currentUserId),
-        removed: true,
-      });
-
-      expect(paginator.getItem('r1')?.own_reactions ?? []).toEqual([]);
-    });
-
-    it('does not add another user reaction to own_reactions', () => {
-      const paginator = new MessagePaginator({ channel, itemIndex });
-      seed(paginator, []);
-
-      paginator.reflectReaction({
-        message: createMessage({ id: 'r1' }),
-        reaction: reaction('love', 'other'),
-      });
-
-      expect(paginator.getItem('r1')?.own_reactions ?? []).toEqual([]);
+      unsubscribe();
     });
   });
 

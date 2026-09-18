@@ -74,6 +74,8 @@ export class EntityStore<T> {
 
   private transactionDepth = 0;
   private pendingChanged = new Map<EntityStoreSubscriber, Set<string>>();
+  /** Ids whose {@link EntityStore.flushSubscribers} was requested while a transaction was open. */
+  private pendingFlushIds?: Set<string>;
 
   constructor({ getEntityId }: EntityStoreOptions<T>) {
     this.getEntityId = getEntityId;
@@ -157,7 +159,14 @@ export class EntityStore<T> {
       return fn();
     } finally {
       this.transactionDepth -= 1;
-      if (this.transactionDepth === 0) this.flush();
+      if (this.transactionDepth === 0) {
+        this.flush();
+        // drained after flush(), because flushState only emits what a subscriber already
+        // has pending and markDirty accumulates until flush() hands it over.
+        const ids = this.pendingFlushIds;
+        this.pendingFlushIds = undefined;
+        if (ids) for (const id of ids) this.flushSubscribersNow(id);
+      }
     }
   }
 
@@ -166,8 +175,20 @@ export class EntityStore<T> {
    * {@link EntityStoreSubscriber.flushState}). Called after an optimistic (local-user) write to
    * `id` so it renders without the throttle delay. Only that id's own subscribers are flushed — the
    * write touched no other id — and flushing a subscriber with nothing pending is a no-op.
+   *
+   * Inside a transaction it is deferred to the outermost exit — inline there it would be a no-op,
+   * since `markDirty` has not notified anyone yet. Getting this wrong costs the siblings (pinned
+   * list, open thread) up to 500ms on an optimistic write, while the writer updates inline.
    */
   flushSubscribers(id: string): void {
+    if (this.transactionDepth > 0) {
+      (this.pendingFlushIds ??= new Set()).add(id);
+      return;
+    }
+    this.flushSubscribersNow(id);
+  }
+
+  private flushSubscribersNow(id: string): void {
     const subscribers = this.subscribers.get(id);
     if (!subscribers) return;
     for (const subscriber of subscribers) subscriber.flushState?.();

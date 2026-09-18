@@ -178,4 +178,92 @@ describe('EntityStore', () => {
       expect(b.onEntitiesChanged).not.toHaveBeenCalled();
     });
   });
+
+  describe('flushSubscribers inside a transaction', () => {
+    /**
+     * A subscriber recording the ORDER in which it is called, which is the whole point: a
+     * `flushState` that lands before `onEntitiesChanged` is a silent no-op, because the subscriber
+     * has not been handed the change yet and so has nothing pending to flush.
+     */
+    const orderedSubscriber = (log: string[], name: string): EntityStoreSubscriber => ({
+      onEntitiesChanged: () => log.push(`${name}:changed`),
+      flushState: () => log.push(`${name}:flushed`),
+    });
+
+    it('defers the flush to the outermost exit, and runs it AFTER the change notification', () => {
+      const log: string[] = [];
+      store.link('m1', orderedSubscriber(log, 'sibling'));
+
+      store.transaction(() => {
+        store.upsert(msg({ id: 'm1' }));
+        store.flushSubscribers('m1');
+        // Nothing at all has reached the subscriber yet — that is what makes an inline flush here
+        // useless.
+        expect(log).toEqual([]);
+      });
+
+      expect(log).toEqual(['sibling:changed', 'sibling:flushed']);
+    });
+
+    it('is unchanged outside a transaction', () => {
+      const log: string[] = [];
+      store.link('m1', orderedSubscriber(log, 'sibling'));
+
+      store.upsert(msg({ id: 'm1' }));
+      store.flushSubscribers('m1');
+
+      expect(log).toEqual(['sibling:changed', 'sibling:flushed']);
+    });
+
+    it('dedupes repeated requests for the same id and drains every distinct one', () => {
+      const log: string[] = [];
+      store.link('m1', orderedSubscriber(log, 'one'));
+      store.link('m2', orderedSubscriber(log, 'two'));
+
+      store.transaction(() => {
+        store.upsert(msg({ id: 'm1' }));
+        store.upsert(msg({ id: 'm2' }));
+        store.flushSubscribers('m1');
+        store.flushSubscribers('m1');
+        store.flushSubscribers('m2');
+      });
+
+      expect(log.filter((entry) => entry.endsWith(':flushed'))).toEqual([
+        'one:flushed',
+        'two:flushed',
+      ]);
+    });
+
+    it('drains only on the outermost exit of a nested transaction', () => {
+      const log: string[] = [];
+      store.link('m1', orderedSubscriber(log, 'sibling'));
+
+      store.transaction(() => {
+        store.transaction(() => {
+          store.upsert(msg({ id: 'm1' }));
+          store.flushSubscribers('m1');
+        });
+        expect(log).toEqual([]);
+      });
+
+      expect(log).toEqual(['sibling:changed', 'sibling:flushed']);
+    });
+
+    it('does not leak requested ids into a later transaction', () => {
+      const log: string[] = [];
+      store.link('m1', orderedSubscriber(log, 'sibling'));
+
+      store.transaction(() => {
+        store.upsert(msg({ id: 'm1' }));
+        store.flushSubscribers('m1');
+      });
+      log.length = 0;
+
+      store.transaction(() => {
+        store.upsert(msg({ id: 'm1' }));
+      });
+
+      expect(log).toEqual(['sibling:changed']);
+    });
+  });
 });

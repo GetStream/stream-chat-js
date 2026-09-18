@@ -556,6 +556,9 @@ describe('optimistic reactions', () => {
 
       client.dispatchEvent({
         type: 'reaction.new',
+        // a reaction is a channel-scoped event and the server always sends `cid`; without it
+        // `dispatchEvent` resolves no channel and the channel handler never runs
+        cid: channel.cid,
         message: generateMsg({ id: parentId, own_reactions: [] }),
         reaction: ownReaction('love', parentId),
       } as unknown as Event);
@@ -571,6 +574,9 @@ describe('optimistic reactions', () => {
 
       client.dispatchEvent({
         type: 'reaction.deleted',
+        // a reaction is a channel-scoped event and the server always sends `cid`; without it
+        // `dispatchEvent` resolves no channel and the channel handler never runs
+        cid: channel.cid,
         message: generateMsg({ id: parentId, own_reactions: [] }),
         reaction: ownReaction('love', parentId),
       } as unknown as Event);

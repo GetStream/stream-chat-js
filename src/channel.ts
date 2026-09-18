@@ -10,6 +10,7 @@ import {
   createMessageOperationsPersistence,
   deleteReactionOptimistically,
   MessageOperations,
+  reflectReactionEvent,
 } from './messageOperations';
 import {
   channelHasReadEvents,
@@ -2623,8 +2624,12 @@ export class Channel extends ChannelApi {
               this.messagePaginator.removeItem({ id: event.message.id });
               this.pinnedMessagesPaginator.removeItem({ id: event.message.id });
             } else {
-              this.messagePaginator.ingestItem(formattedMessage);
-              this.pinnedMessagesPaginator.ingestItem(formattedMessage);
+              // A soft delete changes content only — it moves neither `created_at` nor `pinned`, so
+              // no collection's membership or sort position changes. One id-addressed write
+              // therefore reaches every holder through the store, where an `ingestItem` per
+              // collection would make each of them re-emit its own window on top of the fan-out.
+              const store = this.getClient().messageStore;
+              if (store.has(event.message.id)) store.upsert(formattedMessage);
             }
           }
           this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
@@ -2659,9 +2664,10 @@ export class Channel extends ChannelApi {
             // ingestItem advances the paginator's tracked latest message (→ last_message_at). A
             // message that arrives while the viewer has scrolled to an older window lands in the
             // head interval, not the active one, so the view is preserved without an isUpToDate flag.
-            this.messagePaginator.ingestItem(formatMessage(event.message));
+            const formattedMessage = formatMessage(event.message);
+            this.messagePaginator.ingestItem(formattedMessage);
             // ingestItem auto-adds when pinned (matchesFilter { pinned: true }).
-            this.pinnedMessagesPaginator.ingestItem(formatMessage(event.message));
+            this.pinnedMessagesPaginator.ingestItem(formattedMessage);
           }
 
           // do not increase the unread count - the back-end does not increase the count neither in the following cases:
@@ -2775,8 +2781,9 @@ export class Channel extends ChannelApi {
 
         // system messages don't increment unread counts
         if (event.message) {
-          this.messagePaginator.ingestItem(formatMessage(event.message));
-          this.pinnedMessagesPaginator.ingestItem(formatMessage(event.message));
+          const formattedMessage = formatMessage(event.message);
+          this.messagePaginator.ingestItem(formattedMessage);
+          this.pinnedMessagesPaginator.ingestItem(formattedMessage);
         }
 
         break;
@@ -2875,55 +2882,16 @@ export class Channel extends ChannelApi {
         }
         break;
       case 'reaction.new':
-        if (event.message && event.reaction) {
-          const { reaction } = event;
-          // Reflect main messages AND show_in_channel replies (both live in these paginators);
-          // pure replies are handled by the thread's own reaction subscription.
-          if (!event.message?.parent_id || event.message.show_in_channel) {
-            this.messagePaginator.reflectReaction({ message: event.message, reaction });
-            this.pinnedMessagesPaginator.reflectReaction({
-              message: event.message,
-              reaction,
-            });
-          }
-        }
-        break;
+      case 'reaction.updated':
       case 'reaction.deleted':
         if (event.message && event.reaction) {
-          const { reaction } = event;
-          if (
-            event.message &&
-            (!event.message.parent_id || event.message.show_in_channel)
-          ) {
-            this.messagePaginator.reflectReaction({
-              message: event.message,
-              reaction,
-              removed: true,
-            });
-            this.pinnedMessagesPaginator.reflectReaction({
-              message: event.message,
-              reaction,
-              removed: true,
-            });
-          }
-        }
-        break;
-      case 'reaction.updated':
-        if (event.message && event.reaction) {
-          const { reaction } = event;
-          // assuming reaction.updated is only called if enforce_unique is true
-          if (!event.message?.parent_id || event.message.show_in_channel) {
-            this.messagePaginator.reflectReaction({
-              enforceUnique: true,
-              message: event.message,
-              reaction,
-            });
-            this.pinnedMessagesPaginator.reflectReaction({
-              enforceUnique: true,
-              message: event.message,
-              reaction,
-            });
-          }
+          reflectReactionEvent(this.getClient(), {
+            // reaction.updated is only sent when enforce_unique is set
+            enforceUnique: event.type === 'reaction.updated',
+            message: event.message,
+            reaction: event.reaction,
+            removed: event.type === 'reaction.deleted',
+          });
         }
         break;
       case 'channel.hidden': {

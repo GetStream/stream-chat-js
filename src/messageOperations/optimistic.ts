@@ -1,4 +1,4 @@
-import { applyReactionLocally } from '../entityStore';
+import { applyReactionLocally } from './applyReactionLocally';
 import { isEphemeral } from '../errors';
 import { formatMessage } from '../utils';
 import { dateToNs } from '../utils/time';

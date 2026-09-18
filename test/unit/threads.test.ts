@@ -603,9 +603,13 @@ describe('Threads 2.0', () => {
         // store implements routing/refcount internally (so it survives a store rearchitecture).
         it('keeps a message a sibling collection still holds after the thread is torn down (dual-home refcount)', () => {
           const thread = createTestThread();
-          // The channel list also holds the parent message (it is a normal channel message). ingestItem
-          // links it into the shared store under the channel paginator, regardless of rendering/filter.
-          channel.messagePaginator.ingestItem(formatMessage(parentMessageResponse));
+          // The channel list also holds the parent message (it is a normal channel message), so
+          // ingesting it links it into the shared store under the channel paginator. It has to
+          // carry the channel's cid to pass that paginator's filter — a message the list does not
+          // accept is no longer registered as a holder.
+          channel.messagePaginator.ingestItem(
+            formatMessage({ ...parentMessageResponse, cid: channel.cid }),
+          );
           expect(client.messageStore.has(thread.id)).to.be.true;
 
           // Opening the thread adds a SECOND holder (its parent-message store subscription).
@@ -1843,6 +1847,7 @@ describe('Threads 2.0', () => {
           thread.messagePaginator.ingestItem(
             formatMessage(
               generateMsg({
+                cid: thread.channel.cid,
                 id: messageId,
                 parent_id: thread.id,
                 own_reactions: [
@@ -1913,16 +1918,24 @@ describe('Threads 2.0', () => {
           });
         });
 
-        it('ingests "reaction.new" message into thread messagePaginator when parent_id matches thread.id', () => {
+        it('applies "reaction.new" to a reply the thread paginator already holds', () => {
           const thread = createTestThread();
           thread.registerSubscriptions();
           const message = generateMsg({
             id: uuidv4(),
             parent_id: thread.id,
+            own_reactions: [],
           }) as MessageResponse;
+          thread.messagePaginator.ingestPage({
+            page: [formatMessage(message)],
+            isHead: true,
+            isTail: true,
+            setActive: true,
+          });
 
           client.dispatchEvent({
             type: 'reaction.new',
+            cid: thread.channel.cid,
             message,
             reaction: {
               type: 'love',
@@ -1932,7 +1945,8 @@ describe('Threads 2.0', () => {
             },
           });
 
-          expect(thread.messagePaginator.getItem(message.id)?.id).to.equal(message.id);
+          const item = thread.messagePaginator.getItem(message.id);
+          expect(item?.own_reactions?.some((r) => r.type === 'love')).to.be.true;
 
           thread.unregisterSubscriptions();
         });
@@ -1962,16 +1976,23 @@ describe('Threads 2.0', () => {
         });
 
         (['reaction.deleted', 'reaction.updated'] as const).forEach((eventType) => {
-          it(`ingests "${eventType}" message into thread messagePaginator when parent_id matches thread.id`, () => {
+          it(`applies "${eventType}" to a reply the thread paginator already holds`, () => {
             const thread = createTestThread();
             thread.registerSubscriptions();
             const message = generateMsg({
               id: uuidv4(),
               parent_id: thread.id,
             }) as MessageResponse;
+            thread.messagePaginator.ingestPage({
+              page: [formatMessage(message)],
+              isHead: true,
+              isTail: true,
+              setActive: true,
+            });
 
             client.dispatchEvent({
               type: eventType,
+              cid: thread.channel.cid,
               message,
               reaction: {
                 type: 'love',
