@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessagePaginator } from '../../../../src/pagination/paginators/MessagePaginator';
 import { setStateThrottlingEnabled } from '../../../../src/pagination/paginators/stateThrottling';
 import { EntityStore } from '../../../../src/entityStore/EntityStore';
-import { applyReactionLocally } from '../../../../src/entityStore/applyReactionLocally';
+import { applyReactionLocally } from '../../../../src/messageOperations/applyReactionLocally';
 import { formatMessage } from '../../../../src';
 import { generateMsg } from '../../test-utils/generateMessage';
 import { convertDateToTimestamp } from '../../test-utils/time';
