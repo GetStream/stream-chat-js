@@ -104,6 +104,7 @@ describe('paginator initializeConfig', () => {
       const paginator = new MessagePaginator({ channel });
       const before = paginator._itemIndex;
       paginator.ingestItem({
+        cid: channel.cid,
         id: 'm1',
         created_at: convertDateToTimestamp(new Date()),
       } as never);

@@ -1,6 +1,8 @@
 export { MessageOperations } from './MessageOperations';
 export { createMessageOperationsPersistence } from './persistence';
 export { MessageOperationStatePolicy } from './MessageOperationStatePolicy';
+export { applyReactionLocally } from './applyReactionLocally';
+export { reflectReactionEvent } from './reflectReactionEvent';
 export {
   addReactionOptimistically,
   applyMessageChangeLocally,

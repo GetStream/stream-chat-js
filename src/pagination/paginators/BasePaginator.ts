@@ -1069,6 +1069,45 @@ export abstract class BasePaginator<T, Q> {
   }
 
   /**
+   * Run `fn` with this paginator's window publishes suspended, emitting once on exit.
+   *
+   * A replace is internally remove-then-insert and each half changes the window, so without this one
+   * logical `ingestItem` emits twice.
+   *
+   * `exit` decides how the single emit leaves the scope: `auto` rides the throttle when there is one
+   * (live ops, where successive events should coalesce across the trailing edge), `sync` always
+   * flushes ({@link batch}, whose contract is that a one-shot operation settles in a single update).
+   *
+   * **`lockItemOrder` lists are excluded.** Their emit is not a re-projection but a republish of the
+   * last-published array with the item spliced back at its original index, and exiting through
+   * {@link flushWindowPublish} re-derives from the active interval — reordering the list and dropping
+   * whatever the interval no longer holds, which is the whole point of locking the order.
+   *
+   * Re-entrant: only the outermost scope emits, so an `ingestItem` inside a coalescing `batch`
+   * defers to the batch.
+   */
+  protected withSingleWindowPublish(
+    fn: () => void,
+    { exit = 'auto' }: { exit?: 'auto' | 'sync' } = {},
+  ): void {
+    if (this.config.lockItemOrder) {
+      fn();
+      return;
+    }
+    const isOutermost = this._windowPublishSuspendDepth === 0;
+    this._windowPublishSuspendDepth += 1;
+    try {
+      fn();
+    } finally {
+      this._windowPublishSuspendDepth -= 1;
+    }
+    if (!isOutermost || !this._suspendedWindowDirty) return;
+    this._suspendedWindowDirty = false;
+    if (exit === 'auto' && this.isStateThrottled) this.scheduleWindowPublish();
+    else this.flushWindowPublish();
+  }
+
+  /**
    * Flush any pending throttled window + interval-view publishes immediately. No-op when nothing
    * is pending or throttling is off.
    */
@@ -1363,12 +1402,24 @@ export abstract class BasePaginator<T, Q> {
     const activeInterval = this._itemIntervals.get(this._activeIntervalId);
     if (!activeInterval) return;
 
-    // Throttled (message list): the slot-swap fast path below reads the last-published `items`, which
-    // lags the live intervals while throttled — so skip it. Gate on membership only and schedule a
-    // single coalesced re-projection; the boundary re-derives the window fresh from the interval.
+    // Throttling happens, so this.items lags the intervals and we can't slot swap here. Schedule a
+    // re-projection instead, but only if something actually changed — a sibling may have written the
+    // same object this window is already showing.
     if (this.isStateThrottled) {
-      for (const id of activeInterval.itemIds) {
-        if (changedIds.has(id)) {
+      const currentItems = this.items;
+      if (!currentItems || currentItems.length !== activeInterval.itemIds.length) {
+        // Nothing to pair the interval against so window positions only line up with interval
+        // positions when the two have the same length and gate on membership alone.
+        if (this.intervalHoldsAnyChangedId(activeInterval, changedIds)) {
+          this.scheduleWindowPublish();
+        }
+        return;
+      }
+      for (let i = 0; i < currentItems.length; i++) {
+        const id = this.getItemId(currentItems[i]);
+        if (!changedIds.has(id)) continue;
+        const updated = this._itemIndex.get(id);
+        if (!updated || updated !== currentItems[i]) {
           this.scheduleWindowPublish();
           return;
         }
@@ -1413,11 +1464,8 @@ export abstract class BasePaginator<T, Q> {
 
     // Fallback: membership/order drifted (or no window to patch, or a boost is active). Re-project,
     // but only if a changed id is actually in the active interval.
-    for (const id of activeInterval.itemIds) {
-      if (changedIds.has(id)) {
-        this.state.partialNext({ items: this.intervalToItems(activeInterval) });
-        return;
-      }
+    if (this.intervalHoldsAnyChangedId(activeInterval, changedIds)) {
+      this.state.partialNext({ items: this.intervalToItems(activeInterval) });
     }
   }
 
@@ -2430,6 +2478,14 @@ export abstract class BasePaginator<T, Q> {
    *  - if this is the active interval, re-emit state.items from interval
    */
   ingestItem(ingestedItem: T): boolean {
+    let ingested = false;
+    this.withSingleWindowPublish(() => {
+      ingested = this.applyItemIngestion(ingestedItem);
+    });
+    return ingested;
+  }
+
+  private applyItemIngestion(ingestedItem: T): boolean {
     const id = this.getItemId(ingestedItem);
     const previousItem = this._itemIndex.get(id);
 
@@ -2448,9 +2504,12 @@ export abstract class BasePaginator<T, Q> {
     const itemHasBeenRemoved =
       !!removedItemCoordinates?.state && removedItemCoordinates.state.currentIndex > -1;
 
-    // 2. Update canonical storage (ItemIndex) to the *new* snapshot,
-    //    regardless of filters – this keeps the index authoritative.
-    this._itemIndex.setOne(ingestedItem);
+    // 2. Update canonical storage (ItemIndex) to the *new* snapshot.
+    //    Written only if it either already exists or matches the filter
+    //    of the paginator.
+    if (this._itemIndex.has(id) || this.matchesFilter(ingestedItem)) {
+      this._itemIndex.setOne(ingestedItem);
+    }
 
     // 3. If it no longer matches the filter, we’re done (it has been removed above).
     if (!this.matchesFilter(ingestedItem)) {
@@ -2664,16 +2723,7 @@ export abstract class BasePaginator<T, Q> {
       this._itemIndex.batch(fn);
       return;
     }
-    this._windowPublishSuspendDepth += 1;
-    try {
-      this._itemIndex.batch(fn);
-    } finally {
-      this._windowPublishSuspendDepth -= 1;
-    }
-    if (this._windowPublishSuspendDepth === 0 && this._suspendedWindowDirty) {
-      this._suspendedWindowDirty = false;
-      this.flushWindowPublish();
-    }
+    this.withSingleWindowPublish(() => this._itemIndex.batch(fn), { exit: 'sync' });
   }
 
   // ---------------------------------------------------------------------------

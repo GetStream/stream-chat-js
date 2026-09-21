@@ -92,6 +92,37 @@ describe('PinnedMessagePaginator', () => {
     expect(paginator.items?.map((m) => m.id)).toEqual([]);
   });
 
+  it('does not become a store holder for messages it will never display', () => {
+    // `ingestItem` writes the index BEFORE checking the filter, so an unpinned message used to be
+    // registered as a member and a store holder here — displayed nowhere, but blocking the store's
+    // refcount GC, which is what made message pruning on the main list reclaim nothing.
+    const paginator = new PinnedMessagePaginator({ channel: makeChannel() });
+    paginator.ingestPage({ page: [], isHead: true, isTail: true, setActive: true });
+
+    paginator.ingestItem(
+      makePinned('not-pinned', 1, {
+        pinned: false,
+        pinned_at: undefined,
+      }) as LocalMessage,
+    );
+
+    expect(paginator.getItem('not-pinned')).toBeUndefined();
+    expect(paginator.items ?? []).toHaveLength(0);
+  });
+
+  it('still propagates an unpin for a message it DOES hold', () => {
+    // The mirror case, and why the write precedes the filter at all: an unpinned snapshot no longer
+    // matches, but it has to reach the store so other holders observe `pinned: false`.
+    const paginator = new PinnedMessagePaginator({ channel: makeChannel() });
+    const pinned = makePinned('p1', 1) as LocalMessage;
+    paginator.ingestPage({ page: [pinned], isHead: true, isTail: true, setActive: true });
+    expect(paginator.items ?? []).toHaveLength(1);
+
+    paginator.ingestItem({ ...pinned, pinned: false, pinned_at: undefined });
+
+    expect(paginator.items ?? []).toHaveLength(0);
+  });
+
   it('does not expose the unread / live-view surface (never coupled to read state)', () => {
     const paginator = new PinnedMessagePaginator({ channel: makeChannel() });
     const surface = paginator as unknown as Record<string, unknown>;
@@ -110,6 +141,5 @@ describe('PinnedMessagePaginator', () => {
     const paginator = new PinnedMessagePaginator({ channel: makeChannel() });
     expect(typeof paginator.jumpToMessage).toBe('function');
     expect(typeof paginator.jumpToTheLatestMessage).toBe('function');
-    expect(typeof paginator.reflectReaction).toBe('function');
   });
 });

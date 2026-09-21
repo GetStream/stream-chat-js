@@ -2665,6 +2665,76 @@ describe('BasePaginator', () => {
         ]);
       });
 
+      it('keeps the locked order when the ingest runs inside a coalescing batch', () => {
+        // A coalescing batch suspends the window publish, and the suspended path used to exit
+        // through a re-projection from the active interval — which reorders a locked list and drops
+        // whatever the interval no longer holds. Here `id1` moves to the logical tail, so a
+        // re-projection yields 2 items where the locked order must still show 3.
+        const paginator = new Paginator({ lockItemOrder: true, itemIndex });
+        paginator.ingestPage({ page: [item1, item2, item3], setActive: true });
+        // @ts-expect-error accessing protected property
+        paginator.buildMatchFilters = () => ({ age: { $gt: 100 } });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: 1 }],
+        });
+
+        const adjustedItem1 = { ...item1, age: 103 };
+        paginator.batch(() => paginator.ingestItem(adjustedItem1), { coalesce: true });
+
+        expect(paginator.items).toStrictEqual([adjustedItem1, item2, item3]);
+      });
+
+      it('emits once per ingest, and once for a whole coalescing batch', () => {
+        const paginator = new Paginator({ itemIndex });
+        paginator.ingestPage({ page: [item1, item2, item3], setActive: true });
+
+        let emits = 0;
+        const unsubscribe = paginator.state.subscribe(() => {
+          emits += 1;
+        });
+        emits = 0; // discard the synchronous initial emit
+
+        // A replace is remove-then-insert internally; both halves must land in one emit.
+        paginator.ingestItem({ ...item2, age: 42 });
+        expect(emits).toBe(1);
+
+        emits = 0;
+        paginator.batch(
+          () => {
+            paginator.ingestItem({ ...item1, age: 43 });
+            paginator.ingestItem({ ...item3, age: 44 });
+          },
+          { coalesce: true },
+        );
+        expect(emits).toBe(1);
+
+        unsubscribe();
+      });
+
+      it('emits before ingestItem returns — nothing is deferred past the call', () => {
+        // The single-publish fence must open and close inside one synchronous call. If it ever grows
+        // to span more than that, a caller reading `state` straight after an ingest sees stale items
+        // — which is what stream-chat-react-native's `useMarkRead` does from a `message.new` handler.
+        const paginator = new Paginator({ itemIndex });
+        paginator.ingestPage({ page: [item1, item2, item3], setActive: true });
+
+        const order: string[] = [];
+        const unsubscribe = paginator.state.subscribe(() => order.push('published'));
+        order.length = 0;
+
+        const updated = { ...item2, age: 42 };
+        paginator.ingestItem(updated);
+        order.push('returned');
+
+        expect(order).toEqual(['published', 'returned']);
+        // and the window that landed is the settled one — the new snapshot is in it, and the
+        // intermediate "removed but not yet re-inserted" state was never emitted
+        expect(paginator.items).toHaveLength(3);
+        expect(paginator.items?.find((i) => i.id === item2.id)).toStrictEqual(updated);
+
+        unsubscribe();
+      });
+
       it.each([
         ['on lockItemOrder: false', false],
         ['on lockItemOrder: true', true],

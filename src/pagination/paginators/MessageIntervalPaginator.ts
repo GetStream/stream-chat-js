@@ -20,21 +20,14 @@ import {
 import type {
   LocalMessage,
   MessagePaginationParams,
-  MessageResponse,
   PinnedMessagePaginationOptions,
-  ReactionResponse,
   SortParamRequest,
   UserResponse,
 } from '../../types';
 import type { Channel } from '../../channel';
 import { CORE_NOTIFICATION_TYPE } from '../../notifications';
 import { StateStore } from '@stream-io/state-store';
-import {
-  computeOwnReactions,
-  formatMessage,
-  generateUUIDv4,
-  toDeletedMessage,
-} from '../../utils';
+import { formatMessage, generateUUIDv4, toDeletedMessage } from '../../utils';
 import { makeComparator } from '../sortCompiler';
 import type { FieldToDataResolver } from '../types.normalization';
 import { resolveDotPathValue } from '../utility.normalization';
@@ -1357,40 +1350,44 @@ export class MessageIntervalPaginator extends BasePaginator<
   }) => {
     const loadedMessages = this.items ?? [];
 
-    // Batch: one logical operation touches many messages; coalesce the shared-store fan-out to a
-    // single flush (sibling holders are notified once) instead of once per affected message.
-    this.batch(() => {
-      for (const message of loadedMessages) {
-        if (message.user?.id === userId) {
-          if (hardDelete) {
-            this.removeItem({ id: message.id });
-          } else {
-            this.ingestItem(
-              toDeletedMessage({
-                message,
+    // One logical operation touching many messages so we `coalesce` so this paginator's own window
+    // emits once at the end rather than per message, and the shared-store fan-out folds into a
+    // single flush so sibling holders are notified once too.
+    this.batch(
+      () => {
+        for (const message of loadedMessages) {
+          if (message.user?.id === userId) {
+            if (hardDelete) {
+              this.removeItem({ id: message.id });
+            } else {
+              this.ingestItem(
+                toDeletedMessage({
+                  message,
+                  hardDelete,
+                  deletedAt,
+                }) as LocalMessage,
+              );
+            }
+            continue;
+          }
+
+          if (
+            message.quoted_message?.user?.id === userId &&
+            message.quoted_message.type !== 'deleted'
+          ) {
+            this.ingestItem({
+              ...message,
+              quoted_message: toDeletedMessage({
+                message: formatMessage(message.quoted_message),
                 hardDelete,
                 deletedAt,
               }) as LocalMessage,
-            );
+            });
           }
-          continue;
         }
-
-        if (
-          message.quoted_message?.user?.id === userId &&
-          message.quoted_message.type !== 'deleted'
-        ) {
-          this.ingestItem({
-            ...message,
-            quoted_message: toDeletedMessage({
-              message: formatMessage(message.quoted_message),
-              hardDelete,
-              deletedAt,
-            }) as LocalMessage,
-          });
-        }
-      }
-    });
+      },
+      { coalesce: true },
+    );
   };
 
   /**
@@ -1434,6 +1431,7 @@ export class MessageIntervalPaginator extends BasePaginator<
     this.batch(() => {
       for (const message of this._itemIndex.values()) {
         if (message.user?.id !== user.id) continue;
+        if (message.user === user) continue;
         this._itemIndex.setOne({ ...message, user });
         if (activeIds.has(this.getItemId(message))) activeAffected = true;
       }
@@ -1443,64 +1441,6 @@ export class MessageIntervalPaginator extends BasePaginator<
         items: (this.items ?? []).map((m) => this.getItem(this.getItemId(m)) ?? m),
       });
     }
-  };
-
-  /**
-   * Apply a reaction WS event (`reaction.new` / `reaction.updated` / `reaction.deleted`) to the
-   * cached message. The event's `message` already carries the server-updated
-   * `reaction_groups` / `latest_reactions`; only `own_reactions` needs local preservation so a
-   * cross-user reaction does not wipe the current user's reactions. This re-homes what
-   * `ChannelState.addReaction` / `removeReaction` used to do off the now-removed
-   * `channel.state.messages` / `channel.state.threads` caches (the same logic backs the thread
-   * paginator via `Thread.messagePaginator`).
-   *
-   * `own_reactions` is seeded from the currently cached item (so another user's reaction keeps ours),
-   * falling back to the event's own_reactions when the message is not loaded — matching the legacy
-   * behavior where `_updateMessage` only mutated a message that existed locally.
-   *
-   * @param params - The reaction event payload.
-   * @param params.message - The reaction event's message, carrying the
-   *   server-computed `reaction_groups` / `latest_reactions`. Ingested as-is except for `own_reactions`.
-   * @param params.reaction - The reaction from the event. Only added to/removed from
-   *   `own_reactions` when its `user_id` is the current user; otherwise the current user's
-   *   `own_reactions` are left untouched.
-   * @param [params.removed=false] - `true` for `reaction.deleted` (remove the reaction from
-   *   `own_reactions`); `false` for `reaction.new` / `reaction.updated` (add it).
-   * @param [params.enforceUnique=false] - When adding, first clear the current user's existing
-   *   `own_reactions` so only the incoming one remains (used by `reaction.updated`, where a user's
-   *   reaction replaces their previous one).
-   *
-   * TODO(reactive-store): reflect reactions ONCE at the store level, not per-paginator. Both the
-   * channel handler (channel.ts) and the thread handler (thread.ts) call this on every reaction.*
-   * event, so a message held in more than one collection (a show_in_channel reply, or the thread
-   * parent) is reflected TWICE: two writes to the same canonical slot, each fanning out to the
-   * other holder (double re-projection) and minting a fresh ref that defeats the reconcile
-   * ref-equality bail. Idempotent (counts come wholesale from the event) so the result is correct,
-   * just wasteful. The store already fans out to every holder, so reflect once (by id, if held) and
-   * retire the per-collection reflect calls + parent path + enforce_unique branch.
-   */
-  reflectReaction = ({
-    enforceUnique = false,
-    message,
-    reaction,
-    removed = false,
-  }: {
-    message: MessageResponse | LocalMessage;
-    reaction: ReactionResponse;
-    enforceUnique?: boolean;
-    removed?: boolean;
-  }) => {
-    const formatted = formatMessage(message);
-    const existing = this.getItem(formatted.id);
-    const baseOwnReactions = existing?.own_reactions ?? formatted.own_reactions ?? [];
-    const own_reactions = computeOwnReactions({
-      current: baseOwnReactions,
-      enforceUnique,
-      reaction,
-      removed,
-      userId: this.channel.getClient().userId,
-    });
-    this.ingestItem({ ...formatted, own_reactions });
   };
 
   /**
