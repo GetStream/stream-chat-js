@@ -8,6 +8,8 @@ import type {
   UpdateMessageAPIResponse,
   UpdateMessageOptions,
 } from '../types';
+import type { MessageEchoKind } from '../mutationEcho';
+import type { MessageOperationStatePolicyContext } from './MessageOperationStatePolicy';
 import type { QueueableType } from '../offline-support/types';
 
 export type OperationKind = 'send' | 'retry' | 'update' | 'delete';
@@ -51,6 +53,31 @@ export type MessageOperationsHandlers = {
 
 export type MessageOperationsContext = {
   ingest: (m: LocalMessage) => void;
+  /**
+   * Records that the server copy {@link ingest} just wrote was applied, so its WS echo can be skipped.
+   * Supplied by the owner, which is the only thing that knows which collections its `ingest` reached.
+   * See {@link MessageOperationStatePolicyContext.recordApplied}.
+   */
+  recordApplied?: (m: LocalMessage, kind: MessageEchoKind) => void;
+  /** Removal counterpart of {@link recordApplied}, for a hard delete. */
+  recordRemoved?: (m: LocalMessage) => void;
+  /**
+   * Whether the WS event this response is the twin of has already applied this exact version — the
+   * read half of {@link recordApplied}, supplied by the same owner so the two agree on which
+   * collections are involved.
+   *
+   * Must answer for **every** collection the owner's `ingest` writes, and only say yes when all of
+   * them are covered: a partially-armed write still has work to do, and skipping it would leave a
+   * collection the WS event never reached.
+   */
+  wasApplied?: (m: LocalMessage, kind: MessageEchoKind) => boolean;
+  /** Removal counterpart of {@link wasApplied}, for a hard delete. */
+  wasRemovalApplied?: (m: LocalMessage) => boolean;
+  /**
+   * Marks an operation as open on this message id and returns its disposer, so the WS handlers know
+   * an event about it may have an HTTP twin worth arming for. See `MutationEcho.trackRequest`.
+   */
+  trackRequest?: (messageId: string) => () => void;
   get: (id: string) => LocalMessage | undefined;
   /**
    * Drops the message from local state entirely. Needed by the delete lifecycle: a hard delete removes

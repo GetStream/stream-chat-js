@@ -7,10 +7,48 @@ import type {
 import { formatMessage } from '../utils';
 import { nowNs } from '../utils/time';
 import type { QueueableType } from '../offline-support';
+import type { MessageEchoKind } from '../mutationEcho';
 import type { MessageOperationSpec, OperationKind, OperationParams } from './types';
+
+/**
+ * Which WS event each operation's server copy will be echoed by, and therefore which key it arms.
+ *
+ * An exhaustive `Record`, so adding an `OperationKind` fails the build until it declares how it pairs.
+ * `delete` names the **soft** kind; a hard delete is a removal and goes through `recordRemoved`.
+ */
+const ECHO_KIND_BY_OPERATION: Record<OperationKind, MessageEchoKind> = {
+  delete: 'message-deleted',
+  retry: 'message-new',
+  send: 'message-new',
+  update: 'message-updated',
+};
 
 export type MessageOperationStatePolicyContext = {
   ingest: (m: LocalMessage) => void;
+  /**
+   * Records that the server copy just handed to {@link ingest} was applied, so the WS event echoing
+   * the same change can skip re-applying it.
+   *
+   * Lives on the context rather than in the policy because the policy knows nothing about
+   * collections — the owner's closure knows exactly which ones its `ingest` wrote, and the key is
+   * scoped per collection. Optional, so an owner that has not opted in simply keeps today's
+   * behaviour.
+   *
+   * Only ever called **after** a write, from inside the branch that performed it. An entry must mean
+   * "this exact version is already in state", never "something is about to write this" — otherwise a
+   * path that arms and then bails would suppress the only write that was going to happen.
+   */
+  recordApplied?: (m: LocalMessage, kind: MessageEchoKind) => void;
+  /** Removal counterpart of {@link recordApplied}, for a hard delete. */
+  recordRemoved?: (m: LocalMessage) => void;
+  /**
+   * Whether the WS twin of this response already applied this exact version, in which case the copy
+   * in hand is redundant. The read half of {@link recordApplied} — see its counterpart on
+   * `MessageOperationsContext` for why the owner supplies both.
+   */
+  wasApplied?: (m: LocalMessage, kind: MessageEchoKind) => boolean;
+  /** Removal counterpart of {@link wasApplied}, for a hard delete. */
+  wasRemovalApplied?: (m: LocalMessage) => boolean;
   get: (id: string) => LocalMessage | undefined;
   remove: (id: string) => void;
   persist: (m: LocalMessage) => void;
@@ -162,7 +200,12 @@ export class MessageOperationStatePolicy {
 
     if (kind === 'delete') {
       if (isHardDelete(options)) {
-        this.ctx.remove(messageId);
+        // Only the in-memory removal is gated. `purge` drops the offline-DB row and has no WS twin
+        // that would do it instead, so it must run whichever ordering won.
+        if (!this.ctx.wasRemovalApplied?.(formatted)) {
+          this.ctx.remove(messageId);
+          this.ctx.recordRemoved?.(formatted);
+        }
         this.ctx.purge(messageId);
         return;
       }
@@ -171,7 +214,11 @@ export class MessageOperationStatePolicy {
       // optimistic snapshot, so a copy that arrived while the request was open is still marked.
       if (!this.ctx.get(messageId)) return;
 
-      this.ctx.ingest(formatted);
+      // As above: the projection write is gated, the offline mirror is not.
+      if (!this.ctx.wasApplied?.(formatted, ECHO_KIND_BY_OPERATION.delete)) {
+        this.ctx.ingest(formatted);
+        this.ctx.recordApplied?.(formatted, ECHO_KIND_BY_OPERATION.delete);
+      }
       this.ctx.persist(formatted);
       return;
     }
@@ -193,13 +240,34 @@ export class MessageOperationStatePolicy {
       serverNewer ||
       (existingIsOurOptimisticSend && serverSameOrNewer);
 
-    if (!applyServerCopy) return;
+    // Two independent guarantees, and neither subsumes the other:
+    //
+    // - `alreadyApplied` is identity — the WS twin of THIS request already wrote THIS version. It is
+    //   the stated de-duplication rule, and the only one that survives a rewrite of the comparison
+    //   below.
+    // - `applyServerCopy` is ordering — something newer than this copy is already held (another
+    //   device's edit, a moderation update), so applying it would go backwards. A pairing key cannot
+    //   express that: a newer write has a different version and therefore a different key.
+    //
+    // Before the ledger existed the comparison covered both by accident, since a twin carries an equal
+    // `updated_at` and so fails `serverNewer`. That still holds, which is what makes adding this check
+    // behaviour-neutral for the message path: it declines the same sends, for a reason now written down.
+    const alreadyApplied = !!this.ctx.wasApplied?.(
+      formatted,
+      ECHO_KIND_BY_OPERATION[kind],
+    );
+
+    if (alreadyApplied || !applyServerCopy) return;
 
     this.ctx.ingest(formatted);
     // Persist only what was actually applied, so the row can never disagree with memory. For
     // send/retry this is also what supersedes the pessimistic `failed` write-ahead — and when the copy
     // is declined it is because a fresher one already landed, whose own path wrote the row.
     this.ctx.persist(formatted);
+    // Past both gates, so this is only reached when the copy really was applied — which is what keeps
+    // the two sides from both declining. The WS side can only skip because something armed a key, and
+    // only an actual write arms one.
+    this.ctx.recordApplied?.(formatted, ECHO_KIND_BY_OPERATION[kind]);
   }
 
   async failure<K extends OperationKind>({

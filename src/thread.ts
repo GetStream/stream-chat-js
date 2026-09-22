@@ -24,6 +24,12 @@ import type {
 } from './channel';
 import type { StreamChat } from './client';
 import type { CustomThreadData } from './custom_types';
+import {
+  ECHO_KIND_BY_EVENT_TYPE,
+  getEchoKey,
+  ingestChangesMembership,
+} from './mutationEcho';
+import type { MessageEchoKind } from './mutationEcho';
 import { MessageComposer } from './messageComposer';
 import {
   addReactionOptimistically,
@@ -289,6 +295,22 @@ export class Thread extends WithSubscriptions {
         }
         store.flushSubscribers(m.id);
       },
+      // Whichever branch above ran, the write landed in the client-global store — the same key the
+      // `Channel`'s closures derive, which is what lets a reply edited from inside its thread be
+      // recognised by the channel's own WS handler.
+      recordApplied: (m, kind) =>
+        client.mutationEcho.recordApplied(getEchoKey({ message: m }, kind)),
+      recordRemoved: (m) =>
+        client.mutationEcho.recordApplied(
+          getEchoKey({ message: m }, 'message-hard-deleted'),
+        ),
+      wasApplied: (m, kind) =>
+        client.mutationEcho.wasApplied(getEchoKey({ message: m }, kind)),
+      wasRemovalApplied: (m) =>
+        client.mutationEcho.wasApplied(
+          getEchoKey({ message: m }, 'message-hard-deleted'),
+        ),
+      trackRequest: (messageId) => client.mutationEcho.trackRequest(messageId),
       // Mirrors `ingest`'s routing: a message this paginator does not hold can still be held by the
       // client-global store (a thread parent, a message displayed by another collection), and the
       // policy uses this both for its freshness comparison and to decide whether there is anything to
@@ -745,6 +767,22 @@ export class Thread extends WithSubscriptions {
       }));
     }).unsubscribe;
 
+  /**
+   * Runs `write` unless the paired HTTP response already applied this exact version.
+   *
+   * Skipped entirely when the ingest would change what the reply list HOLDS rather than only what it
+   * shows — a reply arriving for the first time has no twin, and the store's fan-out can never add
+   * it. See {@link ingestChangesMembership}.
+   */
+  private applyReplyEcho = (
+    kind: MessageEchoKind | undefined,
+    message: LocalMessage,
+    perform: () => void,
+  ) => {
+    if (ingestChangesMembership(this.messagePaginator, message)) return perform();
+    this.client.mutationEcho.applyOnce(kind ? { kind, message } : undefined, perform);
+  };
+
   private subscribeNewReplies = () =>
     this.client.on('message.new', (event) => {
       if (!this.client.userId || event.message?.parent_id !== this.id) {
@@ -754,12 +792,17 @@ export class Thread extends WithSubscriptions {
       const isOwnMessage = event.message.user?.id === this.client.userId;
       const { active, read } = this.state.getLatestValue();
 
-      this.upsertReplyLocally({
-        message: event.message,
-        // MessageRequest from current user could have been added optimistically,
-        // so the actual timestamp might differ in the event
-        timestampChanged: isOwnMessage,
-      });
+      const reply = formatMessage(event.message);
+      this.applyReplyEcho(ECHO_KIND_BY_EVENT_TYPE['message.new'], reply, () =>
+        this.upsertReplyLocally({
+          // The SOURCE, not `reply`: `formatMessage` memoises per source object, so re-formatting
+          // an already-formatted copy mints a second reference and defeats the store's bail.
+          message: event.message as MessageResponse,
+          // MessageRequest from current user could have been added optimistically,
+          // so the actual timestamp might differ in the event
+          timestampChanged: isOwnMessage,
+        }),
+      );
 
       if (active) {
         this.throttledMarkRead();
@@ -829,17 +872,29 @@ export class Thread extends WithSubscriptions {
 
       // Deleted message is a reply of this thread
       if (event.message.parent_id === this.id) {
+        const { message } = event;
         if (event.hard_delete) {
-          this.deleteReplyLocally({ message: event.message });
+          this.client.mutationEcho.applyOnce(
+            { kind: 'message-hard-deleted', message: formattedMessage },
+            () => this.deleteReplyLocally({ message }),
+          );
         } else {
           // Handle soft delete (updates deleted_at timestamp)
-          this.upsertReplyLocally({ message: event.message });
+          this.applyReplyEcho(
+            ECHO_KIND_BY_EVENT_TYPE['message.deleted'],
+            formattedMessage,
+            () => this.upsertReplyLocally({ message }),
+          );
         }
       }
 
       // Deleted message is parent message of this thread
       if (event.message.id === this.id) {
-        this.updateParentMessageLocally({ message: event.message });
+        const { message } = event;
+        this.client.mutationEcho.applyOnce(
+          { kind: ECHO_KIND_BY_EVENT_TYPE['message.deleted'], message: formattedMessage },
+          () => this.updateParentMessageLocally({ message }),
+        );
       }
 
       this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
@@ -877,7 +932,16 @@ export class Thread extends WithSubscriptions {
                       event.message.own_reactions,
                   }
                 : event.message;
-          this.updateParentMessageOrReplyLocally(message);
+          const formatted = formatMessage(message);
+          this.applyReplyEcho(
+            // `message.undeleted` shares this subscription but pairs with no operation.
+            eventType === 'message.updated'
+              ? ECHO_KIND_BY_EVENT_TYPE['message.updated']
+              : undefined,
+            formatted,
+            () => this.updateParentMessageOrReplyLocally(message),
+          );
+          // NEVER gated — rewrites OTHER replies quoting this one, which the HTTP path never does.
           this.messagePaginator.reflectQuotedMessageUpdate(formatMessage(event.message));
         }).unsubscribe,
     );

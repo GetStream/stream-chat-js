@@ -53,7 +53,11 @@ export class MessageOperations {
       isQueued: ctx.isQueued,
       persist: ctx.persist,
       purge: ctx.purge,
+      recordApplied: ctx.recordApplied,
+      recordRemoved: ctx.recordRemoved,
       remove: ctx.remove,
+      wasApplied: ctx.wasApplied,
+      wasRemovalApplied: ctx.wasRemovalApplied,
     });
     this.configController = new ConfigController<MessageOperationsConfig>({
       defaults: DEFAULT_MESSAGE_OPERATIONS_CONFIG,
@@ -175,6 +179,11 @@ export class MessageOperations {
   ): Promise<void> {
     const messageId = params.localMessage.id;
 
+    // Open for the whole lifetime of the operation, not just the request: the window in which a WS
+    // event about this id may be our own echo starts at the optimistic write and ends once the
+    // response has been reconciled. `finally` below is the only place it closes.
+    const endRequest = this.ctx.trackRequest?.(messageId);
+
     const optimistic = this.policy.optimistic(kind, params);
 
     try {
@@ -198,6 +207,8 @@ export class MessageOperations {
         options: params.options,
       });
       throw e;
+    } finally {
+      endRequest?.();
     }
   }
 

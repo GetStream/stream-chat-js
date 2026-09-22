@@ -353,6 +353,11 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
     // `StableWSConnection._reconnect()`, so a `closeConnection()` → `openConnection()` cycle (mobile
     // backgrounding) never produced it. Consumers keying post-recovery work off this event — the UI
     // SDKs' mark-read-on-catch-up among them — need it after the reload above, not before.
+    // The reconnect re-queried state, so every armed echo describes a write whose WS twin went down
+    // with the socket and is never coming. Dropped BEFORE the event, so nothing a `connection.recovered`
+    // subscriber writes is measured against a key that predates the reload.
+    this.client.mutationEcho.clear();
+
     this.client.dispatchEvent({ type: 'connection.recovered' });
   };
 
