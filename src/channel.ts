@@ -5,7 +5,11 @@ import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
 import type { ReadStoreReconcileMeta } from './messageDelivery';
 import { MessagePaginator, PinnedMessagePaginator } from './pagination/paginators';
-import { createMessageOperations, reflectReactionEvent } from './messageOperations';
+import {
+  createMessageOperations,
+  reflectReactionEvent,
+  WithMessageOperations,
+} from './messageOperations';
 import type { MessageOperations } from './messageOperations';
 import type { OperationParams, OperationRequestFn } from './messageOperations/types';
 import {
@@ -55,8 +59,6 @@ import type {
   MessageResponse,
   MessageSetType,
   QueryMembersPayload,
-  ReactionRequest,
-  SendReactionRequest,
   SharedLocation,
   StreamRequestOptions,
   StreamResponse,
@@ -216,7 +218,7 @@ export const DEFAULT_CHANNEL_CONFIG: ChannelConfig = deepFreezeConfig({
 /**
  * The Channel class manages its own state.
  */
-export class Channel extends ChannelApi {
+export class Channel extends WithMessageOperations(ChannelApi) {
   _client: StreamChat;
   data: Partial<ChannelResponse> | undefined;
   _data: ChannelInput;
@@ -243,9 +245,9 @@ export class Channel extends ChannelApi {
   private readonly configController: ConfigController<ChannelConfig>;
   public readonly messageComposer: MessageComposer;
   public readonly messageReceiptsTracker: MessageReceiptsTracker;
+  public readonly messageOperations: MessageOperations;
   public readonly messagePaginator: MessagePaginator;
   public readonly pinnedMessagesPaginator: PinnedMessagePaginator;
-  public readonly messageOperations: MessageOperations;
   public readonly cooldownTimer: CooldownTimer;
   /**
    * Teardown for this channel's configuration subscription, released by {@link _disconnect}. Channels
@@ -580,54 +582,16 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Sends a message with optimistic local state update.
+   * Sends a message with optimistic local state update, then stops the typing indicator.
+   *
+   * The only collection-specific part of the optimistic API: typing is a channel concern and a
+   * `Thread` has no counterpart, so it is an override rather than part of the mixin.
    */
-  async sendMessageWithLocalUpdate(params: OperationParams<'send'>): Promise<void> {
-    await this.messageOperations.sendWithLocalUpdate(params);
+  override async sendMessageWithLocalUpdate(
+    params: OperationParams<'send'>,
+  ): Promise<void> {
+    await super.sendMessageWithLocalUpdate(params);
     if (this.messageComposer.config.text.publishTypingEvents) await this.stopTyping();
-  }
-
-  /**
-   * Retry sending a failed message.
-   */
-  async retrySendMessageWithLocalUpdate(
-    params: Omit<OperationParams<'retry'>, 'message'>,
-  ) {
-    await this.messageOperations.retrySendWithLocalUpdate(params);
-  }
-
-  /**
-   * Updates a message with optimistic local state update.
-   */
-  async updateMessageWithLocalUpdate(params: OperationParams<'update'>) {
-    await this.messageOperations.updateWithLocalUpdate(params);
-  }
-
-  /**
-   * Deletes a message with local state update.
-   */
-  async deleteMessageWithLocalUpdate(params: OperationParams<'delete'>) {
-    await this.messageOperations.deleteWithLocalUpdate(params);
-  }
-
-  /**
-   * Adds a reaction with an optimistic local state update - see
-   * {@link MessageOperations.addReactionWithLocalUpdate}, which `Thread` shares.
-   */
-  async addReactionWithLocalUpdate(params: {
-    messageId: string;
-    reaction: ReactionRequest;
-    options?: Pick<SendReactionRequest, 'enforce_unique' | 'skip_push'>;
-  }) {
-    await this.messageOperations.addReactionWithLocalUpdate(params);
-  }
-
-  /**
-   * Removes the current user's reaction with an optimistic local state update - see
-   * {@link MessageOperations.deleteReactionWithLocalUpdate}, which `Thread` shares.
-   */
-  async deleteReactionWithLocalUpdate(params: { messageId: string; type: string }) {
-    await this.messageOperations.deleteReactionWithLocalUpdate(params);
   }
 
   /**

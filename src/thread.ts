@@ -7,9 +7,7 @@ import type {
   MarkReadRequest,
   MarkReadResponse,
   MessageResponse,
-  ReactionRequest,
   ReadStateResponse,
-  SendReactionRequest,
   SortParamRequest,
   StreamResponse,
   ThreadStateResponse,
@@ -17,11 +15,10 @@ import type {
 } from './types';
 import { isDoesNotExistError } from './errors';
 import type { Channel } from './channel';
-import type { OperationParams } from './messageOperations/types';
 import type { StreamChat } from './client';
 import type { CustomThreadData } from './custom_types';
 import { MessageComposer } from './messageComposer';
-import { createMessageOperations } from './messageOperations';
+import { createMessageOperations, WithMessageOperations } from './messageOperations';
 import type { MessageOperations } from './messageOperations';
 import { nowNs } from './utils/time';
 import { WithSubscriptions } from './utils/WithSubscriptions';
@@ -101,7 +98,7 @@ export type ThreadConfig = {
  */
 export const DEFAULT_THREAD_CONFIG: ThreadConfig = deepFreezeConfig({});
 
-export class Thread extends WithSubscriptions {
+export class Thread extends WithMessageOperations(WithSubscriptions) {
   /** The shared configuration machinery — see {@link ConfigController}. */
   private readonly configController = new ConfigController<ThreadConfig>({
     defaults: DEFAULT_THREAD_CONFIG,
@@ -109,8 +106,8 @@ export class Thread extends WithSubscriptions {
   public readonly state: StateStore<ThreadState>;
   public readonly id: string;
   public readonly messageComposer: MessageComposer;
-  public readonly messagePaginator: MessagePaginator;
   public readonly messageOperations: MessageOperations;
+  public readonly messagePaginator: MessagePaginator;
 
   private client: StreamChat;
   private failedRepliesMap: Map<string, LocalMessage> = new Map();
@@ -925,60 +922,6 @@ export class Thread extends WithSubscriptions {
       this.updateParentMessageLocally({ message });
     }
   };
-
-  /**
-   * Sends a message with optimistic local state update.
-   */
-  async sendMessageWithLocalUpdate(params: OperationParams<'send'>): Promise<void> {
-    await this.messageOperations.sendWithLocalUpdate(params);
-  }
-
-  /**
-   * Retry sending a failed message.
-   */
-  async retrySendMessageWithLocalUpdate(
-    params: Omit<OperationParams<'retry'>, 'message'>,
-  ) {
-    await this.messageOperations.retrySendWithLocalUpdate(params);
-  }
-
-  /**
-   * Updates a message with optimistic local state update.
-   *
-   * The update flows through `messagePaginator`, which is the sole reply source.
-   */
-  async updateMessageWithLocalUpdate(params: OperationParams<'update'>) {
-    await this.messageOperations.updateWithLocalUpdate(params);
-  }
-
-  /**
-   * Deletes a message with local state update.
-   */
-  async deleteMessageWithLocalUpdate(params: OperationParams<'delete'>) {
-    await this.messageOperations.deleteWithLocalUpdate(params);
-  }
-
-  /**
-   * Adds a reaction to a reply with an optimistic local state update — see
-   * {@link MessageOperations.addReactionWithLocalUpdate}, which `Channel` shares. The request routes
-   * through the parent channel because reactions are channel-level, while the local write is
-   * addressed by message id and so reaches a pure reply no channel collection holds.
-   */
-  async addReactionWithLocalUpdate(params: {
-    messageId: string;
-    reaction: ReactionRequest;
-    options?: Pick<SendReactionRequest, 'enforce_unique' | 'skip_push'>;
-  }) {
-    await this.messageOperations.addReactionWithLocalUpdate(params);
-  }
-
-  /**
-   * Removes the current user's reaction from a reply with an optimistic local state update — see
-   * {@link MessageOperations.deleteReactionWithLocalUpdate}, which `Channel` shares.
-   */
-  async deleteReactionWithLocalUpdate(params: { messageId: string; type: string }) {
-    await this.messageOperations.deleteReactionWithLocalUpdate(params);
-  }
 
   public markRead = async ({ force = false }: { force?: boolean } = {}) => {
     if (this.ownUnreadCount === 0 && !force) {

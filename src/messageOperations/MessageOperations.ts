@@ -337,17 +337,14 @@ export class MessageOperations {
   }
 
   /*
-   * The optimistic surface `Channel` and `Thread` expose as `*WithLocalUpdate`.
+   * The operations that need more than `send` / `update` / `delete` already do.
    *
-   * The two differ only in which channel the request goes to, which this class already holds as
-   * `ctx.channel` — so the parameter shuffling below is written once here rather than once per owner.
-   * Each owner keeps its own public method, delegating to these; `Channel.sendMessageWithLocalUpdate`
-   * adds a `stopTyping()` afterwards, which is the only genuine difference between them.
+   * There is deliberately no `sendWithLocalUpdate` / `updateWithLocalUpdate` / `deleteWithLocalUpdate`
+   * here: once the per-call request overrides were removed they forwarded their argument unchanged,
+   * which only added a second name for `send` / `update` / `delete`. The three below earn their place —
+   * a retry rewrites the message type, and the reactions bind `ctx.channel`, which is what lets a
+   * `Thread` share them rather than reaching for its parent channel itself.
    */
-
-  async sendWithLocalUpdate(params: OperationParams<'send'>): Promise<void> {
-    await this.send(params);
-  }
 
   /**
    * Retries a failed send. `type: 'regular'` clears the `failed` marker before the attempt, so the
@@ -358,14 +355,6 @@ export class MessageOperations {
     options,
   }: Omit<OperationParams<'retry'>, 'message'>): Promise<void> {
     await this.retry({ localMessage: { ...localMessage, type: 'regular' }, options });
-  }
-
-  async updateWithLocalUpdate(params: OperationParams<'update'>): Promise<void> {
-    await this.update(params);
-  }
-
-  async deleteWithLocalUpdate(params: OperationParams<'delete'>): Promise<void> {
-    await this.delete(params);
   }
 
   /**
