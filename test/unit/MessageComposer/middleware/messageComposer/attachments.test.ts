@@ -552,6 +552,24 @@ describe('createSendWithPendingUploadsAttachmentsMiddleware', () => {
       uploadState: 'uploading' as AttachmentLoadingState,
     },
   };
+  const failed = {
+    type: 'image',
+    localMetadata: {
+      id: 'broken',
+      file: new File([], 'broken.jpg', { type: 'image/jpeg' }),
+      previewUri: 'blob:broken',
+      uploadState: 'failed' as AttachmentLoadingState,
+    },
+  };
+  const blocked = {
+    type: 'image',
+    localMetadata: {
+      id: 'refused',
+      file: new File([], 'refused.exe', { type: 'application/octet-stream' }),
+      previewUri: 'blob:refused',
+      uploadState: 'blocked' as AttachmentLoadingState,
+    },
+  };
 
   const emptyState = (): MessageComposerMiddlewareState => ({
     message: { id: 'test-id', parent_id: undefined, type: 'regular' },
@@ -698,5 +716,83 @@ describe('createSendWithPendingUploadsAttachmentsMiddleware', () => {
 
     expect(result.state.message.attachments ?? []).toHaveLength(0);
     expect(result.state.localMessage.attachments ?? []).toHaveLength(0);
+  });
+
+  it('keeps a failed upload on the optimistic message, with its localMetadata', async () => {
+    // Dropping it would make the file the user attached vanish on send, since the UI clears the
+    // composer. The preview and the `file` handle are what the message list renders and retries
+    // from.
+    const { middleware } = setupComposer({ attachments: [finished, failed] });
+
+    const result = await middleware.handlers.compose(setup(emptyState()));
+
+    expect(result.state.localMessage.attachments).toHaveLength(2);
+    expect(result.state.localMessage.attachments?.[1]).toHaveProperty(
+      'localMetadata.id',
+      'broken',
+    );
+    expect(result.state.localMessage.attachments?.[1]).toHaveProperty(
+      'localMetadata.previewUri',
+      'blob:broken',
+    );
+
+    // It has no URL, so it stays off the API payload.
+    expect(result.state.message.attachments).toHaveLength(1);
+    expect(result.state.message.attachments?.[0]).toMatchObject({
+      image_url: 'https://example.com/done.jpg',
+    });
+  });
+
+  it('drops a blocked upload from both payloads', async () => {
+    // The server's upload configuration refused it, so no retry can ever settle it - it belongs
+    // in the composer, where the user can remove it.
+    const { middleware } = setupComposer({ attachments: [finished, blocked] });
+
+    const result = await middleware.handlers.compose(setup(emptyState()));
+
+    expect(result.state.localMessage.attachments).toHaveLength(1);
+    expect(result.state.localMessage.attachments?.[0]).not.toHaveProperty(
+      'localMetadata',
+    );
+    expect(result.state.message.attachments).toHaveLength(1);
+  });
+
+  it('leaves failed uploads in the composer when it is kept as a draft for a poll', async () => {
+    // Same collision as a pending upload: a retry could be fired from the sent message and from
+    // the composer, both under the one localMetadata.id.
+    const { messageComposer, middleware } = setupComposer({
+      attachments: [finished, failed],
+    });
+    vi.spyOn(messageComposer, 'pollId', 'get').mockReturnValue('poll-id');
+
+    const result = await middleware.handlers.compose(setup(emptyState()));
+
+    expect(result.state.localMessage.attachments).toHaveLength(1);
+    expect(result.state.localMessage.attachments?.[0]).not.toHaveProperty(
+      'localMetadata',
+    );
+    expect(result.state.message.attachments).toHaveLength(1);
+  });
+
+  it('does not introduce an empty attachments array for a failed upload alone', async () => {
+    const { middleware } = setupComposer({ attachments: [failed] });
+
+    const result = await middleware.handlers.compose(setup(emptyState()));
+
+    expect(result.state.message).not.toHaveProperty('attachments');
+    expect(result.state.localMessage.attachments).toHaveLength(1);
+  });
+
+  it('preserves composer order across mixed upload states', async () => {
+    // Previews must not reshuffle when one upload settles and another does not.
+    const { middleware } = setupComposer({ attachments: [pending, finished, failed] });
+
+    const result = await middleware.handlers.compose(setup(emptyState()));
+
+    expect(
+      result.state.localMessage.attachments?.map(
+        (attachment) => (attachment as any).localMetadata?.id ?? 'done',
+      ),
+    ).toEqual(['in-flight', 'done', 'broken']);
   });
 });

@@ -771,7 +771,7 @@ describe('MessageComposer', () => {
       expect(messageComposer.hasSendableData).toBe(true);
     });
 
-    it('still refuses attachments that will never resolve', () => {
+    it('counts a failed upload as content', () => {
       const { messageComposer } = setup();
       messageComposer.compositionMiddlewareExecutor.replace([
         createSendWithPendingUploadsAttachmentsMiddleware(messageComposer),
@@ -780,11 +780,27 @@ describe('MessageComposer', () => {
       messageComposer.attachmentManager.state.partialNext({
         attachments: [
           { type: 'x', localMetadata: { id: 'a1', uploadState: 'failed', file: {} } },
+        ],
+      });
+
+      // It rides along on the optimistic message, where the user retries the upload.
+      expect(messageComposer.hasSendableData).toBe(true);
+    });
+
+    it('still refuses an attachment the server blocked', () => {
+      const { messageComposer } = setup();
+      messageComposer.compositionMiddlewareExecutor.replace([
+        createSendWithPendingUploadsAttachmentsMiddleware(messageComposer),
+      ]);
+
+      messageComposer.attachmentManager.state.partialNext({
+        attachments: [
           { type: 'x', localMetadata: { id: 'a2', uploadState: 'blocked', file: {} } },
         ],
       });
 
-      // A message whose only attachments were rejected must not look sendable.
+      // The upload configuration refused it outright, so no retry can settle it - a message
+      // whose only attachment is blocked must not look sendable.
       expect(messageComposer.hasSendableData).toBe(false);
     });
 
