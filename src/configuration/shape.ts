@@ -13,6 +13,7 @@ import type {
 import type { DeclarativePaginatorConfig } from '../pagination/paginators/BasePaginator';
 import type { MessageOperationsConfig } from '../messageOperations/MessageOperations';
 import type { MessageDeliveryReporterConfig } from '../messageDelivery/MessageDeliveryReporter';
+import type { MutationEchoConfig } from '../mutationEcho';
 import type { ThreadManagerConfig } from '../thread_manager';
 
 import type { LiveLocationManagerConfig } from '../LiveLocationManager';
@@ -527,6 +528,25 @@ const WS_CONNECTION_FIELDS: Record<keyof WSConnectionConfig, ConfigNode> = {
   },
 };
 
+const MUTATION_ECHO_FIELDS: Record<keyof MutationEchoConfig, ConfigNode> = {
+  enabled: {
+    description:
+      'Whether a change already applied from an HTTP response skips its WebSocket echo. Off restores the previous behaviour, where every paired write applies twice.',
+    kind: 'value',
+    type: 'boolean',
+  },
+  maxSize: {
+    description: 'Most pending echoes tracked at once; the oldest is evicted past this.',
+    kind: 'value',
+    type: 'number',
+  },
+  ttlMs: {
+    description: 'How long an applied write can suppress its WebSocket twin.',
+    kind: 'value',
+    type: 'number',
+  },
+};
+
 const CLIENT_FIELDS: Record<keyof ClientDeclarativeConfig, ConfigNode> = {
   connectionRecovery: {
     description:
@@ -537,6 +557,12 @@ const CLIENT_FIELDS: Record<keyof ClientDeclarativeConfig, ConfigNode> = {
   messageDelivery: {
     description: 'Delivery and read receipt reporting.',
     fields: MESSAGE_DELIVERY_FIELDS,
+    kind: 'group',
+  },
+  mutationEcho: {
+    description:
+      'Skipping the WebSocket echo of a change this client already applied from an HTTP response.',
+    fields: MUTATION_ECHO_FIELDS,
     kind: 'group',
   },
   networkConnection: {

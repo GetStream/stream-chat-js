@@ -78,6 +78,7 @@ import {
 import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
 import { ReminderManager } from './reminders';
+import { MutationEcho } from './mutationEcho';
 import type { AbstractOfflineDB } from './offline-support';
 import { getPendingTaskChannelData } from './offline-support/util';
 import { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';
@@ -190,6 +191,14 @@ export class StreamChat extends ChatApi {
    * more than one of them stays consistent without copy-to-copy fan-out.
    */
   messageStore: EntityStore<LocalMessage>;
+  /**
+   * Remembers server writes already applied from an HTTP response, so the WS event carrying the same
+   * change skips re-applying it. Client-scoped because a write made through `thread.messageOperations`
+   * has to be visible to a check made in `Channel._handleChannelEvent`, and vice versa.
+   *
+   * @internal
+   */
+  readonly mutationEcho: MutationEcho;
   offlineDb?: AbstractOfflineDB;
   notifications: NotificationManager;
   reminders: ReminderManager;
@@ -363,6 +372,7 @@ export class StreamChat extends ChatApi {
     this.messageStore = new EntityStore<LocalMessage>({
       getEntityId: (message) => message.id,
     });
+    this.mutationEcho = new MutationEcho();
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
     this.channelManager = new ChannelManager({ client: this });
@@ -429,6 +439,7 @@ export class StreamChat extends ChatApi {
     this.threads.initializeConfig(config?.threads);
     this.messageDeliveryReporter.initializeConfig(config?.messageDelivery);
     this.notifications.initializeConfig(config?.notifications);
+    this.mutationEcho.initializeConfig(config?.mutationEcho);
   }
 
   get mutedUsers() {
@@ -823,6 +834,8 @@ export class StreamChat extends ChatApi {
     this.mutedChannels = [];
     this.uploadManager.reset();
     this.messageComposerCache.clear();
+    // The entries describe writes this user's requests made; nothing will echo them now.
+    this.mutationEcho.clear();
     // Runs the `'client'` setup function's teardown. Cleared so repeated calls cannot double-run it.
     this.unsubscribeClientConfiguration?.();
     this.unsubscribeClientConfiguration = undefined;

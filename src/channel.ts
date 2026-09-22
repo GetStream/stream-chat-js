@@ -22,6 +22,12 @@ import {
   sanitizeOutgoingAttachments,
 } from './utils';
 import { msToNs, nowNs } from './utils/time';
+import {
+  ECHO_KIND_BY_EVENT_TYPE,
+  getEchoKey,
+  ingestChangesMembership,
+} from './mutationEcho';
+import type { MessageEchoKind } from './mutationEcho';
 import { normalizeUploadFile } from './upload-utils';
 import type { StreamChat } from './client';
 import { chatLoggerSystem } from './logger';
@@ -399,6 +405,22 @@ export class Channel extends ChannelApi {
         }
         store.flushSubscribers(m.id);
       },
+      // Whichever branch above ran, the write landed in the client-global store — which is exactly
+      // what the key describes, so one pair of closures covers both routes and every collection
+      // reading through the store.
+      recordApplied: (m, kind) =>
+        client.mutationEcho.recordApplied(getEchoKey({ message: m }, kind)),
+      recordRemoved: (m) =>
+        client.mutationEcho.recordApplied(
+          getEchoKey({ message: m }, 'message-hard-deleted'),
+        ),
+      wasApplied: (m, kind) =>
+        client.mutationEcho.wasApplied(getEchoKey({ message: m }, kind)),
+      wasRemovalApplied: (m) =>
+        client.mutationEcho.wasApplied(
+          getEchoKey({ message: m }, 'message-hard-deleted'),
+        ),
+      trackRequest: (messageId) => client.mutationEcho.trackRequest(messageId),
       // Mirrors `ingest`'s routing: a message this paginator does not hold can still be held by the
       // client-global store (a thread parent, a message displayed by another collection), and the
       // policy uses this both for its freshness comparison and to decide whether there is anything to
@@ -2620,16 +2642,35 @@ export class Channel extends ChannelApi {
             !!event.message.parent_id && !event.message.show_in_channel;
           // Thread-only replies are handled by the Thread object; the channel owns the main list.
           if (!isThreadReply) {
+            const messageId = event.message.id;
             if (event.hard_delete) {
-              this.messagePaginator.removeItem({ id: event.message.id });
-              this.pinnedMessagesPaginator.removeItem({ id: event.message.id });
+              // One gate for both: the HTTP path's `remove` clears every collection this channel
+              // reaches, so there is no half-removed state a single key could misdescribe.
+              this.getClient().mutationEcho.applyOnce(
+                { kind: 'message-hard-deleted', message: formattedMessage },
+                () => {
+                  this.messagePaginator.removeItem({ id: messageId });
+                  this.pinnedMessagesPaginator.removeItem({ id: messageId });
+                },
+              );
             } else {
               // A soft delete changes content only — it moves neither `created_at` nor `pinned`, so
               // no collection's membership or sort position changes. One id-addressed write
               // therefore reaches every holder through the store, where an `ingestItem` per
               // collection would make each of them re-emit its own window on top of the fan-out.
-              const store = this.getClient().messageStore;
-              if (store.has(event.message.id)) store.upsert(formattedMessage);
+              //
+              // No `into`: a soft delete moves neither `created_at` nor `pinned`, so no collection's
+              // membership depends on it.
+              this.getClient().mutationEcho.applyOnce(
+                {
+                  kind: ECHO_KIND_BY_EVENT_TYPE['message.deleted'],
+                  message: formattedMessage,
+                },
+                () => {
+                  const store = this.getClient().messageStore;
+                  if (store.has(messageId)) store.upsert(formattedMessage);
+                },
+              );
             }
           }
           this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
@@ -2664,10 +2705,12 @@ export class Channel extends ChannelApi {
             // ingestItem advances the paginator's tracked latest message (→ last_message_at). A
             // message that arrives while the viewer has scrolled to an older window lands in the
             // head interval, not the active one, so the view is preserved without an isUpToDate flag.
+            // It also auto-adds to the pinned list when pinned (matchesFilter { pinned: true }).
             const formattedMessage = formatMessage(event.message);
-            this.messagePaginator.ingestItem(formattedMessage);
-            // ingestItem auto-adds when pinned (matchesFilter { pinned: true }).
-            this.pinnedMessagesPaginator.ingestItem(formattedMessage);
+            this.ingestMessageEcho(
+              ECHO_KIND_BY_EVENT_TYPE['message.new'],
+              formattedMessage,
+            );
           }
 
           // do not increase the unread count - the back-end does not increase the count neither in the following cases:
@@ -2754,10 +2797,18 @@ export class Channel extends ChannelApi {
           this._extendEventWithOwnReactions(event);
           const formattedMessage = formatMessage(event.message);
           if (!event.message.parent_id) {
-            this.messagePaginator.ingestItem(formattedMessage);
-            this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
             // ingestItem auto-adds on pin / auto-removes on unpin (matchesFilter { pinned: true }).
-            this.pinnedMessagesPaginator.ingestItem(formattedMessage);
+            // `message.undeleted` shares this arm but pairs with no operation (there is no
+            // `undelete` in `OperationKind`), so it passes no kind and is never gated.
+            this.ingestMessageEcho(
+              event.type === 'message.updated'
+                ? ECHO_KIND_BY_EVENT_TYPE['message.updated']
+                : undefined,
+              formattedMessage,
+            );
+            // NEVER gated: these rewrite OTHER messages that quote this one, which the HTTP path
+            // never does. Gating them would leave stale quote previews on the sender's own edit.
+            this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
             this.pinnedMessagesPaginator.reflectQuotedMessageUpdate(formattedMessage);
           }
         }
@@ -2885,13 +2936,20 @@ export class Channel extends ChannelApi {
       case 'reaction.updated':
       case 'reaction.deleted':
         if (event.message && event.reaction) {
-          reflectReactionEvent(this.getClient(), {
-            // reaction.updated is only sent when enforce_unique is set
-            enforceUnique: event.type === 'reaction.updated',
-            message: event.message,
-            reaction: event.reaction,
-            removed: event.type === 'reaction.deleted',
-          });
+          const { message, reaction, type } = event;
+          // Addressed by id, so no `into`: one write reaches the main list, the pinned list, the
+          // reply list and a thread's parent alike, and none of their membership depends on it.
+          this.getClient().mutationEcho.applyOnce(
+            { kind: ECHO_KIND_BY_EVENT_TYPE[type], reaction },
+            () =>
+              reflectReactionEvent(this.getClient(), {
+                // reaction.updated is only sent when enforce_unique is set
+                enforceUnique: type === 'reaction.updated',
+                message,
+                reaction,
+                removed: type === 'reaction.deleted',
+              }),
+          );
         }
         break;
       case 'channel.hidden': {
@@ -3079,6 +3137,32 @@ export class Channel extends ChannelApi {
           return hasChanges ? nextReadState : currentReadState;
         },
         { changedUserIds: entries.map(([userId]) => userId) },
+      );
+    }
+  }
+
+  /**
+   * Gated ingest of `message` into both collections this channel holds messages in.
+   *
+   * One decision PER collection, because they share the key and differ on membership: a
+   * `show_in_channel` reply sent from a `Thread` is already in the reply list (skip) and unknown to
+   * this main list (must run, or it never appears in the channel).
+   *
+   * `kind` is omitted for an event that pairs with no operation (`message.undeleted`), which simply
+   * ingests.
+   */
+  private ingestMessageEcho(kind: MessageEchoKind | undefined, message: LocalMessage) {
+    const write = kind ? { kind, message } : undefined;
+    for (const collection of [this.messagePaginator, this.pinnedMessagesPaginator]) {
+      // A key says the canonical copy already holds this version — which every collection sharing
+      // the store then shows for free. It says nothing about MEMBERSHIP, and the fan-out never adds
+      // or evicts, so an ingest that changes what this collection holds has no twin: just do it.
+      if (ingestChangesMembership(collection, message)) {
+        collection.ingestItem(message);
+        continue;
+      }
+      this.getClient().mutationEcho.applyOnce(write, () =>
+        collection.ingestItem(message),
       );
     }
   }

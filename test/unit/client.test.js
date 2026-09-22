@@ -991,6 +991,21 @@ describe('Client disconnectUser', () => {
 		expect(client.tokenManager.reset.called).to.be.true;
 	});
 
+	it('should clear the mutation echo ledger', async () => {
+		const client = new StreamChat('', '');
+		client.mutationEcho.recordApplied('some-key');
+		expect(client.mutationEcho.wasApplied('some-key')).to.be.true;
+
+		const { resolve, promise } = Promise.withResolvers();
+		client.wsConnection = { disconnect: () => promise };
+		const disconnectPromise = client.disconnectUser();
+		resolve();
+		await disconnectPromise;
+
+		// The entries describe writes made by the departing user's requests; nothing will echo them.
+		expect(client.mutationEcho.wasApplied('some-key')).to.be.false;
+	});
+
 	it('should clear upload manager records', async () => {
 		const client = new StreamChat('', '');
 		client.uploadManager.state.next(() => ({

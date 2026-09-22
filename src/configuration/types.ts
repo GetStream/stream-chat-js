@@ -14,6 +14,7 @@ import type { Thread, ThreadConfig } from '../thread';
 import type { ReminderManagerConfig } from '../reminders/ReminderManager';
 import type { NotificationManagerConfig } from '../notifications/types';
 import type { MessageDeliveryReporterConfig } from '../messageDelivery/MessageDeliveryReporter';
+import type { MutationEchoConfig } from '../mutationEcho';
 import type { ThreadManagerConfig } from '../thread_manager';
 import type {
   ConnectionRecoveryManagerConfig,
@@ -143,6 +144,8 @@ export type ClientDeclarativeConfig = {
    */
   connectionRecovery?: Partial<ConnectionRecoveryManagerConfig>;
   messageDelivery?: Partial<MessageDeliveryReporterConfig>;
+  /** Skipping the WS echo of a change this client already applied from an HTTP response. */
+  mutationEcho?: Partial<MutationEchoConfig>;
   /**
    * Connection status — specifically, the platform listener that reports the device's network. There
    * is no default outside the browser, so this is how React Native and other hosts supply one.

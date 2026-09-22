@@ -1,4 +1,6 @@
 import { applyReactionLocally } from './applyReactionLocally';
+import { getEchoKey, getReactionRequestId } from '../mutationEcho';
+import type { ReactionEchoKind } from '../mutationEcho';
 import { isEphemeral } from '../errors';
 import { formatMessage } from '../utils';
 import { dateToNs } from '../utils/time';
@@ -9,6 +11,7 @@ import type {
   LocalMessage,
   MessageResponse,
   ReactionRequest,
+  ReactionResponse,
   SendReactionRequest,
 } from '../types';
 
@@ -178,13 +181,55 @@ export const isQueuedForReplay = async (
  */
 const reconcileHeldMessage = (
   channel: Channel,
-  message: MessageResponse | undefined | null,
+  response: { message?: MessageResponse | null; reaction?: ReactionResponse } | undefined,
+  /**
+   * The event(s) this write will be echoed by. Plural for the add path: the server, not the client,
+   * decides between `reaction.new` and `reaction.updated` (`enforce_unique` produces the latter), so
+   * both are armed. Arming a key whose event never arrives costs nothing — reads do not consume, and
+   * the unused entry simply expires.
+   */
+  echoKinds: readonly ReactionEchoKind[],
 ) => {
+  const message = response?.message;
   if (!message) return;
-  const { messageStore } = channel.getClient();
+  const { messageStore, mutationEcho } = channel.getClient();
+  // Returns WITHOUT arming: nothing was written, so there is no WS write to suppress. Arming here
+  // would make the event that IS going to apply the change get skipped instead.
   if (!messageStore.has(message.id)) return;
+
+  const { reaction } = response;
+  // Both sides of this pairing write the store by id: this function, and `reflectReactionEvent` on
+  // the WS side. One write reaches every holder, including a thread parent no paginator holds, and
+  // neither side can change any collection's membership.
+  const keyFor = (kind: ReactionEchoKind) => getEchoKey({ reaction }, kind);
+
+  /**
+   * Whether the WS event this response is the twin of already applied it.
+   *
+   * `some`, not `every`: only ONE of the armed kinds can ever fire, because the server decides
+   * between `reaction.new` and `reaction.updated`, so demanding all of them would never be satisfied
+   * on the add path.
+   *
+   * This is the ordering guarantee the message path gets from `applyServerCopy`'s timestamp
+   * comparison, which has no counterpart here: nothing else in the SDK declines a stale reaction
+   * copy. So for reactions the ledger is not an optimisation of an existing gate — it IS the gate,
+   * and WS-first previously applied the same reaction twice.
+   *
+   * The trade this accepts: when the WS side wins, `own_reactions` stay the ones `reflectReactionEvent`
+   * derived locally rather than the server-authoritative list on this response. The two agree in
+   * every ordinary case (the local derivation mirrors the server's rule, `enforce_unique` included),
+   * and it is the same trade the message path has always made when `applyServerCopy` declines a copy.
+   */
+  if (echoKinds.some((kind) => mutationEcho.wasApplied(keyFor(kind)))) return;
+
   messageStore.upsert(formatMessage(message));
+
+  for (const kind of echoKinds) mutationEcho.recordApplied(keyFor(kind));
 };
+
+/** `sendReaction` yields `reaction.new`, or `reaction.updated` under `enforce_unique`. */
+const ADD_REACTION_ECHO_KINDS = ['reaction-new', 'reaction-updated'] as const;
+const REMOVE_REACTION_ECHO_KINDS = ['reaction-deleted'] as const;
 
 /**
  * Adds a reaction with an optimistic local state update: the reaction is applied to the cached message
@@ -217,13 +262,22 @@ export const addReactionOptimistically = async ({
     },
   });
 
+  // Marks the operation open for the duration, so a `reaction.new` / `reaction.updated` arriving while
+  // the request is in flight can recognise itself as our echo and arm. Keyed by message + type + user
+  // rather than by message alone — see `getReactionRequestId`.
+  const endRequest = client.mutationEcho.trackRequest(
+    getReactionRequestId({ messageId, type: reaction.type, userId: client.userID }),
+  );
+
   try {
     const response = await channel.sendReaction({ id: messageId, reaction, ...options });
-    reconcileHeldMessage(channel, response?.message);
+    reconcileHeldMessage(channel, response, ADD_REACTION_ECHO_KINDS);
   } catch (error) {
     // Queued for replay is pending, not failed — there is nothing to roll back.
     if (!(await isQueuedForReplay(client, messageId, ['send-reaction']))) undo?.();
     throw error;
+  } finally {
+    endRequest();
   }
 };
 
@@ -247,11 +301,17 @@ export const deleteReactionOptimistically = async ({
     removed: true,
   });
 
+  const endRequest = client.mutationEcho.trackRequest(
+    getReactionRequestId({ messageId, type, userId: client.userID }),
+  );
+
   try {
     const response = await channel.deleteReaction({ id: messageId, type });
-    reconcileHeldMessage(channel, response?.message);
+    reconcileHeldMessage(channel, response, REMOVE_REACTION_ECHO_KINDS);
   } catch (error) {
     if (!(await isQueuedForReplay(client, messageId, ['delete-reaction']))) undo?.();
     throw error;
+  } finally {
+    endRequest();
   }
 };

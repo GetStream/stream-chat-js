@@ -289,6 +289,23 @@ describe('ConnectionRecoveryManager', () => {
 
       expect(recovered).toHaveBeenCalledTimes(1);
     });
+
+    // A recovery re-queries state, so every armed key describes a write whose WS twin went down with
+    // the socket and is never arriving. Left in place they would suppress the next genuine write of
+    // the same version until the TTL expired.
+    it('clears the mutation echo ledger, before the event is dispatched', async () => {
+      client.mutationEcho.recordApplied('some-key');
+      let armedWhenDispatched: boolean | undefined;
+      client.on('connection.recovered', () => {
+        armedWhenDispatched = client.mutationEcho.wasApplied('some-key');
+      });
+      activeChannel('active');
+
+      await client.connectionRecovery.recover();
+
+      expect(armedWhenDispatched).toBe(false);
+      expect(client.mutationEcho.wasApplied('some-key')).toBe(false);
+    });
   });
 
   describe('a reconnect landing mid-recovery', () => {
