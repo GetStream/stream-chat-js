@@ -1467,6 +1467,74 @@ describe('MessageComposer', () => {
       });
     });
 
+    describe('with pending attachment uploads', () => {
+      // The whole composition chain, not one middleware in isolation. Each attachment
+      // middleware was covered on its own, which is exactly why one middleware overwriting
+      // another's output went unnoticed: `createLinkPreviewsCompositionMiddleware` runs
+      // straight after the attachments middleware and used to rebuild `localMessage.attachments`
+      // from the wire payload, deleting every upload that had not resolved yet.
+      const resolvedUpload = {
+        type: 'image',
+        image_url: 'https://example.com/done.jpg',
+        localMetadata: {
+          id: 'done',
+          file: new File([], 'done.jpg', { type: 'image/jpeg' }),
+          uploadState: 'finished',
+        },
+      };
+      const pendingUpload = {
+        type: 'image',
+        localMetadata: {
+          id: 'in-flight',
+          file: new File([], 'in-flight.jpg', { type: 'image/jpeg' }),
+          previewUri: 'blob:in-flight',
+          uploadState: 'uploading',
+        },
+      };
+
+      const setupWithUploads = (attachments: unknown[]) => {
+        const { messageComposer } = setup();
+        messageComposer.compositionMiddlewareExecutor.replace([
+          createSendWithPendingUploadsAttachmentsMiddleware(messageComposer),
+        ]);
+        // No URL in the text - the unresolved attachment must survive on its own, not because
+        // the link previews middleware happened to bail out early.
+        messageComposer.textComposer.setText('look at these');
+        messageComposer.attachmentManager.state.partialNext({
+          attachments: attachments as never,
+        });
+        return messageComposer;
+      };
+
+      it('keeps an upload still in flight on the optimistic message only', async () => {
+        const messageComposer = setupWithUploads([resolvedUpload, pendingUpload]);
+
+        const composed = await messageComposer.compose();
+
+        // The optimistic message carries both, and the unresolved one keeps the
+        // `localMetadata` whoever performs the send needs to await the upload.
+        expect(composed?.localMessage.attachments).toEqual([
+          { type: 'image', image_url: 'https://example.com/done.jpg' },
+          pendingUpload,
+        ]);
+        // Only what already resolved to a URL goes to the API, with no `localMetadata`.
+        expect(composed?.message.attachments).toEqual([
+          { type: 'image', image_url: 'https://example.com/done.jpg' },
+        ]);
+      });
+
+      it('composes an optimistic message when no upload has resolved yet', async () => {
+        const messageComposer = setupWithUploads([pendingUpload]);
+
+        const composed = await messageComposer.compose();
+
+        expect(composed?.localMessage.attachments).toEqual([pendingUpload]);
+        // Nothing resolved, so the API payload must not gain an `attachments` key - an empty
+        // array reads as "remove every attachment" on an edit.
+        expect(composed?.message.attachments).toBeUndefined();
+      });
+    });
+
     it('should compose enhanced mention payload fields', async () => {
       const { messageComposer } = setup();
       messageComposer.textComposer.setText(
