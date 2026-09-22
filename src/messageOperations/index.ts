@@ -1,4 +1,5 @@
 export { MessageOperations } from './MessageOperations';
+export { createMessageOperations } from './createMessageOperations';
 export { createMessageOperationsPersistence } from './persistence';
 export { MessageOperationStatePolicy } from './MessageOperationStatePolicy';
 export { applyReactionLocally } from './applyReactionLocally';

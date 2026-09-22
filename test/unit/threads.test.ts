@@ -8,6 +8,7 @@ import sinon from 'sinon';
 import {
   Channel,
   ChannelResponse,
+  MessageRequest,
   MessageResponse,
   StreamChat,
   Thread,
@@ -2102,6 +2103,63 @@ describe('Threads 2.0', () => {
           thread.unregisterSubscriptions();
         });
       });
+    });
+  });
+
+  describe('message operations', () => {
+    // The thread's MessageOperations is built by `createMessageOperations`, which both Channel and
+    // Thread share. Two things are thread-specific about that wiring and nothing else covered them:
+    // the `parent_id` stamp, and the fact that a thread resolves its request handlers from the
+    // PARENT CHANNEL's config (`ThreadConfig.requestHandlers` carries only `markReadRequest`).
+    const captureOutgoingSend = (onSend: (message: MessageRequest) => void) =>
+      channel.configState.partialNext({
+        requestHandlers: {
+          sendMessageRequest: async ({ message }) => {
+            onSend(message as MessageRequest);
+            return { message: generateMsg({ id: message?.id }) as MessageResponse };
+          },
+        },
+      });
+
+    it('stamps parent_id on a reply sent through the thread', async () => {
+      const thread = createTestThread();
+      let sent: MessageRequest | undefined;
+      captureOutgoingSend((message) => {
+        sent = message;
+      });
+
+      const localMessage = formatMessage(makeReply({ parent_id: undefined }));
+      await thread.sendMessageWithLocalUpdate({ localMessage });
+
+      expect(sent?.parent_id).to.equal(thread.id);
+    });
+
+    it('sends a channel message without a parent_id for comparison', async () => {
+      let sent: MessageRequest | undefined;
+      captureOutgoingSend((message) => {
+        sent = message;
+      });
+
+      const localMessage = formatMessage(
+        generateMsg({ cid: channel.cid }) as MessageResponse,
+      );
+      await channel.sendMessageWithLocalUpdate({ localMessage });
+
+      expect(sent?.parent_id).to.equal(undefined);
+    });
+
+    it('resolves its request handlers from the parent channel', async () => {
+      const thread = createTestThread();
+      let handlerRan = false;
+      captureOutgoingSend(() => {
+        handlerRan = true;
+      });
+
+      await thread.sendMessageWithLocalUpdate({
+        localMessage: formatMessage(makeReply()),
+      });
+
+      expect(handlerRan).to.equal(true);
     });
   });
 

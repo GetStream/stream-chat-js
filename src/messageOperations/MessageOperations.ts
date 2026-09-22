@@ -1,4 +1,10 @@
-import type { MessageRequest, UpdateMessageOptions } from '../types';
+import type {
+  MessageRequest,
+  ReactionRequest,
+  SendReactionRequest,
+  UpdateMessageOptions,
+} from '../types';
+import { addReactionOptimistically, deleteReactionOptimistically } from './optimistic';
 import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
 import type { StateStore } from '@stream-io/state-store';
 import { ConfigController } from '../configuration/ConfigController';
@@ -201,6 +207,22 @@ export class MessageOperations {
     }
   }
 
+  /*
+   * The four operations. Each resolves its request as `requestFn ?? handlers.<kind> ?? defaults.<kind>`.
+   *
+   * `handlers` is the integrator-facing seam: `ChannelConfig.requestHandlers`, registered per channel
+   * instance through `client.config.set({ channel: { requestHandlers } })` and read fresh on every
+   * call. That is what the UI SDKs use — React Native registers its send handler there to run
+   * attachment uploads inside the send pipeline.
+   *
+   * `requestFn` substitutes the request for one call. Nothing in the SDK passes it; it exists as a
+   * direct injection point for tests, which drive failure paths through it. It is deliberately NOT
+   * surfaced on the `*WithLocalUpdate` params — it wins over `handlers`, so a caller reaching for it
+   * would silently bypass whatever the host SDK registered. Per-call needs belong in a handler that
+   * branches on the message it is given, or, for transport concerns such as an abort signal, in a
+   * `StreamRequestOptions` seam that leaves the registered handler running.
+   */
+
   async send(
     params: OperationParams<'send'>,
     requestFn?: OperationRequestFn<'send'>,
@@ -312,5 +334,62 @@ export class MessageOperations {
         await this.ctx.defaults.delete(p.localMessage.id, p.options));
 
     return await this.run<'delete'>('delete', params, doRequest);
+  }
+
+  /*
+   * The optimistic surface `Channel` and `Thread` expose as `*WithLocalUpdate`.
+   *
+   * The two differ only in which channel the request goes to, which this class already holds as
+   * `ctx.channel` — so the parameter shuffling below is written once here rather than once per owner.
+   * Each owner keeps its own public method, delegating to these; `Channel.sendMessageWithLocalUpdate`
+   * adds a `stopTyping()` afterwards, which is the only genuine difference between them.
+   */
+
+  async sendWithLocalUpdate(params: OperationParams<'send'>): Promise<void> {
+    await this.send(params);
+  }
+
+  /**
+   * Retries a failed send. `type: 'regular'` clears the `failed` marker before the attempt, so the
+   * policy sees a message being sent rather than one that already failed.
+   */
+  async retrySendWithLocalUpdate({
+    localMessage,
+    options,
+  }: Omit<OperationParams<'retry'>, 'message'>): Promise<void> {
+    await this.retry({ localMessage: { ...localMessage, type: 'regular' }, options });
+  }
+
+  async updateWithLocalUpdate(params: OperationParams<'update'>): Promise<void> {
+    await this.update(params);
+  }
+
+  async deleteWithLocalUpdate(params: OperationParams<'delete'>): Promise<void> {
+    await this.delete(params);
+  }
+
+  /**
+   * Adds a reaction with an optimistic local state update — see {@link addReactionOptimistically}.
+   *
+   * The request routes through the channel because reactions are channel-level, while the local write
+   * is addressed by message id and so reaches a pure thread reply that no channel collection holds.
+   */
+  async addReactionWithLocalUpdate(params: {
+    messageId: string;
+    reaction: ReactionRequest;
+    options?: Pick<SendReactionRequest, 'enforce_unique' | 'skip_push'>;
+  }): Promise<void> {
+    await addReactionOptimistically({ channel: this.ctx.channel, ...params });
+  }
+
+  /**
+   * Removes the current user's reaction with an optimistic local state update, mirroring
+   * {@link MessageOperations.addReactionWithLocalUpdate}.
+   */
+  async deleteReactionWithLocalUpdate(params: {
+    messageId: string;
+    type: string;
+  }): Promise<void> {
+    await deleteReactionOptimistically({ channel: this.ctx.channel, ...params });
   }
 }

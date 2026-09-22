@@ -5,19 +5,14 @@ import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
 import type { ReadStoreReconcileMeta } from './messageDelivery';
 import { MessagePaginator, PinnedMessagePaginator } from './pagination/paginators';
-import {
-  addReactionOptimistically,
-  createMessageOperationsPersistence,
-  deleteReactionOptimistically,
-  MessageOperations,
-  reflectReactionEvent,
-} from './messageOperations';
+import { createMessageOperations, reflectReactionEvent } from './messageOperations';
+import type { MessageOperations } from './messageOperations';
+import type { OperationParams, OperationRequestFn } from './messageOperations/types';
 import {
   channelHasReadEvents,
   formatMessage,
   generateChannelTempCid,
   invokeEventListener,
-  localMessageToNewMessagePayload,
   logChatPromiseExecution,
   sanitizeOutgoingAttachments,
 } from './utils';
@@ -47,7 +42,6 @@ import type {
   ChannelStateResponseFields,
   ChannelUpdateOptions,
   Command,
-  DeleteMessageOptions,
   Event,
   EventHandler,
   EventPayload,
@@ -62,7 +56,6 @@ import type {
   MessageSetType,
   QueryMembersPayload,
   ReactionRequest,
-  SendMessageOptions,
   SendReactionRequest,
   SharedLocation,
   StreamRequestOptions,
@@ -70,7 +63,6 @@ import type {
   UnBanUserOptions,
   UpdateChannelPartialRequest,
   UpdateLiveLocationRequest,
-  UpdateMessageOptions,
   UserResponse,
 } from './types';
 import { AIStates } from './types';
@@ -90,55 +82,21 @@ import { ChannelApi } from './gen/chat/ChannelApi';
 
 const logger = chatLoggerSystem.getLogger('channel');
 
-// todo: move to dedicated file
-export type SendMessageWithStateUpdateParams = {
-  localMessage: LocalMessage;
-  message?: MessageRequest;
-  options?: SendMessageOptions;
-  /**
-   * Per-call override for the send/retry request (advanced).
-   * If set, it takes precedence over channel instance configuration handlers.
-   */
-  sendMessageRequestFn?: CustomSendMessageRequestFn;
-};
-
-export type RetrySendMessageWithLocalUpdateParams = Omit<
-  SendMessageWithStateUpdateParams,
-  'message'
->;
-
-export type UpdateMessageWithStateUpdateParams = {
-  localMessage: LocalMessage;
-  options?: UpdateMessageOptions;
-  /**
-   * Per-call override for the update request (advanced).
-   * If set, it takes precedence over channel instance configuration handlers.
-   */
-  updateMessageRequestFn?: CustomUpdateMessageRequestFn;
-};
-
-export type DeleteMessageWithStateUpdateParams = {
-  localMessage: LocalMessage;
-  options?: DeleteMessageOptions;
-  /**
-   * Per-call override for the delete request (advanced).
-   * If set, it takes precedence over channel instance configuration handlers.
-   */
-  deleteMessageRequestFn?: CustomDeleteMessageRequestFn;
-};
-
-// Custom request function types for configuration
-export type CustomSendMessageRequestFn = (
-  params: Omit<SendMessageWithStateUpdateParams, 'sendMessageRequestFn'>,
-) => Promise<{ message: MessageResponse }>;
-
-export type CustomUpdateMessageRequestFn = (
-  params: Omit<UpdateMessageWithStateUpdateParams, 'updateMessageRequestFn'>,
-) => Promise<{ message: MessageResponse }>;
-
-export type CustomDeleteMessageRequestFn = (
-  params: Omit<DeleteMessageWithStateUpdateParams, 'deleteMessageRequestFn'>,
-) => Promise<{ message: MessageResponse }>;
+/**
+ * The message-operation vocabulary, re-exported so it has a public path: `src/messageOperations` is
+ * not part of the root barrel, while `src/index.ts` re-exports this module wholesale.
+ *
+ * `OperationParams<K>` and `OperationRequestFn<K>` are the one spelling for every operation's
+ * parameters and request function — both derived from `MessageOperationSpec`, so adding an operation
+ * kind extends them rather than needing a new hand-written pair.
+ */
+export type {
+  MessageOperationSpec,
+  OperationKind,
+  OperationParams,
+  OperationRequestFn,
+  OperationResponse,
+} from './messageOperations/types';
 
 export type CustomMarkReadRequestFn = (params: {
   channel: Channel;
@@ -154,11 +112,11 @@ export type CustomMarkReadRequestFn = (params: {
  */
 export type ChannelConfig = {
   requestHandlers?: {
-    deleteMessageRequest?: CustomDeleteMessageRequestFn;
+    deleteMessageRequest?: OperationRequestFn<'delete'>;
     markReadRequest?: CustomMarkReadRequestFn;
-    sendMessageRequest?: CustomSendMessageRequestFn;
-    retrySendMessageRequest?: CustomSendMessageRequestFn;
-    updateMessageRequest?: CustomUpdateMessageRequestFn;
+    sendMessageRequest?: OperationRequestFn<'send'>;
+    retrySendMessageRequest?: OperationRequestFn<'retry'>;
+    updateMessageRequest?: OperationRequestFn<'update'>;
   };
   /**
    * Typing indicators for this channel (defaults to enabled). ANDed with the channel type's
@@ -380,102 +338,9 @@ export class Channel extends ChannelApi {
     this.cooldownTimer = new CooldownTimer({ channel: this });
     this.cooldownTimer.registerSubscriptions();
 
-    this.messageOperations = new MessageOperations({
-      ...createMessageOperationsPersistence({ channel: this }),
-      ingest: (m) => {
-        const store = this.getClient().messageStore;
-        // The paginator is the entry point whenever it can hold the message — it owns interval
-        // placement, and its "no longer matches the filter" branch correctly evicts a message that
-        // stopped matching. But its filter is `{ cid, parent_id? }`, so an operation aimed at a message
-        // this paginator does not accept (most importantly a THREAD PARENT edited or deleted from
-        // inside the open thread, which the reply paginator rejects for having no `parent_id`) would
-        // otherwise be silently dropped. Falling back to the client-global store reaches the message
-        // wherever it is held and fans out to every collection holding it — the same reason
-        // `applyReactionLocally` addresses purely by id.
-        if (this.messagePaginator.matchesFilter(m)) {
-          this.messagePaginator.ingestItem(m);
-        } else if (store.has(m.id)) {
-          store.upsert(m);
-        }
-        store.flushSubscribers(m.id);
-      },
-      // Mirrors `ingest`'s routing: a message this paginator does not hold can still be held by the
-      // client-global store (a thread parent, a message displayed by another collection), and the
-      // policy uses this both for its freshness comparison and to decide whether there is anything to
-      // update optimistically at all. Reading only the paginator would make those two disagree.
-      get: (id) =>
-        this.messagePaginator.getItem(id) ?? this.getClient().messageStore.get(id),
-      remove: (id) => {
-        const parentId =
-          this.messagePaginator.getItem(id)?.parent_id ??
-          this.getClient().messageStore.get(id)?.parent_id;
-
-        this.messagePaginator.removeItem({ id });
-        this.pinnedMessagesPaginator.removeItem({ id });
-
-        if (parentId) {
-          this.getClient().threads.threadsById[parentId]?.messagePaginator.removeItem({
-            id,
-          });
-        }
-      },
-      handlers: () => {
-        const { requestHandlers } = this.configState.getLatestValue();
-        const deleteMessageRequest = requestHandlers?.deleteMessageRequest;
-        const sendMessageRequest = requestHandlers?.sendMessageRequest;
-        const retrySendMessageRequest = requestHandlers?.retrySendMessageRequest;
-        const updateMessageRequest = requestHandlers?.updateMessageRequest;
-        return {
-          delete: deleteMessageRequest
-            ? (p) =>
-                deleteMessageRequest({
-                  localMessage: p.localMessage,
-                  options: p.options,
-                })
-            : undefined,
-          send: sendMessageRequest
-            ? (p) =>
-                sendMessageRequest({
-                  localMessage: p.localMessage,
-                  message: p.message,
-                  options: p.options,
-                })
-            : undefined,
-          retry: retrySendMessageRequest
-            ? (p) =>
-                retrySendMessageRequest({
-                  localMessage: p.localMessage,
-                  message: p.message,
-                  options: p.options,
-                })
-            : undefined,
-          update: updateMessageRequest
-            ? (p) =>
-                updateMessageRequest({
-                  localMessage: p.localMessage,
-                  options: p.options,
-                })
-            : undefined,
-        };
-      },
-      defaults: {
-        delete: async (id, o) => {
-          const result = await this.getClient().deleteMessage({ id, ...o });
-          return { message: result.message };
-        },
-        send: async (m, o) => {
-          const result = await this.sendMessage({ message: m, ...o });
-          return { message: result.message };
-        },
-        update: async (m, o) => {
-          const result = await this.getClient().updateMessage({
-            id: m.id,
-            message: localMessageToNewMessagePayload(m),
-            ...o,
-          });
-          return { message: result.message };
-        },
-      },
+    this.messageOperations = createMessageOperations({
+      channel: this,
+      paginator: this.messagePaginator,
     });
 
     // Seed the reactive mute state from the client's current `mutedChannels` (a channel created
@@ -717,17 +582,8 @@ export class Channel extends ChannelApi {
   /**
    * Sends a message with optimistic local state update.
    */
-  async sendMessageWithLocalUpdate(
-    params: SendMessageWithStateUpdateParams,
-  ): Promise<void> {
-    await this.messageOperations.send(
-      {
-        localMessage: params.localMessage,
-        message: params.message,
-        options: params.options,
-      },
-      params.sendMessageRequestFn,
-    );
+  async sendMessageWithLocalUpdate(params: OperationParams<'send'>): Promise<void> {
+    await this.messageOperations.sendWithLocalUpdate(params);
     if (this.messageComposer.config.text.publishTypingEvents) await this.stopTyping();
   }
 
@@ -735,70 +591,43 @@ export class Channel extends ChannelApi {
    * Retry sending a failed message.
    */
   async retrySendMessageWithLocalUpdate(
-    params: Omit<SendMessageWithStateUpdateParams, 'message'>,
+    params: Omit<OperationParams<'retry'>, 'message'>,
   ) {
-    await this.messageOperations.retry(
-      {
-        localMessage: { ...params.localMessage, type: 'regular' },
-        options: params.options,
-      },
-      params.sendMessageRequestFn,
-    );
+    await this.messageOperations.retrySendWithLocalUpdate(params);
   }
 
   /**
    * Updates a message with optimistic local state update.
    */
-  async updateMessageWithLocalUpdate(params: UpdateMessageWithStateUpdateParams) {
-    await this.messageOperations.update(
-      {
-        localMessage: params.localMessage,
-        options: params.options,
-      },
-      params.updateMessageRequestFn,
-    );
+  async updateMessageWithLocalUpdate(params: OperationParams<'update'>) {
+    await this.messageOperations.updateWithLocalUpdate(params);
   }
 
   /**
    * Deletes a message with local state update.
    */
-  async deleteMessageWithLocalUpdate(params: DeleteMessageWithStateUpdateParams) {
-    await this.messageOperations.delete(
-      {
-        localMessage: params.localMessage,
-        options: params.options,
-      },
-      params.deleteMessageRequestFn,
-    );
+  async deleteMessageWithLocalUpdate(params: OperationParams<'delete'>) {
+    await this.messageOperations.deleteWithLocalUpdate(params);
   }
 
   /**
-   * Adds a reaction with an optimistic local state update - see {@link addReactionOptimistically}.
+   * Adds a reaction with an optimistic local state update - see
+   * {@link MessageOperations.addReactionWithLocalUpdate}, which `Thread` shares.
    */
-  async addReactionWithLocalUpdate({
-    messageId,
-    reaction,
-    options,
-  }: {
+  async addReactionWithLocalUpdate(params: {
     messageId: string;
     reaction: ReactionRequest;
     options?: Pick<SendReactionRequest, 'enforce_unique' | 'skip_push'>;
   }) {
-    await addReactionOptimistically({ channel: this, messageId, options, reaction });
+    await this.messageOperations.addReactionWithLocalUpdate(params);
   }
 
   /**
    * Removes the current user's reaction with an optimistic local state update - see
-   * {@link deleteReactionOptimistically}.
+   * {@link MessageOperations.deleteReactionWithLocalUpdate}, which `Thread` shares.
    */
-  async deleteReactionWithLocalUpdate({
-    messageId,
-    type,
-  }: {
-    messageId: string;
-    type: string;
-  }) {
-    await deleteReactionOptimistically({ channel: this, messageId, type });
+  async deleteReactionWithLocalUpdate(params: { messageId: string; type: string }) {
+    await this.messageOperations.deleteReactionWithLocalUpdate(params);
   }
 
   /**
