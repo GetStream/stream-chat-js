@@ -576,6 +576,93 @@ describe('stream-io/message-composer-middleware/link-previews', () => {
     expect((result.state.message.attachments ?? [])[1].type).toBe('article');
     expect((result.state.localMessage.attachments ?? [])[1].type).toBe('article');
   });
+
+  describe('when the two payloads carry different attachments', () => {
+    // What `createAttachmentsCompositionMiddleware` leaves behind with
+    // `AttachmentManagerConfig.pendingUploadsEnabled` on: the resolved upload is in both
+    // payloads, the one still in flight only in `localMessage`, where it keeps the
+    // `localMetadata` that `settlePendingAttachmentUploads` needs to await or retry it.
+    const resolvedUpload = {
+      type: 'image',
+      image_url: 'https://example.com/done.jpg',
+    };
+    const pendingUpload = {
+      type: 'image',
+      localMetadata: {
+        id: 'in-flight',
+        file: new File([], 'in-flight.jpg', { type: 'image/jpeg' }),
+        previewUri: 'blob:in-flight',
+        uploadState: 'uploading',
+      },
+    };
+
+    const divergedState = (): MessageComposerMiddlewareState => ({
+      message: {
+        attachments: [resolvedUpload],
+        id: 'test-id',
+        parent_id: undefined,
+        type: 'regular',
+      },
+      localMessage: {
+        attachments: [resolvedUpload, pendingUpload],
+        created_at: convertDateToTimestamp(new Date()),
+        deleted_at: null,
+        error: undefined,
+        id: 'test-id',
+        mentioned_users: [],
+        parent_id: undefined,
+        pinned_at: null,
+        reaction_groups: null,
+        status: 'sending',
+        text: 'no url here',
+        type: 'regular',
+        updated_at: convertDateToTimestamp(new Date()),
+      },
+      sendOptions: {},
+    });
+
+    it('should leave both attachments arrays intact when there are no link previews', async () => {
+      const { linkPreviewsMiddleware } = setup();
+
+      const result = await linkPreviewsMiddleware.handlers.compose(
+        setupHandlerParams(divergedState()),
+      );
+
+      expect(result.state.message.attachments).toEqual([resolvedUpload]);
+      expect(result.state.localMessage.attachments).toEqual([
+        resolvedUpload,
+        pendingUpload,
+      ]);
+    });
+
+    it('should append the link preview to each payload without merging them', async () => {
+      const { linkPreviewsMiddleware, messageComposer } = setup();
+      messageComposer.linkPreviewsManager.state.next({
+        previews: new Map([
+          [
+            'https://example.com',
+            {
+              ...enrichURLReturnValue,
+              status: LinkPreviewStatus.LOADED,
+            } as LinkPreview,
+          ],
+        ]),
+      });
+
+      const result = await linkPreviewsMiddleware.handlers.compose(
+        setupHandlerParams(divergedState()),
+      );
+
+      expect(result.state.message.attachments).toHaveLength(2);
+      expect((result.state.message.attachments ?? [])[0]).toEqual(resolvedUpload);
+      expect((result.state.message.attachments ?? [])[1].type).toBe('article');
+
+      expect(result.state.localMessage.attachments).toHaveLength(3);
+      expect((result.state.localMessage.attachments ?? [])[0]).toEqual(resolvedUpload);
+      expect((result.state.localMessage.attachments ?? [])[1]).toEqual(pendingUpload);
+      expect((result.state.localMessage.attachments ?? [])[2].type).toBe('article');
+    });
+  });
 });
 
 const setupForDraft = ({
