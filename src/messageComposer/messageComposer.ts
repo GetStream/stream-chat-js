@@ -1,6 +1,6 @@
 import { CORE_NOTIFICATION_TYPE } from '../notifications';
 import { AttachmentManager } from './attachmentManager';
-import { isFinishedUpload, isPendingUpload } from './attachmentIdentity';
+import { isFailedUpload, isFinishedUpload, isPendingUpload } from './attachmentIdentity';
 import { CustomDataManager } from './CustomDataManager';
 import { LinkPreviewsManager } from './linkPreviewsManager';
 import { LocationComposer } from './LocationComposer';
@@ -474,10 +474,16 @@ export class MessageComposer extends WithSubscriptions {
     if (this.allowsPendingUploads) {
       // An upload in flight is no longer a blocker, and a pending attachment counts as content
       // in its own right — otherwise an attachment-only message could never be sent before its
-      // upload finished, which is the point of the flow. `failed` and `blocked` attachments
-      // still do not count: a message whose only attachment was rejected must not look sendable.
+      // upload finished, which is the point of the flow. A `failed` one counts too: it rides
+      // along on the optimistic message, where `settlePendingAttachmentUploads` retries it.
+      // `blocked` still does not — the server's upload configuration refused it, so no retry can
+      // settle it, and a message whose only attachment was rejected outright must not look
+      // sendable.
       const hasSendableAttachment = this.attachmentManager.attachments.some(
-        (attachment) => isFinishedUpload(attachment) || isPendingUpload(attachment),
+        (attachment) =>
+          isFinishedUpload(attachment) ||
+          isPendingUpload(attachment) ||
+          isFailedUpload(attachment),
       );
 
       return !!(
