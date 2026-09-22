@@ -803,9 +803,7 @@ export type MessageResponseBase = MessageBase & {
   created_at?: string;
   deleted_at?: string;
   deleted_reply_count?: number;
-  i18n?: RequireAtLeastOne<Record<`${TranslationLanguages}_text`, string>> & {
-    language: TranslationLanguages;
-  };
+  i18n?: TranslatedField;
   latest_reactions?: ReactionResponse[];
   member?: ChannelMemberResponse;
   mentioned_users?: UserResponse[];
@@ -3285,6 +3283,13 @@ export type TranslationLanguages =
   | 'zh-TW'
   | (string & {});
 
+// Server-owned translations for a single text field, keyed by language.
+export type TranslatedField = RequireAtLeastOne<
+  Record<`${TranslationLanguages}_text`, string>
+> & {
+  language: TranslationLanguages;
+};
+
 export type TypingStartEvent = Event;
 
 export type ReservedUpdatedMessageFields = keyof typeof RESERVED_UPDATED_MESSAGE_FIELDS;
@@ -3647,7 +3652,9 @@ export type PollResponse = CustomPollData &
     allow_answers?: boolean;
     allow_user_suggested_options?: boolean;
     description?: string;
+    description_i18n?: TranslatedField;
     is_closed?: boolean;
+    name_i18n?: TranslatedField;
     voting_visibility?: VotingVisibility;
   };
 
@@ -3658,6 +3665,7 @@ export type PollOption = {
   text: string;
   updated_at: string;
   vote_count: number;
+  text_i18n?: TranslatedField;
   votes?: PollVote[];
 };
 
@@ -3733,6 +3741,7 @@ export type PollOptionResponse = CustomPollData & {
   text: string;
   updated_at: string;
   vote_count: number;
+  text_i18n?: TranslatedField;
   votes?: PollVote[];
 };
 
@@ -3749,6 +3758,7 @@ export type PollVote = {
 export type PollAnswer = Exclude<PollVote, 'option_id'> & {
   answer_text: string;
   is_answer: boolean; // this is absolutely redundant prop as answer_text indicates that a vote is an answer
+  answer_text_i18n?: TranslatedField;
 };
 
 export type PollVotesAPIResponse = {
