@@ -1,4 +1,5 @@
 import { CORE_NOTIFICATION_TYPE } from '../notifications';
+import type { CoreNotificationType } from '../notifications';
 import { AttachmentManager } from './attachmentManager';
 import { isFinishedUpload, isPendingUpload } from './attachmentIdentity';
 import { CustomDataManager } from './CustomDataManager';
@@ -476,6 +477,33 @@ export class MessageComposer extends WithSubscriptions {
     return this.compositionMiddlewareExecutor.installedMiddleware.some(
       (middleware) => middleware.allowsPendingUploads,
     );
+  }
+
+  /**
+   * Where a composed message goes: the thread when this composer belongs to one, the channel
+   * otherwise.
+   *
+   * Thread replies live in `thread.messagePaginator`, which is independent of the channel's, so
+   * dispatching to the wrong one leaves the reply invisible where it was written. An edit composer
+   * is built from the message rather than from its thread, so it can only find the thread when the
+   * manager has it loaded. No composer reachable from a UI SDK is built that way today.
+   */
+  get defaultSubmitTarget(): Channel | Thread {
+    if (this.compositionContext instanceof Thread) return this.compositionContext;
+
+    const { threadId } = this;
+    return (threadId && this.client.threads.threadsById[threadId]) || this.channel;
+  }
+
+  /**
+   * Whether submitting keeps the composer's contents rather than clearing them - see
+   * {@link MessageComposerConfig.retainCompositionOnSubmit}.
+   *
+   * Read by the attachments composition step too: content the composer keeps must not also ride
+   * along on the submitted message, or one `localMetadata.id` ends up owned in two places.
+   */
+  get retainsCompositionOnSubmit() {
+    return this.config.retainCompositionOnSubmit(this);
   }
 
   get hasSendableData() {
@@ -1227,6 +1255,109 @@ export class MessageComposer extends WithSubscriptions {
         },
       });
       throw error;
+    }
+  };
+
+  /**
+   * Lets go of what the submitted message took with it.
+   *
+   * A poll message carries no text or attachments of its own, so the composer keeps whatever else
+   * was drafted and releases only the poll. Everything else is a full clear.
+   */
+  private releaseSubmittedComposition = () => {
+    if (this.retainsCompositionOnSubmit) {
+      this.state.partialNext({ id: MessageComposer.generateId(), pollId: null });
+      return;
+    }
+
+    this.clear();
+  };
+
+  private reportSubmitFailure = (
+    type: CoreNotificationType,
+    message: string,
+    error: unknown,
+  ) => {
+    this.client.notifications.addError({
+      message,
+      origin: {
+        emitter: 'MessageComposer',
+        context: { composer: this },
+      },
+      options: {
+        type,
+        metadata: { reason: (error as Error).message },
+        originalError: error instanceof Error ? error : undefined,
+      },
+    });
+  };
+
+  /**
+   * Composes the message and sends it, releasing the composer as it goes.
+   *
+   * Resolves `true` when the send succeeded, `false` when there was nothing to send or it failed.
+   * It never rejects: a failure is reported through `client.notifications`, and the message stays
+   * in the list marked `failed`, which is where the user retries it. Callers rendering their own
+   * post-send feedback have to check the result.
+   */
+  send = async (): Promise<boolean> => {
+    const composition = await this.compose();
+    if (!composition?.message) return false;
+
+    const { localMessage, message, sendOptions } = composition;
+
+    // Released before the request, not after. The request lasts a round trip - longer still when it
+    // waits for an upload to settle - and clearing at the end leaves that whole window for the
+    // user's next keystrokes to race the clear.
+    this.releaseSubmittedComposition();
+
+    try {
+      await this.defaultSubmitTarget.sendMessageWithLocalUpdate({
+        localMessage,
+        message,
+        options: sendOptions,
+      });
+      return true;
+    } catch (error) {
+      // Nothing is put back. The message is already in the list marked `failed` with a retry
+      // affordance, so restoring here would leave the same content - and the same attachment upload
+      // ids - owned in two places, where sending either copy corrupts the other.
+      this.reportSubmitFailure(
+        CORE_NOTIFICATION_TYPE.messageSendFailed,
+        'Send message request failed',
+        error,
+      );
+      return false;
+    }
+  };
+
+  /**
+   * Composes the edit and saves it, on the same terms as {@link send} - including releasing the
+   * composer before the request rather than after it.
+   */
+  update = async (): Promise<boolean> => {
+    const composition = await this.compose();
+    if (!composition?.message) return false;
+
+    const { localMessage, sendOptions } = composition;
+
+    this.releaseSubmittedComposition();
+
+    try {
+      await this.defaultSubmitTarget.updateMessageWithLocalUpdate({
+        localMessage,
+        options: sendOptions,
+      });
+      return true;
+    } catch (error) {
+      // As in `send`: the edit is kept on the message and marked failed, so there is nothing to
+      // restore here.
+      this.reportSubmitFailure(
+        CORE_NOTIFICATION_TYPE.messageUpdateFailed,
+        'Edit message request failed',
+        error,
+      );
+      return false;
     }
   };
 

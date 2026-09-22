@@ -221,6 +221,7 @@ describe('MessageComposer', () => {
           minShareDurationMs: DEFAULT_COMPOSER_CONFIG.location!.minShareDurationMs,
         },
         polls: DEFAULT_COMPOSER_CONFIG.polls,
+        retainCompositionOnSubmit: DEFAULT_COMPOSER_CONFIG.retainCompositionOnSubmit,
         sendMessageRequestFn: customConfig.sendMessageRequestFn,
         text: {
           enabled: DEFAULT_COMPOSER_CONFIG.text.enabled,
@@ -3067,5 +3068,136 @@ describe('MessageComposer', () => {
       expect(unsubscribeDraftEvents).toHaveBeenCalledTimes(1);
       expect(registerDraftEventSubscriptionsSpy).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('MessageComposer submit lifecycle', () => {
+  const withText = (messageComposer: MessageComposer, text = 'hello') => {
+    messageComposer.textComposer.state.partialNext({ text });
+  };
+
+  it('clears before awaiting the request, not after', async () => {
+    const { messageComposer, mockChannel } = setup();
+    withText(messageComposer);
+
+    let textWhileInFlight: string | undefined;
+    vi.spyOn(mockChannel, 'sendMessageWithLocalUpdate').mockImplementation(async () => {
+      textWhileInFlight = messageComposer.textComposer.text;
+    });
+
+    await messageComposer.send();
+
+    // The request lasts a round trip; clearing at the end leaves that window for the user's next
+    // keystrokes to race the clear.
+    expect(textWhileInFlight).toBe('');
+  });
+
+  it('does not put the composition back when the send fails', async () => {
+    const { messageComposer, mockChannel } = setup();
+    withText(messageComposer);
+    vi.spyOn(mockChannel, 'sendMessageWithLocalUpdate').mockRejectedValue(
+      new Error('nope'),
+    );
+
+    const sent = await messageComposer.send();
+
+    // The message is already in the list marked `failed` with a retry affordance. Restoring here
+    // would leave the same content - and the same attachment upload ids - owned in two places.
+    expect(sent).toBe(false);
+    expect(messageComposer.textComposer.text).toBe('');
+  });
+
+  it('reports a send failure through client.notifications rather than rejecting', async () => {
+    const { messageComposer, mockChannel } = setup();
+    withText(messageComposer);
+    const addError = vi.spyOn(messageComposer.client.notifications, 'addError');
+    vi.spyOn(mockChannel, 'sendMessageWithLocalUpdate').mockRejectedValue(
+      new Error('nope'),
+    );
+
+    await expect(messageComposer.send()).resolves.toBe(false);
+
+    expect(addError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({ type: 'api:message:send:failed' }),
+      }),
+    );
+  });
+
+  it('returns false and sends nothing when there is nothing to compose', async () => {
+    const { messageComposer, mockChannel } = setup();
+    const sendMessageWithLocalUpdate = vi
+      .spyOn(mockChannel, 'sendMessageWithLocalUpdate')
+      .mockResolvedValue(undefined);
+
+    const sent = await messageComposer.send();
+
+    expect(sent).toBe(false);
+    expect(sendMessageWithLocalUpdate).not.toHaveBeenCalled();
+  });
+
+  it('keeps drafted content and releases only the poll when submitting a poll message', async () => {
+    const { messageComposer, mockChannel } = setup({ channelConfig: { polls: true } });
+    withText(messageComposer, 'vote please');
+    messageComposer.state.partialNext({ pollId: 'poll-1' });
+    vi.spyOn(mockChannel, 'sendMessageWithLocalUpdate').mockResolvedValue(undefined);
+
+    expect(messageComposer.retainsCompositionOnSubmit).toBe(true);
+
+    await messageComposer.send();
+
+    expect(messageComposer.pollId).toBeNull();
+    expect(messageComposer.textComposer.text).toBe('vote please');
+  });
+
+  it('routes an update through updateMessageWithLocalUpdate', async () => {
+    const { messageComposer, mockChannel } = setup();
+    withText(messageComposer);
+    const updateMessageWithLocalUpdate = vi
+      .spyOn(mockChannel, 'updateMessageWithLocalUpdate')
+      .mockResolvedValue(undefined);
+
+    const updated = await messageComposer.update();
+
+    expect(updated).toBe(true);
+    expect(updateMessageWithLocalUpdate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('MessageComposerConfig.retainCompositionOnSubmit', () => {
+  it('retains for a poll message by default', () => {
+    const { messageComposer } = setup({ channelConfig: { polls: true } });
+    expect(messageComposer.retainsCompositionOnSubmit).toBe(false);
+
+    messageComposer.state.partialNext({ pollId: 'poll-1' });
+    expect(messageComposer.retainsCompositionOnSubmit).toBe(true);
+  });
+
+  it('lets an integrator decide, receiving the composer', async () => {
+    const retainCompositionOnSubmit = vi.fn(
+      (composer: MessageComposer) => composer.textComposer.text === 'keep me',
+    );
+    const { messageComposer, mockChannel } = setup({
+      config: { retainCompositionOnSubmit },
+    });
+    vi.spyOn(mockChannel, 'sendMessageWithLocalUpdate').mockResolvedValue(undefined);
+
+    messageComposer.textComposer.state.partialNext({ text: 'keep me' });
+    await messageComposer.send();
+
+    expect(retainCompositionOnSubmit).toHaveBeenCalledWith(messageComposer);
+    expect(messageComposer.textComposer.text).toBe('keep me');
+  });
+
+  it('clears when the integrator declines to retain', async () => {
+    const { messageComposer, mockChannel } = setup({
+      config: { retainCompositionOnSubmit: () => false },
+    });
+    vi.spyOn(mockChannel, 'sendMessageWithLocalUpdate').mockResolvedValue(undefined);
+
+    messageComposer.textComposer.state.partialNext({ text: 'let me go' });
+    await messageComposer.send();
+
+    expect(messageComposer.textComposer.text).toBe('');
   });
 });

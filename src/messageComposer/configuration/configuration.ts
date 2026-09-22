@@ -68,5 +68,6 @@ export const DEFAULT_COMPOSER_CONFIG: MessageComposerConfig = deepFreezeConfig({
   linkPreviews: DEFAULT_LINK_PREVIEW_MANAGER_CONFIG,
   location: DEFAULT_LOCATION_COMPOSER_CONFIG,
   polls: DEFAULT_POLL_COMPOSER_CONFIG,
+  retainCompositionOnSubmit: (composer) => !!composer.pollId,
   text: DEFAULT_TEXT_COMPOSER_CONFIG,
 });
