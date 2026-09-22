@@ -522,15 +522,6 @@ describe('MessageComposer', () => {
 
       expect(MessageComposer.evaluateContextType(mockThread)).toBe('thread');
 
-      const mockReplyInLegacyThread = {
-        id: 'test-message-id',
-        legacyThreadId: 'test-thread-id',
-        text: 'Hello world',
-      };
-      expect(MessageComposer.evaluateContextType(mockReplyInLegacyThread as any)).toBe(
-        'legacy_thread',
-      );
-
       const mockMessage = {
         id: 'test-message-id',
       };
@@ -544,15 +535,6 @@ describe('MessageComposer', () => {
       const mockThread = getThread(mockChannel, mockClient, 'test-thread-id');
       expect(MessageComposer.constructTag(mockThread as any)).toBe(
         'thread_test-thread-id',
-      );
-
-      const mockLegacyThread = {
-        cid: mockChannel.cid,
-        id: 'test-message-id',
-        legacyThreadId: 'test-legacy-thread-id',
-      };
-      expect(MessageComposer.constructTag(mockLegacyThread as any)).toBe(
-        'legacy_thread_test-message-id',
       );
 
       const mockMessage = {
@@ -615,16 +597,6 @@ describe('MessageComposer', () => {
         compositionContext: mockThread,
       });
       expect(threadComposer.threadId).toBe('test-thread-id');
-
-      const mockLegacyThread = {
-        cid: mockChannel.cid,
-        id: 'test-message-id',
-        legacyThreadId: 'test-legacy-thread-id',
-      };
-      const { messageComposer: legacyThreadComposer } = setup({
-        compositionContext: mockLegacyThread as any,
-      });
-      expect(legacyThreadComposer.threadId).toBe('test-legacy-thread-id');
 
       const mockMessage = {
         cid: mockChannel.cid,

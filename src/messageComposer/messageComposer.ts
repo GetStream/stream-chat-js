@@ -98,9 +98,7 @@ export type MessageComposerSnapshot = {
   textComposer: TextComposerSnapshot;
 };
 
-export type LocalMessageWithLegacyThreadId = LocalMessage & { legacyThreadId?: string };
-// todo: remove LocalMessageWithLegacyThreadId
-export type CompositionContext = Channel | Thread | LocalMessageWithLegacyThreadId;
+export type CompositionContext = Channel | Thread | LocalMessage;
 
 export type MessageComposerState = {
   id: string;
@@ -309,10 +307,6 @@ export class MessageComposer extends WithSubscriptions {
       return 'thread';
     }
 
-    if (typeof compositionContext.legacyThreadId === 'string') {
-      return 'legacy_thread';
-    }
-
     return 'message';
   }
 
@@ -372,10 +366,6 @@ export class MessageComposer extends WithSubscriptions {
 
     if (this.compositionContext instanceof Thread) {
       return this.compositionContext.id;
-    }
-
-    if (typeof this.compositionContext.legacyThreadId === 'string') {
-      return this.compositionContext.legacyThreadId;
     }
 
     // check if the message is a reply, get parentMessageId
