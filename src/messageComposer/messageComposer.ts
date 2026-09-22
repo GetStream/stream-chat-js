@@ -461,21 +461,11 @@ export class MessageComposer extends WithSubscriptions {
   }
 
   /**
-   * Whether the installed composition middleware composes messages whose uploads are still in
-   * flight — see `MessageCompositionMiddleware.allowsPendingUploads`.
-   *
-   * Derived from the chain rather than from config, so there is exactly one switch: the UI SDK
-   * that implements the rest of the flow installs the middleware, and everything that has to
-   * follow from that (starting with {@link hasSendableData}) follows on its own.
-   *
-   * **Temporary API.** In v10 sending with pending uploads becomes part of the composer
-   * configuration (`MessageComposerConfig`, set through `updateConfig`), and this getter,
-   * together with the middleware declaration it reads, is replaced by that config field.
+   * Whether a message may be sent while its attachments are still uploading — see
+   * {@link AttachmentManagerConfig.pendingUploadsEnabled}.
    */
   get allowsPendingUploads() {
-    return this.compositionMiddlewareExecutor.installedMiddleware.some(
-      (middleware) => middleware.allowsPendingUploads,
-    );
+    return this.attachmentManager.config.pendingUploadsEnabled;
   }
 
   get hasSendableData() {

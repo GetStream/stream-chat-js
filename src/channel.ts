@@ -9,8 +9,10 @@ import {
   addReactionOptimistically,
   createMessageOperationsPersistence,
   deleteReactionOptimistically,
+  keepSendOrderWhilePendingUploadsAllowed,
   MessageOperations,
   reflectReactionEvent,
+  settlePendingAttachmentUploads,
 } from './messageOperations';
 import {
   channelHasReadEvents,
@@ -382,6 +384,19 @@ export class Channel extends ChannelApi {
 
     this.messageOperations = new MessageOperations({
       ...createMessageOperationsPersistence({ channel: this }),
+      sequenceRequests: (kind, request) =>
+        keepSendOrderWhilePendingUploadsAllowed({
+          channelCid: this.cid,
+          composer: this.messageComposer,
+          kind,
+          request,
+        }),
+      settlePendingUploads: (attachments) =>
+        settlePendingAttachmentUploads({
+          attachments,
+          channelCid: this.cid,
+          client: this.getClient(),
+        }),
       ingest: (m) => {
         const store = this.getClient().messageStore;
         // The paginator is the entry point whenever it can hold the message — it owns interval
@@ -720,6 +735,13 @@ export class Channel extends ChannelApi {
   async sendMessageWithLocalUpdate(
     params: SendMessageWithStateUpdateParams,
   ): Promise<void> {
+    // Before the send and not awaited: a send carrying an upload lasts as long as the transfer,
+    // which would otherwise leave everyone watching a typing indicator throughout. Best-effort,
+    // so it must not delay or fail the send.
+    if (this.messageComposer.config.text.publishTypingEvents) {
+      this.stopTyping().catch(() => undefined);
+    }
+
     await this.messageOperations.send(
       {
         localMessage: params.localMessage,
@@ -728,7 +750,6 @@ export class Channel extends ChannelApi {
       },
       params.sendMessageRequestFn,
     );
-    if (this.messageComposer.config.text.publishTypingEvents) await this.stopTyping();
   }
 
   /**

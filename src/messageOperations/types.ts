@@ -75,6 +75,37 @@ export type MessageOperationsContext = {
 
   normalizeOutgoingMessage?: (m: MessageRequest) => MessageRequest;
 
+  /**
+   * Lets the owner run a request on its own instead of in parallel — the server dates a message
+   * on arrival, so a short text sent after a photo would otherwise be dated first. Wraps the
+   * request only; call it once and return its result.
+   */
+  sequenceRequests?: <T>(kind: OperationKind, request: () => Promise<T>) => Promise<T>;
+
+  /**
+   * Resolves any attachment upload still in flight, returning the attachments with their URLs
+   * written on. Supplied by the owner, which knows the target `cid` and the client. Only reachable
+   * with {@link AttachmentManagerConfig.pendingUploadsEnabled} on.
+   */
+  settlePendingUploads?: (
+    attachments: NonNullable<LocalMessage['attachments']>,
+  ) => Promise<{
+    /**
+     * The same list, with each upload that resolved replaced by its uploaded form — URL written,
+     * `localMetadata` dropped. Ones that did not resolve come back untouched, so on failure this
+     * is a mix; `failureReason` is what distinguishes the two cases. Returned by reference when
+     * nothing was pending.
+     */
+    attachments: NonNullable<LocalMessage['attachments']>;
+    /** Set if any upload failed. The ones that did resolve are still kept above. */
+    failureReason?: unknown;
+  }>;
+
+  /**
+   * The owner's own API calls, used when nothing overrides them. Each operation resolves its
+   * request as: a per-call `requestFn`, else the integrator's {@link handlers}, else these — so a
+   * `Channel` reaches its endpoints and a `Thread` its own without this module knowing either.
+   */
   defaults: {
     delete: (id: string, o?: DeleteMessageOptions) => Promise<OperationResponse>;
     send: (m: MessageRequest, o?: SendMessageOptions) => Promise<OperationResponse>;

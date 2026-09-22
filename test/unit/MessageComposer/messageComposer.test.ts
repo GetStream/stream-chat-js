@@ -7,7 +7,6 @@ import {
   ChannelConfigWithInfo,
   ChannelResponse,
   createAttachmentsCompositionMiddleware,
-  createSendWithPendingUploadsAttachmentsMiddleware,
   DEFAULT_COMPOSER_CONFIG,
   LocalMessage,
   MessageComposerConfig,
@@ -206,6 +205,8 @@ describe('MessageComposer', () => {
           fileUploadFilter: DEFAULT_COMPOSER_CONFIG.attachments.fileUploadFilter,
           maxNumberOfFilesPerMessage:
             customConfig.attachments!.maxNumberOfFilesPerMessage,
+          pendingUploadsEnabled:
+            DEFAULT_COMPOSER_CONFIG.attachments.pendingUploadsEnabled,
           trackUploadProgress: DEFAULT_COMPOSER_CONFIG.attachments.trackUploadProgress,
         },
         commands: DEFAULT_COMPOSER_CONFIG.commands,
@@ -728,7 +729,7 @@ describe('MessageComposer', () => {
       expect(messageComposer.hasSendableData).toBe(false);
     });
 
-    it('counts an upload in flight as content once a middleware allows pending uploads', () => {
+    it('counts an upload in flight as content once the config allows pending uploads', () => {
       const { messageComposer } = setup();
 
       messageComposer.attachmentManager.state.partialNext({
@@ -741,41 +742,16 @@ describe('MessageComposer', () => {
       expect(messageComposer.allowsPendingUploads).toBe(false);
       expect(messageComposer.hasSendableData).toBe(false);
 
-      messageComposer.compositionMiddlewareExecutor.replace([
-        createSendWithPendingUploadsAttachmentsMiddleware(messageComposer),
-      ]);
+      messageComposer.updateConfig({ attachments: { pendingUploadsEnabled: true } });
 
-      // Installing the middleware is the whole switch - nothing else has to be told.
-      expect(messageComposer.allowsPendingUploads).toBe(true);
-      expect(messageComposer.hasSendableData).toBe(true);
-    });
-
-    it('recognizes the declaration on a custom middleware, whatever its id', () => {
-      // The composer keys off `allowsPendingUploads`, not off a middleware id, so a UI SDK that
-      // ships its own attachments composition gets the matching sendability rule.
-      const { messageComposer } = setup();
-
-      messageComposer.attachmentManager.state.partialNext({
-        attachments: [
-          { type: 'x', localMetadata: { id: 'a1', uploadState: 'uploading', file: {} } },
-        ],
-      });
-
-      messageComposer.compositionMiddlewareExecutor.use({
-        allowsPendingUploads: true,
-        id: 'custom/attachments-with-pending-uploads',
-        handlers: { compose: ({ forward }) => forward() },
-      });
-
+      // The config is the whole switch - nothing else has to be told.
       expect(messageComposer.allowsPendingUploads).toBe(true);
       expect(messageComposer.hasSendableData).toBe(true);
     });
 
     it('still refuses attachments that will never resolve', () => {
       const { messageComposer } = setup();
-      messageComposer.compositionMiddlewareExecutor.replace([
-        createSendWithPendingUploadsAttachmentsMiddleware(messageComposer),
-      ]);
+      messageComposer.updateConfig({ attachments: { pendingUploadsEnabled: true } });
 
       messageComposer.attachmentManager.state.partialNext({
         attachments: [
@@ -788,11 +764,9 @@ describe('MessageComposer', () => {
       expect(messageComposer.hasSendableData).toBe(false);
     });
 
-    it('goes back to the default rule when the middleware is uninstalled', () => {
+    it('goes back to the default rule when the config is turned off', () => {
       const { messageComposer } = setup();
-      messageComposer.compositionMiddlewareExecutor.replace([
-        createSendWithPendingUploadsAttachmentsMiddleware(messageComposer),
-      ]);
+      messageComposer.updateConfig({ attachments: { pendingUploadsEnabled: true } });
       messageComposer.attachmentManager.state.partialNext({
         attachments: [
           { type: 'x', localMetadata: { id: 'a1', uploadState: 'uploading', file: {} } },
@@ -800,9 +774,7 @@ describe('MessageComposer', () => {
       });
       expect(messageComposer.hasSendableData).toBe(true);
 
-      messageComposer.compositionMiddlewareExecutor.replace([
-        createAttachmentsCompositionMiddleware(messageComposer),
-      ]);
+      messageComposer.updateConfig({ attachments: { pendingUploadsEnabled: false } });
 
       expect(messageComposer.allowsPendingUploads).toBe(false);
       expect(messageComposer.hasSendableData).toBe(false);

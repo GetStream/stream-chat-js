@@ -29,7 +29,9 @@ import {
   addReactionOptimistically,
   createMessageOperationsPersistence,
   deleteReactionOptimistically,
+  keepSendOrderWhilePendingUploadsAllowed,
   MessageOperations,
+  settlePendingAttachmentUploads,
 } from './messageOperations';
 import { nowNs } from './utils/time';
 import { WithSubscriptions } from './utils/WithSubscriptions';
@@ -274,6 +276,21 @@ export class Thread extends WithSubscriptions {
     });
 
     this.messageOperations = new MessageOperations({
+      sequenceRequests: (kind, request) =>
+        keepSendOrderWhilePendingUploadsAllowed({
+          channelCid: this.channel.cid,
+          composer: this.messageComposer,
+          kind,
+          request,
+        }),
+      settlePendingUploads: (attachments) =>
+        settlePendingAttachmentUploads({
+          attachments,
+          // A reply uploads against the channel the thread belongs to - there is no
+          // thread-scoped upload target.
+          channelCid: this.channel.cid,
+          client: this.channel.getClient(),
+        }),
       ...createMessageOperationsPersistence({ channel: this.channel }),
       ingest: (m) => {
         const store = this.channel.getClient().messageStore;
@@ -1032,6 +1049,14 @@ export class Thread extends WithSubscriptions {
     options,
     sendMessageRequestFn,
   }: SendMessageWithStateUpdateParams): Promise<void> {
+    // Before the send and not awaited: a send carrying an upload lasts as long as the transfer,
+    // which would otherwise leave everyone watching a typing indicator throughout. Best-effort,
+    // so it must not delay or fail the send. Gated on the thread's composer but published on the
+    // channel, where typing events live.
+    if (this.messageComposer.config.text.publishTypingEvents) {
+      this.channel.stopTyping().catch(() => undefined);
+    }
+
     await this.messageOperations.send(
       {
         localMessage,

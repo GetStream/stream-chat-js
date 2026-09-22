@@ -1,4 +1,5 @@
 export * from './attachmentIdentity';
+export * from './attachmentUtils';
 export * from './attachmentManager';
 export * from './configuration';
 export * from './CustomDataManager';

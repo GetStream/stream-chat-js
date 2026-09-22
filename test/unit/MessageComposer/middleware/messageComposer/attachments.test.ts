@@ -2,10 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Channel } from '../../../../../src/channel';
 import { StreamChat } from '../../../../../src/client';
 import { MessageComposer } from '../../../../../src/messageComposer/messageComposer';
-import {
-  createAttachmentsCompositionMiddleware,
-  createSendWithPendingUploadsAttachmentsMiddleware,
-} from '../../../../../src/messageComposer/middleware/messageComposer/attachments';
+import { createAttachmentsCompositionMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/attachments';
 import {
   AttachmentLoadingState,
   LocalImageAttachment,
@@ -533,7 +530,7 @@ describe('stream-io/message-composer-middleware/draft-attachments', () => {
   });
 });
 
-describe('createSendWithPendingUploadsAttachmentsMiddleware', () => {
+describe('createAttachmentsCompositionMiddleware with pendingUploadsEnabled', () => {
   const finished = {
     type: 'image',
     image_url: 'https://example.com/done.jpg',
@@ -573,7 +570,13 @@ describe('createSendWithPendingUploadsAttachmentsMiddleware', () => {
     sendOptions: {},
   });
 
-  const setupComposer = ({ attachments }: { attachments: unknown[] }) => {
+  const setupComposer = ({
+    attachments,
+    pendingUploadsEnabled = true,
+  }: {
+    attachments: unknown[];
+    pendingUploadsEnabled?: boolean;
+  }) => {
     const client = {
       userID: 'currentUser',
       user: { id: 'currentUser' },
@@ -585,6 +588,7 @@ describe('createSendWithPendingUploadsAttachmentsMiddleware', () => {
         return null;
       },
       attachmentManager: {
+        config: { pendingUploadsEnabled },
         get attachments() {
           return attachments;
         },
@@ -604,16 +608,22 @@ describe('createSendWithPendingUploadsAttachmentsMiddleware', () => {
     return {
       client,
       messageComposer,
-      middleware: createSendWithPendingUploadsAttachmentsMiddleware(messageComposer),
+      middleware: createAttachmentsCompositionMiddleware(messageComposer),
     };
   };
 
-  it('declares that it allows pending uploads', () => {
-    // `MessageComposer.hasSendableData` reads this declaration, so installing the middleware is
-    // the only switch a UI SDK has to flip.
-    const { middleware } = setupComposer({ attachments: [] });
+  it('falls back to discarding when the config is off', async () => {
+    // The config is read per composition, so the same installed middleware answers to an
+    // `updateConfig` without being reinstalled.
+    const { client, middleware } = setupComposer({
+      attachments: [pending],
+      pendingUploadsEnabled: false,
+    });
 
-    expect(middleware.allowsPendingUploads).toBe(true);
+    const result = await middleware.handlers.compose(setup(emptyState()));
+
+    expect(result.status).toBe('discard');
+    expect(client.notifications.addWarning).toHaveBeenCalled();
   });
 
   it('does not discard or warn while an upload is in flight', async () => {

@@ -21,7 +21,7 @@ import type { LocalNotImageAttachment } from '../../../types';
  * executes this chain before the (by then no-op) `updateAttachment`. If the attachment is gone
  * from the composer, a message is rendering from the preview instead, and releasing it would
  * blank that message out. A message can be sent with uploads still running — see
- * `createSendWithPendingUploadsAttachmentsMiddleware`.
+ * {@link AttachmentManagerConfig.pendingUploadsEnabled}.
  *
  * Omit `composer` and the preview is always released.
  */

@@ -17,7 +17,8 @@ const localAttachmentToAttachment = (localAttachment: LocalAttachment) => {
 };
 
 /**
- * The composition step used by {@link createSendWithPendingUploadsAttachmentsMiddleware}.
+ * The composition step taken when {@link AttachmentManagerConfig.pendingUploadsEnabled}
+ * is on.
  *
  * The two payloads part ways here: `localMessage.attachments` keeps `localMetadata` for
  * anything still uploading - `id` (the `client.uploadManager` key), `file` (the handle needed
@@ -83,47 +84,16 @@ const composeWithPendingUploads = ({
 };
 
 /**
- * Drop-in replacement for {@link createAttachmentsCompositionMiddleware} that lets a message be
- * composed while its attachments are still uploading.
+ * Composes the message's attachments.
  *
- * Reuses the same middleware id, so installing it with
- * `compositionMiddlewareExecutor.replace([...])` keeps its position in the chain. The default
- * refuses instead: it warns "Wait until all attachments have uploaded" and discards the
- * composition.
+ * By default an upload still in flight blocks the send: the chain warns and discards the
+ * composition. With {@link AttachmentManagerConfig.pendingUploadsEnabled} on it composes
+ * anyway, leaving `message.attachments` without the unresolved ones — `MessageOperations` awaits
+ * those uploads and fills in the URLs before the request goes out.
  *
- * **Installing this is only half of the flow.** The composition it produces is not ready for the
- * wire — `message.attachments` omits everything that has no URL yet. Whoever performs the send
- * has to await those uploads (`UploadManager.upload` is idempotent by `localMetadata.id`, so
- * calling it again returns the in-flight promise), write the resolved URLs in, and send after
- * that.
- *
- * Sendability follows on its own: the `allowsPendingUploads` declaration below is what
- * {@link MessageComposer.hasSendableData} reads to stop treating an upload in flight as a
- * blocker, so installing this middleware is the only switch there is.
- *
- * This is why there is no config option turning it on: the switch belongs to the UI SDK that
- * implements the other half. stream-chat-react exposes it as a `Chat` prop;
- * stream-chat-react-native as `allowSendBeforeAttachmentsUpload` on the message input.
+ * The config is read per composition rather than at construction, so `updateConfig` takes effect
+ * on the next send with no need to reinstall anything.
  */
-export const createSendWithPendingUploadsAttachmentsMiddleware = (
-  composer: MessageComposer,
-): MessageCompositionMiddleware => ({
-  allowsPendingUploads: true,
-  id: 'stream-io/message-composer-middleware/attachments',
-  handlers: {
-    compose: ({
-      state,
-      next,
-      forward,
-    }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
-      const { attachmentManager } = composer;
-      if (!attachmentManager) return forward();
-
-      return next(composeWithPendingUploads({ composer, state }));
-    },
-  },
-});
-
 export const createAttachmentsCompositionMiddleware = (
   composer: MessageComposer,
 ): MessageCompositionMiddleware => ({
@@ -137,6 +107,10 @@ export const createAttachmentsCompositionMiddleware = (
     }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
       const { attachmentManager } = composer;
       if (!attachmentManager) return forward();
+
+      if (attachmentManager.config.pendingUploadsEnabled) {
+        return next(composeWithPendingUploads({ composer, state }));
+      }
 
       if (attachmentManager.uploadsInProgressCount > 0) {
         composer.client.notifications.addWarning({

@@ -25,3 +25,5 @@ export type {
   OperationRequestFn,
   OperationResponse,
 } from './types';
+export * from './settlePendingAttachmentUploads';
+export * from './sendOrdering';

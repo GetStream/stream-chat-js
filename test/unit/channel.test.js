@@ -4007,9 +4007,8 @@ describe('message sending flow', () => {
 		});
 
 		it('drops an attachment whose upload never resolved, and warns', async () => {
-			// Reachable when a UI installs createSendWithPendingUploadsAttachmentsMiddleware but
-			// does not await the uploads: without this the API would store an attachment pointing
-			// at nothing.
+			// Reachable when something bypasses the send path that awaits the uploads: without
+			// this the API would store an attachment pointing at nothing.
 			await channel._sendMessage({
 				message: {
 					...message,

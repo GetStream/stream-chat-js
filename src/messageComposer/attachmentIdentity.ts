@@ -54,6 +54,18 @@ export const isFinishedUpload = (
   isLocalUploadAttachment(attachment) &&
   attachment.localMetadata.uploadState === 'finished';
 
+/**
+ * Whether this attachment's upload resolved to a failure the user can retry.
+ *
+ * Distinct from `blocked`, which the server's upload configuration rejected outright - that one
+ * can never succeed, however many times it is retried.
+ */
+export const isFailedUpload = (
+  attachment: unknown,
+): attachment is LocalUploadAttachment =>
+  isLocalUploadAttachment(attachment) &&
+  attachment.localMetadata.uploadState === 'failed';
+
 export const isFileAttachment = (
   attachment: Attachment | LocalAttachment,
   supportedVideoFormat: string[] = [],

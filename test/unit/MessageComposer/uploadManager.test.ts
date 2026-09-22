@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { StreamChat, UploadRecord } from '../../../src';
-import { UploadManager } from '../../../src';
+import { isUploadConfirmationPending, UploadManager } from '../../../src';
 
 const TEST_CID = 'channelType:channelId';
 
@@ -501,5 +501,43 @@ describe('UploadManager', () => {
       expect(manager.getUpload('removed-mid-flight')).toBeUndefined();
       expect(doUploadRequest).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+describe('isUploadConfirmationPending', () => {
+  it('is false unless the attachment is uploading', () => {
+    expect(isUploadConfirmationPending(undefined)).toBe(false);
+    expect(
+      isUploadConfirmationPending({ uploadProgress: 100, uploadState: 'finished' }),
+    ).toBe(false);
+  });
+
+  it('reads the record-supplied flag when present', () => {
+    expect(
+      isUploadConfirmationPending({
+        uploadConfirmationPending: true,
+        uploadProgress: 10,
+        uploadState: 'uploading',
+      }),
+    ).toBe(true);
+    // The flag wins over the progress-derived guess, in both directions.
+    expect(
+      isUploadConfirmationPending({
+        uploadConfirmationPending: false,
+        uploadProgress: 100,
+        uploadState: 'uploading',
+      }),
+    ).toBe(false);
+  });
+
+  it('infers it from full progress when the flag is absent', () => {
+    expect(
+      isUploadConfirmationPending({ uploadProgress: 100, uploadState: 'uploading' }),
+    ).toBe(true);
+    expect(
+      isUploadConfirmationPending({ uploadProgress: 99, uploadState: 'uploading' }),
+    ).toBe(false);
+    // No progress reported at all (trackUploadProgress off): nothing to infer from.
+    expect(isUploadConfirmationPending({ uploadState: 'uploading' })).toBe(false);
   });
 });

@@ -241,6 +241,7 @@ describe('AttachmentManager', () => {
         acceptedFiles: [],
         customCdn: false,
         enabled: true,
+        pendingUploadsEnabled: false,
         trackUploadProgress: true,
       });
     });
