@@ -32,8 +32,10 @@ const defaultFindMessageByTimestamp = (timestamp?: number) => {
 
 const createChannelMock = ({
   findMessageByTimestamp = defaultFindMessageByTimestamp,
+  ownUserId = 'own-user',
 }: {
   findMessageByTimestamp?: (timestamp?: number) => { id: string } | undefined;
+  ownUserId?: string;
 } = {}) => {
   const readStore = new StateStore({
     read: {},
@@ -48,6 +50,9 @@ const createChannelMock = ({
       messagePaginator: {
         findItemByTimestamp: findMessageByTimestamp,
       },
+      // The tracker ingests every member's read state, own user included, so it needs to know
+      // which one is us before reporting how far *others* have got.
+      getClient: () => ({ userID: ownUserId }),
     } as unknown as Channel,
     readStore,
   };
@@ -872,5 +877,58 @@ describe('MessageDeliveryReadTracker', () => {
       expect(localTracker.getUserProgress('u1')).not.toBeNull();
       expect(ids(localTracker.readersForMessage(ref(1000)))).toEqual([]);
     });
+  });
+});
+
+describe('monotonic receipt state', () => {
+  let tracker: MessageReceiptsTracker;
+  let channelMock: ReturnType<typeof createChannelMock>;
+
+  beforeEach(() => {
+    channelMock = createChannelMock();
+    tracker = new MessageReceiptsTracker({ channel: channelMock.channel });
+  });
+
+  it('reports every message at or before the furthest cursor as delivered', () => {
+    tracker.onMessageDelivered({ user: U('bob'), deliveredAt: 3000 });
+
+    // The whole point: nothing older may report less than something newer, because a cursor
+    // cannot pass m3 without having passed m1 and m2.
+    expect(tracker.isDeliveredToOthers(ref(1000))).toBe(true);
+    expect(tracker.isDeliveredToOthers(ref(2000))).toBe(true);
+    expect(tracker.isDeliveredToOthers(ref(3000))).toBe(true);
+    expect(tracker.isDeliveredToOthers(ref(4000))).toBe(false);
+  });
+
+  it('takes the furthest of several members, not the nearest', () => {
+    tracker.onMessageDelivered({ user: U('bob'), deliveredAt: 1000 });
+    tracker.onMessageDelivered({ user: U('carol'), deliveredAt: 3000 });
+
+    // "delivered" means at least one other member received it.
+    expect(tracker.isDeliveredToOthers(ref(3000))).toBe(true);
+  });
+
+  it('ignores our own cursor', () => {
+    // Reading our own channel says nothing about whether anyone received the message.
+    tracker.onMessageDelivered({ user: U('own-user'), deliveredAt: 4000 });
+
+    expect(tracker.isDeliveredToOthers(ref(1000))).toBe(false);
+    expect(tracker.isReadByOthers(ref(1000))).toBe(false);
+  });
+
+  it('applies the same rule to reads', () => {
+    tracker.onMessageRead({ user: U('bob'), readAt: 3000 });
+
+    expect(tracker.isReadByOthers(ref(1000))).toBe(true);
+    expect(tracker.isReadByOthers(ref(3000))).toBe(true);
+    expect(tracker.isReadByOthers(ref(4000))).toBe(false);
+  });
+
+  it('reports nothing delivered or read before anyone has got anywhere', () => {
+    expect(tracker.isDeliveredToOthers(ref(1000))).toBe(false);
+    expect(tracker.isReadByOthers(ref(1000))).toBe(false);
+    const snapshot = tracker.snapshotStore.getLatestValue();
+    expect(snapshot.lastDeliveredRefByOthers).toBeNull();
+    expect(snapshot.lastReadRefByOthers).toBeNull();
   });
 });

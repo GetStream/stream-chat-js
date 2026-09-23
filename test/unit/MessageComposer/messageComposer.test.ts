@@ -3,6 +3,7 @@ import { chatLoggerSystem } from '../../../src/logger';
 import {
   AbstractOfflineDB,
   Channel,
+  ChannelConfig,
   ChannelStateResponseFields,
   ChannelConfigWithInfo,
   ChannelResponse,
@@ -161,6 +162,17 @@ const offlineModeMessageComposerSetup = ({
   return { mockClient, mockChannel, messageComposer };
 };
 
+/**
+ * Stubs the send request the way an integrator does — through the registered handler seam
+ * (`configState.requestHandlers`), which is what `MessageOperations` consults. There is deliberately
+ * no per-call override on `sendMessageWithLocalUpdate`: it would win over whatever the host SDK
+ * registered, so the SDK does not offer callers that footgun.
+ */
+const stubSendRequest = (
+  channel: Channel,
+  sendMessageRequest: NonNullable<ChannelConfig['requestHandlers']>['sendMessageRequest'],
+) => channel.configState.partialNext({ requestHandlers: { sendMessageRequest } });
+
 describe('MessageComposer', () => {
   afterEach(() => {
     chatLoggerSystem.restoreDefaults();
@@ -192,7 +204,6 @@ describe('MessageComposer', () => {
           maxLengthOnEdit: 1000,
           publishTypingEvents: false,
         },
-        sendMessageRequestFn: () => Promise.resolve({ message: generateMsg() }),
       };
 
       const { messageComposer } = setup({ config: customConfig });
@@ -223,7 +234,6 @@ describe('MessageComposer', () => {
         },
         polls: DEFAULT_COMPOSER_CONFIG.polls,
         retainCompositionOnSubmit: DEFAULT_COMPOSER_CONFIG.retainCompositionOnSubmit,
-        sendMessageRequestFn: customConfig.sendMessageRequestFn,
         text: {
           enabled: DEFAULT_COMPOSER_CONFIG.text.enabled,
           maxLengthOnEdit: customConfig.text!.maxLengthOnEdit,
@@ -1735,14 +1745,17 @@ describe('MessageComposer', () => {
         const composed = await messageComposer.compose();
         expect(composed).toBeDefined();
         let resolveSend: (v: { message: MessageResponse }) => void = () => {};
+        stubSendRequest(
+          mockChannel,
+          () =>
+            new Promise((resolve) => {
+              resolveSend = resolve;
+            }),
+        );
         const sendPromise = mockChannel.sendMessageWithLocalUpdate({
           localMessage: composed!.localMessage,
           message: composed!.message,
           options: composed!.sendOptions,
-          sendMessageRequestFn: () =>
-            new Promise((resolve) => {
-              resolveSend = resolve;
-            }),
         });
         await Promise.resolve();
         const optimistic = mockChannel.messagePaginator.getItem(
@@ -1763,11 +1776,11 @@ describe('MessageComposer', () => {
           id: composed!.localMessage.id,
           updated_at: composed!.localMessage.updated_at + msToNs(100),
         });
+        stubSendRequest(mockChannel, async () => ({ message: serverMessage }));
         await mockChannel.sendMessageWithLocalUpdate({
           localMessage: composed!.localMessage,
           message: composed!.message,
           options: composed!.sendOptions,
-          sendMessageRequestFn: async () => ({ message: serverMessage }),
         });
         const after = mockChannel.messagePaginator.getItem(composed!.localMessage.id);
         expect(after?.status).toBe('received');
@@ -1784,20 +1797,20 @@ describe('MessageComposer', () => {
           id: messageId,
           updated_at: olderServerTime,
         });
+        stubSendRequest(mockChannel, async () => {
+          // The echo their names describe, actually landing — mid-flight, as it would in practice.
+          mockChannel.messagePaginator.ingestItem({
+            ...composed!.localMessage,
+            status: 'received',
+            text: 'from the websocket echo',
+            updated_at: convertDateToTimestamp(new Date(composedUpdatedAt + 5000)),
+          });
+          return { message: serverMessage };
+        });
         await mockChannel.sendMessageWithLocalUpdate({
           localMessage: composed!.localMessage,
           message: composed!.message,
           options: composed!.sendOptions,
-          sendMessageRequestFn: async () => {
-            // The echo their names describe, actually landing — mid-flight, as it would in practice.
-            mockChannel.messagePaginator.ingestItem({
-              ...composed!.localMessage,
-              status: 'received',
-              text: 'from the websocket echo',
-              updated_at: convertDateToTimestamp(new Date(composedUpdatedAt + 5000)),
-            });
-            return { message: serverMessage };
-          },
         });
         const after = mockChannel.messagePaginator.getItem(messageId);
         // The echo is newer, so the slower response must not overwrite it.
@@ -1812,25 +1825,25 @@ describe('MessageComposer', () => {
         const messageId = composed!.localMessage.id;
         const composedUpdatedAt = composed!.localMessage.updated_at;
         const olderServerTime = composedUpdatedAt - msToNs(2000);
+        stubSendRequest(mockChannel, async () => {
+          // The pre-existing copy these names describe, actually landing mid-flight.
+          mockChannel.messagePaginator.ingestItem({
+            ...composed!.localMessage,
+            status: 'received',
+            text: 'from the websocket echo',
+            updated_at: convertDateToTimestamp(new Date(composedUpdatedAt + 5000)),
+          });
+          return {
+            message: generateMsg({
+              id: messageId,
+              updated_at: olderServerTime,
+            }),
+          };
+        });
         await mockChannel.sendMessageWithLocalUpdate({
           localMessage: composed!.localMessage,
           message: composed!.message,
           options: composed!.sendOptions,
-          sendMessageRequestFn: async () => {
-            // The pre-existing copy these names describe, actually landing mid-flight.
-            mockChannel.messagePaginator.ingestItem({
-              ...composed!.localMessage,
-              status: 'received',
-              text: 'from the websocket echo',
-              updated_at: convertDateToTimestamp(new Date(composedUpdatedAt + 5000)),
-            });
-            return {
-              message: generateMsg({
-                id: messageId,
-                updated_at: olderServerTime,
-              }),
-            };
-          },
         });
         const after = mockChannel.messagePaginator.getItem(messageId);
         // Newer than the response, so the slower response must not overwrite it.
@@ -1845,25 +1858,25 @@ describe('MessageComposer', () => {
         const messageId = composed!.localMessage.id;
         const composedUpdatedAt = composed!.localMessage.updated_at;
         const olderServerTime = composedUpdatedAt - msToNs(1000);
+        stubSendRequest(mockChannel, async () => {
+          // The pre-existing copy these names describe, actually landing mid-flight.
+          mockChannel.messagePaginator.ingestItem({
+            ...composed!.localMessage,
+            status: 'received',
+            text: 'from the websocket echo',
+            updated_at: convertDateToTimestamp(new Date(composedUpdatedAt + 5000)),
+          });
+          return {
+            message: generateMsg({
+              id: messageId,
+              updated_at: olderServerTime,
+            }),
+          };
+        });
         await mockChannel.sendMessageWithLocalUpdate({
           localMessage: composed!.localMessage,
           message: composed!.message,
           options: composed!.sendOptions,
-          sendMessageRequestFn: async () => {
-            // The pre-existing copy these names describe, actually landing mid-flight.
-            mockChannel.messagePaginator.ingestItem({
-              ...composed!.localMessage,
-              status: 'received',
-              text: 'from the websocket echo',
-              updated_at: convertDateToTimestamp(new Date(composedUpdatedAt + 5000)),
-            });
-            return {
-              message: generateMsg({
-                id: messageId,
-                updated_at: olderServerTime,
-              }),
-            };
-          },
         });
         const after = mockChannel.messagePaginator.getItem(messageId);
         // Newer than the response, so the slower response must not overwrite it.
@@ -1883,17 +1896,17 @@ describe('MessageComposer', () => {
         };
         mockChannel.messagePaginator.ingestItem(existingSending);
         const serverUpdatedAt = composed!.localMessage.updated_at + msToNs(100);
+        stubSendRequest(mockChannel, async () => ({
+          message: generateMsg({
+            cid: mockChannel.cid,
+            id: messageId,
+            updated_at: serverUpdatedAt,
+          }),
+        }));
         await mockChannel.sendMessageWithLocalUpdate({
           localMessage: composed!.localMessage,
           message: composed!.message,
           options: composed!.sendOptions,
-          sendMessageRequestFn: async () => ({
-            message: generateMsg({
-              cid: mockChannel.cid,
-              id: messageId,
-              updated_at: serverUpdatedAt,
-            }),
-          }),
         });
         const after = mockChannel.messagePaginator.getItem(messageId);
         expect(after?.status).toBe('received');
@@ -1909,14 +1922,14 @@ describe('MessageComposer', () => {
           code: 16,
           response: { statusCode: 500 },
         });
+        stubSendRequest(mockChannel, async () => {
+          throw apiError;
+        });
         await expect(
           mockChannel.sendMessageWithLocalUpdate({
             localMessage: composed!.localMessage,
             message: composed!.message,
             options: composed!.sendOptions,
-            sendMessageRequestFn: async () => {
-              throw apiError;
-            },
           }),
         ).rejects.toThrow('Network error');
         const after = mockChannel.messagePaginator.getItem(messageId);

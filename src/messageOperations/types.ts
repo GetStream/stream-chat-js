@@ -9,6 +9,7 @@ import type {
   UpdateMessageOptions,
 } from '../types';
 import type { QueueableType } from '../offline-support/types';
+import type { Channel } from '../channel';
 
 export type OperationKind = 'send' | 'retry' | 'update' | 'delete';
 
@@ -50,6 +51,12 @@ export type MessageOperationsHandlers = {
 };
 
 export type MessageOperationsContext = {
+  /**
+   * The channel every request and offline-DB row belongs to. A `Thread` passes its parent channel,
+   * since a reply is sent, persisted and reacted to against the channel like any other message. It is
+   * what lets the reaction operations live here rather than being written once per owner.
+   */
+  channel: Channel;
   ingest: (m: LocalMessage) => void;
   get: (id: string) => LocalMessage | undefined;
   /**

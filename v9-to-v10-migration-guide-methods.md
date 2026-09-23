@@ -1428,6 +1428,108 @@ channel roles is a server-side operation; use
 with it, along with the rest of the v1 permission surface — see
 [the v1 permission system](./v9-to-v10-migration-guide-type-renames.md#the-v1-permission-system--removed).
 
+## Removed after `10.0.0-rc.12` — per-call message request overrides
+
+Three optional fields are gone from the `*WithLocalUpdate` parameter objects on both `Channel` and
+`Thread`:
+
+| Removed field            | On                                   |
+| ------------------------ | ------------------------------------ |
+| `sendMessageRequestFn`   | `SendMessageWithStateUpdateParams`   |
+| `updateMessageRequestFn` | `UpdateMessageWithStateUpdateParams` |
+| `deleteMessageRequestFn` | `DeleteMessageWithStateUpdateParams` |
+
+They were a second way to do what `ChannelConfig.requestHandlers` already does, and the narrower of
+the two: both layers receive the **identical** argument (`normalizeOutgoingMessage` has already run,
+so a handler sees `parent_id` on a thread reply and can branch), both are resolved per call, and the
+per-call layer had no `retrySendMessageRequestFn` at all — so it could not distinguish a retry from a
+send, which the config layer can.
+
+It was also a hazard. Resolution order was `requestFn ?? handlers.<kind> ?? default`, so passing one
+**won over** whatever the host SDK had registered. In React Native that meant silently skipping the
+registered `sendMessageRequest` handler — and with it the attachment-upload step that runs inside it.
+
+**Migrate to the instance handler seam**, which is unchanged:
+
+```ts
+// before
+await channel.updateMessageWithLocalUpdate({
+  localMessage,
+  updateMessageRequestFn: async ({ localMessage, options }) =>
+    myUpdate(localMessage, options),
+});
+
+// after — registered once, per channel instance
+client.config.set({
+  channel: {
+    requestHandlers: {
+      updateMessageRequest: async ({ localMessage, options }) =>
+        myUpdate(localMessage, options),
+    },
+  },
+});
+
+await channel.updateMessageWithLocalUpdate({ localMessage });
+```
+
+A handler needing to vary by message branches on what it is given — `localMessage.id`, custom fields,
+or `parent_id` to tell a thread reply from a channel message. See
+[`docs/instance-configuration.md`](./docs/instance-configuration.md) for the full seam.
+
+The handler types themselves were renamed in the same release — see
+[one vocabulary for message-operation types](#removed-after-1000-rc12--one-vocabulary-for-message-operation-types)
+below. `requestHandlers` entries keep the same shape either way; only the type's name changed.
+
+There is no replacement for per-call **transport** options (an `AbortSignal`, an upload-progress
+callback). Neither layer ever carried them: a handler's `options` is the wire payload
+(`SendMessageOptions`), not `StreamRequestOptions`. If you need one, open an issue — the fix is to
+thread `requestOptions` through the params so the registered handler keeps running, not to reinstate
+a competing override.
+
+## Removed after `10.0.0-rc.12` — one vocabulary for message-operation types
+
+Seven exported type aliases are gone. Each was a hand-written duplicate of a generic that already
+existed in the same module, derived from `MessageOperationSpec`. The replacements are **exactly**
+the same types — verified by mutual-assignability assertions, not by eye — so this is a rename, not
+a shape change.
+
+| Removed                                 | Replacement                                 |
+| --------------------------------------- | ------------------------------------------- |
+| `SendMessageWithStateUpdateParams`      | `OperationParams<'send'>`                   |
+| `UpdateMessageWithStateUpdateParams`    | `OperationParams<'update'>`                 |
+| `DeleteMessageWithStateUpdateParams`    | `OperationParams<'delete'>`                 |
+| `RetrySendMessageWithLocalUpdateParams` | `Omit<OperationParams<'retry'>, 'message'>` |
+| `CustomSendMessageRequestFn`            | `OperationRequestFn<'send'>`                |
+| `CustomUpdateMessageRequestFn`          | `OperationRequestFn<'update'>`              |
+| `CustomDeleteMessageRequestFn`          | `OperationRequestFn<'delete'>`              |
+
+`OperationKind`, `OperationParams`, `OperationRequestFn`, `OperationResponse` and
+`MessageOperationSpec` are now exported from the package root.
+
+`ChannelConfig.requestHandlers` is retyped accordingly. Handler bodies need **no change** — the
+parameter and return types are identical:
+
+```ts
+client.config.set({
+  channel: {
+    requestHandlers: {
+      // was CustomSendMessageRequestFn, now OperationRequestFn<'send'>
+      sendMessageRequest: async ({ localMessage, message, options }) => {
+        const { message: sent } = await sendViaProxy(message, options);
+        return { message: sent };
+      },
+    },
+  },
+});
+```
+
+Only code that referenced one of the seven **by name** needs editing. Code that derives its types
+positionally — `NonNullable<ChannelConfig['requestHandlers']>['sendMessageRequest']`, or
+`Parameters<typeof channel.sendMessageWithLocalUpdate>[0]` — is unaffected.
+
+`CustomMarkReadRequestFn` and `CustomThreadMarkReadRequestFn` are **not** affected: mark-read is not
+a message operation and has no `OperationKind`.
+
 ## Removed after `10.0.0-rc.8` — moderator promotion moves server-side
 
 **`channel.addModerators(members, message?, options?, requestOptions?)` and

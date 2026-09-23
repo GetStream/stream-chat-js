@@ -1,4 +1,10 @@
-import type { MessageRequest, UpdateMessageOptions } from '../types';
+import type {
+  MessageRequest,
+  ReactionRequest,
+  SendReactionRequest,
+  UpdateMessageOptions,
+} from '../types';
+import { addReactionOptimistically, deleteReactionOptimistically } from './optimistic';
 import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
 import type { StateStore } from '@stream-io/state-store';
 import { ConfigController } from '../configuration/ConfigController';
@@ -280,6 +286,14 @@ export class MessageOperations {
     }
   }
 
+  /*
+   * Each operation resolves its request as `requestFn ?? handlers.<kind> ?? defaults.<kind>`.
+   *
+   * `handlers` is the integrator seam (`ChannelConfig.requestHandlers`). `requestFn` is a direct
+   * injection point for tests; it is not exposed on the public methods because it wins over
+   * `handlers`, so a caller reaching for it would bypass whatever the host SDK registered.
+   */
+
   async send(
     params: OperationParams<'send'>,
     requestFn?: OperationRequestFn<'send'>,
@@ -391,5 +405,37 @@ export class MessageOperations {
         await this.ctx.defaults.delete(p.localMessage.id, p.options));
 
     return await this.run<'delete'>('delete', params, doRequest);
+  }
+
+  async retrySendWithLocalUpdate({
+    localMessage,
+    options,
+  }: Omit<OperationParams<'retry'>, 'message'>): Promise<void> {
+    await this.retry({ localMessage: { ...localMessage, type: 'regular' }, options });
+  }
+
+  /**
+   * Adds a reaction with an optimistic local state update — see {@link addReactionOptimistically}.
+   *
+   * The request routes through the channel because reactions are channel-level, while the local write
+   * is addressed by message id and so reaches a pure thread reply that no channel collection holds.
+   */
+  async addReactionWithLocalUpdate(params: {
+    messageId: string;
+    reaction: ReactionRequest;
+    options?: Pick<SendReactionRequest, 'enforce_unique' | 'skip_push'>;
+  }): Promise<void> {
+    await addReactionOptimistically({ channel: this.ctx.channel, ...params });
+  }
+
+  /**
+   * Removes the current user's reaction with an optimistic local state update, mirroring
+   * {@link MessageOperations.addReactionWithLocalUpdate}.
+   */
+  async deleteReactionWithLocalUpdate(params: {
+    messageId: string;
+    type: string;
+  }): Promise<void> {
+    await deleteReactionOptimistically({ channel: this.ctx.channel, ...params });
   }
 }
