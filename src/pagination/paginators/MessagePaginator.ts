@@ -11,8 +11,8 @@ import {
   MessageIntervalPaginator,
   type MessageQueryShape,
 } from './MessageIntervalPaginator';
-import type { LocalMessage } from '../../types';
-import { nsToDate } from '../../utils/time';
+import type { LocalMessage, TimestampNS } from '../../types';
+import { asTimestampNS, nsToDate } from '../../utils/time';
 import { StateStore } from '@stream-io/state-store';
 
 export type {
@@ -58,7 +58,7 @@ export type MessagePaginatorAggregateState = {
    * sort key {@link MessagePaginator.lastMessageAt} is derived as the max of the two, so the two can
    * never drift out of sync.
    */
-  seededLastMessageAt: number | null;
+  seededLastMessageAt: TimestampNS | null;
 };
 
 export type MessagePaginatorOptions = BaseMessagePaginatorOptions & {
@@ -73,7 +73,7 @@ export type MessagePaginatorOptions = BaseMessagePaginatorOptions & {
 };
 
 export type UnreadSnapshotState = {
-  lastReadAt: number | null;
+  lastReadAt: TimestampNS | null;
   unreadCount: number;
   /**
    * Snapshot of the first unread message id for the user.
@@ -167,11 +167,11 @@ export class MessagePaginator extends MessageIntervalPaginator {
    * **Derived** (never stored) so it cannot drift from {@link lastMessage}. `null` until seeded or a
    * message is ingested.
    */
-  get lastMessageAt(): number | null {
+  get lastMessageAt(): TimestampNS | null {
     const { lastMessage, seededLastMessageAt } = this.aggregateState.getLatestValue();
     const fromMessage = getMessageCreatedAtTimestamp(lastMessage);
     if (fromMessage !== null && seededLastMessageAt !== null) {
-      return Math.max(fromMessage, seededLastMessageAt);
+      return asTimestampNS(Math.max(fromMessage, seededLastMessageAt));
     }
     return fromMessage ?? seededLastMessageAt;
   }
@@ -244,7 +244,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
    * authoritative whole-channel aggregate. Monotonic: a no-op when the paginator already advanced
    * past it (e.g. from ingested messages), so seed order does not matter.
    */
-  seedLastMessageAt(value: number | null | undefined) {
+  seedLastMessageAt(value: TimestampNS | null | undefined) {
     if (value == null || !Number.isFinite(value)) return;
     const current = this.aggregateState.getLatestValue().seededLastMessageAt;
     if (current !== null && value <= current) return;

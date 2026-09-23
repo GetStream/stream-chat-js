@@ -25,14 +25,32 @@
  * has round-tripped through JSON is not guaranteed.
  */
 
+import type { TimestampNS } from '../gen/models';
+
 /** Nanoseconds per millisecond — the only magic number in this module. */
 export const NS_PER_MS = 1e6;
 
-/** A wire timestamp as epoch milliseconds, for arithmetic against `Date.now()` or a `Date`. */
+/**
+ * Brands a raw number as a wire timestamp, without converting it.
+ *
+ * The one sanctioned way to mint a {@link TimestampNS} from a value that is already in
+ * nanoseconds but has lost its brand on the way: a row read back from a local database, a value
+ * parsed out of persisted JSON, a test fixture, or the epoch seed `asTimestampNS(0)`. It does no
+ * checking — a millisecond value passed here stays a millisecond value, now mislabelled. When the
+ * source is milliseconds or a `Date`, use {@link msToNs} or {@link dateToNs} instead.
+ */
+export const asTimestampNS = (ns: number): TimestampNS => ns as TimestampNS;
+
+/**
+ * A wire timestamp as epoch milliseconds, for arithmetic against `Date.now()` or a `Date`.
+ *
+ * Takes a plain `number` rather than a {@link TimestampNS} because it converts durations too: the
+ * difference of two timestamps is a nanosecond span, not an instant, and has no brand.
+ */
 export const nsToMs = (ns: number): number => Math.floor(ns / NS_PER_MS);
 
 /** Epoch milliseconds as a wire timestamp. */
-export const msToNs = (ms: number): number => ms * NS_PER_MS;
+export const msToNs = (ms: number): TimestampNS => asTimestampNS(ms * NS_PER_MS);
 
 /**
  * The local clock as a wire-comparable timestamp, for optimistic writes into API-shaped objects.
@@ -41,23 +59,23 @@ export const msToNs = (ms: number): number => ms * NS_PER_MS;
  * Callers that order by timestamp must tie-break on something else — `findIndexInSortedArray`
  * does so via `selectKey`, and `MessageReceiptsTracker` compares message ids.
  */
-export const nowNs = (): number => msToNs(Date.now());
+export const nowNs = (): TimestampNS => msToNs(Date.now());
 
 /** A wire timestamp as a `Date`, for request payloads and date libraries. */
-export const nsToDate = (ns: number): Date => new Date(nsToMs(ns));
+export const nsToDate = (ns: TimestampNS): Date => new Date(nsToMs(ns));
 
 /**
  * A wire timestamp as a nanosecond-precision RFC3339 string, for an outgoing request date field.
  * {@link nsToDate} is lossy here — `Date` holds only milliseconds.
  */
-export const nsToRfc3339 = (ns: number): string => {
+export const nsToRfc3339 = (ns: TimestampNS): string => {
   const ms = nsToMs(ns);
   const subMs = String(ns - ms * NS_PER_MS).padStart(6, '0');
   return new Date(ms).toISOString().replace(/\.(\d{3})Z$/, `.$1${subMs}Z`);
 };
 
 /** A `Date` as a wire timestamp. */
-export const dateToNs = (date: Date): number => msToNs(date.getTime());
+export const dateToNs = (date: Date): TimestampNS => msToNs(date.getTime());
 
 /**
  * A server-sent timestamp as a `Date`, or `undefined` when there is none.
@@ -78,7 +96,9 @@ export const dateToNs = (date: Date): number => msToNs(date.getTime());
  * Returning `undefined` rather than throwing lets a caller fall back to whatever it already does
  * for a missing timestamp, which is usually to render nothing.
  */
-export const convertTimestampToDate = (timestamp?: number | null): Date | undefined => {
+export const convertTimestampToDate = (
+  timestamp?: TimestampNS | null,
+): Date | undefined => {
   if (timestamp == null || !Number.isFinite(timestamp)) return undefined;
   return nsToDate(timestamp);
 };

@@ -1,5 +1,5 @@
 import type { CursorDeriveContext, PaginationFlags } from '../paginators';
-import type { MessagePaginationParams } from '../../types';
+import type { MessagePaginationParams, TimestampNS } from '../../types';
 
 /**
  * The query keys this helper understands when deriving a cursor direction. Not a request
@@ -34,7 +34,7 @@ const HEADWARD_QUERY_PROPERTIES: Array<keyof LinearPaginationQueryShape> = [
   'id_gte',
 ];
 export const deriveLinearPaginationFlags = <
-  T extends { id: string; created_at: number },
+  T extends { id: string; created_at: TimestampNS },
   Q extends LinearPaginationQueryShape,
 >({
   direction,

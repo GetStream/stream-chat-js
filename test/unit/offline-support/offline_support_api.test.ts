@@ -1209,12 +1209,15 @@ describe('OfflineSupportApi', () => {
         beforeEach(() => {
           readEvent = {
             ...baseEvent,
+            type: 'message.read',
             cid: 'channel-123',
+            created_at: convertDateToTimestamp('2023-01-01T00:00:00Z'),
             user: { id: 'user-1', name: 'Alice' },
             last_read_message_id: 'msg-987',
-            received_at: '2023-01-01T00:00:00Z',
+            // The local receipt time, deliberately later than `created_at`: it must not be persisted.
+            received_at: convertDateToTimestamp('2023-01-01T00:00:05Z'),
             unread_messages: 3,
-          };
+          } as Event;
           offlineDb.upsertReads.mockResolvedValue([['UPSERT read']]);
         });
 
@@ -1233,7 +1236,7 @@ describe('OfflineSupportApi', () => {
             execute: true,
             reads: [
               {
-                last_read: readEvent.received_at,
+                last_read: readEvent.created_at,
                 last_read_message_id: readEvent.last_read_message_id,
                 unread_messages: 5,
                 user: readEvent.user,
@@ -1258,7 +1261,7 @@ describe('OfflineSupportApi', () => {
             execute: true,
             reads: [
               {
-                last_read: readEvent.received_at,
+                last_read: readEvent.created_at,
                 last_read_message_id: readEvent.last_read_message_id,
                 unread_messages: readEvent.unread_messages,
                 user: readEvent.user,
@@ -1284,7 +1287,7 @@ describe('OfflineSupportApi', () => {
             execute: false,
             reads: [
               {
-                last_read: readEvent.received_at,
+                last_read: readEvent.created_at,
                 last_read_message_id: readEvent.last_read_message_id,
                 unread_messages: readEvent.unread_messages,
                 user: readEvent.user,
@@ -1297,6 +1300,38 @@ describe('OfflineSupportApi', () => {
             expect.any(Function),
           );
           expect(result).toEqual([['UPSERT read']]);
+        });
+
+        it('persists the server `last_read_at` for a mark-unread, not the receipt time', async () => {
+          const lastReadAt = convertDateToTimestamp('2022-12-31T23:00:00Z');
+          const markUnreadEvent = {
+            ...readEvent,
+            type: 'notification.mark_unread',
+            last_read_at: lastReadAt,
+          } as Event;
+
+          await offlineDb.handleRead({ event: markUnreadEvent });
+
+          expect(offlineDb.upsertReads).toHaveBeenCalledWith(
+            expect.objectContaining({
+              reads: [expect.objectContaining({ last_read: lastReadAt })],
+            }),
+          );
+        });
+
+        it('falls back to `received_at` when the event carries no server timestamp', async () => {
+          const { created_at: _createdAt, ...eventWithoutCreatedAt } =
+            readEvent as Event & {
+              created_at?: number;
+            };
+
+          await offlineDb.handleRead({ event: eventWithoutCreatedAt as Event });
+
+          expect(offlineDb.upsertReads).toHaveBeenCalledWith(
+            expect.objectContaining({
+              reads: [expect.objectContaining({ last_read: readEvent.received_at })],
+            }),
+          );
         });
 
         it('returns empty array if user is missing', async () => {
@@ -2617,12 +2652,12 @@ describe('OfflineSupportApi', () => {
           const editedMessage = {
             id: 'msg-123',
             cid: 'messaging:channel123',
-            created_at: new Date(),
+            created_at: convertDateToTimestamp(new Date()),
             pinned_at: null,
             status: 'failed',
             text: 'A edited',
             type: 'regular',
-            updated_at: new Date(),
+            updated_at: convertDateToTimestamp(new Date()),
           } as unknown as LocalMessage;
           vi.spyOn(offlineDb, 'getPendingTasks').mockResolvedValue([
             {

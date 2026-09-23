@@ -23,12 +23,18 @@
   `expires` — on every response type, every `WSEvent` member, and the SDK state stores that mirror
   them. Not a `Date`, not an ISO string. In v9 these were typed `string`; in the early v10 RCs they
   were decoded to `Date`. Both are gone: there is no decoder layer any more.
+- **They are typed `TimestampNS`, a branded `number`.** Reading, comparing, sorting and subtracting
+  work exactly as with a plain `number`. What changes is creating one: a plain `number` is not
+  assignable, so optimistic objects and fixtures use `nowNs()`, `msToNs()`, `dateToNs()` or
+  `asTimestampNS()`. See [`TimestampNS` and the `new Date` guard](#timestampns-and-the-new-date-guard).
+- **`new Date(timestamp)` is a compile error.** The package's types augment the global
+  `DateConstructor`, so the most common mistake — `new Date(message.created_at)` — no longer compiles.
 - **Outgoing request date fields are still `Date`.** So a response value can no longer be assigned to
   a request field — the one thing that _was_ safe in v9, when both sides were `string`. The compiler
   catches this.
-- **Three things break with no compile error**: every `Date`-based path is out of range, so
-  `new Date(ns)` and `dayjs(ns)` are both an `Invalid Date`; a millisecond/nanosecond mix-up between
-  two `number`s produces a plausible wrong answer and no complaint; and `0` is now a legitimate
+- **Three things still break with no compile error**: a date library is out of range too, so
+  `dayjs(ns)` is an `Invalid Date` (only `new Date` is guarded); a millisecond/nanosecond mix-up
+  between two numbers produces a plausible wrong answer and no complaint; and `0` is now a legitimate
   timestamp, so `if (!created_at)` is wrong.
 - **`t('timestamp.X', { timestamp })` is not type-checked** — i18next's interpolation bag is untyped,
   so a raw nanosecond number reaches the formatter and renders the literal text `Invalid Date` into
@@ -37,7 +43,7 @@
 - **Filter operands changed meaning**: a bare `number` in a filter is now read as nanoseconds, not
   milliseconds.
 - Convert with the helpers the package now exports: `convertTimestampToDate` (guarded), `nsToDate`,
-  `nsToMs`, `msToNs`, `nowNs`, `dateToNs`, `nsToRfc3339`, `NS_PER_MS`.
+  `nsToMs`, `msToNs`, `nowNs`, `dateToNs`, `nsToRfc3339`, `asTimestampNS`, `NS_PER_MS`.
 
 ---
 
@@ -59,13 +65,15 @@ reads a bare number as milliseconds, which lands in exactly the same place rathe
 plausible.
 
 ```ts
-new Date(message.created_at); // Invalid Date
+new Date(message.created_at); // Invalid Date (now a compile error — see below)
 new Date(message.created_at).toISOString(); // RangeError: Invalid time value
 dayjs(message.created_at).isValid(); // false
 dayjs(message.created_at).format(); // 'Invalid Date' — the literal string
 ```
 
-Neither is a type error, and the two surface differently: `.toISOString()` **throws**, usually
+The `new Date` forms are caught at compile time by the
+[guard](#timestampns-and-the-new-date-guard); the date-library forms are not, and the two surface
+differently: `.toISOString()` **throws**, usually
 mid-render in a component that had no reason to expect it, while dayjs's `.format()` quietly returns
 the string `'Invalid Date'` and renders it on screen. So this mistake is loud in a `RangeError` stack
 trace and near-silent in a formatted timestamp — do not rely on noticing it either way.
@@ -102,20 +110,93 @@ What this means in practice:
 
 ---
 
+## `TimestampNS` and the `new Date` guard
+
+Every server-sent date field is typed `TimestampNS` rather than `number`:
+
+```ts
+export type TimestampNS = number & { readonly [timestampNsBrand]: true };
+```
+
+It is still a `number` at runtime and for every read. Comparison, sorting, subtraction and passing it
+where a `number` is expected all compile as before. Two things change.
+
+**Minting one needs a helper.** A plain `number` is not assignable to a `TimestampNS` field, so code
+that _constructs_ a response-shaped object — an optimistic message, a local reaction, a test fixture,
+a row read back from your own database — has to say where the value came from:
+
+| Source                                                                                    | Use                |
+| ----------------------------------------------------------------------------------------- | ------------------ |
+| The local clock                                                                           | `nowNs()`          |
+| Epoch milliseconds                                                                        | `msToNs(ms)`       |
+| A `Date`                                                                                  | `dateToNs(date)`   |
+| A number that is already nanoseconds (a DB row, persisted JSON, a fixture, the epoch `0`) | `asTimestampNS(n)` |
+
+`asTimestampNS` brands without converting — handing it milliseconds produces a mislabelled value, so
+reserve it for values that are known to be nanoseconds. Arithmetic drops the brand
+(`nowNs() + msToNs(5000)` is a plain `number`); wrap the result in `asTimestampNS` when it goes back
+into a timestamp field.
+
+**`new Date(timestamp)` does not compile.** The package's published types include
+`timestamp-guard.d.ts`, which adds a `DateConstructor` overload for `TimestampNS`:
+
+```ts
+const d: Date = new Date(message.created_at);
+// error TS2740: Type '{ readonly ERROR_use_SDKs_nsToDate_helper_instead: never; }' is missing …
+new Date(message.created_at).toISOString();
+// error TS2339: Property 'toISOString' does not exist on type '{ readonly ERROR_use_SDKs_… }'
+new Date(Date.now()); // unaffected
+nsToDate(message.created_at); // the fix
+```
+
+The helpers that consume an instant — `nsToDate`, `nsToRfc3339`, `convertTimestampToDate` — take a
+`TimestampNS` too, so `nsToDate(Date.now())` is an error rather than a date in 1970. `nsToMs` takes a
+plain `number`, because it also converts durations (the difference of two timestamps).
+
+What the guard does **not** catch:
+
+- **An unused result.** `console.log(new Date(ts))` compiles, since the result is never used as a
+  `Date`. The overload is `@deprecated`, so editors strike it through and
+  `@typescript-eslint/no-deprecated` reports it.
+- **Date libraries.** `dayjs(ts)` / `moment(ts)` accept any `number`.
+- **A fallback or a derived value.** The overload only matches an argument that is _purely_
+  `TimestampNS`, and each of these compiles clean and is an `Invalid Date` at runtime:
+
+  ```ts
+  new Date(message.pinned_at ?? Date.now()); // `TimestampNS | number` collapses to `number`
+  new Date(message.pinned_at ?? 0); // `TimestampNS | 0` is no longer purely branded
+  new Date(Math.max(a.created_at, b.created_at)); // `Math.max` returns a plain `number`
+  ```
+
+  Convert first, then fall back: `convertTimestampToDate(message.pinned_at) ?? fallbackDate`, and
+  `nsToDate(asTimestampNS(Math.max(a.created_at, b.created_at)))`.
+
+- **Untyped paths.** i18next interpolation (see
+  [Rendering timestamps](#rendering-timestamps-the-one-path-the-compiler-does-not-guard)), `any`, and
+  values you have widened to `number` yourself.
+- **Unit mix-ups.** `ts > Date.now()` is two numbers compared; see
+  [Comparison and arithmetic](#comparison-and-arithmetic).
+
+The augmentation is global: it applies to the whole program once `stream-chat`'s types are loaded,
+and there is no per-file opt-out.
+
+---
+
 ## The helpers
 
 All exported from the package root.
 
-| Helper                        | Signature                                         | Use for                                                                  |
-| ----------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------ |
-| `convertTimestampToDate(ts?)` | `number \| null \| undefined → Date \| undefined` | The default. Guarded: `undefined` for an absent or non-finite value.     |
-| `nsToDate(ns)`                | `number → Date`                                   | A value known to be present.                                             |
-| `nsToMs(ns)`                  | `number → number`                                 | Epoch milliseconds, for arithmetic against `Date.now()`.                 |
-| `msToNs(ms)`                  | `number → number`                                 | Milliseconds back into the wire unit.                                    |
-| `nowNs()`                     | `() → number`                                     | The local clock as a wire timestamp, for optimistic writes.              |
-| `dateToNs(date)`              | `Date → number`                                   | A `Date` into the wire unit.                                             |
-| `nsToRfc3339(ns)`             | `number → string`                                 | A nanosecond-precision RFC3339 string, when milliseconds are not enough. |
-| `NS_PER_MS`                   | `1e6`                                             | The conversion constant, if you need it directly.                        |
+| Helper                        | Signature                                              | Use for                                                                   |
+| ----------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------- |
+| `convertTimestampToDate(ts?)` | `TimestampNS \| null \| undefined → Date \| undefined` | The default. Guarded: `undefined` for an absent or non-finite value.      |
+| `nsToDate(ns)`                | `TimestampNS → Date`                                   | A value known to be present.                                              |
+| `nsToMs(ns)`                  | `number → number`                                      | Epoch milliseconds (or a ns duration in ms), for arithmetic.              |
+| `msToNs(ms)`                  | `number → TimestampNS`                                 | Milliseconds back into the wire unit.                                     |
+| `nowNs()`                     | `() → TimestampNS`                                     | The local clock as a wire timestamp, for optimistic writes.               |
+| `dateToNs(date)`              | `Date → TimestampNS`                                   | A `Date` into the wire unit.                                              |
+| `nsToRfc3339(ns)`             | `TimestampNS → string`                                 | A nanosecond-precision RFC3339 string, when milliseconds are not enough.  |
+| `asTimestampNS(n)`            | `number → TimestampNS`                                 | Brands a value already in nanoseconds (DB rows, fixtures). No conversion. |
+| `NS_PER_MS`                   | `1e6`                                                  | The conversion constant, if you need it directly.                         |
 
 **Prefer `convertTimestampToDate` at the boundary where a wire number becomes something a date
 library or a UI prop consumes.** Many timestamps are optional in practice even where the generated
@@ -246,21 +327,25 @@ number. The SDK normalises it internally (`src/channel.ts`); if you read the fie
 yourself, parse it rather than treating it as a wire number. This is an upstream spec bug and the
 field is expected to become a number.
 
-### `pinMessage`'s `number` overload now collides with the response type
+### `pinMessage`'s `number` overload rejects a server timestamp
 
 ```ts
 client.pinMessage(messageOrId, timeoutOrExpirationDate?, pinnedAt?, requestOptions?);
 ```
 
-For both date arguments a `number` means **relative seconds**, not a timestamp — unchanged from v9,
-but `message.pinned_at` is now also a `number`, so the wrong thing type-checks:
+For both date arguments a `number` means **relative seconds**, not a timestamp — unchanged from v9.
+`message.pinned_at` is now also a number, so both parameters exclude `TimestampNS`: handing a
+server timestamp back is a compile error rather than an expiry ~1.79e18 seconds away.
 
 ```ts
-// WRONG — reads the timestamp as "1.79e18 seconds from now".
+// Compile error — would read the timestamp as "1.79e18 seconds from now".
 client.pinMessage(id, null, message.pinned_at);
 // RIGHT
 client.pinMessage(id, null, nsToDate(message.pinned_at));
 ```
+
+A value you have widened to plain `number` yourself still type-checks as seconds, so keep server
+timestamps typed as `TimestampNS` up to this call.
 
 ### Filter operands: a server query needs a `Date`, client-side matching reads a number as nanoseconds
 
@@ -360,41 +445,43 @@ Two related notes:
 
 ## Changed public types and members in this package
 
-Type changes where the member name is unchanged and only the type moved from `Date` to `number`:
+Type changes where the member name is unchanged and only the type moved from `Date` to `TimestampNS`
+(read as `number`; see [`TimestampNS`](#timestampns-and-the-new-date-guard)):
 
-| Type / member                                               | Was                 | Now                   |
-| ----------------------------------------------------------- | ------------------- | --------------------- |
-| `ChannelMuteStatus.createdAt` / `.expiresAt`                | `Date \| null`      | `number \| null`      |
-| `ChannelState['read'][userId].last_read`                    | `Date`              | `number`              |
-| `ChannelState['read'][userId].last_delivered_at`            | `Date \| undefined` | `number \| undefined` |
-| `ThreadState.createdAt`                                     | `Date`              | `number`              |
-| `ThreadState.deletedAt` / `.updatedAt`                      | `Date \| null`      | `number \| null`      |
-| `ThreadUserReadState.lastReadAt`                            | `Date`              | `number`              |
-| `ReminderState.created_at` / `.updated_at`                  | `Date`              | `number`              |
-| `ReminderState.remind_at`                                   | `Date \| null`      | `number \| null`      |
-| `UnreadSnapshotState.lastReadAt`                            | `Date \| null`      | `number \| null`      |
-| `MessagePaginatorAggregateState.seededLastMessageAt`        | `Date \| null`      | `number \| null`      |
-| `MessagePaginator.lastMessageAt` (getter)                   | `Date \| null`      | `number \| null`      |
-| `LocalEvent` `created_at`, and `received_at` on every event | `Date`              | `number`              |
-| `ConnectedEvent.created_at` / `.received_at`                | `Date`              | `number`              |
-| `DBDeleteMessagesForChannelType.truncated_at`               | `Date \| undefined` | `number \| undefined` |
+| Type / member                                               | Was                 | Now                        |
+| ----------------------------------------------------------- | ------------------- | -------------------------- |
+| `ChannelMuteStatus.createdAt` / `.expiresAt`                | `Date \| null`      | `TimestampNS \| null`      |
+| `ChannelState['read'][userId].last_read`                    | `Date`              | `TimestampNS`              |
+| `ChannelState['read'][userId].last_delivered_at`            | `Date \| undefined` | `TimestampNS \| undefined` |
+| `ThreadState.createdAt`                                     | `Date`              | `TimestampNS`              |
+| `ThreadState.deletedAt` / `.updatedAt`                      | `Date \| null`      | `TimestampNS \| null`      |
+| `ThreadUserReadState.lastReadAt`                            | `Date`              | `TimestampNS`              |
+| `ReminderState.created_at` / `.updated_at`                  | `Date`              | `TimestampNS`              |
+| `ReminderState.remind_at`                                   | `Date \| null`      | `TimestampNS \| null`      |
+| `UnreadSnapshotState.lastReadAt`                            | `Date \| null`      | `TimestampNS \| null`      |
+| `MessagePaginatorAggregateState.seededLastMessageAt`        | `Date \| null`      | `TimestampNS \| null`      |
+| `MessagePaginator.lastMessageAt` (getter)                   | `Date \| null`      | `TimestampNS \| null`      |
+| `LocalEvent` `created_at`, and `received_at` on every event | `Date`              | `TimestampNS`              |
+| `ConnectedEvent.created_at` / `.received_at`                | `Date`              | `TimestampNS`              |
+| `DBDeleteMessagesForChannelType.truncated_at`               | `Date \| undefined` | `TimestampNS \| undefined` |
 
 Signature changes:
 
-| Member                                                           | Was                                   | Now                                |
-| ---------------------------------------------------------------- | ------------------------------------- | ---------------------------------- |
-| `channel.countUnread(lastRead?)`                                 | `Date \| null`                        | `number \| null`                   |
-| `channel.lastRead()`                                             | `Date \| null \| undefined`           | `number \| null \| undefined`      |
-| `channel.muteStatus()`                                           | `{ createdAt: Date \| null; … }`      | `{ createdAt: number \| null; … }` |
-| `MessagePaginator.seedLastMessageAt(value)`                      | `string \| Date \| null \| undefined` | `number \| null \| undefined`      |
-| `MessagePaginator.truncate({ truncatedAt })`                     | `Date`                                | `number`                           |
-| `MessagePaginator.applyMessageDeletionForUser({ deletedAt })`    | `Date`                                | `number`                           |
-| `MessagePaginator.findItemByTimestamp(timestamp, exactTsMatch?)` | epoch **ms**                          | wire **ns**                        |
-| `MessageReceiptsTracker.onMessageDelivered({ deliveredAt })`     | `Date`                                | `number`                           |
-| `MessageReceiptsTracker.onMessageRead({ readAt })`               | `Date`                                | `number`                           |
-| `MessageReceiptsTracker.reconcileUserRead({ lastReadAt })`       | `Date \| undefined`                   | `number \| undefined`              |
-| `timeLeftMs(remindAt)`                                           | epoch **ms**                          | wire **ns**                        |
-| `LocationComposer.validLocation` (getter)                        | `SharedLocation \| null`              | `StaticLocationPreview \| null`    |
+| Member                                                           | Was                                    | Now                                        |
+| ---------------------------------------------------------------- | -------------------------------------- | ------------------------------------------ |
+| `channel.countUnread(lastRead?)`                                 | `Date \| null`                         | `TimestampNS \| null`                      |
+| `channel.lastRead()`                                             | `Date \| null \| undefined`            | `TimestampNS \| null \| undefined`         |
+| `channel.muteStatus()`                                           | `{ createdAt: Date \| null; … }`       | `{ createdAt: TimestampNS \| null; … }`    |
+| `MessagePaginator.seedLastMessageAt(value)`                      | `string \| Date \| null \| undefined`  | `TimestampNS \| null \| undefined`         |
+| `MessagePaginator.truncate({ truncatedAt })`                     | `Date`                                 | `TimestampNS`                              |
+| `MessagePaginator.applyMessageDeletionForUser({ deletedAt })`    | `Date`                                 | `TimestampNS`                              |
+| `MessagePaginator.findItemByTimestamp(timestamp, exactTsMatch?)` | epoch **ms**                           | `TimestampNS`                              |
+| `MessageReceiptsTracker.onMessageDelivered({ deliveredAt })`     | `Date`                                 | `TimestampNS`                              |
+| `MessageReceiptsTracker.onMessageRead({ readAt })`               | `Date`                                 | `TimestampNS`                              |
+| `MessageReceiptsTracker.reconcileUserRead({ lastReadAt })`       | `Date \| undefined`                    | `TimestampNS \| undefined`                 |
+| `timeLeftMs(remindAt)`                                           | epoch **ms**                           | `TimestampNS`                              |
+| `client.pinMessage(id, timeoutOrExpirationDate?, pinnedAt?)`     | `number` (seconds) accepted any number | `number` (seconds), `TimestampNS` rejected |
+| `LocationComposer.validLocation` (getter)                        | `SharedLocation \| null`               | `StaticLocationPreview \| null`            |
 
 Renames — these do **not** fail as a type error if you were reading them off a value typed `any`:
 
@@ -406,12 +493,13 @@ Renames — these do **not** fail as a type error if you were reading them off a
 | `MsgRef.timestampMs`                             | `MsgRef.timestamp`                               |
 | `OwnMessageReceiptsTrackerMessageLocator(msgMs)` | `OwnMessageReceiptsTrackerMessageLocator(ns)`    |
 
-**Unit changes with no type change** — the compiler cannot help with these at all:
+**Unit changes** — now typed `TimestampNS`, so assigning a millisecond value no longer compiles:
 
-| Member                                            | Was          | Now         |
-| ------------------------------------------------- | ------------ | ----------- |
-| `PollState.lastActivityAt`                        | `Date`       | wire **ns** |
-| `LastComposerChange.stateUpdate` / `.draftUpdate` | epoch **ms** | wire **ns** |
+| Member                                            | Was                   | Now                        |
+| ------------------------------------------------- | --------------------- | -------------------------- |
+| `PollState.lastActivityAt`                        | `Date`                | `TimestampNS`              |
+| `LastComposerChange.stateUpdate` / `.draftUpdate` | epoch **ms** `number` | `TimestampNS`              |
+| `CooldownTimerState.ownLatestMessageTimestamp`    | —                     | `TimestampNS \| undefined` |
 
 Removed:
 
@@ -443,5 +531,7 @@ Storage-level notes if you maintain your own:
   round-trips through SQLite `INTEGER` exactly, and lexicographic ISO sorting is no longer needed.
 - `ORDER BY` and range comparisons become plain numeric ones — drop any `datetime(…)` /
   `strftime(…)` wrapping, which silently returns `NULL` for an integer column.
+- Rows read back hold plain numbers. Brand them with `asTimestampNS(row.created_at)` when rebuilding
+  a response-shaped object — do not route them through `msToNs`, which would multiply them again.
 - Distinguish absent from epoch. Write `NULL` for an absent timestamp rather than `0` or `''`, or you
   reintroduce exactly the ambiguity the `!= null` discipline above exists to remove.

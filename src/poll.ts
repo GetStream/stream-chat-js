@@ -16,7 +16,11 @@ import type {
   UpdatePollRequest,
   VotingVisibility,
 } from './types';
-import type { PollResponseData as Gen_PollResponseData, WSEvent } from './gen/models';
+import type {
+  PollResponseData as Gen_PollResponseData,
+  TimestampNS,
+  WSEvent,
+} from './gen/models';
 
 const isPollUpdatedEvent = (e: WSEvent): e is EventPayload<'poll.updated'> =>
   e.type === 'poll.updated';
@@ -50,7 +54,7 @@ type OptionId = string;
 
 export type PollState = Omit<PollResponseData, 'own_votes' | 'id'> & {
   /** Unix nanoseconds, matching every API timestamp. */
-  lastActivityAt: number; // todo: would be ideal to get this from the BE
+  lastActivityAt: TimestampNS; // todo: would be ideal to get this from the BE
   maxVotedOptionIds: OptionId[];
   ownVotesByOptionId: Record<OptionId, PollVoteResponseData>;
   ownAnswer?: PollVoteResponseData; // each user can have only one answer

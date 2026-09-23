@@ -1,0 +1,10 @@
+{
+  // The `test/types/` assertions against the built package, exactly as a consumer resolves it: with no
+  // `paths` override, the self-referencing `stream-chat` import goes through `package.json` `exports`
+  // to `dist/types`. `yarn build` runs it last, so a build whose published types lost the
+  // `DateConstructor` guard fails instead of shipping.
+  "extends": "./tsconfig.types-test.json",
+  "compilerOptions": {
+    "paths": {}
+  }
+}

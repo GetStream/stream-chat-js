@@ -12,6 +12,7 @@ import type {
   MarkReadResponse,
   StreamAPIError,
   StreamResponse,
+  TimestampNS,
 } from '../types';
 import { throttle } from '../utils';
 import { isAPIError, isErrorRetryable } from '../errors';
@@ -233,8 +234,8 @@ export class MessageDeliveryReporter {
 
     let latestMessages: LocalMessage[] = [];
     // Wire timestamps (unix nanoseconds), directly comparable against a message's `created_at`.
-    let lastDeliveredAt: number | undefined;
-    let lastReadAt: number | undefined;
+    let lastDeliveredAt: TimestampNS | undefined;
+    let lastReadAt: TimestampNS | undefined;
     let key: string | undefined = undefined;
 
     // todo: unify the API for read state access btw channel and threads

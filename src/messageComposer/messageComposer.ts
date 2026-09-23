@@ -36,6 +36,7 @@ import type {
   EventType,
   LocalMessage,
   MessageResponse,
+  TimestampNS,
   UserResponse,
 } from '../types';
 import { chatLoggerSystem } from '../logger';
@@ -67,7 +68,10 @@ type UnregisterSubscriptions = Unsubscribe;
  * server-derived `created_at` / `updated_at` are directly comparable — which is the whole point of
  * this state.
  */
-export type LastComposerChange = { draftUpdate: number | null; stateUpdate: number };
+export type LastComposerChange = {
+  draftUpdate: TimestampNS | null;
+  stateUpdate: TimestampNS;
+};
 
 export type EditingAuditState = {
   lastChange: LastComposerChange;

@@ -10,6 +10,32 @@ import type {
   CustomThreadData,
   CustomUserData,
 } from '../../custom_types';
+declare const timestampNsBrand: unique symbol;
+
+/**
+ * A unix-nanosecond timestamp, exactly as the server sends it.
+ *
+ * NOT milliseconds. `new Date(t)` is out of range and yields an Invalid Date, whose
+ * `.toISOString()` then throws; `models/timestamp-guard.d.ts` turns that into a
+ * compile error. Comparing or sorting two timestamps is fine -- same unit, plain
+ * numbers. Everything else should go through this SDK's time helpers:
+ *
+ *   nsToDate(t)               a Date
+ *   convertTimestampToDate(t) a Date, or undefined when the value is absent or NaN
+ *   nsToMs(t)                 epoch ms, for arithmetic against Date.now()
+ *   nsToRfc3339(t)            an RFC3339 string keeping sub-millisecond precision
+ *   dateToNs(d), msToNs(ms)   back to a wire timestamp
+ *   nowNs()                   the local clock, wire-comparable
+ *   asTimestampNS(n)          brand a number already in ns (DB rows, fixtures) -- no conversion
+ *
+ * A request date field is typed `Date`, not this -- pass `nsToDate(t)` when handing a
+ * server-sent timestamp back to the API, or `nsToRfc3339(t)` where precision matters.
+ *
+ * Values above `Number.MAX_SAFE_INTEGER` are quantised to ~256ns, so ordering holds
+ * but exact equality after a JSON round-trip does not.
+ */
+export type TimestampNS = number & { readonly [timestampNsBrand]: true };
+
 export type Filters<
   FilterConditions extends Record<string, { type: any; operators: string }>,
 > = QueryFilters<{
@@ -91,35 +117,26 @@ export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Omit<T, Keys> &
   }[Keys];
 export interface AIAudioConfigRequest {
   profile?: string;
-
   rules?: Array<BodyguardRule>;
 }
 
 export interface AIAudioConfigResponse {
   enabled: boolean;
-
   profile: string;
-
   rules: Array<BodyguardRule>;
 }
 
 export interface AIImageConfig {
   enabled: boolean;
-
   ocr_rules: Array<OCRRule>;
-
   rules: Array<AWSRekognitionRule>;
-
   async?: boolean;
 }
 
 export interface AIImageLabelDefinition {
   description: string;
-
   group: string;
-
   key: string;
-
   label: string;
 }
 
@@ -127,62 +144,50 @@ export interface AIIndicatorClearEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   /**
    * The type of event: "ai_indicator.clear" in this case
    */
   type: string;
-
   /**
    * The ID of the channel
    */
   channel_id?: string;
-
   /**
    * The type of the channel
    */
   channel_type?: string;
-
   /**
    * The CID of the channel
    */
   cid?: string;
-
-  received_at?: number;
+  received_at?: TimestampNS;
 }
 
 export interface AIIndicatorStopEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   /**
    * The type of event: "ai_indicator.stop" in this case
    */
   type: string;
-
   /**
    * The ID of the channel
    */
   channel_id?: string;
-
   /**
    * The type of the channel
    */
   channel_type?: string;
-
   /**
    * The CID of the channel
    */
   cid?: string;
-
-  received_at?: number;
+  received_at?: TimestampNS;
 }
 
 export interface AIIndicatorUpdateEvent {
@@ -190,64 +195,55 @@ export interface AIIndicatorUpdateEvent {
    * The state of the AI indicator
    */
   ai_state: string;
-
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * The ID of the message
    */
   message_id: string;
-
   custom: CustomEventData;
-
   /**
    * The type of event: "ai_indicator.update" in this case
    */
   type: string;
-
   /**
    * Optional message from the AI
    */
   ai_message?: string;
-
   /**
    * The ID of the channel
    */
   channel_id?: string;
-
   /**
    * The type of the channel
    */
   channel_type?: string;
-
   /**
    * The CID of the channel
    */
   cid?: string;
-
-  received_at?: number;
+  received_at?: TimestampNS;
 }
 
 export interface AITextConfig {
   enabled: boolean;
-
   profile: string;
-
   rules: Array<BodyguardRule>;
-
   severity_rules: Array<BodyguardSeverityRule>;
-
   async?: boolean;
 }
 
-export interface AIVideoConfig {
+export interface AIVideoConfigRequest {
+  async?: boolean;
+  enabled?: boolean;
+  rules?: Array<AWSRekognitionRule>;
+}
+
+export interface AIVideoConfigResponse {
   enabled: boolean;
-
   rules: Array<AWSRekognitionRule>;
-
   async?: boolean;
 }
 
@@ -256,37 +252,30 @@ export interface APIError {
    * API error code
    */
   code: number;
-
   /**
    * Request duration
    */
   duration: string;
-
   /**
    * Message describing an error
    */
   message: string;
-
   /**
    * URL with additional information
    */
   more_info: string;
-
   /**
    * Response HTTP status code
    */
   status_code: number;
-
   /**
    * Additional error-specific information
    */
   details: Array<number>;
-
   /**
    * Flag that indicates if the error is unrecoverable, requests that return unrecoverable errors should not be retried, this error only applies to the request that caused it
    */
   unrecoverable?: boolean;
-
   /**
    * Additional error info
    */
@@ -295,23 +284,16 @@ export interface APIError {
 
 export interface AWSRekognitionRule {
   action: 'flag' | 'shadow' | 'remove' | 'bounce' | 'bounce_flag' | 'bounce_remove';
-
   label: string;
-
   min_confidence: number;
-
   subclassifications?: Record<string, any>;
 }
 
 export interface Action {
   name: string;
-
   text: string;
-
   type: string;
-
   style?: string;
-
   value?: string;
 }
 
@@ -319,52 +301,41 @@ export interface ActionLogResponse {
   /**
    * Timestamp when the action was taken
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Unique identifier of the action log
    */
   id: string;
-
   /**
    * Reason for the moderation action
    */
   reason: string;
-
   /**
    * Classification of who triggered the action (e.g. user, moderator, automod, api_integration)
    */
   reporter_type: string;
-
   /**
    * ID of the user who was the target of the action
    */
   target_user_id: string;
-
   /**
    * Type of moderation action
    */
   type: string;
-
   /**
    * ID of the user who performed the action
    */
   user_id: string;
-
   ai_providers: Array<string>;
-
   /**
    * Additional metadata about the action
    */
   custom: Record<string, any>;
-
   review_queue_item?: ReviewQueueItemResponse;
-
   /**
    * User response object
    */
   target_user?: UserResponse;
-
   /**
    * User response object
    */
@@ -373,17 +344,11 @@ export interface ActionLogResponse {
 
 export interface ActionSequence {
   action: string;
-
   blur: boolean;
-
   cooldown_period: number;
-
   threshold: number;
-
   time_window: number;
-
   warning: boolean;
-
   warning_text: string;
 }
 
@@ -392,18 +357,15 @@ export interface AddUserGroupMembersRequest {
    * List of user IDs to add as members
    */
   member_ids: Array<string>;
-
   /**
    * Whether to add the members as group admins. Defaults to false
    */
   as_admin?: boolean;
-
   team_id?: string;
 }
 
 export interface AddUserGroupMembersResponse {
   duration: string;
-
   user_group?: UserGroupResponse;
 }
 
@@ -412,35 +374,25 @@ export interface AppEventResponse {
    * boolean
    */
   auto_translation_enabled: boolean;
-
   /**
    * string
    */
   name: string;
-
   /**
    * boolean
    */
   async_url_enrich_enabled?: boolean;
-
   file_upload_config?: FileUploadConfig;
-
   image_upload_config?: FileUploadConfig;
 }
 
 export interface AppResponseFields {
   async_url_enrich_enabled: boolean;
-
   auto_translation_enabled: boolean;
-
   id: number;
-
   name: string;
-
   placement: string;
-
   file_upload_config: FileUploadConfig;
-
   image_upload_config: FileUploadConfig;
 }
 
@@ -448,18 +400,14 @@ export interface AppUpdatedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   app: AppEventResponse;
-
   custom: CustomEventData;
-
   /**
    * The type of event: "app.updated" in this case
    */
   type: string;
-
-  received_at?: number;
+  received_at?: TimestampNS;
 }
 
 export interface AppealItemResponse {
@@ -467,100 +415,86 @@ export interface AppealItemResponse {
    * Reason Text of the Appeal Item
    */
   appeal_reason: string;
-
   /**
    * When the flag was created
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * ID of the entity
    */
   entity_id: string;
-
   /**
    * Type of entity
    */
   entity_type: string;
-
   id: string;
-
   /**
    * Status of the Appeal Item
    */
   status: string;
-
   /**
    * When the flag was last updated
    */
-  updated_at: number;
-
+  updated_at: TimestampNS;
   /**
    * Text severity level assigned by the AI provider
    */
   ai_text_severity?: string;
-
   /**
-   * CID of the channel the entity belongs to, if applicable
+   * Detected language of the appeal_reason text itself
+   */
+  appeal_reason_language?: string;
+  /**
+   * CID of the channel the entity belongs to (content appeals), or of the channel ban being appealed (stream:user appeals). Empty for a global ban appeal.
    */
   channel_cid?: string;
-
   /**
    * Moderation policy key that was applied
    */
   config_key?: string;
-
   /**
    * Decision Reason of the Appeal Item
    */
   decision_reason?: string;
-
   /**
    * Action recommended by the automated moderation system (e.g. flag, remove, shadow)
    */
   recommended_action?: string;
-
   /**
    * ID of the review queue item linked to this appeal, if the appeal was submitted with one
    */
   review_queue_item_id?: string;
-
   /**
    * Overall content severity score (1–100)
    */
   severity?: number;
-
   /**
    * Full chronological history of all moderation actions on the review queue item
    */
   actions?: Array<ActionLogResponse>;
-
   /**
    * Attachments(e.g. Images) of the Appeal Item
    */
   attachments?: Array<string>;
-
   /**
    * Classification labels from automated and manual review
    */
   flag_labels?: Array<string>;
-
   /**
    * Types of flags applied to the entity (e.g. user_report, bodyguard)
    */
   flag_types?: Array<string>;
-
   /**
    * Per-provider flag records explaining why the action was taken
    */
   flags?: Array<ModerationFlagResponse>;
-
+  /**
+   * Detected languages in the content
+   */
+  languages?: Array<string>;
   entity_content?: ModerationPayload;
-
   moderation_action?: ActionLogResponse;
-
   original_moderation_action?: ActionLogResponse;
-
   /**
    * User response object
    */
@@ -572,22 +506,22 @@ export interface AppealRequest {
    * Explanation for why the content is being appealed
    */
   appeal_reason: string;
-
   /**
    * Unique identifier of the entity being appealed
    */
   entity_id: string;
-
   /**
    * Type of entity being appealed (e.g., message, user)
    */
   entity_type: string;
-
+  /**
+   * CID of the channel ban being appealed. Only used when entity_type is stream:user; omit to appeal the global ban.
+   */
+  channel_cid?: string;
   /**
    * ID of the review queue item (flagged message) that triggered the ban. Applicable only for user ban appeals.
    */
   review_queue_item_id?: string;
-
   /**
    * Array of Attachment URLs(e.g., images)
    */
@@ -599,68 +533,42 @@ export interface AppealResponse {
    * Unique identifier of the created Appeal item
    */
   appeal_id: string;
-
   duration: string;
 }
 
 export interface Attachment {
   custom: CustomAttachmentData;
-
   asset_url?: string;
-
   author_icon?: string;
-
   author_link?: string;
-
   author_name?: string;
-
   color?: string;
-
   fallback?: string;
-
   footer?: string;
-
   footer_icon?: string;
-
   image_url?: string;
-
   og_scrape_url?: string;
-
   original_height?: number;
-
   original_width?: number;
-
   pretext?: string;
-
   text?: string;
-
   thumb_url?: string;
-
   title?: string;
-
   title_link?: string;
-
   /**
    * Attachment type (e.g. image, video, url)
    */
   type?: string;
-
   actions?: Array<Action>;
-
   fields?: Array<Field>;
-
   giphy?: Images;
 }
 
 export interface AutomodDetailsResponse {
   action?: string;
-
   original_message_type?: string;
-
   image_labels?: Array<string>;
-
   message_details?: FlagMessageDetailsResponse;
-
   /**
    * Result of the message moderation
    */
@@ -669,41 +577,31 @@ export interface AutomodDetailsResponse {
 
 export interface AutomodPlatformCircumventionConfig {
   enabled: boolean;
-
   rules: Array<AutomodRule>;
-
   async?: boolean;
 }
 
 export interface AutomodRule {
   action: 'flag' | 'shadow' | 'remove' | 'bounce' | 'bounce_flag' | 'bounce_remove';
-
   label: string;
-
   threshold: number;
 }
 
 export interface AutomodSemanticFiltersConfig {
   enabled: boolean;
-
   rules: Array<AutomodSemanticFiltersRule>;
-
   async?: boolean;
 }
 
 export interface AutomodSemanticFiltersRule {
   action: 'flag' | 'shadow' | 'remove' | 'bounce' | 'bounce_flag' | 'bounce_remove';
-
   name: string;
-
   threshold: number;
 }
 
 export interface AutomodToxicityConfig {
   enabled: boolean;
-
   rules: Array<AutomodRule>;
-
   async?: boolean;
 }
 
@@ -712,40 +610,31 @@ export interface BanActionRequestPayload {
    * Also ban user from all channels this moderator creates in the future
    */
   ban_from_future_channels?: boolean;
-
   /**
    * Ban only from specific channel
    */
   channel_ban_only?: boolean;
-
   channel_cid?: string;
-
   /**
    * Message deletion mode: soft, pruning, or hard
    */
-
   delete_messages?: 'soft' | 'pruning' | 'hard';
-
   /**
    * Whether to ban by IP address
    */
   ip_ban?: boolean;
-
   /**
    * Reason for the ban
    */
   reason?: string;
-
   /**
    * Whether this is a shadow ban
    */
   shadow?: boolean;
-
   /**
    * Optional: ban user directly without review item
    */
   target_user_id?: string;
-
   /**
    * Duration of ban in minutes
    */
@@ -756,35 +645,28 @@ export interface BanInfoResponse {
   /**
    * When the ban was created
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * The channel this ban applies to. Empty if this is an app-wide (global) ban rather than a per-channel ban.
    */
   channel_cid?: string;
-
   /**
    * When the ban expires
    */
-  expires?: number;
-
+  expires?: TimestampNS;
   /**
    * Reason for the ban
    */
   reason?: string;
-
   /**
    * Whether this is a shadow ban
    */
   shadow?: boolean;
-
   channel?: ChannelMetadata;
-
   /**
    * User response object
    */
   created_by?: UserResponse;
-
   /**
    * User response object
    */
@@ -793,13 +675,9 @@ export interface BanInfoResponse {
 
 export interface BanOptions {
   delete_messages?: 'soft' | 'pruning' | 'hard';
-
   duration?: number;
-
   ip_ban?: boolean;
-
   reason?: string;
-
   shadow_ban?: boolean;
 }
 
@@ -808,29 +686,23 @@ export interface BanRequest {
    * ID of the user to ban
    */
   target_user_id: string;
-
   /**
    * Channel where the ban applies
    */
   channel_cid?: string;
-
   delete_messages?: 'soft' | 'pruning' | 'hard';
-
   /**
    * Whether to ban the user's IP address
    */
   ip_ban?: boolean;
-
   /**
    * Optional explanation for the ban
    */
   reason?: string;
-
   /**
    * Whether this is a shadow ban
    */
   shadow?: boolean;
-
   /**
    * Duration of the ban in minutes
    */
@@ -838,24 +710,18 @@ export interface BanRequest {
 }
 
 export interface BanResponse {
-  created_at: number;
-
-  expires?: number;
-
+  created_at: TimestampNS;
+  expires?: TimestampNS;
   reason?: string;
-
   shadow?: boolean;
-
   /**
    * User response object
    */
   banned_by?: UserResponse;
-
   /**
    * Represents channel in chat
    */
   channel?: ChannelResponse;
-
   /**
    * User response object
    */
@@ -871,11 +737,8 @@ export interface BlockActionRequestPayload {
 
 export interface BlockListConfig {
   enabled: boolean;
-
   rules: Array<BlockListRule>;
-
   async?: boolean;
-
   match_substring?: boolean;
 }
 
@@ -883,9 +746,7 @@ export interface BlockListOptions {
   /**
    * Blocklist behavior. One of: flag, block, shadow_block
    */
-
   behavior: 'flag' | 'block' | 'shadow_block';
-
   /**
    * Blocklist name
    */
@@ -894,43 +755,32 @@ export interface BlockListOptions {
 
 export interface BlockListResponse {
   is_confusable_folding_enabled: boolean;
-
   is_leet_check_enabled: boolean;
-
   is_plural_check_enabled: boolean;
-
   is_substring_matching_enabled: boolean;
-
   /**
    * Block list name
    */
   name: string;
-
   /**
    * Block list type. One of: regex, domain, domain_allowlist, email, email_allowlist, word
    */
   type: string;
-
   /**
    * List of words to block
    */
   words: Array<string>;
-
   /**
    * Date/time of creation
    */
-  created_at?: number;
-
+  created_at?: TimestampNS;
   id?: string;
-
   owner_user_id?: string;
-
   team?: string;
-
   /**
    * Date/time of the last update
    */
-  updated_at?: number;
+  updated_at?: TimestampNS;
 }
 
 export interface BlockListRule {
@@ -943,9 +793,7 @@ export interface BlockListRule {
     | 'bounce'
     | 'bounce_flag'
     | 'bounce_remove';
-
   name: string;
-
   team: string;
 }
 
@@ -961,17 +809,14 @@ export interface BlockUsersResponse {
    * User id who blocked another user
    */
   blocked_by_user_id: string;
-
   /**
    * User id who got blocked
    */
   blocked_user_id: string;
-
   /**
    * Timestamp when the user was blocked
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Duration of the request in milliseconds
    */
@@ -983,19 +828,15 @@ export interface BlockedUserResponse {
    * ID of the user who got blocked
    */
   blocked_user_id: string;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * ID of the user who blocked another user
    */
   user_id: string;
-
   /**
    * User response object
    */
   blocked_user: UserResponse;
-
   /**
    * User response object
    */
@@ -1004,9 +845,7 @@ export interface BlockedUserResponse {
 
 export interface BodyguardProfileSummary {
   name: string;
-
   display_name?: string;
-
   text_type?: string;
 }
 
@@ -1021,9 +860,7 @@ export interface BodyguardRule {
     | 'bounce'
     | 'bounce_flag'
     | 'bounce_remove';
-
   label: string;
-
   severity_rules: Array<BodyguardSeverityRule>;
 }
 
@@ -1037,7 +874,6 @@ export interface BodyguardSeverityRule {
     | 'bounce'
     | 'bounce_flag'
     | 'bounce_remove';
-
   severity: 'low' | 'medium' | 'high' | 'critical';
 }
 
@@ -1045,34 +881,27 @@ export interface BulkActionAppealsRequest {
   /**
    * Action to apply: unban, restore, unblock, mark_reviewed, or reject_appeal
    */
-
   action_type: 'unban' | 'restore' | 'unblock' | 'mark_reviewed' | 'reject_appeal';
-
   /**
    * List of appeal UUIDs to process
    */
   appeal_ids: Array<string>;
-
   /**
    * Configuration for mark reviewed action
    */
   mark_reviewed?: MarkReviewedRequestPayload;
-
   /**
    * Configuration for rejecting an appeal
    */
   reject_appeal?: RejectAppealRequestPayload;
-
   /**
    * Configuration for restore action. State-aware: reverses whichever of a delete, a block, or a shadow block currently applies to the content (including both a delete and a block/shadow block at once).
    */
   restore?: RestoreActionRequestPayload;
-
   /**
    * Configuration for unban moderation action
    */
   unban?: UnbanActionRequestPayload;
-
   /**
    * Deprecated: use restore instead — it now also reverses a block or shadow block. Configuration for unblock action.
    */
@@ -1081,12 +910,10 @@ export interface BulkActionAppealsRequest {
 
 export interface BulkActionAppealsResponse {
   duration: string;
-
   /**
    * Appeals that could not be processed, with per-item error messages
    */
   errors: Array<BulkAppealError>;
-
   /**
    * Successfully processed appeals
    */
@@ -1095,13 +922,11 @@ export interface BulkActionAppealsResponse {
 
 export interface BulkAppealError {
   appeal_id: string;
-
   error: string;
 }
 
 export interface BulkAppealResult {
   appeal_id: string;
-
   appeal_item?: AppealItemResponse;
 }
 
@@ -1117,7 +942,6 @@ export interface BulkDeleteActionConfigResponse {
    * Number of action configs deleted
    */
   deleted: number;
-
   duration: string;
 }
 
@@ -1130,7 +954,6 @@ export interface BulkUpsertActionConfigRequest {
 
 export interface BulkUpsertActionConfigResponse {
   duration: string;
-
   /**
    * The created or updated action configs in the same order as the request
    */
@@ -1143,31 +966,22 @@ export interface BypassActionRequest {
 
 export interface CallActionOptions {
   duration?: number;
-
   flag_reason?: string;
-
   kick_reason?: string;
-
   mute_audio?: boolean;
-
   mute_video?: boolean;
-
   reason?: string;
-
   warning_text?: string;
 }
 
 export interface CallCustomPropertyParameters {
   operator?: string;
-
   property_key?: string;
 }
 
 export interface CallRuleActionSequence {
   violation_number?: number;
-
   actions?: Array<string>;
-
   call_options?: CallActionOptions;
 }
 
@@ -1177,7 +991,6 @@ export interface CallTypeRuleParameters {
 
 export interface CallViolationCountParameters {
   threshold?: number;
-
   time_window?: string;
 }
 
@@ -1187,153 +1000,100 @@ export interface CastPollVoteRequest {
 
 export interface ChannelConfigOverrides {
   blocklist?: string;
-
   blocklist_behavior?: 'flag' | 'block';
-
   /**
    * Enable/disable message counting
    */
   count_messages?: boolean;
-
   /**
    * Overrides max message length
    */
   max_message_length?: number;
-
   /**
    * Overrides the push notification level for this channel
    */
-
   push_level?: 'all' | 'all_mentions' | 'mentions' | 'direct_mentions' | 'none';
-
   /**
    * Enables message quotes
    */
   quotes?: boolean;
-
   /**
    * Enables or disables reactions
    */
   reactions?: boolean;
-
   /**
    * Enables message replies (threads)
    */
   replies?: boolean;
-
   /**
    * Enable/disable shared locations
    */
   shared_locations?: boolean;
-
   /**
    * Enables or disables typing events
    */
   typing_events?: boolean;
-
   /**
    * Enables or disables file uploads
    */
   uploads?: boolean;
-
   /**
    * Enables or disables URL enrichment
    */
   url_enrichment?: boolean;
-
   /**
    * Enable/disable user message reminders
    */
   user_message_reminders?: boolean;
-
   /**
    * List of commands that channel supports
    */
   commands?: Array<string>;
-
   chat_preferences?: ChatPreferences;
-
   grants?: Record<string, Array<string>>;
 }
 
 export interface ChannelConfigWithInfo {
   automod: 'disabled' | 'simple' | 'AI';
-
   automod_behavior: 'flag' | 'block' | 'shadow_block';
-
   connect_events: boolean;
-
   count_messages: boolean;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   custom_events: boolean;
-
   delivery_events: boolean;
-
   mark_messages_pending: boolean;
-
   max_message_length: number;
-
   message_retention: string;
-
   mutes: boolean;
-
   name: string;
-
   polls: boolean;
-
   push_notifications: boolean;
-
   quotes: boolean;
-
   reactions: boolean;
-
   read_events: boolean;
-
   reminders: boolean;
-
   replies: boolean;
-
   search: boolean;
-
   shared_locations: boolean;
-
   skip_last_msg_update_for_system_msgs: boolean;
-
   typing_events: boolean;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   uploads: boolean;
-
   url_enrichment: boolean;
-
   user_message_reminders: boolean;
-
   commands: Array<Command>;
-
   blocklist?: string;
-
   blocklist_behavior?: 'flag' | 'block' | 'shadow_block';
-
   partition_size?: number;
-
   partition_ttl?: string;
-
   push_level?: 'all' | 'all_mentions' | 'mentions' | 'direct_mentions' | 'none';
-
   allowed_flag_reasons?: Array<string>;
-
   blocklists?: Array<BlockListOptions>;
-
   /**
    * Sets thresholds for AI moderation
    */
   automod_thresholds?: Thresholds;
-
   chat_preferences?: ChatPreferences;
-
   grants?: Record<string, Array<string>>;
 }
 
@@ -1342,17 +1102,14 @@ export interface ChannelContextResponse {
    * Channel CID (<type>:<id>)
    */
   cid: string;
-
   /**
    * Channel ID
    */
   id: string;
-
   /**
    * Channel type
    */
   type: string;
-
   /**
    * User response object
    */
@@ -1363,51 +1120,39 @@ export interface ChannelCreatedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Represents channel in chat
    */
   channel: ChannelResponse;
-
   custom: CustomEventData;
-
   /**
    * The type of event: "channel.created" in this case
    */
   type: string;
-
   /**
    * The ID of the channel which was created
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   channel_message_count?: number;
-
   /**
    * The type of the channel which was created
    */
   channel_type?: string;
-
   /**
    * The CID of the channel which was created
    */
   cid?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   channel_custom?: CustomChannelData;
-
   user?: UserResponseCommonFields;
 }
 
@@ -1415,51 +1160,39 @@ export interface ChannelDeletedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Represents channel in chat
    */
   channel: ChannelResponse;
-
   custom: CustomEventData;
-
   /**
    * The type of event: "channel.deleted" in this case
    */
   type: string;
-
   /**
    * The ID of the channel which was deleted
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   channel_message_count?: number;
-
   /**
    * The type of the channel which was deleted
    */
   channel_type?: string;
-
   /**
    * The CID of the channel which was deleted
    */
   cid?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   channel_custom?: CustomChannelData;
-
   user?: UserResponseCommonFields;
 }
 
@@ -1467,31 +1200,25 @@ export interface ChannelFrozenEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   /**
    * The type of event: "channel.frozen" in this case
    */
   type: string;
-
   /**
    * The ID of the channel which was frozen
    */
   channel_id?: string;
-
   /**
    * The type of the channel which was frozen
    */
   channel_type?: string;
-
   /**
    * The CID of the channel which was frozen
    */
   cid?: string;
-
-  received_at?: number;
+  received_at?: TimestampNS;
 }
 
 export interface ChannelGetOrCreateRequest {
@@ -1499,35 +1226,26 @@ export interface ChannelGetOrCreateRequest {
    * Whether this channel will be hidden for the user who created the channel or not
    */
   hide_for_creator?: boolean;
-
   /**
    * Fetch user presence info
    */
   presence?: boolean;
-
   /**
    * Refresh channel state
    */
   state?: boolean;
-
   thread_unread_counts?: boolean;
-
   /**
    * Start watching the channel
    */
   watch?: boolean;
-
   /**
    * Top-level keys of the message sender's channel-member custom data to include under member.custom (max 8 keys, 64 chars each)
    */
   member_custom_include?: Array<string>;
-
   data?: ChannelInput;
-
   members?: PaginationParams;
-
   messages?: MessagePaginationParams;
-
   watchers?: PaginationParams;
 }
 
@@ -1536,55 +1254,42 @@ export interface ChannelHiddenEvent {
    * Whether the history was cleared
    */
   clear_history: boolean;
-
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Represents channel in chat
    */
   channel: ChannelResponse;
-
   custom: CustomEventData;
-
   /**
    * The type of event: "channel.hidden" in this case
    */
   type: string;
-
   /**
    * The ID of the channel which was hidden
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   channel_message_count?: number;
-
   /**
    * The type of the channel which was hidden
    */
   channel_type?: string;
-
   /**
    * The CID of the channel which was hidden
    */
   cid?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   channel_custom?: CustomChannelData;
-
   user?: UserResponseCommonFields;
 }
 
@@ -1593,72 +1298,51 @@ export interface ChannelInput {
    * Enable or disable auto translation
    */
   auto_translation_enabled?: boolean;
-
   /**
    * Language (or comma-separated list of languages) to translate to when auto translation is active
    */
   auto_translation_language?: string;
-
   created_by_id?: string;
-
   disabled?: boolean;
-
   /**
    * Freeze or unfreeze the channel
    */
   frozen?: boolean;
-
   /**
    * Team the channel belongs to (if multi-tenant mode is enabled)
    */
   team?: string;
-
   truncated_by_id?: string;
-
   filter_tags?: Array<string>;
-
   invites?: Array<ChannelMemberRequest>;
-
   members?: Array<ChannelMemberRequest>;
-
   /**
    * Channel configuration overrides
    */
   config_overrides?: ChannelConfigOverrides;
-
   /**
    * User request object
    */
   created_by?: UserRequest;
-
   custom?: CustomChannelData;
 }
 
 export interface ChannelInputRequest {
   auto_translation_enabled?: boolean;
-
   auto_translation_language?: string;
-
   disabled?: boolean;
-
   frozen?: boolean;
-
   team?: string;
-
   invites?: Array<ChannelMemberRequest>;
-
   members?: Array<ChannelMemberRequest>;
-
   /**
    * Channel configuration overrides
    */
   config_overrides?: ConfigOverridesRequest;
-
   /**
    * User request object
    */
   created_by?: UserRequest;
-
   custom?: CustomChannelData;
 }
 
@@ -1666,44 +1350,34 @@ export interface ChannelKickedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   /**
    * The type of event: "channel.kicked" in this case
    */
   type: string;
-
   /**
    * The ID of the channel which was kicked
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   channel_message_count?: number;
-
   /**
    * The type of the channel which was kicked
    */
   channel_type?: string;
-
   /**
    * The CID of the channel which was kicked
    */
   cid?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   channel_custom?: CustomChannelData;
 }
 
@@ -1712,12 +1386,10 @@ export interface ChannelMemberPartialResponse {
    * Role of the member in the channel
    */
   channel_role: string;
-
   /**
    * Whether the user muted notifications for this channel
    */
   notifications_muted: boolean;
-
   /**
    * Channel-member custom fields projected via `member_custom_include`
    */
@@ -1729,11 +1401,8 @@ export interface ChannelMemberRequest {
    * Role of the member in the channel
    */
   channel_role?: string;
-
   user_id?: string;
-
   custom?: CustomMemberData;
-
   user?: MemberUserRequest;
 }
 
@@ -1742,83 +1411,62 @@ export interface ChannelMemberResponse {
    * Whether member is banned this channel or not
    */
   banned: boolean;
-
   /**
    * Role of the member in the channel
    */
   channel_role: string;
-
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   notifications_muted: boolean;
-
   /**
    * Whether member is shadow banned in this channel or not
    */
   shadow_banned: boolean;
-
   /**
    * Date/time of the last update
    */
-  updated_at: number;
-
+  updated_at: TimestampNS;
   custom: CustomMemberData;
-
-  archived_at?: number;
-
+  archived_at?: TimestampNS;
   /**
    * Expiration date of the ban
    */
-  ban_expires?: number;
-
+  ban_expires?: TimestampNS;
   /**
    * Whether the member's ban also applies to channels the channel's creator will create in the future (an active future channel ban by the creator targets this member)
    */
   ban_from_future_channels?: boolean;
-
-  deleted_at?: number;
-
+  deleted_at?: TimestampNS;
   /**
    * Expiration date of the future channel ban; absent when the future channel ban is permanent
    */
-  future_channel_ban_expires?: number;
-
+  future_channel_ban_expires?: TimestampNS;
   /**
    * Date when invite was accepted
    */
-  invite_accepted_at?: number;
-
+  invite_accepted_at?: TimestampNS;
   /**
    * Date when invite was rejected
    */
-  invite_rejected_at?: number;
-
+  invite_rejected_at?: TimestampNS;
   /**
    * Whether member was invited or not
    */
   invited?: boolean;
-
   /**
    * Whether member is channel moderator or not
    */
   is_moderator?: boolean;
-
-  pinned_at?: number;
-
+  pinned_at?: TimestampNS;
   /**
    * Permission level of the member in the channel (DEPRECATED: use channel_role instead). One of: member, moderator, admin, owner
    */
   role?: string;
-
   status?: string;
-
   user_id?: string;
-
   deleted_messages?: Array<string>;
-
   /**
    * User response object
    */
@@ -1827,27 +1475,18 @@ export interface ChannelMemberResponse {
 
 export interface ChannelMessageCountRuleParameters {
   operator?: string;
-
   threshold?: number;
 }
 
 export interface ChannelMetadata {
   cid: string;
-
   id: string;
-
   type: string;
-
   custom: CustomChannelData;
-
-  last_message_at?: number;
-
+  last_message_at?: TimestampNS;
   member_count?: number;
-
   message_count?: number;
-
   push_level?: string;
-
   team?: string;
 }
 
@@ -1855,23 +1494,19 @@ export interface ChannelMute {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Date/time of the last update
    */
-  updated_at: number;
-
+  updated_at: TimestampNS;
   /**
    * Date/time of mute expiration
    */
-  expires?: number;
-
+  expires?: TimestampNS;
   /**
    * Represents channel in chat
    */
   channel?: ChannelResponse;
-
   /**
    * User response object
    */
@@ -1928,9 +1563,7 @@ export type ChannelOwnCapability =
 
 export interface ChannelPushPreferencesResponse {
   chat_level?: string;
-
-  disabled_until?: number;
-
+  disabled_until?: TimestampNS;
   chat_preferences?: ChatPreferencesResponse;
 }
 
@@ -1939,131 +1572,104 @@ export interface ChannelResponse {
    * Channel CID (<type>:<id>)
    */
   cid: string;
-
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   disabled: boolean;
-
   /**
    * Whether channel is frozen or not
    */
   frozen: boolean;
-
   /**
    * Channel unique ID
    */
   id: string;
-
   /**
    * Type of the channel
    */
   type: string;
-
   /**
    * Date/time of the last update
    */
-  updated_at: number;
-
+  updated_at: TimestampNS;
   /**
    * Custom data for this object
    */
   custom: CustomChannelData;
-
   /**
    * Whether auto translation is enabled or not
    */
   auto_translation_enabled?: boolean;
-
   /**
    * Language (or comma-separated list of languages) to translate to when auto translation is active
    */
   auto_translation_language?: string;
-
   /**
    * Whether this channel is blocked by current user or not
    */
   blocked?: boolean;
-
   /**
    * Cooldown period after sending each message
    */
   cooldown?: number;
-
   /**
    * Date/time of deletion
    */
-  deleted_at?: number;
-
+  deleted_at?: TimestampNS;
   /**
    * Whether this channel is hidden by current user or not
    */
   hidden?: boolean;
-
   /**
    * Date since when the message history is accessible
    */
-  hide_messages_before?: number;
-
+  hide_messages_before?: TimestampNS;
   /**
    * Date of the last message sent
    */
-  last_message_at?: number;
-
+  last_message_at?: TimestampNS;
   /**
    * Number of members in the channel
    */
   member_count?: number;
-
   /**
    * Number of messages in the channel
    */
   message_count?: number;
-
   /**
    * Date of mute expiration
    */
-  mute_expires_at?: number;
-
+  mute_expires_at?: TimestampNS;
   /**
    * Whether this channel is muted or not
    */
   muted?: boolean;
-
   /**
    * Team the channel belongs to (multi-tenant only)
    */
   team?: string;
-
   /**
    * Date of the latest truncation of the channel
    */
-  truncated_at?: number;
-
+  truncated_at?: TimestampNS;
   /**
    * List of filter tags associated with the channel
    */
   filter_tags?: Array<string>;
-
   /**
    * List of channel members (max 100)
    */
   members?: Array<ChannelMemberResponse>;
-
   /**
    * List of channel capabilities of authenticated user
    */
   own_capabilities?: Array<ChannelOwnCapability>;
-
   config?: ChannelConfigWithInfo;
-
   /**
    * User response object
    */
   created_by?: UserResponse;
-
   /**
    * User response object
    */
@@ -2072,38 +1678,23 @@ export interface ChannelResponse {
 
 export interface ChannelStateResponse {
   duration: string;
-
   members: Array<ChannelMemberResponse>;
-
   messages: Array<MessageResponse>;
-
   pinned_messages: Array<MessageResponse>;
-
   threads: Array<ThreadStateResponse>;
-
   hidden?: boolean;
-
-  hide_messages_before?: number;
-
+  hide_messages_before?: TimestampNS;
   watcher_count?: number;
-
   active_live_locations?: Array<SharedLocationResponseData>;
-
   pending_messages?: Array<PendingMessageResponse>;
-
   read?: Array<ReadStateResponse>;
-
   watchers?: Array<UserResponse>;
-
   /**
    * Represents channel in chat
    */
   channel?: ChannelResponse;
-
   draft?: DraftResponse;
-
   membership?: ChannelMemberResponse;
-
   push_preferences?: ChannelPushPreferencesResponse;
 }
 
@@ -2112,63 +1703,49 @@ export interface ChannelStateResponseFields {
    * List of channel members
    */
   members: Array<ChannelMemberResponse>;
-
   /**
    * List of channel messages
    */
   messages: Array<MessageResponse>;
-
   /**
    * List of pinned messages in the channel
    */
   pinned_messages: Array<MessageResponse>;
-
   threads: Array<ThreadStateResponse>;
-
   /**
    * Whether this channel is hidden or not
    */
   hidden?: boolean;
-
   /**
    * Messages before this date are hidden from the user
    */
-  hide_messages_before?: number;
-
+  hide_messages_before?: TimestampNS;
   /**
    * Number of channel watchers
    */
   watcher_count?: number;
-
   /**
    * Active live locations in the channel
    */
   active_live_locations?: Array<SharedLocationResponseData>;
-
   /**
    * Pending messages that this user has sent
    */
   pending_messages?: Array<PendingMessageResponse>;
-
   /**
    * List of read states
    */
   read?: Array<ReadStateResponse>;
-
   /**
    * List of user who is watching the channel
    */
   watchers?: Array<UserResponse>;
-
   /**
    * Represents channel in chat
    */
   channel?: ChannelResponse;
-
   draft?: DraftResponse;
-
   membership?: ChannelMemberResponse;
-
   push_preferences?: ChannelPushPreferencesResponse;
 }
 
@@ -2178,58 +1755,44 @@ export interface ChannelTruncatedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Represents channel in chat
    */
   channel: ChannelResponse;
-
   custom: CustomEventData;
-
   /**
    * The type of event: "channel.truncated" in this case
    */
   type: string;
-
   /**
    * The ID of the channel which was truncated
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   channel_message_count?: number;
-
   /**
    * The type of the channel which was truncated
    */
   channel_type?: string;
-
   /**
    * The CID of the channel which was truncated
    */
   cid?: string;
-
   message_id?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   channel_custom?: CustomChannelData;
-
   /**
    * Represents any chat message
    */
   message?: MessageResponse;
-
   user?: UserResponseCommonFields;
 }
 
@@ -2237,89 +1800,69 @@ export interface ChannelUnFrozenEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   /**
    * The type of event: "channel.unfrozen" in this case
    */
   type: string;
-
   /**
    * The ID of the channel which was unfrozen
    */
   channel_id?: string;
-
   /**
    * The type of the channel which was unfrozen
    */
   channel_type?: string;
-
   /**
    * The CID of the channel which was unfrozen
    */
   cid?: string;
-
-  received_at?: number;
+  received_at?: TimestampNS;
 }
 
 export interface ChannelUpdatedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Represents channel in chat
    */
   channel: ChannelResponse;
-
   custom: CustomEventData;
-
   /**
    * The type of event: "channel.updated" in this case
    */
   type: string;
-
   /**
    * The ID of the channel which was updated
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   channel_message_count?: number;
-
   /**
    * The type of the channel which was updated
    */
   channel_type?: string;
-
   /**
    * The CID of the channel which was updated
    */
   cid?: string;
-
   message_id?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   channel_custom?: CustomChannelData;
-
   /**
    * Represents any chat message
    */
   message?: MessageResponse;
-
   user?: UserResponseCommonFields;
 }
 
@@ -2327,287 +1870,178 @@ export interface ChannelVisibleEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Represents channel in chat
    */
   channel: ChannelResponse;
-
   custom: CustomEventData;
-
   /**
    * The type of event: "channel.visible" in this case
    */
   type: string;
-
   /**
    * The ID of the channel which was shown
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   channel_message_count?: number;
-
   /**
    * The type of the channel which was shown
    */
   channel_type?: string;
-
   /**
    * The CID of the channel which was shown
    */
   cid?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   channel_custom?: CustomChannelData;
-
   user?: UserResponseCommonFields;
 }
 
 export interface ChatDraftPayloadResponse {
   id: string;
-
   text: string;
-
   custom: CustomMessageData;
-
   html?: string;
-
   mml?: string;
-
   parent_id?: string;
-
   poll_id?: string;
-
   quoted_message_id?: string;
-
   show_in_channel?: boolean;
-
   silent?: boolean;
-
   type?: string;
-
   attachments?: Array<Attachment>;
-
   mentioned_users?: Array<UserResponse>;
 }
 
 export interface ChatDraftResponse {
   channel_cid: string;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   message: ChatDraftPayloadResponse;
-
   parent_id?: string;
-
   parent_message?: ChatMessageResponse;
-
   quoted_message?: ChatMessageResponse;
 }
 
 export interface ChatMessageResponse {
   cid: string;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   deleted_reply_count: number;
-
   html: string;
-
   id: string;
-
   mentioned_channel: boolean;
-
   mentioned_here: boolean;
-
   pinned: boolean;
-
   reply_count: number;
-
   shadowed: boolean;
-
   silent: boolean;
-
   text: string;
-
   type: string;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   attachments: Array<Attachment>;
-
   latest_reactions: Array<ChatReactionResponse>;
-
   mentioned_users: Array<UserResponse>;
-
   own_reactions: Array<ChatReactionResponse>;
-
   restricted_visibility: Array<string>;
-
   custom: CustomMessageData;
-
   reaction_counts: Record<string, number>;
-
   reaction_scores: Record<string, number>;
-
   /**
    * User response object
    */
   user: UserResponse;
-
   command?: string;
-
-  deleted_at?: number;
-
+  deleted_at?: TimestampNS;
   deleted_for_me?: boolean;
-
-  message_text_updated_at?: number;
-
+  message_text_updated_at?: TimestampNS;
   mml?: string;
-
   parent_id?: string;
-
-  pin_expires?: number;
-
-  pinned_at?: number;
-
+  pin_expires?: TimestampNS;
+  pinned_at?: TimestampNS;
   poll_id?: string;
-
   quoted_message_id?: string;
-
   show_in_channel?: boolean;
-
   mentioned_group_ids?: Array<string>;
-
   mentioned_groups?: Array<UserGroupResponse>;
-
   mentioned_roles?: Array<string>;
-
   thread_participants?: Array<UserResponse>;
-
   draft?: ChatDraftResponse;
-
   i18n?: Record<string, string>;
-
   image_labels?: Record<string, Array<string>>;
-
   member?: ChannelMemberPartialResponse;
-
   moderation?: ChatModerationV2Response;
-
   /**
    * User response object
    */
   pinned_by?: UserResponse;
-
   poll?: PollResponseData;
-
   quoted_message?: ChatMessageResponse;
-
   reaction_groups?: Record<string, ChatReactionGroupResponse>;
-
   reminder?: ChatReminderResponseData;
-
   shared_location?: ChatSharedLocationResponseData;
 }
 
 export interface ChatModerationV2Response {
   action: string;
-
   original_text: string;
-
   blocklist_matched?: string;
-
   platform_circumvented?: boolean;
-
   semantic_filter_matched?: string;
-
   blocklists_matched?: Array<string>;
-
   image_harms?: Array<string>;
-
   text_harms?: Array<string>;
 }
 
 export interface ChatPreferences {
   channel_mentions?: string;
-
   default_preference?: string;
-
   direct_mentions?: string;
-
   distinct_channel_messages?: string;
-
   group_mentions?: string;
-
   here_mentions?: string;
-
   role_mentions?: string;
-
   thread_replies?: string;
 }
 
 export interface ChatPreferencesInput {
   channel_mentions?: 'all' | 'none';
-
   default_preference?: 'all' | 'none';
-
   direct_mentions?: 'all' | 'none';
-
   group_mentions?: 'all' | 'none';
-
   here_mentions?: 'all' | 'none';
-
   role_mentions?: 'all' | 'none';
-
   thread_replies?: 'all' | 'none';
 }
 
 export interface ChatPreferencesResponse {
   channel_mentions?: string;
-
   default_preference?: string;
-
   direct_mentions?: string;
-
   group_mentions?: string;
-
   here_mentions?: string;
-
   role_mentions?: string;
-
   thread_replies?: string;
 }
 
 export interface ChatReactionGroupResponse {
   count: number;
-
-  first_reaction_at: number;
-
-  last_reaction_at: number;
-
+  first_reaction_at: TimestampNS;
+  last_reaction_at: TimestampNS;
   sum_scores: number;
-
   latest_reactions_by: Array<ChatReactionGroupUserResponse>;
 }
 
 export interface ChatReactionGroupUserResponse {
-  created_at: number;
-
+  created_at: TimestampNS;
   user_id: string;
-
   /**
    * User response object
    */
@@ -2615,20 +2049,13 @@ export interface ChatReactionGroupUserResponse {
 }
 
 export interface ChatReactionResponse {
-  created_at: number;
-
+  created_at: TimestampNS;
   message_id: string;
-
   score: number;
-
   type: string;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   user_id: string;
-
   custom: CustomReactionData;
-
   /**
    * User response object
    */
@@ -2637,19 +2064,12 @@ export interface ChatReactionResponse {
 
 export interface ChatReminderResponseData {
   channel_cid: string;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   message_id: string;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   user_id: string;
-
-  remind_at?: number;
-
+  remind_at?: TimestampNS;
   message?: ChatMessageResponse;
-
   /**
    * User response object
    */
@@ -2658,35 +2078,22 @@ export interface ChatReminderResponseData {
 
 export interface ChatSharedLocationResponseData {
   channel_cid: string;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   created_by_device_id: string;
-
   latitude: number;
-
   longitude: number;
-
   message_id: string;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   user_id: string;
-
-  end_at?: number;
-
+  end_at?: TimestampNS;
   message?: ChatMessageResponse;
 }
 
 export interface ClosedCaptionRuleParameters {
   severity?: string;
-
   threshold?: number;
-
   time_window?: string;
-
   harm_labels?: Array<string>;
-
   llm_harm_labels?: Record<string, string>;
 }
 
@@ -2695,31 +2102,26 @@ export interface Command {
    * Arguments help text, shown in commands auto-completion
    */
   args: string;
-
   /**
    * Description, shown in commands auto-completion
    */
   description: string;
-
   /**
    * Unique command name
    */
   name: string;
-
   /**
    * Set name used for grouping commands
    */
   set: string;
-
   /**
    * Date/time of creation
    */
-  created_at?: number;
-
+  created_at?: TimestampNS;
   /**
    * Date/time of the last update
    */
-  updated_at?: number;
+  updated_at?: TimestampNS;
 }
 
 export interface ConfigOverridesRequest {
@@ -2727,72 +2129,56 @@ export interface ConfigOverridesRequest {
    * Blocklist name
    */
   blocklist?: string;
-
   /**
    * Blocklist behavior. One of: flag, block
    */
-
   blocklist_behavior?: 'flag' | 'block';
-
   /**
    * Enable/disable message counting
    */
   count_messages?: boolean;
-
   /**
    * Maximum message length
    */
   max_message_length?: number;
-
   push_level?: 'all' | 'all_mentions' | 'mentions' | 'direct_mentions' | 'none';
-
   /**
    * Enable/disable quotes
    */
   quotes?: boolean;
-
   /**
    * Enable/disable reactions
    */
   reactions?: boolean;
-
   /**
    * Enable/disable replies
    */
   replies?: boolean;
-
   /**
    * Enable/disable shared locations
    */
   shared_locations?: boolean;
-
   /**
    * Enable/disable typing events
    */
   typing_events?: boolean;
-
   /**
    * Enable/disable uploads
    */
   uploads?: boolean;
-
   /**
    * Enable/disable URL enrichment
    */
   url_enrichment?: boolean;
-
   /**
    * Enable/disable user message reminders
    */
   user_message_reminders?: boolean;
-
   /**
    * List of available commands
    */
   commands?: Array<string>;
-
   chat_preferences?: ChatPreferences;
-
   /**
    * Permission grants modifiers
    */
@@ -2804,104 +2190,73 @@ export interface ConfigResponse {
    * Whether moderation should be performed asynchronously
    */
   async: boolean;
-
   /**
    * When the configuration was created
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Unique identifier for the moderation configuration
    */
   key: string;
-
   /**
    * Team associated with the configuration
    */
   team: string;
-
   /**
    * When the configuration was last updated
    */
-  updated_at: number;
-
+  updated_at: TimestampNS;
   supported_video_call_harm_types: Array<string>;
-
   /**
    * Configurable image moderation label definitions for dashboard rendering
    */
   ai_image_label_definitions?: Array<AIImageLabelDefinition>;
-
   /**
    * Names of Bodyguard credential profiles registered on this app. The dashboard uses this list to render the profile picker on the AI Text section.
    */
   available_bodyguard_profiles?: Array<BodyguardProfileSummary>;
-
   ai_audio_config?: AIAudioConfigResponse;
-
   ai_image_config?: AIImageConfig;
-
   /**
    * Available L2 subclassifications per L1 image moderation label, based on the active provider
    */
   ai_image_subclassifications?: Record<string, Array<string>>;
-
   ai_text_config?: AITextConfig;
-
-  ai_video_config?: AIVideoConfig;
-
+  ai_video_config?: AIVideoConfigResponse;
   automod_platform_circumvention_config?: AutomodPlatformCircumventionConfig;
-
   automod_semantic_filters_config?: AutomodSemanticFiltersConfig;
-
   automod_toxicity_config?: AutomodToxicityConfig;
-
   block_list_config?: BlockListConfig;
-
   flood_config?: FloodConfig;
-
   llm_config?: LLMConfig;
-
   velocity_filter_config?: VelocityFilterConfig;
-
   video_call_rule_config?: VideoCallRuleConfig;
 }
 
 export interface ConnectUserDetailsRequest {
   id: string;
-
   image?: string;
-
   invisible?: boolean;
-
   language?: string;
-
   name?: string;
-
   custom?: CustomUserData;
-
   privacy_settings?: PrivacySettingsResponse;
 }
 
 export interface ContentCountRuleParameters {
   threshold?: number;
-
   time_window?: string;
 }
 
 export interface ContentCustomPropertyCountParameters {
   operator?: string;
-
   property_key?: string;
-
   threshold?: number;
-
   time_window?: string;
 }
 
 export interface ContentCustomPropertyParameters {
   operator?: string;
-
   property_key?: string;
 }
 
@@ -2910,26 +2265,18 @@ export interface CreateBlockListRequest {
    * Block list name
    */
   name: string;
-
   /**
    * List of words to block
    */
   words: Array<string>;
-
   is_confusable_folding_enabled?: boolean;
-
   is_leet_check_enabled?: boolean;
-
   is_plural_check_enabled?: boolean;
-
   is_substring_matching_enabled?: boolean;
-
   team?: string;
-
   /**
    * Block list type. One of: regex, domain, domain_allowlist, email, email_allowlist, word
    */
-
   type?: 'regex' | 'domain' | 'domain_allowlist' | 'email' | 'email_allowlist' | 'word';
 }
 
@@ -2938,7 +2285,6 @@ export interface CreateBlockListResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * Block list contains restricted words
    */
@@ -2950,23 +2296,18 @@ export interface CreateDeviceRequest {
    * Device ID
    */
   id: string;
-
   /**
    * Push provider
    */
-
   push_provider: 'firebase' | 'apn' | 'huawei' | 'xiaomi';
-
   /**
    * Stable physical device identifier used to deduplicate pushes across push providers (e.g. APNs VoIP and Firebase on the same iOS device). Distinct from 'id', which is the push token.
    */
   hardware_id?: string;
-
   /**
    * Push provider name
    */
   push_provider_name?: string;
-
   /**
    * When true the token is for Apple VoIP push notifications
    */
@@ -2985,7 +2326,6 @@ export interface CreateDraftResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   draft: DraftResponse;
 }
 
@@ -3001,12 +2341,10 @@ export interface CreateGuestResponse {
    * the access token to authenticate the user
    */
   access_token: string;
-
   /**
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * User response object
    */
@@ -3018,7 +2356,6 @@ export interface CreatePollOptionRequest {
    * Option text
    */
   text: string;
-
   /**
    * Custom data for this object
    */
@@ -3030,40 +2367,31 @@ export interface CreatePollRequest {
    * The name of the poll
    */
   name: string;
-
   /**
    * Indicates whether users can suggest user defined answers
    */
   allow_answers?: boolean;
-
   allow_user_suggested_options?: boolean;
-
   /**
    * A description of the poll
    */
   description?: string;
-
   /**
    * Indicates whether users can cast multiple votes
    */
   enforce_unique_vote?: boolean;
-
   id?: string;
-
   /**
    * Indicates whether the poll is open for voting
    */
   is_closed?: boolean;
-
   /**
    * Indicates the maximum amount of votes a user can cast
    */
   max_votes_allowed?: number;
-
+  team?: string;
   voting_visibility?: 'anonymous' | 'public';
-
   options?: Array<PollOptionInput>;
-
   /**
    * Custom data for this object
    */
@@ -3072,13 +2400,9 @@ export interface CreatePollRequest {
 
 export interface CreateQueueRequest {
   name: string;
-
   type: 'personal_view' | 'operational_queue';
-
   description?: string;
-
   sort?: Array<Record<string, any>>;
-
   filters?: Record<string, any>;
 }
 
@@ -3091,7 +2415,6 @@ export interface CreateReminderResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   reminder: ReminderResponseData;
 }
 
@@ -3100,22 +2423,18 @@ export interface CreateUserGroupRequest {
    * The user friendly name of the user group
    */
   name: string;
-
   /**
    * An optional description for the group
    */
   description?: string;
-
   /**
    * Optional user group ID. If not provided, a UUID v7 will be generated
    */
   id?: string;
-
   /**
    * Optional team ID to scope the group to a team
    */
   team_id?: string;
-
   /**
    * Optional initial list of user IDs to add as members
    */
@@ -3124,7 +2443,6 @@ export interface CreateUserGroupRequest {
 
 export interface CreateUserGroupResponse {
   duration: string;
-
   user_group?: UserGroupResponse;
 }
 
@@ -3133,7 +2451,6 @@ export interface CustomActionRequestPayload {
    * Custom action identifier
    */
   id?: string;
-
   /**
    * Custom action options
    */
@@ -3141,13 +2458,10 @@ export interface CustomActionRequestPayload {
 }
 
 export interface CustomEvent {
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   type: string;
-
-  received_at?: number;
+  received_at?: TimestampNS;
 }
 
 export interface Data {
@@ -3159,7 +2473,6 @@ export interface DeleteActionConfigResponse {
    * Number of action configs deleted (0 or 1)
    */
   deleted: number;
-
   duration: string;
 }
 
@@ -3168,17 +2481,14 @@ export interface DeleteActivityRequestPayload {
    * ID of the activity to delete (alternative to item_id)
    */
   entity_id?: string;
-
   /**
    * Type of the entity (required for delete_activity to distinguish v2 vs v3)
    */
   entity_type?: string;
-
   /**
    * Whether to permanently delete the activity
    */
   hard_delete?: boolean;
-
   /**
    * Reason for deletion
    */
@@ -3190,7 +2500,6 @@ export interface DeleteChannelResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * Represents channel in chat
    */
@@ -3202,9 +2511,8 @@ export interface DeleteChannelsRequest {
    * All channels that should be deleted
    */
   cids: Array<string>;
-
   /**
-   * Specify if channels and all ressources should be hard deleted
+   * Server-side only. When true, the channels and all their resources are permanently deleted instead of soft-deleted.
    */
   hard_delete?: boolean;
 }
@@ -3214,9 +2522,7 @@ export interface DeleteChannelsResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   task_id?: string;
-
   /**
    * Map of channel IDs and their deletion results
    */
@@ -3225,7 +2531,6 @@ export interface DeleteChannelsResponse {
 
 export interface DeleteChannelsResultResponse {
   status: string;
-
   error?: string;
 }
 
@@ -3234,17 +2539,14 @@ export interface DeleteCommentRequestPayload {
    * ID of the comment to delete (alternative to item_id)
    */
   entity_id?: string;
-
   /**
    * Type of the entity
    */
   entity_type?: string;
-
   /**
    * Whether to permanently delete the comment
    */
   hard_delete?: boolean;
-
   /**
    * Reason for deletion
    */
@@ -3256,17 +2558,14 @@ export interface DeleteMessageRequestPayload {
    * ID of the message to delete (alternative to item_id)
    */
   entity_id?: string;
-
   /**
    * Type of the entity
    */
   entity_type?: string;
-
   /**
    * Whether to permanently delete the message
    */
   hard_delete?: boolean;
-
   /**
    * Reason for deletion
    */
@@ -3278,7 +2577,6 @@ export interface DeleteMessageResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * Represents any chat message
    */
@@ -3296,17 +2594,14 @@ export interface DeleteReactionRequestPayload {
    * ID of the reaction to delete (alternative to item_id)
    */
   entity_id?: string;
-
   /**
    * Type of the entity
    */
   entity_type?: string;
-
   /**
    * Whether to permanently delete the reaction
    */
   hard_delete?: boolean;
-
   /**
    * Reason for deletion
    */
@@ -3318,12 +2613,10 @@ export interface DeleteReactionResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * Represents any chat message
    */
   message: MessageResponse;
-
   reaction: ReactionResponse;
 }
 
@@ -3338,29 +2631,23 @@ export interface DeleteUserMessagesRequestPayload {
   /**
    * Message deletion mode: soft, pruning, or hard
    */
-
   delete_messages: 'soft' | 'pruning' | 'hard';
-
   /**
    * Optional: scope deletion to a single channel (alternative to app-wide deletion)
    */
   channel_cid?: string;
-
   /**
    * Whether to also delete the user's reactions on other users' messages
    */
   delete_reactions?: boolean;
-
   /**
    * ID of the user whose messages should be deleted (alternative to item_id)
    */
   entity_id?: string;
-
   /**
    * Type of the entity
    */
   entity_type?: string;
-
   /**
    * Reason for the deletion
    */
@@ -3372,32 +2659,26 @@ export interface DeleteUserRequestPayload {
    * Also delete all user conversations
    */
   delete_conversation_channels?: boolean;
-
   /**
    * Delete flagged feeds content
    */
   delete_feeds_content?: boolean;
-
   /**
    * ID of the user to delete (alternative to item_id)
    */
   entity_id?: string;
-
   /**
    * Type of the entity
    */
   entity_type?: string;
-
   /**
    * Whether to permanently delete the user
    */
   hard_delete?: boolean;
-
   /**
    * Also delete all user messages
    */
   mark_messages_deleted?: boolean;
-
   /**
    * Reason for deletion
    */
@@ -3406,7 +2687,6 @@ export interface DeleteUserRequestPayload {
 
 export interface DeliveredMessagePayload {
   cid?: string;
-
   id?: string;
 }
 
@@ -3418,43 +2698,35 @@ export interface DeviceResponse {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Device ID
    */
   id: string;
-
   /**
    * Push provider
    */
   push_provider: string;
-
   /**
    * User ID
    */
   user_id: string;
-
   /**
    * Whether device is disabled or not
    */
   disabled?: boolean;
-
   /**
    * Reason explaining why device had been disabled
    */
   disabled_reason?: string;
-
   /**
    * Stable physical device identifier used to deduplicate pushes across push providers
    */
   hardware_id?: string;
-
   /**
    * Push provider name
    */
   push_provider_name?: string;
-
   /**
    * When true the token is for Apple VoIP push notifications
    */
@@ -3465,27 +2737,21 @@ export interface DraftDeletedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   /**
    * The type of event: "draft.deleted" in this case
    */
   type: string;
-
   /**
    * The CID of the channel where the draft was created
    */
   cid?: string;
-
   /**
    * The ID of the parent message
    */
   parent_id?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   draft?: DraftResponse;
 }
 
@@ -3494,56 +2760,44 @@ export interface DraftPayloadResponse {
    * Message ID is unique string identifier of the message
    */
   id: string;
-
   /**
    * Text of the message
    */
   text: string;
-
   custom: CustomMessageData;
-
   /**
    * Contains HTML markup of the message
    */
   html?: string;
-
   /**
    * MML content of the message
    */
   mml?: string;
-
   /**
    * ID of parent message (thread)
    */
   parent_id?: string;
-
   /**
    * Identifier of the poll to include in the message
    */
   poll_id?: string;
-
   quoted_message_id?: string;
-
   /**
    * Whether thread reply should be shown in the channel as well
    */
   show_in_channel?: boolean;
-
   /**
    * Whether message is silent or not
    */
   silent?: boolean;
-
   /**
    * Contains type of the message. One of: regular, system
    */
   type?: string;
-
   /**
    * Array of message attachments
    */
   attachments?: Array<Attachment>;
-
   /**
    * List of mentioned users
    */
@@ -3552,26 +2806,20 @@ export interface DraftPayloadResponse {
 
 export interface DraftResponse {
   channel_cid: string;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Contains the draft message content
    */
   message: DraftPayloadResponse;
-
   parent_id?: string;
-
   /**
    * Represents channel in chat
    */
   channel?: ChannelResponse;
-
   /**
    * Represents any chat message
    */
   parent_message?: MessageResponse;
-
   /**
    * Represents any chat message
    */
@@ -3582,81 +2830,52 @@ export interface DraftUpdatedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   /**
    * The type of event: "draft.updated" in this case
    */
   type: string;
-
   /**
    * The CID of the channel where the draft was created/updated
    */
   cid?: string;
-
   /**
    * The ID of the parent message
    */
   parent_id?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   draft?: DraftResponse;
 }
 
 export interface EnrichedActivity {
   foreign_id?: string;
-
   id?: string;
-
   score?: number;
-
   verb?: string;
-
   to?: Array<string>;
-
   actor?: Data;
-
   latest_reactions?: Record<string, Array<EnrichedReaction>>;
-
   object?: Data;
-
   origin?: Data;
-
   own_reactions?: Record<string, Array<EnrichedReaction>>;
-
   reaction_counts?: Record<string, number>;
-
   target?: Data;
 }
 
 export interface EnrichedReaction {
   activity_id: string;
-
   kind: string;
-
   user_id: string;
-
   id?: string;
-
   parent?: string;
-
   target_feeds?: Array<string>;
-
   children_counts?: Record<string, number>;
-
   created_at?: Time;
-
   data?: Record<string, any>;
-
   latest_children?: Record<string, Array<EnrichedReaction>>;
-
   own_children?: Record<string, Array<EnrichedReaction>>;
-
   updated_at?: Time;
-
   user?: Data;
 }
 
@@ -3665,51 +2884,31 @@ export interface EntityCreatorResponse {
    * Number of minor actions performed on the user
    */
   ban_count: number;
-
   banned: boolean;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Number of major actions performed on the user
    */
   deleted_content_count: number;
-
   /**
    * Number of flag actions performed on the user
    */
   flagged_count: number;
-
   id: string;
-
   language: string;
-
   online: boolean;
-
   role: string;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   blocked_user_ids: Array<string>;
-
   teams: Array<string>;
-
   custom: CustomUserData;
-
   avg_response_time?: number;
-
-  deactivated_at?: number;
-
-  deleted_at?: number;
-
+  deactivated_at?: TimestampNS;
+  deleted_at?: TimestampNS;
   image?: string;
-
-  last_active?: number;
-
+  last_active?: TimestampNS;
   name?: string;
-
-  revoke_tokens_issued_before?: number;
-
+  revoke_tokens_issued_before?: TimestampNS;
   teams_role?: Record<string, string>;
 }
 
@@ -3718,12 +2917,10 @@ export interface EscalatePayload {
    * Additional context for the reviewer
    */
   notes?: string;
-
   /**
    * Priority of the escalation (low, medium, high)
    */
   priority?: string;
-
   /**
    * Reason for the escalation (from configured escalation_reasons)
    */
@@ -3732,17 +2929,13 @@ export interface EscalatePayload {
 
 export interface EscalationMetadata {
   notes?: string;
-
   priority?: string;
-
   reason?: string;
 }
 
 export interface EventRequest {
   type: string;
-
   parent_id?: string;
-
   custom?: CustomEventData;
 }
 
@@ -3751,7 +2944,6 @@ export interface EventResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * The discriminator object for all websocket events, it maps events' payload to the final type
    */
@@ -3760,141 +2952,92 @@ export interface EventResponse {
 
 export interface FeedsActivityLocation {
   lat: number;
-
   lng: number;
 }
 
 export interface FeedsBookmarkResponse {
-  created_at: number;
-
+  created_at: TimestampNS;
   object_id: string;
-
   object_type: string;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   /**
    * User response object
    */
   user: UserResponse;
-
   activity_id?: string;
-
   custom?: Record<string, any>;
 }
 
 export interface FeedsEnrichedCollectionResponse {
-  created_at: number;
-
+  created_at: TimestampNS;
   id: string;
-
   name: string;
-
   status: string;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   user_id: string;
-
   custom: Record<string, any>;
 }
 
 export interface FeedsFeedResponse {
   activity_count: number;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   description: string;
-
   feed: string;
-
   follower_count: number;
-
   following_count: number;
-
   group_id: string;
-
   id: string;
-
   member_count: number;
-
   name: string;
-
   pin_count: number;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   /**
    * User response object
    */
   created_by: UserResponse;
-
-  deleted_at?: number;
-
+  deleted_at?: TimestampNS;
   visibility?: string;
-
   filter_tags?: Array<string>;
-
   custom?: Record<string, any>;
-
   location?: FeedsActivityLocation;
 }
 
 export interface FeedsNotificationComment {
   comment: string;
-
   id: string;
-
   user_id: string;
-
   attachments?: Array<Attachment>;
 }
 
 export interface FeedsNotificationContext {
   target?: FeedsNotificationTarget;
-
   trigger?: FeedsNotificationTrigger;
 }
 
 export interface FeedsNotificationParentActivity {
   id: string;
-
   text?: string;
-
   type?: string;
-
   user_id?: string;
-
   attachments?: Array<Attachment>;
 }
 
 export interface FeedsNotificationTarget {
   id: string;
-
   name?: string;
-
   text?: string;
-
   type?: string;
-
   user_id?: string;
-
   attachments?: Array<Attachment>;
-
   comment?: FeedsNotificationComment;
-
   custom?: Record<string, any>;
-
   parent_activity?: FeedsNotificationParentActivity;
 }
 
 export interface FeedsNotificationTrigger {
   text: string;
-
   type: string;
-
   comment?: FeedsNotificationComment;
-
   custom?: Record<string, any>;
 }
 
@@ -3902,45 +3045,31 @@ export interface FeedsPreferences {
   /**
    * Push notification preference for comments on user's activities. One of: all, none
    */
-
   comment?: 'all' | 'none';
-
   /**
    * Push notification preference for mentions in comments. One of: all, none
    */
-
   comment_mention?: 'all' | 'none';
-
   /**
    * Push notification preference for reactions on comments. One of: all, none
    */
-
   comment_reaction?: 'all' | 'none';
-
   /**
    * Push notification preference for replies to comments. One of: all, none
    */
-
   comment_reply?: 'all' | 'none';
-
   /**
    * Push notification preference for new followers. One of: all, none
    */
-
   follow?: 'all' | 'none';
-
   /**
    * Push notification preference for mentions in activities. One of: all, none
    */
-
   mention?: 'all' | 'none';
-
   /**
    * Push notification preference for reactions on user's activities or comments. One of: all, none
    */
-
   reaction?: 'all' | 'none';
-
   /**
    * Push notification preferences for custom activity types. Map of activity type to preference (all or none)
    */
@@ -3949,54 +3078,37 @@ export interface FeedsPreferences {
 
 export interface FeedsPreferencesResponse {
   comment?: string;
-
   comment_mention?: string;
-
   comment_reaction?: string;
-
   comment_reply?: string;
-
   follow?: string;
-
   mention?: string;
-
   reaction?: string;
-
   custom_activity_types?: Record<string, string>;
 }
 
 export interface FeedsReactionGroupResponse {
   count: number;
-
-  first_reaction_at: number;
-
-  last_reaction_at: number;
+  first_reaction_at: TimestampNS;
+  last_reaction_at: TimestampNS;
 }
 
 export interface FeedsReactionResponse {
   activity_id: string;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   type: string;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   /**
    * User response object
    */
   user: UserResponse;
-
   comment_id?: string;
-
   custom?: Record<string, any>;
 }
 
 export interface FeedsShareResponse {
   activity_id: string;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * User response object
    */
@@ -4005,185 +3117,104 @@ export interface FeedsShareResponse {
 
 export interface FeedsV3ActivityResponse {
   bookmark_count: number;
-
   comment_count: number;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   hidden: boolean;
-
   id: string;
-
   popularity: number;
-
   preview: boolean;
-
   reaction_count: number;
-
   restrict_replies: string;
-
   score: number;
-
   share_count: number;
-
   type: string;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   visibility: string;
-
   attachments: Array<Attachment>;
-
   comments: Array<FeedsV3CommentResponse>;
-
   feeds: Array<string>;
-
   filter_tags: Array<string>;
-
   interest_tags: Array<string>;
-
   latest_reactions: Array<FeedsReactionResponse>;
-
   mentioned_users: Array<UserResponse>;
-
   own_bookmarks: Array<FeedsBookmarkResponse>;
-
   own_reactions: Array<FeedsReactionResponse>;
-
   collections: Record<string, FeedsEnrichedCollectionResponse>;
-
   custom: Record<string, any>;
-
   reaction_groups: Record<string, FeedsReactionGroupResponse>;
-
   search_data: Record<string, any>;
-
   /**
    * User response object
    */
   user: UserResponse;
-
-  deleted_at?: number;
-
-  edited_at?: number;
-
-  expires_at?: number;
-
+  deleted_at?: TimestampNS;
+  edited_at?: TimestampNS;
+  expires_at?: TimestampNS;
   friend_reaction_count?: number;
-
   is_read?: boolean;
-
   is_seen?: boolean;
-
   is_watched?: boolean;
-
   moderation_action?: string;
-
   selector_source?: string;
-
   text?: string;
-
   visibility_tag?: string;
-
   friend_reactions?: Array<FeedsReactionResponse>;
-
   latest_shares?: Array<FeedsShareResponse>;
-
   current_feed?: FeedsFeedResponse;
-
   i18n?: Record<string, string>;
-
   location?: FeedsActivityLocation;
-
   metrics?: Record<string, number>;
-
   moderation?: ModerationV2Response;
-
   notification_context?: FeedsNotificationContext;
-
   parent?: FeedsV3ActivityResponse;
-
   poll?: PollResponseData;
-
   score_vars?: Record<string, any>;
 }
 
 export interface FeedsV3CommentResponse {
   bookmark_count: number;
-
   confidence_score: number;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   downvote_count: number;
-
   id: string;
-
   object_id: string;
-
   object_type: string;
-
   reaction_count: number;
-
   reply_count: number;
-
   score: number;
-
   status: string;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   upvote_count: number;
-
   mentioned_users: Array<UserResponse>;
-
   own_reactions: Array<FeedsReactionResponse>;
-
   /**
    * User response object
    */
   user: UserResponse;
-
   controversy_score?: number;
-
-  deleted_at?: number;
-
-  edited_at?: number;
-
+  deleted_at?: TimestampNS;
+  edited_at?: TimestampNS;
   parent_id?: string;
-
   text?: string;
-
   attachments?: Array<Attachment>;
-
   latest_reactions?: Array<FeedsReactionResponse>;
-
   custom?: Record<string, any>;
-
   i18n?: Record<string, string>;
-
   moderation?: ModerationV2Response;
-
   reaction_groups?: Record<string, FeedsReactionGroupResponse>;
 }
 
 export interface Field {
   short: boolean;
-
   title: string;
-
   value: string;
 }
 
 export interface FileUploadConfig {
   size_limit: number;
-
   allowed_file_extensions: Array<string>;
-
   allowed_mime_types: Array<string>;
-
   blocked_file_extensions: Array<string>;
-
   blocked_mime_types: Array<string>;
 }
 
@@ -4192,7 +3223,6 @@ export interface FileUploadRequest {
    * file field
    */
   file?: string;
-
   user?: OnlyUserID;
 }
 
@@ -4201,12 +3231,10 @@ export interface FileUploadResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * URL to the uploaded asset. Should be used to put to `asset_url` attachment field
    */
   file?: string;
-
   /**
    * URL of the file thumbnail for supported file formats. Should be put to `thumb_url` attachment field
    */
@@ -4218,27 +3246,26 @@ export interface FilterConfigResponse {
    * LLM moderation labels available as filter values
    */
   llm_labels: Array<string>;
-
   /**
    * AI image moderation labels available as filter values. Reflects the app's effective image taxonomy: custom Bodyguard taxonomy when enabled, otherwise the standard L1 label set.
    */
   ai_image_labels?: Array<string>;
-
   /**
    * AI text moderation labels available as filter values
    */
   ai_text_labels?: Array<string>;
-
   /**
    * Moderation config keys present in the queue, available as filter values
    */
   config_keys?: Array<string>;
-
   /**
    * The moderation_payload.custom keys the app has configured as review-queue filter chips (via moderation_dashboard_preferences.filterable_custom_keys). Discovery hint for the dashboard only — the filter accepts any custom key regardless of this list.
    */
   filterable_custom_keys?: Array<string>;
-
+  /**
+   * Names of the app's moderation rules, available as filter values on the `label` field when filtering rule-flagged content. Includes disabled rules, since items flagged before a rule was turned off still carry its name; excludes deleted ones. Scoped to the caller's teams on a multi-tenant app. Capped at 30 names, ordered by name, so an app above that cap is listed partially.
+   */
+  rule_names?: Array<string>;
   /**
    * AI image moderation labels available as filter values, as a map of L1 label to its L2 sub-labels. Reflects the app's effective image taxonomy: custom Bodyguard taxonomy when enabled, otherwise the standard catalogue of the org's enabled image providers.
    */
@@ -4251,23 +3278,18 @@ export interface FlagCountRuleParameters {
 
 export interface FlagDetailsResponse {
   original_text: string;
-
   automod?: AutomodDetailsResponse;
-
   extra?: Record<string, any>;
 }
 
 export interface FlagFeedbackResponse {
-  created_at: number;
-
+  created_at: TimestampNS;
   message_id: string;
-
   labels: Array<LabelResponse>;
 }
 
 export interface FlagItemResponse {
   duration: string;
-
   /**
    * Unique identifier of the created moderation item
    */
@@ -4276,11 +3298,8 @@ export interface FlagItemResponse {
 
 export interface FlagMessageDetailsResponse {
   pin_changed?: boolean;
-
   should_enrich?: boolean;
-
   skip_push?: boolean;
-
   updated_by_id?: string;
 }
 
@@ -4289,27 +3308,22 @@ export interface FlagRequest {
    * Unique identifier of the entity being flagged
    */
   entity_id: string;
-
   /**
    * Type of entity being flagged (e.g., message, user)
    */
   entity_type: string;
-
   /**
    * ID of the user who created the flagged entity
    */
   entity_creator_id?: string;
-
   /**
    * Optional explanation for why the content is being flagged
    */
   reason?: string;
-
   /**
    * Additional metadata about the flag
    */
   custom?: Record<string, any>;
-
   moderation_payload?: ModerationPayload;
 }
 
@@ -4319,128 +3333,82 @@ export interface FlagUserOptions {
 
 export interface FloodConfig {
   allowlist?: Array<string>;
-
   identical?: FloodIdenticalConfig;
-
   similar?: FloodSimilarConfig;
 }
 
 export interface FloodIdenticalConfig {
   action: string;
-
   enabled: boolean;
-
   threshold: number;
-
   time_window: string;
 }
 
 export interface FloodIdenticalRuleParameters {
+  min_text_length?: number;
   threshold?: number;
-
   time_window?: string;
-
+  track_across_users?: boolean;
   allowlist?: Array<string>;
 }
 
 export interface FloodSimilarConfig {
   action: string;
-
   enabled: boolean;
-
   similarity_distance: number;
-
   threshold: number;
-
   time_window: string;
 }
 
 export interface FloodSimilarRuleParameters {
   similarity_distance?: number;
-
   threshold?: number;
-
   time_window?: string;
-
   allowlist?: Array<string>;
 }
 
 export interface FullUserResponse {
   banned: boolean;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   id: string;
-
   invisible: boolean;
-
   language: string;
-
   online: boolean;
-
   role: string;
-
   shadow_banned: boolean;
-
   total_unread_count: number;
-
   unread_channels: number;
-
   unread_count: number;
-
   unread_threads: number;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   blocked_user_ids: Array<string>;
-
   channel_mutes: Array<ChannelMute>;
-
   devices: Array<DeviceResponse>;
-
   mutes: Array<UserMuteResponse>;
-
   teams: Array<string>;
-
   custom: CustomUserData;
-
   avg_response_time?: number;
-
-  ban_expires?: number;
-
-  deactivated_at?: number;
-
-  deleted_at?: number;
-
+  ban_expires?: TimestampNS;
+  deactivated_at?: TimestampNS;
+  deleted_at?: TimestampNS;
   image?: string;
-
-  last_active?: number;
-
+  last_active?: TimestampNS;
   name?: string;
-
-  revoke_tokens_issued_before?: number;
-
+  revoke_tokens_issued_before?: TimestampNS;
   latest_hidden_channels?: Array<string>;
-
   privacy_settings?: PrivacySettingsResponse;
-
   teams_role?: Record<string, string>;
 }
 
 export interface FutureChannelBanResponse {
-  created_at: number;
-
-  expires?: number;
-
+  created_at: TimestampNS;
+  expires?: TimestampNS;
   reason?: string;
-
   shadow?: boolean;
-
   /**
    * User response object
    */
   banned_by?: UserResponse;
-
   /**
    * User response object
    */
@@ -4449,7 +3417,6 @@ export interface FutureChannelBanResponse {
 
 export interface GetActionConfigResponse {
   duration: string;
-
   /**
    * Moderation action configs grouped by entity type, sorted by order ascending
    */
@@ -4458,7 +3425,6 @@ export interface GetActionConfigResponse {
 
 export interface GetAppealResponse {
   duration: string;
-
   item?: AppealItemResponse;
 }
 
@@ -4467,7 +3433,6 @@ export interface GetApplicationResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   app: AppResponseFields;
 }
 
@@ -4476,7 +3441,6 @@ export interface GetBlockedUsersResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * Array of blocked user object
    */
@@ -4485,7 +3449,6 @@ export interface GetBlockedUsersResponse {
 
 export interface GetConfigResponse {
   duration: string;
-
   config?: ConfigResponse;
 }
 
@@ -4494,13 +3457,11 @@ export interface GetDraftResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   draft: DraftResponse;
 }
 
 export interface GetManyMessagesResponse {
   duration: string;
-
   /**
    * List of messages
    */
@@ -4512,7 +3473,6 @@ export interface GetMessageResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * Represents any chat message
    */
@@ -4521,79 +3481,57 @@ export interface GetMessageResponse {
 
 export interface GetOGResponse {
   duration: string;
-
   custom: CustomAttachmentData;
-
   /**
    * URL of detected video or audio
    */
   asset_url?: string;
-
   author_icon?: string;
-
   /**
    * og:site
    */
   author_link?: string;
-
   /**
    * og:site_name
    */
   author_name?: string;
-
   color?: string;
-
   fallback?: string;
-
   footer?: string;
-
   footer_icon?: string;
-
   /**
    * URL of detected image
    */
   image_url?: string;
-
   /**
    * extracted url from the text
    */
   og_scrape_url?: string;
-
   original_height?: number;
-
   original_width?: number;
-
   pretext?: string;
-
   /**
    * og:description
    */
   text?: string;
-
   /**
    * URL of detected thumb image
    */
   thumb_url?: string;
-
   /**
    * og:title
    */
   title?: string;
-
   /**
    * og:url
    */
   title_link?: string;
-
   /**
    * Attachment type, could be empty, image, audio or video
    */
   type?: string;
-
   actions?: Array<Action>;
-
   fields?: Array<Field>;
-
   giphy?: Images;
 }
 
@@ -4602,7 +3540,6 @@ export interface GetPinnedMessagesResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * Messages
    */
@@ -4611,7 +3548,6 @@ export interface GetPinnedMessagesResponse {
 
 export interface GetReactionsResponse {
   duration: string;
-
   /**
    * List of reactions
    */
@@ -4623,19 +3559,16 @@ export interface GetRepliesResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   messages: Array<MessageResponse>;
 }
 
 export interface GetThreadResponse {
   duration: string;
-
   thread: ThreadStateResponse;
 }
 
 export interface GetUserGroupResponse {
   duration: string;
-
   user_group?: UserGroupResponse;
 }
 
@@ -4648,17 +3581,14 @@ export interface GroupedChannelsBucket {
    * Channels returned for this bucket
    */
   channels: Array<ChannelStateResponseFields>;
-
   /**
    * Cursor for the next page of this group
    */
   next?: string;
-
   /**
    * Cursor for the previous page of this group
    */
   prev?: string;
-
   /**
    * Unread channels currently classified into this bucket
    */
@@ -4667,9 +3597,7 @@ export interface GroupedChannelsBucket {
 
 export interface GroupedChannelsGroupRequest {
   limit?: number;
-
   next?: string;
-
   prev?: string;
 }
 
@@ -4678,17 +3606,14 @@ export interface GroupedQueryChannelsRequest {
    * Default max channels per group (default 10)
    */
   limit?: number;
-
   /**
    * Whether to subscribe to presence events for channel members
    */
   presence?: boolean;
-
   /**
    * Whether to start watching found channels or not
    */
   watch?: boolean;
-
   /**
    * Groups to return, keyed by group name. Each group can define limit, next, or prev. 'next' and 'prev' cursors are only allowed when the request contains exactly one group; multi-group pagination is rejected.
    */
@@ -4700,7 +3625,6 @@ export interface GroupedQueryChannelsResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * Predefined channel groups keyed by group name
    */
@@ -4709,29 +3633,19 @@ export interface GroupedQueryChannelsResponse {
 
 export interface HarmConfig {
   cooldown_period: number;
-
   severity: number;
-
   threshold: number;
-
   action_sequences: Array<ActionSequence>;
-
   harm_types: Array<string>;
 }
 
 export interface HealthCheckEvent {
   connection_id: string;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   type: string;
-
   cid?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   me?: OwnUserResponse;
 }
 
@@ -4751,47 +3665,34 @@ export interface HideChannelResponse {
 
 export interface IPContentCountRuleParameters {
   threshold?: number;
-
   time_window?: string;
 }
 
 export interface IPFlagCountRuleParameters {
   severity?: string;
-
   threshold?: number;
-
   time_window?: string;
-
   harm_labels?: Array<string>;
 }
 
 export interface ImageContentParameters {
   label_operator?: string;
-
   min_confidence?: number;
-
   harm_labels?: Array<string>;
 }
 
 export interface ImageData {
   frames: string;
-
   height: string;
-
   size: string;
-
   url: string;
-
   width: string;
 }
 
 export interface ImageRuleParameters {
   min_confidence?: number;
-
   threshold?: number;
-
   time_window?: string;
-
   harm_labels?: Array<string>;
 }
 
@@ -4800,17 +3701,14 @@ export interface ImageSize {
    * Crop mode. One of: top, bottom, left, right, center
    */
   crop?: string;
-
   /**
    * Target image height
    */
   height?: number;
-
   /**
    * Resize method. One of: clip, crop, scale, fill
    */
   resize?: string;
-
   /**
    * Target image width
    */
@@ -4819,12 +3717,10 @@ export interface ImageSize {
 
 export interface ImageUploadRequest {
   file?: string;
-
   /**
    * field with JSON-encoded array of image size configurations
    */
   upload_sizes?: Array<ImageSize>;
-
   user?: OnlyUserID;
 }
 
@@ -4833,11 +3729,8 @@ export interface ImageUploadResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   file?: string;
-
   thumb_url?: string;
-
   /**
    * Array of image size configurations
    */
@@ -4846,23 +3739,16 @@ export interface ImageUploadResponse {
 
 export interface Images {
   fixed_height: ImageData;
-
   fixed_height_downsampled: ImageData;
-
   fixed_height_still: ImageData;
-
   fixed_width: ImageData;
-
   fixed_width_downsampled: ImageData;
-
   fixed_width_still: ImageData;
-
   original: ImageData;
 }
 
 export interface ImportBlockListRequest {
   items: Array<string>;
-
   chunk_size?: number;
 }
 
@@ -4871,37 +3757,27 @@ export interface ImportBlockListResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   task_id: string;
 }
 
 export interface KeyframeOCRRuleParameters {
   threshold?: number;
-
   time_window?: string;
-
   harm_labels?: Array<string>;
 }
 
 export interface KeyframeRuleParameters {
   min_confidence?: number;
-
   threshold?: number;
-
   time_window?: string;
-
   harm_labels?: Array<string>;
 }
 
 export interface LLMConfig {
   enabled: boolean;
-
   rules: Array<LLMRule>;
-
   app_context?: string;
-
   async?: boolean;
-
   severity_descriptions?: Record<string, string>;
 }
 
@@ -4914,19 +3790,14 @@ export interface LLMRule {
     | 'bounce_flag'
     | 'bounce_remove'
     | 'keep';
-
   description: string;
-
   label: string;
-
   severity_rules: Array<BodyguardSeverityRule>;
 }
 
 export interface LabelResponse {
   name: string;
-
   harm_labels?: Array<string>;
-
   phrase_list_ids?: Array<number>;
 }
 
@@ -4935,7 +3806,6 @@ export interface LabelThresholds {
    * Threshold for automatic message block
    */
   block?: number;
-
   /**
    * Threshold for automatic message flag
    */
@@ -4947,15 +3817,12 @@ export interface ListBlockListResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   blocklists: Array<BlockListResponse>;
-
   next_cursor?: string;
 }
 
 export interface ListDevicesResponse {
   duration: string;
-
   /**
    * List of devices
    */
@@ -4967,13 +3834,11 @@ export interface ListQueuesResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   queues: Array<ModerationQueueResponse>;
 }
 
 export interface ListUserGroupsResponse {
   duration: string;
-
   /**
    * List of user groups
    */
@@ -5003,7 +3868,6 @@ export interface MarkReadRequest {
    * ID of the message that is considered last read by client
    */
   message_id?: string;
-
   /**
    * Optional Thread ID to specifically mark a given thread as read
    */
@@ -5015,34 +3879,23 @@ export interface MarkReadResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   event?: MarkReadResponseEvent;
 }
 
 export interface MarkReadResponseEvent {
   channel_id: string;
-
   channel_type: string;
-
   cid: string;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   type: string;
-
-  channel_last_message_at?: number;
-
+  channel_last_message_at?: TimestampNS;
   last_read_message_id?: string;
-
   team?: string;
-
   /**
    * Represents channel in chat
    */
   channel?: ChannelResponse;
-
   thread?: ThreadResponse;
-
   user?: UserResponseCommonFields;
 }
 
@@ -5051,12 +3904,10 @@ export interface MarkReviewedRequestPayload {
    * Maximum content items to mark as reviewed
    */
   content_to_mark_as_reviewed_limit?: number;
-
   /**
    * Reason for the appeal decision
    */
   decision_reason?: string;
-
   /**
    * Skip marking content as reviewed
    */
@@ -5068,12 +3919,10 @@ export interface MarkUnreadRequest {
    * ID of the message from where the channel is marked unread
    */
   message_id?: string;
-
   /**
    * Timestamp of the message from where the channel is marked unread
    */
   message_timestamp?: Date;
-
   /**
    * Mark a thread unread, specify one of the thread, message timestamp, or message id
    */
@@ -5081,69 +3930,53 @@ export interface MarkUnreadRequest {
 }
 
 export interface MaxStreakChangedEvent {
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   type: string;
-
-  received_at?: number;
+  received_at?: TimestampNS;
 }
 
 export interface MemberAddedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Represents channel in chat
    */
   channel: ChannelResponse;
-
   custom: CustomEventData;
-
   member: ChannelMemberResponse;
-
   /**
    * The type of event: "member.added" in this case
    */
   type: string;
-
   /**
    * The ID of the channel to which the member was added
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   /**
    * The number of messages in the channel
    */
   channel_message_count?: number;
-
   /**
    * The type of the channel to which the member was added
    */
   channel_type?: string;
-
   /**
    * The CID of the channel to which the member was added
    */
   cid?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   channel_custom?: CustomChannelData;
-
   user?: UserResponseCommonFields;
 }
 
@@ -5151,56 +3984,43 @@ export interface MemberRemovedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Represents channel in chat
    */
   channel: ChannelResponse;
-
   custom: CustomEventData;
-
   member: ChannelMemberResponse;
-
   /**
    * The type of event: "member.removed" in this case
    */
   type: string;
-
   /**
    * The ID of the channel from which the member was removed
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   /**
    * The number of messages in the channel
    */
   channel_message_count?: number;
-
   /**
    * The type of the channel from which the member was removed
    */
   channel_type?: string;
-
   /**
    * The CID of the channel from which the member was removed
    */
   cid?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   channel_custom?: CustomChannelData;
-
   user?: UserResponseCommonFields;
 }
 
@@ -5208,72 +4028,53 @@ export interface MemberUpdatedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Represents channel in chat
    */
   channel: ChannelResponse;
-
   custom: CustomEventData;
-
   member: ChannelMemberResponse;
-
   /**
    * The type of event: "member.updated" in this case
    */
   type: string;
-
   /**
    * The ID of the channel in which the member was updated
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   /**
    * The number of messages in the channel
    */
   channel_message_count?: number;
-
   /**
    * The type of the channel in which the member was updated
    */
   channel_type?: string;
-
   /**
    * The CID of the channel in which the member was updated
    */
   cid?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   channel_custom?: CustomChannelData;
-
   user?: UserResponseCommonFields;
 }
 
 export interface MemberUserRequest {
   id: string;
-
   image?: string;
-
   invisible?: boolean;
-
   language?: string;
-
   name?: string;
-
   custom?: CustomUserData;
-
   privacy_settings?: PrivacySettingsResponse;
 }
 
@@ -5282,7 +4083,6 @@ export interface MembersResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * List of found members
    */
@@ -5301,7 +4101,6 @@ export interface MessageActionResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * Represents any chat message
    */
@@ -5310,21 +4109,13 @@ export interface MessageActionResponse {
 
 export interface MessageChangeSet {
   attachments: boolean;
-
   custom: boolean;
-
   html: boolean;
-
   mentioned_user_ids: boolean;
-
   mml: boolean;
-
   pin: boolean;
-
   quoted_message_id: boolean;
-
   silent: boolean;
-
   text: boolean;
 }
 
@@ -5332,66 +4123,51 @@ export interface MessageDeletedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Whether the message was hard deleted
    */
   hard_delete: boolean;
-
   message_id: string;
-
   custom: CustomEventData;
-
   /**
    * Represents any chat message
    */
   message: MessageResponse;
-
   /**
    * The type of event: "message.deleted" in this case
    */
   type: string;
-
   /**
    * The ID of the channel where the message was sent
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   /**
    * The number of messages in the channel
    */
   channel_message_count?: number;
-
   /**
    * The type of the channel where the message was sent
    */
   channel_type?: string;
-
   /**
    * The CID of the channel where the message was sent
    */
   cid?: string;
-
   /**
    * Whether the message was deleted only for the current user
    */
   deleted_for_me?: boolean;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   channel_custom?: CustomChannelData;
-
   user?: UserResponseCommonFields;
 }
 
@@ -5399,103 +4175,76 @@ export interface MessageDeliveredEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   /**
    * The type of event: "message.delivered" in this case
    */
   type: string;
-
   /**
    * The ID of the channel where the message was read
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   /**
    * The number of messages in the channel
    */
   channel_message_count?: number;
-
   /**
    * The type of the channel where the message was read
    */
   channel_type?: string;
-
   /**
    * The CID of the channel where the message was read
    */
   cid?: string;
-
   /**
    * The time when the message was delivered
    */
   last_delivered_at?: string;
-
   /**
    * The ID of the last delivered message
    */
   last_delivered_message_id?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   /**
    * Represents channel in chat
    */
   channel?: ChannelResponse;
-
   channel_custom?: CustomChannelData;
-
   user?: UserResponseCommonFields;
 }
 
 export interface MessageFlagResponse {
-  created_at: number;
-
+  created_at: TimestampNS;
   created_by_automod: boolean;
-
-  updated_at: number;
-
-  approved_at?: number;
-
+  updated_at: TimestampNS;
+  approved_at?: TimestampNS;
   reason?: string;
-
-  rejected_at?: number;
-
-  reviewed_at?: number;
-
+  rejected_at?: TimestampNS;
+  reviewed_at?: TimestampNS;
   custom?: Record<string, any>;
-
   details?: FlagDetailsResponse;
-
   /**
    * Represents any chat message
    */
   message?: MessageResponse;
-
   moderation_feedback?: FlagFeedbackResponse;
-
   /**
    * Result of the message moderation
    */
   moderation_result?: MessageModerationResult;
-
   /**
    * User response object
    */
   reviewed_by?: UserResponse;
-
   /**
    * User response object
    */
@@ -5507,49 +4256,39 @@ export interface MessageModerationResult {
    * Action taken by automod
    */
   action: string;
-
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * ID of the message
    */
   message_id: string;
-
   /**
    * Date/time of the last update
    */
-  updated_at: number;
-
+  updated_at: TimestampNS;
   /**
    * Whether user has bad karma
    */
   user_bad_karma: boolean;
-
   /**
    * Karma of the user
    */
   user_karma: number;
-
   /**
    * Word that was blocked
    */
   blocked_word?: string;
-
   /**
    * Name of the blocklist
    */
   blocklist_name?: string;
-
   /**
    * User who moderated the message
    */
   moderated_by?: string;
-
   ai_moderation_response?: ModerationResponse;
-
   /**
    * Sets thresholds for AI moderation
    */
@@ -5560,93 +4299,71 @@ export interface MessageNewEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   message_id: string;
-
   /**
    * The number of watchers
    */
   watcher_count: number;
-
   custom: CustomEventData;
-
   /**
    * Represents any chat message
    */
   message: MessageResponse;
-
   /**
    * The type of event: "message.new" in this case
    */
   type: string;
-
   /**
    * The ID of the channel where the message was sent
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   /**
    * The number of messages in the channel
    */
   channel_message_count?: number;
-
   /**
    * The type of the channel where the message was sent
    */
   channel_type?: string;
-
   /**
    * The CID of the channel where the message was sent
    */
   cid?: string;
-
   /**
    * The author of the parent message
    */
   parent_author?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   total_unread_count?: number;
-
   unread_channels?: number;
-
   /**
    * The number of unread messages
    */
   unread_count?: number;
-
   /**
    * The participants of the thread
    */
   thread_participants?: Array<UserResponseCommonFields>;
-
   /**
    * Represents channel in chat
    */
   channel?: ChannelResponse;
-
   channel_custom?: CustomChannelData;
-
   grouped_unread_channels?: Record<string, number>;
-
   user?: UserResponseCommonFields;
 }
 
 export interface MessageOptions {
   include_thread_participants?: boolean;
-
   member_custom_include?: Array<string>;
 }
 
@@ -5655,52 +4372,42 @@ export interface MessagePaginationParams {
    * The timestamp to get messages with a created_at timestamp greater than
    */
   created_at_after?: Date;
-
   /**
    * The timestamp to get messages with a created_at timestamp greater than or equal to
    */
   created_at_after_or_equal?: Date;
-
   /**
    * The result will be a set of messages, that are both older and newer than the created_at timestamp provided, distributed evenly around the timestamp
    */
   created_at_around?: Date;
-
   /**
    * The timestamp to get messages with a created_at timestamp smaller than
    */
   created_at_before?: Date;
-
   /**
    * The timestamp to get messages with a created_at timestamp smaller than or equal to
    */
   created_at_before_or_equal?: Date;
-
   /**
    * The result will be a set of messages, that are both older and newer than the message with the provided ID, and the message with the ID provided will be in the middle of the set
    */
   id_around?: string;
-
   /**
    * The ID of the message to get messages with a timestamp greater than
    */
   id_gt?: string;
-
   /**
    * The ID of the message to get messages with a timestamp greater than or equal to
    */
   id_gte?: string;
-
   /**
    * The ID of the message to get messages with a timestamp smaller than
    */
   id_lt?: string;
-
   /**
    * The ID of the message to get messages with a timestamp smaller than or equal to
    */
   id_lte?: string;
-
   /**
    * The maximum number of messages to return (max limit
    */
@@ -5711,61 +4418,47 @@ export interface MessageReadEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   /**
    * The type of event: "message.read" in this case
    */
   type: string;
-
   /**
    * The ID of the channel where the message was read
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   /**
    * The number of messages in the channel
    */
   channel_message_count?: number;
-
   /**
    * The type of the channel where the message was read
    */
   channel_type?: string;
-
   /**
    * The CID of the channel where the message was read
    */
   cid?: string;
-
   /**
    * The ID of the last read message
    */
   last_read_message_id?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   /**
    * Represents channel in chat
    */
   channel?: ChannelResponse;
-
   channel_custom?: CustomChannelData;
-
   thread?: ThreadResponse;
-
   user?: UserResponseCommonFields;
 }
 
@@ -5774,88 +4467,67 @@ export interface MessageRequest {
    * Message ID is unique string identifier of the message
    */
   id?: string;
-
   mentioned_channel?: boolean;
-
   mentioned_here?: boolean;
-
   /**
    * Should be empty if `text` is provided. Can only be set when using server-side API
    */
   mml?: string;
-
   /**
    * ID of parent message (thread)
    */
   parent_id?: string;
-
   /**
    * Date when pinned message expires
    */
   pin_expires?: Date;
-
   /**
    * Whether message is pinned or not
    */
   pinned?: boolean;
-
   /**
    * Date when message got pinned
    */
   pinned_at?: Date;
-
   /**
    * Identifier of the poll to include in the message
    */
   poll_id?: string;
-
   quoted_message_id?: string;
-
   /**
    * Whether thread reply should be shown in the channel as well
    */
   show_in_channel?: boolean;
-
   /**
    * Whether message is silent or not
    */
   silent?: boolean;
-
   /**
    * Text of the message. Should be empty if `mml` is provided
    */
   text?: string;
-
   /**
    * Contains type of the message. One of: regular, system
    */
-
   type?: 'regular' | 'system';
-
   /**
    * Array of message attachments
    */
   attachments?: Array<Attachment>;
-
   /**
    * List of user group IDs to mention. Group members who are also channel members will receive push notifications. Max 10 groups
    */
   mentioned_group_ids?: Array<string>;
-
   mentioned_roles?: Array<string>;
-
   /**
    * Array of user IDs to mention
    */
   mentioned_users?: Array<string>;
-
   /**
    * A list of user ids that have restricted visibility to the message
    */
   restricted_visibility?: Array<string>;
-
   custom?: CustomMessageData;
-
   shared_location?: SharedLocation;
 }
 
@@ -5864,214 +4536,165 @@ export interface MessageResponse {
    * Channel unique identifier in <type>:<id> format
    */
   cid: string;
-
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   deleted_reply_count: number;
-
   /**
    * Contains HTML markup of the message. Can only be set when using server-side API
    */
   html: string;
-
   /**
    * Message ID is unique string identifier of the message
    */
   id: string;
-
   /**
    * Whether the message mentioned the channel tag
    */
   mentioned_channel: boolean;
-
   /**
    * Whether the message mentioned online users with @here tag
    */
   mentioned_here: boolean;
-
   /**
    * Whether message is pinned or not
    */
   pinned: boolean;
-
   /**
    * Number of replies to this message
    */
   reply_count: number;
-
   /**
    * Whether the message was shadowed or not
    */
   shadowed: boolean;
-
   /**
    * Whether message is silent or not
    */
   silent: boolean;
-
   /**
    * Text of the message. Should be empty if `mml` is provided
    */
   text: string;
-
   /**
    * Contains type of the message. One of: regular, ephemeral, error, reply, system, deleted
    */
   type: string;
-
   /**
    * Date/time of the last update
    */
-  updated_at: number;
-
+  updated_at: TimestampNS;
   /**
    * Array of message attachments
    */
   attachments: Array<Attachment>;
-
   /**
    * List of 10 latest reactions to this message
    */
   latest_reactions: Array<ReactionResponse>;
-
   /**
    * List of mentioned users
    */
   mentioned_users: Array<UserResponse>;
-
   /**
    * List of 10 latest reactions of authenticated user to this message
    */
   own_reactions: Array<ReactionResponse>;
-
   /**
    * A list of user ids that have restricted visibility to the message, if the list is not empty, the message is only visible to the users in the list
    */
   restricted_visibility: Array<string>;
-
   custom: CustomMessageData;
-
   /**
    * An object containing number of reactions of each type. Key: reaction type (string), value: number of reactions (int)
    */
   reaction_counts: Record<string, number>;
-
   /**
    * An object containing scores of reactions of each type. Key: reaction type (string), value: total score of reactions (int)
    */
   reaction_scores: Record<string, number>;
-
   /**
    * User response object
    */
   user: UserResponse;
-
   /**
    * Contains provided slash command
    */
   command?: string;
-
   /**
    * Date/time of deletion
    */
-  deleted_at?: number;
-
+  deleted_at?: TimestampNS;
   deleted_for_me?: boolean;
-
-  message_text_updated_at?: number;
-
+  message_text_updated_at?: TimestampNS;
   /**
    * Should be empty if `text` is provided. Can only be set when using server-side API
    */
   mml?: string;
-
   /**
    * ID of parent message (thread)
    */
   parent_id?: string;
-
   /**
    * Date when pinned message expires
    */
-  pin_expires?: number;
-
+  pin_expires?: TimestampNS;
   /**
    * Date when message got pinned
    */
-  pinned_at?: number;
-
+  pinned_at?: TimestampNS;
   /**
    * Identifier of the poll to include in the message
    */
   poll_id?: string;
-
   quoted_message_id?: string;
-
   /**
    * Whether thread reply should be shown in the channel as well
    */
   show_in_channel?: boolean;
-
   /**
    * List of user group IDs mentioned in the message. Group members who are also channel members will receive push notifications based on their push preferences. Max 10 groups
    */
   mentioned_group_ids?: Array<string>;
-
   /**
    * List of mentioned user group objects.
    */
   mentioned_groups?: Array<UserGroupResponse>;
-
   /**
    * List of roles mentioned in the message (e.g. admin, channel_moderator, custom roles). Members with matching roles will receive push notifications based on their push preferences. Max 10 roles
    */
   mentioned_roles?: Array<string>;
-
   /**
    * List of users who participate in thread
    */
   thread_participants?: Array<UserResponse>;
-
   draft?: DraftResponse;
-
   /**
    * Object with translations. Key `language` contains the original language key. Other keys contain translations
    */
   i18n?: Record<string, string>;
-
   /**
    * Contains image moderation information
    */
   image_labels?: Record<string, Array<string>>;
-
   member?: ChannelMemberPartialResponse;
-
   /**
    * Channel member data for the users mentioned in the message, keyed by user id. Only present when the app has member custom on mentioned users enabled, and only for the first two mentioned users of each message
    */
   mentioned_channel_members?: Record<string, ChannelMemberPartialResponse>;
-
   moderation?: ModerationV2Response;
-
   /**
    * User response object
    */
   pinned_by?: UserResponse;
-
   poll?: PollResponseData;
-
   /**
    * Represents any chat message
    */
   quoted_message?: MessageResponse;
-
   reaction_groups?: Record<string, ReactionGroupResponse>;
-
   reminder?: ReminderResponseData;
-
   shared_location?: SharedLocationResponseData;
 }
 
@@ -6079,60 +4702,47 @@ export interface MessageUndeletedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   message_id: string;
-
   custom: CustomEventData;
-
   /**
    * Represents any chat message
    */
   message: MessageResponse;
-
   /**
    * The type of event: "message.undeleted" in this case
    */
   type: string;
-
   /**
    * The ID of the channel where the message was sent
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   /**
    * The number of messages in the channel
    */
   channel_message_count?: number;
-
   /**
    * The type of the channel where the message was sent
    */
   channel_type?: string;
-
   /**
    * The CID of the channel where the message was sent
    */
   cid?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   channel_custom?: CustomChannelData;
 }
 
 export interface MessageUpdate {
   old_text?: string;
-
   change_set?: MessageChangeSet;
 }
 
@@ -6140,58 +4750,44 @@ export interface MessageUpdatedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   message_id: string;
-
   custom: CustomEventData;
-
   /**
    * Represents any chat message
    */
   message: MessageResponse;
-
   /**
    * The type of event: "message.updated" in this case
    */
   type: string;
-
   /**
    * The ID of the channel where the message was sent
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   /**
    * The number of messages in the channel
    */
   channel_message_count?: number;
-
   /**
    * The type of the channel where the message was sent
    */
   channel_type?: string;
-
   /**
    * The CID of the channel where the message was sent
    */
   cid?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   channel_custom?: CustomChannelData;
-
   message_update?: MessageUpdate;
-
   user?: UserResponseCommonFields;
 }
 
@@ -6200,219 +4796,169 @@ export interface MessageWithChannelResponse {
    * Channel unique identifier in <type>:<id> format
    */
   cid: string;
-
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   deleted_reply_count: number;
-
   /**
    * Contains HTML markup of the message. Can only be set when using server-side API
    */
   html: string;
-
   /**
    * Message ID is unique string identifier of the message
    */
   id: string;
-
   /**
    * Whether the message mentioned the channel tag
    */
   mentioned_channel: boolean;
-
   /**
    * Whether the message mentioned online users with @here tag
    */
   mentioned_here: boolean;
-
   /**
    * Whether message is pinned or not
    */
   pinned: boolean;
-
   /**
    * Number of replies to this message
    */
   reply_count: number;
-
   /**
    * Whether the message was shadowed or not
    */
   shadowed: boolean;
-
   /**
    * Whether message is silent or not
    */
   silent: boolean;
-
   /**
    * Text of the message. Should be empty if `mml` is provided
    */
   text: string;
-
   /**
    * Contains type of the message. One of: regular, ephemeral, error, reply, system, deleted
    */
   type: string;
-
   /**
    * Date/time of the last update
    */
-  updated_at: number;
-
+  updated_at: TimestampNS;
   /**
    * Array of message attachments
    */
   attachments: Array<Attachment>;
-
   /**
    * List of 10 latest reactions to this message
    */
   latest_reactions: Array<ReactionResponse>;
-
   /**
    * List of mentioned users
    */
   mentioned_users: Array<UserResponse>;
-
   /**
    * List of 10 latest reactions of authenticated user to this message
    */
   own_reactions: Array<ReactionResponse>;
-
   /**
    * A list of user ids that have restricted visibility to the message, if the list is not empty, the message is only visible to the users in the list
    */
   restricted_visibility: Array<string>;
-
   /**
    * Represents channel in chat
    */
   channel: ChannelResponse;
-
   custom: CustomMessageData;
-
   /**
    * An object containing number of reactions of each type. Key: reaction type (string), value: number of reactions (int)
    */
   reaction_counts: Record<string, number>;
-
   /**
    * An object containing scores of reactions of each type. Key: reaction type (string), value: total score of reactions (int)
    */
   reaction_scores: Record<string, number>;
-
   /**
    * User response object
    */
   user: UserResponse;
-
   /**
    * Contains provided slash command
    */
   command?: string;
-
   /**
    * Date/time of deletion
    */
-  deleted_at?: number;
-
+  deleted_at?: TimestampNS;
   deleted_for_me?: boolean;
-
-  message_text_updated_at?: number;
-
+  message_text_updated_at?: TimestampNS;
   /**
    * Should be empty if `text` is provided. Can only be set when using server-side API
    */
   mml?: string;
-
   /**
    * ID of parent message (thread)
    */
   parent_id?: string;
-
   /**
    * Date when pinned message expires
    */
-  pin_expires?: number;
-
+  pin_expires?: TimestampNS;
   /**
    * Date when message got pinned
    */
-  pinned_at?: number;
-
+  pinned_at?: TimestampNS;
   /**
    * Identifier of the poll to include in the message
    */
   poll_id?: string;
-
   quoted_message_id?: string;
-
   /**
    * Whether thread reply should be shown in the channel as well
    */
   show_in_channel?: boolean;
-
   /**
    * List of user group IDs mentioned in the message. Group members who are also channel members will receive push notifications based on their push preferences. Max 10 groups
    */
   mentioned_group_ids?: Array<string>;
-
   /**
    * List of mentioned user group objects.
    */
   mentioned_groups?: Array<UserGroupResponse>;
-
   /**
    * List of roles mentioned in the message (e.g. admin, channel_moderator, custom roles). Members with matching roles will receive push notifications based on their push preferences. Max 10 roles
    */
   mentioned_roles?: Array<string>;
-
   /**
    * List of users who participate in thread
    */
   thread_participants?: Array<UserResponse>;
-
   draft?: DraftResponse;
-
   /**
    * Object with translations. Key `language` contains the original language key. Other keys contain translations
    */
   i18n?: Record<string, string>;
-
   /**
    * Contains image moderation information
    */
   image_labels?: Record<string, Array<string>>;
-
   member?: ChannelMemberPartialResponse;
-
   /**
    * Channel member data for the users mentioned in the message, keyed by user id. Only present when the app has member custom on mentioned users enabled, and only for the first two mentioned users of each message
    */
   mentioned_channel_members?: Record<string, ChannelMemberPartialResponse>;
-
   moderation?: ModerationV2Response;
-
   /**
    * User response object
    */
   pinned_by?: UserResponse;
-
   poll?: PollResponseData;
-
   /**
    * Represents any chat message
    */
   quoted_message?: MessageResponse;
-
   reaction_groups?: Record<string, ReactionGroupResponse>;
-
   reminder?: ReminderResponseData;
-
   shared_location?: SharedLocationResponseData;
 }
 
@@ -6421,34 +4967,27 @@ export interface ModerationActionConfigResponse {
    * The action to take
    */
   action: string;
-
   /**
    * Description of what this action does
    */
   description: string;
-
   /**
    * Type of entity this action applies to
    */
   entity_type: string;
-
   /**
    * Icon for the dashboard
    */
   icon: string;
-
   /**
    * Display order (lower numbers shown first)
    */
   order: number;
-
   id?: string;
-
   /**
    * Queue type this action config belongs to
    */
   queue_type?: string;
-
   /**
    * Custom data for the action
    */
@@ -6461,43 +5000,24 @@ export interface ModerationBanResponse {
 
 export interface ModerationCallResponse {
   backstage: boolean;
-
   captioning: boolean;
-
   cid: string;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   current_session_id: string;
-
   id: string;
-
   recording: boolean;
-
   transcribing: boolean;
-
   translating: boolean;
-
   type: string;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   blocked_user_ids: Array<string>;
-
   custom: Record<string, any>;
-
   channel_cid?: string;
-
-  ended_at?: number;
-
+  ended_at?: TimestampNS;
   join_ahead_time_seconds?: number;
-
   routing_number?: string;
-
-  starts_at?: number;
-
+  starts_at?: TimestampNS;
   team?: string;
-
   /**
    * User response object
    */
@@ -6509,22 +5029,15 @@ export interface ModerationCustomActionEvent {
    * The ID of the custom action that was executed
    */
   action_id: string;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   review_queue_item: ReviewQueueItemResponse;
-
   type: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * Additional options passed to the custom action
    */
   action_options?: Record<string, any>;
-
   /**
    * Represents any chat message
    */
@@ -6532,37 +5045,24 @@ export interface ModerationCustomActionEvent {
 }
 
 export interface ModerationFlagResponse {
-  created_at: number;
-
+  created_at: TimestampNS;
   entity_id: string;
-
   entity_type: string;
-
   type: string;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   user_id: string;
-
   result: Array<Record<string, any>>;
-
+  content_published_at?: TimestampNS;
   entity_creator_id?: string;
-
   reason?: string;
-
   review_queue_item_id?: string;
-
   labels?: Array<string>;
-
   custom?: Record<string, any>;
-
   /**
    * Content payload for moderation
    */
   moderation_payload?: ModerationPayloadResponse;
-
   review_queue_item?: ReviewQueueItemResponse;
-
   /**
    * User response object
    */
@@ -6574,32 +5074,22 @@ export interface ModerationFlaggedEvent {
    * The type of content that was flagged
    */
   content_type: string;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * The ID of the flagged content
    */
   object_id: string;
-
   custom: CustomEventData;
-
   type: string;
-
-  received_at?: number;
+  received_at?: TimestampNS;
 }
 
 export interface ModerationMarkReviewedEvent {
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   item: ReviewQueueItemResponse;
-
   type: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * Represents any chat message
    */
@@ -6607,24 +5097,16 @@ export interface ModerationMarkReviewedEvent {
 }
 
 export interface ModerationPayload {
+  country_code?: string;
   audios?: Array<string>;
-
   image_ordered_keys?: Array<string>;
-
   images?: Array<string>;
-
   other_media?: Array<string>;
-
   text_ordered_keys?: Array<string>;
-
   texts?: Array<string>;
-
   videos?: Array<string>;
-
   custom?: Record<string, any>;
-
   image_ids?: Record<string, string>;
-
   text_ids?: Record<string, string>;
 }
 
@@ -6633,47 +5115,38 @@ export interface ModerationPayloadResponse {
    * Audio URLs to moderate
    */
   audios?: Array<string>;
-
   /**
    * Caller-supplied keys for images, index-aligned with images[]
    */
   image_ordered_keys?: Array<string>;
-
   /**
    * Image URLs to moderate
    */
   images?: Array<string>;
-
   /**
    * Media URLs from attachments outside the typed image/video/audio lists (custom attachment types such as GIF pickers)
    */
   other_media?: Array<string>;
-
   /**
    * Caller-supplied keys for texts (e.g. "title", "description"), index-aligned with texts[]
    */
   text_ordered_keys?: Array<string>;
-
   /**
    * Text content to moderate
    */
   texts?: Array<string>;
-
   /**
    * Video URLs to moderate
    */
   videos?: Array<string>;
-
   /**
    * Custom data for moderation
    */
   custom?: Record<string, any>;
-
   /**
    * Caller-supplied content IDs per image key (from content_ids on /analyze)
    */
   image_ids?: Record<string, string>;
-
   /**
    * Caller-supplied content IDs per text key (from content_ids on /analyze)
    */
@@ -6681,52 +5154,33 @@ export interface ModerationPayloadResponse {
 }
 
 export interface ModerationQueueResponse {
-  created_at: number;
-
+  created_at: TimestampNS;
   created_by: string;
-
   description: string;
-
   id: string;
-
   item_count: number;
-
   name: string;
-
   type: string;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   sort: Array<Record<string, any>>;
-
   filters: Record<string, any>;
 }
 
 export interface ModerationResponse {
   action: string;
-
   explicit: number;
-
   spam: number;
-
   toxic: number;
 }
 
 export interface ModerationV2Response {
   action: string;
-
   original_text: string;
-
   blocklist_matched?: string;
-
   platform_circumvented?: boolean;
-
   semantic_filter_matched?: string;
-
   blocklists_matched?: Array<string>;
-
   image_harms?: Array<string>;
-
   text_harms?: Array<string>;
 }
 
@@ -6735,7 +5189,6 @@ export interface MuteChannelRequest {
    * Duration of mute in milliseconds
    */
   expiration?: number;
-
   /**
    * Channel CIDs to mute (if multiple channels)
    */
@@ -6744,14 +5197,11 @@ export interface MuteChannelRequest {
 
 export interface MuteChannelResponse {
   duration: string;
-
   /**
    * Object with mutes (if multiple channels were muted)
    */
   channel_mutes?: Array<ChannelMute>;
-
   channel_mute?: ChannelMute;
-
   own_user?: OwnUserResponse;
 }
 
@@ -6760,7 +5210,6 @@ export interface MuteRequest {
    * User IDs to mute (if multiple users)
    */
   target_ids: Array<string>;
-
   /**
    * Duration of mute in minutes
    */
@@ -6769,17 +5218,14 @@ export interface MuteRequest {
 
 export interface MuteResponse {
   duration: string;
-
   /**
    * Object with mutes (if multiple users were muted)
    */
   mutes?: Array<UserMuteResponse>;
-
   /**
    * A list of users that can't be found. Common cause for this is deleted users
    */
   non_existing_users?: Array<string>;
-
   own_user?: OwnUserResponse;
 }
 
@@ -6787,48 +5233,36 @@ export interface NotificationAddedToChannelEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Represents channel in chat
    */
   channel: ChannelResponse;
-
   custom: CustomEventData;
-
   member: ChannelMemberResponse;
-
   /**
    * The type of event: "notification.added_to_channel" in this case
    */
   type: string;
-
   /**
    * The ID of the channel to which the user was added
    */
   channel_id?: string;
-
   channel_member_count?: number;
-
   channel_message_count?: number;
-
   /**
    * The type of the channel to which the user was added
    */
   channel_type?: string;
-
   /**
    * The CID of the channel to which the user was added
    */
   cid?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   channel_custom?: CustomChannelData;
 }
 
@@ -6836,66 +5270,51 @@ export interface NotificationChannelDeletedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Represents channel in chat
    */
   channel: ChannelResponse;
-
   custom: CustomEventData;
-
   /**
    * The type of event: "notification.channel_deleted" in this case
    */
   type: string;
-
   /**
    * The ID of the channel which was deleted
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   channel_message_count?: number;
-
   /**
    * The type of the channel which was deleted
    */
   channel_type?: string;
-
   /**
    * The CID of the channel which was deleted
    */
   cid?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   /**
    * The total number of unread messages
    */
   total_unread_count?: number;
-
   /**
    * The number of channels with unread messages
    */
   unread_channels?: number;
-
   /**
    * The number of unread messages in the channel
    */
   unread_count?: number;
-
   channel_custom?: CustomChannelData;
-
   grouped_unread_channels?: Record<string, number>;
 }
 
@@ -6903,88 +5322,67 @@ export interface NotificationChannelMutesUpdatedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   me: OwnUserResponse;
-
   /**
    * The type of event: "notification.channel_mutes_updated" in this case
    */
   type: string;
-
-  received_at?: number;
+  received_at?: TimestampNS;
 }
 
 export interface NotificationChannelTruncatedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Represents channel in chat
    */
   channel: ChannelResponse;
-
   custom: CustomEventData;
-
   /**
    * The type of event: "notification.channel_truncated" in this case
    */
   type: string;
-
   /**
    * The ID of the channel which was truncated
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   channel_message_count?: number;
-
   /**
    * The type of the channel which was truncated
    */
   channel_type?: string;
-
   /**
    * The CID of the channel which was truncated
    */
   cid?: string;
-
   message_id?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   /**
    * The total number of unread messages
    */
   total_unread_count?: number;
-
   /**
    * The number of channels with unread messages
    */
   unread_channels?: number;
-
   /**
    * The number of unread messages in the channel
    */
   unread_count?: number;
-
   channel_custom?: CustomChannelData;
-
   grouped_unread_channels?: Record<string, number>;
-
   /**
    * Represents any chat message
    */
@@ -6995,56 +5393,43 @@ export interface NotificationInviteAcceptedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Represents channel in chat
    */
   channel: ChannelResponse;
-
   custom: CustomEventData;
-
   member: ChannelMemberResponse;
-
   /**
    * The type of event: "notification.invite_accepted" in this case
    */
   type: string;
-
   /**
    * The ID of the channel to which the user accepted the invite
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   /**
    * The number of messages in the channel
    */
   channel_message_count?: number;
-
   /**
    * The type of the channel to which the user accepted the invite
    */
   channel_type?: string;
-
   /**
    * The CID of the channel to which the user accepted the invite
    */
   cid?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   channel_custom?: CustomChannelData;
-
   user?: UserResponseCommonFields;
 }
 
@@ -7052,56 +5437,43 @@ export interface NotificationInviteRejectedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Represents channel in chat
    */
   channel: ChannelResponse;
-
   custom: CustomEventData;
-
   member: ChannelMemberResponse;
-
   /**
    * The type of event: "notification.invite_rejected" in this case
    */
   type: string;
-
   /**
    * The ID of the channel to which the user rejected the invite
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   /**
    * The number of messages in the channel
    */
   channel_message_count?: number;
-
   /**
    * The type of the channel to which the user rejected the invite
    */
   channel_type?: string;
-
   /**
    * The CID of the channel to which the user rejected the invite
    */
   cid?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   channel_custom?: CustomChannelData;
-
   user?: UserResponseCommonFields;
 }
 
@@ -7109,56 +5481,43 @@ export interface NotificationInvitedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Represents channel in chat
    */
   channel: ChannelResponse;
-
   custom: CustomEventData;
-
   member: ChannelMemberResponse;
-
   /**
    * The type of event: "notification.invited" in this case
    */
   type: string;
-
   /**
    * The ID of the channel to which the user was invited
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   /**
    * The number of messages in the channel
    */
   channel_message_count?: number;
-
   /**
    * The type of the channel to which the user was invited
    */
   channel_type?: string;
-
   /**
    * The CID of the channel to which the user was invited
    */
   cid?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   channel_custom?: CustomChannelData;
-
   user?: UserResponseCommonFields;
 }
 
@@ -7166,90 +5525,69 @@ export interface NotificationMarkReadEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * The total number of unread messages
    */
   total_unread_count: number;
-
   /**
    * The number of channels with unread messages
    */
   unread_channels: number;
-
   /**
    * The total number of unread messages
    */
   unread_count: number;
-
   custom: CustomEventData;
-
   /**
    * The type of event: "notification.mark_read" in this case
    */
   type: string;
-
   /**
    * The ID of the channel which was marked as read
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   channel_message_count?: number;
-
   /**
    * The type of the channel which was marked as read
    */
   channel_type?: string;
-
   /**
    * The CID of the channel which was marked as read
    */
   cid?: string;
-
   /**
    * The ID of the last read message
    */
   last_read_message_id?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   /**
    * The ID of the thread which was marked as read
    */
   thread_id?: string;
-
   /**
    * The total number of unread messages in the threads
    */
   unread_thread_messages?: number;
-
   /**
    * The number of unread threads
    */
   unread_threads?: number;
-
   /**
    * Represents channel in chat
    */
   channel?: ChannelResponse;
-
   channel_custom?: CustomChannelData;
-
   grouped_unread_channels?: Record<string, number>;
-
   thread?: ThreadResponse;
-
   user?: UserResponseCommonFields;
 }
 
@@ -7257,103 +5595,80 @@ export interface NotificationMarkUnreadEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   /**
    * The type of event: "notification.mark_unread" in this case
    */
   type: string;
-
   /**
    * The ID of the channel which was marked as unread
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   channel_message_count?: number;
-
   /**
    * The type of the channel which was marked as unread
    */
   channel_type?: string;
-
   /**
    * The CID of the channel which was marked as unread
    */
   cid?: string;
-
   /**
    * The ID of the first unread message
    */
   first_unread_message_id?: string;
-
   /**
    * The time when the channel/thread was marked as unread
    */
-  last_read_at?: number;
-
+  last_read_at?: TimestampNS;
   /**
    * The ID of the last read message
    */
   last_read_message_id?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   /**
    * The ID of the thread which was marked as unread
    */
   thread_id?: string;
-
   /**
    * The total number of unread messages
    */
   total_unread_count?: number;
-
   /**
    * The number of channels with unread messages
    */
   unread_channels?: number;
-
   /**
    * The total number of unread messages
    */
   unread_count?: number;
-
   /**
    * The number of unread messages in the channel/thread after first_unread_message_id
    */
   unread_messages?: number;
-
   /**
    * The total number of unread messages in the threads
    */
   unread_thread_messages?: number;
-
   /**
    * The number of unread threads
    */
   unread_threads?: number;
-
   /**
    * Represents channel in chat
    */
   channel?: ChannelResponse;
-
   channel_custom?: CustomChannelData;
-
   grouped_unread_channels?: Record<string, number>;
-
   user?: UserResponseCommonFields;
 }
 
@@ -7361,91 +5676,67 @@ export interface NotificationMutesUpdatedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   me: OwnUserResponse;
-
   /**
    * The type of event: "notification.mutes_updated" in this case
    */
   type: string;
-
-  received_at?: number;
+  received_at?: TimestampNS;
 }
 
 export interface NotificationNewMessageEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   message_id: string;
-
   /**
    * The number of watchers
    */
   watcher_count: number;
-
   /**
    * Represents channel in chat
    */
   channel: ChannelResponse;
-
   custom: CustomEventData;
-
   /**
    * Represents any chat message
    */
   message: MessageResponse;
-
   /**
    * The type of event: "notification.message_new" in this case
    */
   type: string;
-
   /**
    * The ID of the channel where the message was sent
    */
   channel_id?: string;
-
   channel_member_count?: number;
-
   channel_message_count?: number;
-
   /**
    * The type of the channel where the message was sent
    */
   channel_type?: string;
-
   /**
    * The CID of the channel where the message was sent
    */
   cid?: string;
-
   parent_author?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   total_unread_count?: number;
-
   unread_channels?: number;
-
   unread_count?: number;
-
   /**
    * The participants of the thread
    */
   thread_participants?: Array<UserResponseCommonFields>;
-
   channel_custom?: CustomChannelData;
-
   grouped_unread_channels?: Record<string, number>;
 }
 
@@ -7453,56 +5744,43 @@ export interface NotificationRemovedFromChannelEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Represents channel in chat
    */
   channel: ChannelResponse;
-
   custom: CustomEventData;
-
   member: ChannelMemberResponse;
-
   /**
    * The type of event: "notification.removed_from_channel" in this case
    */
   type: string;
-
   /**
    * The ID of the channel from which the user was removed
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   /**
    * The number of messages in the channel
    */
   channel_message_count?: number;
-
   /**
    * The type of the channel from which the user was removed
    */
   channel_type?: string;
-
   /**
    * The CID of the channel from which the user was removed
    */
   cid?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   channel_custom?: CustomChannelData;
-
   user?: UserResponseCommonFields;
 }
 
@@ -7510,88 +5788,66 @@ export interface NotificationThreadMessageNewEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   message_id: string;
-
   /**
    * The ID of the thread
    */
   thread_id: string;
-
   /**
    * The number of watchers
    */
   watcher_count: number;
-
   /**
    * Represents channel in chat
    */
   channel: ChannelResponse;
-
   custom: CustomEventData;
-
   /**
    * Represents any chat message
    */
   message: MessageResponse;
-
   /**
    * The type of event: "notification.message_new" in this case
    */
   type: string;
-
   /**
    * The ID of the channel where the message was sent
    */
   channel_id?: string;
-
   channel_member_count?: number;
-
   channel_message_count?: number;
-
   /**
    * The type of the channel where the message was sent
    */
   channel_type?: string;
-
   /**
    * The CID of the channel where the message was sent
    */
   cid?: string;
-
   parent_author?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   unread_thread_messages?: number;
-
   unread_threads?: number;
-
   /**
    * The participants of the thread
    */
   thread_participants?: Array<UserResponseCommonFields>;
-
   channel_custom?: CustomChannelData;
 }
 
 export interface OCRContentParameters {
   label_operator?: string;
-
   severity?: string;
-
   harm_labels?: Array<string>;
 }
 
 export interface OCRRule {
   action: 'flag' | 'shadow' | 'remove' | 'bounce' | 'bounce_flag' | 'bounce_remove';
-
   label: string;
 }
 
@@ -7601,77 +5857,49 @@ export interface OnlyUserID {
 
 export interface OwnUserResponse {
   banned: boolean;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   id: string;
-
   invisible: boolean;
-
   language: string;
-
   online: boolean;
-
   role: string;
-
   total_unread_count: number;
-
   unread_channels: number;
-
   unread_count: number;
-
   unread_threads: number;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   channel_mutes: Array<ChannelMute>;
-
   devices: Array<DeviceResponse>;
-
   mutes: Array<UserMuteResponse>;
-
   teams: Array<string>;
-
   custom: CustomUserData;
-
   avg_response_time?: number;
-
-  deactivated_at?: number;
-
-  deleted_at?: number;
-
+  deactivated_at?: TimestampNS;
+  deleted_at?: TimestampNS;
   image?: string;
-
-  last_active?: number;
-
+  last_active?: TimestampNS;
   name?: string;
-
-  revoke_tokens_issued_before?: number;
-
+  revoke_tokens_issued_before?: TimestampNS;
   blocked_user_ids?: Array<string>;
-
   latest_hidden_channels?: Array<string>;
-
   privacy_settings?: PrivacySettingsResponse;
-
   push_preferences?: PushPreferencesResponse;
-
   teams_role?: Record<string, string>;
-
   total_unread_count_by_team?: Record<string, number>;
 }
 
 export interface PaginationParams {
+  id_gt?: number;
+  id_gte?: number;
+  id_lt?: number;
+  id_lte?: number;
   limit?: number;
-
   offset?: number;
 }
 
 export interface ParsedPredefinedFilterResponse {
   name: string;
-
   filter: Record<string, any>;
-
   sort?: Array<SortParamRequest>;
 }
 
@@ -7679,37 +5907,29 @@ export interface PendingMessageEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * The method used for the pending message
    */
   method: string;
-
   custom: CustomEventData;
-
   /**
    * The type of event: "message.pending" in this case
    */
   type: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * Represents channel in chat
    */
   channel?: ChannelResponse;
-
   /**
    * Represents any chat message
    */
   message?: MessageResponse;
-
   /**
    * Metadata attached to the pending message
    */
   metadata?: Record<string, string>;
-
   /**
    * User response object
    */
@@ -7721,12 +5941,10 @@ export interface PendingMessageResponse {
    * Represents channel in chat
    */
   channel?: ChannelResponse;
-
   /**
    * Represents any chat message
    */
   message?: MessageResponse;
-
   /**
    * User response object
    */
@@ -7737,73 +5955,56 @@ export interface PollClosedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   poll: PollResponseData;
-
   /**
    * The type of event: "poll.closed" in this case
    */
   type: string;
-
   activity_id?: string;
-
   /**
    * The CID of the channel containing the poll
    */
   cid?: string;
-
   /**
    * The ID of the message containing the poll
    */
   message_id?: string;
-
-  received_at?: number;
+  received_at?: TimestampNS;
 }
 
 export interface PollDeletedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   poll: PollResponseData;
-
   /**
    * The type of event: "poll.deleted" in this case
    */
   type: string;
-
   activity_id?: string;
-
   /**
    * The CID of the channel containing the poll
    */
   cid?: string;
-
   /**
    * The ID of the message containing the poll
    */
   message_id?: string;
-
-  received_at?: number;
+  received_at?: TimestampNS;
 }
 
 export interface PollOptionInput {
   text?: string;
-
   custom?: CustomPollOptionData;
 }
 
 export interface PollOptionRequest {
   id: string;
-
   text?: string;
-
   custom?: CustomPollOptionData;
 }
 
@@ -7812,16 +6013,14 @@ export interface PollOptionResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   poll_option: PollOptionResponseData;
 }
 
 export interface PollOptionResponseData {
   id: string;
-
   text: string;
-
   custom: CustomPollOptionData;
+  text_i18n?: Record<string, string>;
 }
 
 export interface PollResponse {
@@ -7829,185 +6028,134 @@ export interface PollResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   poll: PollResponseData;
 }
 
 export interface PollResponseData {
   allow_answers: boolean;
-
   allow_user_suggested_options: boolean;
-
   answers_count: number;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   created_by_id: string;
-
   description: string;
-
   enforce_unique_vote: boolean;
-
   id: string;
-
   name: string;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   vote_count: number;
-
   /**
    * Voting visibility of the poll
    */
-
   voting_visibility: 'anonymous' | 'public';
-
   latest_answers: Array<PollVoteResponseData>;
-
   options: Array<PollOptionResponseData>;
-
   own_votes: Array<PollVoteResponseData>;
-
   custom: CustomPollData;
-
   latest_votes_by_option: Record<string, Array<PollVoteResponseData>>;
-
   vote_counts_by_option: Record<string, number>;
-
   is_closed?: boolean;
-
   max_votes_allowed?: number;
-
   /**
    * User response object
    */
   created_by?: UserResponse;
+  description_i18n?: Record<string, string>;
+  name_i18n?: Record<string, string>;
 }
 
 export interface PollUpdatedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   poll: PollResponseData;
-
   /**
    * The type of event: "poll.updated" in this case
    */
   type: string;
-
   activity_id?: string;
-
   /**
    * The CID of the channel containing the poll
    */
   cid?: string;
-
   /**
    * The ID of the message containing the poll
    */
   message_id?: string;
-
-  received_at?: number;
+  received_at?: TimestampNS;
 }
 
 export interface PollVoteCastedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   poll: PollResponseData;
-
   poll_vote: PollVoteResponseData;
-
   /**
    * The type of event: "poll.vote_casted" in this case
    */
   type: string;
-
   activity_id?: string;
-
   /**
    * The CID of the channel containing the poll
    */
   cid?: string;
-
   /**
    * The ID of the message containing the poll
    */
   message_id?: string;
-
-  received_at?: number;
+  received_at?: TimestampNS;
 }
 
 export interface PollVoteChangedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   poll: PollResponseData;
-
   poll_vote: PollVoteResponseData;
-
   /**
    * The type of event: "poll.vote_changed" in this case
    */
   type: string;
-
   activity_id?: string;
-
   /**
    * The CID of the channel containing the poll
    */
   cid?: string;
-
   /**
    * The ID of the message containing the poll
    */
   message_id?: string;
-
-  received_at?: number;
+  received_at?: TimestampNS;
 }
 
 export interface PollVoteRemovedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   poll: PollResponseData;
-
   poll_vote: PollVoteResponseData;
-
   /**
    * The type of event: "poll.vote_removed" in this case
    */
   type: string;
-
   activity_id?: string;
-
   /**
    * The CID of the channel containing the poll
    */
   cid?: string;
-
   /**
    * The ID of the message containing the poll
    */
   message_id?: string;
-
-  received_at?: number;
+  received_at?: TimestampNS;
 }
 
 export interface PollVoteResponse {
@@ -8015,29 +6163,20 @@ export interface PollVoteResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   poll?: PollResponseData;
-
   vote?: PollVoteResponseData;
 }
 
 export interface PollVoteResponseData {
-  created_at: number;
-
+  created_at: TimestampNS;
   id: string;
-
   option_id: string;
-
   poll_id: string;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   answer_text?: string;
-
   is_answer?: boolean;
-
   user_id?: string;
-
+  answer_text_i18n?: Record<string, string>;
   /**
    * User response object
    */
@@ -8049,22 +6188,17 @@ export interface PollVotesResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * Poll votes
    */
   votes: Array<PollVoteResponseData>;
-
   next?: string;
-
   prev?: string;
 }
 
 export interface PrivacySettingsResponse {
   delivery_receipts?: DeliveryReceiptsResponse;
-
   read_receipts?: ReadReceiptsResponse;
-
   typing_indicators?: TypingIndicatorsResponse;
 }
 
@@ -8072,18 +6206,14 @@ export interface PushPreferenceInput {
   /**
    * Set the level of call push notifications for the user. One of: all, none, default
    */
-
   call_level?: 'all' | 'none' | 'default';
-
   /**
    * Set the push preferences for a specific channel. If empty it sets the default for the user
    */
   channel_cid?: string;
-
   /**
    * Set the level of chat push notifications for the user. Note: "mentions" is deprecated in favor of "direct_mentions". One of: all, mentions, direct_mentions, all_mentions, none, default
    */
-
   chat_level?:
     | 'all'
     | 'mentions'
@@ -8091,59 +6221,43 @@ export interface PushPreferenceInput {
     | 'all_mentions'
     | 'none'
     | 'default';
-
   /**
    * Disable push notifications till a certain time
    */
   disabled_until?: Date;
-
   /**
    * Set the level of feeds push notifications for the user. One of: all, none, default
    */
-
   feeds_level?: 'all' | 'none' | 'default';
-
   /**
    * Remove the disabled until time. (IE stop snoozing notifications)
    */
   remove_disable?: boolean;
-
   /**
    * The user id for which to set the push preferences. Required when using server side auths, defaults to current user with client side auth.
    */
   user_id?: string;
-
   chat_preferences?: ChatPreferencesInput;
-
   feeds_preferences?: FeedsPreferences;
 }
 
 export interface PushPreferencesResponse {
   call_level?: string;
-
   chat_level?: string;
-
-  disabled_until?: number;
-
+  disabled_until?: TimestampNS;
   feeds_level?: string;
-
   chat_preferences?: ChatPreferencesResponse;
-
   feeds_preferences?: FeedsPreferencesResponse;
 }
 
 export interface QueryAppealsRequest {
   limit?: number;
-
   next?: string;
-
   prev?: string;
-
   /**
    * Sorting parameters for appeals
    */
   sort?: Array<SortParamRequest>;
-
   /**
    * Filter conditions for appeals
    */
@@ -8207,14 +6321,11 @@ export interface QueryAppealsRequest {
 
 export interface QueryAppealsResponse {
   duration: string;
-
   /**
    * List of Appeal Items
    */
   items: Array<AppealItemResponse>;
-
   next?: string;
-
   prev?: string;
 }
 
@@ -8256,22 +6367,22 @@ export interface QueryBannedUsersPayload {
       operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
   }>;
-
+  created_at_after?: TimestampNS;
+  created_at_after_or_equal?: TimestampNS;
+  created_at_before?: TimestampNS;
+  created_at_before_or_equal?: TimestampNS;
   /**
    * Whether to exclude expired bans or not
    */
   exclude_expired_bans?: boolean;
-
   /**
    * Number of records to return
    */
   limit?: number;
-
   /**
    * Number of records to offset
    */
   offset?: number;
-
   /**
    * Array of sort parameters
    */
@@ -8283,7 +6394,6 @@ export interface QueryBannedUsersResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * List of found bans
    */
@@ -8295,49 +6405,39 @@ export interface QueryChannelsRequest {
    * Number of channels to limit
    */
   limit?: number;
-
   /**
    * Number of members to limit
    */
   member_limit?: number;
-
   /**
    * Number of messages to limit
    */
   message_limit?: number;
-
   /**
    * Channel pagination offset
    */
   offset?: number;
-
   /**
    * ID of a predefined filter to use instead of filter_conditions
    */
   predefined_filter?: string;
-
   presence?: boolean;
-
   /**
    * Whether to update channel state or not
    */
   state?: boolean;
-
   /**
    * Whether to start watching found channels or not
    */
   watch?: boolean;
-
   /**
    * Top-level keys of the message sender's channel-member custom data to include under member.custom (max 8 keys, 64 chars each)
    */
   member_custom_include?: Array<string>;
-
   /**
    * List of sort parameters
    */
   sort?: Array<SortParamRequest>;
-
   /**
    * Filter conditions to apply to the query
    */
@@ -8509,12 +6609,10 @@ export interface QueryChannelsRequest {
       operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
   }>;
-
   /**
    * Values to interpolate into the predefined filter template
    */
   filter_values?: Record<string, any>;
-
   sort_values?: Record<string, any>;
 }
 
@@ -8523,27 +6621,21 @@ export interface QueryChannelsResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * List of channels
    */
   channels: Array<ChannelStateResponseFields>;
-
   predefined_filter?: ParsedPredefinedFilterResponse;
 }
 
 export interface QueryDraftsRequest {
   limit?: number;
-
   next?: string;
-
   prev?: string;
-
   /**
    * Array of sort parameters
    */
   sort?: Array<SortParamRequest>;
-
   /**
    * Filter to apply to the query
    */
@@ -8570,38 +6662,35 @@ export interface QueryDraftsResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * Drafts
    */
   drafts: Array<DraftResponse>;
-
   next?: string;
-
   prev?: string;
 }
 
 export interface QueryFutureChannelBansPayload {
+  created_at_after?: TimestampNS;
+  created_at_after_or_equal?: TimestampNS;
+  created_at_before?: TimestampNS;
+  created_at_before_or_equal?: TimestampNS;
   /**
    * Whether to exclude expired bans or not
    */
   exclude_expired_bans?: boolean;
-
   /**
    * When true, the response includes the total number of bans matching the query filter (independent of limit and offset, capped at 100000)
    */
   include_total?: boolean;
-
   /**
    * Number of records to return
    */
   limit?: number;
-
   /**
    * Number of records to offset
    */
   offset?: number;
-
   /**
    * Filter by the target user ID. Server-side: returns all bans against this user. Client-side: narrows the authenticated user's own bans to this target.
    */
@@ -8613,12 +6702,10 @@ export interface QueryFutureChannelBansResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * List of found future channel bans
    */
   bans: Array<FutureChannelBanResponse>;
-
   /**
    * Total number of bans matching the query filter, computed at query time and capped at 100000. Only present when include_total is set on the request; omitted when computing the total timed out
    */
@@ -8627,20 +6714,22 @@ export interface QueryFutureChannelBansResponse {
 
 export interface QueryMembersPayload {
   type: string;
-
+  created_at_after?: TimestampNS;
+  created_at_after_or_equal?: TimestampNS;
+  created_at_before?: TimestampNS;
+  created_at_before_or_equal?: TimestampNS;
   id?: string;
-
   limit?: number;
-
   offset?: number;
-
+  user_id_gt?: string;
+  user_id_gte?: string;
+  user_id_lt?: string;
+  user_id_lte?: string;
   members?: Array<ChannelMemberRequest>;
-
   /**
    * Array of sort parameters
    */
   sort?: Array<SortParamRequest>;
-
   /**
    * Filter conditions to apply to the query
    */
@@ -8739,19 +6828,15 @@ export interface QueryMembersPayload {
 
 export interface QueryMessageFlagsPayload {
   limit?: number;
-
   offset?: number;
-
   /**
    * Whether to include deleted messages in the results
    */
   show_deleted_messages?: boolean;
-
   /**
    * Array of sort parameters
    */
   sort?: Array<SortParamRequest>;
-
   /**
    * Filter conditions to apply to the query
    */
@@ -8848,7 +6933,6 @@ export interface QueryMessageFlagsResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * The flags that match the query
    */
@@ -8857,16 +6941,12 @@ export interface QueryMessageFlagsResponse {
 
 export interface QueryModerationConfigsRequest {
   limit?: number;
-
   next?: string;
-
   prev?: string;
-
   /**
    * Sorting parameters for the results
    */
   sort?: Array<SortParamRequest>;
-
   /**
    * Filter conditions for moderation configs
    */
@@ -8903,29 +6983,22 @@ export interface QueryModerationConfigsRequest {
 
 export interface QueryModerationConfigsResponse {
   duration: string;
-
   /**
    * List of moderation configurations
    */
   configs: Array<ConfigResponse>;
-
   next?: string;
-
   prev?: string;
 }
 
 export interface QueryPollVotesRequest {
   limit?: number;
-
   next?: string;
-
   prev?: string;
-
   /**
    * Array of sort parameters
    */
   sort?: Array<SortParamRequest>;
-
   /**
    * Filter to apply to the query
    */
@@ -8969,16 +7042,12 @@ export interface QueryPollVotesRequest {
 
 export interface QueryPollsRequest {
   limit?: number;
-
   next?: string;
-
   prev?: string;
-
   /**
    * Array of sort parameters
    */
   sort?: Array<SortParamRequest>;
-
   /**
    * Filter to apply to the query
    */
@@ -9055,29 +7124,22 @@ export interface QueryPollsResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * Polls data returned by the query
    */
   polls: Array<PollResponseData>;
-
   next?: string;
-
   prev?: string;
 }
 
 export interface QueryReactionsRequest {
   limit?: number;
-
   next?: string;
-
   prev?: string;
-
   /**
    * Array of sort parameters
    */
   sort?: Array<SortParamRequest>;
-
   /**
    * Filter to apply to the query
    */
@@ -9104,26 +7166,19 @@ export interface QueryReactionsResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   reactions: Array<ReactionResponse>;
-
   next?: string;
-
   prev?: string;
 }
 
 export interface QueryRemindersRequest {
   limit?: number;
-
   next?: string;
-
   prev?: string;
-
   /**
    * Array of sort parameters
    */
   sort?: Array<SortParamRequest>;
-
   /**
    * Filter to apply to the query
    */
@@ -9155,51 +7210,39 @@ export interface QueryRemindersResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * MessageReminders data returned by the query
    */
   reminders: Array<ReminderResponseData>;
-
   next?: string;
-
   prev?: string;
 }
 
 export interface QueryReviewQueueRequest {
   exclude_default_action_config?: boolean;
-
   limit?: number;
-
   /**
    * Number of items to lock (1-25)
    */
   lock_count?: number;
-
   /**
    * Duration for which items should be locked
    */
   lock_duration?: number;
-
   /**
    * Whether to lock items for review (true), unlock items (false), or just fetch (nil)
    */
   lock_items?: boolean;
-
   next?: string;
-
   prev?: string;
-
   /**
    * Whether to return only statistics
    */
   stats_only?: boolean;
-
   /**
    * Sorting parameters for the results
    */
   sort?: Array<SortParamRequest>;
-
   /**
    * Filter conditions for review queue items. Accepts built-in fields (e.g. status, channel_cid, severity, recommended_action) and customer-supplied moderation_payload.custom keys: any key that is not a built-in field is matched against the item's custom moderation data (e.g. {"location_id": "loc-42"}). Use filter_config.filterable_custom_keys to discover which custom keys the app exposes as chips.
    */
@@ -9254,6 +7297,11 @@ export interface QueryReviewQueueRequest {
       operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
 
+    confidence_score: {
+      type: number;
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
+    };
+
     config_key: {
       type: string;
       operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
@@ -9291,7 +7339,15 @@ export interface QueryReviewQueueRequest {
 
     entity_creator_name: {
       type: string;
-      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
+      operators:
+        | '$contains'
+        | '$eq'
+        | '$exists'
+        | '$gt'
+        | '$gte'
+        | '$in'
+        | '$lt'
+        | '$lte';
     };
 
     entity_id: {
@@ -9443,60 +7499,45 @@ export interface QueryReviewQueueRequest {
 
 export interface QueryReviewQueueResponse {
   duration: string;
-
   /**
    * List of review queue items
    */
   items: Array<ReviewQueueItemResponse>;
-
   /**
    * Configuration for moderation actions
    */
   action_config: Record<string, Array<ModerationActionConfigResponse>>;
-
   /**
    * Statistics about the review queue
    */
   stats: Record<string, any>;
-
   next?: string;
-
   prev?: string;
-
   default_action_config?: Record<string, Array<ModerationActionConfigResponse>>;
-
   filter_config?: FilterConfigResponse;
 }
 
 export interface QueryThreadsRequest {
   limit?: number;
-
   member_limit?: number;
-
   next?: string;
-
   /**
    * Limit the number of participants returned per each thread
    */
   participant_limit?: number;
-
   prev?: string;
-
   /**
    * Limit the number of replies returned per each thread
    */
   reply_limit?: number;
-
   /**
    * Start watching the channel this thread belongs to
    */
   watch?: boolean;
-
   /**
    * Array of sort parameters
    */
   sort?: Array<SortParamRequest>;
-
   /**
    * Filter to apply to the query
    */
@@ -9583,14 +7624,11 @@ export interface QueryThreadsResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * List of enriched thread states
    */
   threads: Array<ThreadStateResponse>;
-
   next?: string;
-
   prev?: string;
 }
 
@@ -9695,15 +7733,14 @@ export interface QueryUsersPayload {
       operators: '$autocomplete' | '$eq';
     };
   }>;
-
+  id_gt?: string;
+  id_gte?: string;
+  id_lt?: string;
+  id_lte?: string;
   include_deactivated_users?: boolean;
-
   limit?: number;
-
   offset?: number;
-
   presence?: boolean;
-
   /**
    * Array of sort parameters
    */
@@ -9715,7 +7752,6 @@ export interface QueryUsersResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * Array of users as result of filters applied.
    */
@@ -9727,43 +7763,26 @@ export interface QueueResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   queue?: ModerationQueueResponse;
 }
 
 export interface Reaction {
   activity_id: string;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   kind: string;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   user_id: string;
-
-  deleted_at?: number;
-
+  deleted_at?: TimestampNS;
   id?: string;
-
   parent?: string;
-
   score?: number;
-
   target_feeds?: Array<string>;
-
   children_counts?: Record<string, any>;
-
   data?: Record<string, any>;
-
   latest_children?: Record<string, Array<Reaction>>;
-
   moderation?: Record<string, any>;
-
   own_children?: Record<string, Array<Reaction>>;
-
   target_feeds_extra_data?: Record<string, any>;
-
   user?: User;
 }
 
@@ -9771,68 +7790,52 @@ export interface ReactionDeletedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Represents channel in chat
    */
   channel: ChannelResponse;
-
   custom: CustomEventData;
-
   /**
    * The type of event: "reaction.deleted" in this case
    */
   type: string;
-
   /**
    * The ID of the channel containing the message
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   /**
    * The number of messages in the channel
    */
   channel_message_count?: number;
-
   /**
    * The type of the channel containing the message
    */
   channel_type?: string;
-
   /**
    * The CID of the channel containing the message
    */
   cid?: string;
-
   message_id?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   /**
    * The participants of the thread
    */
   thread_participants?: Array<UserResponseCommonFields>;
-
   channel_custom?: CustomChannelData;
-
   /**
    * Represents any chat message
    */
   message?: MessageResponse;
-
   reaction?: ReactionResponse;
-
   user?: UserResponseCommonFields;
 }
 
@@ -9841,22 +7844,18 @@ export interface ReactionGroupResponse {
    * Count is the number of reactions of this type.
    */
   count: number;
-
   /**
    * FirstReactionAt is the time of the first reaction of this type. This is the same also if all reaction of this type are deleted, because if someone will react again with the same type, will be preserved the sorting.
    */
-  first_reaction_at: number;
-
+  first_reaction_at: TimestampNS;
   /**
    * LastReactionAt is the time of the last reaction of this type.
    */
-  last_reaction_at: number;
-
+  last_reaction_at: TimestampNS;
   /**
    * SumScores is the sum of all scores of reactions of this type. Medium allows you to clap articles more than once and shows the sum of all claps from all users. For example, you can send `clap` x5 using `score: 5`.
    */
   sum_scores: number;
-
   /**
    * The most recent users who reacted with this type, ordered by most recent first.
    */
@@ -9867,13 +7866,11 @@ export interface ReactionGroupUserResponse {
   /**
    * The time when the user reacted.
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * The ID of the user who reacted.
    */
   user_id: string;
-
   /**
    * User response object
    */
@@ -9884,68 +7881,52 @@ export interface ReactionNewEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Represents channel in chat
    */
   channel: ChannelResponse;
-
   custom: CustomEventData;
-
   /**
    * The type of event: "reaction.new" in this case
    */
   type: string;
-
   /**
    * The ID of the channel containing the message
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   /**
    * The number of messages in the channel
    */
   channel_message_count?: number;
-
   /**
    * The type of the channel containing the message
    */
   channel_type?: string;
-
   /**
    * The CID of the channel containing the message
    */
   cid?: string;
-
   message_id?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   /**
    * The participants of the thread
    */
   thread_participants?: Array<UserResponseCommonFields>;
-
   channel_custom?: CustomChannelData;
-
   /**
    * Represents any chat message
    */
   message?: MessageResponse;
-
   reaction?: ReactionResponse;
-
   user?: UserResponseCommonFields;
 }
 
@@ -9954,22 +7935,18 @@ export interface ReactionRequest {
    * The type of reaction (e.g. 'like', 'laugh', 'wow')
    */
   type: string;
-
   /**
    * Date/time of creation
    */
   created_at?: Date;
-
   /**
    * Reaction score. If not specified reaction has score of 1
    */
   score?: number;
-
   /**
    * Date/time of the last update
    */
   updated_at?: Date;
-
   custom?: CustomReactionData;
 }
 
@@ -9977,38 +7954,31 @@ export interface ReactionResponse {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Message ID
    */
   message_id: string;
-
   /**
    * Score of the reaction
    */
   score: number;
-
   /**
    * Type of reaction
    */
   type: string;
-
   /**
    * Date/time of the last update
    */
-  updated_at: number;
-
+  updated_at: TimestampNS;
   /**
    * User ID
    */
   user_id: string;
-
   /**
    * Custom data for this object
    */
   custom: CustomReactionData;
-
   /**
    * User response object
    */
@@ -10019,63 +7989,48 @@ export interface ReactionUpdatedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   message_id: string;
-
   /**
    * Represents channel in chat
    */
   channel: ChannelResponse;
-
   custom: CustomEventData;
-
   /**
    * Represents any chat message
    */
   message: MessageResponse;
-
   /**
    * The type of event: "reaction.updated" in this case
    */
   type: string;
-
   /**
    * The ID of the channel containing the message
    */
   channel_id?: string;
-
   /**
    * The number of members in the channel
    */
   channel_member_count?: number;
-
   /**
    * The number of messages in the channel
    */
   channel_message_count?: number;
-
   /**
    * The type of the channel containing the message
    */
   channel_type?: string;
-
   /**
    * The CID of the channel containing the message
    */
   cid?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team ID
    */
   team?: string;
-
   channel_custom?: CustomChannelData;
-
   reaction?: ReactionResponse;
-
   user?: UserResponseCommonFields;
 }
 
@@ -10084,19 +8039,14 @@ export interface ReadReceiptsResponse {
 }
 
 export interface ReadStateResponse {
-  last_read: number;
-
+  last_read: TimestampNS;
   unread_messages: number;
-
   /**
    * User response object
    */
   user: UserResponse;
-
-  last_delivered_at?: number;
-
+  last_delivered_at?: TimestampNS;
   last_delivered_message_id?: string;
-
   last_read_message_id?: string;
 }
 
@@ -10112,37 +8062,29 @@ export interface ReminderCreatedEvent {
    * The CID of the Channel for which the reminder was created
    */
   cid: string;
-
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * The ID of the message for which the reminder was created
    */
   message_id: string;
-
   /**
    * The ID of the user for whom the reminder was created
    */
   user_id: string;
-
   custom: CustomEventData;
-
   reminder: ReminderResponseData;
-
   /**
    * The type of event: "reminder.created" in this case
    */
   type: string;
-
   /**
    * The ID of the parent message, if the reminder is for a thread message
    */
   parent_id?: string;
-
-  received_at?: number;
+  received_at?: TimestampNS;
 }
 
 export interface ReminderDeletedEvent {
@@ -10150,37 +8092,29 @@ export interface ReminderDeletedEvent {
    * The CID of the Channel for which the reminder was created
    */
   cid: string;
-
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * The ID of the message for which the reminder was created
    */
   message_id: string;
-
   /**
    * The ID of the user for whom the reminder was created
    */
   user_id: string;
-
   custom: CustomEventData;
-
   reminder: ReminderResponseData;
-
   /**
    * The type of event: "reminder.deleted" in this case
    */
   type: string;
-
   /**
    * The ID of the parent message, if the reminder is for a thread message
    */
   parent_id?: string;
-
-  received_at?: number;
+  received_at?: TimestampNS;
 }
 
 export interface ReminderNotificationEvent {
@@ -10188,59 +8122,43 @@ export interface ReminderNotificationEvent {
    * The CID of the Channel for which the reminder was created
    */
   cid: string;
-
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * The ID of the message for which the reminder was created
    */
   message_id: string;
-
   /**
    * The ID of the user for whom the reminder was created
    */
   user_id: string;
-
   custom: CustomEventData;
-
   reminder: ReminderResponseData;
-
   /**
    * The type of event: "notification.reminder_due" in this case
    */
   type: string;
-
   parent_id?: string;
-
-  received_at?: number;
+  received_at?: TimestampNS;
 }
 
 export interface ReminderResponseData {
   channel_cid: string;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   message_id: string;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   user_id: string;
-
-  remind_at?: number;
-
+  remind_at?: TimestampNS;
   /**
    * Represents channel in chat
    */
   channel?: ChannelResponse;
-
   /**
    * Represents any chat message
    */
   message?: MessageResponse;
-
   /**
    * User response object
    */
@@ -10252,37 +8170,29 @@ export interface ReminderUpdatedEvent {
    * The CID of the Channel for which the reminder was created
    */
   cid: string;
-
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * The ID of the message for which the reminder was created
    */
   message_id: string;
-
   /**
    * The ID of the user for whom the reminder was created
    */
   user_id: string;
-
   custom: CustomEventData;
-
   reminder: ReminderResponseData;
-
   /**
    * The type of event: "reminder.updated" in this case
    */
   type: string;
-
   /**
    * The ID of the parent message, if the reminder is for a thread message
    */
   parent_id?: string;
-
-  received_at?: number;
+  received_at?: TimestampNS;
 }
 
 export interface RemoveUserGroupMembersRequest {
@@ -10290,13 +8200,11 @@ export interface RemoveUserGroupMembersRequest {
    * List of user IDs to remove
    */
   member_ids: Array<string>;
-
   team_id?: string;
 }
 
 export interface RemoveUserGroupMembersResponse {
   duration: string;
-
   user_group?: UserGroupResponse;
 }
 
@@ -10319,143 +8227,111 @@ export interface ReviewQueueItemResponse {
    * AI-determined text severity
    */
   ai_text_severity: string;
-
   /**
    * When the item was created
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * ID of the entity being reviewed
    */
   entity_id: string;
-
   /**
    * Type of entity being reviewed
    */
   entity_type: string;
-
   /**
    * Whether the item has been escalated
    */
   escalated: boolean;
-
   flags_count: number;
-
   /**
    * Unique identifier of the review queue item
    */
   id: string;
-
   latest_moderator_action: string;
-
   /**
    * Suggested moderation action
    */
   recommended_action: string;
-
   /**
    * ID of the moderator who reviewed the item
    */
   reviewed_by: string;
-
   /**
    * Severity level of the content
    */
   severity: number;
-
   /**
    * Current status of the review
    */
   status: string;
-
   /**
    * When the item was last updated
    */
-  updated_at: number;
-
+  updated_at: TimestampNS;
   /**
    * Moderation actions taken
    */
   actions: Array<ActionLogResponse>;
-
   /**
    * Associated ban records
    */
   bans: Array<BanInfoResponse>;
-
   /**
    * Associated flag records
    */
   flags: Array<ModerationFlagResponse>;
-
   /**
    * Detected languages in the content
    */
   languages: Array<string>;
-
   /**
    * When the review was completed
    */
-  completed_at?: number;
-
+  completed_at?: TimestampNS;
+  /**
+   * Highest per-label confidence (0-1) any provider reported across the item's flags; absent when no flag carried one
+   */
+  confidence_score?: number;
   config_key?: string;
-
   /**
    * ID of who created the entity
    */
   entity_creator_id?: string;
-
   /**
    * When the item was escalated
    */
-  escalated_at?: number;
-
+  escalated_at?: TimestampNS;
   /**
    * ID of the moderator who escalated the item
    */
   escalated_by?: string;
-
   /**
    * When the item was reviewed
    */
-  reviewed_at?: number;
-
+  reviewed_at?: TimestampNS;
   /**
    * Teams associated with this item
    */
   teams?: Array<string>;
-
   activity?: EnrichedActivity;
-
   appeal?: AppealItemResponse;
-
   /**
    * User response object
    */
   assigned_to?: UserResponse;
-
   call?: ModerationCallResponse;
-
   entity_creator?: EntityCreatorResponse;
-
   escalation_metadata?: EscalationMetadata;
-
   feeds_v2_activity?: EnrichedActivity;
-
   feeds_v2_reaction?: Reaction;
-
   feeds_v3_activity?: FeedsV3ActivityResponse;
-
   feeds_v3_comment?: FeedsV3CommentResponse;
-
   message?: ChatMessageResponse;
-
   /**
    * Content payload for moderation
    */
   moderation_payload?: ModerationPayloadResponse;
-
   reaction?: Reaction;
 }
 
@@ -10463,23 +8339,19 @@ export interface Role {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Whether this is a custom role or built-in
    */
   custom: boolean;
-
   /**
    * Unique role name
    */
   name: string;
-
   /**
    * Date/time of the last update
    */
-  updated_at: number;
-
+  updated_at: TimestampNS;
   /**
    * List of scopes where this role is currently present. `.app` means that role is present in app-level grants
    */
@@ -10488,9 +8360,7 @@ export interface Role {
 
 export interface RuleBuilderAction {
   reason?: string;
-
   skip_inbox?: boolean;
-
   type?:
     | 'ban_user'
     | 'flag_user'
@@ -10509,103 +8379,65 @@ export interface RuleBuilderAction {
     | 'warning'
     | 'call_warning'
     | 'webhook_only';
-
   ban_options?: BanOptions;
-
   call_options?: CallActionOptions;
-
   flag_user_options?: FlagUserOptions;
 }
 
 export interface RuleBuilderCondition {
   confidence?: number;
-
   type?: string;
-
   call_custom_property_params?: CallCustomPropertyParameters;
-
   call_type_rule_params?: CallTypeRuleParameters;
-
   call_violation_count_params?: CallViolationCountParameters;
-
   channel_message_count_rule_params?: ChannelMessageCountRuleParameters;
-
   closed_caption_rule_params?: ClosedCaptionRuleParameters;
-
   content_count_rule_params?: ContentCountRuleParameters;
-
   content_custom_property_count_params?: ContentCustomPropertyCountParameters;
-
   content_custom_property_params?: ContentCustomPropertyParameters;
-
   content_flag_count_rule_params?: FlagCountRuleParameters;
-
   flood_identical_params?: FloodIdenticalRuleParameters;
-
   flood_similar_params?: FloodSimilarRuleParameters;
-
   image_content_params?: ImageContentParameters;
-
   image_rule_params?: ImageRuleParameters;
-
   ip_content_count_rule_params?: IPContentCountRuleParameters;
-
   ip_flag_count_rule_params?: IPFlagCountRuleParameters;
-
   keyframe_ocr_rule_params?: KeyframeOCRRuleParameters;
-
   keyframe_rule_params?: KeyframeRuleParameters;
-
   ocr_content_params?: OCRContentParameters;
-
   text_content_params?: TextContentParameters;
-
   text_rule_params?: TextRuleParameters;
-
+  user_channel_count_params?: UserChannelCountRuleParameters;
   user_created_within_params?: UserCreatedWithinParameters;
-
   user_custom_property_params?: UserCustomPropertyParameters;
-
   user_flag_count_rule_params?: FlagCountRuleParameters;
-
   user_identical_content_count_params?: UserIdenticalContentCountParameters;
-
+  user_identical_image_count_params?: UserIdenticalImageCountParameters;
+  user_reaction_count_params?: UserReactionCountRuleParameters;
   user_role_params?: UserRoleParameters;
-
   user_rule_params?: UserRuleParameters;
-
   video_content_params?: VideoContentParameters;
-
   video_rule_params?: VideoRuleParameters;
 }
 
 export interface RuleBuilderConditionGroup {
   logic?: string;
-
   conditions?: Array<RuleBuilderCondition>;
 }
 
 export interface RuleBuilderConfig {
   async?: boolean;
-
   rules?: Array<RuleBuilderRule>;
 }
 
 export interface RuleBuilderRule {
   rule_type: string;
-
   cooldown_period?: string;
-
   id?: string;
-
   logic?: string;
-
   action_sequences?: Array<CallRuleActionSequence>;
-
   conditions?: Array<RuleBuilderCondition>;
-
   groups?: Array<RuleBuilderConditionGroup>;
-
   action?: RuleBuilderAction;
 }
 
@@ -10781,36 +8613,28 @@ export interface SearchPayload {
       operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
   }>;
-
   force_default_search?: boolean;
-
   force_sql_v2_backend?: boolean;
-
   /**
    * Number of messages to return
    */
   limit?: number;
-
   /**
    * Pagination parameter. Cannot be used with non-zero offset.
    */
   next?: string;
-
   /**
    * Pagination offset. Cannot be used with sort or next.
    */
   offset?: number;
-
   /**
    * Search phrase
    */
   query?: string;
-
   /**
    * Sort parameters. Cannot be used with non-zero offset
    */
   sort?: Array<SortParamRequest>;
-
   /**
    * Message filter conditions
    */
@@ -10900,7 +8724,6 @@ export interface SearchPayload {
       operators: '$eq' | '$in';
     };
   }>;
-
   message_options?: MessageOptions;
 }
 
@@ -10909,22 +8732,18 @@ export interface SearchResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * Search results
    */
   results: Array<SearchResult>;
-
   /**
    * Value to pass to the next search query in order to paginate
    */
   next?: string;
-
   /**
    * Value that points to the previous page. Pass as the next value in a search query to paginate backwards
    */
   previous?: string;
-
   results_warning?: SearchWarning;
 }
 
@@ -10934,123 +8753,72 @@ export interface SearchResult {
 
 export interface SearchResultMessage {
   cid: string;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   deleted_reply_count: number;
-
   html: string;
-
   id: string;
-
   mentioned_channel: boolean;
-
   mentioned_here: boolean;
-
   pinned: boolean;
-
   reply_count: number;
-
   shadowed: boolean;
-
   silent: boolean;
-
   text: string;
-
   type: string;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   attachments: Array<Attachment>;
-
   latest_reactions: Array<ReactionResponse>;
-
   mentioned_users: Array<UserResponse>;
-
   own_reactions: Array<ReactionResponse>;
-
   restricted_visibility: Array<string>;
-
   custom: CustomMessageData;
-
   reaction_counts: Record<string, number>;
-
   reaction_scores: Record<string, number>;
-
   /**
    * User response object
    */
   user: UserResponse;
-
   command?: string;
-
-  deleted_at?: number;
-
+  deleted_at?: TimestampNS;
   deleted_for_me?: boolean;
-
-  message_text_updated_at?: number;
-
+  message_text_updated_at?: TimestampNS;
   mml?: string;
-
   parent_id?: string;
-
-  pin_expires?: number;
-
-  pinned_at?: number;
-
+  pin_expires?: TimestampNS;
+  pinned_at?: TimestampNS;
   poll_id?: string;
-
   quoted_message_id?: string;
-
   show_in_channel?: boolean;
-
   mentioned_group_ids?: Array<string>;
-
   mentioned_groups?: Array<UserGroupResponse>;
-
   mentioned_roles?: Array<string>;
-
   thread_participants?: Array<UserResponse>;
-
   /**
    * Represents channel in chat
    */
   channel?: ChannelResponse;
-
   draft?: DraftResponse;
-
   i18n?: Record<string, string>;
-
   image_labels?: Record<string, Array<string>>;
-
   member?: ChannelMemberPartialResponse;
-
   mentioned_channel_members?: Record<string, ChannelMemberPartialResponse>;
-
   moderation?: ModerationV2Response;
-
   /**
    * User response object
    */
   pinned_by?: UserResponse;
-
   poll?: PollResponseData;
-
   /**
    * Represents any chat message
    */
   quoted_message?: MessageResponse;
-
   reaction_groups?: Record<string, ReactionGroupResponse>;
-
   reminder?: ReminderResponseData;
-
   shared_location?: SharedLocationResponseData;
 }
 
 export interface SearchRolesResponse {
   duration: string;
-
   /**
    * Matching roles, sorted ascending by name
    */
@@ -11059,7 +8827,6 @@ export interface SearchRolesResponse {
 
 export interface SearchUserGroupsResponse {
   duration: string;
-
   /**
    * List of matching user groups
    */
@@ -11071,17 +8838,14 @@ export interface SearchWarning {
    * Code corresponding to the warning
    */
   warning_code: number;
-
   /**
    * Description of the warning
    */
   warning_description: string;
-
   /**
    * Number of channels searched
    */
   channel_search_count?: number;
-
   /**
    * Channel CIDs for the searched channels
    */
@@ -11097,21 +8861,16 @@ export interface SendMessageRequest {
    * Message data for creating or updating a message
    */
   message: MessageRequest;
-
   /**
    * When true, the response includes channel_context: a slim channel object with cid, type, id and created_by
    */
   include_channel_context?: boolean;
-
   /**
    * When true, the response includes mentioned_members: for each mentioned user, whether that user is currently a channel member. Requires the ReadChannelMembers permission
    */
   include_mentioned_members?: boolean;
-
   keep_channel_hidden?: boolean;
-
   skip_enrich_url?: boolean;
-
   skip_push?: boolean;
 }
 
@@ -11120,17 +8879,14 @@ export interface SendMessageResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * Represents any chat message
    */
   message: MessageResponse;
-
   /**
    * Slim channel object: identity plus creator
    */
   channel_context?: ChannelContextResponse;
-
   /**
    * Map of mentioned user ID to whether that user is currently an active channel member. Only set when include_mentioned_members was requested; omitted when the message has no mentions or the membership lookup failed
    */
@@ -11142,12 +8898,10 @@ export interface SendReactionRequest {
    * Represents user reaction to a message
    */
   reaction: ReactionRequest;
-
   /**
    * Whether to replace all existing user reactions
    */
   enforce_unique?: boolean;
-
   /**
    * Skips any mobile push notifications
    */
@@ -11159,12 +8913,10 @@ export interface SendReactionResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * Represents any chat message
    */
   message: MessageResponse;
-
   reaction: ReactionResponse;
 }
 
@@ -11177,11 +8929,8 @@ export interface ShadowBlockActionRequestPayload {
 
 export interface SharedLocation {
   latitude: number;
-
   longitude: number;
-
   created_by_device_id?: string;
-
   end_at?: Date;
 }
 
@@ -11190,54 +8939,43 @@ export interface SharedLocationResponse {
    * Channel CID
    */
   channel_cid: string;
-
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Device ID that created the live location
    */
   created_by_device_id: string;
-
   duration: string;
-
   /**
    * Latitude coordinate
    */
   latitude: number;
-
   /**
    * Longitude coordinate
    */
   longitude: number;
-
   /**
    * Message ID
    */
   message_id: string;
-
   /**
    * Date/time of the last update
    */
-  updated_at: number;
-
+  updated_at: TimestampNS;
   /**
    * User ID
    */
   user_id: string;
-
   /**
    * Time when the live location expires
    */
-  end_at?: number;
-
+  end_at?: TimestampNS;
   /**
    * Represents channel in chat
    */
   channel?: ChannelResponse;
-
   /**
    * Represents any chat message
    */
@@ -11246,28 +8984,18 @@ export interface SharedLocationResponse {
 
 export interface SharedLocationResponseData {
   channel_cid: string;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   created_by_device_id: string;
-
   latitude: number;
-
   longitude: number;
-
   message_id: string;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   user_id: string;
-
-  end_at?: number;
-
+  end_at?: TimestampNS;
   /**
    * Represents channel in chat
    */
   channel?: ChannelResponse;
-
   /**
    * Represents any chat message
    */
@@ -11276,7 +9004,6 @@ export interface SharedLocationResponseData {
 
 export interface SharedLocationsResponse {
   duration: string;
-
   active_live_locations: Array<SharedLocationResponseData>;
 }
 
@@ -11294,12 +9021,10 @@ export interface SortParamRequest {
    * Direction of sorting, 1 for Ascending, -1 for Descending, default is 1. One of: -1, 1
    */
   direction?: number;
-
   /**
    * Name of field to sort by
    */
   field?: string;
-
   /**
    * Type of field to sort by. Empty string or omitted means string type (default). One of: number, boolean
    */
@@ -11310,7 +9035,6 @@ export interface SubmitActionRequest {
   /**
    * Type of moderation action to perform. One of: mark_reviewed, delete_message, delete_activity, delete_comment, delete_reaction, ban, custom, unban, restore, delete_user, delete_user_messages, unblock, block, shadow_block, unmask, kick_user, end_call, escalate, de_escalate
    */
-
   action_type:
     | 'flag'
     | 'mark_reviewed'
@@ -11334,96 +9058,76 @@ export interface SubmitActionRequest {
     | 'escalate'
     | 'de_escalate'
     | 'bypass';
-
   /**
    * UUID of the appeal to act on (required for reject_appeal, optional for other actions)
    */
   appeal_id?: string;
-
   /**
    * UUID of the review queue item to act on
    */
   item_id?: string;
-
   /**
    * Configuration for ban moderation action
    */
   ban?: BanActionRequestPayload;
-
   /**
    * Configuration for block action
    */
   block?: BlockActionRequestPayload;
-
   bypass?: BypassActionRequest;
-
   /**
    * Configuration for custom moderation action
    */
   custom?: CustomActionRequestPayload;
-
   /**
    * Configuration for activity deletion action
    */
   delete_activity?: DeleteActivityRequestPayload;
-
   /**
    * Configuration for comment deletion action
    */
   delete_comment?: DeleteCommentRequestPayload;
-
   /**
    * Configuration for message deletion action
    */
   delete_message?: DeleteMessageRequestPayload;
-
   /**
    * Configuration for reaction deletion action
    */
   delete_reaction?: DeleteReactionRequestPayload;
-
   /**
    * Configuration for user deletion action
    */
   delete_user?: DeleteUserRequestPayload;
-
   /**
    * Configuration for deleting all of a user's chat messages without banning them or deleting their account
    */
   delete_user_messages?: DeleteUserMessagesRequestPayload;
-
   /**
    * Configuration for escalation action
    */
   escalate?: EscalatePayload;
-
   flag?: FlagRequest;
-
   /**
    * Configuration for mark reviewed action
    */
   mark_reviewed?: MarkReviewedRequestPayload;
-
   /**
    * Configuration for rejecting an appeal
    */
   reject_appeal?: RejectAppealRequestPayload;
-
   /**
    * Configuration for restore action. State-aware: reverses whichever of a delete, a block, or a shadow block currently applies to the content (including both a delete and a block/shadow block at once).
    */
   restore?: RestoreActionRequestPayload;
-
   /**
    * Configuration for shadow block action
    */
   shadow_block?: ShadowBlockActionRequestPayload;
-
   /**
    * Configuration for unban moderation action
    */
   unban?: UnbanActionRequestPayload;
-
   /**
    * Deprecated: use restore instead — it now also reverses a block or shadow block. Configuration for unblock action.
    */
@@ -11432,14 +9136,11 @@ export interface SubmitActionRequest {
 
 export interface SubmitActionResponse {
   duration: string;
-
   /**
    * Present when the appeal was accepted but the entity could not be restored automatically. The moderator should restore it manually.
    */
   auto_restore_warning?: string;
-
   appeal_item?: AppealItemResponse;
-
   item?: ReviewQueueItemResponse;
 }
 
@@ -11448,7 +9149,6 @@ export interface SyncRequest {
    * Date from which synchronization should happen
    */
   last_sync_at: Date;
-
   /**
    * List of channel CIDs to sync
    */
@@ -11460,12 +9160,10 @@ export interface SyncResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * List of events
    */
   events: Array<WSEvent>;
-
   /**
    * List of CIDs that user can't access
    */
@@ -11474,71 +9172,48 @@ export interface SyncResponse {
 
 export interface TextContentParameters {
   contains_url?: boolean;
-
   label_operator?: string;
-
   severity?: string;
-
   text_length?: number;
-
   text_length_operator?: string;
-
   blocklist_match?: Array<string>;
-
   harm_labels?: Array<string>;
-
   llm_harm_labels?: Record<string, string>;
 }
 
 export interface TextRuleParameters {
   contains_url?: boolean;
-
   semantic_filter_min_threshold?: number;
-
   severity?: string;
-
   threshold?: number;
-
   time_window?: string;
-
   blocklist_match?: Array<string>;
-
   harm_labels?: Array<string>;
-
   semantic_filter_names?: Array<string>;
-
   llm_harm_labels?: Record<string, string>;
 }
 
 export interface ThreadParticipant {
   channel_cid: string;
-
   /**
    * Date/time of creation
    */
-  created_at: number;
-
-  last_read_at: number;
-
+  created_at: TimestampNS;
+  last_read_at: TimestampNS;
   custom: CustomThreadData;
-
-  last_thread_message_at?: number;
-
+  last_thread_message_at?: TimestampNS;
   /**
    * Left Thread At is the time when the user left the thread
    */
-  left_thread_at?: number;
-
+  left_thread_at?: TimestampNS;
   /**
    * Thead ID is unique string identifier of the thread
    */
   thread_id?: string;
-
   /**
    * User ID is unique string identifier of the user
    */
   user_id?: string;
-
   /**
    * User response object
    */
@@ -11550,77 +9225,62 @@ export interface ThreadResponse {
    * Active Participant Count
    */
   active_participant_count: number;
-
   /**
    * Channel CID
    */
   channel_cid: string;
-
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Created By User ID
    */
   created_by_user_id: string;
-
   /**
    * Parent Message ID
    */
   parent_message_id: string;
-
   /**
    * Participant Count
    */
   participant_count: number;
-
   /**
    * Reply Count
    */
   reply_count: number;
-
   /**
    * Title
    */
   title: string;
-
   /**
    * Date/time of the last update
    */
-  updated_at: number;
-
+  updated_at: TimestampNS;
   /**
    * Custom data for this object
    */
   custom: CustomThreadData;
-
   /**
    * Deleted At
    */
-  deleted_at?: number;
-
+  deleted_at?: TimestampNS;
   /**
    * Last Message At
    */
-  last_message_at?: number;
-
+  last_message_at?: TimestampNS;
   /**
    * Thread Participants
    */
   thread_participants?: Array<ThreadParticipant>;
-
   /**
    * Represents channel in chat
    */
   channel?: ChannelResponse;
-
   /**
    * User response object
    */
   created_by?: UserResponse;
-
   /**
    * Represents any chat message
    */
@@ -11632,83 +9292,65 @@ export interface ThreadStateResponse {
    * Active Participant Count
    */
   active_participant_count: number;
-
   /**
    * Channel CID
    */
   channel_cid: string;
-
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Created By User ID
    */
   created_by_user_id: string;
-
   /**
    * Parent Message ID
    */
   parent_message_id: string;
-
   /**
    * Participant Count
    */
   participant_count: number;
-
   /**
    * Reply Count
    */
   reply_count: number;
-
   /**
    * Title
    */
   title: string;
-
   /**
    * Date/time of the last update
    */
-  updated_at: number;
-
+  updated_at: TimestampNS;
   latest_replies: Array<MessageResponse>;
-
   /**
    * Custom data for this object
    */
   custom: CustomThreadData;
-
   /**
    * Deleted At
    */
-  deleted_at?: number;
-
+  deleted_at?: TimestampNS;
   /**
    * Last Message At
    */
-  last_message_at?: number;
-
+  last_message_at?: TimestampNS;
   read?: Array<ReadStateResponse>;
-
   /**
    * Thread Participants
    */
   thread_participants?: Array<ThreadParticipant>;
-
   /**
    * Represents channel in chat
    */
   channel?: ChannelResponse;
-
   /**
    * User response object
    */
   created_by?: UserResponse;
-
   draft?: DraftResponse;
-
   /**
    * Represents any chat message
    */
@@ -11716,28 +9358,19 @@ export interface ThreadStateResponse {
 }
 
 export interface ThreadUpdatedEvent {
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   type: string;
-
   channel_id?: string;
-
   channel_type?: string;
-
   cid?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   thread?: ThreadResponse;
 }
 
 export interface Thresholds {
   explicit?: LabelThresholds;
-
   spam?: LabelThresholds;
-
   toxic?: LabelThresholds;
 }
 
@@ -11747,7 +9380,6 @@ export interface TranslateMessageRequest {
   /**
    * Language to translate message to
    */
-
   language:
     | 'af'
     | 'sq'
@@ -11808,27 +9440,34 @@ export interface TranslateMessageRequest {
     | 'ht';
 }
 
+export interface TranslateMessageResponse {
+  /**
+   * Duration of the request in milliseconds
+   */
+  duration: string;
+  /**
+   * Represents any chat message
+   */
+  message: MessageResponse;
+}
+
 export interface TruncateChannelRequest {
   /**
    * Permanently delete channel data (messages, reactions, etc.)
    */
   hard_delete?: boolean;
-
   /**
    * When `message` is set disables all push notifications for it
    */
   skip_push?: boolean;
-
   /**
    * Truncate channel data up to `truncated_at`. The system message (if provided) creation time is always greater than `truncated_at`
    */
   truncated_at?: Date;
-
   /**
    * List of member IDs to hide message history for. If empty, truncates the channel for all members
    */
   member_ids?: Array<string>;
-
   /**
    * Message data for creating or updating a message
    */
@@ -11840,12 +9479,10 @@ export interface TruncateChannelResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * Represents channel in chat
    */
   channel?: ChannelResponse;
-
   /**
    * Represents any chat message
    */
@@ -11860,37 +9497,30 @@ export interface TypingStartEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   /**
    * The type of event: "typing.start" in this case
    */
   type: string;
-
   /**
    * The ID of the channel where the user started typing
    */
   channel_id?: string;
-
   /**
    * The type of the channel where the user started typing
    */
   channel_type?: string;
-
   /**
    * The CID of the channel where the user started typing
    */
   cid?: string;
-
   /**
    * The parent ID if the user started typing in a thread
    */
   parent_id?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
+  member?: ChannelMemberPartialResponse;
   user?: UserResponseCommonFields;
 }
 
@@ -11898,37 +9528,30 @@ export interface TypingStopEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   /**
    * The type of event: "typing.stop" in this case
    */
   type: string;
-
   /**
    * The ID of the channel where the user stopped typing
    */
   channel_id?: string;
-
   /**
    * The type of the channel where the user stopped typing
    */
   channel_type?: string;
-
   /**
    * The CID of the channel where the user stopped typing
    */
   cid?: string;
-
   /**
    * The parent ID if the user stopped typing in a thread
    */
   parent_id?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
+  member?: ChannelMemberPartialResponse;
   user?: UserResponseCommonFields;
 }
 
@@ -11937,17 +9560,14 @@ export interface UnbanActionRequestPayload {
    * Channel CID for channel-specific unban
    */
   channel_cid?: string;
-
   /**
    * Reason for the appeal decision
    */
   decision_reason?: string;
-
   /**
    * Also remove the future channels ban for this user
    */
   remove_future_channels_ban?: boolean;
-
   /**
    * Optional: unban user directly without review item
    */
@@ -11983,7 +9603,6 @@ export interface UnmuteChannelRequest {
    * Duration of mute in milliseconds
    */
   expiration?: number;
-
   /**
    * Channel CIDs to mute (if multiple channels)
    */
@@ -11999,7 +9618,6 @@ export interface UnmuteRequest {
 
 export interface UnmuteResponse {
   duration: string;
-
   /**
    * A list of users that can't be found. Common cause for this is deleted users
    */
@@ -12008,41 +9626,29 @@ export interface UnmuteResponse {
 
 export interface UnreadCountsChannel {
   channel_id: string;
-
-  last_read: number;
-
+  last_read: TimestampNS;
   unread_count: number;
 }
 
 export interface UnreadCountsChannelType {
   channel_count: number;
-
   channel_type: string;
-
   unread_count: number;
 }
 
 export interface UnreadCountsThread {
-  last_read: number;
-
+  last_read: TimestampNS;
   last_read_message_id: string;
-
   parent_message_id: string;
-
   unread_count: number;
 }
 
 export interface UpdateBlockListRequest {
   is_confusable_folding_enabled?: boolean;
-
   is_leet_check_enabled?: boolean;
-
   is_plural_check_enabled?: boolean;
-
   is_substring_matching_enabled?: boolean;
-
   team?: string;
-
   /**
    * List of words to block
    */
@@ -12054,7 +9660,6 @@ export interface UpdateBlockListResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * Block list contains restricted words
    */
@@ -12063,7 +9668,6 @@ export interface UpdateBlockListResponse {
 
 export interface UpdateChannelPartialRequest {
   unset?: Array<string>;
-
   set?: Record<string, any>;
 }
 
@@ -12072,12 +9676,10 @@ export interface UpdateChannelPartialResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * List of updated members
    */
   members: Array<ChannelMemberResponse>;
-
   /**
    * Represents channel in chat
    */
@@ -12089,59 +9691,47 @@ export interface UpdateChannelRequest {
    * Set to `true` to accept the invite
    */
   accept_invite?: boolean;
-
   /**
    * Sets cool down period for the channel in seconds
    */
   cooldown?: number;
-
   /**
    * Set to `true` to hide channel's history when adding new members
    */
   hide_history?: boolean;
-
   /**
    * If set, hides channel's history before this time when adding new members. Takes precedence over `hide_history` when both are provided. Must be in RFC3339 format (e.g., "2024-01-01T10:00:00Z") and in the past.
    */
   hide_history_before?: Date;
-
   /**
    * Set to `true` to reject the invite
    */
   reject_invite?: boolean;
-
   /**
    * When `message` is set disables all push notifications for it
    */
   skip_push?: boolean;
-
   /**
    * List of filter tags to add to the channel
    */
   add_filter_tags?: Array<string>;
-
   /**
    * List of user IDs to add to the channel
    */
   add_members?: Array<ChannelMemberRequest>;
-
   /**
    * List of user IDs to invite to the channel
    */
   invites?: Array<ChannelMemberRequest>;
-
   /**
    * List of filter tags to remove from the channel
    */
   remove_filter_tags?: Array<string>;
-
   /**
    * List of user IDs to remove from the channel
    */
   remove_members?: Array<string>;
-
   data?: ChannelInputRequest;
-
   /**
    * Message data for creating or updating a message
    */
@@ -12153,17 +9743,14 @@ export interface UpdateChannelResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * List of channel members
    */
   members: Array<ChannelMemberResponse>;
-
   /**
    * Represents channel in chat
    */
   channel?: ChannelResponse;
-
   /**
    * Represents any chat message
    */
@@ -12175,17 +9762,14 @@ export interface UpdateLiveLocationRequest {
    * Live location ID
    */
   message_id: string;
-
   /**
    * Time when the live location expires
    */
   end_at?: Date;
-
   /**
    * Latitude coordinate
    */
   latitude?: number;
-
   /**
    * Longitude coordinate
    */
@@ -12194,7 +9778,6 @@ export interface UpdateLiveLocationRequest {
 
 export interface UpdateMemberPartialRequest {
   unset?: Array<string>;
-
   set?: Record<string, any>;
 }
 
@@ -12203,7 +9786,6 @@ export interface UpdateMemberPartialResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   channel_member?: ChannelMemberResponse;
 }
 
@@ -12212,14 +9794,11 @@ export interface UpdateMessagePartialRequest {
    * Skip enriching the URL in the message
    */
   skip_enrich_url?: boolean;
-
   skip_push?: boolean;
-
   /**
    * Array of field names to unset
    */
   unset?: Array<string>;
-
   /**
    * Sets new field values
    */
@@ -12231,7 +9810,6 @@ export interface UpdateMessagePartialResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * Represents any chat message
    */
@@ -12243,12 +9821,10 @@ export interface UpdateMessageRequest {
    * Message data for creating or updating a message
    */
   message: MessageRequest;
-
   /**
    * Skip enrich URL
    */
   skip_enrich_url?: boolean;
-
   skip_push?: boolean;
 }
 
@@ -12257,7 +9833,6 @@ export interface UpdateMessageResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * Represents any chat message
    */
@@ -12269,12 +9844,10 @@ export interface UpdatePollOptionRequest {
    * Option ID
    */
   id: string;
-
   /**
    * Option text
    */
   text: string;
-
   /**
    * Custom data for this object
    */
@@ -12286,7 +9859,6 @@ export interface UpdatePollPartialRequest {
    * Array of field names to unset
    */
   unset?: Array<string>;
-
   /**
    * Sets new field values
    */
@@ -12298,53 +9870,42 @@ export interface UpdatePollRequest {
    * Poll ID
    */
   id: string;
-
   /**
    * Poll name
    */
   name: string;
-
   /**
    * Allow answers
    */
   allow_answers?: boolean;
-
   /**
    * Allow user suggested options
    */
   allow_user_suggested_options?: boolean;
-
   /**
    * Poll description
    */
   description?: string;
-
   /**
    * Enforce unique vote
    */
   enforce_unique_vote?: boolean;
-
   /**
    * Is closed
    */
   is_closed?: boolean;
-
   /**
    * Max votes allowed
    */
   max_votes_allowed?: number;
-
   /**
    * Voting visibility
    */
-
   voting_visibility?: 'anonymous' | 'public';
-
   /**
    * Poll options
    */
   options?: Array<PollOptionRequest>;
-
   /**
    * Custom data for this object
    */
@@ -12353,11 +9914,8 @@ export interface UpdatePollRequest {
 
 export interface UpdateQueueRequest {
   description?: string;
-
   name?: string;
-
   sort?: Array<Record<string, any>>;
-
   filters?: Record<string, any>;
 }
 
@@ -12370,7 +9928,6 @@ export interface UpdateReminderResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   reminder: ReminderResponseData;
 }
 
@@ -12379,7 +9936,6 @@ export interface UpdateThreadPartialRequest {
    * Array of field names to unset
    */
   unset?: Array<string>;
-
   /**
    * Sets new field values
    */
@@ -12391,7 +9947,6 @@ export interface UpdateThreadPartialResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   thread: ThreadResponse;
 }
 
@@ -12400,18 +9955,15 @@ export interface UpdateUserGroupRequest {
    * The new description for the group
    */
   description?: string;
-
   /**
    * The new name of the user group
    */
   name?: string;
-
   team_id?: string;
 }
 
 export interface UpdateUserGroupResponse {
   duration: string;
-
   user_group?: UserGroupResponse;
 }
 
@@ -12420,9 +9972,7 @@ export interface UpdateUserPartialRequest {
    * User ID to update
    */
   id: string;
-
   unset?: Array<string>;
-
   set?: Record<string, any>;
 }
 
@@ -12442,9 +9992,11 @@ export interface UpdateUsersResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
+  /**
+   * @deprecated
+   * Deprecated: always empty. Removing a user from a team no longer deletes their memberships in that team's channels, so there is no task to poll
+   */
   membership_deletion_task_id: string;
-
   /**
    * Object containing users
    */
@@ -12456,7 +10008,6 @@ export interface UploadChannelFileRequest {
    * file field
    */
   file?: string;
-
   user?: OnlyUserID;
 }
 
@@ -12465,14 +10016,11 @@ export interface UploadChannelFileResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * URL to the uploaded asset. Should be used to put to `asset_url` attachment field
    */
   file?: string;
-
   moderation_action?: string;
-
   /**
    * URL of the file thumbnail for supported file formats. Should be put to `thumb_url` attachment field
    */
@@ -12481,12 +10029,10 @@ export interface UploadChannelFileResponse {
 
 export interface UploadChannelRequest {
   file?: string;
-
   /**
    * field with JSON-encoded array of image size configurations
    */
   upload_sizes?: Array<ImageSize>;
-
   user?: OnlyUserID;
 }
 
@@ -12495,13 +10041,9 @@ export interface UploadChannelResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   file?: string;
-
   moderation_action?: string;
-
   thumb_url?: string;
-
   /**
    * Array of image size configurations
    */
@@ -12510,19 +10052,12 @@ export interface UploadChannelResponse {
 
 export interface UpsertActionConfigItem {
   action: string;
-
   entity_type: string;
-
   order: number;
-
   description?: string;
-
   icon?: string;
-
   id?: string;
-
   queue_type?: string;
-
   custom?: Record<string, any>;
 }
 
@@ -12531,37 +10066,30 @@ export interface UpsertActionConfigRequest {
    * The action to perform (e.g. ban, delete_message, custom)
    */
   action: string;
-
   /**
    * Type of entity this action applies to (e.g. stream:chat:v1:message)
    */
   entity_type: string;
-
   /**
    * Display order in the dashboard (0–100, lower numbers shown first)
    */
   order: number;
-
   /**
    * Human-readable label for the dashboard button
    */
   description?: string;
-
   /**
    * Icon identifier for the dashboard button
    */
   icon?: string;
-
   /**
    * UUID of an existing action config to update; omit to create a new record
    */
   id?: string;
-
   /**
    * Queue this config belongs to; null means the default queue
    */
   queue_type?: string;
-
   /**
    * Action-specific parameters passed to the action handler
    */
@@ -12570,7 +10098,6 @@ export interface UpsertActionConfigRequest {
 
 export interface UpsertActionConfigResponse {
   duration: string;
-
   /**
    * Configuration for a moderation action
    */
@@ -12582,53 +10109,34 @@ export interface UpsertConfigRequest {
    * Unique identifier for the moderation configuration
    */
   key: string;
-
   /**
    * Whether moderation should be performed asynchronously
    */
   async?: boolean;
-
   /**
    * Team associated with the configuration
    */
   team?: string;
-
   ai_audio_config?: AIAudioConfigRequest;
-
   ai_image_config?: AIImageConfig;
-
   ai_text_config?: AITextConfig;
-
-  ai_video_config?: AIVideoConfig;
-
+  ai_video_config?: AIVideoConfigRequest;
   automod_platform_circumvention_config?: AutomodPlatformCircumventionConfig;
-
   automod_semantic_filters_config?: AutomodSemanticFiltersConfig;
-
   automod_toxicity_config?: AutomodToxicityConfig;
-
   aws_rekognition_config?: AIImageConfig;
-
   block_list_config?: BlockListConfig;
-
   bodyguard_config?: AITextConfig;
-
   flood_config?: FloodConfig;
-
   google_vision_config?: GoogleVisionConfig;
-
   llm_config?: LLMConfig;
-
   rule_builder_config?: RuleBuilderConfig;
-
   velocity_filter_config?: VelocityFilterConfig;
-
   video_call_rule_config?: VideoCallRuleConfig;
 }
 
 export interface UpsertConfigResponse {
   duration: string;
-
   config?: ConfigResponse;
 }
 
@@ -12644,7 +10152,6 @@ export interface UpsertPushPreferencesResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   /**
    * The channel specific push notification preferences, only returned for channels you've edited.
    */
@@ -12652,7 +10159,6 @@ export interface UpsertPushPreferencesResponse {
     string,
     Record<string, ChannelPushPreferencesResponse>
   >;
-
   /**
    * The user preferences, always returned regardless if you edited it
    */
@@ -12661,7 +10167,6 @@ export interface UpsertPushPreferencesResponse {
 
 export interface User {
   id: string;
-
   data?: Record<string, any>;
 }
 
@@ -12669,68 +10174,56 @@ export interface UserBannedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   user: UserResponseCommonFields;
-
   /**
    * The type of event: "user.banned" in this case
    */
   type: string;
-
   /**
    * The ID of the channel where the target user was banned
    */
   channel_id?: string;
-
   channel_member_count?: number;
-
   channel_message_count?: number;
-
   /**
    * The type of the channel where the target user was banned
    */
   channel_type?: string;
-
   /**
    * The CID of the channel where the target user was banned
    */
   cid?: string;
-
   /**
    * The expiration date of the ban
    */
-  expiration?: number;
-
+  expiration?: TimestampNS;
   /**
    * The reason for the ban
    */
   reason?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * ID of the review queue item (flagged message) that triggered the ban, if the ban was applied from the moderation review queue
    */
   review_queue_item_id?: string;
-
   /**
    * Whether the user was shadow banned
    */
   shadow?: boolean;
-
   /**
    * The team of the channel where the target user was banned
    */
   team?: string;
-
   total_bans?: number;
-
   channel_custom?: CustomChannelData;
-
   created_by?: UserResponseCommonFields;
+}
+
+export interface UserChannelCountRuleParameters {
+  threshold?: number;
+  time_window?: string;
 }
 
 export interface UserCreatedWithinParameters {
@@ -12739,7 +10232,6 @@ export interface UserCreatedWithinParameters {
 
 export interface UserCustomPropertyParameters {
   operator?: string;
-
   property_key?: string;
 }
 
@@ -12747,19 +10239,14 @@ export interface UserDeactivatedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   user: UserResponseCommonFields;
-
   /**
    * The type of event: "user.deactivated" in this case
    */
   type: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   created_by?: UserResponseCommonFields;
 }
 
@@ -12767,67 +10254,49 @@ export interface UserDeletedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * The type of deletion that was used for the user's conversations. One of: hard, soft, pruning, (empty string)
    */
   delete_conversation: string;
-
   /**
    * Whether the user's conversation channels were deleted
    */
   delete_conversation_channels: boolean;
-
   /**
    * The type of deletion that was used for the user's messages. One of: hard, soft, pruning, (empty string)
    */
   delete_messages: string;
-
   /**
    * The type of deletion that was used for the user. One of: hard, soft, pruning, (empty string)
    */
   delete_user: string;
-
   /**
    * Whether the user was hard deleted
    */
   hard_delete: boolean;
-
   /**
    * Whether the user's messages were marked as deleted
    */
   mark_messages_deleted: boolean;
-
   custom: CustomEventData;
-
   user: UserResponseCommonFields;
-
   /**
    * The type of event: "user.deleted" in this case
    */
   type: string;
-
-  received_at?: number;
+  received_at?: TimestampNS;
 }
 
 export interface UserGroup {
   app_pk: number;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   id: string;
-
   name: string;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   created_by?: string;
-
   description?: string;
-
   team_id?: string;
-
   members?: Array<UserGroupMember>;
 }
 
@@ -12835,19 +10304,14 @@ export interface UserGroupCreatedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   /**
    * The type of event: "user_group.created" in this case
    */
   type: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   user?: UserResponseCommonFields;
-
   user_group?: UserGroup;
 }
 
@@ -12855,31 +10319,22 @@ export interface UserGroupDeletedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   /**
    * The type of event: "user_group.deleted" in this case
    */
   type: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   user?: UserResponseCommonFields;
-
   user_group?: UserGroup;
 }
 
 export interface UserGroupMember {
   app_pk: number;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   group_id: string;
-
   is_admin: boolean;
-
   user_id: string;
 }
 
@@ -12887,24 +10342,18 @@ export interface UserGroupMemberAddedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * The user IDs that were added
    */
   members: Array<string>;
-
   custom: CustomEventData;
-
   /**
    * The type of event: "user_group.member_added" in this case
    */
   type: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   user?: UserResponseCommonFields;
-
   user_group?: UserGroup;
 }
 
@@ -12912,42 +10361,29 @@ export interface UserGroupMemberRemovedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * The user IDs that were removed
    */
   members: Array<string>;
-
   custom: CustomEventData;
-
   /**
    * The type of event: "user_group.member_removed" in this case
    */
   type: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   user?: UserResponseCommonFields;
-
   user_group?: UserGroup;
 }
 
 export interface UserGroupResponse {
-  created_at: number;
-
+  created_at: TimestampNS;
   id: string;
-
   name: string;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   created_by?: string;
-
   description?: string;
-
   team_id?: string;
-
   members?: Array<UserGroupMember>;
 }
 
@@ -12955,25 +10391,26 @@ export interface UserGroupUpdatedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   /**
    * The type of event: "user_group.updated" in this case
    */
   type: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   user?: UserResponseCommonFields;
-
   user_group?: UserGroup;
 }
 
 export interface UserIdenticalContentCountParameters {
   threshold?: number;
+  time_window?: string;
+}
 
+export interface UserIdenticalImageCountParameters {
+  match?: string;
+  similarity_distance?: number;
+  threshold?: number;
   time_window?: string;
 }
 
@@ -12981,63 +10418,47 @@ export interface UserMessagesDeletedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   user: UserResponseCommonFields;
-
   /**
    * The type of event: "user.messages.deleted" in this case
    */
   type: string;
-
   /**
    * The ID of the channel where the target user's messages were deleted
    */
   channel_id?: string;
-
   channel_member_count?: number;
-
   channel_message_count?: number;
-
   /**
    * The type of the channel where the target user's messages were deleted
    */
   channel_type?: string;
-
   /**
    * The CID of the channel where the target user's messages were deleted
    */
   cid?: string;
-
   /**
    * Whether Messages were hard deleted
    */
   hard_delete?: boolean;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The team of the channel where the target user's messages were deleted
    */
   team?: string;
-
   channel_custom?: CustomChannelData;
 }
 
 export interface UserMuteResponse {
-  created_at: number;
-
-  updated_at: number;
-
-  expires?: number;
-
+  created_at: TimestampNS;
+  updated_at: TimestampNS;
+  expires?: TimestampNS;
   /**
    * User response object
    */
   target?: UserResponse;
-
   /**
    * User response object
    */
@@ -13048,24 +10469,18 @@ export interface UserMutedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   user: UserResponseCommonFields;
-
   /**
    * The type of event: "user.muted" in this case
    */
   type: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * The target users that were muted
    */
   target_users?: Array<UserResponseCommonFields>;
-
   target_user?: UserResponseCommonFields;
 }
 
@@ -13073,37 +10488,34 @@ export interface UserPresenceChangedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   user: UserResponseCommonFields;
-
   /**
    * The type of event: "user.presence.changed" in this case
    */
   type: string;
+  received_at?: TimestampNS;
+}
 
-  received_at?: number;
+export interface UserReactionCountRuleParameters {
+  count?: string;
+  threshold?: number;
+  time_window?: string;
 }
 
 export interface UserReactivatedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   user: UserResponseCommonFields;
-
   /**
    * The type of event: "user.reactivated" in this case
    */
   type: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   created_by?: UserResponseCommonFields;
 }
 
@@ -13112,26 +10524,20 @@ export interface UserRequest {
    * User ID
    */
   id: string;
-
   /**
    * User's profile image URL
    */
   image?: string;
-
   invisible?: boolean;
-
   language?: string;
-
   /**
    * Optional name of user
    */
   name?: string;
-
   /**
    * Custom user data
    */
   custom?: CustomUserData;
-
   privacy_settings?: PrivacySettingsResponse;
 }
 
@@ -13140,164 +10546,110 @@ export interface UserResponse {
    * Whether a user is banned or not
    */
   banned: boolean;
-
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * Unique user identifier
    */
   id: string;
-
   /**
    * Preferred language of a user
    */
   language: string;
-
   /**
    * Whether a user online or not
    */
   online: boolean;
-
   /**
    * Determines the set of user permissions
    */
   role: string;
-
   /**
    * Date/time of the last update
    */
-  updated_at: number;
-
+  updated_at: TimestampNS;
   blocked_user_ids: Array<string>;
-
   /**
    * List of teams user is a part of
    */
   teams: Array<string>;
-
   /**
    * Custom data for this object
    */
   custom: CustomUserData;
-
   avg_response_time?: number;
-
   /**
    * Date of deactivation
    */
-  deactivated_at?: number;
-
+  deactivated_at?: TimestampNS;
   /**
    * Date/time of deletion
    */
-  deleted_at?: number;
-
+  deleted_at?: TimestampNS;
   image?: string;
-
   /**
    * Date of last activity
    */
-  last_active?: number;
-
+  last_active?: TimestampNS;
   /**
    * Optional name of user
    */
   name?: string;
-
   /**
    * Revocation date for tokens
    */
-  revoke_tokens_issued_before?: number;
-
+  revoke_tokens_issued_before?: TimestampNS;
   teams_role?: Record<string, string>;
 }
 
 export interface UserResponseCommonFields {
   banned: boolean;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   id: string;
-
   language: string;
-
   online: boolean;
-
   role: string;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   blocked_user_ids: Array<string>;
-
   teams: Array<string>;
-
   custom: CustomUserData;
-
   avg_response_time?: number;
-
-  deactivated_at?: number;
-
-  deleted_at?: number;
-
+  deactivated_at?: TimestampNS;
+  deleted_at?: TimestampNS;
   image?: string;
-
-  last_active?: number;
-
+  last_active?: TimestampNS;
   name?: string;
-
-  revoke_tokens_issued_before?: number;
-
+  revoke_tokens_issued_before?: TimestampNS;
   teams_role?: Record<string, string>;
 }
 
 export interface UserResponsePrivacyFields {
   banned: boolean;
-
-  created_at: number;
-
+  created_at: TimestampNS;
   id: string;
-
   language: string;
-
   online: boolean;
-
   role: string;
-
-  updated_at: number;
-
+  updated_at: TimestampNS;
   blocked_user_ids: Array<string>;
-
   teams: Array<string>;
-
   custom: CustomUserData;
-
   avg_response_time?: number;
-
-  deactivated_at?: number;
-
-  deleted_at?: number;
-
+  deactivated_at?: TimestampNS;
+  deleted_at?: TimestampNS;
   image?: string;
-
   invisible?: boolean;
-
-  last_active?: number;
-
+  last_active?: TimestampNS;
   name?: string;
-
-  revoke_tokens_issued_before?: number;
-
+  revoke_tokens_issued_before?: TimestampNS;
   privacy_settings?: PrivacySettingsResponse;
-
   teams_role?: Record<string, string>;
 }
 
 export interface UserRoleParameters {
   operator?: string;
-
   role?: string;
 }
 
@@ -13309,50 +10661,37 @@ export interface UserUnbannedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   user: UserResponseCommonFields;
-
   /**
    * The type of event: "user.unbanned" in this case
    */
   type: string;
-
   /**
    * The ID of the channel where the target user was unbanned
    */
   channel_id?: string;
-
   channel_member_count?: number;
-
   channel_message_count?: number;
-
   /**
    * The type of the channel where the target user was unbanned
    */
   channel_type?: string;
-
   /**
    * The CID of the channel where the target user was unbanned
    */
   cid?: string;
-
-  received_at?: number;
-
+  received_at?: TimestampNS;
   /**
    * Whether the target user was shadow unbanned
    */
   shadow?: boolean;
-
   /**
    * The team of the channel where the target user was unbanned
    */
   team?: string;
-
   channel_custom?: CustomChannelData;
-
   created_by?: UserResponseCommonFields;
 }
 
@@ -13360,153 +10699,111 @@ export interface UserUpdatedEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   custom: CustomEventData;
-
   user: UserResponsePrivacyFields;
-
   /**
    * The type of event: "user.updated" in this case
    */
   type: string;
-
-  received_at?: number;
+  received_at?: TimestampNS;
 }
 
 export interface UserWatchingStartEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * The number of users watching the channel
    */
   watcher_count: number;
-
   custom: CustomEventData;
-
   user: UserResponseCommonFields;
-
   /**
    * The type of event: "user.watching.start" in this case
    */
   type: string;
-
   /**
    * The ID of the channel which the user started watching
    */
   channel_id?: string;
-
   /**
    * The type of the channel which the user started watching
    */
   channel_type?: string;
-
   /**
    * The CID of the channel which the user started watching
    */
   cid?: string;
-
-  received_at?: number;
+  received_at?: TimestampNS;
 }
 
 export interface UserWatchingStopEvent {
   /**
    * Date/time of creation
    */
-  created_at: number;
-
+  created_at: TimestampNS;
   /**
    * The number of users watching the channel
    */
   watcher_count: number;
-
   custom: CustomEventData;
-
   user: UserResponseCommonFields;
-
   /**
    * The type of event: "user.watching.stop" in this case
    */
   type: string;
-
   /**
    * The ID of the channel which the user stopped watching
    */
   channel_id?: string;
-
   /**
    * The type of the channel which the user stopped watching
    */
   channel_type?: string;
-
   /**
    * The CID of the channel which the user stopped watching
    */
   cid?: string;
-
-  received_at?: number;
+  received_at?: TimestampNS;
 }
 
 export interface VelocityFilterConfig {
   advanced_filters: boolean;
-
   cascading_actions: boolean;
-
   cids_per_user: number;
-
   enabled: boolean;
-
   first_message_only: boolean;
-
   rules: Array<VelocityFilterConfigRule>;
-
   async?: boolean;
 }
 
 export interface VelocityFilterConfigRule {
   action: 'flag' | 'shadow' | 'remove' | 'ban';
-
   ban_duration: number;
-
   cascading_action: 'flag' | 'shadow' | 'remove' | 'ban';
-
   cascading_threshold: number;
-
   check_message_context: boolean;
-
   fast_spam_threshold: number;
-
   fast_spam_ttl: number;
-
   ip_ban: boolean;
-
   probation_period: number;
-
   shadow_ban: boolean;
-
   slow_spam_threshold: number;
-
   slow_spam_ttl: number;
-
   url_only: boolean;
-
   slow_spam_ban_duration?: number;
 }
 
 export interface VideoCallRuleConfig {
   flag_all_labels: boolean;
-
   flagged_labels: Array<string>;
-
   rules: Array<HarmConfig>;
 }
 
 export interface VideoContentParameters {
   label_operator?: string;
-
   harm_labels?: Array<string>;
 }
 
@@ -13516,15 +10813,12 @@ export interface VideoKickUserRequestPayload {}
 
 export interface VideoRuleParameters {
   threshold?: number;
-
   time_window?: string;
-
   harm_labels?: Array<string>;
 }
 
 export interface VoteData {
   answer_text?: string;
-
   option_id?: string;
 }
 
@@ -13533,14 +10827,11 @@ export interface WSAuthMessage {
    * JWT token for authentication
    */
   token: string;
-
   user_details: ConnectUserDetailsRequest;
-
   /**
    * Channel-member custom keys to project onto message.member for messages this connection receives (opt-in; capped, off by default).
    */
   member_custom_include?: Array<string>;
-
   /**
    * List of products to subscribe to. One of: chat, video, feeds
    */
@@ -13712,16 +11003,10 @@ export interface WrappedUnreadCountsResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
-
   total_unread_count: number;
-
   total_unread_threads_count: number;
-
   channel_type: Array<UnreadCountsChannelType>;
-
   channels: Array<UnreadCountsChannel>;
-
   threads: Array<UnreadCountsThread>;
-
   total_unread_count_by_team?: Record<string, number>;
 }

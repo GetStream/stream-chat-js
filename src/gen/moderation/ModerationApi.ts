@@ -187,6 +187,7 @@ export class ModerationApi {
       appeal_reason: request?.appeal_reason,
       entity_id: request?.entity_id,
       entity_type: request?.entity_type,
+      channel_cid: request?.channel_cid,
       review_queue_item_id: request?.review_queue_item_id,
       attachments: request?.attachments,
     };

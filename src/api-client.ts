@@ -152,8 +152,11 @@ export class ApiClient {
     const remaining = headers['x-ratelimit-remaining'] as string | undefined;
     if (remaining) rateLimit.rate_limit_remaining = parseInt(remaining, 10);
 
-    const reset = headers['x-ratelimit-reset'] as string | undefined;
-    if (reset) rateLimit.rate_limit_reset = new Date(reset);
+    // Unix SECONDS (`strconv.FormatInt(info.Reset, 10)` server-side). `new Date('1700000000')` parses the
+    // string as a date and is Invalid Date, so convert the number explicitly.
+    const reset = Number(headers['x-ratelimit-reset']);
+    if (Number.isFinite(reset) && reset > 0)
+      rateLimit.rate_limit_reset = new Date(reset * 1000);
 
     return {
       response_headers: headers as Record<string, string>,

@@ -1,0 +1,17 @@
+{
+  // Compile-time assertions in `test/types/` against the source tree. `yarn types` runs it.
+  //
+  // `stream-chat` is mapped to `src/` so the assertions need no build; `tsconfig.types-test.dist.json`
+  // re-runs the same files against the built `dist/types`.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "emitDeclarationOnly": false,
+    "declaration": false,
+    "paths": {
+      "stream-chat": ["./src/index.ts"]
+    }
+  },
+  "include": ["./test/types/**/*.ts"]
+}

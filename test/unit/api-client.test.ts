@@ -127,6 +127,38 @@ describe('ApiClient request options', () => {
   });
 });
 
+describe('ApiClient rate limit metadata', () => {
+  const sendWithHeaders = async (headers: Record<string, string>) => {
+    const client = getClientWithUser();
+    vi.spyOn(client.axiosInstance, 'request').mockResolvedValue({
+      data: {},
+      status: 200,
+      headers,
+    });
+    const { metadata } = await client.api.sendRequest('GET', '/api/v2/chat/channels');
+    return metadata.rate_limit;
+  };
+
+  it('reads x-ratelimit-reset as unix seconds', async () => {
+    const rateLimit = await sendWithHeaders({
+      'x-ratelimit-limit': '60',
+      'x-ratelimit-remaining': '59',
+      'x-ratelimit-reset': '1700000000',
+    });
+
+    expect(rateLimit?.rate_limit).toBe(60);
+    expect(rateLimit?.rate_limit_remaining).toBe(59);
+    expect(rateLimit?.rate_limit_reset?.toISOString()).toBe('2023-11-14T22:13:20.000Z');
+  });
+
+  it('leaves the reset unset rather than producing an Invalid Date', async () => {
+    expect(
+      (await sendWithHeaders({ 'x-ratelimit-reset': 'garbage' }))?.rate_limit_reset,
+    ).toBe(undefined);
+    expect((await sendWithHeaders({}))?.rate_limit_reset).toBe(undefined);
+  });
+});
+
 describe('ApiClient header precedence', () => {
   let client: StreamChat;
   let requestSpy: ReturnType<typeof vi.spyOn>;

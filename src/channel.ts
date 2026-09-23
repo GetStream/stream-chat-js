@@ -20,7 +20,7 @@ import {
   logChatPromiseExecution,
   sanitizeOutgoingAttachments,
 } from './utils';
-import { msToNs, nowNs } from './utils/time';
+import { asTimestampNS, msToNs, nowNs } from './utils/time';
 import { normalizeUploadFile } from './upload-utils';
 import type { StreamChat } from './client';
 import { chatLoggerSystem } from './logger';
@@ -62,6 +62,7 @@ import type {
   SharedLocation,
   StreamRequestOptions,
   StreamResponse,
+  TimestampNS,
   UnBanUserOptions,
   UpdateChannelPartialRequest,
   UpdateLiveLocationRequest,
@@ -1153,7 +1154,7 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   /**
    * Returns the mute status for the current channel.
    *
-   * @returns An object of the form `{ muted: true | false, createdAt: number | null, expiresAt: number | null }`,
+   * @returns An object of the form `{ muted: true | false, createdAt: TimestampNS | null, expiresAt: TimestampNS | null }`,
    *   where the timestamps are unix nanoseconds as the API sends them.
    */
   muteStatus() {
@@ -1733,7 +1734,7 @@ export class Channel extends WithMessageOperations(ChannelApi) {
    *   defaults to the current user's read state).
    * @returns Unread count.
    */
-  countUnread(lastRead?: number | null) {
+  countUnread(lastRead?: TimestampNS | null) {
     // Nullish, not truthy: `0` is a legitimate wire timestamp (the epoch).
     if (lastRead == null) return this.state.unreadCount;
     let count = 0;
@@ -2523,7 +2524,7 @@ export class Channel extends WithMessageOperations(ChannelApi) {
                 // every "no last read" consumer already treats a missing value.
                 if (ownUserId && countsAsOwnUnread && !currentReadState[ownUserId]) {
                   nextReadState[ownUserId] = {
-                    last_read: 0,
+                    last_read: asTimestampNS(0),
                     unread_messages: 1,
                     user: (client.user ?? { id: ownUserId }) as UserResponse,
                   };

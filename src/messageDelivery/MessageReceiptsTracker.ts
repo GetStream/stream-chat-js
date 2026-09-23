@@ -1,13 +1,14 @@
-import type { ReadStateResponse, UserResponse } from '../types';
+import type { ReadStateResponse, TimestampNS, UserResponse } from '../types';
 import { StateStore } from '@stream-io/state-store';
 import type { Channel } from '../channel';
+import { asTimestampNS } from '../utils/time';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 
 type UserId = string;
 type MessageId = string;
-export type MsgRef = { timestamp: number; msgId: MessageId };
+export type MsgRef = { timestamp: TimestampNS; msgId: MessageId };
 export type OwnMessageReceiptsTrackerMessageLocator = (
-  timestamp: number,
+  timestamp: TimestampNS,
 ) => MsgRef | null;
 export type UserProgress = {
   user: UserResponse;
@@ -44,23 +45,26 @@ export type ReadStoreReconcileMeta = {
   removedUserIds?: string[];
 };
 type ReadStoreUserState = {
-  last_read?: number;
+  last_read?: TimestampNS;
   unread_messages?: number;
   user?: UserResponse;
   first_unread_message_id?: string;
   last_read_message_id?: string;
-  last_delivered_at?: number;
+  last_delivered_at?: TimestampNS;
   last_delivered_message_id?: string;
 };
 
 // ---------- ordering utilities ----------
 
-const MIN_REF: MsgRef = { timestamp: Number.NEGATIVE_INFINITY, msgId: '' } as const;
+const MIN_REF: MsgRef = {
+  timestamp: asTimestampNS(Number.NEGATIVE_INFINITY),
+  msgId: '',
+} as const;
 
 const isValidReadState = (
   readState: ReadStoreUserState | undefined,
 ): readState is ReadStoreUserState & {
-  last_read: number;
+  last_read: TimestampNS;
   user: UserResponse;
 } => !!readState?.user && Number.isFinite(readState.last_read);
 
@@ -204,7 +208,7 @@ export class MessageReceiptsTracker extends WithSubscriptions {
     this.channel = channel;
     this.locateMessage =
       locateMessage ??
-      ((timestamp: number) => {
+      ((timestamp: TimestampNS) => {
         const message = this.channel.messagePaginator.findItemByTimestamp(timestamp);
         return message ? { timestamp, msgId: message.id } : null;
       });
@@ -331,7 +335,7 @@ export class MessageReceiptsTracker extends WithSubscriptions {
   }: {
     user: UserResponse;
     /** Unix nanoseconds, as the API sends it. */
-    deliveredAt: number;
+    deliveredAt: TimestampNS;
     lastDeliveredMessageId?: string;
   }) {
     const timestamp = deliveredAt;
@@ -367,7 +371,7 @@ export class MessageReceiptsTracker extends WithSubscriptions {
   }: {
     user: UserResponse;
     /** Unix nanoseconds, as the API sends it. */
-    readAt: number;
+    readAt: TimestampNS;
     lastReadMessageId?: string;
   }) {
     const timestamp = readAt;
@@ -417,7 +421,7 @@ export class MessageReceiptsTracker extends WithSubscriptions {
   }: {
     user: UserResponse;
     /** Unix nanoseconds, as the API sends it. */
-    lastReadAt?: number;
+    lastReadAt?: TimestampNS;
     lastReadMessageId?: string;
   }) {
     const userProgress = this.ensureUser(user);
@@ -661,12 +665,12 @@ export class MessageReceiptsTracker extends WithSubscriptions {
   }
 
   private readStateToUserProgress(readState: {
-    last_read: number;
+    last_read: TimestampNS;
     unread_messages?: number;
     user: UserResponse;
     first_unread_message_id?: string;
     last_read_message_id?: string;
-    last_delivered_at?: number;
+    last_delivered_at?: TimestampNS;
     last_delivered_message_id?: string;
   }): UserProgress {
     const lastReadTimestamp = readState.last_read;

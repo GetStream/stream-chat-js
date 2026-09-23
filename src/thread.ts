@@ -11,6 +11,7 @@ import type {
   SortParamRequest,
   StreamResponse,
   ThreadStateResponse,
+  TimestampNS,
   UserResponse,
 } from './types';
 import { isDoesNotExistError } from './errors';
@@ -43,10 +44,10 @@ export type ThreadState = {
   active: boolean;
   channel: Channel;
   /** Unix nanoseconds, as the API sends it. */
-  createdAt: number;
+  createdAt: TimestampNS;
   custom: CustomThreadData;
   /** Unix nanoseconds, as the API sends it. */
-  deletedAt: number | null;
+  deletedAt: TimestampNS | null;
   isLoading: boolean;
   isStateStale: boolean;
   /**
@@ -59,12 +60,12 @@ export type ThreadState = {
   replyCount: number;
   title: string;
   /** Unix nanoseconds, as the API sends it. */
-  updatedAt: number | null;
+  updatedAt: TimestampNS | null;
 };
 
 export type ThreadUserReadState = {
   /** Unix nanoseconds, as the API sends it. */
-  lastReadAt: number;
+  lastReadAt: TimestampNS;
   unreadMessageCount: number;
   user: UserResponse;
   lastReadMessageId?: string;
@@ -73,7 +74,10 @@ export type ThreadUserReadState = {
 
 export type ThreadReadState = Record<string, ThreadUserReadState | undefined>;
 
-const timestampOr = (value: number | undefined, fallback: number): number =>
+const timestampOr = (
+  value: TimestampNS | undefined,
+  fallback: TimestampNS,
+): TimestampNS =>
   typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 
 const DEFAULT_PAGE_LIMIT = 50;
