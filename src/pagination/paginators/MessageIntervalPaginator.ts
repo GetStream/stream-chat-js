@@ -214,8 +214,10 @@ export class MessageIntervalPaginator extends BasePaginator<
 > {
   declare state: StateStore<MessagePaginatorState>;
   private readonly _id: string;
-  protected channel: Channel;
-  protected parentMessageId?: string;
+  /** The channel this list belongs to. A thread's reply list holds its parent channel. */
+  readonly channel: Channel;
+  /** Set when this is a thread's reply list, to the parent message's id. */
+  readonly parentMessageId?: string;
   readonly messageFocusSignal: StateStore<MessageFocusSignalState>;
   private clearMessageFocusSignalTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private messageFocusSignalToken = 0;

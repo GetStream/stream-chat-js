@@ -2,26 +2,24 @@ import { createMessageOperationsPersistence } from './persistence';
 import { localMessageToNewMessagePayload } from '../utils';
 import { MessageOperations } from './MessageOperations';
 import type { Channel } from '../channel';
-import type { MessagePaginator } from '../pagination/paginators';
+import type { Thread } from '../thread';
 
 /**
  * Builds the `MessageOperations` a message collection owns, shared by `Channel` and `Thread` so the
  * two cannot drift — the same reason {@link createMessageOperationsPersistence} exists.
  *
- * @param params.channel - Where requests and offline-DB rows go. A `Thread` passes its parent channel.
- * @param params.paginator - The collection's own list, read and written before the global store.
- * @param params.parentMessageId - Set by a `Thread`; stamps `parent_id` on every outgoing message.
+ * Everything it needs is derivable from the collection: a `Thread` sends against its parent channel
+ * and stamps its own id as `parent_id`, a `Channel` against itself with no stamp.
  */
-export const createMessageOperations = ({
-  channel,
-  paginator,
-  parentMessageId,
-}: {
-  channel: Channel;
-  paginator: MessagePaginator;
-  parentMessageId?: string;
-}) =>
-  new MessageOperations({
+export const createMessageOperations = (collection: Channel | Thread) => {
+  // Read off the paginator rather than discriminating on the collection: it already holds both, and a
+  // `Channel | Thread` discriminator would have to be either an `instanceof` (a value import that
+  // closes a module-load cycle back to `channel.ts`) or a duck-type that a codegen run could silently
+  // invert.
+  const paginator = collection.messagePaginator;
+  const { channel, parentMessageId } = paginator;
+
+  return new MessageOperations({
     ...createMessageOperationsPersistence({ channel }),
     channel,
     ingest: (m) => {
@@ -121,3 +119,4 @@ export const createMessageOperations = ({
       },
     },
   });
+};

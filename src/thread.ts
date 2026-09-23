@@ -262,11 +262,7 @@ export class Thread extends WithMessageOperations(WithSubscriptions) {
       compositionContext: this,
     });
 
-    this.messageOperations = createMessageOperations({
-      channel: this.channel,
-      paginator: this.messagePaginator,
-      parentMessageId: this.id,
-    });
+    this.messageOperations = createMessageOperations(this);
 
     // Share one derivation path with `config.reset()`. Idempotent — the paginator was already
     // configured through its constructor above; this re-applies the mutable half the way a reset does.

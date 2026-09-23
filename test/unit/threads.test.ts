@@ -2121,6 +2121,17 @@ describe('Threads 2.0', () => {
         },
       });
 
+    // `createMessageOperations` reads both off the paginator. Pinned here because getting either
+    // wrong sends a channel message as a reply, or a reply to the wrong parent, with no type error.
+    it('exposes the channel and parent message id the operations are built from', () => {
+      const thread = createTestThread();
+
+      expect(channel.messagePaginator.channel).toBe(channel);
+      expect(channel.messagePaginator.parentMessageId).toBeUndefined();
+      expect(thread.messagePaginator.channel).toBe(thread.channel);
+      expect(thread.messagePaginator.parentMessageId).toBe(thread.id);
+    });
+
     it('stamps parent_id on a reply sent through the thread', async () => {
       const thread = createTestThread();
       let sent: MessageRequest | undefined;

@@ -340,10 +340,7 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     this.cooldownTimer = new CooldownTimer({ channel: this });
     this.cooldownTimer.registerSubscriptions();
 
-    this.messageOperations = createMessageOperations({
-      channel: this,
-      paginator: this.messagePaginator,
-    });
+    this.messageOperations = createMessageOperations(this);
 
     // Seed the reactive mute state from the client's current `mutedChannels` (a channel created
     // after connect may already be muted). Kept in sync afterwards by the client fan-out on
