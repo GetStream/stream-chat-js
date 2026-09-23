@@ -170,6 +170,12 @@ export type MessageComposerConfig = {
   location: LocationComposerConfig;
   /** Configuration for the poll composer */
   polls: PollComposerConfig;
+  /**
+   * Decides whether submitting keeps the composer's contents instead of clearing them, and whether
+   * the attachments composition step leaves unresolved uploads behind with them. Defaults to
+   * retaining for a poll message, which carries no text or attachments of its own.
+   */
+  retainCompositionOnSubmit: (composer: MessageComposer) => boolean;
   /** Maximum number of characters in a message */
   text: TextComposerConfig;
 };

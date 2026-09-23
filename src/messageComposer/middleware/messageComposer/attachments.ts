@@ -45,15 +45,13 @@ const composeWithPendingUploads = ({
   composer: MessageComposer;
   state: MessageComposerMiddlewareState;
 }): MessageComposerMiddlewareState => {
-  // `useSubmitHandler` in the UI SDKs deliberately skips `MessageComposer.clear()` when the
-  // composition carries a poll - it keeps the composer's contents as a draft. Handing an
-  // unresolved attachment to such a message would leave the same `localMetadata.id` owned by
-  // both the sent message and the composer: the user could send it a second time, and the
-  // second `UploadManager.upload` call would restart the request under an id whose in-flight
-  // entry had already been cleaned up. The same collision is what a retry from two places would
-  // cause, so both pending and failed uploads stay in the composer in that case and ride along
-  // with the next message once they settle.
-  const composerIsKeptAsDraft = !!composer.pollId;
+  // Handing an unresolved attachment to a message the composer also keeps would leave the same
+  // `localMetadata.id` owned by both: the user could send it a second time, and that
+  // `UploadManager.upload` call would restart the request under an id whose in-flight entry had
+  // already been cleaned up. A retry from two places collides the same way. So both pending and
+  // failed uploads stay in the composer here, and ride along with the next message once they
+  // settle.
+  const composerIsKeptAsDraft = composer.retainsCompositionOnSubmit;
 
   // Composer order is preserved in both payloads so previews do not reshuffle when an upload
   // settles.

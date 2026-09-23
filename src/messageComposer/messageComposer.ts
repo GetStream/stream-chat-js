@@ -1,4 +1,5 @@
 import { CORE_NOTIFICATION_TYPE } from '../notifications';
+import type { CoreNotificationType } from '../notifications';
 import { AttachmentManager } from './attachmentManager';
 import { isFailedUpload, isFinishedUpload, isPendingUpload } from './attachmentIdentity';
 import { CustomDataManager } from './CustomDataManager';
@@ -97,9 +98,23 @@ export type MessageComposerSnapshot = {
   textComposer: TextComposerSnapshot;
 };
 
-export type LocalMessageWithLegacyThreadId = LocalMessage & { legacyThreadId?: string };
-// todo: remove LocalMessageWithLegacyThreadId
-export type CompositionContext = Channel | Thread | LocalMessageWithLegacyThreadId;
+export type CompositionContext = Channel | Thread | LocalMessage;
+
+/**
+ * What a submit did, and by implication where the content now is.
+ *
+ * - `sent` - it went out.
+ * - `nothing-to-send` - there was nothing to compose, or a middleware discarded the composition
+ *   (a command that is not ready, one disabled by the quoted or edited message, an upload still
+ *   running). **The composer keeps its contents**, and the reason has already been reported through
+ *   `client.notifications`.
+ * - `failed` - the request failed. **The composer has been released**; the content is in the
+ *   message list marked `failed`, where the user retries it.
+ *
+ * The distinction matters because the last two leave the composer in opposite states, so a caller
+ * that reopens or restores UI has to tell them apart.
+ */
+export type MessageComposerSubmitResult = 'sent' | 'nothing-to-send' | 'failed';
 
 export type MessageComposerState = {
   id: string;
@@ -308,10 +323,6 @@ export class MessageComposer extends WithSubscriptions {
       return 'thread';
     }
 
-    if (typeof compositionContext.legacyThreadId === 'string') {
-      return 'legacy_thread';
-    }
-
     return 'message';
   }
 
@@ -371,10 +382,6 @@ export class MessageComposer extends WithSubscriptions {
 
     if (this.compositionContext instanceof Thread) {
       return this.compositionContext.id;
-    }
-
-    if (typeof this.compositionContext.legacyThreadId === 'string') {
-      return this.compositionContext.legacyThreadId;
     }
 
     // check if the message is a reply, get parentMessageId
@@ -466,6 +473,33 @@ export class MessageComposer extends WithSubscriptions {
    */
   get allowsPendingUploads() {
     return this.attachmentManager.config.pendingUploadsEnabled;
+  }
+
+  /**
+   * Where a composed message goes: the thread when this composer belongs to one, the channel
+   * otherwise.
+   *
+   * Thread replies live in `thread.messagePaginator`, which is independent of the channel's, so
+   * dispatching to the wrong one leaves the reply invisible where it was written. An edit composer
+   * is built from the message rather than from its thread, so it can only find the thread when the
+   * manager has it loaded. No composer reachable from a UI SDK is built that way today.
+   */
+  get defaultSubmitTarget(): Channel | Thread {
+    if (this.compositionContext instanceof Thread) return this.compositionContext;
+
+    const { threadId } = this;
+    return (threadId && this.client.threads.threadsById[threadId]) || this.channel;
+  }
+
+  /**
+   * Whether submitting keeps the composer's contents rather than clearing them - see
+   * {@link MessageComposerConfig.retainCompositionOnSubmit}.
+   *
+   * Read by the attachments composition step too: content the composer keeps must not also ride
+   * along on the submitted message, or one `localMetadata.id` ends up owned in two places.
+   */
+  get retainsCompositionOnSubmit() {
+    return this.config.retainCompositionOnSubmit(this);
   }
 
   get hasSendableData() {
@@ -1223,6 +1257,122 @@ export class MessageComposer extends WithSubscriptions {
         },
       });
       throw error;
+    }
+  };
+
+  /**
+   * Lets go of what the submitted message took with it.
+   *
+   * A poll message carries no text or attachments of its own, so the composer keeps whatever else
+   * was drafted and releases only the poll. Everything else is a full clear.
+   */
+  private releaseSubmittedComposition = () => {
+    if (this.retainsCompositionOnSubmit) {
+      this.state.partialNext({
+        id: MessageComposer.generateId(),
+        // Unconditional, and safe whatever decided to retain: a poll that exists is always a poll
+        // that just went out, because `createMessageComposerStateCompositionMiddleware` copies a
+        // set `pollId` onto every composition - threads and edits included, where the poll-only
+        // middleware forwards. There is no state where this detaches one the submission did not
+        // carry.
+        //
+        // Detaching it is also not optional. While `pollId` is set, `hasSendableData` counts it as
+        // content on its own and `createPollOnlyCompositionMiddleware` turns every composition
+        // into a poll-only message, so a composer left bound to a spent poll nullifies whatever is
+        // typed next and re-sends the same poll.
+        pollId: null,
+      });
+      return;
+    }
+
+    this.clear();
+  };
+
+  private reportSubmitFailure = (
+    type: CoreNotificationType,
+    message: string,
+    error: unknown,
+  ) => {
+    this.client.notifications.addError({
+      message,
+      origin: {
+        emitter: 'MessageComposer',
+        context: { composer: this },
+      },
+      options: {
+        type,
+        metadata: { reason: (error as Error).message },
+        originalError: error instanceof Error ? error : undefined,
+      },
+    });
+  };
+
+  /**
+   * Composes the message and sends it, releasing the composer as it goes.
+   *
+   * Never rejects - see {@link MessageComposerSubmitResult} for what each outcome means and where
+   * the content ends up. A failure is reported through `client.notifications`, and the message
+   * stays in the list marked `failed`, which is where the user retries it. Callers rendering their
+   * own post-send feedback have to check the result.
+   */
+  send = async (): Promise<MessageComposerSubmitResult> => {
+    const composition = await this.compose();
+    if (!composition?.message) return 'nothing-to-send';
+
+    const { localMessage, message, sendOptions } = composition;
+
+    // Released before the request, not after. The request lasts a round trip - longer still when it
+    // waits for an upload to settle - and clearing at the end leaves that whole window for the
+    // user's next keystrokes to race the clear.
+    this.releaseSubmittedComposition();
+
+    try {
+      await this.defaultSubmitTarget.sendMessageWithLocalUpdate({
+        localMessage,
+        message,
+        options: sendOptions,
+      });
+      return 'sent';
+    } catch (error) {
+      // Nothing is put back. The message is already in the list marked `failed` with a retry
+      // affordance, so restoring here would leave the same content - and the same attachment upload
+      // ids - owned in two places, where sending either copy corrupts the other.
+      this.reportSubmitFailure(
+        CORE_NOTIFICATION_TYPE.messageSendFailed,
+        'Send message request failed',
+        error,
+      );
+      return 'failed';
+    }
+  };
+
+  /**
+   * Composes the edit and saves it, on the same terms as {@link send} - including releasing the
+   * composer before the request rather than after it.
+   */
+  update = async (): Promise<MessageComposerSubmitResult> => {
+    const composition = await this.compose();
+    if (!composition?.message) return 'nothing-to-send';
+
+    const { localMessage, sendOptions } = composition;
+
+    this.releaseSubmittedComposition();
+
+    try {
+      await this.defaultSubmitTarget.updateMessageWithLocalUpdate({
+        localMessage,
+        options: sendOptions,
+      });
+      return 'sent';
+    } catch (error) {
+      // As in `send`: the edit is kept on the message and marked failed, so there is nothing to
+      // restore here.
+      this.reportSubmitFailure(
+        CORE_NOTIFICATION_TYPE.messageUpdateFailed,
+        'Edit message request failed',
+        error,
+      );
+      return 'failed';
     }
   };
 

@@ -605,6 +605,9 @@ describe('createAttachmentsCompositionMiddleware with pendingUploadsEnabled', ()
       get pollId() {
         return null;
       },
+      get retainsCompositionOnSubmit() {
+        return !!this.pollId;
+      },
       attachmentManager: {
         config: { pendingUploadsEnabled },
         get attachments() {
