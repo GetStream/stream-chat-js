@@ -1,4 +1,8 @@
-import { isFinishedUpload, isPendingUpload } from '../../attachmentIdentity';
+import {
+  isFailedUpload,
+  isFinishedUpload,
+  isPendingUpload,
+} from '../../attachmentIdentity';
 import type { MiddlewareHandlerParams } from '../../../middleware';
 import { CORE_NOTIFICATION_TYPE } from '../../../notifications';
 import type { Attachment } from '../../../types';
@@ -17,14 +21,22 @@ const localAttachmentToAttachment = (localAttachment: LocalAttachment) => {
 };
 
 /**
- * The composition step used by {@link createSendWithPendingUploadsAttachmentsMiddleware}.
+ * The composition step taken when {@link AttachmentManagerConfig.pendingUploadsEnabled}
+ * is on.
  *
- * The two payloads part ways here: `localMessage.attachments` keeps `localMetadata` for
- * anything still uploading - `id` (the `client.uploadManager` key), `file` (the handle needed
- * to await the upload) and `previewUri` (so the message list can render the user's own file
- * meanwhile) - while `message.attachments`, which goes to the API, carries only attachments
- * that already resolved to a URL. Whoever performs the send fills in the rest once the uploads
- * settle.
+ * The two payloads part ways here: `localMessage.attachments` keeps `localMetadata` for every
+ * attachment that has not resolved to a URL - `id` (the `client.uploadManager` key), `file` (the
+ * handle needed to await or retry the upload) and `previewUri` (so the message list can render
+ * the user's own file meanwhile) - while `message.attachments`, which goes to the API, carries
+ * only attachments that already resolved to a URL. `MessageOperations` fills in the rest once the
+ * uploads settle.
+ *
+ * That includes uploads that already `failed`: dropping them here is how a file the user attached
+ * disappears without trace, because the UI clears the composer on send. Riding along on the
+ * optimistic message instead keeps the preview visible and leaves the `file` handle in reach of
+ * `settlePendingAttachmentUploads`, which retries a failed upload rather than dropping it.
+ * `blocked` is the one state that stays behind - the server's upload configuration refused it, so
+ * no retry can ever settle it, and it belongs in the composer where the user can remove it.
  */
 const composeWithPendingUploads = ({
   composer,
@@ -33,11 +45,12 @@ const composeWithPendingUploads = ({
   composer: MessageComposer;
   state: MessageComposerMiddlewareState;
 }): MessageComposerMiddlewareState => {
-  // Handing a still-uploading attachment to a message the composer also keeps would leave the same
+  // Handing an unresolved attachment to a message the composer also keeps would leave the same
   // `localMetadata.id` owned by both: the user could send it a second time, and that
   // `UploadManager.upload` call would restart the request under an id whose in-flight entry had
-  // already been cleaned up. So a pending upload stays in the composer in that case and rides along
-  // with the next message once it finishes.
+  // already been cleaned up. A retry from two places collides the same way. So both pending and
+  // failed uploads stay in the composer here, and ride along with the next message once they
+  // settle.
   const composerIsKeptAsDraft = composer.retainsCompositionOnSubmit;
 
   // Composer order is preserved in both payloads so previews do not reshuffle when an upload
@@ -45,12 +58,15 @@ const composeWithPendingUploads = ({
   const relevantAttachments = composer.attachmentManager.attachments.filter(
     (attachment) =>
       isFinishedUpload(attachment) ||
-      (!composerIsKeptAsDraft && isPendingUpload(attachment)),
+      (!composerIsKeptAsDraft &&
+        (isPendingUpload(attachment) || isFailedUpload(attachment))),
   );
 
   const localAttachments = (state.localMessage.attachments ?? []).concat(
+    // Only a finished upload has a URL of its own. Everything else keeps `localMetadata`, which
+    // is what the message list joins to the live `uploadManager` record and what a retry needs.
     relevantAttachments.map((attachment) =>
-      isPendingUpload(attachment) ? attachment : localAttachmentToAttachment(attachment),
+      isFinishedUpload(attachment) ? localAttachmentToAttachment(attachment) : attachment,
     ),
   );
   const messageAttachments = (state.message.attachments ?? []).concat(
@@ -81,47 +97,16 @@ const composeWithPendingUploads = ({
 };
 
 /**
- * Drop-in replacement for {@link createAttachmentsCompositionMiddleware} that lets a message be
- * composed while its attachments are still uploading.
+ * Composes the message's attachments.
  *
- * Reuses the same middleware id, so installing it with
- * `compositionMiddlewareExecutor.replace([...])` keeps its position in the chain. The default
- * refuses instead: it warns "Wait until all attachments have uploaded" and discards the
- * composition.
+ * By default an upload still in flight blocks the send: the chain warns and discards the
+ * composition. With {@link AttachmentManagerConfig.pendingUploadsEnabled} on it composes
+ * anyway, leaving `message.attachments` without the unresolved ones — `MessageOperations` awaits
+ * those uploads and fills in the URLs before the request goes out.
  *
- * **Installing this is only half of the flow.** The composition it produces is not ready for the
- * wire — `message.attachments` omits everything that has no URL yet. Whoever performs the send
- * has to await those uploads (`UploadManager.upload` is idempotent by `localMetadata.id`, so
- * calling it again returns the in-flight promise), write the resolved URLs in, and send after
- * that.
- *
- * Sendability follows on its own: the `allowsPendingUploads` declaration below is what
- * {@link MessageComposer.hasSendableData} reads to stop treating an upload in flight as a
- * blocker, so installing this middleware is the only switch there is.
- *
- * This is why there is no config option turning it on: the switch belongs to the UI SDK that
- * implements the other half. stream-chat-react exposes it as a `Chat` prop;
- * stream-chat-react-native as `allowSendBeforeAttachmentsUpload` on the message input.
+ * The config is read per composition rather than at construction, so `updateConfig` takes effect
+ * on the next send with no need to reinstall anything.
  */
-export const createSendWithPendingUploadsAttachmentsMiddleware = (
-  composer: MessageComposer,
-): MessageCompositionMiddleware => ({
-  allowsPendingUploads: true,
-  id: 'stream-io/message-composer-middleware/attachments',
-  handlers: {
-    compose: ({
-      state,
-      next,
-      forward,
-    }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
-      const { attachmentManager } = composer;
-      if (!attachmentManager) return forward();
-
-      return next(composeWithPendingUploads({ composer, state }));
-    },
-  },
-});
-
 export const createAttachmentsCompositionMiddleware = (
   composer: MessageComposer,
 ): MessageCompositionMiddleware => ({
@@ -135,6 +120,10 @@ export const createAttachmentsCompositionMiddleware = (
     }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
       const { attachmentManager } = composer;
       if (!attachmentManager) return forward();
+
+      if (attachmentManager.config.pendingUploadsEnabled) {
+        return next(composeWithPendingUploads({ composer, state }));
+      }
 
       if (attachmentManager.uploadsInProgressCount > 0) {
         composer.client.notifications.addWarning({

@@ -8,7 +8,6 @@ import {
   ChannelConfigWithInfo,
   ChannelResponse,
   createAttachmentsCompositionMiddleware,
-  createSendWithPendingUploadsAttachmentsMiddleware,
   DEFAULT_COMPOSER_CONFIG,
   LocalMessage,
   MessageComposerConfig,
@@ -217,6 +216,8 @@ describe('MessageComposer', () => {
           fileUploadFilter: DEFAULT_COMPOSER_CONFIG.attachments.fileUploadFilter,
           maxNumberOfFilesPerMessage:
             customConfig.attachments!.maxNumberOfFilesPerMessage,
+          pendingUploadsEnabled:
+            DEFAULT_COMPOSER_CONFIG.attachments.pendingUploadsEnabled,
           trackUploadProgress: DEFAULT_COMPOSER_CONFIG.attachments.trackUploadProgress,
         },
         commands: DEFAULT_COMPOSER_CONFIG.commands,
@@ -711,7 +712,7 @@ describe('MessageComposer', () => {
       expect(messageComposer.hasSendableData).toBe(false);
     });
 
-    it('counts an upload in flight as content once a middleware allows pending uploads', () => {
+    it('counts an upload in flight as content once the config allows pending uploads', () => {
       const { messageComposer } = setup();
 
       messageComposer.attachmentManager.state.partialNext({
@@ -724,58 +725,46 @@ describe('MessageComposer', () => {
       expect(messageComposer.allowsPendingUploads).toBe(false);
       expect(messageComposer.hasSendableData).toBe(false);
 
-      messageComposer.compositionMiddlewareExecutor.replace([
-        createSendWithPendingUploadsAttachmentsMiddleware(messageComposer),
-      ]);
+      messageComposer.updateConfig({ attachments: { pendingUploadsEnabled: true } });
 
-      // Installing the middleware is the whole switch - nothing else has to be told.
+      // The config is the whole switch - nothing else has to be told.
       expect(messageComposer.allowsPendingUploads).toBe(true);
       expect(messageComposer.hasSendableData).toBe(true);
     });
 
-    it('recognizes the declaration on a custom middleware, whatever its id', () => {
-      // The composer keys off `allowsPendingUploads`, not off a middleware id, so a UI SDK that
-      // ships its own attachments composition gets the matching sendability rule.
+    it('counts a failed upload as content', () => {
       const { messageComposer } = setup();
-
-      messageComposer.attachmentManager.state.partialNext({
-        attachments: [
-          { type: 'x', localMetadata: { id: 'a1', uploadState: 'uploading', file: {} } },
-        ],
-      });
-
-      messageComposer.compositionMiddlewareExecutor.use({
-        allowsPendingUploads: true,
-        id: 'custom/attachments-with-pending-uploads',
-        handlers: { compose: ({ forward }) => forward() },
-      });
-
-      expect(messageComposer.allowsPendingUploads).toBe(true);
-      expect(messageComposer.hasSendableData).toBe(true);
-    });
-
-    it('still refuses attachments that will never resolve', () => {
-      const { messageComposer } = setup();
-      messageComposer.compositionMiddlewareExecutor.replace([
-        createSendWithPendingUploadsAttachmentsMiddleware(messageComposer),
-      ]);
+      messageComposer.updateConfig({ attachments: { pendingUploadsEnabled: true } });
 
       messageComposer.attachmentManager.state.partialNext({
         attachments: [
           { type: 'x', localMetadata: { id: 'a1', uploadState: 'failed', file: {} } },
+        ],
+      });
+
+      // It rides along on the optimistic message, where `settlePendingAttachmentUploads`
+      // retries the upload.
+      expect(messageComposer.hasSendableData).toBe(true);
+    });
+
+    it('still refuses an attachment the server blocked', () => {
+      const { messageComposer } = setup();
+      messageComposer.updateConfig({ attachments: { pendingUploadsEnabled: true } });
+
+      messageComposer.attachmentManager.state.partialNext({
+        attachments: [
           { type: 'x', localMetadata: { id: 'a2', uploadState: 'blocked', file: {} } },
         ],
       });
 
-      // A message whose only attachments were rejected must not look sendable.
+      // The upload configuration refused it outright, so no retry can settle it - a message
+      // whose only attachment is blocked must not look sendable.
       expect(messageComposer.hasSendableData).toBe(false);
     });
 
-    it('goes back to the default rule when the middleware is uninstalled', () => {
+    it('goes back to the default rule when the config is turned off', () => {
       const { messageComposer } = setup();
-      messageComposer.compositionMiddlewareExecutor.replace([
-        createSendWithPendingUploadsAttachmentsMiddleware(messageComposer),
-      ]);
+      messageComposer.updateConfig({ attachments: { pendingUploadsEnabled: true } });
       messageComposer.attachmentManager.state.partialNext({
         attachments: [
           { type: 'x', localMetadata: { id: 'a1', uploadState: 'uploading', file: {} } },
@@ -783,9 +772,7 @@ describe('MessageComposer', () => {
       });
       expect(messageComposer.hasSendableData).toBe(true);
 
-      messageComposer.compositionMiddlewareExecutor.replace([
-        createAttachmentsCompositionMiddleware(messageComposer),
-      ]);
+      messageComposer.updateConfig({ attachments: { pendingUploadsEnabled: false } });
 
       expect(messageComposer.allowsPendingUploads).toBe(false);
       expect(messageComposer.hasSendableData).toBe(false);
@@ -1599,6 +1586,97 @@ describe('MessageComposer', () => {
           user_id: 'user-id',
         },
         sendOptions: {},
+      });
+    });
+
+    describe('with pending attachment uploads', () => {
+      // The whole composition chain, not one middleware in isolation. Each attachment
+      // middleware was covered on its own, which is exactly why one middleware overwriting
+      // another's output went unnoticed: `createLinkPreviewsCompositionMiddleware` runs
+      // straight after the attachments middleware and used to rebuild `localMessage.attachments`
+      // from the wire payload, deleting every upload that had not resolved yet.
+      const resolvedUpload = {
+        type: 'image',
+        image_url: 'https://example.com/done.jpg',
+        localMetadata: {
+          id: 'done',
+          file: new File([], 'done.jpg', { type: 'image/jpeg' }),
+          uploadState: 'finished',
+        },
+      };
+      const pendingUpload = {
+        type: 'image',
+        localMetadata: {
+          id: 'in-flight',
+          file: new File([], 'in-flight.jpg', { type: 'image/jpeg' }),
+          previewUri: 'blob:in-flight',
+          uploadState: 'uploading',
+        },
+      };
+      const failedUpload = {
+        type: 'image',
+        localMetadata: {
+          id: 'broken',
+          file: new File([], 'broken.jpg', { type: 'image/jpeg' }),
+          previewUri: 'blob:broken',
+          uploadState: 'failed',
+        },
+      };
+
+      const setupWithUploads = (attachments: unknown[]) => {
+        const { messageComposer } = setup();
+        messageComposer.updateConfig({ attachments: { pendingUploadsEnabled: true } });
+        // No URL in the text - the unresolved attachment must survive on its own, not because
+        // the link previews middleware happened to bail out early.
+        messageComposer.textComposer.setText('look at these');
+        messageComposer.attachmentManager.state.partialNext({
+          attachments: attachments as never,
+        });
+        return messageComposer;
+      };
+
+      it('keeps an upload still in flight on the optimistic message only', async () => {
+        const messageComposer = setupWithUploads([resolvedUpload, pendingUpload]);
+
+        const composed = await messageComposer.compose();
+
+        // The optimistic message carries both, and the unresolved one keeps the
+        // `localMetadata` that `settlePendingAttachmentUploads` needs to await the upload.
+        expect(composed?.localMessage.attachments).toEqual([
+          { type: 'image', image_url: 'https://example.com/done.jpg' },
+          pendingUpload,
+        ]);
+        // Only what already resolved to a URL goes to the API, with no `localMetadata`.
+        expect(composed?.message.attachments).toEqual([
+          { type: 'image', image_url: 'https://example.com/done.jpg' },
+        ]);
+      });
+
+      it('keeps a failed upload on the optimistic message only', async () => {
+        const messageComposer = setupWithUploads([resolvedUpload, failedUpload]);
+
+        const composed = await messageComposer.compose();
+
+        // It rides along so `settlePendingAttachmentUploads` can retry it - dropping it here is
+        // how an attachment disappears with no upload, no error and no warning.
+        expect(composed?.localMessage.attachments).toEqual([
+          { type: 'image', image_url: 'https://example.com/done.jpg' },
+          failedUpload,
+        ]);
+        expect(composed?.message.attachments).toEqual([
+          { type: 'image', image_url: 'https://example.com/done.jpg' },
+        ]);
+      });
+
+      it('composes an optimistic message when no upload has resolved yet', async () => {
+        const messageComposer = setupWithUploads([pendingUpload, failedUpload]);
+
+        const composed = await messageComposer.compose();
+
+        expect(composed?.localMessage.attachments).toEqual([pendingUpload, failedUpload]);
+        // Nothing resolved, so the API payload must not gain an `attachments` key - an empty
+        // array reads as "remove every attachment" on an edit.
+        expect(composed?.message.attachments).toBeUndefined();
       });
     });
 

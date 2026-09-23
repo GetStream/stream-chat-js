@@ -579,7 +579,7 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   }
 
   /**
-   * Sends a message with optimistic local state update, then stops the typing indicator.
+   * Sends a message with optimistic local state update, stopping the typing indicator first.
    *
    * The only collection-specific part of the optimistic API: typing is a channel concern and a
    * `Thread` has no counterpart, so it is an override rather than part of the mixin.
@@ -587,8 +587,14 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   override async sendMessageWithLocalUpdate(
     params: OperationParams<'send'>,
   ): Promise<void> {
+    // Before the send and not awaited: a send carrying an upload lasts as long as the transfer,
+    // which would otherwise leave everyone watching a typing indicator throughout. Best-effort,
+    // so it must not delay or fail the send.
+    if (this.messageComposer.config.text.publishTypingEvents) {
+      this.stopTyping().catch(() => undefined);
+    }
+
     await super.sendMessageWithLocalUpdate(params);
-    if (this.messageComposer.config.text.publishTypingEvents) await this.stopTyping();
   }
 
   /**

@@ -1,18 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
-  isScrapedContent,
-  isLocalAttachment,
-  isLocalUploadAttachment,
-  isFileAttachment,
-  isLocalFileAttachment,
-  isImageAttachment,
-  isLocalImageAttachment,
   isAudioAttachment,
+  isFailedUpload,
+  isFileAttachment,
+  isImageAttachment,
+  isLocalAttachment,
   isLocalAudioAttachment,
-  isVoiceRecordingAttachment,
-  isLocalVoiceRecordingAttachment,
-  isVideoAttachment,
+  isLocalFileAttachment,
+  isLocalImageAttachment,
+  isLocalUploadAttachment,
   isLocalVideoAttachment,
+  isLocalVoiceRecordingAttachment,
+  isScrapedContent,
+  isVideoAttachment,
+  isVoiceRecordingAttachment,
 } from '../../../src/messageComposer/attachmentIdentity';
 
 describe('attachmentIdentity', () => {
@@ -242,6 +243,36 @@ describe('attachmentIdentity', () => {
     it('should return false for local non-video attachments', () => {
       const attachment = { custom: {}, type: 'file', localMetadata: { id: 'test-id' } };
       expect(isLocalVideoAttachment(attachment)).toBe(false);
+    });
+  });
+  describe('isFailedUpload', () => {
+    it('should return true for an attachment whose upload failed', () => {
+      const attachment = {
+        type: 'image',
+        localMetadata: { id: 'test-id', uploadState: 'failed' },
+      };
+      expect(isFailedUpload(attachment)).toBe(true);
+    });
+
+    it.each(['pending', 'uploading', 'finished', 'blocked'])(
+      'should return false for upload state %s',
+      (uploadState) => {
+        const attachment = {
+          type: 'image',
+          localMetadata: { id: 'test-id', uploadState },
+        };
+        expect(isFailedUpload(attachment)).toBe(false);
+      },
+    );
+
+    it('should return false for a local attachment carrying no upload state', () => {
+      const attachment = { type: 'image', localMetadata: { id: 'test-id' } };
+      expect(isFailedUpload(attachment)).toBe(false);
+    });
+
+    it('should return false for a plain attachment', () => {
+      expect(isFailedUpload({ type: 'image' })).toBe(false);
+      expect(isFailedUpload(undefined)).toBe(false);
     });
   });
 });

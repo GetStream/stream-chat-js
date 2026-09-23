@@ -423,10 +423,8 @@ const isRemoteUrl = (url?: string) => !!url && /^https?:\/\//i.test(url.trim());
  *
  * `localMetadata` is how `AttachmentManager` tracks an upload (its id, the `File`, the local
  * preview); it must never reach the API. An attachment that still carries it and has no remote
- * URL was never settled — which is what happens when
- * `createSendWithPendingUploadsAttachmentsMiddleware` is installed by a UI SDK that does not
- * implement the rest of the flow (awaiting those uploads before sending). Sending it would store
- * an attachment pointing at nothing, so it is dropped and logged instead.
+ * URL was never settled, which means something bypassed the send path that awaits those uploads.
+ * Sending it would store an attachment pointing at nothing, so it is dropped and logged instead.
  *
  * Returns the same message object when there was nothing to change.
  */

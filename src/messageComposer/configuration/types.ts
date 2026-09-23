@@ -102,6 +102,12 @@ export type AttachmentManagerConfig = {
    */
   customCdn: boolean;
   /**
+   * When `true`, a message may be sent while its attachments are still uploading (defaults to
+   * `false`). The message is composed and shown right away, and the send request waits for those
+   * uploads to settle before it goes out; if one of them fails, the whole message fails.
+   */
+  pendingUploadsEnabled: boolean;
+  /**
    * When `true`, the attachment manager sets `localMetadata.uploadProgress` and passes
    * `options.onProgress` to `doUploadRequest` (built-in and custom). Set to `false` to disable
    * progress tracking (defaults to `true`).

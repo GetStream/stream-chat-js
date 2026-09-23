@@ -36,6 +36,7 @@ export const DEFAULT_ATTACHMENT_MANAGER_CONFIG: AttachmentManagerConfig = {
   enabled: true,
   fileUploadFilter: () => true,
   maxNumberOfFilesPerMessage: API_MAX_FILES_ALLOWED_PER_MESSAGE,
+  pendingUploadsEnabled: false,
   trackUploadProgress: true,
 };
 

@@ -1,4 +1,6 @@
 import { createMessageOperationsPersistence } from './persistence';
+import { keepSendOrderWhilePendingUploadsAllowed } from './sendOrdering';
+import { settlePendingAttachmentUploads } from './settlePendingAttachmentUploads';
 import { localMessageToNewMessagePayload } from '../utils';
 import { MessageOperations } from './MessageOperations';
 import type { Channel } from '../channel';
@@ -20,6 +22,21 @@ export const createMessageOperations = (collection: Channel | Thread) => {
   const { channel, parentMessageId } = paginator;
 
   return new MessageOperations({
+    sequenceRequests: (kind, request) =>
+      keepSendOrderWhilePendingUploadsAllowed({
+        channelCid: channel.cid,
+        composer: collection.messageComposer,
+        kind,
+        request,
+      }),
+    settlePendingUploads: (attachments) =>
+      settlePendingAttachmentUploads({
+        attachments,
+        // A reply uploads against the channel the thread belongs to - there is no thread-scoped
+        // upload target.
+        channelCid: channel.cid,
+        client: channel.getClient(),
+      }),
     ...createMessageOperationsPersistence({ channel }),
     channel,
     ingest: (m) => {

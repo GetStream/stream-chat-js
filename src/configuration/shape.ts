@@ -234,6 +234,12 @@ const ATTACHMENTS_FIELDS: Record<keyof AttachmentManagerConfig, ConfigNode> = {
     kind: 'value',
     type: 'number',
   },
+  pendingUploadsEnabled: {
+    description:
+      'Lets a message be sent while its attachments are still uploading. The message appears immediately and the request waits for the uploads; one failed upload fails the message.',
+    kind: 'value',
+    type: 'boolean',
+  },
   trackUploadProgress: {
     description:
       'Reports upload progress on each attachment. Turning it off skips the progress bookkeeping.',

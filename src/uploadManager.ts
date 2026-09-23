@@ -4,7 +4,7 @@ import type { StreamChat } from './client';
 import { chatLoggerSystem } from './logger';
 import type { UploadRequestOptions } from './messageComposer/configuration/types';
 import { StateStore } from '@stream-io/state-store';
-import type { AttachmentManager } from '.';
+import type { AttachmentManager, LocalAttachmentUploadMetadata } from '.';
 
 const logger = chatLoggerSystem.getLogger('upload-manager');
 
@@ -23,6 +23,7 @@ export const isUploadCancellation = (error: unknown) =>
   axios.isCancel(error) || (error instanceof Error && error.name === 'AbortError');
 
 export type UploadRecord = {
+  /** The attachment's local id (`localMetadata.id`); also the key this record is held under. */
   id: string;
   /**
    * `true` once every byte has been handed to the transport but the server has not responded
@@ -45,7 +46,38 @@ export type UploadRecord = {
   uploadProgress?: number;
 };
 
+/**
+ * Whether every byte is sent but the server has not answered — the window where a determinate
+ * progress bar should go indeterminate. Reads
+ * {@link UploadRecord.uploadConfirmationPending} when present, else infers it from progress
+ * reaching 100. Takes `localMetadata`, which is what a handed-over message payload carries.
+ */
+export const isUploadConfirmationPending = (
+  localMetadata?: Pick<
+    LocalAttachmentUploadMetadata,
+    'uploadConfirmationPending' | 'uploadProgress' | 'uploadState'
+  >,
+) => {
+  if (!localMetadata || localMetadata.uploadState !== 'uploading') return false;
+  if (localMetadata.uploadConfirmationPending !== undefined)
+    return localMetadata.uploadConfirmationPending;
+
+  return (
+    localMetadata.uploadProgress !== undefined && localMetadata.uploadProgress >= 100
+  );
+};
+
 export type UploadManagerState = {
+  /**
+   * In-flight uploads keyed by the attachment's local id (`localMetadata.id`) — not the message id
+   * or the URL, neither of which exists yet when an upload starts. That keying is what makes
+   * {@link UploadManager.upload} idempotent, so a message carrying a pending upload awaits the
+   * transfer the composer already began rather than starting a second one.
+   *
+   * A record lives only for the request, removed on success and on failure alike. So this answers
+   * "is a request running now", never "did this upload" — for that read
+   * `localMetadata.uploadState`.
+   */
   uploads: Record<string, UploadRecord>;
 };
 
@@ -85,12 +117,12 @@ export class UploadManager {
   }
 
   private resolveAttachmentManager(channelCid: string) {
-    const colon = channelCid.indexOf(':');
-    if (colon <= 0 || colon === channelCid.length - 1) {
+    const colon = ':';
+    const colonIndex = channelCid.indexOf(colon);
+    if (colonIndex <= 0 || colonIndex === channelCid.length - 1) {
       throw new Error(`Invalid channelCid: ${channelCid}`);
     }
-    const channelType = channelCid.slice(0, colon);
-    const channelId = channelCid.slice(colon + 1);
+    const [channelType, channelId] = channelCid.split(colon);
     return this.client.channel(channelType, channelId).messageComposer.attachmentManager;
   }
 

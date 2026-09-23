@@ -32,12 +32,15 @@ export const createLinkPreviewsCompositionMiddleware = (
               LinkPreviewsManager.getPreviewData(preview),
             );
 
-      const attachments: Attachment[] = (state.message.attachments ?? []).concat(
+      const messageAttachments: Attachment[] = (state.message.attachments ?? []).concat(
         linkPreviews,
       );
+      const localAttachments: Attachment[] = (
+        state.localMessage.attachments ?? []
+      ).concat(linkPreviews);
 
       // prevent introducing attachments array into the payload sent to the server
-      if (!attachments.length) return forward();
+      if (!messageAttachments.length && !localAttachments.length) return forward();
 
       const sendOptions = { ...state.sendOptions };
       const skip_enrich_url =
@@ -47,16 +50,23 @@ export const createLinkPreviewsCompositionMiddleware = (
         sendOptions.skip_enrich_url = true;
       }
 
+      // Each payload gets the `attachments` key only when there is something to put in it,
+      // matching the attachments middleware. An empty array is not "nothing to say": on an edit
+      // the API reads it as "remove every attachment".
       return next({
         ...state,
-        message: {
-          ...state.message,
-          attachments,
-        },
-        localMessage: {
-          ...state.localMessage,
-          attachments,
-        },
+        message: messageAttachments.length
+          ? {
+              ...state.message,
+              attachments: messageAttachments,
+            }
+          : state.message,
+        localMessage: localAttachments.length
+          ? {
+              ...state.localMessage,
+              attachments: localAttachments,
+            }
+          : state.localMessage,
         sendOptions,
       });
     },
