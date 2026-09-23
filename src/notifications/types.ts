@@ -50,6 +50,10 @@ export const CORE_NOTIFICATION_TYPE = {
   messageJumpFailed: 'api:message:jump:failed',
   /** Jumping to the latest message failed. */
   messageJumpToLatestFailed: 'api:message:jumpToLatest:failed',
+  /** Sending a composed message failed. The message stays in the list, marked failed. */
+  messageSendFailed: 'api:message:send:failed',
+  /** Saving an edit failed. The edit is kept on the message, marked failed. */
+  messageUpdateFailed: 'api:message:update:failed',
   pollCastVoteLimit: 'validation:poll:castVote:limit',
   pollCreateFailed: 'api:poll:create:failed',
 } as const;

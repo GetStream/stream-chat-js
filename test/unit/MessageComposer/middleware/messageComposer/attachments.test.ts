@@ -584,6 +584,9 @@ describe('createSendWithPendingUploadsAttachmentsMiddleware', () => {
       get pollId() {
         return null;
       },
+      get retainsCompositionOnSubmit() {
+        return !!this.pollId;
+      },
       attachmentManager: {
         get attachments() {
           return attachments;
