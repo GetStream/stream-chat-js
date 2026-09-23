@@ -387,11 +387,12 @@ export class MessageDeliveryReporter {
   };
 
   /**
-   * Delegates the mark-read call to the Channel or Thread instance.
+   * Delegates the mark-read call to the Channel or Thread instance. A channel whose read events are
+   * disabled is marked read locally instead, when the client opted into counting unread itself.
    *
    * @param collection - The channel or thread to mark as read.
    * @param options - Flags forwarded to the underlying `markRead` call (optional).
-   * @returns The server response, or `null` when the collection is unsupported.
+   * @returns The server response, or `null` when no request went out.
    */
   public markRead = async (collection: Channel | Thread, options?: MarkReadRequest) => {
     const isThreadCollection = isThread(collection);
@@ -412,11 +413,21 @@ export class MessageDeliveryReporter {
           })) ?? null)
         : await channel.markRead(requestOptions);
     } else {
-      const markReadRequestHandler =
-        channel.configState.getLatestValue().requestHandlers?.markReadRequest;
-      result = markReadRequestHandler
-        ? ((await markReadRequestHandler({ channel, options: requestOptions })) ?? null)
-        : await channel.markRead(requestOptions);
+      const { readEvents, requestHandlers } = channel.configState.getLatestValue();
+      const markReadRequestHandler = requestHandlers?.markReadRequest;
+      // Without read events there is no server-side read state to advance - `channel.markRead()`
+      // throws. `isLocalUnreadCountEnabled` is how a client asks to count unread anyway, so the
+      // reset has to come from somewhere: `markReadLocally` clears it through the same read
+      // handling a `message.read` would. Threads are deliberately outside this branch - their read
+      // state is their own, and resetting the channel is not what a thread read means.
+      if (markReadRequestHandler) {
+        result =
+          (await markReadRequestHandler({ channel, options: requestOptions })) ?? null;
+      } else if (!readEvents.enabled && this.client.options.isLocalUnreadCountEnabled) {
+        channel.markReadLocally();
+      } else {
+        result = await channel.markRead(requestOptions);
+      }
     }
 
     // A read implies delivery, so the candidate is only dropped once the request actually went
