@@ -1476,9 +1476,9 @@ A handler needing to vary by message branches on what it is given — `localMess
 or `parent_id` to tell a thread reply from a channel message. See
 [`docs/instance-configuration.md`](./docs/instance-configuration.md) for the full seam.
 
-The `CustomSendMessageRequestFn` / `CustomUpdateMessageRequestFn` / `CustomDeleteMessageRequestFn`
-types are **not** removed — they still type the `requestHandlers` entries. Their parameter is now the
-params type itself rather than `Omit<…, 'xRequestFn'>`, which is the same shape as before.
+The handler types themselves were renamed in the same release — see
+[one vocabulary for message-operation types](#removed-after-1000-rc12--one-vocabulary-for-message-operation-types)
+below. `requestHandlers` entries keep the same shape either way; only the type's name changed.
 
 There is no replacement for per-call **transport** options (an `AbortSignal`, an upload-progress
 callback). Neither layer ever carried them: a handler's `options` is the wire payload

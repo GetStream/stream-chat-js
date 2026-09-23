@@ -208,19 +208,11 @@ export class MessageOperations {
   }
 
   /*
-   * The four operations. Each resolves its request as `requestFn ?? handlers.<kind> ?? defaults.<kind>`.
+   * Each operation resolves its request as `requestFn ?? handlers.<kind> ?? defaults.<kind>`.
    *
-   * `handlers` is the integrator-facing seam: `ChannelConfig.requestHandlers`, registered per channel
-   * instance through `client.config.set({ channel: { requestHandlers } })` and read fresh on every
-   * call. That is what the UI SDKs use — React Native registers its send handler there to run
-   * attachment uploads inside the send pipeline.
-   *
-   * `requestFn` substitutes the request for one call. Nothing in the SDK passes it; it exists as a
-   * direct injection point for tests, which drive failure paths through it. It is deliberately NOT
-   * surfaced on the `*WithLocalUpdate` params — it wins over `handlers`, so a caller reaching for it
-   * would silently bypass whatever the host SDK registered. Per-call needs belong in a handler that
-   * branches on the message it is given, or, for transport concerns such as an abort signal, in a
-   * `StreamRequestOptions` seam that leaves the registered handler running.
+   * `handlers` is the integrator seam (`ChannelConfig.requestHandlers`). `requestFn` is a direct
+   * injection point for tests; it is not exposed on the public methods because it wins over
+   * `handlers`, so a caller reaching for it would bypass whatever the host SDK registered.
    */
 
   async send(
@@ -336,20 +328,6 @@ export class MessageOperations {
     return await this.run<'delete'>('delete', params, doRequest);
   }
 
-  /*
-   * The operations that need more than `send` / `update` / `delete` already do.
-   *
-   * There is deliberately no `sendWithLocalUpdate` / `updateWithLocalUpdate` / `deleteWithLocalUpdate`
-   * here: once the per-call request overrides were removed they forwarded their argument unchanged,
-   * which only added a second name for `send` / `update` / `delete`. The three below earn their place —
-   * a retry rewrites the message type, and the reactions bind `ctx.channel`, which is what lets a
-   * `Thread` share them rather than reaching for its parent channel itself.
-   */
-
-  /**
-   * Retries a failed send. `type: 'regular'` clears the `failed` marker before the attempt, so the
-   * policy sees a message being sent rather than one that already failed.
-   */
   async retrySendWithLocalUpdate({
     localMessage,
     options,

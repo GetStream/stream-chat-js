@@ -5,25 +5,12 @@ import type { Channel } from '../channel';
 import type { MessagePaginator } from '../pagination/paginators';
 
 /**
- * Builds the `MessageOperations` a message collection owns.
+ * Builds the `MessageOperations` a message collection owns, shared by `Channel` and `Thread` so the
+ * two cannot drift — the same reason {@link createMessageOperationsPersistence} exists.
  *
- * `Channel` and `Thread` used to write this out separately, ~95 lines each that differed in four
- * tokens (`this.` versus `this.channel.`) plus the `parent_id` stamp. They are one definition here,
- * for the same reason {@link createMessageOperationsPersistence} is: two copies of this plumbing is
- * how the two silently drift, and a drift here is a correctness bug in optimistic send/edit/delete.
- *
- * A shared base class is not available — `Channel` extends the generated `ChannelApi` and `Thread`
- * extends `WithSubscriptions`, so single inheritance is spent on both sides. Composition into an
- * owned collaborator is what the rest of the SDK does (see `ConfigController`), and this follows it.
- *
- * @param params.channel - The channel the requests and offline-DB rows belong to. A `Thread` passes
- *   its parent channel: a reply is sent, persisted and reacted to against the channel like any other
- *   message.
- * @param params.paginator - The collection's own message list — `channel.messagePaginator` for a
- *   channel, `thread.messagePaginator` for a thread. This is the list an operation reads and writes
- *   first; the client-global message store is the fallback.
- * @param params.parentMessageId - Set by a `Thread`. Stamps `parent_id` onto every outgoing message,
- *   which is what makes a composed message a reply.
+ * @param params.channel - Where requests and offline-DB rows go. A `Thread` passes its parent channel.
+ * @param params.paginator - The collection's own list, read and written before the global store.
+ * @param params.parentMessageId - Set by a `Thread`; stamps `parent_id` on every outgoing message.
  */
 export const createMessageOperations = ({
   channel,
@@ -59,16 +46,9 @@ export const createMessageOperations = ({
     // policy uses this both for its freshness comparison and to decide whether there is anything to
     // update optimistically at all. Reading only the paginator would make those two disagree.
     get: (id) => paginator.getItem(id) ?? channel.getClient().messageStore.get(id),
-    // One fan-out covering every collection that can hold the message, rather than the mirror-image
-    // pair the two owners used to write in opposite directions. Each call is a no-op when that list
-    // does not hold the id, so naming all of them is cheaper than working out which one applies:
-    //
-    // - the owning list first (for a channel this *is* `channel.messagePaginator`, so the next call
-    //   collapses into it);
-    // - the channel's own list and its pinned list, because a reply with `show_in_channel` is held
-    //   there too and removing it from the reply list alone would leave a ghost until the
-    //   `message.deleted` event arrives;
-    // - the reply list of whichever thread claims the message as its parent.
+    // One fan-out over every collection that can hold the message, rather than the mirror-image pair
+    // the two owners used to write in opposite directions. Each call is a no-op when that list does
+    // not hold the id, so naming all of them is cheaper than working out which one applies.
     remove: (id) => {
       const client = channel.getClient();
       const parentId =
