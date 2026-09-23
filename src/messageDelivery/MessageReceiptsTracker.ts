@@ -16,8 +16,28 @@ export type UserProgress = {
 };
 export type MessageReceiptsSnapshot = {
   revision: number;
+  /**
+   * Which users' read cursor sits *on* each message - not which messages have been read. A reader
+   * appears once, at the message they stopped on.
+   *
+   * This is the compact form: one entry per user, not per message. "Who has read message X" is
+   * every user at or past it, which {@link MessageReceiptsTracker.readersForMessage} answers, and
+   * which a consumer rendering a range can accumulate from these buckets in one pass.
+   */
   readersByMessageId: Record<MessageId, UserResponse[]>;
+  /** As {@link readersByMessageId}, for delivery. */
   deliveredByMessageId: Record<MessageId, UserResponse[]>;
+  /**
+   * How far the furthest *other* member has got, or `null` when nobody has got anywhere.
+   *
+   * Delivery and read only move forward, so one ref answers every message: at or before it means
+   * delivered/read, after it means not yet. A per-message map cannot express that - it marks only
+   * the message each cursor happens to land on, leaving every earlier message looking less far
+   * along than a later one, which is a state that cannot occur.
+   */
+  lastDeliveredRefByOthers: MsgRef | null;
+  /** As {@link lastDeliveredRefByOthers}, for reads. */
+  lastReadRefByOthers: MsgRef | null;
 };
 export type ReadStoreReconcileMeta = {
   changedUserIds?: string[];
@@ -175,6 +195,8 @@ export class MessageReceiptsTracker extends WithSubscriptions {
     revision: 0,
     readersByMessageId: {},
     deliveredByMessageId: {},
+    lastDeliveredRefByOthers: null,
+    lastReadRefByOthers: null,
   });
 
   constructor({ channel, locateMessage }: OwnMessageReceiptsTrackerOptions) {
@@ -454,6 +476,23 @@ export class MessageReceiptsTracker extends WithSubscriptions {
     return this.deliveredSorted.slice(pos).map((x) => x.user);
   }
 
+  /**
+   * Whether at least one other member has this message delivered.
+   *
+   * Reads the single furthest cursor rather than asking who is past this message, so the answer is
+   * monotonic by construction: an older message can never report less than a newer one.
+   */
+  isDeliveredToOthers(msgRef: MsgRef): boolean {
+    const ref = this.snapshotStore.getLatestValue().lastDeliveredRefByOthers;
+    return !!ref && compareRefsAsc(msgRef, ref) <= 0;
+  }
+
+  /** As {@link isDeliveredToOthers}, for reads. */
+  isReadByOthers(msgRef: MsgRef): boolean {
+    const ref = this.snapshotStore.getLatestValue().lastReadRefByOthers;
+    return !!ref && compareRefsAsc(msgRef, ref) <= 0;
+  }
+
   /** Users who delivered but have NOT read. */
   deliveredNotReadForMessage(msgRef: MsgRef): UserResponse[] {
     const pos = findIndex(
@@ -677,6 +716,25 @@ export class MessageReceiptsTracker extends WithSubscriptions {
     );
   }
 
+  /**
+   * The furthest ref in an ascending-by-cursor array, ignoring this user's own progress - your own
+   * cursor says nothing about whether anyone received the message.
+   */
+  private furthestRefByOthers(
+    sorted: UserProgress[],
+    refOf: (progress: UserProgress) => MsgRef,
+  ): MsgRef | null {
+    const ownUserId = this.channel.getClient().userID;
+
+    for (let i = sorted.length - 1; i >= 0; i -= 1) {
+      if (sorted[i].user.id === ownUserId) continue;
+      const ref = refOf(sorted[i]);
+      return Number.isFinite(ref.timestamp) ? ref : null;
+    }
+
+    return null;
+  }
+
   private emitSnapshot() {
     const readersByMessageId = this.groupUsersByLastReadMessage();
     const deliveredByMessageId = this.groupUsersByLastDeliveredMessage();
@@ -686,6 +744,14 @@ export class MessageReceiptsTracker extends WithSubscriptions {
       revision: currentSnapshot.revision + 1,
       readersByMessageId,
       deliveredByMessageId,
+      lastDeliveredRefByOthers: this.furthestRefByOthers(
+        this.deliveredSorted,
+        ({ lastDeliveredRef }) => lastDeliveredRef,
+      ),
+      lastReadRefByOthers: this.furthestRefByOthers(
+        this.readSorted,
+        ({ lastReadRef }) => lastReadRef,
+      ),
     });
   }
 }
