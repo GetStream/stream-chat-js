@@ -369,6 +369,12 @@ const MESSAGE_COMPOSER_FIELDS: Record<keyof MessageComposerConfig, ConfigNode> =
     fields: POLLS_FIELDS,
     kind: 'group',
   },
+  retainCompositionOnSubmit: {
+    description:
+      "Decides whether submitting keeps the composer's contents instead of clearing them. Retains for a poll message by default.",
+    kind: 'value',
+    type: 'function',
+  },
   text: { description: 'The text input itself.', fields: TEXT_FIELDS, kind: 'group' },
 };
 
