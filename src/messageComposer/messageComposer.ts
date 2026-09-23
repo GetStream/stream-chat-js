@@ -100,6 +100,22 @@ export type MessageComposerSnapshot = {
 
 export type CompositionContext = Channel | Thread | LocalMessage;
 
+/**
+ * What a submit did, and by implication where the content now is.
+ *
+ * - `sent` - it went out.
+ * - `nothing-to-send` - there was nothing to compose, or a middleware discarded the composition
+ *   (a command that is not ready, one disabled by the quoted or edited message, an upload still
+ *   running). **The composer keeps its contents**, and the reason has already been reported through
+ *   `client.notifications`.
+ * - `failed` - the request failed. **The composer has been released**; the content is in the
+ *   message list marked `failed`, where the user retries it.
+ *
+ * The distinction matters because the last two leave the composer in opposite states, so a caller
+ * that reopens or restores UI has to tell them apart.
+ */
+export type MessageComposerSubmitResult = 'sent' | 'nothing-to-send' | 'failed';
+
 export type MessageComposerState = {
   id: string;
   draftId: string | null;
@@ -1256,7 +1272,20 @@ export class MessageComposer extends WithSubscriptions {
    */
   private releaseSubmittedComposition = () => {
     if (this.retainsCompositionOnSubmit) {
-      this.state.partialNext({ id: MessageComposer.generateId(), pollId: null });
+      this.state.partialNext({
+        id: MessageComposer.generateId(),
+        // Unconditional, and safe whatever decided to retain: a poll that exists is always a poll
+        // that just went out, because `createMessageComposerStateCompositionMiddleware` copies a
+        // set `pollId` onto every composition - threads and edits included, where the poll-only
+        // middleware forwards. There is no state where this detaches one the submission did not
+        // carry.
+        //
+        // Detaching it is also not optional. While `pollId` is set, `hasSendableData` counts it as
+        // content on its own and `createPollOnlyCompositionMiddleware` turns every composition
+        // into a poll-only message, so a composer left bound to a spent poll nullifies whatever is
+        // typed next and re-sends the same poll.
+        pollId: null,
+      });
       return;
     }
 
@@ -1285,14 +1314,14 @@ export class MessageComposer extends WithSubscriptions {
   /**
    * Composes the message and sends it, releasing the composer as it goes.
    *
-   * Resolves `true` when the send succeeded, `false` when there was nothing to send or it failed.
-   * It never rejects: a failure is reported through `client.notifications`, and the message stays
-   * in the list marked `failed`, which is where the user retries it. Callers rendering their own
-   * post-send feedback have to check the result.
+   * Never rejects - see {@link MessageComposerSubmitResult} for what each outcome means and where
+   * the content ends up. A failure is reported through `client.notifications`, and the message
+   * stays in the list marked `failed`, which is where the user retries it. Callers rendering their
+   * own post-send feedback have to check the result.
    */
-  send = async (): Promise<boolean> => {
+  send = async (): Promise<MessageComposerSubmitResult> => {
     const composition = await this.compose();
-    if (!composition?.message) return false;
+    if (!composition?.message) return 'nothing-to-send';
 
     const { localMessage, message, sendOptions } = composition;
 
@@ -1307,7 +1336,7 @@ export class MessageComposer extends WithSubscriptions {
         message,
         options: sendOptions,
       });
-      return true;
+      return 'sent';
     } catch (error) {
       // Nothing is put back. The message is already in the list marked `failed` with a retry
       // affordance, so restoring here would leave the same content - and the same attachment upload
@@ -1317,7 +1346,7 @@ export class MessageComposer extends WithSubscriptions {
         'Send message request failed',
         error,
       );
-      return false;
+      return 'failed';
     }
   };
 
@@ -1325,9 +1354,9 @@ export class MessageComposer extends WithSubscriptions {
    * Composes the edit and saves it, on the same terms as {@link send} - including releasing the
    * composer before the request rather than after it.
    */
-  update = async (): Promise<boolean> => {
+  update = async (): Promise<MessageComposerSubmitResult> => {
     const composition = await this.compose();
-    if (!composition?.message) return false;
+    if (!composition?.message) return 'nothing-to-send';
 
     const { localMessage, sendOptions } = composition;
 
@@ -1338,7 +1367,7 @@ export class MessageComposer extends WithSubscriptions {
         localMessage,
         options: sendOptions,
       });
-      return true;
+      return 'sent';
     } catch (error) {
       // As in `send`: the edit is kept on the message and marked failed, so there is nothing to
       // restore here.
@@ -1347,7 +1376,7 @@ export class MessageComposer extends WithSubscriptions {
         'Edit message request failed',
         error,
       );
-      return false;
+      return 'failed';
     }
   };
 

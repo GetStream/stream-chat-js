@@ -3075,7 +3075,7 @@ describe('MessageComposer submit lifecycle', () => {
 
     // The message is already in the list marked `failed` with a retry affordance. Restoring here
     // would leave the same content - and the same attachment upload ids - owned in two places.
-    expect(sent).toBe(false);
+    expect(sent).toBe('failed');
     expect(messageComposer.textComposer.text).toBe('');
   });
 
@@ -3087,7 +3087,7 @@ describe('MessageComposer submit lifecycle', () => {
       new Error('nope'),
     );
 
-    await expect(messageComposer.send()).resolves.toBe(false);
+    await expect(messageComposer.send()).resolves.toBe('failed');
 
     expect(addError).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -3104,7 +3104,9 @@ describe('MessageComposer submit lifecycle', () => {
 
     const sent = await messageComposer.send();
 
-    expect(sent).toBe(false);
+    // Told apart from a failed request: nothing left the composer, so a caller must not treat this
+    // as content that now lives in the message list.
+    expect(sent).toBe('nothing-to-send');
     expect(sendMessageWithLocalUpdate).not.toHaveBeenCalled();
   });
 
@@ -3131,7 +3133,7 @@ describe('MessageComposer submit lifecycle', () => {
 
     const updated = await messageComposer.update();
 
-    expect(updated).toBe(true);
+    expect(updated).toBe('sent');
     expect(updateMessageWithLocalUpdate).toHaveBeenCalledTimes(1);
   });
 });
@@ -3171,5 +3173,42 @@ describe('MessageComposerConfig.retainCompositionOnSubmit', () => {
     await messageComposer.send();
 
     expect(messageComposer.textComposer.text).toBe('');
+  });
+});
+
+describe('MessageComposer poll release on submit', () => {
+  const sendSucceeds = (mockChannel: Channel) =>
+    vi.spyOn(mockChannel, 'sendMessageWithLocalUpdate').mockResolvedValue(undefined);
+
+  it('detaches the poll that was submitted', () => {
+    const { messageComposer, mockChannel } = setup({ channelConfig: { polls: true } });
+    sendSucceeds(mockChannel);
+    messageComposer.state.partialNext({ pollId: 'poll-1' });
+
+    return messageComposer.send().then(() => {
+      // While `pollId` is set every composition becomes a poll-only message, so a composer left
+      // bound to a spent poll would nullify anything typed next and re-send the same poll.
+      expect(messageComposer.pollId).toBeNull();
+    });
+  });
+
+  it('always submits a poll it holds, which is what makes detaching it safe', async () => {
+    // `createMessageComposerStateCompositionMiddleware` copies a set `pollId` onto the composition
+    // in every context - thread and edit included, where the poll-only middleware forwards. So a
+    // poll that exists is always a poll that went out, and there is no case where releasing the
+    // composer discards one the submission did not carry.
+    const { mockChannel, mockClient } = setup();
+    const mockThread = getThread(mockChannel, mockClient, 'test-thread-id');
+    const { messageComposer } = setup({
+      channelConfig: { polls: true },
+      compositionContext: mockThread,
+    });
+
+    messageComposer.textComposer.state.partialNext({ text: 'a thread reply' });
+    messageComposer.state.partialNext({ pollId: 'poll-1' });
+
+    const composition = await messageComposer.compose();
+
+    expect(composition?.message?.poll_id).toBe('poll-1');
   });
 });
