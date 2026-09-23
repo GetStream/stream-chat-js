@@ -1,5 +1,5 @@
 import { StateStore } from '@stream-io/state-store';
-import { formatMessage, localMessageToNewMessagePayload } from './utils';
+import { formatMessage } from './utils';
 import type {
   DraftResponse,
   EventType,
@@ -7,30 +7,19 @@ import type {
   MarkReadRequest,
   MarkReadResponse,
   MessageResponse,
-  ReactionRequest,
   ReadStateResponse,
-  SendReactionRequest,
   SortParamRequest,
   StreamResponse,
   ThreadStateResponse,
   UserResponse,
 } from './types';
 import { isDoesNotExistError } from './errors';
-import type {
-  Channel,
-  DeleteMessageWithStateUpdateParams,
-  SendMessageWithStateUpdateParams,
-  UpdateMessageWithStateUpdateParams,
-} from './channel';
+import type { Channel } from './channel';
 import type { StreamChat } from './client';
 import type { CustomThreadData } from './custom_types';
 import { MessageComposer } from './messageComposer';
-import {
-  addReactionOptimistically,
-  createMessageOperationsPersistence,
-  deleteReactionOptimistically,
-  MessageOperations,
-} from './messageOperations';
+import { createMessageOperations, WithMessageOperations } from './messageOperations';
+import type { MessageOperations } from './messageOperations';
 import { nowNs } from './utils/time';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 import { MessagePaginator } from './pagination';
@@ -109,7 +98,7 @@ export type ThreadConfig = {
  */
 export const DEFAULT_THREAD_CONFIG: ThreadConfig = deepFreezeConfig({});
 
-export class Thread extends WithSubscriptions {
+export class Thread extends WithMessageOperations(WithSubscriptions) {
   /** The shared configuration machinery — see {@link ConfigController}. */
   private readonly configController = new ConfigController<ThreadConfig>({
     defaults: DEFAULT_THREAD_CONFIG,
@@ -117,8 +106,8 @@ export class Thread extends WithSubscriptions {
   public readonly state: StateStore<ThreadState>;
   public readonly id: string;
   public readonly messageComposer: MessageComposer;
-  public readonly messagePaginator: MessagePaginator;
   public readonly messageOperations: MessageOperations;
+  public readonly messagePaginator: MessagePaginator;
 
   private client: StreamChat;
   private failedRepliesMap: Map<string, LocalMessage> = new Map();
@@ -273,100 +262,7 @@ export class Thread extends WithSubscriptions {
       compositionContext: this,
     });
 
-    this.messageOperations = new MessageOperations({
-      ...createMessageOperationsPersistence({ channel: this.channel }),
-      ingest: (m) => {
-        const store = this.channel.getClient().messageStore;
-        // See the matching comment in `Channel`: the reply paginator's filter demands
-        // `parent_id === this.id`, so an operation on this thread's PARENT message — edited or deleted
-        // from inside the open thread, which is how the UI SDKs route it — is not something the reply
-        // paginator can hold. The store reaches it (a subscribed thread seeds its parent there) and
-        // fans the change out to the channel list too.
-        if (this.messagePaginator.matchesFilter(m)) {
-          this.messagePaginator.ingestItem(m);
-        } else if (store.has(m.id)) {
-          store.upsert(m);
-        }
-        store.flushSubscribers(m.id);
-      },
-      // Mirrors `ingest`'s routing: a message this paginator does not hold can still be held by the
-      // client-global store (a thread parent, a message displayed by another collection), and the
-      // policy uses this both for its freshness comparison and to decide whether there is anything to
-      // update optimistically at all. Reading only the paginator would make those two disagree.
-      get: (id) =>
-        this.messagePaginator.getItem(id) ??
-        this.channel.getClient().messageStore.get(id),
-      remove: (id) => {
-        this.messagePaginator.removeItem({ id });
-        // A reply with `show_in_channel` is held by the channel list as well, so removing it from the
-        // reply paginator alone leaves a ghost there until the `message.deleted` event arrives. Both
-        // calls are no-ops when the paginator does not hold the id, which is the same reason the SDK's
-        // own `removeMessage` removes from the channel unconditionally.
-        this.channel.messagePaginator.removeItem({ id });
-        this.channel.pinnedMessagesPaginator.removeItem({ id });
-      },
-      normalizeOutgoingMessage: (m) => ({
-        ...m,
-        parent_id: this.id,
-      }),
-      handlers: () => {
-        const { requestHandlers } = this.channel.configState.getLatestValue();
-        const deleteMessageRequest = requestHandlers?.deleteMessageRequest;
-        const sendMessageRequest = requestHandlers?.sendMessageRequest;
-        const retrySendMessageRequest = requestHandlers?.retrySendMessageRequest;
-        const updateMessageRequest = requestHandlers?.updateMessageRequest;
-        return {
-          delete: deleteMessageRequest
-            ? (p) =>
-                deleteMessageRequest({
-                  localMessage: p.localMessage,
-                  options: p.options,
-                })
-            : undefined,
-          send: sendMessageRequest
-            ? (p) =>
-                sendMessageRequest({
-                  localMessage: p.localMessage,
-                  message: p.message,
-                  options: p.options,
-                })
-            : undefined,
-          retry: retrySendMessageRequest
-            ? (p) =>
-                retrySendMessageRequest({
-                  localMessage: p.localMessage,
-                  message: p.message,
-                  options: p.options,
-                })
-            : undefined,
-          update: updateMessageRequest
-            ? (p) =>
-                updateMessageRequest({
-                  localMessage: p.localMessage,
-                  options: p.options,
-                })
-            : undefined,
-        };
-      },
-      defaults: {
-        delete: async (id, o) => {
-          const result = await this.channel.getClient().deleteMessage({ id, ...o });
-          return { message: result.message };
-        },
-        send: async (m, o) => {
-          const result = await this.channel.sendMessage({ message: m, ...o });
-          return { message: result.message };
-        },
-        update: async (m, o) => {
-          const result = await this.channel.getClient().updateMessage({
-            id: m.id,
-            message: localMessageToNewMessagePayload(m),
-            ...o,
-          });
-          return { message: result.message };
-        },
-      },
-    });
+    this.messageOperations = createMessageOperations(this);
 
     // Share one derivation path with `config.reset()`. Idempotent — the paginator was already
     // configured through its constructor above; this re-applies the mutable half the way a reset does.
@@ -1022,105 +918,6 @@ export class Thread extends WithSubscriptions {
       this.updateParentMessageLocally({ message });
     }
   };
-
-  /**
-   * Sends a message with optimistic local state update.
-   */
-  async sendMessageWithLocalUpdate({
-    localMessage,
-    message,
-    options,
-    sendMessageRequestFn,
-  }: SendMessageWithStateUpdateParams): Promise<void> {
-    await this.messageOperations.send(
-      {
-        localMessage,
-        message,
-        options,
-      },
-      sendMessageRequestFn,
-    );
-  }
-
-  /**
-   * Retry sending a failed message.
-   */
-  async retrySendMessageWithLocalUpdate(
-    params: Omit<SendMessageWithStateUpdateParams, 'message'>,
-  ) {
-    await this.messageOperations.retry(
-      {
-        localMessage: { ...params.localMessage, type: 'regular' },
-        options: params.options,
-      },
-      params.sendMessageRequestFn,
-    );
-  }
-
-  /**
-   * Updates a message with optimistic local state update.
-   *
-   * The update flows through `messagePaginator`, which is the sole reply source.
-   */
-  async updateMessageWithLocalUpdate(params: UpdateMessageWithStateUpdateParams) {
-    await this.messageOperations.update(
-      {
-        localMessage: params.localMessage,
-        options: params.options,
-      },
-      params.updateMessageRequestFn,
-    );
-  }
-
-  /**
-   * Deletes a message with local state update.
-   */
-  async deleteMessageWithLocalUpdate(params: DeleteMessageWithStateUpdateParams) {
-    await this.messageOperations.delete(
-      {
-        localMessage: params.localMessage,
-        options: params.options,
-      },
-      params.deleteMessageRequestFn,
-    );
-  }
-
-  /**
-   * Adds a reaction to a reply with an optimistic local state update — see
-   * {@link addReactionOptimistically}, which `Channel` shares. The request routes through the parent
-   * channel because reactions are channel-level, while the local write is addressed by message id and
-   * so reaches a pure reply no channel collection holds.
-   */
-  async addReactionWithLocalUpdate({
-    messageId,
-    reaction,
-    options,
-  }: {
-    messageId: string;
-    reaction: ReactionRequest;
-    options?: Pick<SendReactionRequest, 'enforce_unique' | 'skip_push'>;
-  }) {
-    await addReactionOptimistically({
-      channel: this.channel,
-      messageId,
-      options,
-      reaction,
-    });
-  }
-
-  /**
-   * Removes the current user's reaction from a reply with an optimistic local state update — see
-   * {@link deleteReactionOptimistically}, which `Channel` shares.
-   */
-  async deleteReactionWithLocalUpdate({
-    messageId,
-    type,
-  }: {
-    messageId: string;
-    type: string;
-  }) {
-    await deleteReactionOptimistically({ channel: this.channel, messageId, type });
-  }
 
   public markRead = async ({ force = false }: { force?: boolean } = {}) => {
     if (this.ownUnreadCount === 0 && !force) {

@@ -63,6 +63,12 @@ describe('optimistic edit/delete routing', () => {
 
     const thread = new Thread({ client, channel, parentMessage });
     thread.registerSubscriptions();
+    // Adopt into the manager's list, as the UI SDKs do once a thread's replies have loaded. That is
+    // what puts it in `threadsById`, which is how a delete reaches its reply list.
+    client.threads.state.next((current) => ({
+      ...current,
+      threads: [thread, ...current.threads],
+    }));
 
     const reply = generateMsg({
       cid: channel.cid,

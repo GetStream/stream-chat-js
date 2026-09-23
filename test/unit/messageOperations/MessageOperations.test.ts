@@ -1,9 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MessageOperations } from '../../../src/messageOperations/MessageOperations';
+import type { Channel } from '../../../src/channel';
 import type { LocalMessage, Message, MessageResponse } from '../../../src/types';
 import { msToNs, nowNs } from '../../../src/utils/time';
 
 type Store = Map<string, LocalMessage>;
+
+/**
+ * `MessageOperations` reaches `ctx.channel` only from the reaction operations, which this suite does
+ * not exercise — it drives the four message operations through explicit `defaults`/`handlers`. A
+ * stand-in keeps the context type-complete without dragging a client into a suite that needs none.
+ */
+const channelStandIn = {} as Channel;
 
 const makeLocalMessage = (overrides?: Partial<LocalMessage>): LocalMessage =>
   ({
@@ -39,6 +47,7 @@ const makeMessageResponse = (overrides?: Partial<MessageResponse>): MessageRespo
  * override it.
  */
 const stateHooks = (store: Store) => ({
+  channel: channelStandIn,
   isQueued: () => false,
   persist: () => {},
   purge: () => {},
@@ -649,6 +658,7 @@ describe('MessageOperations — optimistic lifecycle', () => {
     const removed: string[] = [];
 
     const context = {
+      channel: channelStandIn,
       defaults: {
         delete: defaultDelete,
         send: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
@@ -806,6 +816,7 @@ describe('MessageOperations — optimistic lifecycle', () => {
       const persisted: LocalMessage[] = [];
 
       const ops = new MessageOperations({
+        channel: channelStandIn,
         defaults: {
           delete: defaultDelete,
           send: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
