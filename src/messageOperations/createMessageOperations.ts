@@ -46,15 +46,11 @@ export const createMessageOperations = ({
     // policy uses this both for its freshness comparison and to decide whether there is anything to
     // update optimistically at all. Reading only the paginator would make those two disagree.
     get: (id) => paginator.getItem(id) ?? channel.getClient().messageStore.get(id),
-    // One fan-out over every collection that can hold the message, rather than the mirror-image pair
-    // the two owners used to write in opposite directions. Each call is a no-op when that list does
-    // not hold the id, so naming all of them is cheaper than working out which one applies.
     remove: (id) => {
       const client = channel.getClient();
       const parentId =
         paginator.getItem(id)?.parent_id ?? client.messageStore.get(id)?.parent_id;
 
-      paginator.removeItem({ id });
       channel.messagePaginator.removeItem({ id });
       channel.pinnedMessagesPaginator.removeItem({ id });
 
