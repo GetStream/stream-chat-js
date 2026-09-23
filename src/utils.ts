@@ -118,8 +118,7 @@ export const channelHasReadEvents = (channel?: Channel) => {
  * channelTracksReadLocally - Whether a channel maintains a client local unread count.
  */
 export const channelTracksReadLocally = (channel?: Channel) =>
-  !channelHasReadEvents(channel) &&
-  !!channel?.getClient().options.isLocalUnreadCountEnabled;
+  !channelHasReadEvents(channel) && !!channel?.config.readEvents.localUnreadCountEnabled;
 
 /**
  * retryInterval - A retry interval which increases acc to number of failures

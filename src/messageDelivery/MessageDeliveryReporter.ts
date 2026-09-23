@@ -416,14 +416,14 @@ export class MessageDeliveryReporter {
       const { readEvents, requestHandlers } = channel.configState.getLatestValue();
       const markReadRequestHandler = requestHandlers?.markReadRequest;
       // Without read events there is no server-side read state to advance - `channel.markRead()`
-      // throws. `isLocalUnreadCountEnabled` is how a client asks to count unread anyway, so the
+      // throws. `localUnreadCountEnabled` is how an integrator asks to count unread anyway, so the
       // reset has to come from somewhere: `markReadLocally` clears it through the same read
       // handling a `message.read` would. Threads are deliberately outside this branch - their read
       // state is their own, and resetting the channel is not what a thread read means.
       if (markReadRequestHandler) {
         result =
           (await markReadRequestHandler({ channel, options: requestOptions })) ?? null;
-      } else if (!readEvents.enabled && this.client.options.isLocalUnreadCountEnabled) {
+      } else if (!readEvents.enabled && readEvents.localUnreadCountEnabled) {
         channel.markReadLocally();
       } else {
         result = await channel.markRead(requestOptions);

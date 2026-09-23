@@ -429,6 +429,11 @@ describe('MessageDeliveryReporter', () => {
   describe('channel with read events disabled', () => {
     let localChannel: Channel;
 
+    const enableLocalUnreadCount = () =>
+      localChannel.configState.partialNext({
+        readEvents: { ...localChannel.config.readEvents, localUnreadCountEnabled: true },
+      });
+
     beforeEach(() => {
       // The server config has to be in place before the channel is built - it is folded into the
       // channel's own configuration at construction, not consulted per call.
@@ -443,8 +448,8 @@ describe('MessageDeliveryReporter', () => {
       localChannel.initialized = true;
     });
 
-    it('clears the unread count without a request when the client counts unread itself', async () => {
-      client.options.isLocalUnreadCountEnabled = true;
+    it('clears the unread count without a request when unread is counted locally', async () => {
+      enableLocalUnreadCount();
       const markReadSpy = vi.spyOn(localChannel, 'markRead');
       client.dispatchEvent({
         cid: localChannel.cid,
@@ -461,7 +466,7 @@ describe('MessageDeliveryReporter', () => {
       expect(localChannel.countUnread()).toBe(0);
     });
 
-    it('still requests when the client did not opt into a local unread count', async () => {
+    it('still requests when no local unread count was configured', async () => {
       const markReadSpy = vi.spyOn(localChannel, 'markRead').mockResolvedValue({} as any);
 
       await localChannel.markReadViaReporter();
@@ -470,7 +475,7 @@ describe('MessageDeliveryReporter', () => {
     });
 
     it('leaves threads on the request path, since a thread read is not the channel read', async () => {
-      client.options.isLocalUnreadCountEnabled = true;
+      enableLocalUnreadCount();
       const markReadSpy = vi.spyOn(localChannel, 'markRead').mockResolvedValue({} as any);
       const markReadLocallySpy = vi.spyOn(localChannel, 'markReadLocally');
       const thread = new Thread({
@@ -488,7 +493,7 @@ describe('MessageDeliveryReporter', () => {
     });
 
     it('lets a custom markReadRequest handler take over', async () => {
-      client.options.isLocalUnreadCountEnabled = true;
+      enableLocalUnreadCount();
       const markReadLocallySpy = vi.spyOn(localChannel, 'markReadLocally');
       const handler = vi.fn(async () => ({ event: {} }) as any);
       localChannel.configState.partialNext({

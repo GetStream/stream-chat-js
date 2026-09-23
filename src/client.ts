@@ -320,10 +320,7 @@ export class StreamChat extends ChatApi {
     this.browser = options.browser ?? typeof window !== 'undefined';
     this.node = !this.browser;
 
-    this.options = {
-      isLocalUnreadCountEnabled: false,
-      ...options,
-    };
+    this.options = { ...options };
 
     this.axiosInstance = axios.create({
       timeout: 3000,

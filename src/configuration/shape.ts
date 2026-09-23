@@ -652,6 +652,12 @@ const CHANNEL_FIELDS: Record<keyof ChannelDeclarativeConfig, ConfigNode> = {
         kind: 'value',
         type: 'boolean',
       },
+      localUnreadCountEnabled: {
+        description:
+          'Counts unread messages client-side when `enabled` is false, reset by `channel.markReadLocally()` instead of a request. Not subject to server authority.',
+        kind: 'value',
+        type: 'boolean',
+      },
     },
     kind: 'group',
   },

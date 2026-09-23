@@ -130,11 +130,16 @@ export type ChannelConfig = {
    */
   typingEvents: { enabled: boolean };
   /**
-   * Read receipts for this channel (defaults to enabled). ANDed with the channel type's `read_events`,
-   * so either side can switch them off and neither can widen. Read by {@link Channel.markRead} and
-   * {@link Channel.markUnread}.
+   * Read receipts for this channel. `enabled` (defaults to true) is ANDed with the channel type's
+   * `read_events`, so either side can switch them off and neither can widen. Read by
+   * {@link Channel.markRead} and {@link Channel.markUnread}.
+   *
+   * `localUnreadCountEnabled` (defaults to false) applies only once `enabled` is false: the channel
+   * keeps counting unread messages for this user and {@link Channel.markReadLocally} resets that
+   * count, with nothing sent to the server. It is deliberately outside the server's authority -
+   * counting locally is what an integrator does *because* the server declines to.
    */
-  readEvents: { enabled: boolean };
+  readEvents: { enabled: boolean; localUnreadCountEnabled: boolean };
   /**
    * Threaded replies for this channel (defaults to enabled). ANDed with the channel type's `replies`.
    */
@@ -209,7 +214,7 @@ const ownDeclarativeConfig = (
 export const DEFAULT_CHANNEL_CONFIG: ChannelConfig = deepFreezeConfig({
   availableCommands: [],
   deliveryEvents: { enabled: true },
-  readEvents: { enabled: true },
+  readEvents: { enabled: true, localUnreadCountEnabled: false },
   replies: { enabled: true },
   typingEvents: { enabled: true },
   userMessageReminders: { enabled: true },
@@ -1505,7 +1510,7 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   /**
    * Resets this user's unread count locally, without any backend call. Intended for
    * channels that have read events disabled (e.g. livestreams) when the client is created with the
-   * `isLocalUnreadCountEnabled` option. Dispatches a dedicated, client-only `message.read_locally` event
+   * `readEvents.localUnreadCountEnabled` configuration. Dispatches a dedicated, client-only `message.read_locally` event
    * that runs through the same `_handleChannelEvent` read logic as a real `message.read` (minus the
    * delivery-report network sync), so the read-state update lives in one place. When offline support
    * is enabled, the offline DB persists the reset for read-events-disabled channels, so the local
@@ -1711,12 +1716,10 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     if (message.user?.id && this.getClient().userMuteStatus(message.user.id))
       return false;
 
-    // Return false if channel doesn't allow read events, unless the client opted into a local
-    // unread count (e.g. livestreams where read events are disabled). See `isLocalUnreadCountEnabled`.
-    if (
-      !this.getClient().options.isLocalUnreadCountEnabled &&
-      !channelHasReadEvents(this)
-    ) {
+    // Return false if channel doesn't allow read events, unless the integrator opted into a local
+    // unread count (e.g. livestreams where read events are disabled). See
+    // `readEvents.localUnreadCountEnabled`.
+    if (!this.config.readEvents.localUnreadCountEnabled && !channelHasReadEvents(this)) {
       return false;
     }
 

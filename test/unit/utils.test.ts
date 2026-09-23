@@ -577,14 +577,16 @@ describe('channelHasReadEvents', () => {
 
 describe('channelTracksReadLocally', () => {
   const setup = ({
-    isLocalUnreadCountEnabled,
+    localUnreadCountEnabled,
     own_capabilities,
   }: {
-    isLocalUnreadCountEnabled?: boolean;
+    localUnreadCountEnabled?: boolean;
     own_capabilities?: ChannelOwnCapability[];
   }) => {
-    const client = new StreamChat('apiKey', { isLocalUnreadCountEnabled });
+    const client = new StreamChat('apiKey');
     client.user = { id: 'user' };
+    // client-level, so every channel this client builds derives it
+    client.config.setConfig('channel', { readEvents: { localUnreadCountEnabled } });
     const channel = client.channel('messaging', 'cap-id');
     channel.data = { own_capabilities };
     return { client, channel };
@@ -592,7 +594,7 @@ describe('channelTracksReadLocally', () => {
 
   it('returns true when read events are disabled and local unread count is enabled', () => {
     const { channel } = setup({
-      isLocalUnreadCountEnabled: true,
+      localUnreadCountEnabled: true,
       own_capabilities: [],
     });
     expect(channelTracksReadLocally(channel)).toBe(true);
@@ -600,7 +602,7 @@ describe('channelTracksReadLocally', () => {
 
   it('returns false when the channel has read events', () => {
     const { channel } = setup({
-      isLocalUnreadCountEnabled: true,
+      localUnreadCountEnabled: true,
       own_capabilities: ['read-events'],
     });
     expect(channelTracksReadLocally(channel)).toBe(false);
@@ -608,7 +610,7 @@ describe('channelTracksReadLocally', () => {
 
   it('returns false when local unread count is disabled', () => {
     const { channel } = setup({
-      isLocalUnreadCountEnabled: false,
+      localUnreadCountEnabled: false,
       own_capabilities: [],
     });
     expect(channelTracksReadLocally(channel)).toBe(false);
