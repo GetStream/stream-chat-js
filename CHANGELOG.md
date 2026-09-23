@@ -1,3 +1,19 @@
+## [10.0.0-rc.13](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.12...v10.0.0-rc.13) (2026-09-23)
+
+### Features
+
+* **MessageComposer:** add send and update message API ([#1881](https://github.com/GetStream/stream-chat-js/issues/1881)) ([95b2502](https://github.com/GetStream/stream-chat-js/commit/95b25025c36354eb136afb8688d17e7b404afcb0))
+* **messageDelivery:** report receipt state from the furthest cursor ([#1883](https://github.com/GetStream/stream-chat-js/issues/1883)) ([79f3ac1](https://github.com/GetStream/stream-chat-js/commit/79f3ac14880a615617471a75c757713f0fbc610b))
+* settle pending attachment uploads ([#1880](https://github.com/GetStream/stream-chat-js/issues/1880)) ([59f5869](https://github.com/GetStream/stream-chat-js/commit/59f5869f7011ec6800666e443d521da21bae0983))
+
+### Refactors
+
+* unify message operation apis ([#1882](https://github.com/GetStream/stream-chat-js/issues/1882)) ([2ed1c75](https://github.com/GetStream/stream-chat-js/commit/2ed1c75a1b15c55322d57226af60cc95fd724715))
+
+### Performance Improvements
+
+* store publish amplification ([#1876](https://github.com/GetStream/stream-chat-js/issues/1876)) ([d93ee7d](https://github.com/GetStream/stream-chat-js/commit/d93ee7de18cf32da690798804ba46ec59a5fdceb))
+
 ## [10.0.0-rc.12](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.11...v10.0.0-rc.12) (2026-09-18)
 
 ### ⚠ BREAKING CHANGES
