@@ -137,8 +137,8 @@ reserve it for values that are known to be nanoseconds. Arithmetic drops the bra
 (`nowNs() + msToNs(5000)` is a plain `number`); wrap the result in `asTimestampNS` when it goes back
 into a timestamp field.
 
-**`new Date(timestamp)` does not compile.** The package's published types include
-`timestamp-guard.d.ts`, which adds a `DateConstructor` overload for `TimestampNS`:
+**`new Date(timestamp)` does not compile.** The package's published types include a global
+augmentation (`gen/models/timestamp-guard`) that adds a `DateConstructor` overload for `TimestampNS`:
 
 ```ts
 const d: Date = new Date(message.created_at);

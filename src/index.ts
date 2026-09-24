@@ -79,10 +79,10 @@ export type {
 export * from './thread_manager';
 export * from './token_manager';
 export * from './types';
-// Type-only and erased from the bundle. Declaration emit keeps it, which is what carries the
-// `DateConstructor` augmentation (`new Date(timestampNs)` becomes a compile error) into the published
-// types — a `.d.ts` is only loaded downstream if the entry point's type graph reaches it. The build
-// copies the file into `dist/types`, since `tsc` never emits source `.d.ts` files.
+// Type-only and erased from the bundle, so there is no runtime import of an empty module. Declaration
+// emit keeps it, which is what carries the `DateConstructor` augmentation (`new Date(timestampNs)`
+// becomes a compile error) into the published types: a global augmentation only reaches a consumer if
+// the entry point's type graph imports the file that declares it.
 export type {} from './gen/models/timestamp-guard';
 export * from './uploadManager';
 export * from './offline-support';

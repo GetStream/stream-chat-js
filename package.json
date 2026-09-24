@@ -78,9 +78,8 @@
     "yaml": "^2.8.4"
   },
   "scripts": {
-    "build": "rm -rf dist && concurrently 'tsc && yarn run copy-dts' './scripts/bundle.mts' && yarn run types:dist",
-    "start": "concurrently 'yarn run copy-dts && tsc --watch' './scripts/bundle.mts --watch'",
-    "copy-dts": "mkdir -p dist/types/gen/models && cp src/gen/models/timestamp-guard.d.ts dist/types/gen/models/",
+    "build": "rm -rf dist && concurrently 'tsc' './scripts/bundle.mts' && yarn run types:dist",
+    "start": "concurrently 'tsc --watch' './scripts/bundle.mts --watch'",
     "types": "tsc --noEmit && yarn run types:scripts && yarn run types:tests",
     "lint": "yarn run prettier && yarn run eslint",
     "lint-fix": "yarn run eslint-fix; yarn run prettier-fix",

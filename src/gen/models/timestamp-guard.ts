@@ -22,3 +22,6 @@ declare global {
     };
   }
 }
+
+// Keeps this a module, which `declare global` requires, independent of the import above.
+export {};

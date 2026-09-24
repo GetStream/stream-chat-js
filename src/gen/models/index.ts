@@ -16,7 +16,7 @@ declare const timestampNsBrand: unique symbol;
  * A unix-nanosecond timestamp, exactly as the server sends it.
  *
  * NOT milliseconds. `new Date(t)` is out of range and yields an Invalid Date, whose
- * `.toISOString()` then throws; `models/timestamp-guard.d.ts` turns that into a
+ * `.toISOString()` then throws; `models/timestamp-guard.ts` turns that into a
  * compile error. Comparing or sorting two timestamps is fine -- same unit, plain
  * numbers. Everything else should go through this SDK's time helpers:
  *

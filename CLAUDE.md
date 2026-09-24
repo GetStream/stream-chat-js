@@ -47,8 +47,8 @@ Single test runs use Vitest's CLI directly: `yarn test-unit path/to/file.test.ts
 When both finish, `yarn build` runs `types:dist`: the compile-time assertions in `test/types/` checked
 against the built `dist/types`, resolved through `package.json#exports` exactly as a consumer would.
 It is what fails a build whose published types lost the `DateConstructor` guard
-(`src/gen/models/timestamp-guard.d.ts`, which `tsc` never emits and `copy-dts` copies in). The same
-files run against `src/` as `types:tests`, part of `yarn types`.
+(`src/gen/models/timestamp-guard.ts`, which reaches consumers only through the type-only re-export in
+`src/index.ts`). The same files run against `src/` as `types:tests`, part of `yarn types`.
 
 `package.json#exports` routes consumers to the right bundle by condition: `node` → node-cjs, `browser`/`react-native` → browser-cjs (require) or esm (import), default → esm. The `react-native` + `require` branch must stay pointed at CJS — React Native's Jest runs CJS with `customConditions: ["react-native"]` and does not transform `node_modules`, so an `.mjs` there is a syntax error across every RN suite that touches the module. `typesVersions` mirrors the subpaths for consumers still on `moduleResolution: "node"`. There is **no `package.json#browser` field** — it used to zero Node-only deps (`crypto`, `https`, `jsonwebtoken`, `ws`, `zlib`) for browser/RN builds, but the SDK no longer imports any of them (`src/index.ts` is platform-agnostic: global `WebSocket`, global `FormData`, global `atob`). `scripts/bundle.mts` keeps a `browserIgnoreModules` hook, currently an empty array, for the day that changes. Prefer a platform global or a browser-safe dep over reintroducing a Node-only one.
 
