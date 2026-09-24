@@ -61,7 +61,7 @@ describe('StreamChat construction', () => {
 
     it('treats an omitted options argument as an empty options object', () => {
       const client = new StreamChat(API_KEY);
-      expect(client.options.isLocalUnreadCountEnabled).to.equal(false);
+      expect(client.options).to.deep.equal({});
     });
   });
 
@@ -117,7 +117,6 @@ describe('StreamChat construction', () => {
     it('applies defaults when no options are passed', () => {
       const client = new StreamChat(API_KEY);
 
-      expect(client.options.isLocalUnreadCountEnabled).to.equal(false);
       // No longer an empty `URLSearchParams` on `options` — the field moved to
       // `wsConnection.config.urlParams` and defaults to `undefined`. `_buildUrl` does
       // `new URLSearchParams(urlParams)`, which treats `undefined` and an empty instance
@@ -130,11 +129,9 @@ describe('StreamChat construction', () => {
 
     it('honors user-provided overrides', () => {
       const client = new StreamChat(API_KEY, {
-        isLocalUnreadCountEnabled: true,
         config: { client: { connectionRecovery: { enabled: false } } },
       });
 
-      expect(client.options.isLocalUnreadCountEnabled).to.equal(true);
       // Seeded from `options.config` before the managers are wired, so it applies from construction.
       expect(client.connectionRecovery.config.enabled).to.equal(false);
     });

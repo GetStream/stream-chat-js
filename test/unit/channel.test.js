@@ -759,16 +759,18 @@ describe('Channel AI indicator state (channel.state.aiState)', function () {
 	});
 });
 
-describe('Channel localized unread count (isLocalUnreadCountEnabled)', function () {
+describe('Channel local unread count (readEvents.localUnreadCountEnabled)', function () {
 	const user = { id: 'user' };
 	const otherUser = { id: 'other-user' };
 
 	// own_capabilities without 'read-events' models a channel with read events disabled (livestream).
-	const setupChannel = ({ isLocalUnreadCountEnabled }) => {
-		const client = new StreamChat('apiKey', { isLocalUnreadCountEnabled });
+	const setupChannel = ({ localUnreadCountEnabled }) => {
+		const client = new StreamChat('apiKey');
 		client.user = user;
 		client.user = { id: user.id };
 		client.userMuteStatus = () => false;
+		// client-level, so the channel built below derives it
+		client.config.setConfig('channel', { readEvents: { localUnreadCountEnabled } });
 		const channel = client.channel('messaging', 'live-id');
 		channel.initialized = true;
 		channel.data = { ...channel.data, own_capabilities: [] };
@@ -776,17 +778,17 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 	};
 
 	it('_countMessageAsUnread returns true with read events off when the flag is set', function () {
-		const { channel } = setupChannel({ isLocalUnreadCountEnabled: true });
+		const { channel } = setupChannel({ localUnreadCountEnabled: true });
 		expect(channel._countMessageAsUnread({ user: otherUser })).to.be.ok;
 	});
 
 	it('_countMessageAsUnread returns false with read events off when the flag is not set', function () {
-		const { channel } = setupChannel({ isLocalUnreadCountEnabled: false });
+		const { channel } = setupChannel({ localUnreadCountEnabled: false });
 		expect(channel._countMessageAsUnread({ user: otherUser })).not.to.be.ok;
 	});
 
 	it('message.new increments the unread count with read events off when the flag is set', function () {
-		const { channel } = setupChannel({ isLocalUnreadCountEnabled: true });
+		const { channel } = setupChannel({ localUnreadCountEnabled: true });
 
 		channel._handleChannelEvent({
 			type: 'message.new',
@@ -804,7 +806,7 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 	});
 
 	it('seeds the own read row when a message counts as unread and the channel has none yet', function () {
-		const { channel } = setupChannel({ isLocalUnreadCountEnabled: true });
+		const { channel } = setupChannel({ localUnreadCountEnabled: true });
 		expect(channel.state.read[user.id]).to.be.undefined;
 
 		channel._handleChannelEvent({
@@ -821,7 +823,7 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 	});
 
 	it('message.new does not increment the unread count with read events off when the flag is not set', function () {
-		const { channel } = setupChannel({ isLocalUnreadCountEnabled: false });
+		const { channel } = setupChannel({ localUnreadCountEnabled: false });
 
 		channel._handleChannelEvent({
 			type: 'message.new',
@@ -832,7 +834,7 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 	});
 
 	it('markReadLocally resets the count and emits a message.read-shaped message.read_locally event', function () {
-		const { client, channel } = setupChannel({ isLocalUnreadCountEnabled: true });
+		const { client, channel } = setupChannel({ localUnreadCountEnabled: true });
 		// markReadLocally is purely local; assert it performs no HTTP request via the api seam.
 		const sendRequest = vi
 			.spyOn(client.api, 'sendRequest')
@@ -875,7 +877,7 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 	});
 
 	it('markReadLocally returns undefined and dispatches nothing when there is no connected user', function () {
-		const { client, channel } = setupChannel({ isLocalUnreadCountEnabled: true });
+		const { client, channel } = setupChannel({ localUnreadCountEnabled: true });
 		client.user = undefined;
 		const onLocalRead = vi.fn();
 		channel.on('message.read_locally', onLocalRead);
@@ -887,7 +889,7 @@ describe('Channel localized unread count (isLocalUnreadCountEnabled)', function 
 	});
 
 	it('markReadLocally resets the count and creates the own read row when none exists yet (fresh livestream)', function () {
-		const { client, channel } = setupChannel({ isLocalUnreadCountEnabled: true });
+		const { client, channel } = setupChannel({ localUnreadCountEnabled: true });
 		const sendRequest = vi
 			.spyOn(client.api, 'sendRequest')
 			.mockResolvedValue({ body: {}, metadata: {} });

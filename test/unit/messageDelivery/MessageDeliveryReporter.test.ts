@@ -426,6 +426,87 @@ describe('MessageDeliveryReporter', () => {
     expect(markDeliveredSpy).not.toHaveBeenCalled();
   });
 
+  describe('channel with read events disabled', () => {
+    let localChannel: Channel;
+
+    const enableLocalUnreadCount = () =>
+      localChannel.configState.partialNext({
+        readEvents: { ...localChannel.config.readEvents, localUnreadCountEnabled: true },
+      });
+
+    beforeEach(() => {
+      // The server config has to be in place before the channel is built - it is folded into the
+      // channel's own configuration at construction, not consulted per call.
+      client.channelServerConfigs[`${channelType}:noReadEvents`] = {
+        created_at: '',
+        delivery_events: true,
+        read_events: false,
+        reminders: false,
+        updated_at: '',
+      };
+      localChannel = client.channel(channelType, 'noReadEvents');
+      localChannel.initialized = true;
+    });
+
+    it('clears the unread count without a request when unread is counted locally', async () => {
+      enableLocalUnreadCount();
+      const markReadSpy = vi.spyOn(localChannel, 'markRead');
+      client.dispatchEvent({
+        cid: localChannel.cid,
+        message: { ...mkMsg('m1', 1000), user: otherUser },
+        type: 'message.new',
+        user: otherUser,
+      } as any);
+      // Without the opt-in the channel would not have counted this at all.
+      expect(localChannel.countUnread()).toBe(1);
+
+      await expect(localChannel.markReadViaReporter()).resolves.toBeNull();
+
+      expect(markReadSpy).not.toHaveBeenCalled();
+      expect(localChannel.countUnread()).toBe(0);
+    });
+
+    it('still requests when no local unread count was configured', async () => {
+      const markReadSpy = vi.spyOn(localChannel, 'markRead').mockResolvedValue({} as any);
+
+      await localChannel.markReadViaReporter();
+
+      expect(markReadSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves threads on the request path, since a thread read is not the channel read', async () => {
+      enableLocalUnreadCount();
+      const markReadSpy = vi.spyOn(localChannel, 'markRead').mockResolvedValue({} as any);
+      const markReadLocallySpy = vi.spyOn(localChannel, 'markReadLocally');
+      const thread = new Thread({
+        client,
+        threadData: generateThreadResponse(
+          { type: channelType, id: 'noReadEvents', cid: localChannel.cid },
+          mkMsg('parent', 1000),
+        ),
+      });
+
+      await client.messageDeliveryReporter.markRead(thread);
+
+      expect(markReadLocallySpy).not.toHaveBeenCalled();
+      expect(markReadSpy).toHaveBeenCalledWith({ thread_id: thread.id });
+    });
+
+    it('lets a custom markReadRequest handler take over', async () => {
+      enableLocalUnreadCount();
+      const markReadLocallySpy = vi.spyOn(localChannel, 'markReadLocally');
+      const handler = vi.fn(async () => ({ event: {} }) as any);
+      localChannel.configState.partialNext({
+        requestHandlers: { markReadRequest: handler },
+      });
+
+      await localChannel.markReadViaReporter();
+
+      expect(handler).toHaveBeenCalled();
+      expect(markReadLocallySpy).not.toHaveBeenCalled();
+    });
+  });
+
   // `CustomMarkReadRequestFn` returns `Promise<Partial<StreamResponse<MarkReadResponse>> | null>`.
   // The `Partial<>` is what lets a handler delegate straight to `channel.markRead` — that resolves
   // to `StreamResponse<MarkReadResponse>` whose `event` is optional, so a stricter

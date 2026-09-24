@@ -404,6 +404,27 @@ describe("the 'channel' configuration key", () => {
       },
     );
 
+    // The point of the flag: the integrator counts unread *because* the server declined read
+    // events, so a server "no" must not reach it the way it reaches `enabled`.
+    it('leaves localUnreadCountEnabled outside the server restriction', () => {
+      client.config.set({
+        channel: { readEvents: { enabled: true, localUnreadCountEnabled: true } },
+      });
+
+      const { readEvents } = withServerConfig({
+        read_events: false,
+      }).configState.getLatestValue();
+
+      expect(readEvents.enabled).toBe(false);
+      expect(readEvents.localUnreadCountEnabled).toBe(true);
+    });
+
+    it('defaults localUnreadCountEnabled to false', () => {
+      expect(
+        openChannel().configState.getLatestValue().readEvents.localUnreadCountEnabled,
+      ).toBe(false);
+    });
+
     it('re-derives when the server config arrives after construction', () => {
       // The case the subscription exists for: a channel built before it has been queried reads
       // `serverConfig` as undefined, so the restriction states nothing and the defaults stand. Without

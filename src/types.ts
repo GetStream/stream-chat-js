@@ -150,12 +150,6 @@ export type StreamChatOptions = {
   baseURL?: string;
   browser?: boolean;
   /**
-   * When true, maintains a client-local unread count on channels that have read events disabled
-   * (e.g. livestreams). The count increments on incoming messages and is reset via
-   * `channel.markReadLocally()`. It is never sent to the backend, but is persisted to the offline DB.
-   */
-  isLocalUnreadCountEnabled?: boolean;
-  /**
    * Custom notification manager service to use for the client.
    * If not provided, a default notification manager will be created.
    * Notifications are used to communicate events like errors, warnings, info, etc. Other services can publish notifications or subscribe to the NotificationManager state changes.
