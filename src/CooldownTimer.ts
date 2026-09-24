@@ -1,7 +1,7 @@
 import { StateStore } from '@stream-io/state-store';
 import { getMessageCreatedAtTimestamp } from './pagination/paginators/MessageIntervalPaginator';
 import { nowNs, nsToMs } from './utils/time';
-import type { ChannelResponse, LocalMessage } from './types';
+import type { ChannelResponse, LocalMessage, TimestampNS } from './types';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 import type { Channel } from './channel';
 
@@ -18,7 +18,7 @@ export type CooldownTimerState = {
    * Creation timestamp of the latest message authored by the current user in this channel, in unix
    * nanoseconds as the API sends it. Change reported via message.new WS event.
    */
-  ownLatestMessageTimestamp?: number;
+  ownLatestMessageTimestamp?: TimestampNS;
   /**
    * Remaining cooldown in whole seconds (rounded).
    */
@@ -141,7 +141,7 @@ export class CooldownTimer extends WithSubscriptions {
    *
    * @param timestamp - Unix nanoseconds, as the API sends it.
    */
-  public setOwnLatestMessageTimestamp = (timestamp: number | undefined) => {
+  public setOwnLatestMessageTimestamp = (timestamp: TimestampNS | undefined) => {
     this.state.partialNext({ ownLatestMessageTimestamp: timestamp });
     this.recalculate();
   };
@@ -155,11 +155,11 @@ export class CooldownTimer extends WithSubscriptions {
     messages,
   }: {
     messages: LocalMessage[];
-  }): number | undefined {
+  }): TimestampNS | undefined {
     const ownUserId = this.getOwnUserId();
     if (!ownUserId) return undefined;
 
-    let latest: number | undefined;
+    let latest: TimestampNS | undefined;
     for (let i = messages.length - 1; i >= 0; i -= 1) {
       const message = messages[i];
       if (message.user?.id !== ownUserId) continue;

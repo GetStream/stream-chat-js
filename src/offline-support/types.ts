@@ -15,6 +15,7 @@ import type {
   ReactionResponse,
   ReadStateResponse,
   SortParamRequest,
+  TimestampNS,
 } from '../types';
 import type { Channel } from '../channel';
 import type { StreamChat } from '../client';
@@ -321,7 +322,7 @@ export type DBDeleteMessagesForChannelType = {
   cid: string;
   /** Timestamp before which messages are deleted. */
   /** Unix nanoseconds, as the API sends it. */
-  truncated_at?: number;
+  truncated_at?: TimestampNS;
   /** Whether to immediately execute the operation. */
   execute?: boolean;
 };

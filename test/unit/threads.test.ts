@@ -2300,13 +2300,13 @@ describe('Threads 2.0', () => {
           const parentMessageId = uuidv4();
 
           client.dispatchEvent({
-            received_at: new Date().toISOString(),
+            received_at: nowNs(),
             type: 'notification.thread_message_new',
             message: generateMsg({ parent_id: parentMessageId }) as MessageResponse,
           });
 
           client.dispatchEvent({
-            received_at: new Date().toISOString(),
+            received_at: nowNs(),
             type: 'notification.thread_message_new',
             message: generateMsg({ parent_id: parentMessageId }) as MessageResponse,
           });
@@ -2328,7 +2328,7 @@ describe('Threads 2.0', () => {
           expect(stateBefore.unseenThreadIds).to.be.empty;
 
           client.dispatchEvent({
-            received_at: new Date().toISOString(),
+            received_at: nowNs(),
             type: 'notification.thread_message_new',
             message: generateMsg({ parent_id: thread.id }) as MessageResponse,
           });

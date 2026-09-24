@@ -572,7 +572,7 @@ describe('createAttachmentsCompositionMiddleware with pendingUploadsEnabled', ()
     message: { id: 'test-id', parent_id: undefined, type: 'regular' },
     localMessage: {
       attachments: [],
-      created_at: new Date(),
+      created_at: convertDateToTimestamp(new Date()),
       deleted_at: null,
       error: undefined,
       id: 'test-id',
@@ -583,7 +583,7 @@ describe('createAttachmentsCompositionMiddleware with pendingUploadsEnabled', ()
       status: 'sending',
       text: '',
       type: 'regular',
-      updated_at: new Date(),
+      updated_at: convertDateToTimestamp(new Date()),
     },
     sendOptions: {},
   });

@@ -52,6 +52,7 @@ import type {
   SdkIdentifier,
   StreamChatOptions,
   StreamRequestOptions,
+  TimestampNS,
   TokenOrProvider,
   UnBanUserOptions,
   UpdateUserPartialRequest,
@@ -121,6 +122,13 @@ export type ChannelConfigsState = {
 };
 
 export type ClientUser = PartializeAllBut<OwnUserResponse, 'id'> & { anon?: boolean };
+
+/**
+ * `T`, unless it is a server-sent {@link TimestampNS}: for parameters where a bare `number` means a
+ * relative offset rather than an instant. `any` passes through (`0 extends 1 & T`), so untyped
+ * callers are not suddenly rejected.
+ */
+type NotATimestampNS<T> = 0 extends 1 & T ? T : T extends TimestampNS ? never : T;
 
 export class StreamChat extends ChatApi {
   private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics
@@ -2011,6 +2019,10 @@ export class StreamChat extends ChatApi {
   /**
    * Pins the message.
    *
+   * A `number` is a relative offset in SECONDS, so a server-sent timestamp (`message.pinned_at`,
+   * `message.pin_expires`) is rejected at compile time rather than read as ~1.79e18 seconds from now.
+   * Hand one back as a date with `nsToDate(timestamp)`.
+   *
    * @param messageOrMessageId - MessageRequest object or message ID.
    * @param timeoutOrExpirationDate - Expiration date or timeout. Use `number` to set the timeout
    *   in seconds, `string` or `Date` to set the exact expiration date (optional).
@@ -2021,10 +2033,13 @@ export class StreamChat extends ChatApi {
    *   into the request (optional).
    * @returns The updated message response.
    */
-  pinMessage(
+  pinMessage<
+    Expiration extends null | number | string | Date | undefined = undefined,
+    PinnedAt extends number | string | Date | undefined = undefined,
+  >(
     messageOrMessageId: string | { id: string },
-    timeoutOrExpirationDate?: null | number | string | Date,
-    pinnedAt?: number | string | Date,
+    timeoutOrExpirationDate?: NotATimestampNS<Expiration>,
+    pinnedAt?: NotATimestampNS<PinnedAt>,
     requestOptions?: StreamRequestOptions,
   ) {
     const id = this._validateAndGetMessageId(

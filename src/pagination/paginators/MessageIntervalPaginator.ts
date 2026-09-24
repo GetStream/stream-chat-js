@@ -22,6 +22,7 @@ import type {
   MessagePaginationParams,
   PinnedMessagePaginationOptions,
   SortParamRequest,
+  TimestampNS,
   UserResponse,
 } from '../../types';
 import type { Channel } from '../../channel';
@@ -118,7 +119,7 @@ const dataFieldFilterResolver: FieldToDataResolver<LocalMessage> = {
  */
 export const getMessageCreatedAtTimestamp = (
   message: LocalMessage | null | undefined,
-): number | null => {
+): TimestampNS | null => {
   const timestamp = message?.created_at;
   return typeof timestamp === 'number' && Number.isFinite(timestamp) ? timestamp : null;
 };
@@ -1133,7 +1134,7 @@ export class MessageIntervalPaginator extends BasePaginator<
     lastReadAt,
     messages,
   }: {
-    lastReadAt: number;
+    lastReadAt: TimestampNS;
     messages: LocalMessage[];
   }): { firstUnreadMessageId: string | null; lastReadMessageId: string | null } => {
     // Messages are expected in chronological order. We find:
@@ -1271,7 +1272,7 @@ export class MessageIntervalPaginator extends BasePaginator<
    * `isTail`/`hasMoreTail` are set; intervals entirely newer keep their flags (unloaded older
    * messages may still sit between them and the cutoff). The active window is re-emitted once.
    */
-  truncate = ({ truncatedAt }: { truncatedAt: number }) => {
+  truncate = ({ truncatedAt }: { truncatedAt: TimestampNS }) => {
     const cutoff = truncatedAt;
     if (!Number.isFinite(cutoff)) return;
 
@@ -1348,7 +1349,7 @@ export class MessageIntervalPaginator extends BasePaginator<
   }: {
     userId: string;
     hardDelete?: boolean;
-    deletedAt: number;
+    deletedAt: TimestampNS;
   }) => {
     const loadedMessages = this.items ?? [];
 
@@ -1453,7 +1454,7 @@ export class MessageIntervalPaginator extends BasePaginator<
    * read cursors live — which is already sorted, so this is O(log n) with no re-sort.
    */
   findItemByTimestamp = (
-    timestamp: number,
+    timestamp: TimestampNS,
     exactTsMatch = false,
   ): LocalMessage | null => {
     const items = this.headItems; // ascending by created_at

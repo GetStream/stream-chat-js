@@ -21,3 +21,8 @@ jobs:
 
       - name: Lint
         run: yarn lint
+
+      # `tsc` over src, the build scripts, and the compile-time assertions in `test/types/` (which pin
+      # the `TimestampNS` brand and its `new Date` guard). Nothing else in PR CI typechecks.
+      - name: Types
+        run: yarn types

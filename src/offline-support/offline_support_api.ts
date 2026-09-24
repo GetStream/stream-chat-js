@@ -985,13 +985,22 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     execute?: boolean;
   }) => {
     const {
-      received_at: last_read = nowNs(),
       last_read_message_id,
       // @ts-expect-error property missing
       unread_messages = 0,
       user,
       cid,
     } = event;
+    // Mirror what `Channel` writes into `state.read` for the same event, so a cold start hydrated from
+    // the DB agrees with the live state: a mark-unread moves the cursor back to the server's
+    // `last_read_at`, every other read event reads up to the server's `created_at`. `received_at` is
+    // the local clock at receipt — skewed against server time, and for a mark-unread plain wrong,
+    // since "now" is after the messages the user just marked unread — so it is only a fallback.
+    const last_read =
+      (event.type === 'notification.mark_unread' ? event.last_read_at : undefined) ??
+      event.created_at ??
+      event.received_at ??
+      nowNs();
 
     const overriddenUnreadMessages = unreadMessages ?? unread_messages;
 

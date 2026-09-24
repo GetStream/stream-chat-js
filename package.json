@@ -78,9 +78,9 @@
     "yaml": "^2.8.4"
   },
   "scripts": {
-    "build": "rm -rf dist && concurrently 'tsc' './scripts/bundle.mts'",
+    "build": "rm -rf dist && concurrently 'tsc' './scripts/bundle.mts' && yarn run types:dist",
     "start": "concurrently 'tsc --watch' './scripts/bundle.mts --watch'",
-    "types": "tsc --noEmit && yarn run types:scripts",
+    "types": "tsc --noEmit && yarn run types:scripts && yarn run types:tests",
     "lint": "yarn run prettier && yarn run eslint",
     "lint-fix": "yarn run eslint-fix; yarn run prettier-fix",
     "prettier": "prettier '**/*.{json,js,mjs,mts,cjs,ts,yml,md}' --check",
@@ -95,7 +95,9 @@
     "postinstall": "node -e \"require('fs').existsSync('scripts/install-husky.mjs') && import('./scripts/install-husky.mjs')\"",
     "prepare": "yarn run build",
     "generate-client": "./scripts/generate-client.sh",
-    "types:scripts": "tsc -p tsconfig.scripts.json"
+    "types:scripts": "tsc -p tsconfig.scripts.json",
+    "types:tests": "tsc -p tsconfig.types-test.json",
+    "types:dist": "tsc -p tsconfig.types-test.dist.json"
   },
   "engines": {
     "node": ">=22.18.0"

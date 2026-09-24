@@ -6,6 +6,7 @@ import type {
   LocalMessage,
   MessageResponse,
   PendingMessageResponse,
+  TimestampNS,
   UserResponse,
 } from './types';
 import { AIStates } from './types';
@@ -17,13 +18,13 @@ type ChannelReadStatus = Record<
   string,
   {
     /** Unix nanoseconds, as the API sends it. */
-    last_read: number;
+    last_read: TimestampNS;
     unread_messages: number;
     user: UserResponse;
     first_unread_message_id?: string;
     last_read_message_id?: string;
     /** Unix nanoseconds, as the API sends it. */
-    last_delivered_at?: number;
+    last_delivered_at?: TimestampNS;
     last_delivered_message_id?: string;
   }
 >;
@@ -110,9 +111,9 @@ export type ChannelDataState = {
 export type ChannelMuteStatus = {
   muted: boolean;
   /** Unix nanoseconds, as the API sends it. */
-  createdAt: number | null;
+  createdAt: TimestampNS | null;
   /** Unix nanoseconds, as the API sends it. */
-  expiresAt: number | null;
+  expiresAt: TimestampNS | null;
 };
 
 /**

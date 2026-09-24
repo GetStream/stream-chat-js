@@ -1,10 +1,11 @@
 import { binarySearch } from '../sortCompiler';
 import { dateToNs } from '../../utils/time';
+import type { TimestampNS } from '../../types';
 import type { BasePaginator, CursorDeriveContext, PaginationFlags } from '../paginators';
 import { ComparisonResult } from '../types.normalization';
 
 export const deriveCreatedAtAroundPaginationFlags = <
-  T extends { id: string; created_at: number },
+  T extends { id: string; created_at: TimestampNS },
   Q extends { created_at_around?: Date | string },
   P extends BasePaginator<T, Q>,
 >({

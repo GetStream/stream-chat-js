@@ -1,10 +1,26 @@
 import { describe, expect, it } from 'vitest';
 
-import { msToNs, nsToDate, nsToMs, nsToRfc3339 } from '../../../src/utils/time';
+import {
+  asTimestampNS,
+  msToNs,
+  nsToDate,
+  nsToMs,
+  nsToRfc3339,
+} from '../../../src/utils/time';
+
+describe('asTimestampNS', () => {
+  it('brands the value without converting it', () => {
+    const raw = 1786219962651957000;
+
+    expect(asTimestampNS(raw)).toBe(raw);
+    expect(asTimestampNS(0)).toBe(0);
+    expect(nsToDate(asTimestampNS(raw)).getTime()).toBe(nsToMs(raw));
+  });
+});
 
 describe('nsToRfc3339', () => {
   /** A real on-device value, whose sub-millisecond remainder is non-zero. */
-  const NANOS = 1786219962651957000;
+  const NANOS = asTimestampNS(1786219962651957000);
 
   it('emits nine fractional digits', () => {
     expect(nsToRfc3339(NANOS)).toMatch(/^\d{4}-\d{2}-\d{2}T[\d:]{8}\.\d{9}Z$/);

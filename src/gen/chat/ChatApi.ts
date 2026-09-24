@@ -109,6 +109,7 @@ import type {
   SyncRequest,
   SyncResponse,
   TranslateMessageRequest,
+  TranslateMessageResponse,
   TruncateChannelRequest,
   TruncateChannelResponse,
   UnblockUsersRequest,
@@ -1478,7 +1479,7 @@ export class ChatApi {
   async translateMessage(
     request: TranslateMessageRequest & { id: string },
     requestOptions?: StreamRequestOptions,
-  ): Promise<StreamResponse<MessageActionResponse>> {
+  ): Promise<StreamResponse<TranslateMessageResponse>> {
     const pathParams = {
       id: request?.id,
     };
@@ -1487,7 +1488,7 @@ export class ChatApi {
     };
 
     const response = await this.apiClient.sendRequest<
-      StreamResponse<MessageActionResponse>
+      StreamResponse<TranslateMessageResponse>
     >(
       'POST',
       '/api/v2/chat/messages/{id}/translate',
@@ -2122,6 +2123,7 @@ export class ChatApi {
       id: request?.id,
       is_closed: request?.is_closed,
       max_votes_allowed: request?.max_votes_allowed,
+      team: request?.team,
       voting_visibility: request?.voting_visibility,
       options: request?.options,
       custom: request?.custom,

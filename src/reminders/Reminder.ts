@@ -2,7 +2,12 @@ import { ReminderTimer } from './ReminderTimer';
 import { StateStore } from '@stream-io/state-store';
 import { nowNs, nsToMs } from '../utils/time';
 import type { ReminderTimerConfig } from './ReminderTimer';
-import type { MessageResponse, ReminderResponseData, UserResponse } from '../types';
+import type {
+  MessageResponse,
+  ReminderResponseData,
+  TimestampNS,
+  UserResponse,
+} from '../types';
 
 /**
  * Milliseconds until `remindAt`, negative once it has passed.
@@ -10,22 +15,22 @@ import type { MessageResponse, ReminderResponseData, UserResponse } from '../typ
  * @param remindAt - Unix nanoseconds, as the API sends it. The subtraction happens in the wire unit
  *   and is converted once, so the returned duration stays in the milliseconds `setTimeout` speaks.
  */
-export const timeLeftMs = (remindAt: number) => nsToMs(remindAt - nowNs());
+export const timeLeftMs = (remindAt: TimestampNS) => nsToMs(remindAt - nowNs());
 
 export type ReminderResponseBaseOrResponse = ReminderResponseData;
 
 export type ReminderState = {
   channel_cid: string;
   /** Unix nanoseconds, as the API sends it. */
-  created_at: number;
+  created_at: TimestampNS;
   message: MessageResponse | null;
   message_id: string;
   /** Unix nanoseconds, as the API sends it. */
-  remind_at: number | null;
+  remind_at: TimestampNS | null;
   /** A duration, so milliseconds — see {@link timeLeftMs}. */
   timeLeftMs: number | null;
   /** Unix nanoseconds, as the API sends it. */
-  updated_at: number;
+  updated_at: TimestampNS;
   user: UserResponse | null;
   user_id: string;
 };

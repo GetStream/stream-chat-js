@@ -29,6 +29,7 @@ import type {
   SendMessageRequest,
   SendMessageResponse,
   SharedLocationResponseData,
+  TimestampNS,
   TranslateMessageRequest,
   UpdateChannelRequest,
   UpdateMessageRequest,
@@ -224,13 +225,13 @@ type LocalEvent = (
   | ({ type: 'message.read_locally' } & {
       channel_type: string;
       cid: string;
-      created_at: number;
+      created_at: TimestampNS;
       channel_id?: string;
       last_read_message_id?: string;
       team?: string;
       user?: UserResponse;
     })
-) & { received_at?: number };
+) & { received_at?: TimestampNS };
 
 /**
  * The hello event of the `/api/v2/connect` WebSocket endpoint, sent once the auth frame
@@ -244,10 +245,10 @@ export type ConnectedEvent = {
   type: 'connection.ok';
   connection_id: string;
   /** Unix nanoseconds, as every other wire event carries it. */
-  created_at: number;
+  created_at: TimestampNS;
   me: OwnUserResponse;
   /** Unix nanoseconds, as every other wire event carries it. */
-  received_at?: number;
+  received_at?: TimestampNS;
 };
 
 export type Event = WSEvent | ConnectedEvent | LocalEvent | keyof CustomEventTypes;

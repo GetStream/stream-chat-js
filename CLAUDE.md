@@ -20,6 +20,7 @@ Companion docs that apply to all agents: `AGENTS.md` (general agent rules) and `
 | Watch dev build                         | `yarn start`                             |
 | Typecheck only                          | `yarn types`                             |
 | Typecheck the build scripts only        | `yarn types:scripts`                     |
+| Type assertions (src / built dist)      | `yarn types:tests` / `yarn types:dist`   |
 | Lint (prettier + eslint, zero warnings) | `yarn lint`                              |
 | Auto-fix lint/format                    | `yarn lint-fix`                          |
 | Unit tests (Vitest)                     | `yarn test` (alias for `yarn test-unit`) |
@@ -42,6 +43,12 @@ Single test runs use Vitest's CLI directly: `yarn test-unit path/to/file.test.ts
    reached something it must not. Nothing is forbidden today — the translation layer that used to sit
    behind `stream-chat/i18n` now ships as **`@stream-io/i18n`** — but adding a new entry point without
    declaring its boundary in `ENTRY_BOUNDARIES` is still an error, which is the point of keeping it.
+
+When both finish, `yarn build` runs `types:dist`: the compile-time assertions in `test/types/` checked
+against the built `dist/types`, resolved through `package.json#exports` exactly as a consumer would.
+It is what fails a build whose published types lost the `DateConstructor` guard
+(`src/gen/models/timestamp-guard.ts`, which reaches consumers only through the type-only re-export in
+`src/index.ts`). The same files run against `src/` as `types:tests`, part of `yarn types`.
 
 `package.json#exports` routes consumers to the right bundle by condition: `node` → node-cjs, `browser`/`react-native` → browser-cjs (require) or esm (import), default → esm. The `react-native` + `require` branch must stay pointed at CJS — React Native's Jest runs CJS with `customConditions: ["react-native"]` and does not transform `node_modules`, so an `.mjs` there is a syntax error across every RN suite that touches the module. `typesVersions` mirrors the subpaths for consumers still on `moduleResolution: "node"`. There is **no `package.json#browser` field** — it used to zero Node-only deps (`crypto`, `https`, `jsonwebtoken`, `ws`, `zlib`) for browser/RN builds, but the SDK no longer imports any of them (`src/index.ts` is platform-agnostic: global `WebSocket`, global `FormData`, global `atob`). `scripts/bundle.mts` keeps a `browserIgnoreModules` hook, currently an empty array, for the day that changes. Prefer a platform global or a browser-safe dep over reintroducing a Node-only one.
 
@@ -199,7 +206,7 @@ GitHub workflows in `.github/workflows/`:
 
 | Workflow       | Trigger             | What it runs                                                   |
 | -------------- | ------------------- | -------------------------------------------------------------- |
-| `lint.yml`     | PR                  | `yarn lint`                                                    |
+| `lint.yml`     | PR                  | `yarn lint`, then `yarn types`                                 |
 | `unit.yml`     | PR                  | `yarn test-coverage`                                           |
 | `size.yml`     | PR (excludes tests) | `preactjs/compressed-size-action` — reports bundle-size diff   |
 | `pr-check.yml` | PR title change     | `commitlint` on the PR title                                   |
