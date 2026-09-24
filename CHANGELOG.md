@@ -1,3 +1,13 @@
+## [10.0.0-rc.14](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.13...v10.0.0-rc.14) (2026-09-24)
+
+### ⚠ BREAKING CHANGES
+
+* brand server-sent timestamps as TimestampNS and ship the Date guard (#1884)
+
+### Features
+
+* brand server-sent timestamps as TimestampNS and ship the Date guard ([#1884](https://github.com/GetStream/stream-chat-js/issues/1884)) ([e51198a](https://github.com/GetStream/stream-chat-js/commit/e51198aa89322564d49246ed3ff763b6d19fe136)), closes [GetStream/chat#17356](https://github.com/GetStream/chat/issues/17356) [GetStream/chat#17460](https://github.com/GetStream/chat/issues/17460) [#17356](https://github.com/GetStream/stream-chat-js/issues/17356) [GetStream/stream-chat-react#3297](https://github.com/GetStream/stream-chat-react/issues/3297) [GetStream/stream-chat-react-native#3822](https://github.com/GetStream/stream-chat-react-native/issues/3822) [GetStream/chat#17425](https://github.com/GetStream/chat/issues/17425)
+
 ## [10.0.0-rc.13](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.12...v10.0.0-rc.13) (2026-09-23)
 
 ### Features
