@@ -644,6 +644,65 @@ describe('connection', function () {
 		});
 	});
 
+	describe('disconnect while connecting', () => {
+		const token =
+			'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYW1pbiJ9.dN0CCAW5CayCq0dsTXxLZvjxhQuZvlaeIfrJmxk9NkU';
+
+		beforeEach(() => MockWebSocket.reset());
+		afterEach(() => MockWebSocket.reset());
+
+		it('does not open a socket when closeConnection() runs while the token is loading', async () => {
+			const client = new StreamChat('apiKey', { allowServerSideConnect: true });
+			client.wsConnection.updateConfig({ webSocketImpl: MockWebSocket });
+			client.setBaseURL(wsBaseURL);
+			let provideToken;
+			const tokenProvider = () =>
+				new Promise((resolve) => {
+					provideToken = resolve;
+				});
+
+			const connecting = client.connectUser({ id: 'amin' }, tokenProvider);
+			// the mobile backgrounding flow, landing while the provider is still out
+			await client.closeConnection();
+			provideToken(token);
+			await connecting;
+
+			// a socket built here would carry the current wsID, so it would go live behind the close
+			expect(MockWebSocket.instances).to.have.length(0);
+			expect(client.wsConnection.isHealthy).to.be.false;
+			expect(client.connectionIdManager.connectionId).to.be.undefined;
+		});
+
+		it('does not settle the connect promises when disconnect() runs during a token refresh', async () => {
+			const client = newStreamChat();
+			client.tokenManager = new TokenManager();
+			client.tokenManager.token = 't.oke.n';
+			let finishLoading;
+			client.tokenManager.loadToken = sinon.spy(
+				() =>
+					new Promise((resolve) => {
+						finishLoading = resolve;
+					}),
+			);
+			client._settleConnectPromises = sinon.spy();
+			const c = new StableWSConnection({ wsConnection: client.wsConnection });
+
+			const reconnecting = c._reconnect({ interval: 1, refreshToken: true });
+			for (let i = 0; i < 20 && !client.tokenManager.loadToken.called; i++) {
+				await sleep(5);
+			}
+			expect(client.tokenManager.loadToken.calledOnce).to.be.true;
+
+			c.disconnect();
+			finishLoading('t.oke.n');
+			await reconnecting;
+
+			// resolving setUserPromise here would make connectUser's cleanup think its attempt won
+			expect(client._settleConnectPromises.called).to.be.false;
+			expect(MockWebSocket.instances).to.have.length(0);
+		});
+	});
+
 	describe('Connection connect timeout', function () {
 		const token =
 			'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYW1pbiJ9.dN0CCAW5CayCq0dsTXxLZvjxhQuZvlaeIfrJmxk9NkU';
