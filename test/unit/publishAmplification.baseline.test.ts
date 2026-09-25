@@ -100,10 +100,10 @@ describe('publish amplification — one event, one publish per collection', () =
       page,
       setActive: true,
     });
-    client.threads.state.next((current) => ({
-      ...current,
-      threads: [thread, ...current.threads],
-    }));
+    client.threads.paginator.replaceItems([
+      thread,
+      ...(client.threads.paginator.items ?? []),
+    ]);
     thread.registerSubscriptions();
 
     const recorder = recordPublishes({

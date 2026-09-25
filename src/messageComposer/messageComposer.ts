@@ -485,14 +485,14 @@ export class MessageComposer extends WithSubscriptions {
    *
    * Thread replies live in `thread.messagePaginator`, which is independent of the channel's, so
    * dispatching to the wrong one leaves the reply invisible where it was written. An edit composer
-   * is built from the message rather than from its thread, so it can only find the thread when the
-   * manager has it loaded. No composer reachable from a UI SDK is built that way today.
+   * is built from the message rather than from its thread, so it finds the thread only when
+   * `client.threads` has it registered — listed, or active (open somewhere).
    */
   get defaultSubmitTarget(): Channel | Thread {
     if (this.compositionContext instanceof Thread) return this.compositionContext;
 
     const { threadId } = this;
-    return (threadId && this.client.threads.threadsById[threadId]) || this.channel;
+    return (threadId && this.client.threads.get(threadId)) || this.channel;
   }
 
   /**

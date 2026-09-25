@@ -91,6 +91,11 @@ export class EntityStore<T> {
     return this.byId.has(id);
   }
 
+  /** Every entity currently in the store. */
+  values(): T[] {
+    return Array.from(this.byId.values());
+  }
+
   // ---- writes ----
 
   /**

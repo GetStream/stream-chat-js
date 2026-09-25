@@ -2944,6 +2944,7 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     this.unsubscribeServerConfig?.();
     this.unsubscribeServerConfig = undefined;
     this.messageReceiptsTracker.unregisterSubscriptions();
+    this._client.threads.forgetChannel(this.cid);
     // A deleted channel (or one the user was removed from) must not be re-watched — see #2599.
     this.watchStatus = ChannelWatchStatus.NotWatching;
     this.pendingDisposal = true;

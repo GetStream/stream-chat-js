@@ -63,12 +63,12 @@ describe('optimistic edit/delete routing', () => {
 
     const thread = new Thread({ client, channel, parentMessage });
     thread.registerSubscriptions();
-    // Adopt into the manager's list, as the UI SDKs do once a thread's replies have loaded. That is
-    // what puts it in `threadsById`, which is how a delete reaches its reply list.
-    client.threads.state.next((current) => ({
-      ...current,
-      threads: [thread, ...current.threads],
-    }));
+    // In the manager's list, which registers it with `client.threads` — how a delete reaches its
+    // reply list.
+    client.threads.paginator.replaceItems([
+      thread,
+      ...(client.threads.paginator.items ?? []),
+    ]);
 
     const reply = generateMsg({
       cid: channel.cid,
@@ -94,7 +94,7 @@ describe('optimistic edit/delete routing', () => {
    * this is the mirror, for a reply deleted from the channel list while its thread is loaded.
    */
   describe('show_in_channel reply hard-deleted from the channel', () => {
-    const setupSharedReply = () => {
+    const setupSharedReply = ({ listed = true } = {}) => {
       const parentId = uuidv4();
       const parentMessage = generateMsg({
         cid: channel.cid,
@@ -119,8 +119,9 @@ describe('optimistic edit/delete routing', () => {
         setActive: true,
       });
 
-      // Only threads the manager knows about are reachable from `Channel`.
-      client.threads.state.partialNext({ threads: [thread] });
+      // Only threads registered with the manager are reachable from `Channel`: listed, or active.
+      if (listed) client.threads.paginator.replaceItems([thread]);
+      else thread.activate();
 
       return { reply, thread };
     };
@@ -143,6 +144,18 @@ describe('optimistic edit/delete routing', () => {
       expect(thread.messagePaginator.getItem(reply.id)).toBeUndefined();
     });
 
+    it('clears it from an open thread the list does not hold', async () => {
+      const { reply, thread } = setupSharedReply({ listed: false });
+      vi.spyOn(client, 'deleteMessage').mockResolvedValue({} as never);
+
+      await channel.deleteMessageWithLocalUpdate({
+        localMessage: formatMessage(reply) as LocalMessage,
+        options: { hard: true },
+      });
+
+      expect(thread.messagePaginator.getItem(reply.id)).toBeUndefined();
+    });
+
     it('leaves threads belonging to other channels alone', async () => {
       const { reply } = setupSharedReply();
       const otherChannel = createChannel(client);
@@ -160,9 +173,10 @@ describe('optimistic edit/delete routing', () => {
         page: [formatMessage({ ...reply, cid: otherChannel.cid })],
         setActive: true,
       });
-      client.threads.state.partialNext({
-        threads: [...client.threads.state.getLatestValue().threads, otherThread],
-      });
+      client.threads.paginator.replaceItems([
+        ...(client.threads.paginator.items ?? []),
+        otherThread,
+      ]);
       vi.spyOn(client, 'deleteMessage').mockResolvedValue({} as never);
 
       await channel.deleteMessageWithLocalUpdate({

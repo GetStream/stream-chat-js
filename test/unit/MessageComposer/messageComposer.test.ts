@@ -620,6 +620,26 @@ describe('MessageComposer', () => {
       expect(messageComposer.threadId).toBe('test-parent-id');
     });
 
+    it('resolves an edited reply to its thread when the thread is open but not listed', () => {
+      const { mockChannel, mockClient } = setup();
+      const thread = getThread(mockChannel, mockClient, 'test-parent-id');
+      const editComposer = new MessageComposer({
+        client: mockClient,
+        compositionContext: {
+          cid: mockChannel.cid,
+          id: 'test-message-id',
+          parent_id: 'test-parent-id',
+        } as any,
+      });
+
+      expect(editComposer.defaultSubmitTarget).toBe(editComposer.channel);
+
+      thread.activate();
+
+      expect(mockClient.threads.isListed(thread.id)).toBe(false);
+      expect(editComposer.defaultSubmitTarget).toBe(thread);
+    });
+
     it('should return the correct client', () => {
       const { messageComposer, mockClient } = setup();
       expect(messageComposer.client).toBe(mockClient);

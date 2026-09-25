@@ -19,7 +19,7 @@ import {
   SortParamRequest,
 } from '../../src';
 
-import { describe, it, beforeEach, expect, afterEach } from 'vitest';
+import { describe, it, beforeEach, expect, afterEach, vi } from 'vitest';
 import { dateToNs, msToNs, nowNs } from '../../src/utils/time';
 import { convertDateToTimestamp } from './test-utils/time';
 
@@ -2175,44 +2175,49 @@ describe('Threads 2.0', () => {
   });
 
   describe('ThreadManager', () => {
+    const listOf = (manager: ThreadManager) => manager.paginator.items ?? [];
+    const setList = (manager: ThreadManager, threads: Thread[], next?: string) =>
+      manager.paginator.replaceItems(threads, next);
+
     it('initializes properly', () => {
       const state = threadManager.state.getLatestValue();
-      expect(state.threads).to.be.empty;
       expect(state.unseenThreadIds).to.be.empty;
-      expect(state.pagination.isLoading).to.be.false;
-      expect(state.pagination.nextCursor).to.be.null;
+      expect(threadManager.paginator.items).to.be.undefined;
+      expect(threadManager.paginator.isLoading).to.be.false;
+      expect(threadManager.paginator.isInitialized).to.be.false;
     });
 
     describe('resetState', () => {
       it('resets the state properly', async () => {
-        threadManager.state.partialNext({
-          threads: [createTestThread(), createTestThread()],
-          unseenThreadIds: ['1', '2'],
-        });
+        setList(threadManager, [
+          createTestThread({ parentMessageOverrides: { id: uuidv4() } }),
+          createTestThread({ parentMessageOverrides: { id: uuidv4() } }),
+        ]);
+        threadManager.state.partialNext({ unseenThreadIds: ['1', '2'] });
         threadManager.registerSubscriptions();
-        expect(threadManager.state.getLatestValue().threads).to.have.lengthOf(2);
+        expect(listOf(threadManager)).to.have.lengthOf(2);
         expect(threadManager.state.getLatestValue().unseenThreadIds).to.have.lengthOf(2);
         threadManager.resetState();
         expect(threadManager.state.getLatestValue()).to.be.deep.equal(
           THREAD_MANAGER_INITIAL_STATE,
         );
+        expect(threadManager.paginator.items).to.be.undefined;
+        expect(threadManager.registeredThreads).to.be.empty;
       });
     });
 
     it('resets the thread state on disconnect', async () => {
       const clientWithUser = await getClientWithUser({ id: 'user1' });
       const thread = createTestThread();
-      clientWithUser.threads.state.partialNext({ ready: true, threads: [thread] });
+      setList(clientWithUser.threads, [thread]);
       clientWithUser.threads.registerSubscriptions();
 
-      const { threads, unseenThreadIds } = clientWithUser.threads.state.getLatestValue();
-
-      expect(threads).to.deep.equal([thread]);
-      expect(unseenThreadIds.length).to.equal(0);
+      expect(listOf(clientWithUser.threads)).to.deep.equal([thread]);
+      expect(clientWithUser.threads.state.getLatestValue().unseenThreadIds).to.be.empty;
 
       await clientWithUser.disconnectUser();
 
-      expect(clientWithUser.threads.state.getLatestValue().threads).to.have.lengthOf(0);
+      expect(listOf(clientWithUser.threads)).to.have.lengthOf(0);
       expect(
         clientWithUser.threads.state.getLatestValue().unseenThreadIds,
       ).to.have.lengthOf(0);
@@ -2249,15 +2254,24 @@ describe('Threads 2.0', () => {
       });
 
       it('removes threads from the state if their channel got deleted', () => {
-        const thread = createTestThread();
+        const thread = createTestThread({ parentMessageOverrides: { id: uuidv4() } });
         const toBeRemoved = [
-          createTestThread({ channelOverrides: { id: 'channel1' } }),
-          createTestThread({ channelOverrides: { id: 'channel1' } }),
-          createTestThread({ channelOverrides: { id: 'channel2' } }),
+          createTestThread({
+            channelOverrides: { id: 'channel1' },
+            parentMessageOverrides: { id: uuidv4() },
+          }),
+          createTestThread({
+            channelOverrides: { id: 'channel1' },
+            parentMessageOverrides: { id: uuidv4() },
+          }),
+          createTestThread({
+            channelOverrides: { id: 'channel2' },
+            parentMessageOverrides: { id: uuidv4() },
+          }),
         ];
-        threadManager.state.partialNext({ threads: [thread, ...toBeRemoved] });
+        setList(threadManager, [thread, ...toBeRemoved]);
 
-        expect(threadManager.state.getLatestValue().threads).to.have.lengthOf(4);
+        expect(listOf(threadManager)).to.have.lengthOf(4);
 
         client.dispatchEvent({
           type: 'notification.channel_deleted',
@@ -2269,7 +2283,7 @@ describe('Threads 2.0', () => {
           cid: 'messaging:channel2',
         });
 
-        expect(threadManager.state.getLatestValue().threads).to.deep.equal([thread]);
+        expect(listOf(threadManager)).to.deep.equal([thread]);
       });
 
       describe('Event: notification.thread_message_new', () => {
@@ -2283,7 +2297,7 @@ describe('Threads 2.0', () => {
         });
 
         it('tracks new unseen threads', () => {
-          threadManager.state.partialNext({ ready: true });
+          setList(threadManager, [createTestThread()]);
 
           client.dispatchEvent({
             type: 'notification.thread_message_new',
@@ -2296,7 +2310,7 @@ describe('Threads 2.0', () => {
         });
 
         it('deduplicates unseen threads', () => {
-          threadManager.state.partialNext({ ready: true });
+          setList(threadManager, [createTestThread()]);
           const parentMessageId = uuidv4();
 
           client.dispatchEvent({
@@ -2318,10 +2332,7 @@ describe('Threads 2.0', () => {
 
         it('tracks thread order becoming stale', () => {
           const thread = createTestThread();
-          threadManager.state.partialNext({
-            threads: [thread],
-            ready: true,
-          });
+          setList(threadManager, [thread]);
 
           const stateBefore = threadManager.state.getLatestValue();
           expect(stateBefore.isThreadOrderStale).to.be.false;
@@ -2341,10 +2352,8 @@ describe('Threads 2.0', () => {
 
       it('reloads on connection.recovered if the thread list was activated at least once', () => {
         const thread = createTestThread();
-        threadManager.state.partialNext({
-          threads: [thread],
-          wasActivatedAtLeastOnce: true,
-        });
+        setList(threadManager, [thread]);
+        threadManager.state.partialNext({ wasActivatedAtLeastOnce: true });
         threadManager.registerSubscriptions();
         const stub = sinon.stub(client, 'queryThreads').resolves({
           threads: [],
@@ -2370,10 +2379,8 @@ describe('Threads 2.0', () => {
 
       it('collapses several recoveries in one window into a single reload', () => {
         const thread = createTestThread();
-        threadManager.state.partialNext({
-          threads: [thread],
-          wasActivatedAtLeastOnce: true,
-        });
+        setList(threadManager, [thread]);
+        threadManager.state.partialNext({ wasActivatedAtLeastOnce: true });
         threadManager.registerSubscriptions();
         const stub = sinon.stub(client, 'queryThreads').resolves({
           threads: [],
@@ -2394,7 +2401,7 @@ describe('Threads 2.0', () => {
 
       it('does not reload after connection drop if the thread list was never activated', () => {
         const thread = createTestThread();
-        threadManager.state.partialNext({ threads: [thread] });
+        setList(threadManager, [thread]);
         threadManager.registerSubscriptions();
         const stub = sinon.stub(client, 'queryThreadsAndHydrate').resolves({
           threads: [],
@@ -2431,16 +2438,12 @@ describe('Threads 2.0', () => {
         const [thread3, registerThread3, unregisterThread3] =
           createTestThreadAndSpySubscriptions();
 
-        threadManager.state.partialNext({
-          threads: [thread1, thread2],
-        });
+        setList(threadManager, [thread1, thread2]);
 
         expect(registerThread1.calledOnce).to.be.true;
         expect(registerThread2.calledOnce).to.be.true;
 
-        threadManager.state.partialNext({
-          threads: [thread2, thread3],
-        });
+        setList(threadManager, [thread2, thread3]);
 
         expect(unregisterThread1.calledOnce).to.be.true;
         expect(registerThread3.calledOnce).to.be.true;
@@ -2466,28 +2469,177 @@ describe('Threads 2.0', () => {
         });
       });
 
-      describe('threadsById', () => {
-        it('lazily generates & re-generates a proper lookup table', () => {
-          const thread1 = createTestThread({ parentMessageOverrides: { id: uuidv4() } });
-          const thread2 = createTestThread({ parentMessageOverrides: { id: uuidv4() } });
-          const thread3 = createTestThread({ parentMessageOverrides: { id: uuidv4() } });
+      describe('thread registry', () => {
+        const createThreadWithId = (id = uuidv4()) =>
+          createTestThread({ parentMessageOverrides: { id } });
 
-          expect(threadManager.threadsById).to.be.empty;
+        it('resolves listed threads', () => {
+          const thread1 = createThreadWithId();
+          const thread2 = createThreadWithId();
+          const thread3 = createThreadWithId();
 
-          threadManager.state.partialNext({ threads: [thread1, thread2] });
-          const state1 = threadManager.state.getLatestValue();
+          setList(threadManager, [thread1, thread2]);
 
-          expect(state1.threads).to.have.lengthOf(2);
-          expect(Object.keys(threadManager.threadsById)).to.have.lengthOf(2);
-          expect(threadManager.threadsById).to.have.keys(thread1.id, thread2.id);
+          expect(threadManager.get(thread1.id)).to.equal(thread1);
+          expect(threadManager.isListed(thread2.id)).to.be.true;
 
-          threadManager.state.partialNext({ threads: [thread3] });
-          const state2 = threadManager.state.getLatestValue();
+          setList(threadManager, [thread3]);
 
-          expect(state2.threads).to.have.lengthOf(1);
-          expect(Object.keys(threadManager.threadsById)).to.have.lengthOf(1);
-          expect(threadManager.threadsById).to.have.keys(thread3.id);
-          expect(threadManager.threadsById[thread3.id]).to.equal(thread3);
+          expect(threadManager.get(thread1.id)).to.be.undefined;
+          expect(threadManager.isListed(thread1.id)).to.be.false;
+          expect(threadManager.get(thread3.id)).to.equal(thread3);
+          expect(threadManager.registeredThreads).to.deep.equal([thread3]);
+        });
+
+        it('registers an active thread the list does not hold', () => {
+          const thread = createThreadWithId();
+
+          thread.activate();
+
+          expect(client.threads.get(thread.id)).to.equal(thread);
+          expect(client.threads.isListed(thread.id)).to.be.false;
+        });
+
+        it('subscribes an active unlisted thread while the manager is registered', () => {
+          client.threads.registerSubscriptions();
+          const thread = createThreadWithId();
+          const registerSpy = sinon.spy(thread, 'registerSubscriptions');
+
+          thread.activate();
+
+          expect(registerSpy.calledOnce).to.be.true;
+          client.threads.unregisterSubscriptions();
+        });
+
+        it('keeps an opened thread registered and subscribed after it is deactivated', () => {
+          client.threads.registerSubscriptions();
+          const thread = createThreadWithId();
+          const unregisterSpy = sinon.spy(thread, 'unregisterSubscriptions');
+
+          thread.activate();
+          thread.deactivate();
+
+          expect(client.threads.get(thread.id)).to.equal(thread);
+          expect(unregisterSpy.called).to.be.false;
+          client.threads.unregisterSubscriptions();
+        });
+
+        it('keeps an opened thread registered when the list evicts it', () => {
+          client.threads.registerSubscriptions();
+          const thread = createThreadWithId();
+          const unregisterSpy = sinon.spy(thread, 'unregisterSubscriptions');
+          setList(client.threads, [thread]);
+          thread.activate();
+          thread.deactivate();
+
+          setList(client.threads, []);
+
+          expect(client.threads.get(thread.id)).to.equal(thread);
+          expect(client.threads.isListed(thread.id)).to.be.false;
+          expect(unregisterSpy.called).to.be.false;
+          client.threads.unregisterSubscriptions();
+        });
+
+        it('forgets opened threads when their channel is torn down', () => {
+          client.threads.registerSubscriptions();
+          const thread = createThreadWithId();
+          const unregisterSpy = sinon.spy(thread, 'unregisterSubscriptions');
+          thread.activate();
+
+          client.dispatchEvent({
+            cid: thread.channel.cid,
+            type: 'notification.channel_deleted',
+          });
+
+          expect(client.threads.get(thread.id)).to.be.undefined;
+          expect(unregisterSpy.calledOnce).to.be.true;
+          client.threads.unregisterSubscriptions();
+        });
+
+        it('forgets opened threads on resetState', () => {
+          const thread = createThreadWithId();
+          thread.activate();
+
+          client.threads.resetState();
+
+          expect(client.threads.get(thread.id)).to.be.undefined;
+        });
+
+        it('keeps a listed thread registered after it is deactivated', () => {
+          const thread = createThreadWithId();
+          setList(client.threads, [thread]);
+
+          thread.activate();
+          thread.deactivate();
+
+          expect(client.threads.get(thread.id)).to.equal(thread);
+        });
+
+        it('keeps the opened instance when the list is replaced with a copy', () => {
+          const thread = createThreadWithId();
+          const copy = createThreadWithId(thread.id);
+          thread.activate();
+
+          setList(client.threads, [copy]);
+
+          expect(listOf(client.threads)[0]).to.equal(thread);
+          expect(client.threads.get(thread.id)).to.equal(thread);
+        });
+
+        it('reuses an active instance when a reload returns its thread', async () => {
+          const thread = createThreadWithId();
+          const copy = createThreadWithId(thread.id);
+          thread.activate();
+          stubbedQueryThreads.resolves({ threads: [copy], next: undefined });
+
+          await client.threads.reload({ force: true });
+
+          expect(listOf(client.threads)).to.deep.equal([thread]);
+        });
+
+        it('reuses an active instance when the next page returns its thread', async () => {
+          const listed = createThreadWithId();
+          const thread = createThreadWithId();
+          const copy = createThreadWithId(thread.id);
+          thread.activate();
+          setList(client.threads, [listed], 'cursor');
+          stubbedQueryThreads.resolves({ threads: [copy], next: undefined });
+
+          await client.threads.loadNextPage();
+
+          expect(listOf(client.threads)).to.deep.equal([listed, thread]);
+        });
+
+        it('reopens an opened thread without a fetch, and reloads it only once it went stale', async () => {
+          client.threads.registerSubscriptions();
+          const thread = createThreadWithId();
+          const getThread = sinon
+            .stub(client, 'getThreadAndHydrate')
+            .resolves(createThreadWithId(thread.id));
+
+          thread.activate();
+          thread.deactivate();
+          thread.activate();
+          thread.deactivate();
+
+          expect(getThread.called).to.be.false;
+
+          // What a recovery pass does to an opened thread nobody is displaying.
+          thread.state.partialNext({ isStateStale: true });
+          thread.activate();
+
+          await vi.waitFor(() => expect(getThread.calledOnce).to.be.true);
+          client.threads.unregisterSubscriptions();
+        });
+
+        it('leaves a second instance of a registered thread unregistered', () => {
+          const thread = createThreadWithId();
+          const other = createThreadWithId(thread.id);
+          setList(client.threads, [thread]);
+
+          other.activate();
+
+          expect(client.threads.get(thread.id)).to.equal(thread);
         });
       });
 
@@ -2506,22 +2658,19 @@ describe('Threads 2.0', () => {
       });
 
       describe('reload', () => {
-        it('reloads with a default limit if both threads and unseenThreadIds are empty', async () => {
-          threadManager.state.partialNext({
-            threads: [],
-            unseenThreadIds: [],
-          });
+        it('loads the first page with the default limit', async () => {
           await threadManager.reload();
           expect(stubbedQueryThreads.firstCall.calledWithMatch({ limit: 25 })).to.be.true;
         });
 
         it('skips reload if there were no updates since the latest reload', async () => {
-          threadManager.state.partialNext({ ready: true });
+          setList(threadManager, [createTestThread()]);
           await threadManager.reload();
           expect(stubbedQueryThreads.notCalled).to.be.true;
         });
 
         it('reloads if thread list order is stale', async () => {
+          setList(threadManager, [createTestThread()]);
           threadManager.state.partialNext({ isThreadOrderStale: true });
 
           await threadManager.reload();
@@ -2531,6 +2680,7 @@ describe('Threads 2.0', () => {
         });
 
         it('reloads if there are new unseen threads', async () => {
+          setList(threadManager, [createTestThread()]);
           threadManager.state.partialNext({ unseenThreadIds: [uuidv4()] });
 
           await threadManager.reload();
@@ -2540,10 +2690,8 @@ describe('Threads 2.0', () => {
         });
 
         it('picks correct limit when reloading', async () => {
-          threadManager.state.partialNext({
-            threads: [createTestThread()],
-            unseenThreadIds: [uuidv4()],
-          });
+          setList(threadManager, [createTestThread()]);
+          threadManager.state.partialNext({ unseenThreadIds: [uuidv4()] });
 
           await threadManager.reload();
 
@@ -2552,6 +2700,9 @@ describe('Threads 2.0', () => {
 
         it('adds new thread instances to the list', async () => {
           const thread = createTestThread();
+          setList(threadManager, [
+            createTestThread({ parentMessageOverrides: { id: uuidv4() } }),
+          ]);
           threadManager.state.partialNext({ unseenThreadIds: [thread.id] });
           stubbedQueryThreads.resolves({
             threads: [thread],
@@ -2560,7 +2711,8 @@ describe('Threads 2.0', () => {
 
           await threadManager.reload();
 
-          const { threads, unseenThreadIds } = threadManager.state.getLatestValue();
+          const threads = listOf(threadManager);
+          const { unseenThreadIds } = threadManager.state.getLatestValue();
 
           expect(threads).to.contain(thread);
           expect(unseenThreadIds).to.be.empty;
@@ -2573,8 +2725,8 @@ describe('Threads 2.0', () => {
           const newThread = createTestThread({
             parentMessageOverrides: { id: uuidv4() },
           });
+          setList(threadManager, [existingThread]);
           threadManager.state.partialNext({
-            threads: [existingThread],
             unseenThreadIds: [newThread.id],
           });
           stubbedQueryThreads.resolves({
@@ -2584,7 +2736,7 @@ describe('Threads 2.0', () => {
 
           await threadManager.reload();
 
-          const { threads } = threadManager.state.getLatestValue();
+          const threads = listOf(threadManager);
 
           expect(threads[0]).to.equal(newThread);
           expect(threads[1]).to.equal(existingThread);
@@ -2598,8 +2750,8 @@ describe('Threads 2.0', () => {
               { user_id: 'u1' },
             ] as ThreadStateResponse['thread_participants'],
           });
+          setList(threadManager, [existingThread]);
           threadManager.state.partialNext({
-            threads: [existingThread],
             unseenThreadIds: [newThread.id],
           });
           stubbedQueryThreads.resolves({
@@ -2609,7 +2761,7 @@ describe('Threads 2.0', () => {
 
           await threadManager.reload();
 
-          const { threads } = threadManager.state.getLatestValue();
+          const threads = listOf(threadManager);
 
           expect(threads).to.have.lengthOf(1);
           expect(threads).to.contain(existingThread);
@@ -2626,8 +2778,8 @@ describe('Threads 2.0', () => {
           const newThread2 = createTestThread({
             parentMessageOverrides: { id: uuidv4() },
           });
+          setList(threadManager, [existingThread]);
           threadManager.state.partialNext({
-            threads: [existingThread],
             unseenThreadIds: [newThread1.id, newThread2.id],
           });
           stubbedQueryThreads.resolves({
@@ -2637,21 +2789,21 @@ describe('Threads 2.0', () => {
 
           await threadManager.reload();
 
-          const { threads } = threadManager.state.getLatestValue();
+          const threads = listOf(threadManager);
 
           expect(threads[1]).to.equal(existingThread);
         });
       });
 
       describe('loadNextPage', () => {
+        it('does nothing before the first load', async () => {
+          await threadManager.loadNextPage();
+
+          expect(stubbedQueryThreads.called).to.be.false;
+        });
+
         it('does nothing if there is no next page to load', async () => {
-          threadManager.state.next((current) => ({
-            ...current,
-            pagination: {
-              ...current.pagination,
-              nextCursor: null,
-            },
-          }));
+          setList(threadManager, [createTestThread()]);
 
           await threadManager.loadNextPage();
 
@@ -2659,14 +2811,8 @@ describe('Threads 2.0', () => {
         });
 
         it('prevents loading next page if already loading', async () => {
-          threadManager.state.next((current) => ({
-            ...current,
-            pagination: {
-              ...current.pagination,
-              isLoadingNext: true,
-              nextCursor: 'cursor',
-            },
-          }));
+          setList(threadManager, [createTestThread()], 'cursor');
+          threadManager.paginator.state.partialNext({ isLoading: true });
 
           await threadManager.loadNextPage();
 
@@ -2674,17 +2820,7 @@ describe('Threads 2.0', () => {
         });
 
         it('forms correct request when loading next page', async () => {
-          threadManager.state.next((current) => ({
-            ...current,
-            pagination: {
-              ...current.pagination,
-              nextCursor: 'cursor',
-            },
-          }));
-          stubbedQueryThreads.resolves({
-            threads: [],
-            next: undefined,
-          });
+          setList(threadManager, [createTestThread()], 'cursor');
 
           await threadManager.loadNextPage();
 
@@ -2699,26 +2835,21 @@ describe('Threads 2.0', () => {
           ).to.be.true;
         });
 
-        it('switches loading state properly', async () => {
-          threadManager.state.next((current) => ({
-            ...current,
-            pagination: {
-              ...current.pagination,
-              nextCursor: 'cursor',
-            },
-          }));
+        it('keeps the loaded threads visible while the next page loads', async () => {
+          const existingThread = createTestThread();
+          setList(threadManager, [existingThread], 'cursor');
           const spy = sinon.spy();
-          threadManager.state.subscribeWithSelector(
-            (nextValue) => ({ isLoadingNext: nextValue.pagination.isLoadingNext }),
+          threadManager.paginator.state.subscribeWithSelector(
+            (nextValue) => ({ isLoading: nextValue.isLoading, items: nextValue.items }),
             spy,
           );
           spy.resetHistory();
 
           await threadManager.loadNextPage();
 
-          expect(spy.callCount).to.equal(2);
-          expect(spy.firstCall.calledWith({ isLoadingNext: true })).to.be.true;
-          expect(spy.lastCall.calledWith({ isLoadingNext: false })).to.be.true;
+          expect(spy.firstCall.args[0].isLoading).to.be.true;
+          expect(spy.firstCall.args[0].items).to.deep.equal([existingThread]);
+          expect(spy.lastCall.args[0].isLoading).to.be.false;
         });
 
         it('updates thread list and pagination', async () => {
@@ -2728,14 +2859,7 @@ describe('Threads 2.0', () => {
           const newThread = createTestThread({
             parentMessageOverrides: { id: uuidv4() },
           });
-          threadManager.state.next((current) => ({
-            ...current,
-            threads: [existingThread],
-            pagination: {
-              ...current.pagination,
-              nextCursor: 'cursor1',
-            },
-          }));
+          setList(threadManager, [existingThread], 'cursor1');
           stubbedQueryThreads.resolves({
             threads: [newThread],
             next: 'cursor2',
@@ -2743,11 +2867,11 @@ describe('Threads 2.0', () => {
 
           await threadManager.loadNextPage();
 
-          const { threads, pagination } = threadManager.state.getLatestValue();
+          const threads = listOf(threadManager);
 
           expect(threads).to.have.lengthOf(2);
           expect(threads[1]).to.equal(newThread);
-          expect(pagination.nextCursor).to.equal('cursor2');
+          expect(threadManager.paginator.cursor?.tailward).to.equal('cursor2');
         });
       });
 

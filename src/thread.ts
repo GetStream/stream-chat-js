@@ -349,10 +349,15 @@ export class Thread extends WithMessageOperations(WithSubscriptions) {
    * reload on reconnect, so an unbalanced `deactivate()` now costs more than a missed auto-read —
    * hence the refcount, matching `channel.activate()`. A thread held by more than one mount stays
    * active until the last holder releases it.
+   *
+   * The first activation also registers the thread with `client.threads` for the rest of the session:
+   * it stays subscribed and resolvable through `client.threads.get(id)` after it is deactivated,
+   * whether or not the thread list holds it. Reopening it therefore needs no fetch unless it went stale.
    */
   public activate = () => {
     this._activeRefCount += 1;
     if (this._activeRefCount === 1) {
+      this.client.threads.register(this);
       this.state.partialNext({ active: true });
     }
   };
@@ -376,10 +381,9 @@ export class Thread extends WithMessageOperations(WithSubscriptions) {
    *
    * Preserves failed (unsent) replies. They are read out of the reply paginator rather than out of
    * `failedRepliesMap`, because that map is only written by `upsertReplyLocally`, whose callers are
-   * this thread's own subscriptions and the offline-DB path keyed on `ThreadManager.threadsById` —
-   * neither of which covers a thread constructed directly and never registered (the common path in
-   * the React Native SDK, which resolves `threadsById[id] ?? new Thread(...)`). Reading the paginator
-   * is true for managed and unmanaged threads alike. An overlap merge keeps them anyway (the
+   * this thread's own subscriptions and the offline-DB path resolved through `client.threads.get` —
+   * neither of which covers a thread that was never activated or listed. Reading the paginator
+   * is true for registered and unregistered threads alike. An overlap merge keeps them anyway (the
    * reconcile's provenance guard never prunes a non-server message); only a disjoint rebuild can drop
    * them, so any that actually fell out are re-ingested below.
    *
@@ -546,10 +550,10 @@ export class Thread extends WithMessageOperations(WithSubscriptions) {
    *   `hasLiveInstances('thread')` does not count it when deciding whether to warn about a
    *   construction-only path registered too late.
    *
-   * So read "declarative configuration is unaffected" as *at construction only*. A thread held by a
-   * `ThreadManager` that has itself registered is covered — `subscribeManageThreadSubscriptions` calls
-   * `registerSubscriptions()` on every thread entering its state — so the common path is fine. A thread
-   * constructed directly, or held by an unregistered manager, is not.
+   * So read "declarative configuration is unaffected" as *at construction only*. A thread registered
+   * with a `ThreadManager` that has itself registered is covered — the manager calls
+   * `registerSubscriptions()` on every thread the list holds or that is active — so the common path
+   * is fine. A thread that is neither, or held by an unregistered manager, is not.
    *
    * The alternative — applying the setup function at construction — would break the teardown symmetry
    * `WithSubscriptions` provides, which is why the asymmetry stands.

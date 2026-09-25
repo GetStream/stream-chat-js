@@ -70,7 +70,7 @@ export const createMessageOperations = (collection: Channel | Thread) => {
       channel.pinnedMessagesPaginator.removeItem({ id });
 
       if (parentId) {
-        client.threads.threadsById[parentId]?.messagePaginator.removeItem({ id });
+        client.threads.get(parentId)?.messagePaginator.removeItem({ id });
       }
     },
     ...(parentMessageId
