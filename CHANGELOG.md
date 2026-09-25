@@ -1,3 +1,15 @@
+## [10.0.0-rc.15](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.14...v10.0.0-rc.15) (2026-09-25)
+
+### ⚠ BREAKING CHANGES
+
+* **MessageDeliveryReporter:** The `isLocalUnreadCountEnabled` client option is
+removed. Use `channel.readEvents.localUnreadCountEnabled` in the
+configuration service instead (see above).
+
+### Features
+
+* **MessageDeliveryReporter:** mark channel read locally when local read count tracking are enabled ([#1886](https://github.com/GetStream/stream-chat-js/issues/1886)) ([439a018](https://github.com/GetStream/stream-chat-js/commit/439a018d1ef11f9b6ca2231269573d6d333060a2))
+
 ## [10.0.0-rc.14](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.13...v10.0.0-rc.14) (2026-09-24)
 
 ### ⚠ BREAKING CHANGES
