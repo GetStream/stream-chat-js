@@ -38,7 +38,7 @@ describe('ThreadPaginator', () => {
 
     expect(client.threads.state.getLatestValue().isReloading).toBe(true);
     expect(client.threads.paginator.items).toBeUndefined();
-    // `isLoading` is left to the next page.
+    // The paginator's `isLoading` is the next page's (`master`'s `isLoadingNext`).
     expect(client.threads.paginator.isLoading).toBe(false);
     await load;
     expect(client.threads.state.getLatestValue().isReloading).toBe(false);
@@ -81,25 +81,54 @@ describe('ThreadPaginator', () => {
       await failFirstLoad();
       const query = vi.spyOn(client, 'queryThreadsAndHydrate');
 
-      await client.threads.loadNextPage();
+      await client.threads.paginator.toTail();
 
       expect(query).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('reload and next page are guarded independently (as on master)', () => {
+    /** A `queryThreadsAndHydrate` call that resolves only when the test says so. */
+    const respondLater = () => {
+      let settle: (threads: Thread[], next?: string) => void = () => undefined;
+      vi.spyOn(client, 'queryThreadsAndHydrate').mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            settle = (threads, next) => resolve({ next, threads });
+          }),
+      );
+      return (threads: Thread[], next?: string) => settle(threads, next);
+    };
+
     it('runs a reload while a next page is loading', async () => {
       respond([makeThread('a')], 'cursor');
       await client.threads.reload();
-      respond([makeThread('b')]);
-      const nextPage = client.threads.loadNextPage();
-      const reloadQuery = respond([makeThread('c')]);
+      const settleNextPage = respondLater();
+      const nextPage = client.threads.paginator.toTail();
+      const query = respond([makeThread('c')]);
 
       await client.threads.reload({ force: true });
-      await nextPage;
 
-      expect(reloadQuery).toHaveBeenCalledWith(expect.objectContaining({ limit: 1 }));
-      expect(ids()).toContain('c');
+      // first load, the pending next page, then the reload, without waiting for the page
+      expect(query).toHaveBeenCalledTimes(3);
+      expect(query).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 1 }));
+      settleNextPage([]);
+      await nextPage;
+    });
+
+    it('runs a next page while a reload is loading', async () => {
+      respond([makeThread('a')], 'cursor');
+      await client.threads.reload();
+      const settleReload = respondLater();
+      const reload = client.threads.reload({ force: true });
+      const query = respond([makeThread('b')]);
+
+      await client.threads.paginator.toTail();
+
+      expect(query).toHaveBeenCalledTimes(3);
+      expect(query).toHaveBeenLastCalledWith(expect.objectContaining({ next: 'cursor' }));
+      settleReload([makeThread('c')]);
+      await reload;
     });
 
     it('drops a second reload while one is in flight', async () => {
@@ -125,7 +154,7 @@ describe('ThreadPaginator', () => {
     );
     respond([b]);
 
-    await client.threads.loadNextPage();
+    await client.threads.paginator.toTail();
 
     expect(ids()).toEqual(['c', 'a', 'b']);
     expect(blanked).not.toContain(true);
@@ -155,7 +184,10 @@ describe('ThreadPaginator', () => {
     respond([makeThread('a')]);
     await client.threads.reload();
     const flags: boolean[] = [];
-    client.threads.state.subscribe(({ isReloading }) => flags.push(isReloading));
+    client.threads.state.subscribeWithSelector(
+      ({ isReloading }) => ({ isReloading }),
+      ({ isReloading }) => flags.push(isReloading),
+    );
     respond([makeThread('b')]);
 
     const reload = client.threads.reload({ force: true });
@@ -231,7 +263,7 @@ describe('ThreadPaginator', () => {
     respond([makeThread('a'), makeThread('b')], 'first');
     await client.threads.reload();
     respond([makeThread('c')]);
-    await client.threads.loadNextPage();
+    await client.threads.paginator.toTail();
     expect(client.threads.paginator.hasMoreTail).toBe(false);
     respond([makeThread('c'), makeThread('a')], 'after-reload');
 
@@ -239,7 +271,7 @@ describe('ThreadPaginator', () => {
 
     expect(client.threads.paginator.hasMoreTail).toBe(true);
     const query = respond([makeThread('b')]);
-    await client.threads.loadNextPage();
+    await client.threads.paginator.toTail();
     expect(query).toHaveBeenLastCalledWith(
       expect.objectContaining({ next: 'after-reload' }),
     );
@@ -252,7 +284,7 @@ describe('ThreadPaginator', () => {
     vi.spyOn(client, 'queryThreadsAndHydrate').mockRejectedValueOnce(
       new Error('offline'),
     );
-    await client.threads.loadNextPage();
+    await client.threads.paginator.toTail();
     expect(client.threads.paginator.lastQueryError).toBeDefined();
     client.threads.state.partialNext({ unseenThreadIds: ['x'] });
     respond([makeThread('x'), makeThread('a')]);
@@ -264,6 +296,23 @@ describe('ThreadPaginator', () => {
     expect(ids()).toEqual(['x', 'a']);
   });
 
+  it('keeps the list and cursor after a failed next page, so the next one retries', async () => {
+    respond([makeThread('a')], 'cursor');
+    await client.threads.reload();
+    vi.spyOn(client, 'queryThreadsAndHydrate').mockRejectedValueOnce(
+      new Error('offline'),
+    );
+
+    await client.threads.paginator.toTail();
+
+    expect(ids()).toEqual(['a']);
+    expect(client.threads.paginator.hasMoreTail).toBe(true);
+    const query = respond([makeThread('b')]);
+    await client.threads.paginator.toTail();
+    expect(query).toHaveBeenLastCalledWith(expect.objectContaining({ next: 'cursor' }));
+    expect(ids()).toEqual(['a', 'b']);
+  });
+
   it('continues pagination from the cursor a reload returned', async () => {
     respond([makeThread('a')], 'first');
     await client.threads.reload();
@@ -271,7 +320,7 @@ describe('ThreadPaginator', () => {
     await client.threads.reload({ force: true });
     const query = respond([makeThread('c')]);
 
-    await client.threads.loadNextPage();
+    await client.threads.paginator.toTail();
 
     expect(query).toHaveBeenLastCalledWith(
       expect.objectContaining({ next: 'after-reload' }),

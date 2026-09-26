@@ -2604,7 +2604,7 @@ describe('Threads 2.0', () => {
           setList(client.threads, [listed], 'cursor');
           stubbedQueryThreads.resolves({ threads: [copy], next: undefined });
 
-          await client.threads.loadNextPage();
+          await client.threads.paginator.toTail();
 
           expect(listOf(client.threads)).to.deep.equal([listed, thread]);
         });
@@ -2794,9 +2794,9 @@ describe('Threads 2.0', () => {
         });
       });
 
-      describe('loadNextPage', () => {
+      describe('next page (paginator.toTail)', () => {
         it('does nothing before the first load', async () => {
-          await threadManager.loadNextPage();
+          await threadManager.paginator.toTail();
 
           expect(stubbedQueryThreads.called).to.be.false;
         });
@@ -2804,7 +2804,7 @@ describe('Threads 2.0', () => {
         it('does nothing if there is no next page to load', async () => {
           setList(threadManager, [createTestThread()]);
 
-          await threadManager.loadNextPage();
+          await threadManager.paginator.toTail();
 
           expect(stubbedQueryThreads.called).to.be.false;
         });
@@ -2813,7 +2813,7 @@ describe('Threads 2.0', () => {
           setList(threadManager, [createTestThread()], 'cursor');
           threadManager.paginator.state.partialNext({ isLoading: true });
 
-          await threadManager.loadNextPage();
+          await threadManager.paginator.toTail();
 
           expect(stubbedQueryThreads.called).to.be.false;
         });
@@ -2821,7 +2821,7 @@ describe('Threads 2.0', () => {
         it('forms correct request when loading next page', async () => {
           setList(threadManager, [createTestThread()], 'cursor');
 
-          await threadManager.loadNextPage();
+          await threadManager.paginator.toTail();
 
           expect(
             stubbedQueryThreads.calledWithMatch({
@@ -2844,7 +2844,7 @@ describe('Threads 2.0', () => {
           );
           spy.resetHistory();
 
-          await threadManager.loadNextPage();
+          await threadManager.paginator.toTail();
 
           expect(spy.firstCall.args[0].isLoading).to.be.true;
           expect(spy.firstCall.args[0].items).to.deep.equal([existingThread]);
@@ -2864,7 +2864,7 @@ describe('Threads 2.0', () => {
             next: 'cursor2',
           });
 
-          await threadManager.loadNextPage();
+          await threadManager.paginator.toTail();
 
           const threads = listOf(threadManager);
 

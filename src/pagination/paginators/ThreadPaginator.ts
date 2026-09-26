@@ -4,6 +4,7 @@ import type {
   PaginationQueryReturnValue,
   PaginationQueryShapeChangeIdentifier,
   PaginatorOptions,
+  PaginatorState,
 } from './BasePaginator';
 import type { StreamChat } from '../../client';
 import type { Thread } from '../../thread';
@@ -59,6 +60,17 @@ export class ThreadPaginator extends BasePaginator<Thread, QueryThreadsRequest> 
     });
     this.client = client;
     this.resolveThread = resolveThread;
+  }
+
+  /**
+   * No next page until a load has landed (`master`'s `nextCursor: null`), so `toTail()` is a no-op
+   * before the first successful reload, e.g. when an empty list fires `onEndReached` on mount.
+   */
+  get initialState(): PaginatorState<Thread> {
+    return {
+      ...super.initialState,
+      hasMoreTail: false,
+    };
   }
 
   getItemId(thread: Thread): string {

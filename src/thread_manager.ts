@@ -43,8 +43,8 @@ export type ThreadManagerState = {
   /** A listed thread got a reply since the latest reload, so the list order may be out of date. */
   isThreadOrderStale: boolean;
   /**
-   * A loaded list is being re-queried. The list stays in `paginator.items` until it is replaced, so
-   * this is the signal to show a loading state for a reload.
+   * The list is loading its first page or being re-queried (`master`'s `pagination.isLoading`). A
+   * re-query keeps the list in `paginator.items` until it is replaced, so this is the reload signal.
    */
   isReloading: boolean;
   unreadThreadCount: number;
@@ -370,7 +370,8 @@ export class ThreadManager extends WithSubscriptions {
 
   /**
    * Loads the first page, or re-queries a loaded list in place, sized to what is loaded plus the
-   * unseen threads. Skipped once loaded unless forced or something changed; the list survives a failure.
+   * unseen threads. Skipped once loaded unless forced or something changed; the list survives a
+   * failure. Guarded only against another reload, as on `master`.
    */
   public reload = async ({ force = false } = {}) => {
     const { isReloading, isThreadOrderStale, unseenThreadIds } =
@@ -378,14 +379,12 @@ export class ThreadManager extends WithSubscriptions {
     if (isReloading) return;
     if (!force && this.isListLoaded && !unseenThreadIds.length && !isThreadOrderStale)
       return;
-    const { pageSize } = this.paginator;
-    const limit = (this.paginator.items?.length ?? 0) + unseenThreadIds.length;
+    const { items, pageSize } = this.paginator;
+    const limit = (items?.length ?? 0) + unseenThreadIds.length;
 
     this.state.partialNext({ isReloading: true });
     try {
-      await this.paginator.reload({
-        limit: Math.min(limit, pageSize) || pageSize,
-      });
+      await this.paginator.reload({ limit: Math.min(limit, pageSize) || pageSize });
     } finally {
       const error = this.paginator.lastQueryError;
       if (error) {
@@ -398,11 +397,5 @@ export class ThreadManager extends WithSubscriptions {
         ...(error ? {} : { isThreadOrderStale: false, unseenThreadIds: [] }),
       });
     }
-  };
-
-  /** Appends the next page; a no-op before the first load and at the end (`master`'s `!nextCursor`). */
-  public loadNextPage = async () => {
-    if (!this.isListLoaded || !this.paginator.hasMoreTail) return;
-    await this.paginator.toTail();
   };
 }

@@ -53,8 +53,10 @@
 - **The thread list moved to `client.threads.paginator`**, a `ThreadPaginator`. `state.threads`,
   `state.pagination` and `state.ready` are gone from `ThreadManagerState` (as is the
   `ThreadManagerPagination` type); read `paginator.state` (`items`, `isLoading`, `hasMoreTail`,
-  `lastQueryError`) instead. `unseenThreadIds`, `isThreadOrderStale` and `unreadThreadCount` stay on
-  `client.threads.state`. See below.
+  `lastQueryError`) instead; `isReloading` there replaces `pagination.isLoading`. `unseenThreadIds`,
+  `isThreadOrderStale` and `unreadThreadCount` stay on `client.threads.state`.
+  `client.threads.loadNextPage()` and `client.threads.queryThreads()` are removed: use
+  `paginator.toTail()` and `client.queryThreadsAndHydrate()`. See below.
 - `Role` type renamed to `RoleName`.
 - Assorted small tightenings: `TokenManager.setTokenOrProvider` user param narrowed, `revokeTokens(before)` no longer accepts `string`.
 
@@ -955,8 +957,10 @@ const { isReloading: isLoading } = client.threads.state.getLatestValue();
   next page are guarded independently, as before.
 - `client.threads.queryThreads()` is removed; the list queries through its paginator. For a one-off
   query use `client.queryThreadsAndHydrate(...)`, which returns `Thread` instances.
-- `loadNextPage()` takes no options any more. It is a no-op until a first load succeeds (the old
-  `ready`, now `paginator.items !== undefined`) and once there is no next page.
+- `loadNextPage()` is removed. Load the next page with `client.threads.paginator.toTail()`, as for any
+  paginator. It is a no-op until a first load succeeds (the old `ready`, now
+  `paginator.items !== undefined`) and once there is no next page (the old `!nextCursor`), and a failed
+  one keeps the list and cursor so the next call retries.
 - A reset (`resetState()`, `disconnectUser()`) returns `paginator.items` to `undefined`.
 
 ### `ChannelState.membership`
