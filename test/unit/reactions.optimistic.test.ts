@@ -374,10 +374,11 @@ describe('optimistic reactions', () => {
         page: [formatMessage(reply)],
         setActive: true,
       });
-      client.threads.paginator.replaceItems([
-        thread,
-        ...(client.threads.paginator.items ?? []),
-      ]);
+      client.threads.paginator.setItems({
+        isFirstPage: true,
+        isLastPage: true,
+        valueOrFactory: (current) => [thread, ...current],
+      });
 
       return { reply, thread };
     };

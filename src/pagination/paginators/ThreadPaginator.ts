@@ -13,7 +13,7 @@ import { isEqual } from '../../utils/mergeWith/mergeWithCore';
 export const DEFAULT_THREAD_PAGE_SIZE = 25;
 
 /** Per-page query options the thread list has always requested. */
-const DEFAULT_THREAD_QUERY: QueryThreadsRequest = {
+export const DEFAULT_THREAD_QUERY: QueryThreadsRequest = {
   participant_limit: 10,
   reply_limit: 10,
   watch: true,
@@ -44,7 +44,7 @@ export type ThreadPaginatorOptions = {
  * There is deliberately no client-side sort. The server's default order (unread first, then by
  * latest reply) reads state a `Thread` mutates in place, so a comparator over it would corrupt the
  * interval storage on every mark-read or reply. Pages append in server order and a reload replaces
- * the list ({@link ThreadPaginator.replaceItems}).
+ * the list ({@link ThreadPaginator.reload}).
  */
 export class ThreadPaginator extends BasePaginator<Thread, QueryThreadsRequest> {
   private readonly client: StreamChat;
@@ -90,24 +90,34 @@ export class ThreadPaginator extends BasePaginator<Thread, QueryThreadsRequest> 
   filterQueryResults = (threads: Thread[]) => threads;
 
   /**
-   * Replaces the loaded list with `threads` as a fresh first page, in place: the current items stay
-   * visible until the swap, and each thread resolves to its live instance like a queried page does.
+   * Re-queries the first page and swaps the list in place, in server order; also the first load. The
+   * current threads stay until the response lands, and a failed query leaves them untouched and
+   * records `lastQueryError`; a successful one clears it.
    */
-  replaceItems(incoming: Thread[], next?: string) {
-    const threads = incoming.map(this.resolveThread);
-    const nextIds = new Set(threads.map((thread) => thread.id));
+  reload = async ({ limit = this.pageSize }: { limit?: number } = {}) => {
+    const results = await this.runQueryRetryable({
+      queryShape: { ...DEFAULT_THREAD_QUERY, limit },
+      retryCount: this.config.retryCount,
+    });
+    if (!results) return;
+
+    // We have to replace here as we can't hold then, since the sorting is server driven
+    // and stale ids get replaced (and subsequently evicted from the entity index if no holders
+    // exist).
+    const nextIds = new Set(results.items.map((thread) => thread.id));
     this.setIntervals([]);
     this.setActiveInterval(undefined);
     for (const [id] of this._itemIndex.entries()) {
       if (!nextIds.has(id)) this._itemIndex.remove(id);
     }
     this.setItems({
-      cursor: { headward: undefined, tailward: next },
+      cursor: { headward: undefined, tailward: results.tailward },
       isFirstPage: true,
-      isLastPage: !next,
-      valueOrFactory: threads,
+      isLastPage: !results.tailward,
+      valueOrFactory: results.items,
     });
-  }
+    if (this.lastQueryError) this.state.partialNext({ lastQueryError: undefined });
+  };
 
   /**
    * Also releases the list's hold on its threads, which the base reset leaves in the index. Released

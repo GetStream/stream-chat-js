@@ -65,10 +65,11 @@ describe('optimistic edit/delete routing', () => {
     thread.registerSubscriptions();
     // In the manager's list, which registers it with `client.threads` — how a delete reaches its
     // reply list.
-    client.threads.paginator.replaceItems([
-      thread,
-      ...(client.threads.paginator.items ?? []),
-    ]);
+    client.threads.paginator.setItems({
+      isFirstPage: true,
+      isLastPage: true,
+      valueOrFactory: (current) => [thread, ...current],
+    });
 
     const reply = generateMsg({
       cid: channel.cid,
@@ -120,8 +121,13 @@ describe('optimistic edit/delete routing', () => {
       });
 
       // Only threads registered with the manager are reachable from `Channel`: listed, or active.
-      if (listed) client.threads.paginator.replaceItems([thread]);
-      else thread.activate();
+      if (listed) {
+        client.threads.paginator.setItems({
+          isFirstPage: true,
+          isLastPage: true,
+          valueOrFactory: [thread],
+        });
+      } else thread.activate();
 
       return { reply, thread };
     };
@@ -173,10 +179,11 @@ describe('optimistic edit/delete routing', () => {
         page: [formatMessage({ ...reply, cid: otherChannel.cid })],
         setActive: true,
       });
-      client.threads.paginator.replaceItems([
-        ...(client.threads.paginator.items ?? []),
-        otherThread,
-      ]);
+      client.threads.paginator.setItems({
+        isFirstPage: true,
+        isLastPage: true,
+        valueOrFactory: (current) => [...current, otherThread],
+      });
       vi.spyOn(client, 'deleteMessage').mockResolvedValue({} as never);
 
       await channel.deleteMessageWithLocalUpdate({

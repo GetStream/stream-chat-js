@@ -9,13 +9,7 @@ import { ThreadPaginator } from './pagination/paginators/ThreadPaginator';
 
 import type { StreamChat } from './client';
 import type { Thread } from './thread';
-import type {
-  Event,
-  EventPayload,
-  EventType,
-  OwnUserResponse,
-  QueryThreadsRequest,
-} from './types';
+import type { Event, EventPayload, EventType, OwnUserResponse } from './types';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 
 const eventCarriesOwnUser = (
@@ -36,7 +30,6 @@ export type ThreadManagerConfig = {
 export const DEFAULT_THREAD_MANAGER_CONFIG: ThreadManagerConfig = deepFreezeConfig({
   connectionRecoveryThrottleMs: 1000,
 });
-const MAX_QUERY_THREADS_LIMIT = 25;
 
 /** Manager-level state. The list itself lives on {@link ThreadManager.paginator}. */
 export type ThreadManagerState = {
@@ -97,8 +90,6 @@ export class ThreadManager extends WithSubscriptions {
   });
   /** Threads opened this session, kept until their channel is torn down or the user disconnects. */
   private readonly openedThreads = new Map<string, Thread>();
-  /** The in-flight in-place reload, if any; guards against overlapping ones. */
-  private reloadPromise: Promise<void> | undefined;
 
   /** The shared configuration machinery — see {@link ConfigController}. */
   private readonly configController: ConfigController<ThreadManagerConfig>;
@@ -334,7 +325,7 @@ export class ThreadManager extends WithSubscriptions {
       const parentId = event.message?.parent_id;
       if (!parentId) return;
 
-      if (!this.paginator.isInitialized) return;
+      if (!this.isListLoaded) return;
       const { unseenThreadIds } = this.state.getLatestValue();
 
       if (this.listIndex.has(parentId)) {
@@ -372,66 +363,46 @@ export class ThreadManager extends WithSubscriptions {
     return super.unregisterSubscriptions();
   };
 
+  /** A page has landed: `master`'s `ready`. A failed first load or a reset leaves it unset. */
+  private get isListLoaded() {
+    return this.paginator.items !== undefined;
+  }
+
   /**
-   * Loads the list's first page, or re-queries a loaded list and replaces it in place — sized to
-   * what is loaded plus the unseen threads, and skipped unless forced or something changed.
+   * Loads the first page, or re-queries a loaded list in place, sized to what is loaded plus the
+   * unseen threads. Skipped once loaded unless forced or something changed; the list survives a failure.
    */
   public reload = async ({ force = false } = {}) => {
-    if (this.reloadPromise || this.paginator.isLoading) return this.reloadPromise;
-
-    if (!this.paginator.isInitialized) {
-      await this.paginator.toTail();
-      if (!this.paginator.lastQueryError) {
-        this.state.partialNext({ isThreadOrderStale: false, unseenThreadIds: [] });
-      }
+    const { isReloading, isThreadOrderStale, unseenThreadIds } =
+      this.state.getLatestValue();
+    if (isReloading) return;
+    if (!force && this.isListLoaded && !unseenThreadIds.length && !isThreadOrderStale)
       return;
-    }
-
-    const { unseenThreadIds, isThreadOrderStale } = this.state.getLatestValue();
-    if (!force && !unseenThreadIds.length && !isThreadOrderStale) return;
+    const { pageSize } = this.paginator;
     const limit = (this.paginator.items?.length ?? 0) + unseenThreadIds.length;
 
-    this.reloadPromise = (async () => {
-      this.state.partialNext({ isReloading: true });
-      try {
-        const response = await this.queryThreads({
-          limit: Math.min(limit, MAX_QUERY_THREADS_LIMIT) || MAX_QUERY_THREADS_LIMIT,
-        });
-        this.paginator.replaceItems(response.threads, response.next);
-        this.state.partialNext({
-          isReloading: false,
-          isThreadOrderStale: false,
-          unseenThreadIds: [],
-        });
-      } catch (error) {
+    this.state.partialNext({ isReloading: true });
+    try {
+      await this.paginator.reload({
+        limit: Math.min(limit, pageSize) || pageSize,
+      });
+    } finally {
+      const error = this.paginator.lastQueryError;
+      if (error) {
         logger
           .withExtraTags('reload')
           .error('Failed to reload the thread list.', { error });
-        this.state.partialNext({ isReloading: false });
-      } finally {
-        this.reloadPromise = undefined;
       }
-    })();
-    return this.reloadPromise;
+      this.state.partialNext({
+        isReloading: false,
+        ...(error ? {} : { isThreadOrderStale: false, unseenThreadIds: [] }),
+      });
+    }
   };
 
-  public queryThreads = (options: QueryThreadsRequest = {}) =>
-    this.client.queryThreadsAndHydrate({
-      limit: 25,
-      participant_limit: 10,
-      reply_limit: 10,
-      watch: true,
-      ...options,
-    });
-
-  /** Appends the next page; a no-op before the first load, at the end, or during a reload. */
+  /** Appends the next page; a no-op before the first load and at the end (`master`'s `!nextCursor`). */
   public loadNextPage = async () => {
-    if (
-      this.reloadPromise ||
-      !this.paginator.isInitialized ||
-      !this.paginator.hasMoreTail
-    )
-      return;
+    if (!this.isListLoaded || !this.paginator.hasMoreTail) return;
     await this.paginator.toTail();
   };
 }

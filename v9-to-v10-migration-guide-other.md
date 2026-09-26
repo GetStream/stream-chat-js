@@ -942,16 +942,21 @@ const { isLoading, isLoadingNext, nextCursor } = pagination;
 // v10
 const {
   items: threads,
-  isLoading,
+  isLoading: isLoadingNext,
   hasMoreTail,
 } = client.threads.paginator.state.getLatestValue();
-// One loading flag: no items yet means the first page, items in hand means the next page.
+const { isReloading: isLoading } = client.threads.state.getLatestValue();
 ```
 
-- `reload()` loads the first page, or re-queries a loaded list and replaces it in place. During a
-  re-query `paginator.items` keeps the current threads and `paginator.isLoading` stays `false`;
-  `client.threads.state.isReloading` is the flag to show a loading state from.
-- `loadNextPage()` takes no options any more and is a no-op before the first load.
+- `reload()` loads the first page, or re-queries a loaded list and replaces it in place.
+  `client.threads.state.isReloading` is set for both, and it is the old `pagination.isLoading`. During a
+  re-query `paginator.items` keeps the current threads, and a failed one leaves them untouched.
+- `paginator.isLoading` is the old `pagination.isLoadingNext`: only a next page sets it. A reload and a
+  next page are guarded independently, as before.
+- `client.threads.queryThreads()` is removed; the list queries through its paginator. For a one-off
+  query use `client.queryThreadsAndHydrate(...)`, which returns `Thread` instances.
+- `loadNextPage()` takes no options any more. It is a no-op until a first load succeeds (the old
+  `ready`, now `paginator.items !== undefined`) and once there is no next page.
 - A reset (`resetState()`, `disconnectUser()`) returns `paginator.items` to `undefined`.
 
 ### `ChannelState.membership`

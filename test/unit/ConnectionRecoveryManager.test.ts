@@ -60,10 +60,11 @@ describe('ConnectionRecoveryManager', () => {
 
   /** Puts `thread` in the manager's list, as a `queryThreads` page would. */
   const addToList = (thread: Thread) =>
-    client.threads.paginator.replaceItems([
-      thread,
-      ...(client.threads.paginator.items ?? []),
-    ]);
+    client.threads.paginator.setItems({
+      isFirstPage: true,
+      isLastPage: true,
+      valueOrFactory: (current) => [thread, ...current],
+    });
 
   /** A thread a consumer is displaying, which the list also holds. */
   const activeThread = (id: string) => {
@@ -120,7 +121,11 @@ describe('ConnectionRecoveryManager', () => {
 
     it('reloads an active thread after the list evicts it', async () => {
       const { thread, reload } = activeThread('evicted-but-open');
-      client.threads.paginator.replaceItems([]);
+      vi.spyOn(client, 'queryThreadsAndHydrate').mockResolvedValueOnce({
+        next: undefined,
+        threads: [],
+      });
+      await client.threads.paginator.reload();
       expect(client.threads.get(thread.id)).toBe(thread);
       vi.spyOn(client.channelManager, 'recover').mockResolvedValue([]);
 

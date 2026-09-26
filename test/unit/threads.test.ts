@@ -15,8 +15,6 @@ import {
   ThreadManager,
   ThreadStateResponse,
   THREAD_MANAGER_INITIAL_STATE,
-  ThreadFilters,
-  SortParamRequest,
 } from '../../src';
 
 import { describe, it, beforeEach, expect, afterEach, vi } from 'vitest';
@@ -2176,8 +2174,20 @@ describe('Threads 2.0', () => {
 
   describe('ThreadManager', () => {
     const listOf = (manager: ThreadManager) => manager.paginator.items ?? [];
+    /** Fills an empty list, as a loaded first page would. */
     const setList = (manager: ThreadManager, threads: Thread[], next?: string) =>
-      manager.paginator.replaceItems(threads, next);
+      manager.paginator.setItems({
+        cursor: next ? { headward: undefined, tailward: next } : undefined,
+        isFirstPage: true,
+        isLastPage: !next,
+        valueOrFactory: threads,
+      });
+    /** Replaces a loaded list through a real reload. */
+    const replaceList = async (manager: ThreadManager, threads: Thread[]) => {
+      const query = sinon.stub(manager.paginator, 'query').resolves({ items: threads });
+      await manager.paginator.reload();
+      query.restore();
+    };
 
     it('initializes properly', () => {
       const state = threadManager.state.getLatestValue();
@@ -2424,7 +2434,7 @@ describe('Threads 2.0', () => {
         expect(stub.called).to.be.true;
       });
 
-      it('manages subscriptions when threads are added to and removed from the list', () => {
+      it('manages subscriptions when threads are added to and removed from the list', async () => {
         const createTestThreadAndSpySubscriptions = () => {
           const thread = createTestThread({ parentMessageOverrides: { id: uuidv4() } });
           const registerSubscriptionsSpy = sinon.spy(thread, 'registerSubscriptions');
@@ -2443,7 +2453,7 @@ describe('Threads 2.0', () => {
         expect(registerThread1.calledOnce).to.be.true;
         expect(registerThread2.calledOnce).to.be.true;
 
-        setList(threadManager, [thread2, thread3]);
+        await replaceList(threadManager, [thread2, thread3]);
 
         expect(unregisterThread1.calledOnce).to.be.true;
         expect(registerThread3.calledOnce).to.be.true;
@@ -2473,7 +2483,7 @@ describe('Threads 2.0', () => {
         const createThreadWithId = (id = uuidv4()) =>
           createTestThread({ parentMessageOverrides: { id } });
 
-        it('resolves listed threads', () => {
+        it('resolves listed threads', async () => {
           const thread1 = createThreadWithId();
           const thread2 = createThreadWithId();
           const thread3 = createThreadWithId();
@@ -2483,7 +2493,7 @@ describe('Threads 2.0', () => {
           expect(threadManager.get(thread1.id)).to.equal(thread1);
           expect(threadManager.isListed(thread2.id)).to.be.true;
 
-          setList(threadManager, [thread3]);
+          await replaceList(threadManager, [thread3]);
 
           expect(threadManager.get(thread1.id)).to.be.undefined;
           expect(threadManager.isListed(thread1.id)).to.be.false;
@@ -2524,7 +2534,7 @@ describe('Threads 2.0', () => {
           client.threads.unregisterSubscriptions();
         });
 
-        it('keeps an opened thread registered when the list evicts it', () => {
+        it('keeps an opened thread registered when the list evicts it', async () => {
           client.threads.registerSubscriptions();
           const thread = createThreadWithId();
           const unregisterSpy = sinon.spy(thread, 'unregisterSubscriptions');
@@ -2532,7 +2542,7 @@ describe('Threads 2.0', () => {
           thread.activate();
           thread.deactivate();
 
-          setList(client.threads, []);
+          await replaceList(client.threads, []);
 
           expect(client.threads.get(thread.id)).to.equal(thread);
           expect(client.threads.isListed(thread.id)).to.be.false;
@@ -2572,17 +2582,6 @@ describe('Threads 2.0', () => {
           thread.activate();
           thread.deactivate();
 
-          expect(client.threads.get(thread.id)).to.equal(thread);
-        });
-
-        it('keeps the opened instance when the list is replaced with a copy', () => {
-          const thread = createThreadWithId();
-          const copy = createThreadWithId(thread.id);
-          thread.activate();
-
-          setList(client.threads, [copy]);
-
-          expect(listOf(client.threads)[0]).to.equal(thread);
           expect(client.threads.get(thread.id)).to.equal(thread);
         });
 
@@ -2872,92 +2871,6 @@ describe('Threads 2.0', () => {
           expect(threads).to.have.lengthOf(2);
           expect(threads[1]).to.equal(newThread);
           expect(threadManager.paginator.cursor?.tailward).to.equal('cursor2');
-        });
-      });
-
-      describe('queryThreads', () => {
-        it('forms correct request with default parameters', async () => {
-          await threadManager.queryThreads();
-
-          expect(
-            stubbedQueryThreads.calledWithMatch({
-              limit: 25,
-              participant_limit: 10,
-              reply_limit: 10,
-              watch: true,
-            }),
-          ).to.be.true;
-        });
-
-        it('applies filter parameters correctly', async () => {
-          const filter: ThreadFilters = {
-            created_at: { $gt: '2024-01-01T00:00:00Z' },
-          };
-
-          await threadManager.queryThreads({ filter });
-
-          expect(
-            stubbedQueryThreads.calledWithMatch({
-              limit: 25,
-              participant_limit: 10,
-              reply_limit: 10,
-              watch: true,
-              filter,
-            }),
-          ).to.be.true;
-        });
-
-        it('applies sort parameters correctly', async () => {
-          const sort: SortParamRequest[] = [
-            { field: 'created_at', direction: -1 },
-            { field: 'last_message_at', direction: 1 },
-          ];
-
-          await threadManager.queryThreads({ sort });
-
-          expect(
-            stubbedQueryThreads.calledWithMatch({
-              limit: 25,
-              participant_limit: 10,
-              reply_limit: 10,
-              watch: true,
-              sort,
-            }),
-          ).to.be.true;
-        });
-
-        it('applies both filter and sort parameters correctly', async () => {
-          const filter: ThreadFilters = {
-            created_by_user_id: { $eq: 'user1' },
-            updated_at: { $gte: '2024-01-01T00:00:00Z' },
-          };
-          const sort: SortParamRequest[] = [{ field: 'last_message_at', direction: -1 }];
-
-          await threadManager.queryThreads({ filter, sort });
-
-          expect(
-            stubbedQueryThreads.calledWithMatch({
-              limit: 25,
-              participant_limit: 10,
-              reply_limit: 10,
-              watch: true,
-              filter,
-              sort,
-            }),
-          ).to.be.true;
-        });
-
-        it('handles empty filter and sort parameters', async () => {
-          await threadManager.queryThreads({});
-
-          expect(
-            stubbedQueryThreads.calledWithMatch({
-              limit: 25,
-              participant_limit: 10,
-              reply_limit: 10,
-              watch: true,
-            }),
-          ).to.be.true;
         });
       });
     });
