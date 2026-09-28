@@ -1,12 +1,13 @@
 import { chatLoggerSystem } from './logger';
 import { deepFreezeConfig } from './configuration/utils/deepFreezeConfig';
-import { StateStore } from '@stream-io/state-store';
+import { StateStore, type Unsubscribe } from '@stream-io/state-store';
 import { ConfigController } from './configuration/ConfigController';
 import { throttle } from './utils';
 import { EntityStore, type EntityStoreSubscriber } from './entityStore/EntityStore';
 import { StoreBackedItemIndex } from './entityStore/StoreBackedItemIndex';
 import { ThreadPaginator } from './pagination/paginators/ThreadPaginator';
 
+import type { Channel } from './channel';
 import type { StreamChat } from './client';
 import type { Thread } from './thread';
 import type { Event, EventPayload, EventType, OwnUserResponse } from './types';
@@ -61,10 +62,10 @@ export const THREAD_MANAGER_INITIAL_STATE: ThreadManagerState = {
 const logger = chatLoggerSystem.getLogger('thread-manager');
 
 const getThreadId = (thread: Thread) => thread.id;
-/** Registry holder for list membership. */
+/** `threadStore` holder for list membership. */
 const LIST_HOLDER: EntityStoreSubscriber = { onEntitiesChanged: () => undefined };
-/** Registry holder for a thread that has been opened (`thread.activate()`). */
-const OPENED_HOLDER: EntityStoreSubscriber = { onEntitiesChanged: () => undefined };
+/** `threadStore` holder for a thread kept for the session because it was opened (`thread.activate()`). */
+const KEPT_HOLDER: EntityStoreSubscriber = { onEntitiesChanged: () => undefined };
 
 export class ThreadManager extends WithSubscriptions {
   public readonly state: StateStore<ThreadManagerState>;
@@ -72,20 +73,23 @@ export class ThreadManager extends WithSubscriptions {
   public readonly paginator: ThreadPaginator;
   private client: StreamChat;
   /**
-   * Every live thread: the list's plus every thread opened this session. Refcounted by holder, so a
-   * thread leaves once neither the list holds it nor it counts as opened.
+   * Every live thread, held by the list (`listIndex`) and/or `KEPT_HOLDER` (opened this session).
+   * A thread leaves once neither holds it.
    */
-  private readonly registry = new EntityStore<Thread>({ getEntityId: getThreadId });
+  private readonly threadStore = new EntityStore<Thread>({ getEntityId: getThreadId });
   /** Which registered threads the list holds: the paginator's item index. */
   private readonly listIndex = new StoreBackedItemIndex<Thread>({
     getEntityId: getThreadId,
     owner: LIST_HOLDER,
-    store: this.registry,
+    store: this.threadStore,
   });
-  /** Threads opened this session, kept until their channel is torn down or the user disconnects. */
-  private readonly openedThreads = new Map<string, Thread>();
   /** A reload is in flight; a second one is dropped (`master`'s `pagination.isLoading` guard). */
   private isReloadInFlight = false;
+  /**
+   * A local `pendingDisposal` listener (a state subscription, not a server watch) per channel instance
+   * that has had a listed or kept thread; removed when that channel is disposed or on reset.
+   */
+  private readonly disposalListeners = new Map<Channel, Unsubscribe>();
 
   /** The shared configuration machinery — see {@link ConfigController}. */
   private readonly configController: ConfigController<ThreadManagerConfig>;
@@ -145,29 +149,27 @@ export class ThreadManager extends WithSubscriptions {
    * list). Resolve threads through this, not `paginator.items`, which is the list only; list
    * membership is `paginator.getItem(id)`.
    */
-  public get = (id: string): Thread | undefined => this.registry.get(id);
+  public get = (id: string): Thread | undefined => this.threadStore.get(id);
 
   /**
-   * Every registered thread — the list's plus the opened ones.
+   * Every registered thread — the list's plus the kept ones.
    *
    * @internal
    */
   public get registeredThreads(): Thread[] {
-    return this.registry.values();
+    return this.threadStore.values();
   }
 
   /**
-   * Called by `thread.activate()`. Registers `thread` for good: it resolves through
+   * Called by `thread.activate()`. Keeps `thread` for the session: it resolves through
    * {@link ThreadManager.get} and stays subscribed whether or not the list holds it, until its
-   * channel is torn down or the user disconnects.
+   * channel is disposed or the user disconnects.
    *
    * @internal
    */
   public register = (thread: Thread) => {
     const { id } = thread;
-    if (this.openedThreads.get(id) === thread) return;
-
-    const registered = this.registry.get(id);
+    const registered = this.threadStore.get(id);
     if (registered && registered !== thread) {
       logger
         .withExtraTags('register')
@@ -180,29 +182,51 @@ export class ThreadManager extends WithSubscriptions {
       return;
     }
 
-    this.openedThreads.set(id, thread);
-    this.registry.link(id, OPENED_HOLDER);
-    this.registry.upsert(thread, OPENED_HOLDER);
+    this.threadStore.link(id, KEPT_HOLDER);
+    this.threadStore.upsert(thread, KEPT_HOLDER);
     if (this.hasSubscriptions) thread.registerSubscriptions();
+    this.listenForDisposal(thread);
   };
 
-  /**
-   * Drops the opened threads of a channel being torn down; called by `channel._disconnect()`.
-   *
-   * @internal
-   */
-  public forgetChannel = (cid: string) =>
-    this.forgetOpenedThreads((thread) => thread.channel.cid === cid);
-
-  private forgetOpenedThreads = (predicate: (thread: Thread) => boolean) => {
-    for (const [id, thread] of this.openedThreads) {
-      if (!predicate(thread)) continue;
-      this.openedThreads.delete(id);
-      this.registry.unlink(id, OPENED_HOLDER);
-      if (this.hasSubscriptions && this.registry.get(id) !== thread) {
-        thread.unregisterSubscriptions();
-      }
+  /** Releases the kept hold on `thread`; the list's own diff unsubscribes it if it is still listed. */
+  private release = (thread: Thread) => {
+    this.threadStore.unlink(thread.id, KEPT_HOLDER);
+    if (this.hasSubscriptions && !this.paginator.items?.includes(thread)) {
+      thread.unregisterSubscriptions();
     }
+  };
+
+  /** Listens for its channel's disposal the first time a thread on that channel is seen. */
+  private listenForDisposal = (thread: Thread) => {
+    const { channel } = thread;
+    if (this.disposalListeners.has(channel)) return;
+    if (channel.pendingDisposal) {
+      this.releaseChannel(channel);
+      return;
+    }
+    this.disposalListeners.set(
+      channel,
+      channel.state.subscribeWithSelector(
+        ({ pendingDisposal }) => ({ pendingDisposal }),
+        ({ pendingDisposal }) => {
+          if (pendingDisposal) this.releaseChannel(channel);
+        },
+      ),
+    );
+  };
+
+  /** The channel was disposed, so its threads are unusable: release every one of them. */
+  private releaseChannel = (channel: Channel) => {
+    this.disposalListeners.get(channel)?.();
+    this.disposalListeners.delete(channel);
+    const onChannel = (thread: Thread) => thread.channel === channel;
+    this.threadStore.values().filter(onChannel).forEach(this.release);
+    const listed = (this.paginator.items ?? []).filter(onChannel);
+    if (!listed.length) return;
+    this.paginator.batch(
+      () => listed.forEach(({ id }) => this.paginator.removeItem({ id })),
+      { coalesce: true },
+    );
   };
 
   /**
@@ -211,15 +235,18 @@ export class ThreadManager extends WithSubscriptions {
    * per id: the index upserts, so a second instance would replace the registered one.
    */
   private resolveQueriedThread = (incoming: Thread) => {
-    const existing = this.registry.get(incoming.id);
-    if (!existing) return incoming;
-    if (existing.hasStaleState) existing.hydrateState(incoming);
-    return existing;
+    const existing = this.threadStore.get(incoming.id);
+    const thread = existing ?? incoming;
+    if (existing?.hasStaleState) existing.hydrateState(incoming);
+    this.listenForDisposal(thread);
+    return thread;
   };
 
   public resetState = () => {
-    this.forgetOpenedThreads(() => true);
+    this.threadStore.values().forEach(this.release);
     this.paginator.resetState();
+    this.disposalListeners.forEach((unsubscribe) => unsubscribe());
+    this.disposalListeners.clear();
     this.state.next(THREAD_MANAGER_INITIAL_STATE);
   };
 
@@ -239,10 +266,9 @@ export class ThreadManager extends WithSubscriptions {
     this.addUnsubscribeFunction(this.subscribeReloadOnActivation());
     this.addUnsubscribeFunction(this.subscribeNewReplies());
     this.addUnsubscribeFunction(this.subscribeReloadOnConnectionRecovered());
-    this.addUnsubscribeFunction(this.subscribeChannelDeleted());
     // The list's threads are registered by `subscribeManageThreadSubscriptions`; this covers the
-    // opened ones it does not hold.
-    this.registry.values().forEach((thread) => thread.registerSubscriptions());
+    // kept ones it does not hold.
+    this.threadStore.values().forEach((thread) => thread.registerSubscriptions());
   };
 
   private subscribeUnreadThreadsCountChange = () => {
@@ -276,29 +302,17 @@ export class ThreadManager extends WithSubscriptions {
     return () => unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
   };
 
-  private subscribeChannelDeleted = () =>
-    this.client.on('notification.channel_deleted', (event) => {
-      const { cid } = event;
-      this.paginator.batch(
-        () => {
-          for (const thread of this.paginator.items ?? []) {
-            if (thread.channel.cid === cid) this.paginator.removeItem({ id: thread.id });
-          }
-        },
-        { coalesce: true },
-      );
-    }).unsubscribe;
-
   private subscribeManageThreadSubscriptions = () =>
     this.paginator.state.subscribeWithSelector(
       (nextValue) => ({ threads: nextValue.items ?? [] }),
       ({ threads: nextThreads }, prev) => {
         const { threads: prevThreads = [] } = prev ?? {};
-        // Left the list and was never opened. Read off the items rather than the registry, so it does
-        // not depend on whether a paginator path publishes before or after updating its index.
+        // Left the list and isn't kept. Asks for the kept hold, not `threadStore.get`: `removeItem`
+        // publishes before it unlinks the list's hold.
         const listed = new Set(nextThreads);
         const removedThreads = prevThreads.filter(
-          (thread) => !listed.has(thread) && this.openedThreads.get(thread.id) !== thread,
+          (thread) =>
+            !listed.has(thread) && !this.threadStore.isHeldBy(thread.id, KEPT_HOLDER),
         );
 
         nextThreads.forEach((thread) => thread.registerSubscriptions());
@@ -353,7 +367,7 @@ export class ThreadManager extends WithSubscriptions {
   };
 
   public unregisterSubscriptions = () => {
-    this.registry.values().forEach((thread) => thread.unregisterSubscriptions());
+    this.threadStore.values().forEach((thread) => thread.unregisterSubscriptions());
     return super.unregisterSubscriptions();
   };
 

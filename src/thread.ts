@@ -350,7 +350,7 @@ export class Thread extends WithMessageOperations(WithSubscriptions) {
    * hence the refcount, matching `channel.activate()`. A thread held by more than one mount stays
    * active until the last holder releases it.
    *
-   * The first activation also registers the thread with `client.threads` for the rest of the session:
+   * The first activation also keeps the thread in `client.threads` for the rest of the session:
    * it stays subscribed and resolvable through `client.threads.get(id)` after it is deactivated,
    * whether or not the thread list holds it. Reopening it therefore needs no fetch unless it went stale.
    */

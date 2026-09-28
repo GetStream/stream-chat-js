@@ -2182,6 +2182,14 @@ describe('Threads 2.0', () => {
         isLastPage: !next,
         valueOrFactory: threads,
       });
+    /** Fills the list through a real (stubbed) query, the path the SDK itself uses. */
+    const loadList = async (manager: ThreadManager, threads: Thread[]) => {
+      vi.spyOn(client, 'queryThreadsAndHydrate').mockResolvedValueOnce({
+        next: undefined,
+        threads,
+      });
+      await manager.paginator.reload();
+    };
     /** Replaces a loaded list through a real reload. */
     const replaceList = async (manager: ThreadManager, threads: Thread[]) => {
       const query = sinon.stub(manager.paginator, 'query').resolves({ items: threads });
@@ -2263,37 +2271,143 @@ describe('Threads 2.0', () => {
         });
       });
 
-      it('removes threads from the state if their channel got deleted', () => {
-        const thread = createTestThread({ parentMessageOverrides: { id: uuidv4() } });
-        const toBeRemoved = [
-          createTestThread({
-            channelOverrides: { id: 'channel1' },
-            parentMessageOverrides: { id: uuidv4() },
-          }),
-          createTestThread({
-            channelOverrides: { id: 'channel1' },
-            parentMessageOverrides: { id: uuidv4() },
-          }),
-          createTestThread({
-            channelOverrides: { id: 'channel2' },
-            parentMessageOverrides: { id: uuidv4() },
-          }),
-        ];
-        setList(threadManager, [thread, ...toBeRemoved]);
+      // The client's handler disposes the channel, and the manager's disposal listener releases its threads.
+      (
+        [
+          'channel.deleted',
+          'notification.channel_deleted',
+          'notification.removed_from_channel',
+        ] as const
+      ).forEach((type) => {
+        it(`removes a channel's threads from the list on ${type}`, async () => {
+          const thread = createTestThread({ parentMessageOverrides: { id: uuidv4() } });
+          const toBeRemoved = [
+            createTestThread({
+              channelOverrides: { id: 'channel1' },
+              parentMessageOverrides: { id: uuidv4() },
+            }),
+            createTestThread({
+              channelOverrides: { id: 'channel1' },
+              parentMessageOverrides: { id: uuidv4() },
+            }),
+            createTestThread({
+              channelOverrides: { id: 'channel2' },
+              parentMessageOverrides: { id: uuidv4() },
+            }),
+          ];
+          await loadList(client.threads, [thread, ...toBeRemoved]);
+          expect(listOf(client.threads)).to.have.lengthOf(4);
 
-        expect(listOf(threadManager)).to.have.lengthOf(4);
+          client.dispatchEvent({ cid: 'messaging:channel1', type });
+          client.dispatchEvent({ cid: 'messaging:channel2', type });
 
-        client.dispatchEvent({
-          type: 'notification.channel_deleted',
-          cid: 'messaging:channel1',
+          expect(listOf(client.threads)).to.deep.equal([thread]);
+          toBeRemoved.forEach(({ id }) => expect(client.threads.get(id)).to.be.undefined);
+        });
+      });
+
+      describe('channel disposal', () => {
+        const threadOn = (channelId: string) =>
+          createTestThread({
+            channelOverrides: { id: channelId },
+            parentMessageOverrides: { id: uuidv4() },
+          });
+
+        /** The unsubscribe of every disposal listener the manager opens on `channel`. */
+        const trackDisposalListeners = (channel: Channel) => {
+          const { state } = channel;
+          const unsubscribes: Array<ReturnType<typeof vi.fn>> = [];
+          const original = state.subscribeWithSelector.bind(state);
+          vi.spyOn(state, 'subscribeWithSelector').mockImplementation(
+            (selector, handler) => {
+              const unsubscribe = vi.fn(original(selector, handler));
+              // Only the manager's disposal listener selects exactly `pendingDisposal`.
+              const keys = Object.keys(selector(state.getLatestValue()));
+              if (keys.length === 1 && keys[0] === 'pendingDisposal')
+                unsubscribes.push(unsubscribe);
+              return unsubscribe;
+            },
+          );
+          return unsubscribes;
+        };
+
+        it("releases a disposed channel's threads with no event, listed and opened", async () => {
+          const listed = threadOn('dead');
+          const opened = threadOn('dead');
+          const other = threadOn('alive');
+          const unsubscribes = trackDisposalListeners(listed.channel);
+          await loadList(client.threads, [listed, other]);
+          opened.activate();
+          expect(unsubscribes).to.have.lengthOf(1);
+
+          listed.channel.pendingDisposal = true;
+
+          expect(unsubscribes[0]).toHaveBeenCalledOnce();
+          expect(listOf(client.threads)).to.deep.equal([other]);
+          expect(client.threads.get(listed.id)).to.be.undefined;
+          expect(client.threads.get(opened.id)).to.be.undefined;
+          expect(client.threads.get(other.id)).to.equal(other);
         });
 
-        client.dispatchEvent({
-          type: 'notification.channel_deleted',
-          cid: 'messaging:channel2',
+        it('releases a thread activated after its channel was disposed, leaving no listener', () => {
+          const thread = threadOn('dead');
+          thread.channel.pendingDisposal = true;
+          const unsubscribes = trackDisposalListeners(thread.channel);
+
+          thread.activate();
+
+          expect(client.threads.get(thread.id)).to.be.undefined;
+          unsubscribes.forEach((unsubscribe) => expect(unsubscribe).toHaveBeenCalled());
         });
 
-        expect(listOf(threadManager)).to.deep.equal([thread]);
+        it('keeps one disposal listener per channel instance until it is disposed or reset', async () => {
+          const first = threadOn('shared');
+          const second = threadOn('shared');
+          expect(second.channel).to.equal(first.channel);
+          const unsubscribes = trackDisposalListeners(first.channel);
+
+          await loadList(client.threads, [first]);
+          second.activate();
+
+          expect(unsubscribes).to.have.lengthOf(1);
+          await replaceList(client.threads, []);
+          expect(unsubscribes[0]).not.toHaveBeenCalled();
+          client.threads.resetState();
+          expect(unsubscribes[0]).toHaveBeenCalledOnce();
+        });
+
+        it('tracks a re-created channel as a new instance', () => {
+          const old = threadOn('recreated');
+          old.activate();
+          old.channel.pendingDisposal = true;
+          expect(client.threads.get(old.id)).to.be.undefined;
+
+          const fresh = threadOn('recreated');
+          expect(fresh.channel).not.to.equal(old.channel);
+          fresh.activate();
+
+          expect(client.threads.get(fresh.id)).to.equal(fresh);
+          fresh.channel.pendingDisposal = true;
+          expect(client.threads.get(fresh.id)).to.be.undefined;
+        });
+      });
+
+      it('drops and unsubscribes a listed and opened thread when its channel is torn down', () => {
+        client.threads.registerSubscriptions();
+        const thread = createTestThread({
+          channelOverrides: { id: 'channel1' },
+          parentMessageOverrides: { id: uuidv4() },
+        });
+        const unregisterSpy = sinon.spy(thread, 'unregisterSubscriptions');
+        setList(client.threads, [thread]);
+        thread.activate();
+
+        client.dispatchEvent({ cid: 'messaging:channel1', type: 'channel.deleted' });
+
+        expect(listOf(client.threads)).to.be.empty;
+        expect(client.threads.get(thread.id)).to.be.undefined;
+        expect(unregisterSpy.calledOnce).to.be.true;
+        client.threads.unregisterSubscriptions();
       });
 
       describe('Event: notification.thread_message_new', () => {
@@ -2463,6 +2577,17 @@ describe('Threads 2.0', () => {
         expect(unregisterThread1.calledOnce).to.be.true;
         expect(unregisterThread2.calledOnce).to.be.true;
         expect(unregisterThread3.calledOnce).to.be.true;
+      });
+
+      it('unsubscribes a thread removed with removeItem, which publishes before unlinking', () => {
+        const thread = createTestThread({ parentMessageOverrides: { id: uuidv4() } });
+        const unregisterSpy = sinon.spy(thread, 'unregisterSubscriptions');
+        setList(threadManager, [thread]);
+
+        threadManager.paginator.removeItem({ id: thread.id });
+
+        expect(unregisterSpy.calledOnce).to.be.true;
+        expect(threadManager.get(thread.id)).to.be.undefined;
       });
     });
 
