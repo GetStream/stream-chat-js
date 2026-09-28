@@ -832,10 +832,11 @@ export class StreamChat extends ChatApi {
     this.unsubscribeClientConfiguration?.();
     this.unsubscribeClientConfiguration = undefined;
 
-    // Since we wipe all user data already, we should reset token manager as well
+    // Deferred so the long-poll close can still authenticate. By the time it settles a
+    // connectUser() / connectAnonymousUser() may have set the next user and their token.
     closePromise
       .finally(() => {
-        this.tokenManager.reset();
+        if (!this.userId) this.tokenManager.reset();
       })
       .catch((err) =>
         logger

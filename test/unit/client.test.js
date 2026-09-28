@@ -991,6 +991,58 @@ describe('Client disconnectUser', () => {
 		expect(client.tokenManager.reset.called).to.be.true;
 	});
 
+	describe('when a user connects before the close settles', () => {
+		let client;
+		let resolveClose;
+
+		beforeEach(() => {
+			client = new StreamChat('key', { allowServerSideConnect: true });
+			// the real connectUser, without a socket
+			client.openConnection = () => Promise.resolve();
+			const { resolve, promise } = Promise.withResolvers();
+			resolveClose = resolve;
+			client.wsConnection = { disconnect: () => promise };
+		});
+
+		it('keeps the next user token', async () => {
+			await client.connectUser({ id: 'a' }, async () => 'token-a');
+
+			const disconnectPromise = client.disconnectUser();
+			await client.connectUser({ id: 'b' }, async () => 'token-b');
+			resolveClose();
+			await disconnectPromise;
+
+			expect(client.tokenManager.token).to.equal('token-b');
+			expect(client.tokenManager.user.id).to.equal('b');
+		});
+
+		it('keeps the token of the same user reconnecting', async () => {
+			const user = { id: 'a' };
+			const tokenProvider = async () => 'token-a';
+			await client.connectUser(user, tokenProvider);
+
+			const disconnectPromise = client.disconnectUser();
+			await client.connectUser(user, tokenProvider);
+			resolveClose();
+			await disconnectPromise;
+
+			expect(client.tokenManager.token).to.equal('token-a');
+			expect(client.tokenManager.user).to.equal(user);
+		});
+
+		it('keeps an anonymous user anonymous', async () => {
+			await client.connectUser({ id: 'a' }, async () => 'token-a');
+
+			const disconnectPromise = client.disconnectUser();
+			await client.connectAnonymousUser();
+			resolveClose();
+			await disconnectPromise;
+
+			expect(client.anonymous).to.be.true;
+			expect(client.getAuthType()).to.equal('anonymous');
+		});
+	});
+
 	it('should clear upload manager records', async () => {
 		const client = new StreamChat('', '');
 		client.uploadManager.state.next(() => ({
