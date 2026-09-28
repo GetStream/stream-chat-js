@@ -90,8 +90,10 @@ async function deleteBlockList() {
 
 async function deletePermission() {
 	const authClient = await utils.getTestClient(true);
+	// unique id so concurrent runs against the shared test app can't delete it first
+	const id = uuidv4();
 	await authClient.createPermission({
-		id: 'test-delete-permission',
+		id,
 		name: 'TestDeletePermission',
 		action: 'ReadChannel',
 		condition: {
@@ -100,8 +102,8 @@ async function deletePermission() {
 			},
 		},
 	});
-	await sleep(5000);
-	return await authClient.deletePermission('test-delete-permission');
+	// the new permission is not immediately visible to delete
+	return await utils.retry(() => authClient.deletePermission(id));
 }
 
 async function deleteRole() {

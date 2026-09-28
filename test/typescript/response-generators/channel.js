@@ -138,10 +138,11 @@ async function inviteMembers() {
 async function lastMessage() {
 	const channel = await utils.createTestChannelForUser(uuidv4(), johnID);
 	await channel.watch();
-	await channel.sendMessage({ text: 'Hello World' });
-	await channel.sendMessage({ text: 'Hello World...again' });
+	const { message: sent } = await channel.sendMessage({ text: 'Hello World' });
+	// channel state is populated by the message.new WS event, not the send response
+	await utils.waitFor(() => channel.lastMessage()?.id === sent.id);
 
-	const message = await channel.lastMessage();
+	const message = channel.lastMessage();
 	delete message.__html; // __html is deprecated and removed from the types
 	return message;
 }

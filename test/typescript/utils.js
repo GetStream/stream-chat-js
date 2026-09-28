@@ -126,4 +126,23 @@ module.exports = {
 			setTimeout(resolve, ms);
 		});
 	},
+	// polls until predicate returns truthy, for state that arrives via WS events
+	waitFor: async function waitFor(predicate, { timeout = 10000, interval = 100 } = {}) {
+		const deadline = Date.now() + timeout;
+		while (!predicate()) {
+			if (Date.now() > deadline) throw new Error(`waitFor timed out after ${timeout}ms`);
+			await this.sleep(interval);
+		}
+	},
+	// retries fn on error, for eventually consistent backend reads
+	retry: async function retry(fn, { attempts = 5, delay = 2000 } = {}) {
+		for (let i = 1; ; i++) {
+			try {
+				return await fn();
+			} catch (err) {
+				if (i >= attempts) throw err;
+				await this.sleep(delay);
+			}
+		}
+	},
 };

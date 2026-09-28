@@ -138,6 +138,7 @@ export type AppSettingsAPIResponse = APIResponse & {
     auto_translation_enabled?: boolean;
     before_message_send_hook_url?: string;
     before_message_send_hook_attempt_timeout_ms?: number;
+    before_message_send_hook_system_messages?: boolean;
     campaign_enabled?: boolean;
     cdn_expiration_seconds?: number;
     chat_primary_use_case?: string;
