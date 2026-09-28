@@ -7,6 +7,8 @@ import type {
   PaginatorState,
 } from './BasePaginator';
 import type { StreamChat } from '../../client';
+import { EntityStore } from '../../entityStore/EntityStore';
+import { StoreBackedItemIndex } from '../../entityStore/StoreBackedItemIndex';
 import type { Thread } from '../../thread';
 import type { QueryThreadsRequest } from '../../types';
 import { isEqual } from '../../utils/mergeWith/mergeWithCore';
@@ -34,8 +36,8 @@ const hasPaginationQueryShapeChanged: PaginationQueryShapeChangeIdentifier<
 
 export type ThreadPaginatorOptions = {
   client: StreamChat;
-  /** Maps a queried thread to its live instance: the registered one if there is one. */
-  resolveThread: (thread: Thread) => Thread;
+  /** The store the list holds its threads in (`client.threads`' thread store). Omitted, it keeps a private one. */
+  store?: EntityStore<Thread>;
   paginatorOptions?: PaginatorOptions<Thread, QueryThreadsRequest>;
 };
 
@@ -49,17 +51,25 @@ export type ThreadPaginatorOptions = {
  */
 export class ThreadPaginator extends BasePaginator<Thread, QueryThreadsRequest> {
   private readonly client: StreamChat;
-  private readonly resolveThread: (thread: Thread) => Thread;
+  private readonly store: EntityStore<Thread>;
 
-  constructor({ client, resolveThread, paginatorOptions }: ThreadPaginatorOptions) {
+  constructor({
+    client,
+    store = new EntityStore<Thread>({ getEntityId: (thread) => thread.id }),
+    paginatorOptions,
+  }: ThreadPaginatorOptions) {
     super({
       hasPaginationQueryShapeChanged,
       initialCursor: ZERO_PAGE_CURSOR,
+      itemIndex: new StoreBackedItemIndex<Thread>({
+        getEntityId: (thread) => thread.id,
+        store,
+      }),
       pageSize: DEFAULT_THREAD_PAGE_SIZE,
       ...paginatorOptions,
     });
     this.client = client;
-    this.resolveThread = resolveThread;
+    this.store = store;
   }
 
   /**
@@ -96,7 +106,21 @@ export class ThreadPaginator extends BasePaginator<Thread, QueryThreadsRequest> 
     PaginationQueryReturnValue<Thread>
   > => {
     const { threads, next } = await this.client.queryThreadsAndHydrate(queryShape);
-    return { items: threads.map(this.resolveThread), tailward: next };
+    return { items: threads.map(this.toStoredInstance), tailward: next };
+  };
+
+  /**
+   * The stored instance for a queried thread, so there's one per id. The index upserts, so a second
+   * instance would replace the stored one. A stale stored thread is refreshed from the query, unless
+   * it's open (active) at which point it reloads itself and this would replace the replies on screen.
+   */
+  private toStoredInstance = (incoming: Thread): Thread => {
+    const stored = this.store.get(incoming.id);
+    if (!stored) return incoming;
+    if (stored.hasStaleState && !stored.state.getLatestValue().active) {
+      stored.hydrateState(incoming);
+    }
+    return stored;
   };
 
   filterQueryResults = (threads: Thread[]) => threads;

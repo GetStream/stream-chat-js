@@ -4,7 +4,6 @@ import { StateStore, type Unsubscribe } from '@stream-io/state-store';
 import { ConfigController } from './configuration/ConfigController';
 import { throttle } from './utils';
 import { EntityStore, type EntityStoreSubscriber } from './entityStore/EntityStore';
-import { StoreBackedItemIndex } from './entityStore/StoreBackedItemIndex';
 import { ThreadPaginator } from './pagination/paginators/ThreadPaginator';
 
 import type { Channel } from './channel';
@@ -69,8 +68,6 @@ export const THREAD_MANAGER_INITIAL_STATE: ThreadManagerState = {
 const logger = chatLoggerSystem.getLogger('thread-manager');
 
 const getThreadId = (thread: Thread) => thread.id;
-/** `threadStore` holder for list membership. */
-const LIST_HOLDER: EntityStoreSubscriber = { onEntitiesChanged: () => undefined };
 /** `threadStore` holder for a thread opened this session (`register()`, from `thread.activate()`). */
 const REGISTERED_HOLDER: EntityStoreSubscriber = { onEntitiesChanged: () => undefined };
 
@@ -80,16 +77,10 @@ export class ThreadManager extends WithSubscriptions {
   public readonly paginator: ThreadPaginator;
   private client: StreamChat;
   /**
-   * Every live thread, held by the list (`listIndex`) and/or `REGISTERED_HOLDER` (opened this session).
-   * A thread leaves once neither holds it.
+   * Every live thread, held by the list (the paginator's own index over this store) and/or
+   * `REGISTERED_HOLDER` (opened this session). A thread leaves once neither holds it.
    */
   private readonly threadStore = new EntityStore<Thread>({ getEntityId: getThreadId });
-  /** Which registered threads the list holds: the paginator's item index. */
-  private readonly listIndex = new StoreBackedItemIndex<Thread>({
-    getEntityId: getThreadId,
-    owner: LIST_HOLDER,
-    store: this.threadStore,
-  });
   /** A reload is in flight; a second one is dropped (`master`'s `pagination.isLoading` guard). */
   private isReloadInFlight = false;
   /**
@@ -116,11 +107,13 @@ export class ThreadManager extends WithSubscriptions {
     });
     this.client = client;
     this.state = new StateStore<ThreadManagerState>(THREAD_MANAGER_INITIAL_STATE);
-    this.paginator = new ThreadPaginator({
-      client,
-      paginatorOptions: { itemIndex: this.listIndex },
-      resolveThread: this.resolveQueriedThread,
-    });
+    this.paginator = new ThreadPaginator({ client, store: this.threadStore });
+    // Every thread entering the list gets its channel's disposal listener. Set up here rather than in
+    // `registerSubscriptions()`, so it doesn't depend on a UI having mounted.
+    this.paginator.state.subscribeWithSelector(
+      ({ items }) => ({ items }),
+      ({ items }) => items?.forEach(this.listenForDisposal),
+    );
   }
 
   /** The current resolved configuration. `Readonly` — change it through {@link updateConfig}. */
@@ -262,21 +255,6 @@ export class ThreadManager extends WithSubscriptions {
     );
   };
 
-  /**
-   * The live instance for a queried thread: the registered one (rehydrated if stale), else
-   * `incoming`. Every thread entering the list passes through here, which is what keeps one instance
-   * per id: the index upserts, so a second instance would replace the registered one.
-   */
-  private resolveQueriedThread = (incoming: Thread) => {
-    const existing = this.threadStore.get(incoming.id);
-    const thread = existing ?? incoming;
-    if (existing?.hasStaleState && !existing.state.getLatestValue().active) {
-      existing.hydrateState(incoming);
-    }
-    this.listenForDisposal(thread);
-    return thread;
-  };
-
   public resetState = () => {
     this.threadStore.values().forEach(this.release);
     this.paginator.resetState();
@@ -372,7 +350,7 @@ export class ThreadManager extends WithSubscriptions {
       if (!this.isListLoaded) return;
       const { unseenThreadIds } = this.state.getLatestValue();
 
-      if (this.listIndex.has(parentId)) {
+      if (this.paginator.getItem(parentId)) {
         this.state.partialNext({ isThreadOrderStale: true });
       } else if (!unseenThreadIds.includes(parentId)) {
         this.state.partialNext({ unseenThreadIds: unseenThreadIds.concat(parentId) });

@@ -2360,6 +2360,21 @@ describe('Threads 2.0', () => {
             parentMessageOverrides: { id: uuidv4() },
           });
 
+        it('drops a queried thread whose channel is already disposed', async () => {
+          client.threads.registerSubscriptions();
+          const alive = threadOn('alive');
+          const dead = threadOn('dead');
+          dead.channel.pendingDisposal = true;
+
+          await loadList(client.threads, [alive, dead]);
+
+          expect(listOf(client.threads)).to.deep.equal([alive]);
+          expect(client.threads.get(dead.id)).to.be.undefined;
+          expect(dead.hasSubscriptions).to.be.false;
+          expect(alive.hasSubscriptions).to.be.true;
+          client.threads.unregisterSubscriptions();
+        });
+
         it("releases a disposed channel's threads with no event, listed and opened", async () => {
           const listed = threadOn('dead');
           const opened = threadOn('dead');
