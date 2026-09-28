@@ -923,12 +923,14 @@ const thread =
 client.threads.state.next((s) => ({ ...s, threads: [thread, ...s.threads] })); // to keep it live
 
 // v10
-const thread = client.threads.get(id) ?? new Thread({ channel, client, parentMessage });
+const thread = client.threads.ensure({ channel, parentMessage });
 thread.activate(); // on mount; thread.deactivate() on unmount
 ```
 
-`client.threads.paginator.getItem(id)` answers whether the list holds a thread. A queried page that contains
-an opened thread reuses that instance rather than creating a second one.
+`ensure()` returns the stored instance, or builds a new one, and registers it either way, so a list
+query that lands before `activate()` reuses it rather than creating a second one.
+`client.threads.get(id)` only looks a thread up, and `client.threads.paginator.getItem(id)` answers
+whether the list holds it.
 
 ### The thread list is a `ThreadPaginator`
 

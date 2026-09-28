@@ -9,8 +9,15 @@ import { ThreadPaginator } from './pagination/paginators/ThreadPaginator';
 
 import type { Channel } from './channel';
 import type { StreamChat } from './client';
-import type { Thread } from './thread';
-import type { Event, EventPayload, EventType, OwnUserResponse } from './types';
+import { Thread } from './thread';
+import type {
+  Event,
+  EventPayload,
+  EventType,
+  LocalMessage,
+  MessageResponse,
+  OwnUserResponse,
+} from './types';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 
 const eventCarriesOwnUser = (
@@ -150,6 +157,27 @@ export class ThreadManager extends WithSubscriptions {
    * membership is `paginator.getItem(id)`.
    */
   public get = (id: string): Thread | undefined => this.threadStore.get(id);
+
+  /**
+   * Returns the thread for `parentMessage`, creating it if it doesn't exist yet. Use this to open a
+   * thread instead of calling `new Thread()`.
+   *
+   * The returned thread is registered right away. If the thread list loads it before the UI
+   * activates it, the list reuses this instance instead of creating a duplicate.
+   */
+  public ensure = ({
+    channel,
+    parentMessage,
+  }: {
+    channel: Channel;
+    parentMessage: LocalMessage | MessageResponse;
+  }): Thread => {
+    const thread =
+      this.threadStore.get(parentMessage.id) ??
+      new Thread({ channel, client: this.client, parentMessage });
+    this.register(thread);
+    return thread;
+  };
 
   /**
    * Every registered thread — the list's plus the opened ones.

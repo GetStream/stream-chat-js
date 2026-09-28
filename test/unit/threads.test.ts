@@ -3,6 +3,7 @@ import { generateMsg } from './test-utils/generateMessage';
 import { generateThreadResponse } from './test-utils/generateThreadResponse';
 import { getClientWithUser } from './test-utils/getClient';
 import { formatMessage, generateUUIDv4 as uuidv4 } from '../../src/utils';
+import { chatLoggerSystem } from '../../src/logger';
 
 import sinon from 'sinon';
 import {
@@ -17,7 +18,7 @@ import {
   THREAD_MANAGER_INITIAL_STATE,
 } from '../../src';
 
-import { describe, it, beforeEach, expect, afterEach, vi } from 'vitest';
+import { describe, it, beforeEach, expect, afterEach, onTestFinished, vi } from 'vitest';
 import { dateToNs, msToNs, nowNs } from '../../src/utils/time';
 import { convertDateToTimestamp } from './test-utils/time';
 
@@ -2196,6 +2197,21 @@ describe('Threads 2.0', () => {
       await manager.paginator.reload();
       query.restore();
     };
+    /** The unsubscribe of every disposal listener the manager opens on `channel`. */
+    const trackDisposalListeners = (channel: Channel) => {
+      const { state } = channel;
+      const unsubscribes: Array<ReturnType<typeof vi.fn>> = [];
+      const original = state.subscribeWithSelector.bind(state);
+      vi.spyOn(state, 'subscribeWithSelector').mockImplementation((selector, handler) => {
+        const unsubscribe = vi.fn(original(selector, handler));
+        // Only the manager's disposal listener selects exactly `pendingDisposal`.
+        const keys = Object.keys(selector(state.getLatestValue()));
+        if (keys.length === 1 && keys[0] === 'pendingDisposal')
+          unsubscribes.push(unsubscribe);
+        return unsubscribe;
+      });
+      return unsubscribes;
+    };
 
     it('initializes properly', () => {
       const state = threadManager.state.getLatestValue();
@@ -2312,24 +2328,6 @@ describe('Threads 2.0', () => {
             channelOverrides: { id: channelId },
             parentMessageOverrides: { id: uuidv4() },
           });
-
-        /** The unsubscribe of every disposal listener the manager opens on `channel`. */
-        const trackDisposalListeners = (channel: Channel) => {
-          const { state } = channel;
-          const unsubscribes: Array<ReturnType<typeof vi.fn>> = [];
-          const original = state.subscribeWithSelector.bind(state);
-          vi.spyOn(state, 'subscribeWithSelector').mockImplementation(
-            (selector, handler) => {
-              const unsubscribe = vi.fn(original(selector, handler));
-              // Only the manager's disposal listener selects exactly `pendingDisposal`.
-              const keys = Object.keys(selector(state.getLatestValue()));
-              if (keys.length === 1 && keys[0] === 'pendingDisposal')
-                unsubscribes.push(unsubscribe);
-              return unsubscribe;
-            },
-          );
-          return unsubscribes;
-        };
 
         it("releases a disposed channel's threads with no event, listed and opened", async () => {
           const listed = threadOn('dead');
@@ -2624,6 +2622,62 @@ describe('Threads 2.0', () => {
           expect(threadManager.paginator.getItem(thread1.id)).to.be.undefined;
           expect(threadManager.get(thread3.id)).to.equal(thread3);
           expect(threadManager.registeredThreads).to.deep.equal([thread3]);
+        });
+
+        it('ensure builds and registers a missing thread, which a later list query resolves to', async () => {
+          const parentMessage = { ...parentMessageResponse, id: uuidv4() };
+
+          const thread = client.threads.ensure({ channel, parentMessage });
+
+          expect(client.threads.get(parentMessage.id)).to.equal(thread);
+          expect(client.threads.ensure({ channel, parentMessage })).to.equal(thread);
+          await loadList(client.threads, [createThreadWithId(parentMessage.id)]);
+          expect(listOf(client.threads)).to.have.lengthOf(1);
+          expect(listOf(client.threads)[0]).to.equal(thread);
+        });
+
+        it('ensure has no further effect when it, or activate(), registers the same thread again', () => {
+          const sink = vi.fn();
+          chatLoggerSystem.configureLoggers({
+            'thread-manager': { level: 'warn', sink },
+          });
+          onTestFinished(() => chatLoggerSystem.restoreDefaults());
+          client.threads.registerSubscriptions();
+          const disposalListeners = trackDisposalListeners(channel);
+          const countClientListeners = () =>
+            [...client.listeners.values()].reduce(
+              (sum, handlers) => sum + handlers.size,
+              0,
+            );
+          const parentMessage = { ...parentMessageResponse, id: uuidv4() };
+          const thread = client.threads.ensure({ channel, parentMessage });
+          const listenersAfterFirstCall = countClientListeners();
+
+          client.threads.ensure({ channel, parentMessage });
+          thread.activate();
+
+          expect(countClientListeners()).to.equal(listenersAfterFirstCall);
+          expect(disposalListeners).to.have.lengthOf(1);
+          expect(sink).not.toHaveBeenCalled();
+          // Still a single hold: one release on disposal removes it and unsubscribes the thread.
+          channel.pendingDisposal = true;
+          expect(client.threads.get(thread.id)).to.be.undefined;
+          expect(thread.hasSubscriptions).to.be.false;
+          client.threads.unregisterSubscriptions();
+        });
+
+        it('ensure returns the stored instance and registers it, so it outlives the list', async () => {
+          const listed = createThreadWithId();
+          await loadList(client.threads, [listed]);
+
+          const thread = client.threads.ensure({
+            channel,
+            parentMessage: { ...parentMessageResponse, id: listed.id },
+          });
+          await replaceList(client.threads, []);
+
+          expect(thread).to.equal(listed);
+          expect(client.threads.get(listed.id)).to.equal(listed);
         });
 
         it('registers an active thread the list does not hold', () => {
