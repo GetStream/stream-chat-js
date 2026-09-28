@@ -104,31 +104,45 @@ export class ThreadPaginator extends BasePaginator<Thread, QueryThreadsRequest> 
   /**
    * Re-queries the first page and swaps the list in place, in server order; also the first load. The
    * current threads stay until the response lands, and a failed query leaves them untouched and
-   * records `lastQueryError`; a successful one clears it.
+   * records `lastQueryError`; a successful one clears it. Like any paginator, the first load publishes
+   * `isLoading`; a reload of a loaded list does not, since `isLoading` with items means the next page.
    */
   reload = async ({ limit = this.pageSize }: { limit?: number } = {}) => {
-    const results = await this.runQueryRetryable({
-      queryShape: { ...DEFAULT_THREAD_QUERY, limit },
-      retryCount: this.config.retryCount,
-    });
-    if (!results) return;
+    const isFirstLoad = this.items === undefined;
+    if (isFirstLoad) this.state.partialNext({ isLoading: true });
+    let replaced = false;
+    try {
+      const results = await this.runQueryRetryable({
+        queryShape: { ...DEFAULT_THREAD_QUERY, limit },
+        retryCount: this.config.retryCount,
+      });
+      if (!results) return;
 
-    // We have to replace here as we can't hold then, since the sorting is server driven
-    // and stale ids get replaced (and subsequently evicted from the entity index if no holders
-    // exist).
-    const nextIds = new Set(results.items.map((thread) => thread.id));
-    this.setIntervals([]);
-    this.setActiveInterval(undefined);
-    for (const [id] of this._itemIndex.entries()) {
-      if (!nextIds.has(id)) this._itemIndex.remove(id);
+      // We have to replace here as we can't hold then, since the sorting is server driven
+      // and stale ids get replaced (and subsequently evicted from the entity index if no holders
+      // exist).
+      const nextIds = new Set(results.items.map((thread) => thread.id));
+      this.setIntervals([]);
+      this.setActiveInterval(undefined);
+      for (const [id] of this._itemIndex.entries()) {
+        if (!nextIds.has(id)) this._itemIndex.remove(id);
+      }
+      this.setItems({
+        cursor: { headward: undefined, tailward: results.tailward },
+        isFirstPage: true,
+        isLastPage: !results.tailward,
+        valueOrFactory: results.items,
+      });
+      replaced = true;
+    } finally {
+      const clearError = replaced && this.lastQueryError;
+      if (isFirstLoad || clearError) {
+        this.state.partialNext({
+          ...(isFirstLoad ? { isLoading: false } : {}),
+          ...(clearError ? { lastQueryError: undefined } : {}),
+        });
+      }
     }
-    this.setItems({
-      cursor: { headward: undefined, tailward: results.tailward },
-      isFirstPage: true,
-      isLastPage: !results.tailward,
-      valueOrFactory: results.items,
-    });
-    if (this.lastQueryError) this.state.partialNext({ lastQueryError: undefined });
   };
 
   /**

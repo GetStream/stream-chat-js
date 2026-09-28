@@ -48,12 +48,12 @@
 - Composer configuration gained required `polls`, `attachments.enabled` and `attachments.customCdn` (all defaulted — only full-literal annotations break). The channel type's `uploads` / `polls` flags now resolve **into** that configuration, so read `composer.config` rather than `channel.serverConfig`. **Silent behaviour change:** a custom `doUploadRequest` no longer waives the `upload-file` capability — set `attachments.customCdn: true` if you upload to storage Stream does not host.
 - **`client.threads.threadsById` is removed.** It was built from the thread list alone. Use
   `client.threads.get(id)` for the live thread (listed, or open anywhere) and
-  `client.threads.isListed(id)` for list membership. An open thread no longer has to be added to
+  `client.threads.paginator.getItem(id)` for list membership. An open thread no longer has to be added to
   the list to stay live: `thread.activate()` registers it. See below.
 - **The thread list moved to `client.threads.paginator`**, a `ThreadPaginator`. `state.threads`,
   `state.pagination` and `state.ready` are gone from `ThreadManagerState` (as is the
   `ThreadManagerPagination` type); read `paginator.state` (`items`, `isLoading`, `hasMoreTail`,
-  `lastQueryError`) instead; `isReloading` there replaces `pagination.isLoading`. `unseenThreadIds`,
+  `lastQueryError`) instead. `unseenThreadIds`,
   `isThreadOrderStale` and `unreadThreadCount` stay on `client.threads.state`.
   `client.threads.loadNextPage()` and `client.threads.queryThreads()` are removed: use
   `paginator.toTail()` and `client.queryThreadsAndHydrate()`. See below.
@@ -927,7 +927,7 @@ const thread = client.threads.get(id) ?? new Thread({ channel, client, parentMes
 thread.activate(); // on mount; thread.deactivate() on unmount
 ```
 
-`client.threads.isListed(id)` answers whether the list holds a thread. A queried page that contains
+`client.threads.paginator.getItem(id)` answers whether the list holds a thread. A queried page that contains
 an opened thread reuses that instance rather than creating a second one.
 
 ### The thread list is a `ThreadPaginator`
@@ -942,19 +942,18 @@ const { threads, pagination } = client.threads.state.getLatestValue();
 const { isLoading, isLoadingNext, nextCursor } = pagination;
 
 // v10
-const {
-  items: threads,
-  isLoading: isLoadingNext,
-  hasMoreTail,
-} = client.threads.paginator.state.getLatestValue();
-const { isReloading: isLoading } = client.threads.state.getLatestValue();
+const { items, isLoading, hasMoreTail } = client.threads.paginator.state.getLatestValue();
+const threads = items ?? [];
+const isLoadingFirstPage = isLoading && !threads.length;
+const isLoadingNext = isLoading && threads.length > 0;
 ```
 
-- `reload()` loads the first page, or re-queries a loaded list and replaces it in place.
-  `client.threads.state.isReloading` is set for both, and it is the old `pagination.isLoading`. During a
-  re-query `paginator.items` keeps the current threads, and a failed one leaves them untouched.
-- `paginator.isLoading` is the old `pagination.isLoadingNext`: only a next page sets it. A reload and a
-  next page are guarded independently, as before.
+- `reload()` loads the first page, or re-queries a loaded list and replaces it in place. The first load
+  sets `paginator.isLoading`, like any paginator. A re-query of a loaded list sets no loading flag: the
+  current threads stay in `paginator.items` until the new ones land, and a failed re-query leaves them
+  untouched. There is no replacement for `pagination.isLoading` during a re-query; show the list as it is.
+- `paginator.isLoading` with threads loaded is the old `pagination.isLoadingNext`. A reload and a next
+  page are guarded independently, as before.
 - `client.threads.queryThreads()` is removed; the list queries through its paginator. For a one-off
   query use `client.queryThreadsAndHydrate(...)`, which returns `Thread` instances.
 - `loadNextPage()` is removed. Load the next page with `client.threads.paginator.toTail()`, as for any

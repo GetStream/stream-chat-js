@@ -112,7 +112,7 @@ describe('ConnectionRecoveryManager', () => {
       // A thread opened from a message list is registered by `activate()`, not by the list.
       const { thread, reload } = buildThread('active-but-unlisted');
       thread.activate();
-      expect(client.threads.isListed(thread.id)).toBe(false);
+      expect(client.threads.paginator.getItem(thread.id)).toBeUndefined();
       vi.spyOn(client.channelManager, 'recover').mockResolvedValue([]);
 
       online();

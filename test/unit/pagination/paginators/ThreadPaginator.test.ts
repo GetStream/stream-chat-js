@@ -31,17 +31,15 @@ describe('ThreadPaginator', () => {
       .channel as ChannelResponse;
   });
 
-  it('flags the first load as a reload, with no items until it lands', async () => {
+  it('publishes isLoading on the first load, like any paginator, with no items until it lands', async () => {
     respond([makeThread()]);
 
     const load = client.threads.reload();
 
-    expect(client.threads.state.getLatestValue().isReloading).toBe(true);
+    expect(client.threads.paginator.isLoading).toBe(true);
     expect(client.threads.paginator.items).toBeUndefined();
-    // The paginator's `isLoading` is the next page's (`master`'s `isLoadingNext`).
-    expect(client.threads.paginator.isLoading).toBe(false);
     await load;
-    expect(client.threads.state.getLatestValue().isReloading).toBe(false);
+    expect(client.threads.paginator.isLoading).toBe(false);
     expect(ids()).toHaveLength(1);
   });
 
@@ -52,6 +50,13 @@ describe('ThreadPaginator', () => {
       );
       await client.threads.reload();
     };
+
+    it('clears isLoading and leaves nothing loaded', async () => {
+      await failFirstLoad();
+
+      expect(client.threads.paginator.isLoading).toBe(false);
+      expect(client.threads.paginator.items).toBeUndefined();
+    });
 
     it('retries on the next unforced reload', async () => {
       await failFirstLoad();
@@ -85,6 +90,24 @@ describe('ThreadPaginator', () => {
 
       expect(query).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('counts a reply to an opened thread the list does not hold as unseen, as on master', async () => {
+    client.threads.registerSubscriptions();
+    respond([makeThread('a')]);
+    await client.threads.reload();
+    makeThread('opened').activate();
+
+    client.dispatchEvent({
+      message: generateMsg({ parent_id: 'opened' }) as MessageResponse,
+      received_at: nowNs(),
+      type: 'notification.thread_message_new',
+    });
+
+    const { isThreadOrderStale, unseenThreadIds } = client.threads.state.getLatestValue();
+    expect(unseenThreadIds).toEqual(['opened']);
+    expect(isThreadOrderStale).toBe(false);
+    client.threads.unregisterSubscriptions();
   });
 
   describe('reload and next page are guarded independently (as on master)', () => {
@@ -180,26 +203,20 @@ describe('ThreadPaginator', () => {
     );
   });
 
-  it('flags a reload on the manager while the list stays loaded', async () => {
+  it('shows no loading state while a loaded list reloads, keeping it until the reload lands', async () => {
     respond([makeThread('a')]);
     await client.threads.reload();
-    const flags: boolean[] = [];
-    client.threads.state.subscribeWithSelector(
-      ({ isReloading }) => ({ isReloading }),
-      ({ isReloading }) => flags.push(isReloading),
-    );
     respond([makeThread('b')]);
 
     const reload = client.threads.reload({ force: true });
 
-    expect(client.threads.state.getLatestValue().isReloading).toBe(true);
+    expect(client.threads.paginator.isLoading).toBe(false);
     expect(ids()).toEqual(['a']);
     await reload;
-    expect(flags).toEqual([false, true, false]);
     expect(ids()).toEqual(['b']);
   });
 
-  it('clears the reload flag and keeps the list and flags when a reload fails', async () => {
+  it('keeps the list and flags when a reload fails, and lets the next reload run', async () => {
     respond([makeThread('a')]);
     await client.threads.reload();
     client.threads.state.partialNext({
@@ -212,13 +229,14 @@ describe('ThreadPaginator', () => {
 
     await client.threads.reload();
 
-    const { isReloading, isThreadOrderStale, unseenThreadIds } =
-      client.threads.state.getLatestValue();
-    expect(isReloading).toBe(false);
+    const { isThreadOrderStale, unseenThreadIds } = client.threads.state.getLatestValue();
     expect(ids()).toEqual(['a']);
     // Kept for the next reload to pick up, as on master.
     expect(isThreadOrderStale).toBe(true);
     expect(unseenThreadIds).toEqual(['x']);
+    respond([makeThread('b')]);
+    await client.threads.reload();
+    expect(ids()).toEqual(['b']);
   });
 
   describe('after a successful but empty first load (master: `ready` is true)', () => {
@@ -339,6 +357,6 @@ describe('ThreadPaginator', () => {
 
     expect(client.threads.get('listed')).toBeUndefined();
     expect(client.threads.get('opened')).toBe(opened);
-    expect(client.threads.isListed('opened')).toBe(false);
+    expect(client.threads.paginator.getItem('opened')).toBeUndefined();
   });
 });

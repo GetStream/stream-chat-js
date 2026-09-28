@@ -636,7 +636,7 @@ describe('MessageComposer', () => {
 
       thread.activate();
 
-      expect(mockClient.threads.isListed(thread.id)).toBe(false);
+      expect(mockClient.threads.paginator.getItem(thread.id)).toBeUndefined();
       expect(editComposer.defaultSubmitTarget).toBe(thread);
     });
 

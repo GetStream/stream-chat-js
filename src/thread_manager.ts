@@ -42,11 +42,6 @@ export type ThreadManagerState = {
   wasActivatedAtLeastOnce: boolean;
   /** A listed thread got a reply since the latest reload, so the list order may be out of date. */
   isThreadOrderStale: boolean;
-  /**
-   * The list is loading its first page or being re-queried (`master`'s `pagination.isLoading`). A
-   * re-query keeps the list in `paginator.items` until it is replaced, so this is the reload signal.
-   */
-  isReloading: boolean;
   unreadThreadCount: number;
   /**
    * List of threads that haven't been loaded in the list, but have received new messages
@@ -57,7 +52,6 @@ export type ThreadManagerState = {
 
 export const THREAD_MANAGER_INITIAL_STATE: ThreadManagerState = {
   active: false,
-  isReloading: false,
   isThreadOrderStale: false,
   unreadThreadCount: 0,
   unseenThreadIds: [],
@@ -90,6 +84,8 @@ export class ThreadManager extends WithSubscriptions {
   });
   /** Threads opened this session, kept until their channel is torn down or the user disconnects. */
   private readonly openedThreads = new Map<string, Thread>();
+  /** A reload is in flight; a second one is dropped (`master`'s `pagination.isLoading` guard). */
+  private isReloadInFlight = false;
 
   /** The shared configuration machinery — see {@link ConfigController}. */
   private readonly configController: ConfigController<ThreadManagerConfig>;
@@ -146,12 +142,10 @@ export class ThreadManager extends WithSubscriptions {
 
   /**
    * The live thread for `id`: one in the list, or one opened this session (e.g. from a message
-   * list). Resolve threads through this, not `paginator.items`, which is the list only.
+   * list). Resolve threads through this, not `paginator.items`, which is the list only; list
+   * membership is `paginator.getItem(id)`.
    */
   public get = (id: string): Thread | undefined => this.registry.get(id);
-
-  /** Whether the thread list holds `id`. */
-  public isListed = (id: string) => this.listIndex.has(id);
 
   /**
    * Every registered thread — the list's plus the opened ones.
@@ -371,31 +365,30 @@ export class ThreadManager extends WithSubscriptions {
   /**
    * Loads the first page, or re-queries a loaded list in place, sized to what is loaded plus the
    * unseen threads. Skipped once loaded unless forced or something changed; the list survives a
-   * failure. Guarded only against another reload, as on `master`.
+   * failure. Guarded only against another reload, as on `master`. A reload of a loaded list shows
+   * no loading state; the first load shows through `paginator.isLoading`.
    */
   public reload = async ({ force = false } = {}) => {
-    const { isReloading, isThreadOrderStale, unseenThreadIds } =
-      this.state.getLatestValue();
-    if (isReloading) return;
+    if (this.isReloadInFlight) return;
+    const { isThreadOrderStale, unseenThreadIds } = this.state.getLatestValue();
     if (!force && this.isListLoaded && !unseenThreadIds.length && !isThreadOrderStale)
       return;
     const { items, pageSize } = this.paginator;
     const limit = (items?.length ?? 0) + unseenThreadIds.length;
 
-    this.state.partialNext({ isReloading: true });
+    this.isReloadInFlight = true;
     try {
       await this.paginator.reload({ limit: Math.min(limit, pageSize) || pageSize });
     } finally {
+      this.isReloadInFlight = false;
       const error = this.paginator.lastQueryError;
       if (error) {
         logger
           .withExtraTags('reload')
           .error('Failed to reload the thread list.', { error });
+      } else {
+        this.state.partialNext({ isThreadOrderStale: false, unseenThreadIds: [] });
       }
-      this.state.partialNext({
-        isReloading: false,
-        ...(error ? {} : { isThreadOrderStale: false, unseenThreadIds: [] }),
-      });
     }
   };
 }

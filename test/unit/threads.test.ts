@@ -2491,12 +2491,12 @@ describe('Threads 2.0', () => {
           setList(threadManager, [thread1, thread2]);
 
           expect(threadManager.get(thread1.id)).to.equal(thread1);
-          expect(threadManager.isListed(thread2.id)).to.be.true;
+          expect(threadManager.paginator.getItem(thread2.id)).to.equal(thread2);
 
           await replaceList(threadManager, [thread3]);
 
           expect(threadManager.get(thread1.id)).to.be.undefined;
-          expect(threadManager.isListed(thread1.id)).to.be.false;
+          expect(threadManager.paginator.getItem(thread1.id)).to.be.undefined;
           expect(threadManager.get(thread3.id)).to.equal(thread3);
           expect(threadManager.registeredThreads).to.deep.equal([thread3]);
         });
@@ -2507,7 +2507,7 @@ describe('Threads 2.0', () => {
           thread.activate();
 
           expect(client.threads.get(thread.id)).to.equal(thread);
-          expect(client.threads.isListed(thread.id)).to.be.false;
+          expect(client.threads.paginator.getItem(thread.id)).to.be.undefined;
         });
 
         it('subscribes an active unlisted thread while the manager is registered', () => {
@@ -2545,7 +2545,7 @@ describe('Threads 2.0', () => {
           await replaceList(client.threads, []);
 
           expect(client.threads.get(thread.id)).to.equal(thread);
-          expect(client.threads.isListed(thread.id)).to.be.false;
+          expect(client.threads.paginator.getItem(thread.id)).to.be.undefined;
           expect(unregisterSpy.called).to.be.false;
           client.threads.unregisterSubscriptions();
         });
