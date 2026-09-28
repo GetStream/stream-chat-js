@@ -495,6 +495,7 @@ export class Thread extends WithMessageOperations(WithSubscriptions) {
 
     const incomingReplies = thread.messagePaginator.state.getLatestValue().items ?? [];
 
+    if (!options?.reconcile) this.messagePaginator.clearStateAndCache();
     if (typeof this.messagePaginator.items === 'undefined') {
       // Nothing loaded yet — the common case for a thread opened from a message, whose paginator
       // has never held a window. `mergeNewestPage` deliberately no-ops there (it merges into an

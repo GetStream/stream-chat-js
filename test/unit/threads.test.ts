@@ -504,7 +504,9 @@ describe('Threads 2.0', () => {
             latest_replies: [existingReply],
             reply_count: 10,
           });
-          thread.hydrateState(hydrationThread);
+          thread.hydrateState(hydrationThread, {
+            reconcile: { candidateIds: new Set([existingReply.id]) },
+          });
 
           expect(thread.messagePaginator.state.getLatestValue().hasMoreTail).to.be.true;
         });
@@ -539,7 +541,9 @@ describe('Threads 2.0', () => {
             reply_count: 11,
           });
 
-          thread.hydrateState(hydrationThread);
+          thread.hydrateState(hydrationThread, {
+            reconcile: { candidateIds: new Set([existingReply.id]) },
+          });
 
           const paginatorState = thread.messagePaginator.state.getLatestValue();
           expect(paginatorState.items?.map((reply) => reply.id)).to.deep.equal([
@@ -551,6 +555,33 @@ describe('Threads 2.0', () => {
           );
           // Merging a partial newest window must not clear "load older".
           expect(paginatorState.hasMoreTail).to.be.true;
+        });
+
+        it('replaces the loaded replies when hydrated without reconcile options', () => {
+          const replyAt = (second: number, overrides: Partial<MessageResponse> = {}) =>
+            makeReply({
+              created_at: convertDateToTimestamp(`2020-01-01T00:00:0${second}.000Z`),
+              ...overrides,
+            });
+          const older = replyAt(1);
+          const kept = replyAt(2, { text: 'original' });
+          const hardDeleted = replyAt(3);
+          const thread = createTestThread({
+            latest_replies: [older, kept, hardDeleted],
+            reply_count: 5,
+          });
+          // The page a list query brings: only the newest replies, fetched without a snapshot.
+          const hydrationThread = createTestThread({
+            latest_replies: [{ ...kept, text: 'edited' }],
+            reply_count: 4,
+          });
+
+          thread.hydrateState(hydrationThread);
+
+          expect(repliesOf(thread).map((reply) => reply.id)).to.deep.equal([kept.id]);
+          expect(thread.messagePaginator.getItem(kept.id)?.text).to.equal('edited');
+          expect(thread.messagePaginator.getItem(older.id)).to.be.undefined;
+          expect(thread.messagePaginator.state.getLatestValue().hasMoreTail).to.be.true;
         });
 
         it('refreshes the store parent so the projection is not clobbered by a stale copy', () => {
@@ -2664,6 +2695,36 @@ describe('Threads 2.0', () => {
           expect(client.threads.get(thread.id)).to.be.undefined;
           expect(thread.hasSubscriptions).to.be.false;
           client.threads.unregisterSubscriptions();
+        });
+
+        it("replaces a stale listed thread's replies with the reloaded list's", async () => {
+          const id = uuidv4();
+          const reply = (second: number) =>
+            generateMsg({
+              cid: channel.cid,
+              parent_id: id,
+              created_at: convertDateToTimestamp(`2020-01-01T00:00:0${second}.000Z`),
+            }) as MessageResponse;
+          const [older, kept, hardDeleted] = [reply(1), reply(2), reply(3)];
+          const listed = createTestThread({
+            latest_replies: [older, kept, hardDeleted],
+            parentMessageOverrides: { id },
+            reply_count: 3,
+          });
+          await loadList(client.threads, [listed]);
+          listed.state.partialNext({ isStateStale: true });
+
+          await loadList(client.threads, [
+            createTestThread({
+              latest_replies: [kept],
+              parentMessageOverrides: { id },
+              reply_count: 2,
+            }),
+          ]);
+
+          expect(listOf(client.threads)[0]).to.equal(listed);
+          expect(repliesOf(listed).map((r) => r.id)).to.deep.equal([kept.id]);
+          expect(listed.hasStaleState).to.be.false;
         });
 
         it('ensure returns the stored instance and registers it, so it outlives the list', async () => {
