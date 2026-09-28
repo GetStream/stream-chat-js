@@ -226,7 +226,9 @@ export class OfflineDBSyncManager {
 
       const error = e as AxiosError<APIErrorResponse>;
 
-      if (error.response?.data?.code === 23) {
+      // 48 is RequestTimeoutError. A timed-out sync tells us nothing about how far
+      // behind the DB is, so leave it alone rather than resetting it.
+      if (error.response?.data?.code === 48) {
         return;
       }
 
