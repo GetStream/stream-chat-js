@@ -164,6 +164,9 @@ export class ThreadManager extends WithSubscriptions {
    *
    * The returned thread is registered right away. If the thread list loads it before the UI
    * activates it, the list reuses this instance instead of creating a duplicate.
+   *
+   * A thread created here only has its parent message, so it starts stale and it loads its thread data
+   * (participants, read state, replies) once, the first time it's opened.
    */
   public ensure = ({
     channel,
@@ -172,9 +175,11 @@ export class ThreadManager extends WithSubscriptions {
     channel: Channel;
     parentMessage: LocalMessage | MessageResponse;
   }): Thread => {
-    const thread =
-      this.threadStore.get(parentMessage.id) ??
-      new Thread({ channel, client: this.client, parentMessage });
+    let thread = this.threadStore.get(parentMessage.id);
+    if (!thread) {
+      thread = new Thread({ channel, client: this.client, parentMessage });
+      thread.state.partialNext({ isStateStale: true });
+    }
     this.register(thread);
     return thread;
   };

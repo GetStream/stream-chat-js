@@ -928,7 +928,9 @@ thread.activate(); // on mount; thread.deactivate() on unmount
 ```
 
 `ensure()` returns the stored instance, or builds a new one, and registers it either way, so a list
-query that lands before `activate()` reuses it rather than creating a second one.
+query that lands before `activate()` reuses it rather than creating a second one. A thread it builds
+has only its parent message, so it starts stale and loads its thread data once, when it is first
+activated.
 `client.threads.get(id)` only looks a thread up, and `client.threads.paginator.getItem(id)` answers
 whether the list holds it.
 

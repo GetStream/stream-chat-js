@@ -2667,6 +2667,37 @@ describe('Threads 2.0', () => {
           expect(listOf(client.threads)[0]).to.equal(thread);
         });
 
+        it('ensure marks a thread it builds stale, so it loads its data once when opened', () => {
+          client.threads.registerSubscriptions();
+          const parentMessage = { ...parentMessageResponse, id: uuidv4() };
+
+          const thread = client.threads.ensure({ channel, parentMessage });
+          const reload = vi.spyOn(thread, 'reload').mockResolvedValue(undefined);
+
+          expect(thread.hasStaleState).to.be.true;
+          thread.activate();
+          expect(reload).toHaveBeenCalledOnce();
+          client.threads.unregisterSubscriptions();
+        });
+
+        it('ensure leaves a stored thread as it is, so opening a listed one does not reload', async () => {
+          client.threads.registerSubscriptions();
+          const listed = createThreadWithId();
+          await loadList(client.threads, [listed]);
+          const reload = vi.spyOn(listed, 'reload').mockResolvedValue(undefined);
+
+          const thread = client.threads.ensure({
+            channel,
+            parentMessage: { ...parentMessageResponse, id: listed.id },
+          });
+          thread.activate();
+
+          expect(thread).to.equal(listed);
+          expect(listed.hasStaleState).to.be.false;
+          expect(reload).not.toHaveBeenCalled();
+          client.threads.unregisterSubscriptions();
+        });
+
         it('ensure has no further effect when it, or activate(), registers the same thread again', () => {
           const sink = vi.fn();
           chatLoggerSystem.configureLoggers({
@@ -2682,6 +2713,8 @@ describe('Threads 2.0', () => {
             );
           const parentMessage = { ...parentMessageResponse, id: uuidv4() };
           const thread = client.threads.ensure({ channel, parentMessage });
+          // Opening a thread `ensure` built loads its data once; not what this test is about.
+          vi.spyOn(thread, 'reload').mockResolvedValue(undefined);
           const listenersAfterFirstCall = countClientListeners();
 
           client.threads.ensure({ channel, parentMessage });
