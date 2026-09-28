@@ -35,12 +35,19 @@ const logger = chatLoggerSystem.getLogger('client');
  * socket it would leak — `client.connect()` overwrites `connection` without disconnecting the
  * previous one, leaving a dead socket still listening and still able to call `_reconnect()` on
  * itself.
+ *
+ * **With `enableWSFallback`, the store can describe the long-poll instead.** Once
+ * `client.connect()` has switched to `WSConnectionFallback` (`client.wsFallback`), that class
+ * writes {@link state} through {@link _setStatus}, and {@link connection} is left holding the
+ * disconnected socket. The client never switches back, so from then on `state` and
+ * {@link isHealthy} report the long-poll.
  */
 export class WSConnection extends WithSubscriptions {
   state: StateStore<WSConnectionState>;
   /**
    * The live socket, or `null` before the first {@link connect}. Built and replaced here, not from
-   * outside — reach for {@link isHealthy} rather than this.
+   * outside — reach for {@link isHealthy} rather than this. After an `enableWSFallback` switch it
+   * keeps the socket that failed, disconnected, since nothing builds a new one again.
    *
    * @internal
    */
@@ -139,9 +146,9 @@ export class WSConnection extends WithSubscriptions {
   }
 
   /**
-   * Is this WebSocket up. Read from {@link state} rather than from the current socket, so it
-   * survives the socket being replaced and answers `false` rather than throwing before the first
-   * connect.
+   * Is this WebSocket up — or, after an `enableWSFallback` switch, the long-poll. Read from
+   * {@link state} rather than from the current socket, so it survives the socket being replaced and
+   * answers `false` rather than throwing before the first connect.
    */
   get isHealthy(): boolean {
     return this.state.getLatestValue().isHealthy;
@@ -153,10 +160,12 @@ export class WSConnection extends WithSubscriptions {
   }
 
   /**
-   * Records this WebSocket's status. Returns whether it changed.
+   * Records this connection's status. Returns whether it changed.
    *
-   * {@link StableWSConnection} is the only caller, and it routes **every** status transition through
-   * here — including `disconnect()`, which `closeConnection()` uses, and the two error paths.
+   * {@link StableWSConnection} routes **every** status transition through here — including
+   * `disconnect()`, which `closeConnection()` uses, and the two error paths. The one other
+   * caller is `WSConnectionFallback`, which takes over once `enableWSFallback` has switched to
+   * long-polling.
    *
    * @internal
    */
@@ -180,6 +189,9 @@ export class WSConnection extends WithSubscriptions {
    *
    * Read from the store rather than from an event, so there is one description of the device's
    * network rather than two that can disagree.
+   *
+   * It keeps routing to {@link connection} after an `enableWSFallback` switch, where that socket is
+   * disconnected and ignores it. The long-poll subscribes to the same store itself.
    */
   public registerSubscriptions = (): Unsubscribe => {
     if (!this.hasSubscriptions) {

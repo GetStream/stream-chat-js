@@ -5,8 +5,9 @@ import { describe, expect, it } from 'vitest';
 /**
  * `requiresConnectionId` (src/api-client.ts) gates only on the `watch` / `presence` flags. The two
  * generated operations that declare `connection_id` but carry no flag set it themselves:
- * `stopWatchingChannel` from `StreamChat`'s override, which waits for a connection being established
- * and sends its id, and `longPoll`'s endpoint from the long-poll fallback, which addresses its own polls.
+ * `stopWatchingChannel` from `StreamChat`'s override, which always waits for the connection id as the
+ * gate does and sends it, and `longPoll`'s endpoint from the long-poll fallback, which addresses its
+ * own polls.
  *
  * That makes every new flagless, connection-scoped operation a place the id has to be set by hand,
  * with nothing failing if it is not. This test pins the set, so a regenerated spec adding one

@@ -270,7 +270,10 @@ export class ApiClient {
  * The server keys watches and presence by that id and answers `200` while registering nothing when it
  * is missing, so a request that races the handshake yields a channel that never receives an event.
  *
- * Other operations declare `connection_id` too, they have to ensure waiting on their own.
+ * The two generated operations that declare `connection_id` without a flag set it themselves:
+ * `stopWatchingChannel` through `StreamChat`'s override, and `longPoll`'s endpoint through the
+ * long-poll fallback. `test/unit/codegen/connectionIdEndpoints.test.ts` pins that set, so a new one
+ * surfaces there.
  */
 export const requiresConnectionId = (
   params: Record<string, unknown> | undefined,

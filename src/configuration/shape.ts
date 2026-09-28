@@ -580,7 +580,7 @@ const CLIENT_FIELDS: Record<keyof ClientDeclarativeConfig, ConfigNode> = {
   },
   wsConnection: {
     description:
-      "This client's WebSocket: how long to wait for it, how often to ping it, how long it may go quiet before being declared dead, and how long a drop must last before a UI reports it.",
+      "This client's WebSocket: how long to wait for it, how often to ping it, how long it may go quiet before being declared dead, how long a drop must last before a UI reports it, and whether to fall back to long-polling when it cannot connect.",
     fields: WS_CONNECTION_FIELDS,
     kind: 'group',
   },

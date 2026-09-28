@@ -38,7 +38,7 @@
   means if you deploy the WebSocket client on Node 18 or 20.
 - **Server-side is gone.** If you construct with a `secret` or call server-only admin endpoints, switch to `@stream-io/node-sdk`. The construction guide has the full list — every feature module below that was server-only is dropped for the same reason.
 - Two barrels removed from the package root, one added: **`./events` and `./base64` are gone; `./logger` is new.** `./signing` survives with exactly one export left, `UserFromToken`. The `./campaign`, `./channel_batch_updater`, and `./segment` barrels are still exported but the modules are emptied (they contain only a comment pointing at the server SDK) — importing anything by name from them will fail.
-- **`connection.changed` is removed.** Connectivity is published as two reactive stores, `client.wsConnection.state` for this client's socket and `client.networkConnection.state` for the device's network. A handler for the event simply stops firing, with no compile error in plain JavaScript, and a "connection lost" banner has to hold a drop itself where the event used to. The socket's own `isHealthy` is unchanged; what moved is where you read it. See below.
+- **`connection.changed` is removed.** Connectivity is published as two reactive stores, `client.wsConnection.state` for this client's socket (or its long-poll, once `enableWSFallback` has switched to it) and `client.networkConnection.state` for the device's network. A handler for the event simply stops firing, with no compile error in plain JavaScript, and a "connection lost" banner has to hold a drop itself where the event used to. The socket's own `isHealthy` is unchanged; what moved is where you read it. See below.
 - **Watching waits instead of degrading.** A request that watches a channel or subscribes to presence is held until the WebSocket handshake produces the connection id the server keys that subscription by, rather than being sent without one and silently registering nothing. It throws only when no socket is open and none is being opened. An explicit `watch: false` is never held. See below.
 - **The WebSocket connect endpoint moved to `/api/v2/connect`.** The hello event is now `connection.ok` rather than `health.check`. The long-poll fallback works as in v9, against `/api/v2/longpoll`, with `enableWSFallback` moved into the `wsConnection` configuration and `client.defaultWSTimeoutWithFallback` gone.
 - `Event` (type name) is kept, but its shape widened: `Event = WSEvent | ConnectedEvent | LocalEvent | keyof CustomEventTypes`. `EventPayload<'<type>'>` narrows to a specific event.
@@ -297,9 +297,11 @@ client.networkConnection.state.getLatestValue();
 // { isOnline, lastOnlineAt, lastOfflineAt }
 ```
 
-`client.wsConnection` is this client's WebSocket. `client.networkConnection` is the **device's**
-network status, reported by a platform reporter you install — a separate fact that routinely disagrees
-with the socket in both directions. Neither is derived from the other.
+`client.wsConnection` is this client's WebSocket — or, once `enableWSFallback` has switched to
+long-polling, the long-poll, which writes the same store, just as v9's long-poll dispatched
+`connection.changed`. `client.networkConnection` is the **device's** network status, reported by a
+platform reporter you install — a separate fact that routinely disagrees with the socket in both
+directions. Neither is derived from the other.
 
 ### What breaks
 
@@ -438,8 +440,8 @@ is never held at all, which is what makes it usable offline. An abort signal rea
 as the request, so an abandoned query does not sit on it.
 
 `channel.stopWatching()` carries no flag but is held the same way, since it tells the server which
-connection should stop watching: it waits for a connection being established, then sends its id.
-With no connection at all there is nothing to stop watching, so it goes out at once, without one.
+connection should stop watching: it always waits for the connection id — rejecting, like a watching
+request, when there is no connection and none is being established — and honours the abort signal.
 
 ### `connection.recovered` is withheld when the socket drops mid-recovery
 
@@ -581,7 +583,10 @@ client switches to HTTP long-polling, dispatches `transport.changed` with
 - Its status is `client.wsConnection.state`, as for the WebSocket, since `connection.changed` is gone.
 - A reconnect recovers state through the usual connection recovery; `client.recoverState()` is gone.
 - It takes online/offline changes from `client.networkConnection` instead of `window` events, so a
-  network status reporter you install, such as one wrapping NetInfo, reaches it too.
+  network status reporter you install, such as one wrapping NetInfo, reaches it too. As in v9, it
+  stops listening at its first `closeConnection()` / `disconnectUser()` and does not start again.
+- State is also recovered after `closeConnection()` → `openConnection()`, which v9's long-poll never
+  did: recovery follows the status store rather than being called from `connect()`.
 - The switch is skipped when a network status reporter says the device is offline: the browser's,
   or one you installed. v9 checked only `navigator.onLine`. On hosts without a network API, the
   default reporter mirrors the WebSocket, so its "offline" only means the socket is down, and the
@@ -662,11 +667,13 @@ Note that `client.queryChannels()` defaults to `watch: true`, so the bare call _
 
 Affected when they ask for a watch or presence: `client.queryChannels()`,
 `client.groupedQueryChannels()`, `client.sync()`, `client.queryThreads()`, `client.getThread()`,
-`channel.query()`, `channel.watch()` and `client.queryUsers()`. `channel.stopWatching()` is held too,
-while a connection is being established; with no connection at all it goes out at once.
+`channel.query()`, `channel.watch()` and `client.queryUsers()`. `channel.stopWatching()` is always
+affected — it carries no flag and is connection-scoped by definition, since it tells the server
+which connection should stop watching.
 
 Every other request is unaffected, and — unlike v9 — no longer carries a `connection_id` query
-param at all. It is now attached only to the requests listed above.
+param at all. It is now attached only to the requests listed above, and to the long-poll
+fallback's own polls and close.
 
 #### `closeConnection()` drops the id too
 
@@ -679,6 +686,10 @@ recreated the same bug one level down: it was written on every handshake and nev
 kept reporting an id for a socket that was gone. Read `client._getConnectionID()` (or
 `client.connectionIdManager.connectionId`) instead — both are dropped the moment the connection
 stops being healthy.
+
+`client.wsFallback.connectionID` survives from v9, because the long-poll addresses its own polls and
+close with it, and it behaves as in v9: it is not cleared when the long-poll goes down, only when it
+reconnects or is disconnected. Read `client._getConnectionID()` for the long-poll's id too.
 
 The consequence for mobile apps: `closeConnection()` (the documented background/foreground seam)
 now makes the gated calls above throw until `openConnection()` has been called, even though the

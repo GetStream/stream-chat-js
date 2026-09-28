@@ -530,8 +530,9 @@ describe('ApiClient connection id gate', () => {
         .false;
     });
 
-    // The regression the `connection_id` fallback used to cause: the generator emits the key for
-    // every operation that *can* watch, so gating on its presence gated `watch: false` too.
+    // The regression gating on a declared `connection_id` once caused, before the gate stopped
+    // reading it: the generator emits the key for every operation that *can* watch, so gating
+    // on its presence gated `watch: false` too.
     it('does not gate a declared connection_id when the request opted out of watching', () => {
       expect(requiresConnectionId({ connection_id: undefined }, { watch: false })).to.be
         .false;
@@ -621,14 +622,27 @@ describe('ApiClient connection id gate', () => {
     expect(sentParams().connection_id).to.equal('late-id');
   });
 
-  it('sends stopWatching at once, without an id, when there is no connection', async () => {
-    // With no connection, and none being established, there is nothing to stop watching.
+  it('rejects stopWatching when there is no id and nothing in flight', async () => {
     client.connectionIdManager.reset();
 
-    await client.channel('messaging', 'id').stopWatching();
+    await expect(client.channel('messaging', 'id').stopWatching()).rejects.toThrow(
+      'No connection id is available',
+    );
+    expect(requestSpy).not.toHaveBeenCalled();
+  });
 
-    expect(requestSpy).toHaveBeenCalledTimes(1);
-    expect(sentParams().connection_id).to.be.undefined;
+  it('abandons the stopWatching wait when the caller aborts', async () => {
+    client.connectionIdManager.reset();
+    client.connectionIdManager.arm();
+    const controller = new AbortController();
+
+    const inFlight = client
+      .channel('messaging', 'id')
+      .stopWatching({}, { signal: controller.signal });
+    controller.abort();
+
+    await expect(inFlight).rejects.toThrow();
+    expect(requestSpy).not.toHaveBeenCalled();
   });
 
   it('lets a request that needs no id through while the handshake is still in flight', async () => {

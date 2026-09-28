@@ -47,14 +47,19 @@ export const browserNetworkStatusReporter: NetworkStatusReporter = (onStatusChan
  * and right in the common case where the device really did lose its network and took the socket with
  * it.
  *
- * Nothing is reported until the socket has been up once. `isOnline` on the WebSocket store is `false`
- * from construction, and forwarding that would claim the device is offline before anything had been
- * attempted — a fabricated reading, which is the one thing this module refuses to produce. Until
- * then the device's status stays `undefined`, meaning unknown.
+ * Nothing is reported until the socket has been up once. `isHealthy` on the WebSocket store is
+ * `false` from construction, and forwarding that would claim the device is offline before
+ * anything had been attempted — a fabricated reading, which is the one thing this module refuses
+ * to produce. Until then the device's status stays `undefined`, meaning unknown.
  *
  * Install a real reporter wherever one exists. This one can only ever repeat what the socket already
  * said, so it cannot tell you that the network came back before the socket noticed, which is the
  * whole reason the network signal is worth having.
+ *
+ * It reads the store, not the socket, so after an `enableWSFallback` switch it mirrors the
+ * long-poll — which also follows network status, and so hears its own status echoed back. The
+ * switch itself ignores this reporter's "offline" (see
+ * `NetworkConnectionObserver.isStatusDerivedFromSocket`), since it only means the socket is down.
  */
 export const createWSConnectionNetworkStatusReporter =
   (wsConnection: WSConnection): NetworkStatusReporter =>

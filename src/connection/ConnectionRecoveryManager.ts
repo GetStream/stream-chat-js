@@ -69,8 +69,12 @@ export const DEFAULT_CONNECTION_RECOVERY_MANAGER_CONFIG: ConnectionRecoveryManag
  * transition, is guaranteed to land after the replay and the sync rather than alongside them.
  *
  * Recovery deliberately keeps no "did we drop?" flag of its own: `ChannelWatchStatus.WasWatching`
- * already records exactly that, written from both truthful hooks
- * (`StableWSConnection._setHealth(false)` and `closeConnection()`).
+ * already records exactly that, written from the truthful hooks
+ * (`StableWSConnection._setHealth(false)` and `closeConnection()`, plus
+ * `WSConnectionFallback._setState()` after an `enableWSFallback` switch).
+ *
+ * The status store it follows is the long-poll's once `enableWSFallback` has switched to it, so a
+ * long-poll reconnect recovers the same way a WebSocket reconnect does.
  */
 export class ConnectionRecoveryManager extends WithSubscriptions {
   client: StreamChat;
@@ -349,10 +353,11 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
     }
 
     // `connection.recovered` means "recovery finished". Dispatched from here so it fires on EVERY
-    // reconnect path — the removed `recoverState()` was only ever called by
-    // `StableWSConnection._reconnect()`, so a `closeConnection()` → `openConnection()` cycle (mobile
-    // backgrounding) never produced it. Consumers keying post-recovery work off this event — the UI
-    // SDKs' mark-read-on-catch-up among them — need it after the reload above, not before.
+    // reconnect path — the removed `recoverState()` was only ever called on an automatic
+    // reconnect (`StableWSConnection._reconnect()`, or v9's long-poll `connect(true)`), so a
+    // `closeConnection()` → `openConnection()` cycle (mobile backgrounding) never produced it.
+    // Consumers keying post-recovery work off this event — the UI SDKs' mark-read-on-catch-up
+    // among them — need it after the reload above, not before.
     this.client.dispatchEvent({ type: 'connection.recovered' });
   };
 
