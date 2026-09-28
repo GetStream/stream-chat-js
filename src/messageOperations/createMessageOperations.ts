@@ -1,7 +1,7 @@
 import { createMessageOperationsPersistence } from './persistence';
 import { keepSendOrderWhilePendingUploadsAllowed } from './sendOrdering';
 import { settlePendingAttachmentUploads } from './settlePendingAttachmentUploads';
-import { localMessageToNewMessagePayload } from '../utils';
+import { toUpdatedMessagePayload } from '../utils';
 import { MessageOperations } from './MessageOperations';
 import type { Channel } from '../channel';
 import type { Thread } from '../thread';
@@ -129,7 +129,7 @@ export const createMessageOperations = (collection: Channel | Thread) => {
       update: async (m, o) => {
         const result = await channel.getClient().updateMessage({
           id: m.id,
-          message: localMessageToNewMessagePayload(m),
+          message: toUpdatedMessagePayload(m),
           ...o,
         });
         return { message: result.message };

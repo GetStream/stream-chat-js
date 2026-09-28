@@ -264,6 +264,26 @@ describe('optimistic edit/delete routing', () => {
   });
 
   describe('thread reply', () => {
+    it('sends an edit without server-owned fields such as type and user', async () => {
+      const { reply, thread } = setupThread();
+      const updateMessage = vi
+        .spyOn(client, 'updateMessage')
+        .mockResolvedValue({ message: { ...reply, text: 'reply after' } } as never);
+
+      await thread.updateMessageWithLocalUpdate({
+        localMessage: {
+          ...formatMessage(reply),
+          text: 'reply after',
+          type: 'reply',
+        } as LocalMessage,
+      });
+
+      const sent = updateMessage.mock.calls[0][0].message as Record<string, unknown>;
+      expect(sent.text).toBe('reply after');
+      expect(sent).not.toHaveProperty('type');
+      expect(sent).not.toHaveProperty('user');
+    });
+
     it('removes a show_in_channel reply from the channel list too on a hard delete', async () => {
       const { parentId, thread } = setupThread();
       // A reply the author chose to also post to the channel is held by BOTH paginators, so removing it

@@ -2054,4 +2054,32 @@ describe('ChannelPaginator', () => {
       expect(paginator.hasMoreTail).toBe(false);
     });
   });
+  describe('first page loaded as a keepPreviousItems refresh', () => {
+    it('is the head, so a channel with a newer message moves to the top instead of vanishing', async () => {
+      const channels = [0, 1, 2].map((i) => {
+        const channel = new Channel(client, 'messaging', `kpi-${i}`, {});
+        setLastMessageAt(channel, new Date(Date.UTC(2020, 0, 3 - i)));
+        return channel;
+      });
+      const paginator = new ChannelPaginator({
+        client,
+        paginatorOptions: {
+          doRequest: () => Promise.resolve({ items: channels }),
+          pageSize: 3,
+        },
+      });
+
+      await paginator.toTail({ keepPreviousItems: true, reset: 'yes' });
+      expect(paginator.itemIntervals.map((i) => i.isHead)).toEqual([true]);
+
+      setLastMessageAt(channels[2], new Date(Date.UTC(2020, 0, 9)));
+      paginator.ingestItem(channels[2]);
+
+      expect(paginator.items?.map((channel) => channel.id)).toEqual([
+        'kpi-2',
+        'kpi-0',
+        'kpi-1',
+      ]);
+    });
+  });
 });
