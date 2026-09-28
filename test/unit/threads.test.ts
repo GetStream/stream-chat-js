@@ -2727,6 +2727,38 @@ describe('Threads 2.0', () => {
           expect(listed.hasStaleState).to.be.false;
         });
 
+        it('leaves an open stale listed thread to reload itself', async () => {
+          const id = uuidv4();
+          const reply = (second: number) =>
+            generateMsg({
+              cid: channel.cid,
+              parent_id: id,
+              created_at: convertDateToTimestamp(`2020-01-01T00:00:0${second}.000Z`),
+            }) as MessageResponse;
+          const [older, kept] = [reply(1), reply(2)];
+          const listed = createTestThread({
+            latest_replies: [older, kept],
+            parentMessageOverrides: { id },
+            reply_count: 2,
+          });
+          vi.spyOn(listed, 'reload').mockResolvedValue(undefined);
+          await loadList(client.threads, [listed]);
+          listed.activate();
+          listed.state.partialNext({ isStateStale: true });
+
+          await loadList(client.threads, [
+            createTestThread({
+              latest_replies: [kept],
+              parentMessageOverrides: { id },
+              reply_count: 2,
+            }),
+          ]);
+
+          expect(listOf(client.threads)[0]).to.equal(listed);
+          expect(repliesOf(listed).map((r) => r.id)).to.deep.equal([older.id, kept.id]);
+          expect(listed.hasStaleState).to.be.true;
+        });
+
         it('ensure returns the stored instance and registers it, so it outlives the list', async () => {
           const listed = createThreadWithId();
           await loadList(client.threads, [listed]);

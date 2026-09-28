@@ -265,7 +265,9 @@ export class ThreadManager extends WithSubscriptions {
   private resolveQueriedThread = (incoming: Thread) => {
     const existing = this.threadStore.get(incoming.id);
     const thread = existing ?? incoming;
-    if (existing?.hasStaleState) existing.hydrateState(incoming);
+    if (existing?.hasStaleState && !existing.state.getLatestValue().active) {
+      existing.hydrateState(incoming);
+    }
     this.listenForDisposal(thread);
     return thread;
   };
