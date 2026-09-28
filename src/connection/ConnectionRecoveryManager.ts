@@ -259,7 +259,7 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
   }
 
   /**
-   * A kept thread stays registered and subscribed after it closes, but a drop loses events it
+   * An opened thread stays registered and subscribed after it closes, but a drop loses events it
    * cannot replay. Flag only, no request: a listed one is rehydrated by the thread list's reload,
    * and any other reloads on its next `activate()`.
    */

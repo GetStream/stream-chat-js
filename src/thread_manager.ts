@@ -64,8 +64,8 @@ const logger = chatLoggerSystem.getLogger('thread-manager');
 const getThreadId = (thread: Thread) => thread.id;
 /** `threadStore` holder for list membership. */
 const LIST_HOLDER: EntityStoreSubscriber = { onEntitiesChanged: () => undefined };
-/** `threadStore` holder for a thread kept for the session because it was opened (`thread.activate()`). */
-const KEPT_HOLDER: EntityStoreSubscriber = { onEntitiesChanged: () => undefined };
+/** `threadStore` holder for a thread opened this session (`register()`, from `thread.activate()`). */
+const REGISTERED_HOLDER: EntityStoreSubscriber = { onEntitiesChanged: () => undefined };
 
 export class ThreadManager extends WithSubscriptions {
   public readonly state: StateStore<ThreadManagerState>;
@@ -73,7 +73,7 @@ export class ThreadManager extends WithSubscriptions {
   public readonly paginator: ThreadPaginator;
   private client: StreamChat;
   /**
-   * Every live thread, held by the list (`listIndex`) and/or `KEPT_HOLDER` (opened this session).
+   * Every live thread, held by the list (`listIndex`) and/or `REGISTERED_HOLDER` (opened this session).
    * A thread leaves once neither holds it.
    */
   private readonly threadStore = new EntityStore<Thread>({ getEntityId: getThreadId });
@@ -87,7 +87,7 @@ export class ThreadManager extends WithSubscriptions {
   private isReloadInFlight = false;
   /**
    * A local `pendingDisposal` listener (a state subscription, not a server watch) per channel instance
-   * that has had a listed or kept thread; removed when that channel is disposed or on reset.
+   * that has had a listed or opened thread; removed when that channel is disposed or on reset.
    */
   private readonly disposalListeners = new Map<Channel, Unsubscribe>();
 
@@ -152,7 +152,7 @@ export class ThreadManager extends WithSubscriptions {
   public get = (id: string): Thread | undefined => this.threadStore.get(id);
 
   /**
-   * Every registered thread — the list's plus the kept ones.
+   * Every registered thread — the list's plus the opened ones.
    *
    * @internal
    */
@@ -182,15 +182,15 @@ export class ThreadManager extends WithSubscriptions {
       return;
     }
 
-    this.threadStore.link(id, KEPT_HOLDER);
-    this.threadStore.upsert(thread, KEPT_HOLDER);
+    this.threadStore.link(id, REGISTERED_HOLDER);
+    this.threadStore.upsert(thread, REGISTERED_HOLDER);
     if (this.hasSubscriptions) thread.registerSubscriptions();
     this.listenForDisposal(thread);
   };
 
-  /** Releases the kept hold on `thread`; the list's own diff unsubscribes it if it is still listed. */
+  /** Releases the `REGISTERED_HOLDER` hold on `thread`; the list's own diff unsubscribes it if it is still listed. */
   private release = (thread: Thread) => {
-    this.threadStore.unlink(thread.id, KEPT_HOLDER);
+    this.threadStore.unlink(thread.id, REGISTERED_HOLDER);
     if (this.hasSubscriptions && !this.paginator.items?.includes(thread)) {
       thread.unregisterSubscriptions();
     }
@@ -267,7 +267,7 @@ export class ThreadManager extends WithSubscriptions {
     this.addUnsubscribeFunction(this.subscribeNewReplies());
     this.addUnsubscribeFunction(this.subscribeReloadOnConnectionRecovered());
     // The list's threads are registered by `subscribeManageThreadSubscriptions`; this covers the
-    // kept ones it does not hold.
+    // opened ones it does not hold.
     this.threadStore.values().forEach((thread) => thread.registerSubscriptions());
   };
 
@@ -307,12 +307,13 @@ export class ThreadManager extends WithSubscriptions {
       (nextValue) => ({ threads: nextValue.items ?? [] }),
       ({ threads: nextThreads }, prev) => {
         const { threads: prevThreads = [] } = prev ?? {};
-        // Left the list and isn't kept. Asks for the kept hold, not `threadStore.get`: `removeItem`
+        // Left the list and wasn't opened. Asks for `REGISTERED_HOLDER`, not `threadStore.get`: `removeItem`
         // publishes before it unlinks the list's hold.
         const listed = new Set(nextThreads);
         const removedThreads = prevThreads.filter(
           (thread) =>
-            !listed.has(thread) && !this.threadStore.isHeldBy(thread.id, KEPT_HOLDER),
+            !listed.has(thread) &&
+            !this.threadStore.isHeldBy(thread.id, REGISTERED_HOLDER),
         );
 
         nextThreads.forEach((thread) => thread.registerSubscriptions());
