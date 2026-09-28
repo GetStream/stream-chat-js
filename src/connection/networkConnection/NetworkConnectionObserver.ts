@@ -3,7 +3,10 @@ import { StateStore } from '@stream-io/state-store';
 import { ConfigController } from '../../configuration/ConfigController';
 import { deepFreezeConfig } from '../../configuration/utils/deepFreezeConfig';
 import { chatLoggerSystem } from '../../logger';
-import { getDefaultNetworkStatusReporter } from './reporters';
+import {
+  browserNetworkStatusReporter,
+  getDefaultNetworkStatusReporter,
+} from './reporters';
 import type {
   NetworkConnectionObserverConfig,
   NetworkConnectionState,
@@ -174,6 +177,21 @@ export class NetworkConnectionObserver extends WithSubscriptions {
    */
   public get isOnline(): boolean | undefined {
     return this.state.getLatestValue().isOnline;
+  }
+
+  /**
+   * Whether the installed reporter is the host default that mirrors this client's WebSocket
+   * (`createWSConnectionNetworkStatusReporter`). Under it `isOnline === false` means "the socket is
+   * down", not "the device is offline".
+   *
+   * @internal
+   */
+  public get isStatusDerivedFromSocket(): boolean {
+    return (
+      this.installedReporter !== undefined &&
+      this.installedReporter === this.defaultReporter &&
+      this.defaultReporter !== browserNetworkStatusReporter
+    );
   }
 
   /**

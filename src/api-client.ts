@@ -265,45 +265,30 @@ export class ApiClient {
 
 /**
  * Whether a request registers a server-side subscription, and so must not be sent before the
- * handshake has produced a connection id.
+ * handshake has produced a connection id: one with a `watch` or `presence` flag set.
  *
  * The server keys watches and presence by that id and answers `200` while registering nothing when it
  * is missing, so a request that races the handshake yields a channel that never receives an event.
+ *
+ * Other operations declare `connection_id` too, they have to ensure waiting on their own.
  */
 export const requiresConnectionId = (
   params: Record<string, unknown> | undefined,
   body: unknown,
 ) => {
   const payload = params?.payload as Record<string, unknown> | undefined;
-  // Guarded rather than `body ?? undefined`: the `in` checks below throw on a string body.
   const requestBody = (typeof body === 'object' && body !== null ? body : undefined) as
     | Record<string, unknown>
     | undefined;
 
-  if (
+  return Boolean(
     params?.watch ||
     params?.presence ||
     payload?.watch ||
     payload?.presence ||
     requestBody?.watch ||
-    requestBody?.presence
-  ) {
-    return true;
-  }
-
-  // A flag that is present and false is a deliberate "do not subscribe", so it must not fall through
-  // to the parameter check below — that is what made an explicit `watch: false` wait for a socket.
-  if (
-    [params, payload, requestBody].some(
-      (source) => source && ('watch' in source || 'presence' in source),
-    )
-  ) {
-    return false;
-  }
-
-  // Some operations subscribe without carrying a flag — stop-watching and long polling — and are
-  // recognised by the generated `connection_id` parameter instead.
-  return Boolean(params && 'connection_id' in params);
+    requestBody?.presence,
+  );
 };
 
 /**

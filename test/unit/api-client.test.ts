@@ -499,9 +499,10 @@ describe('ApiClient connection id gate', () => {
   const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
   describe('requiresConnectionId', () => {
-    it('gates on a declared connection_id query param, even without a watch flag', () => {
-      // the only signal stopWatchingChannel and longPoll give
-      expect(requiresConnectionId({ connection_id: undefined }, undefined)).to.be.true;
+    it('does not gate on a declared connection_id query param alone', () => {
+      // stopWatchingChannel and the long-poll set theirs themselves
+      expect(requiresConnectionId({ connection_id: undefined }, undefined)).to.be.false;
+      expect(requiresConnectionId({ connection_id: 'id' }, undefined)).to.be.false;
     });
 
     it('gates on a watch or presence flag in the request body', () => {
@@ -571,7 +572,7 @@ describe('ApiClient connection id gate', () => {
     expect(sentParams().connection_id).to.equal('late-id');
   });
 
-  it('gates queryThreads, getThread, sync and stopWatching, which had no gate before', async () => {
+  it('gates queryThreads, getThread and sync, which had no gate before', async () => {
     const gated = [
       () => client.queryThreads({ watch: true }),
       () => client.getThread({ message_id: 'mid', watch: true }),
@@ -581,8 +582,6 @@ describe('ApiClient connection id gate', () => {
           last_sync_at: new Date(),
           watch: true,
         }),
-      // stopWatching carries no flag at all - the declared `connection_id` is its only signal
-      () => client.channel('messaging', 'id').stopWatching(),
     ];
 
     for (const call of gated) {
@@ -598,6 +597,38 @@ describe('ApiClient connection id gate', () => {
       await inFlight;
       expect(requestSpy, call.toString()).toHaveBeenCalledTimes(1);
     }
+  });
+
+  it('sends stopWatching with the current connection id', async () => {
+    client.connectionIdManager.resolveConnectionId('current-id');
+
+    await client.channel('messaging', 'id').stopWatching();
+
+    expect(sentParams().connection_id).to.equal('current-id');
+  });
+
+  it('holds stopWatching while a connection is being established, then sends its id', async () => {
+    client.connectionIdManager.reset();
+    client.connectionIdManager.arm();
+
+    const inFlight = client.channel('messaging', 'id').stopWatching();
+    await flush();
+    expect(requestSpy).not.toHaveBeenCalled();
+
+    client.connectionIdManager.resolveConnectionId('late-id');
+    await inFlight;
+    expect(requestSpy).toHaveBeenCalledTimes(1);
+    expect(sentParams().connection_id).to.equal('late-id');
+  });
+
+  it('sends stopWatching at once, without an id, when there is no connection', async () => {
+    // With no connection, and none being established, there is nothing to stop watching.
+    client.connectionIdManager.reset();
+
+    await client.channel('messaging', 'id').stopWatching();
+
+    expect(requestSpy).toHaveBeenCalledTimes(1);
+    expect(sentParams().connection_id).to.be.undefined;
   });
 
   it('lets a request that needs no id through while the handshake is still in flight', async () => {

@@ -18,10 +18,11 @@
 
 ## TL;DR
 
-- **`client.defaultWSTimeout` is gone**, and so are the `WebSocketImpl`, `wsUrlParams` and
-  `wsConnection` client options. Everything the WebSocket reads now lives in one configuration slice —
-  `client.config.set({ client: { wsConnection: { … } } })` — as `connectTimeoutMs`, `pingIntervalMs`,
-  `healthCheckGracePeriodMs`, `webSocketImpl`, `urlParams` and `connection`. Unlike the fields and
+- **`client.defaultWSTimeout` is gone**, and so are the `WebSocketImpl`, `wsUrlParams`,
+  `wsConnection` and `enableWSFallback` client options. Everything the WebSocket reads now lives in one
+  configuration slice — `client.config.set({ client: { wsConnection: { … } } })` — as
+  `connectTimeoutMs`, `enableWSFallback`, `pingIntervalMs`, `healthCheckGracePeriodMs`,
+  `webSocketImpl`, `urlParams` and `connection`. Unlike the fields and
   options they replace, these survive a reconnect.
 - **Server-sent dates are unix-nanosecond `number`s** on every response and event type — not `Date`
   objects and not ISO strings, while outgoing **request** date fields are still `Date`. `new Date(ns)`
@@ -39,7 +40,7 @@
 - Two barrels removed from the package root, one added: **`./events` and `./base64` are gone; `./logger` is new.** `./signing` survives with exactly one export left, `UserFromToken`. The `./campaign`, `./channel_batch_updater`, and `./segment` barrels are still exported but the modules are emptied (they contain only a comment pointing at the server SDK) — importing anything by name from them will fail.
 - **`connection.changed` is removed.** Connectivity is published as two reactive stores, `client.wsConnection.state` for this client's socket and `client.networkConnection.state` for the device's network. A handler for the event simply stops firing, with no compile error in plain JavaScript, and a "connection lost" banner has to hold a drop itself where the event used to. The socket's own `isHealthy` is unchanged; what moved is where you read it. See below.
 - **Watching waits instead of degrading.** A request that watches a channel or subscribes to presence is held until the WebSocket handshake produces the connection id the server keys that subscription by, rather than being sent without one and silently registering nothing. It throws only when no socket is open and none is being opened. An explicit `watch: false` is never held. See below.
-- **The WebSocket connect endpoint moved to `/api/v2/connect`.** The hello event is now `connection.ok` rather than `health.check`, and the long-poll fallback (`enableWSFallback`, `transport.changed`) is gone.
+- **The WebSocket connect endpoint moved to `/api/v2/connect`.** The hello event is now `connection.ok` rather than `health.check`. The long-poll fallback works as in v9, against `/api/v2/longpoll`, with `enableWSFallback` moved into the `wsConnection` configuration and `client.defaultWSTimeoutWithFallback` gone.
 - `Event` (type name) is kept, but its shape widened: `Event = WSEvent | ConnectedEvent | LocalEvent | keyof CustomEventTypes`. `EventPayload<'<type>'>` narrows to a specific event.
 - `EventTypes` (plural) renamed to `EventType` (singular). `CustomEventTypes` interface is unchanged — augment it to add custom event-type keys, same as v9.
 - Filter payloads now carry **per-endpoint operator constraints** (inline `Filters<{ … }>` on each request type) — previously-permissive filter objects may stop type-checking. Only one operator per field is allowed, and `null` is no longer a valid `$in` element. `QueryPollsFilters`, `QueryVotesFilters`, and `ReminderFilters` were the last hand-written holdouts and now derive from their request types too.
@@ -436,8 +437,9 @@ An explicit `watch: false` is still honoured, and a request that asks for neithe
 is never held at all, which is what makes it usable offline. An abort signal reaches the wait as well
 as the request, so an abandoned query does not sit on it.
 
-This covers requests the old guard never did — stop-watching and long polling carry no `watch` flag
-and are recognised by their declared `connection_id` parameter instead.
+`channel.stopWatching()` carries no flag but is held the same way, since it tells the server which
+connection should stop watching: it waits for a connection being established, then sends its id.
+With no connection at all there is nothing to stop watching, so it goes out at once, without one.
 
 ### `connection.recovered` is withheld when the socket drops mid-recovery
 
@@ -555,26 +557,35 @@ visible in two places:
 
 Anonymous connections are unaffected: `connectAnonymousUser()` works the same way.
 
-### Long-poll fallback removed
+### Long-poll fallback (`enableWSFallback`)
 
-The HTTP long-poll transport that v9 fell back to when the WebSocket failed is gone. Removed
-with it:
+Works as in v9, but the flag moved off `StreamChatOptions` into the `wsConnection` configuration,
+with the socket's other settings. Left in the constructor options, it is silently ignored:
 
-| Removed                                                                  | Notes                                                                                                                                                                                                       |
-| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `enableWSFallback` client option                                         | No replacement.                                                                                                                                                                                             |
-| `WSConnectionFallback`, `ConnectionState` (`src/connection_fallback.ts`) | Never exported from the package root; internal.                                                                                                                                                             |
-| `transport.changed` event                                                | Only ever dispatched when switching to long-poll. Remove listeners.                                                                                                                                         |
-| `client.defaultWSTimeoutWithFallback`                                    | `client.defaultWSTimeout` (15s) is now the only connect timeout. In v9, enabling the fallback shortened the WS timeout to 6s so the fallback could take over sooner; without it, connects get the full 15s. |
+```ts
+// v9
+const client = new StreamChat(API_KEY, { enableWSFallback: true });
 
-```diff
-- const client = new StreamChat(API_KEY, { enableWSFallback: true });
-- client.on('transport.changed', ({ mode }) => reportTransport(mode));
-+ const client = new StreamChat(API_KEY);
+// v10
+const client = new StreamChat(API_KEY);
+client.config.set({ client: { wsConnection: { enableWSFallback: true } } });
 ```
 
-The WebSocket's own reconnect and health-check loop is unchanged and still handles transient
-network failures. If you need to react to connectivity, subscribe to `client.wsConnection.state`.
+With it on, the WebSocket connects as it would without the flag, within `connectTimeoutMs` (15s by
+default). v9 gave it 6s while the flag was on, through `client.defaultWSTimeoutWithFallback`, which is
+gone: lower `connectTimeoutMs` to switch sooner. If the WebSocket fails with a network error, the
+client switches to HTTP long-polling, dispatches `transport.changed` with
+`mode: 'longpoll'`, and stays on long-poll for the rest of its lifetime. What else changed around it:
+
+- It polls `/api/v2/longpoll` instead of `/longpoll`.
+- Its status is `client.wsConnection.state`, as for the WebSocket, since `connection.changed` is gone.
+- A reconnect recovers state through the usual connection recovery; `client.recoverState()` is gone.
+- It takes online/offline changes from `client.networkConnection` instead of `window` events, so a
+  network status reporter you install, such as one wrapping NetInfo, reaches it too.
+- The switch is skipped when a network status reporter says the device is offline: the browser's,
+  or one you installed. v9 checked only `navigator.onLine`. On hosts without a network API, the
+  default reporter mirrors the WebSocket, so its "offline" only means the socket is down, and the
+  switch goes ahead.
 
 ### Watching a channel now requires a connected user
 
@@ -651,9 +662,8 @@ Note that `client.queryChannels()` defaults to `watch: true`, so the bare call _
 
 Affected when they ask for a watch or presence: `client.queryChannels()`,
 `client.groupedQueryChannels()`, `client.sync()`, `client.queryThreads()`, `client.getThread()`,
-`channel.query()`, `channel.watch()` and `client.queryUsers()`. `channel.stopWatching()` is always
-affected — it carries no flag and is connection-scoped by definition, since it tells the server
-which connection should stop watching.
+`channel.query()`, `channel.watch()` and `client.queryUsers()`. `channel.stopWatching()` is held too,
+while a connection is being established; with no connection at all it goes out at once.
 
 Every other request is unaffected, and — unlike v9 — no longer carries a `connection_id` query
 param at all. It is now attached only to the requests listed above.
@@ -1295,7 +1305,7 @@ For each source file that touches the SDK:
 17. **Fix upload call sites.** `channel.sendFile` / `sendImage` are now `channel.uploadFile` / `uploadImage`, and take a request object: `{ file }`, where `file` is a `File`, a `Blob`, or a React-Native `{ uri, name, type }` descriptor — no `Buffer`, no readable streams. The MIME type still has to be explicit on the React-Native path, it just lives on the descriptor rather than in a separate `contentType` argument. `axiosRequestConfig` becomes `requestOptions` (`{ onUploadProgress, signal }`), and the routes moved to `/api/v2/…`.
 18. **Delete bundler shims** added for `stream-chat`'s Node-only deps (`crypto`, `https`, `zlib`, `jsonwebtoken`, `ws`) — `package.json#browser` is gone because nothing imports them anymore.
 19. **Handle the new connect hello event.** Anything keyed on the _first_ `health.check` (seeding `client.user`, unread counts, "connected" UI state) should listen for `connection.ok` instead; periodic `health.check` events are unchanged. Narrow on `event.type` before reading fields off the resolved `ConnectionOpen`.
-20. **Drop long-poll fallback code.** Remove `enableWSFallback` from client options, delete `transport.changed` listeners, and delete reads of `client.defaultWSTimeoutWithFallback`.
+20. **Move `enableWSFallback`** from the client options to `client.config.set({ client: { wsConnection: { enableWSFallback: true } } })`. `transport.changed` is unchanged. Delete reads of `client.defaultWSTimeoutWithFallback` (lower `connectTimeoutMs` if you relied on the faster switch), and read the long-poll's status from `client.wsConnection.state` rather than `connection.changed`.
 21. **Replace `client.setLocalDevice(device)` / the `device` client option** with an explicit `await client.createDevice({ id, push_provider, push_provider_name? })` after connecting.
 22. **Polyfill `atob`** if your React Native / Hermes target lacks it (`typeof atob === 'undefined'`); `UserFromToken` depends on it during `connectUser`.
 23. **Call `liveLocationManager.dispose()`** when you are finished with a manager you constructed, alongside whatever `unregisterSubscriptions()` you already call. Nothing will fail to compile: `dispose()` is the _configuration_ teardown, and until it runs the client's configuration registry holds a handle to the manager — a long-lived client and many short-lived managers will accumulate them. `unregisterSubscriptions()` is unchanged and stays ref-counted, so it deliberately no longer releases configuration; it never should have, since with two callers sharing a manager the first to leave stopped a still-live instance from tracking `client.config`. `SearchController` already worked this way.

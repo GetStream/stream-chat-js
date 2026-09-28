@@ -64,6 +64,10 @@ export function isErrorRetryable(error: APIError) {
   return err.retryable;
 }
 
+export function isConnectionIDError(error: APIError) {
+  return error.code === 46; // ConnectionIDNotFoundError
+}
+
 /**
  * Whether an error is EPHEMERAL — a transient failure worth queueing/retrying rather than a
  * definitive rejection. True when the server never responded (connection/network/offline error - no

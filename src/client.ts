@@ -60,6 +60,7 @@ import type {
   UserResponse,
 } from './types';
 import { isWSFailure } from './errors';
+import { WSConnectionFallback } from './connection/WSConnectionFallback';
 import type { APIError } from './errors';
 import { chatLoggerSystem } from './logger';
 import { queueOrRun } from './offline-support/queueableOperations';
@@ -238,6 +239,8 @@ export class StreamChat extends ChatApi {
   userAgent?: string;
   wsBaseURL?: string;
   wsConnection: WSConnection;
+  /** The long-poll transport, set once `enableWSFallback` has switched away from the WebSocket. */
+  wsFallback?: WSConnectionFallback;
   wsPromise: ConnectAPIResponse | null;
   private _wsPromiseSettled = true;
   private _wsConnectId = 0;
@@ -650,7 +653,10 @@ export class StreamChat extends ChatApi {
       this.cleaningIntervalRef = undefined;
     }
 
-    await this.wsConnection?.disconnect(timeout);
+    await Promise.all([
+      this.wsConnection?.disconnect(timeout),
+      this.wsFallback?.disconnect(timeout),
+    ]);
 
     this.offlineDb?.executeQuerySafely(
       async (db) => {
@@ -1406,10 +1412,37 @@ export class StreamChat extends ChatApi {
     }
 
     try {
+      // if fallback is used before, continue using it instead of waiting for WS to fail
+      if (this.wsFallback) {
+        return await this.wsFallback.connect();
+      }
+
       // `wsConnection` builds and owns the socket; the reconnection logic and the connect timeout
       // (`config.connectTimeoutMs`) live in there.
       return await this.wsConnection.connect();
     } catch (error) {
+      // run fallback only if it's WS/Network error and not a normal API error
+      // make sure the device is online before even trying the longpoll. The default reporter on
+      // hosts without a network API mirrors the WebSocket, so its "offline" only means the socket
+      // is down, and is ignored.
+      const { networkConnection } = this;
+      const isDeviceOffline =
+        networkConnection.isOnline === false &&
+        !networkConnection.isStatusDerivedFromSocket;
+      if (
+        this.wsConnection.config.enableWSFallback &&
+        isWSFailure(error as APIError) &&
+        !isDeviceOffline
+      ) {
+        logger.withExtraTags('connect').info('WS failed, fallback to longpoll');
+        this.dispatchEvent({ type: 'transport.changed', mode: 'longpoll' });
+
+        this.wsConnection.connection?._destroyCurrentWSConnection();
+        void this.wsConnection.disconnect(); // close WS so no retry
+        this.wsFallback = new WSConnectionFallback({ client: this });
+        return await this.wsFallback.connect();
+      }
+
       // A failure the socket does not retry leaves nothing else to settle the pending connection id.
       if (!isWSFailure(error as APIError)) {
         this.connectionIdManager.rejectConnectionId(error);
@@ -1433,6 +1466,31 @@ export class StreamChat extends ChatApi {
     this.state.updateUsers(data.users);
 
     return data;
+  }
+
+  /**
+   * Stops watching a channel on this client's connection.
+   *
+   * @param ...args - `[request, requestOptions]`. `request.connection_id` is replaced by this
+   *   client's connection id, waiting for one while a connection is being established, as a watching
+   *   request does. With no connection at all there is nothing to stop watching, so the request goes
+   *   out at once, without an id.
+   * @returns The server response.
+   */
+  override async stopWatchingChannel(
+    ...args: Parameters<ChatApi['stopWatchingChannel']>
+  ) {
+    const [request, ...rest] = args;
+    const { connectionIdManager } = this;
+    const connectionId =
+      connectionIdManager.connectionId || connectionIdManager.loadConnectionIdPromise
+        ? await connectionIdManager.getConnectionId()
+        : undefined;
+
+    return super.stopWatchingChannel(
+      { ...request, connection_id: connectionId },
+      ...rest,
+    );
   }
 
   /**

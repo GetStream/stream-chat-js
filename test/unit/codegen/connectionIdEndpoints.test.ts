@@ -3,17 +3,13 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * `requiresConnectionId` (src/api-client.ts) gates on the `watch` / `presence` flags, and falls
- * back to the generated `queryParams` carrying a `connection_id` key for the operations that
- * declare no flag at all: `stopWatchingChannel` and `longPoll`. The generator emits that key for
- * every operation the client-side OpenAPI spec declares one on, even when the value is `undefined`.
+ * `requiresConnectionId` (src/api-client.ts) gates only on the `watch` / `presence` flags. The two
+ * generated operations that declare `connection_id` but carry no flag set it themselves:
+ * `stopWatchingChannel` from `StreamChat`'s override, which waits for a connection being established
+ * and sends its id, and `longPoll`'s endpoint from the long-poll fallback, which addresses its own polls.
  *
- * That coupling is invisible at runtime: should the generator start omitting keys holding
- * `undefined`, the fallback would silently stop firing for those two, and they would start racing
- * the handshake again with nothing failing. This test pins the set instead.
- *
- * The other seven entries are not load-bearing for the fallback - they all declare a flag, which is
- * read first - but they are pinned so that a regenerated spec adding a connection-scoped operation
+ * That makes every new flagless, connection-scoped operation a place the id has to be set by hand,
+ * with nothing failing if it is not. This test pins the set, so a regenerated spec adding one
  * surfaces here rather than passing silently.
  */
 const GEN_ROOT = join(__dirname, '../../../src/gen');

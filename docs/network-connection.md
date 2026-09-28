@@ -200,6 +200,7 @@ client.config.set({
   client: {
     wsConnection: {
       connectTimeoutMs: 15000, // how long connect() waits for the server's hello
+      enableWSFallback: false, // long-poll when the WebSocket cannot connect
       pingIntervalMs: 25000, // how often a health-check ping goes out — 25s is also the maximum
       healthCheckGracePeriodMs: 10000, // extra room before the socket is declared dead
       offlineNotificationDisplayDelayMs: 5000, // how long a UI holds a drop before reporting it

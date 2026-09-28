@@ -35,6 +35,7 @@ describe('client.wsConnection configuration', () => {
       // `undefined` property as absent, so omitting them here would silently stop covering them.
       expect(client.wsConnection.config).toEqual({
         connectTimeoutMs: 15_000,
+        enableWSFallback: false,
         pingIntervalMs: 25_000,
         healthCheckGracePeriodMs: 10_000,
         offlineNotificationDisplayDelayMs: 5_000,
@@ -42,7 +43,7 @@ describe('client.wsConnection configuration', () => {
         urlParams: undefined,
         connection: undefined,
       });
-      expect(Object.keys(client.wsConnection.config)).toHaveLength(7);
+      expect(Object.keys(client.wsConnection.config)).toHaveLength(8);
     });
 
     it('keeps the 25s ping / 35s connection check pair the socket documents', () => {
@@ -104,11 +105,13 @@ describe('client.wsConnection configuration', () => {
       // already reachable — the change is that they are declared, typed and validated in one place.
       //
       // `offlineNotificationDisplayDelayMs` is the deliberate exception: nothing here acts on it,
-      // and it is declared so the UI SDKs share one value. Still excluded: the network-recovery
+      // and it is declared so the UI SDKs share one value. `enableWSFallback` is read by
+      // `client.connect()`, which decides whether to fall back. Still excluded: the network-recovery
       // retry, a bare literal no caller could reach.
       expect(Object.keys(client.wsConnection.config).sort()).toEqual([
         'connectTimeoutMs',
         'connection',
+        'enableWSFallback',
         'healthCheckGracePeriodMs',
         'offlineNotificationDisplayDelayMs',
         'pingIntervalMs',

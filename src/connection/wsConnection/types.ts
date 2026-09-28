@@ -33,6 +33,13 @@ export type WSConnectionConfig = {
    */
   connectTimeoutMs: number;
   /**
+   * Falls back to HTTP long-polling when the WebSocket cannot connect, for networks that block
+   * WebSockets. Defaults to `false`. The WebSocket connects within {@link connectTimeoutMs}, as
+   * without the flag; lower it to switch sooner. The client dispatches `transport.changed` with
+   * `mode: 'longpoll'` when it switches, and stays on long-poll from then on.
+   */
+  enableWSFallback: boolean;
+  /**
    * How often a health-check ping goes out while the socket is up.
    *
    * **Can only be lowered.** 25s is both the default and the maximum, because a slower ping risks the

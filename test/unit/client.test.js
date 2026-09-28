@@ -7,6 +7,7 @@ import { StreamChat } from '../../src/client';
 import { ChatApi } from '../../src/gen-imports';
 import { chatLoggerSystem } from '../../src/logger';
 import { StableWSConnection } from '../../src/connection';
+import { ConnectionState } from '../../src/connection/WSConnectionFallback';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
 import { generateThreadResponse } from './test-utils/generateThreadResponse';
 import {
@@ -2496,5 +2497,151 @@ describe('_normalizeExpiration', () => {
 		expect(() => client._normalizeExpiration(input)).toThrow(
 			/does not resolve to a valid date/,
 		);
+	});
+});
+
+describe('Client WSFallback', () => {
+	const userToken =
+		'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYW1pbiJ9.1R88K_f1CC2yrR6j1_OzMEbasfS_dxRSNbundEDBlJI';
+	const wsFailure = () =>
+		Object.assign(new Error('initial WS connection could not be established'), {
+			isWSFailure: true,
+		});
+	let client;
+
+	/** Answers the long-poll: connects with `connectionId`, holds polls until cancelled. */
+	const fakeLongPoll = (connectionId = 'new_id') => {
+		const calls = [];
+		vi.spyOn(client.api, 'doAxiosRequest').mockImplementation(
+			(type, url, data, config) => {
+				calls.push({ url, params: config.params });
+				if (config.params?.json) {
+					return Promise.resolve({
+						event: { type: 'connection.ok', connection_id: connectionId },
+					});
+				}
+				if (config.params?.close) return Promise.resolve({});
+				return new Promise((_, reject) => config.cancelToken?.promise.then(reject));
+			},
+		);
+		return calls;
+	};
+
+	beforeEach(() => {
+		client = new StreamChat('key', { allowServerSideConnect: true });
+		client.config.set({ client: { wsConnection: { enableWSFallback: true } } });
+		// As the real socket does: arms the connection id before failing.
+		vi.spyOn(client.wsConnection, 'connect').mockImplementation(async () => {
+			client.connectionIdManager.arm();
+			throw wsFailure();
+		});
+	});
+
+	afterEach(async () => {
+		await client.disconnectUser();
+		vi.unstubAllGlobals();
+	});
+
+	it('should try wsFallback if WebSocket fails', async () => {
+		fakeLongPoll();
+
+		const health = await client.connectUser({ id: 'amin' }, userToken);
+
+		expect(health).toMatchObject({ type: 'connection.ok', connection_id: 'new_id' });
+		expect(client.wsConnection.connect).toHaveBeenCalledWith();
+		expect(client.wsFallback.state).toBe(ConnectionState.Connected);
+		expect(client.wsFallback.connectionID).toBe('new_id');
+		expect(client.wsConnection.isHealthy).toBe(true);
+		expect(client.connectionIdManager.connectionId).toBe('new_id');
+
+		await client.disconnectUser();
+		expect(client.wsFallback.state).toBe(ConnectionState.Disconnected);
+		expect(client.wsConnection.isHealthy).toBe(false);
+	});
+
+	it('should fire transport.changed and connection.ok events', async () => {
+		fakeLongPoll();
+		const dispatchEvent = vi.spyOn(client, 'dispatchEvent');
+
+		await client.connectUser({ id: 'amin' }, userToken);
+
+		expect(dispatchEvent).toHaveBeenCalledWith(
+			expect.objectContaining({ type: 'transport.changed', mode: 'longpoll' }),
+		);
+		expect(dispatchEvent).toHaveBeenCalledWith(
+			expect.objectContaining({ type: 'connection.ok', connection_id: 'new_id' }),
+		);
+	});
+
+	it('should make a watch issued during the WebSocket attempt wait for the long-poll id', async () => {
+		fakeLongPoll();
+
+		const connecting = client.connectUser({ id: 'amin' }, userToken);
+		const waiter = client.connectionIdManager.getConnectionId();
+		await connecting;
+
+		await expect(waiter).resolves.toBe('new_id');
+	});
+
+	it('should close the long-poll connection id on closeConnection', async () => {
+		const calls = fakeLongPoll();
+		await client.connectUser({ id: 'amin' }, userToken);
+
+		await client.closeConnection();
+
+		expect(calls.at(-1)).toMatchObject({
+			url: expect.stringMatching(/\/api\/v2\/longpoll$/),
+			params: { close: true, connection_id: 'new_id' },
+		});
+		expect(client.wsConnection.isHealthy).toBe(false);
+	});
+
+	it('should keep using the fallback after closeConnection -> openConnection', async () => {
+		fakeLongPoll();
+		await client.connectUser({ id: 'amin' }, userToken);
+		const fallback = client.wsFallback;
+
+		await client.closeConnection();
+		await client.openConnection();
+
+		expect(client.wsFallback).toBe(fallback);
+		expect(client.wsConnection.connect).toHaveBeenCalledTimes(1);
+		expect(client.wsFallback.state).toBe(ConnectionState.Connected);
+	});
+
+	it('should ignore fallback if flag is false', async () => {
+		fakeLongPoll();
+		client.wsConnection.updateConfig({ enableWSFallback: false });
+
+		await expect(client.connectUser({ id: 'amin' }, userToken)).rejects.toThrow(
+			/initial WS connection could not be established/,
+		);
+
+		expect(client.wsConnection.connect).toHaveBeenCalledWith();
+		expect(client.wsFallback).toBeUndefined();
+		expect(client.api.doAxiosRequest).not.toHaveBeenCalled();
+	});
+
+	it('should ignore fallback if a network reporter says the device is offline', async () => {
+		fakeLongPoll();
+		client.networkConnection.setStatusReporter(null);
+		client.networkConnection.setStatus(false);
+
+		await expect(client.connectUser({ id: 'amin' }, userToken)).rejects.toThrow(
+			/initial WS connection could not be established/,
+		);
+
+		expect(client.wsFallback).toBeUndefined();
+	});
+
+	it('should fall back anyway when the offline reading only mirrors the WebSocket', async () => {
+		fakeLongPoll();
+		// the host default without a network API: its "offline" only means the socket is down
+		expect(client.networkConnection.isStatusDerivedFromSocket).toBe(true);
+		client.networkConnection.state.partialNext({ isOnline: false });
+
+		await client.connectUser({ id: 'amin' }, userToken);
+
+		expect(client.wsFallback.state).toBe(ConnectionState.Connected);
 	});
 });
