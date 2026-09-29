@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { CanceledError } from 'axios';
 import type { StreamChat } from '../client';
 import { retryInterval, sleep } from '../utils';
 import { isAPIError, isConnectionIDError, isErrorRetryable } from '../errors';
@@ -109,6 +109,15 @@ export class WSConnectionFallback {
       if (retry && isErrorRetryable(error)) {
         this._log(`_req() - Retryable error, retrying request`);
         await sleep(retryInterval(this.consecutiveFailures));
+        // A reconnect (or `disconnect()`) during the sleep replaced the connection id this request
+        // carries. Sent anyway, it would come back as a ConnectionIDNotFoundError, and `_poll` would
+        // tear down the connection that replaced it.
+        if (params.connection_id && params.connection_id !== this.connectionID) {
+          this._log(`_req() - Connection id changed, dropping the retry`);
+          throw new CanceledError(
+            'The connection id changed while the retry was waiting',
+          );
+        }
         return this._req<T>(params, config, retry);
       }
 
@@ -177,7 +186,8 @@ export class WSConnectionFallback {
     this.connectionID = undefined; // connect should be sent with empty connection_id so API creates one
     try {
       const { event } = await this._req<{ event: ConnectionOpen }>(
-        { json: this.client._buildWSAuthPayload() },
+        // Authenticated by the request's `Authorization` header, so the message carries no token.
+        { json: this.client._buildWSAuthPayload('') },
         { timeout: 8000 }, // 8s
         reconnect,
       );
@@ -193,7 +203,10 @@ export class WSConnectionFallback {
       }
       return event;
     } catch (err) {
-      this._setState(ConnectionState.Closed);
+      // `disconnect()` has already set the state of an attempt it cancelled. Overwriting it with
+      // Closed would let the next online edge in `_applyNetworkStatus` reconnect it.
+      if (this.state !== ConnectionState.Disconnected)
+        this._setState(ConnectionState.Closed);
       // Nothing retries a failed connect, so fail whatever is waiting for a connection id. A cancel
       // comes from `disconnect()`, which leaves them waiting for the next connection instead.
       if (!axios.isCancel(err)) this.client.connectionIdManager.rejectConnectionId(err);

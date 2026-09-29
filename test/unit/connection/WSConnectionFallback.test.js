@@ -1,5 +1,5 @@
 import sinon from 'sinon';
-import { CanceledError } from 'axios';
+import axios, { CanceledError } from 'axios';
 
 import * as utils from '../../../src/utils';
 import * as errors from '../../../src/errors';
@@ -336,6 +336,50 @@ describe('WSConnectionFallback', () => {
 			expect(c.consecutiveFailures).to.be.eql(3);
 			expect(c._req.calledThrice).to.be.true;
 		});
+
+		it('should drop a retry whose connection id changed while it waited', async () => {
+			const longPoll = sinon.stub().rejects();
+			// once, so a retry that is not dropped fails instead of looping
+			vi.spyOn(errors, 'isErrorRetryable').mockReturnValueOnce(true);
+			const c = new WSConnectionFallback({ client: newClient({ longPoll }) });
+			c.connectionID = 'old';
+			// a reconnect lands while the retry sleeps
+			vi.spyOn(utils, 'sleep').mockImplementation(async () => {
+				c.connectionID = 'new';
+			});
+
+			const error = await c._req({ connection_id: 'old' }, {}, true).catch((e) => e);
+			expect(axios.isCancel(error)).to.be.true;
+			expect(longPoll.calledOnce).to.be.true;
+		});
+
+		it('should drop a retry whose connection id disconnect() dropped while it waited', async () => {
+			const longPoll = sinon.stub().rejects();
+			vi.spyOn(errors, 'isErrorRetryable').mockReturnValueOnce(true);
+			const c = new WSConnectionFallback({ client: newClient({ longPoll }) });
+			c.connectionID = 'old';
+			vi.spyOn(utils, 'sleep').mockImplementation(async () => {
+				c.connectionID = undefined;
+			});
+
+			const error = await c._req({ connection_id: 'old' }, {}, true).catch((e) => e);
+			expect(axios.isCancel(error)).to.be.true;
+			expect(longPoll.calledOnce).to.be.true;
+		});
+
+		it('should retry with the same connection id while it is still current', async () => {
+			const longPoll = sinon.stub();
+			longPoll.onFirstCall().rejects();
+			longPoll.resolves({ events: [] });
+			vi.spyOn(errors, 'isErrorRetryable').mockReturnValue(true);
+			vi.spyOn(utils, 'sleep').mockResolvedValue();
+			const c = new WSConnectionFallback({ client: newClient({ longPoll }) });
+			c.connectionID = 'id';
+
+			await c._req({ connection_id: 'id' }, {}, true);
+			expect(longPoll.calledTwice).to.be.true;
+			expect(longPoll.secondCall.args[0]).to.be.eql({ connection_id: 'id' });
+		});
 	});
 
 	describe('connect', () => {
@@ -357,7 +401,8 @@ describe('WSConnectionFallback', () => {
 			c._poll = sinon.spy();
 
 			expect(await c.connect()).to.be.eql(health);
-			expect(c.client._buildWSAuthPayload.calledOnce).to.be.true;
+			// authenticated by the Authorization header, so the message carries no token
+			expect(c.client._buildWSAuthPayload.calledOnceWithExactly('')).to.be.true;
 			expect(c._poll.calledOnce).to.be.true;
 			expect(c._req.calledOnceWithExactly({ json: 'payload' }, { timeout: 8000 }, false))
 				.to.be.true;
@@ -448,6 +493,27 @@ describe('WSConnectionFallback', () => {
 			waiter = c.client.connectionIdManager.getConnectionId();
 			await expect(connecting).rejects.toThrow();
 			expect(c.client.connectionIdManager.loadConnectionIdPromise).to.be.equal(waiter);
+		});
+
+		it('should stay Disconnected when disconnect() cancels it', async () => {
+			const c = new WSConnectionFallback({ client: newClient() });
+			let cancel;
+			c._req = (params) =>
+				params.close
+					? Promise.resolve()
+					: new Promise((_, reject) => (cancel = () => reject(new CanceledError())));
+
+			const connecting = c.connect();
+			await c.disconnect();
+			cancel();
+			await expect(connecting).rejects.toThrow();
+			expect(c.state).to.be.eql(ConnectionState.Disconnected);
+
+			// so the next online edge does not reconnect it
+			c.connect = sinon.spy();
+			c._applyNetworkStatus(false);
+			c._applyNetworkStatus(true);
+			expect(c.connect.called).to.be.false;
 		});
 	});
 
