@@ -39,7 +39,7 @@ export const DEFAULT_CONNECTION_RECOVERY_MANAGER_CONFIG: ConnectionRecoveryManag
  * 3. **Every active thread reloads its replies** (`Thread.reload`), because none of the above touches
  *    them: a channel reload refreshes the main message list, and `ThreadManager`'s own recovery
  *    refreshes the thread *list*, reusing thread instances without rehydrating them unless something
- *    separately marked them stale — which only `user.watching.stop` does, never a reconnect.
+ *    separately marked them stale.
  *
  * It is explicitly **not** a sweep over `client.activeChannels`. Watches are a bounded server
  * resource, and after any scrolling that cache holds far more channels than a query returns — so
@@ -237,8 +237,7 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
    * Threads need their own pass because nothing else brings an open thread's replies back — a
    * channel reload refreshes the main message list, `ChannelManager.recover()` refreshes the channel
    * lists*, and `ThreadManager`'s own recovery refreshes the thread *list*, reusing existing
-   * instances without rehydrating them unless they were separately marked stale (which only
-   * `user.watching.stop` does, never a reconnect).
+   * instances without rehydrating them unless they were separately marked stale.
    *
    * `active` is the filter that matters: the registry also holds every thread the list has paged
    * in, which is not what should be re-fetched on a reconnect — only what someone is actually

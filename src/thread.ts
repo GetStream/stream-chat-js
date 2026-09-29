@@ -16,6 +16,7 @@ import type {
 } from './types';
 import { isDoesNotExistError } from './errors';
 import type { Channel } from './channel';
+import { ChannelWatchStatus } from './channel_state';
 import type { StreamChat } from './client';
 import type { CustomThreadData } from './custom_types';
 import { MessageComposer } from './messageComposer';
@@ -526,6 +527,7 @@ export class Thread extends WithMessageOperations(WithSubscriptions) {
     this.addUnsubscribeFunction(this.subscribeParentMessageFromStore());
     this.addUnsubscribeFunction(this.subscribeMarkActiveThreadRead());
     this.addUnsubscribeFunction(this.subscribeReloadActiveStaleThread());
+    this.addUnsubscribeFunction(this.subscribeMarkStaleOnStopWatching());
   };
 
   /**
@@ -602,19 +604,22 @@ export class Thread extends WithMessageOperations(WithSubscriptions) {
       },
     );
 
-  public handleWatchingStop = (event: PipelineEvent) => {
-    const { channel } = this.state.getLatestValue();
-
-    if (
-      !this.client.userId ||
-      this.client.userId !== event.user?.id ||
-      event.channel?.cid !== channel.cid
-    ) {
-      return;
-    }
-
-    this.state.partialNext({ isStateStale: true });
-  };
+  /**
+   * A watch stopped while the connection stays up (`NotWatching`) ends the channel's events with no
+   * reconnect to catch it. A dropped connection (`WasWatching`) is left to recovery.
+   */
+  private subscribeMarkStaleOnStopWatching = () =>
+    this.channel.state.subscribeWithSelector(
+      ({ watchStatus }) => ({ watchStatus }),
+      ({ watchStatus }, previous) => {
+        if (
+          previous?.watchStatus === ChannelWatchStatus.Watching &&
+          watchStatus === ChannelWatchStatus.NotWatching
+        ) {
+          this.state.partialNext({ isStateStale: true });
+        }
+      },
+    );
 
   public handleRepliesUnread = (event: EventPayload<'notification.mark_unread'>) => {
     if (!event.user || event.created_at == null || !event.thread_id) return;

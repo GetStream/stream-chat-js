@@ -290,7 +290,7 @@ export class ThreadManager extends WithSubscriptions {
    * Hands client events to the threads in the store by id, as `PollManager` does for polls: a thread
    * doesn't listen to the client itself. A message event goes to the thread the message is a reply
    * in and the thread it starts; quoted-message updates stay within the reply's own thread, as on
-   * `master`.
+   * `master`. A thread follows its channel's `watchStatus` itself, so watch events need no routing.
    */
   private subscribeThreadEvents = () => {
     const threadsOf = (message?: { id: string; parent_id?: string }) =>
@@ -343,10 +343,6 @@ export class ThreadManager extends WithSubscriptions {
             .forEach((thread) => thread.handleUserMessagesDeleted(event)),
         ),
       ),
-      this.client.on('user.watching.stop', (event) => {
-        if (event.user?.id !== this.client.userId) return;
-        this.threadStore.values().forEach((thread) => thread.handleWatchingStop(event));
-      }),
     ].map(({ unsubscribe }) => unsubscribe);
 
     return () => unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());

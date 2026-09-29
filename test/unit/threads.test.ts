@@ -9,6 +9,7 @@ import sinon from 'sinon';
 import {
   Channel,
   ChannelResponse,
+  ChannelWatchStatus,
   MessageRequest,
   MessageResponse,
   StreamChat,
@@ -1304,43 +1305,39 @@ describe('Threads 2.0', () => {
         });
       });
 
-      describe('Event: user.watching.stop', () => {
-        it('ignores incoming event if the data do not match (channel or user.id)', () => {
+      describe('channel watch status', () => {
+        // What sets `watchStatus` (stopWatching, a dropped connection) is pinned in channel.test.js.
+        it('marks the thread stale when this client stops watching its channel', () => {
           const thread = createTestThread();
           subscribeThread(thread);
+          thread.channel.watchStatus = ChannelWatchStatus.Watching;
 
-          client.dispatchEvent({
-            type: 'user.watching.stop',
-            channel: channelResponse,
-            user: { id: 'bob' },
-          });
+          thread.channel.watchStatus = ChannelWatchStatus.NotWatching;
 
-          expect(thread.hasStaleState).to.be.false;
-
-          client.dispatchEvent({
-            type: 'user.watching.stop',
-            channel: generateChannel().channel as ChannelResponse,
-            user: { id: TEST_USER_ID },
-          });
-
-          expect(thread.hasStaleState).to.be.false;
-
+          expect(thread.hasStaleState).to.be.true;
           thread.unregisterSubscriptions();
         });
 
-        it('marks own state as stale whenever current user stops watching associated channel', () => {
+        it('leaves a dropped connection to recovery, which reloads open threads itself', () => {
           const thread = createTestThread();
           subscribeThread(thread);
+          thread.channel.watchStatus = ChannelWatchStatus.Watching;
 
-          client.dispatchEvent({
-            type: 'user.watching.stop',
-            cid: channelResponse.cid,
-            channel: channelResponse,
-            user: { id: TEST_USER_ID },
-          });
+          thread.channel.watchStatus = ChannelWatchStatus.WasWatching;
 
-          expect(thread.hasStaleState).to.be.true;
+          expect(thread.hasStaleState).to.be.false;
+          thread.unregisterSubscriptions();
+        });
 
+        it("ignores another channel's watch ending", () => {
+          const thread = createTestThread();
+          subscribeThread(thread);
+          const other = client.channel('messaging', uuidv4());
+          other.watchStatus = ChannelWatchStatus.Watching;
+
+          other.watchStatus = ChannelWatchStatus.NotWatching;
+
+          expect(thread.hasStaleState).to.be.false;
           thread.unregisterSubscriptions();
         });
       });
@@ -3310,6 +3307,39 @@ describe('Threads 2.0', () => {
       [uuidv4(), uuidv4(), uuidv4()].forEach(openThread);
 
       expect(listenerCount()).to.equal(before);
+    });
+  });
+
+  describe('watch status from thread queries', () => {
+    // The server watches a thread's channel for a query sent with `watch: true`.
+    const threadResponse = () =>
+      generateThreadResponse(
+        channelResponse,
+        parentMessageResponse,
+      ) as ThreadStateResponse;
+
+    it('getThreadAndHydrate marks the channel watched, unless asked not to watch', async () => {
+      vi.spyOn(client, 'getThread').mockResolvedValue({
+        thread: threadResponse(),
+      } as never);
+
+      await client.getThreadAndHydrate(parentMessageResponse.id, { watch: false });
+      expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
+
+      await client.getThreadAndHydrate(parentMessageResponse.id);
+      expect(channel.watchStatus).to.equal(ChannelWatchStatus.Watching);
+    });
+
+    it('queryThreadsAndHydrate marks the threads’ channels watched, unless asked not to watch', async () => {
+      vi.spyOn(client, 'queryThreads').mockResolvedValue({
+        threads: [threadResponse()],
+      } as never);
+
+      await client.queryThreadsAndHydrate({ watch: false });
+      expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
+
+      await client.queryThreadsAndHydrate();
+      expect(channel.watchStatus).to.equal(ChannelWatchStatus.Watching);
     });
   });
 });

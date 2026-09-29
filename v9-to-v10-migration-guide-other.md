@@ -939,6 +939,12 @@ threads it holds, the way `client.polls` does for polls. A thread therefore gets
 `client.threads` holds it (listed, `ensure()`d or activated) and `client.threads.registerSubscriptions()`
 has run; calling `thread.registerSubscriptions()` on a thread you built yourself is no longer enough.
 
+A thread query sent with `watch: true` (`getThreadAndHydrate()`, `queryThreadsAndHydrate()`, and
+through them `thread.reload()` and the thread list) now sets the channel's `watchStatus` to `Watching`,
+since the server does watch the thread's channel. A thread marks itself stale when that status becomes
+`NotWatching` (the watch was stopped while connected) instead of reacting to `user.watching.stop`; a
+dropped connection is handled by connection recovery, as before.
+
 ### The thread list is a `ThreadPaginator`
 
 `client.threads.paginator` holds the list, in the order `queryThreads` returns it. There is no
