@@ -561,7 +561,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     this.client.offlineDb?.executeQuerySafely(
       (db) =>
         db.upsertCidsForQuery({
-          cids,
+          cids: cids.slice(0, this.pageSize),
           filters: request.filter_conditions,
           options: request,
           predefinedFilter: this._predefinedFilter,

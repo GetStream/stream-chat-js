@@ -1117,6 +1117,45 @@ describe('ChannelPaginator', () => {
       );
     });
 
+    it('persists only the first page, including after paginating and live reorders', async () => {
+      await setUpOfflineDb({ isSynced: true });
+      const [a, b, c, d] = ['a', 'b', 'c', 'd'].map((id, index) => {
+        const channel = new Channel(client, 'type', id, {});
+        setLastMessageAt(channel, new Date(Date.UTC(1970, 0, 10 - index)));
+        return channel;
+      });
+      vi.spyOn(client, 'queryChannelsAndHydrate')
+        .mockResolvedValueOnce({ channels: [a, b], duration: '0.1ms' })
+        .mockResolvedValueOnce({ channels: [c, d], duration: '0.1ms' });
+      const paginator = new ChannelPaginator({
+        client,
+        filters: {},
+        paginatorOptions: { pageSize: 2 },
+        sort: [{ field: 'last_message_at', direction: -1 }],
+      });
+
+      await paginator.toTail();
+      expect(upsertCidsForQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({ cids: [a.cid, b.cid] }),
+      );
+      upsertCidsForQuery.mockClear();
+
+      // A later page cannot change the first page, so it is not written.
+      await paginator.toTail();
+
+      expect(paginator.items).toHaveLength(4);
+      expect(upsertCidsForQuery).not.toHaveBeenCalled();
+
+      // `d` receives a newer message and moves to the top.
+      setLastMessageAt(d, new Date(Date.UTC(1970, 0, 20)));
+      paginator.boost(d.cid, { seq: paginator.maxBoostSeq + 1 });
+      paginator.ingestItem(d);
+
+      expect(upsertCidsForQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({ cids: [d.cid, a.cid] }),
+      );
+    });
+
     it('does not persist when a removal changed nothing', async () => {
       await setUpOfflineDb({ isSynced: true });
       vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({

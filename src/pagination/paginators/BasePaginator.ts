@@ -3389,7 +3389,8 @@ export abstract class BasePaginator<T, Q> {
 
     const state = this.getStateAfterQuery(stateUpdate, isFirstPage);
     if (updateState) this.state.next(state);
-    this.populateOfflineDbAfterQuery({ items: state.items, queryShape });
+    // Only the first page is cached and a later page cannot change it.
+    if (isFirstPage) this.populateOfflineDbAfterQuery({ items: state.items, queryShape });
 
     return {
       stateCandidate: state,
