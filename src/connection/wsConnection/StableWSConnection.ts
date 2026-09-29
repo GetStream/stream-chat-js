@@ -366,9 +366,7 @@ export class StableWSConnection {
         await this.client.tokenManager.loadToken();
       }
 
-      // `disconnect()` can run while the token is still loading - `closeConnection()` on mobile
-      // backgrounding does. Building the socket now would give it the current `wsID`, so its
-      // callbacks would be live and it would publish an id and events for a connection nobody wants.
+      // if `disconnect()` was called while the token was loading, abort the connection attempt.
       if (this.isDisconnected) {
         this.isConnecting = false;
         logger
@@ -474,8 +472,6 @@ export class StableWSConnection {
 
     try {
       // Nothing comes back when `_connect` bailed out because `disconnect()` ran in the meantime.
-      // Settling then would resolve `setUserPromise` for a connection that was never made, which
-      // defeats `connectUser`'s check that its own attempt is still the current one.
       if (await this._connect()) {
         this.client._settleConnectPromises();
         this.consecutiveFailures = 0;
