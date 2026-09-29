@@ -21,6 +21,12 @@ A guideline for `release-v15`. The LLC side is `feat/thread-paginator`, and the 
   doesn't look in the store, so callers have to prefer an existing instance (see `viewReplyInThread` below).
 - `client.threads.activate()` / `deactivate()` still exist. Activating reloads the list when it needs it: first load,
   unseen threads, or stale order.
+- **Threads don't listen to the client any more.** `client.threads.registerSubscriptions()` routes each event by id to
+  the stored thread it belongs to, as `PollManager` does for polls. A `Thread` that isn't in the store gets no events,
+  and `thread.registerSubscriptions()` on its own covers only its state subscriptions.
+- **A thread goes stale when its channel's `watchStatus` goes to `NotWatching`** (e.g. `channel.stopWatching()`), not
+  on `user.watching.stop`. A dropped connection is handled by connection recovery. Thread queries sent with
+  `watch: true` (`getThreadAndHydrate`, `queryThreadsAndHydrate`) now set the channel to `Watching`.
 
 ## API mapping
 
@@ -105,7 +111,10 @@ A guideline for `release-v15`. The LLC side is `feat/thread-paginator`, and the 
 
 **No change needed**
 
-- `useChat`: `client.threads.registerSubscriptions()` / `unregisterSubscriptions()`.
+- `useChat`: `client.threads.registerSubscriptions()` / `unregisterSubscriptions()`. This is now also what delivers
+  thread events, so it has to stay mounted for as long as threads are shown.
+- Nothing in React calls `thread.registerSubscriptions()` directly or handles `user.watching.*` for threads, so the
+  routing and `watchStatus` changes need no code changes.
 - `useActiveThread` / `useCloseThread`: `thread.activate()` / `deactivate()`. `deactivate()` only flips `active`; the
   thread stays registered.
 - `ChatViewThreadsSelectorButton`: `unreadThreadCount` is still on `client.threads.state`.
@@ -125,7 +134,8 @@ A guideline for `release-v15`. The LLC side is `feat/thread-paginator`, and the 
 ## Don't
 
 - Don't write threads into the manager's state or the list yourself.
-- Don't construct `Thread` to open one; use `ensure()` (and prefer `get()` after any `await`).
+- Don't construct `Thread` to open one; use `ensure()` (and prefer `get()` after any `await`). A thread outside the
+  store gets no events.
 - Don't look threads up in `paginator.items`, which covers the list only; use `client.threads.get(id)`.
 - Don't reset the manager's state on mount. `resetState()` is teardown, and runs on `disconnectUser()`.
 
@@ -143,6 +153,8 @@ How to update them:
 - Seed the list through the paginator (`paginator.state.partialNext({ items })`, or a mocked `queryThreads` response),
   not `client.threads.state.threads`.
 - An opened thread should be found with `client.threads.get(id)`, while `paginator.getItem(id)` stays `undefined`.
+- A test that dispatches client events at a thread needs `client.threads.registerSubscriptions()` and the thread in
+  the store (`ensure()`, `activate()` or a list query). No current React test relies on the old per-thread listeners.
 
 Cases worth adding:
 
