@@ -2519,7 +2519,12 @@ describe('Client WSFallback', () => {
 		const calls = [];
 		const respond = (data) => Promise.resolve({ data, status: 200, headers: {} });
 		vi.spyOn(client.axiosInstance, 'request').mockImplementation((config) => {
-			calls.push({ url: config.url, params: config.params, timeout: config.timeout });
+			calls.push({
+				url: config.url,
+				params: config.params,
+				timeout: config.timeout,
+				authorization: config.headers?.Authorization,
+			});
 			if (config.params?.json) {
 				return respond({
 					event: { type: 'connection.ok', connection_id: connectionId },
@@ -2629,6 +2634,21 @@ describe('Client WSFallback', () => {
 		expect(client.wsConnection.fallback).toBe(fallback);
 		expect(socketConnect).toHaveBeenCalledTimes(1);
 		expect(client.wsConnection.fallback.state).toBe(ConnectionState.Connected);
+	});
+
+	it('should connect a token provider on the kept long-poll after disconnectUser', async () => {
+		const calls = fakeLongPoll();
+		await client.connectUser({ id: 'amin' }, userToken);
+		await client.disconnectUser();
+
+		const health = await client.connectUser({ id: 'amin' }, async () => userToken);
+
+		expect(health).toMatchObject({ type: 'connection.ok', connection_id: 'new_id' });
+		expect(socketConnect).toHaveBeenCalledTimes(1);
+		expect(client.wsConnection.fallback.state).toBe(ConnectionState.Connected);
+		expect(calls.filter((call) => call.params?.json).at(-1)).toMatchObject({
+			authorization: userToken,
+		});
 	});
 
 	it('should route network status to the long-poll', async () => {

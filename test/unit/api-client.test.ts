@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { requiresConnectionId } from '../../src/api-client';
 import { getClientWithUser } from './test-utils/getClient';
 
-import type { StreamChat } from '../../src/client';
+import { StreamChat } from '../../src/client';
 import type { StreamRequestOptions } from '../../src/types';
 
 describe('ApiClient request options', () => {
@@ -769,6 +769,53 @@ describe('ApiClient connection id gate', () => {
     client.connectionIdManager.rejectConnectionId(new Error('ws handshake failed'));
 
     await expect(inFlight).rejects.toThrow('ws handshake failed');
+    expect(requestSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('ApiClient token loading', () => {
+  let client: StreamChat;
+  let requestSpy: ReturnType<typeof vi.spyOn>;
+
+  const sentAuthorization = () =>
+    (requestSpy.mock.calls[0][0] as AxiosRequestConfig).headers?.Authorization;
+  const sendRequest = () => client.api.sendRequest('GET', '/api/v2/chat/channels');
+
+  beforeEach(() => {
+    client = new StreamChat('key');
+    requestSpy = vi
+      .spyOn(client.axiosInstance, 'request')
+      .mockResolvedValue({ data: {}, status: 200, headers: {} });
+  });
+
+  it('waits for a token provider that is still loading', async () => {
+    let provideToken: (token: string) => void = () => undefined;
+    client._setToken(
+      { id: 'amin' },
+      () => new Promise<string>((resolve) => (provideToken = resolve)),
+    );
+
+    const request = sendRequest();
+    await Promise.resolve();
+    expect(requestSpy).not.toHaveBeenCalled();
+
+    provideToken('provided-token');
+    await request;
+
+    expect(sentAuthorization()).toBe('provided-token');
+  });
+
+  it("rejects with the provider's error when the provider fails", async () => {
+    client
+      ._setToken({ id: 'amin' }, () => Promise.reject(new Error('provider down')))
+      .catch(() => undefined);
+
+    await expect(sendRequest()).rejects.toThrow(/Call to tokenProvider failed/);
+    expect(requestSpy).not.toHaveBeenCalled();
+  });
+
+  it('still rejects when no token was ever set', async () => {
+    await expect(sendRequest()).rejects.toThrow(/User token is not set/);
     expect(requestSpy).not.toHaveBeenCalled();
   });
 });

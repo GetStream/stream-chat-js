@@ -193,6 +193,7 @@ export class ApiClient {
       };
     }
 
+    await this.client.tokenManager.tokenReady();
     const initialRequestConfig = this.populateRequestConfigWithDefaults(additionalConfig);
 
     const clientRequestId = initialRequestConfig.headers?.[
