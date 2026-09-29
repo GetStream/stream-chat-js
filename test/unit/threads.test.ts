@@ -69,6 +69,12 @@ describe('Threads 2.0', () => {
     });
   }
 
+  // Threads get client events through `client.threads`, as polls do through `client.polls`.
+  function subscribeThread(thread: Thread) {
+    client.threads.registerSubscriptions();
+    client.threads.register(thread);
+  }
+
   // The messagePaginator is the sole reply source (Thread.state.replies was removed).
   const repliesOf = (thread: Thread) =>
     thread.messagePaginator.state.getLatestValue().items ?? [];
@@ -1158,7 +1164,7 @@ describe('Threads 2.0', () => {
             },
           ],
         });
-        thread.registerSubscriptions();
+        subscribeThread(thread);
 
         const stateBefore = thread.state.getLatestValue();
         const stubbedMarkRead = sinon
@@ -1199,7 +1205,7 @@ describe('Threads 2.0', () => {
           latest_replies: [initialReply],
           reply_count: 1,
         });
-        thread.registerSubscriptions();
+        subscribeThread(thread);
 
         const reloadedReply = makeReply({
           created_at: convertDateToTimestamp('2020-03-01T00:00:01.000Z'),
@@ -1228,7 +1234,7 @@ describe('Threads 2.0', () => {
       describe('Event: thread.updated', () => {
         it('ignores incoming event if the data do not match (parent_message_id)', () => {
           const thread = createTestThread({ title: 'A' });
-          thread.registerSubscriptions();
+          subscribeThread(thread);
 
           const stateBefore = thread.state.getLatestValue();
           expect(stateBefore.title).to.eq('A');
@@ -1246,7 +1252,7 @@ describe('Threads 2.0', () => {
 
         it('correctly updates thread-level properties', () => {
           const thread = createTestThread({ title: 'A' });
-          thread.registerSubscriptions();
+          subscribeThread(thread);
 
           const stateBefore = thread.state.getLatestValue();
           expect(stateBefore.title).to.eq('A');
@@ -1273,7 +1279,7 @@ describe('Threads 2.0', () => {
           const thread = createTestThread({
             custom: { [customKey1]: 1, [customKey2]: { key: 1 } },
           });
-          thread.registerSubscriptions();
+          subscribeThread(thread);
 
           const stateBefore = thread.state.getLatestValue();
 
@@ -1301,7 +1307,7 @@ describe('Threads 2.0', () => {
       describe('Event: user.watching.stop', () => {
         it('ignores incoming event if the data do not match (channel or user.id)', () => {
           const thread = createTestThread();
-          thread.registerSubscriptions();
+          subscribeThread(thread);
 
           client.dispatchEvent({
             type: 'user.watching.stop',
@@ -1324,7 +1330,7 @@ describe('Threads 2.0', () => {
 
         it('marks own state as stale whenever current user stops watching associated channel', () => {
           const thread = createTestThread();
-          thread.registerSubscriptions();
+          subscribeThread(thread);
 
           client.dispatchEvent({
             type: 'user.watching.stop',
@@ -1350,7 +1356,7 @@ describe('Threads 2.0', () => {
               },
             ],
           });
-          thread.registerSubscriptions();
+          subscribeThread(thread);
 
           const stateBefore = thread.state.getLatestValue();
           expect(stateBefore.read['bob']?.unreadMessageCount).to.equal(42);
@@ -1380,7 +1386,7 @@ describe('Threads 2.0', () => {
               },
             ],
           });
-          thread.registerSubscriptions();
+          subscribeThread(thread);
 
           const stateBefore = thread.state.getLatestValue();
           expect(stateBefore.read['bob']?.unreadMessageCount).to.equal(42);
@@ -1415,7 +1421,7 @@ describe('Threads 2.0', () => {
               },
             ],
           });
-          thread.registerSubscriptions();
+          subscribeThread(thread);
           const stateBefore = thread.state.getLatestValue();
 
           client.dispatchEvent({
@@ -1442,7 +1448,7 @@ describe('Threads 2.0', () => {
               },
             ],
           });
-          thread.registerSubscriptions();
+          subscribeThread(thread);
 
           const lastReadAt = new Date();
           const createdAt = new Date(Date.now() - 5000);
@@ -1473,7 +1479,7 @@ describe('Threads 2.0', () => {
 
         it('creates a read entry for a user that did not have one previously', () => {
           const thread = createTestThread();
-          thread.registerSubscriptions();
+          subscribeThread(thread);
 
           const otherUserId = 'bob';
           const createdAt = new Date();
@@ -1496,7 +1502,7 @@ describe('Threads 2.0', () => {
       describe('Event: message.new', () => {
         it('ignores a reply if it does not belong to the associated thread', () => {
           const thread = createTestThread();
-          thread.registerSubscriptions();
+          subscribeThread(thread);
           const stateBefore = thread.state.getLatestValue();
 
           client.dispatchEvent({
@@ -1513,7 +1519,7 @@ describe('Threads 2.0', () => {
 
         it('prevents handling a reply if the state of the thread is stale', () => {
           const thread = createTestThread();
-          thread.registerSubscriptions();
+          subscribeThread(thread);
           thread.state.partialNext({ isStateStale: true });
           const stateBefore = thread.state.getLatestValue();
 
@@ -1539,7 +1545,7 @@ describe('Threads 2.0', () => {
               },
             ],
           });
-          thread.registerSubscriptions();
+          subscribeThread(thread);
 
           const newMessage = makeReply({ user: { id: 'bob' } });
           client.dispatchEvent({
@@ -1565,7 +1571,7 @@ describe('Threads 2.0', () => {
               },
             ],
           });
-          thread.registerSubscriptions();
+          subscribeThread(thread);
 
           const newMessage = generateMsg({
             parent_id: thread.id,
@@ -1613,7 +1619,7 @@ describe('Threads 2.0', () => {
               },
             ],
           });
-          thread.registerSubscriptions();
+          subscribeThread(thread);
 
           // reply_count is sourced from the parent message, so it starts at 1.
           expect(thread.state.getLatestValue().replyCount).to.equal(1);
@@ -1673,7 +1679,7 @@ describe('Threads 2.0', () => {
             },
           ],
         });
-        thread.registerSubscriptions();
+        subscribeThread(thread);
 
         expect(thread.ownUnreadCount).to.equal(42);
 
@@ -1701,7 +1707,7 @@ describe('Threads 2.0', () => {
             },
           ],
         });
-        thread.registerSubscriptions();
+        subscribeThread(thread);
         thread.activate();
 
         client.dispatchEvent({
@@ -1731,7 +1737,7 @@ describe('Threads 2.0', () => {
               }) as MessageResponse,
           );
           const thread = createTestThread({ latest_replies: messages });
-          thread.registerSubscriptions();
+          subscribeThread(thread);
 
           const messageToDelete = messages[2];
 
@@ -1756,7 +1762,7 @@ describe('Threads 2.0', () => {
             makeReply({ created_at: msToNs(createdAt + 1000 * i) }),
           );
           const thread = createTestThread({ latest_replies: messages, reply_count: 5 });
-          thread.registerSubscriptions();
+          subscribeThread(thread);
 
           const messageToDelete = messages[2];
 
@@ -1786,7 +1792,7 @@ describe('Threads 2.0', () => {
 
         it('handles deletion of the thread (updates deleted_at and parentMessage properties)', () => {
           const thread = createTestThread();
-          thread.registerSubscriptions();
+          subscribeThread(thread);
 
           const stateBefore = thread.state.getLatestValue();
 
@@ -1811,10 +1817,12 @@ describe('Threads 2.0', () => {
 
         it('reflects quoted_message updates in messagePaginator cache', () => {
           const thread = createTestThread();
-          thread.registerSubscriptions();
+          subscribeThread(thread);
 
+          // Another reply in the same thread: quoted-message updates stay within it, as on `master`.
           const quotedMessage = generateMsg({
             id: uuidv4(),
+            parent_id: thread.id,
             text: 'before delete',
           }) as MessageResponse;
           const quoteCarrier = generateMsg({
@@ -1857,7 +1865,7 @@ describe('Threads 2.0', () => {
               thread,
               'updateParentMessageOrReplyLocally',
             );
-            thread.registerSubscriptions();
+            subscribeThread(thread);
 
             client.dispatchEvent({
               type: eventType,
@@ -1872,7 +1880,7 @@ describe('Threads 2.0', () => {
 
         it("preserves the current user's own_reactions on a cross-user reaction to a reply", () => {
           const thread = createTestThread();
-          thread.registerSubscriptions();
+          subscribeThread(thread);
           const messageId = uuidv4();
           // Seed a reply that already carries the current user's own reaction.
           thread.messagePaginator.ingestItem(
@@ -1916,7 +1924,7 @@ describe('Threads 2.0', () => {
         (['user.messages.deleted', 'user.deleted'] as const).forEach((eventType) => {
           it(`soft-deletes a banned user's replies in the thread paginator on "${eventType}"`, () => {
             const thread = createTestThread();
-            thread.registerSubscriptions();
+            subscribeThread(thread);
             const bannedUserId = 'banned-user';
             const replyId = uuidv4();
             thread.messagePaginator.ingestPage({
@@ -1951,7 +1959,7 @@ describe('Threads 2.0', () => {
 
         it('applies "reaction.new" to a reply the thread paginator already holds', () => {
           const thread = createTestThread();
-          thread.registerSubscriptions();
+          subscribeThread(thread);
           const message = generateMsg({
             id: uuidv4(),
             parent_id: thread.id,
@@ -1984,7 +1992,7 @@ describe('Threads 2.0', () => {
 
         it('ignores "reaction.new" message in thread messagePaginator when parent_id does not match thread.id', () => {
           const thread = createTestThread();
-          thread.registerSubscriptions();
+          subscribeThread(thread);
           const message = generateMsg({
             id: uuidv4(),
             parent_id: uuidv4(),
@@ -2009,7 +2017,7 @@ describe('Threads 2.0', () => {
         (['reaction.deleted', 'reaction.updated'] as const).forEach((eventType) => {
           it(`applies "${eventType}" to a reply the thread paginator already holds`, () => {
             const thread = createTestThread();
-            thread.registerSubscriptions();
+            subscribeThread(thread);
             const message = generateMsg({
               id: uuidv4(),
               parent_id: thread.id,
@@ -2040,7 +2048,7 @@ describe('Threads 2.0', () => {
 
           it(`ignores "${eventType}" message in thread messagePaginator when parent_id does not match thread.id`, () => {
             const thread = createTestThread();
-            thread.registerSubscriptions();
+            subscribeThread(thread);
             const message = generateMsg({
               id: uuidv4(),
               parent_id: uuidv4(),
@@ -2065,10 +2073,12 @@ describe('Threads 2.0', () => {
 
         it('reflects quoted_message updates in messagePaginator on "message.updated"', () => {
           const thread = createTestThread();
-          thread.registerSubscriptions();
+          subscribeThread(thread);
 
+          // Another reply in the same thread: quoted-message updates stay within it, as on `master`.
           const quotedMessage = generateMsg({
             id: uuidv4(),
+            parent_id: thread.id,
             text: 'before update',
           }) as MessageResponse;
           const quoteCarrier = generateMsg({
@@ -2098,10 +2108,12 @@ describe('Threads 2.0', () => {
 
         it('reflects quoted_message updates in messagePaginator on "message.undeleted"', () => {
           const thread = createTestThread();
-          thread.registerSubscriptions();
+          subscribeThread(thread);
 
+          // Another reply in the same thread: quoted-message updates stay within it, as on `master`.
           const quotedMessage = generateMsg({
             id: uuidv4(),
+            parent_id: thread.id,
             text: 'before undelete',
             type: 'deleted',
           }) as MessageResponse;
@@ -3193,6 +3205,111 @@ describe('Threads 2.0', () => {
           expect(threadManager.paginator.cursor?.tailward).to.equal('cursor2');
         });
       });
+    });
+  });
+
+  describe('event routing', () => {
+    const openThread = (parentId: string) => {
+      const thread = createMinimalThread({ parentMessageOverrides: { id: parentId } });
+      subscribeThread(thread);
+      return thread;
+    };
+    const dispatchReply = (thread: Thread, text: string) =>
+      client.dispatchEvent({
+        type: 'message.new',
+        message: generateMsg({
+          cid: channel.cid,
+          parent_id: thread.id,
+          text,
+        }) as MessageResponse,
+        user: { id: 'bob' },
+      });
+    const replyTexts = (thread: Thread) => repliesOf(thread).map((m) => m.text);
+
+    it('delivers a reply only to its own thread', () => {
+      const first = openThread(uuidv4());
+      const second = openThread(uuidv4());
+      const secondHandler = vi.spyOn(second, 'handleNewReply');
+
+      dispatchReply(first, 'for first');
+
+      expect(replyTexts(first)).to.deep.equal(['for first']);
+      expect(secondHandler).not.toHaveBeenCalled();
+    });
+
+    it('delivers a message event to the thread it replies in and the thread it starts, only', () => {
+      const [inReply, started, unrelated] = [uuidv4(), uuidv4(), uuidv4()].map(
+        openThread,
+      );
+      const handlers = [inReply, started, unrelated].map((thread) =>
+        vi.spyOn(thread, 'handleMessageUpdated'),
+      );
+
+      client.dispatchEvent({
+        type: 'message.updated',
+        message: generateMsg({
+          cid: channel.cid,
+          parent_id: inReply.id,
+        }) as MessageResponse,
+        user: { id: 'bob' },
+      });
+      client.dispatchEvent({
+        type: 'message.updated',
+        message: { ...parentMessageResponse, id: started.id, text: 'edited parent' },
+        user: { id: 'bob' },
+      });
+
+      expect(handlers.map((handler) => handler.mock.calls.length)).to.deep.equal([
+        1, 1, 0,
+      ]);
+    });
+
+    it("delivers a user's message deletion to every stored thread", () => {
+      const threads = [uuidv4(), uuidv4()].map(openThread);
+      const handlers = threads.map((thread) =>
+        vi.spyOn(thread, 'handleUserMessagesDeleted'),
+      );
+
+      client.dispatchEvent({ type: 'user.messages.deleted', user: { id: 'bob' } });
+
+      handlers.forEach((handler) => expect(handler).toHaveBeenCalledTimes(1));
+    });
+
+    it('gives nothing to a thread the manager does not hold, even one subscribed by hand', () => {
+      client.threads.registerSubscriptions();
+      const thread = createMinimalThread({ parentMessageOverrides: { id: uuidv4() } });
+      thread.registerSubscriptions();
+
+      dispatchReply(thread, 'unheard');
+
+      expect(client.threads.get(thread.id)).to.be.undefined;
+      expect(replyTexts(thread)).to.deep.equal([]);
+    });
+
+    it('routes nothing until the manager is subscribed, and nothing after it unsubscribes', () => {
+      const thread = client.threads.ensure({
+        channel,
+        parentMessage: { ...parentMessageResponse, id: uuidv4() },
+      });
+
+      dispatchReply(thread, 'before');
+      client.threads.registerSubscriptions();
+      dispatchReply(thread, 'during');
+      client.threads.unregisterSubscriptions();
+      dispatchReply(thread, 'after');
+
+      expect(replyTexts(thread)).to.deep.equal(['during']);
+    });
+
+    it('adds no client listeners for the threads it holds', () => {
+      client.threads.registerSubscriptions();
+      const listenerCount = () =>
+        [...client.listeners.values()].reduce((sum, set) => sum + set.size, 0);
+      const before = listenerCount();
+
+      [uuidv4(), uuidv4(), uuidv4()].forEach(openThread);
+
+      expect(listenerCount()).to.equal(before);
     });
   });
 });

@@ -68,6 +68,7 @@ export const THREAD_MANAGER_INITIAL_STATE: ThreadManagerState = {
 const logger = chatLoggerSystem.getLogger('thread-manager');
 
 const getThreadId = (thread: Thread) => thread.id;
+
 /** `threadStore` holder for a thread opened this session (`register()`, from `thread.activate()`). */
 const REGISTERED_HOLDER: EntityStoreSubscriber = { onEntitiesChanged: () => undefined };
 
@@ -279,9 +280,76 @@ export class ThreadManager extends WithSubscriptions {
     this.addUnsubscribeFunction(this.subscribeReloadOnActivation());
     this.addUnsubscribeFunction(this.subscribeNewReplies());
     this.addUnsubscribeFunction(this.subscribeReloadOnConnectionRecovered());
+    this.addUnsubscribeFunction(this.subscribeThreadEvents());
     // The list's threads are registered by `subscribeManageThreadSubscriptions`; this covers the
     // opened ones it does not hold.
     this.threadStore.values().forEach((thread) => thread.registerSubscriptions());
+  };
+
+  /**
+   * Hands client events to the threads in the store by id, as `PollManager` does for polls: a thread
+   * doesn't listen to the client itself. A message event goes to the thread the message is a reply
+   * in and the thread it starts; quoted-message updates stay within the reply's own thread, as on
+   * `master`.
+   */
+  private subscribeThreadEvents = () => {
+    const threadsOf = (message?: { id: string; parent_id?: string }) =>
+      message
+        ? [
+            message.parent_id ? this.get(message.parent_id) : undefined,
+            this.get(message.id),
+          ]
+        : [];
+
+    const unsubscribeFunctions = [
+      this.client.on('message.new', (event) => {
+        if (event.message?.parent_id)
+          this.get(event.message.parent_id)?.handleNewReply(event);
+      }),
+      this.client.on('message.read', (event) => {
+        if (event.thread)
+          this.get(event.thread.parent_message_id)?.handleRepliesRead(event);
+      }),
+      this.client.on('notification.mark_unread', (event) => {
+        if (event.thread_id) this.get(event.thread_id)?.handleRepliesUnread(event);
+      }),
+      this.client.on('thread.updated', (event) => {
+        if (event.thread)
+          this.get(event.thread.parent_message_id)?.handleThreadUpdated(event);
+      }),
+      this.client.on('message.deleted', (event) =>
+        threadsOf(event.message).forEach((thread) => thread?.handleMessageDeleted(event)),
+      ),
+      ...(['message.updated', 'message.undeleted'] as const).map((eventType) =>
+        this.client.on(eventType, (event) =>
+          threadsOf(event.message).forEach((thread) =>
+            thread?.handleMessageUpdated(event),
+          ),
+        ),
+      ),
+      ...(['reaction.new', 'reaction.deleted', 'reaction.updated'] as const).map(
+        (eventType) =>
+          this.client.on(eventType, (event) =>
+            threadsOf(event.message).forEach((thread) =>
+              thread?.handleReactionChanged(event),
+            ),
+          ),
+      ),
+      // A banned or deleted user's replies can be in any thread, so these two are the exception.
+      ...(['user.messages.deleted', 'user.deleted'] as const).map((eventType) =>
+        this.client.on(eventType, (event) =>
+          this.threadStore
+            .values()
+            .forEach((thread) => thread.handleUserMessagesDeleted(event)),
+        ),
+      ),
+      this.client.on('user.watching.stop', (event) => {
+        if (event.user?.id !== this.client.userId) return;
+        this.threadStore.values().forEach((thread) => thread.handleWatchingStop(event));
+      }),
+    ].map(({ unsubscribe }) => unsubscribe);
+
+    return () => unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
   };
 
   private subscribeUnreadThreadsCountChange = () => {

@@ -2,7 +2,7 @@ import { StateStore } from '@stream-io/state-store';
 import { formatMessage } from './utils';
 import type {
   DraftResponse,
-  EventType,
+  EventPayload,
   LocalMessage,
   MarkReadRequest,
   MarkReadResponse,
@@ -524,16 +524,8 @@ export class Thread extends WithMessageOperations(WithSubscriptions) {
 
     this.addUnsubscribeFunction(this.subscribeThreadSetupStateChange());
     this.addUnsubscribeFunction(this.subscribeParentMessageFromStore());
-    this.addUnsubscribeFunction(this.subscribeThreadUpdated());
     this.addUnsubscribeFunction(this.subscribeMarkActiveThreadRead());
     this.addUnsubscribeFunction(this.subscribeReloadActiveStaleThread());
-    this.addUnsubscribeFunction(this.subscribeMarkThreadStale());
-    this.addUnsubscribeFunction(this.subscribeNewReplies());
-    this.addUnsubscribeFunction(this.subscribeRepliesRead());
-    this.addUnsubscribeFunction(this.subscribeRepliesUnread());
-    this.addUnsubscribeFunction(this.subscribeMessageDeleted());
-    this.addUnsubscribeFunction(this.subscribeMessageUpdated());
-    this.addUnsubscribeFunction(this.subscribeUserMessagesDeleted());
   };
 
   /**
@@ -573,21 +565,20 @@ export class Thread extends WithMessageOperations(WithSubscriptions) {
       alsoWatch: ['messagePaginator', 'messageOperations'],
     });
 
-  private subscribeThreadUpdated = () =>
-    this.client.on('thread.updated', (event) => {
-      if (!event.thread || event.thread.parent_message_id !== this.id) {
-        return;
-      }
+  public handleThreadUpdated = (event: EventPayload<'thread.updated'>) => {
+    if (!event.thread || event.thread.parent_message_id !== this.id) {
+      return;
+    }
 
-      const threadData = event.thread;
+    const threadData = event.thread;
 
-      this.state.partialNext({
-        title: threadData.title,
-        updatedAt: threadData.updated_at,
-        deletedAt: threadData.deleted_at ?? null,
-        custom: threadData.custom ?? {},
-      });
-    }).unsubscribe;
+    this.state.partialNext({
+      title: threadData.title,
+      updatedAt: threadData.updated_at,
+      deletedAt: threadData.deleted_at ?? null,
+      custom: threadData.custom ?? {},
+    });
+  };
 
   private subscribeMarkActiveThreadRead = () =>
     this.state.subscribeWithSelector(
@@ -611,218 +602,185 @@ export class Thread extends WithMessageOperations(WithSubscriptions) {
       },
     );
 
-  private subscribeMarkThreadStale = () =>
-    this.client.on('user.watching.stop', (event: PipelineEvent) => {
-      const { channel } = this.state.getLatestValue();
+  public handleWatchingStop = (event: PipelineEvent) => {
+    const { channel } = this.state.getLatestValue();
 
-      if (
-        !this.client.userId ||
-        this.client.userId !== event.user?.id ||
-        event.channel?.cid !== channel.cid
-      ) {
-        return;
-      }
+    if (
+      !this.client.userId ||
+      this.client.userId !== event.user?.id ||
+      event.channel?.cid !== channel.cid
+    ) {
+      return;
+    }
 
-      this.state.partialNext({ isStateStale: true });
-    }).unsubscribe;
-
-  private subscribeRepliesUnread = () =>
-    this.client.on('notification.mark_unread', (event) => {
-      if (!event.user || event.created_at == null || !event.thread_id) return;
-      if (event.thread_id !== this.id) return;
-
-      const userId = event.user.id;
-      const createdAt = event.created_at;
-      const user = event.user;
-
-      this.state.next((current) => ({
-        ...current,
-        read: {
-          ...current.read,
-          [userId]: {
-            ...current.read[userId],
-            lastReadAt: timestampOr(event.last_read_at, createdAt),
-            user,
-            firstUnreadMessageId: event.first_unread_message_id,
-            unreadMessageCount: event.unread_messages ?? 0,
-          },
-        },
-      }));
-    }).unsubscribe;
-
-  private subscribeNewReplies = () =>
-    this.client.on('message.new', (event) => {
-      if (!this.client.userId || event.message?.parent_id !== this.id) {
-        return;
-      }
-
-      const isOwnMessage = event.message.user?.id === this.client.userId;
-      const { active, read } = this.state.getLatestValue();
-
-      this.upsertReplyLocally({
-        message: event.message,
-        // MessageRequest from current user could have been added optimistically,
-        // so the actual timestamp might differ in the event
-        timestampChanged: isOwnMessage,
-      });
-
-      if (active) {
-        this.throttledMarkRead();
-      }
-
-      const nextRead: ThreadReadState = {};
-
-      for (const userId of Object.keys(read)) {
-        const userRead = read[userId];
-
-        if (userRead) {
-          let nextUserRead: ThreadUserReadState = userRead;
-
-          if (userId === event.user?.id) {
-            // The user who just sent a message to the thread has no unread messages
-            // in that thread
-            nextUserRead = {
-              ...nextUserRead,
-              lastReadAt: timestampOr(event.created_at, nowNs()),
-              user: event.user,
-              unreadMessageCount: 0,
-            };
-          } else if (active && userId === this.client.userId) {
-            // Do not increment unread count for the current user in an active thread
-          } else {
-            // Increment unread count for all users except the author of the new message
-            nextUserRead = {
-              ...nextUserRead,
-              unreadMessageCount: userRead.unreadMessageCount + 1,
-            };
-          }
-
-          nextRead[userId] = nextUserRead;
-        }
-      }
-
-      this.state.partialNext({ read: nextRead });
-    }).unsubscribe;
-
-  private subscribeRepliesRead = () =>
-    this.client.on('message.read', (event) => {
-      if (!event.user || event.created_at == null || !event.thread) return;
-      if (event.thread.parent_message_id !== this.id) return;
-
-      const userId = event.user.id;
-      const createdAt = event.created_at;
-      const user = event.user;
-
-      this.state.next((current) => ({
-        ...current,
-        read: {
-          ...current.read,
-          [userId]: {
-            lastReadAt: createdAt,
-            user,
-            lastReadMessageId: event.last_read_message_id,
-            unreadMessageCount: 0,
-          },
-        },
-      }));
-    }).unsubscribe;
-
-  private subscribeMessageDeleted = () =>
-    this.client.on('message.deleted', (event) => {
-      if (!event.message) return;
-      const formattedMessage = formatMessage(event.message);
-
-      // Deleted message is a reply of this thread
-      if (event.message.parent_id === this.id) {
-        if (event.hard_delete) {
-          this.deleteReplyLocally({ message: event.message });
-        } else {
-          // Handle soft delete (updates deleted_at timestamp)
-          this.upsertReplyLocally({ message: event.message });
-        }
-      }
-
-      // Deleted message is parent message of this thread
-      if (event.message.id === this.id) {
-        this.updateParentMessageLocally({ message: event.message });
-      }
-
-      this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
-    }).unsubscribe;
-
-  private subscribeMessageUpdated = () => {
-    const messageUpdateTypes: EventType[] = ['message.updated', 'message.undeleted'];
-    const reactionTypes: EventType[] = [
-      'reaction.new',
-      'reaction.deleted',
-      'reaction.updated',
-    ];
-
-    const unsubscribeMessageUpdated = messageUpdateTypes.map(
-      (eventType) =>
-        this.client.on(eventType, (event: PipelineEvent) => {
-          if (!event.message) return;
-          // A `message.updated` WS event carries `own_reactions: []`; upserting it verbatim would
-          // wipe the current user's reactions on an edit. Preserve them off the copy we already hold
-          // — the reply paginator for a reply, `state.parentMessage` for the parent (the parent is
-          // not held in any paginator, so it needs the same treatment directly).
-          const message =
-            event.message.parent_id === this.id
-              ? {
-                  ...event.message,
-                  own_reactions:
-                    this.messagePaginator.getItem(event.message.id)?.own_reactions ??
-                    event.message.own_reactions,
-                }
-              : !event.message.parent_id && event.message.id === this.id
-                ? {
-                    ...event.message,
-                    own_reactions:
-                      this.state.getLatestValue().parentMessage?.own_reactions ??
-                      event.message.own_reactions,
-                  }
-                : event.message;
-          this.updateParentMessageOrReplyLocally(message);
-          this.messagePaginator.reflectQuotedMessageUpdate(formatMessage(event.message));
-        }).unsubscribe,
-    );
-
-    const unsubscribeReactions = reactionTypes.map(
-      (eventType) =>
-        this.client.on(eventType, (event: PipelineEvent) => {
-          if (!event.message || !event.reaction) return;
-          const { message } = event;
-          this.messagePaginator.reflectQuotedMessageUpdate(formatMessage(message));
-        }).unsubscribe,
-    );
-
-    const unsubscribeFunctions = [...unsubscribeMessageUpdated, ...unsubscribeReactions];
-
-    return () => unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
+    this.state.partialNext({ isStateStale: true });
   };
 
-  private subscribeUserMessagesDeleted = () => {
-    // Apply a user ban / deletion to this thread's own reply list. Previously
-    // channel.state.deleteUserMessages marked banned-user replies deleted in the (now removed)
-    // channel.state.threads shadow; the reply paginator is the thread's source of truth now.
-    const eventTypes: EventType[] = ['user.messages.deleted', 'user.deleted'];
+  public handleRepliesUnread = (event: EventPayload<'notification.mark_unread'>) => {
+    if (!event.user || event.created_at == null || !event.thread_id) return;
+    if (event.thread_id !== this.id) return;
 
-    const unsubscribeFunctions = eventTypes.map(
-      (eventType) =>
-        this.client.on(eventType, (event: PipelineEvent) => {
-          if (!event.user) return;
-          // user.deleted carries the deletion time on the user; user.messages.deleted on the event.
-          const deletedAtSource =
-            eventType === 'user.deleted' ? event.user.deleted_at : event.created_at;
-          this.messagePaginator.applyMessageDeletionForUser({
-            userId: event.user.id,
-            hardDelete: !!event.hard_delete,
-            deletedAt: deletedAtSource ?? nowNs(),
-          });
-        }).unsubscribe,
-    );
+    const userId = event.user.id;
+    const createdAt = event.created_at;
+    const user = event.user;
 
-    return () => unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
+    this.state.next((current) => ({
+      ...current,
+      read: {
+        ...current.read,
+        [userId]: {
+          ...current.read[userId],
+          lastReadAt: timestampOr(event.last_read_at, createdAt),
+          user,
+          firstUnreadMessageId: event.first_unread_message_id,
+          unreadMessageCount: event.unread_messages ?? 0,
+        },
+      },
+    }));
+  };
+
+  public handleNewReply = (event: EventPayload<'message.new'>) => {
+    if (!this.client.userId || event.message?.parent_id !== this.id) {
+      return;
+    }
+
+    const isOwnMessage = event.message.user?.id === this.client.userId;
+    const { active, read } = this.state.getLatestValue();
+
+    this.upsertReplyLocally({
+      message: event.message,
+      // MessageRequest from current user could have been added optimistically,
+      // so the actual timestamp might differ in the event
+      timestampChanged: isOwnMessage,
+    });
+
+    if (active) {
+      this.throttledMarkRead();
+    }
+
+    const nextRead: ThreadReadState = {};
+
+    for (const userId of Object.keys(read)) {
+      const userRead = read[userId];
+
+      if (userRead) {
+        let nextUserRead: ThreadUserReadState = userRead;
+
+        if (userId === event.user?.id) {
+          // The user who just sent a message to the thread has no unread messages
+          // in that thread
+          nextUserRead = {
+            ...nextUserRead,
+            lastReadAt: timestampOr(event.created_at, nowNs()),
+            user: event.user,
+            unreadMessageCount: 0,
+          };
+        } else if (active && userId === this.client.userId) {
+          // Do not increment unread count for the current user in an active thread
+        } else {
+          // Increment unread count for all users except the author of the new message
+          nextUserRead = {
+            ...nextUserRead,
+            unreadMessageCount: userRead.unreadMessageCount + 1,
+          };
+        }
+
+        nextRead[userId] = nextUserRead;
+      }
+    }
+
+    this.state.partialNext({ read: nextRead });
+  };
+
+  public handleRepliesRead = (event: EventPayload<'message.read'>) => {
+    if (!event.user || event.created_at == null || !event.thread) return;
+    if (event.thread.parent_message_id !== this.id) return;
+
+    const userId = event.user.id;
+    const createdAt = event.created_at;
+    const user = event.user;
+
+    this.state.next((current) => ({
+      ...current,
+      read: {
+        ...current.read,
+        [userId]: {
+          lastReadAt: createdAt,
+          user,
+          lastReadMessageId: event.last_read_message_id,
+          unreadMessageCount: 0,
+        },
+      },
+    }));
+  };
+
+  public handleMessageDeleted = (event: EventPayload<'message.deleted'>) => {
+    if (!event.message) return;
+    const formattedMessage = formatMessage(event.message);
+
+    // Deleted message is a reply of this thread
+    if (event.message.parent_id === this.id) {
+      if (event.hard_delete) {
+        this.deleteReplyLocally({ message: event.message });
+      } else {
+        // Handle soft delete (updates deleted_at timestamp)
+        this.upsertReplyLocally({ message: event.message });
+      }
+    }
+
+    // Deleted message is parent message of this thread
+    if (event.message.id === this.id) {
+      this.updateParentMessageLocally({ message: event.message });
+    }
+
+    this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
+  };
+
+  public handleMessageUpdated = (event: PipelineEvent) => {
+    if (!event.message) return;
+    // A `message.updated` WS event carries `own_reactions: []`; upserting it verbatim would
+    // wipe the current user's reactions on an edit. Preserve them off the copy we already hold
+    // — the reply paginator for a reply, `state.parentMessage` for the parent (the parent is
+    // not held in any paginator, so it needs the same treatment directly).
+    const message =
+      event.message.parent_id === this.id
+        ? {
+            ...event.message,
+            own_reactions:
+              this.messagePaginator.getItem(event.message.id)?.own_reactions ??
+              event.message.own_reactions,
+          }
+        : !event.message.parent_id && event.message.id === this.id
+          ? {
+              ...event.message,
+              own_reactions:
+                this.state.getLatestValue().parentMessage?.own_reactions ??
+                event.message.own_reactions,
+            }
+          : event.message;
+    this.updateParentMessageOrReplyLocally(message);
+    this.messagePaginator.reflectQuotedMessageUpdate(formatMessage(event.message));
+  };
+
+  public handleReactionChanged = (event: PipelineEvent) => {
+    if (!event.message || !event.reaction) return;
+    const { message } = event;
+    this.messagePaginator.reflectQuotedMessageUpdate(formatMessage(message));
+  };
+
+  // Apply a user ban / deletion to this thread's own reply list. Previously
+  // channel.state.deleteUserMessages marked banned-user replies deleted in the (now removed)
+  // channel.state.threads shadow; the reply paginator is the thread's source of truth now.
+  public handleUserMessagesDeleted = (event: PipelineEvent) => {
+    if (!event.user) return;
+    // user.deleted carries the deletion time on the user; user.messages.deleted on the event.
+    const deletedAtSource =
+      event.type === 'user.deleted' ? event.user.deleted_at : event.created_at;
+    this.messagePaginator.applyMessageDeletionForUser({
+      userId: event.user.id,
+      hardDelete: !!event.hard_delete,
+      deletedAt: deletedAtSource ?? nowNs(),
+    });
   };
 
   // The parent message lives in the client-global message store (one canonical POJO per id);

@@ -105,7 +105,8 @@ describe('publish amplification — one event, one publish per collection', () =
       isLastPage: true,
       valueOrFactory: (current) => [thread, ...current],
     });
-    thread.registerSubscriptions();
+    // Subscribes the listed thread, and routes its events to it.
+    client.threads.registerSubscriptions();
 
     const recorder = recordPublishes({
       main: channel.messagePaginator,

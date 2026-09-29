@@ -934,6 +934,11 @@ activated.
 `client.threads.get(id)` only looks a thread up, and `client.threads.paginator.getItem(id)` answers
 whether the list holds it.
 
+A thread no longer listens to the client itself: `client.threads` hands each thread event to the
+threads it holds, the way `client.polls` does for polls. A thread therefore gets events only once
+`client.threads` holds it (listed, `ensure()`d or activated) and `client.threads.registerSubscriptions()`
+has run; calling `thread.registerSubscriptions()` on a thread you built yourself is no longer enough.
+
 ### The thread list is a `ThreadPaginator`
 
 `client.threads.paginator` holds the list, in the order `queryThreads` returns it. There is no
