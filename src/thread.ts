@@ -241,6 +241,7 @@ export class Thread extends WithSubscriptions {
       replyCount,
       replies,
       updatedAt,
+      pagination,
     } = thread.state.getLatestValue();
 
     // Preserve pending replies and append them to the updated list of replies
@@ -257,6 +258,12 @@ export class Thread extends WithSubscriptions {
       replyCount,
       replies: pendingReplies.length ? replies.concat(pendingReplies) : replies,
       updatedAt,
+      // the cursors have to match the hydrated replies, the loading flags belong to this instance
+      pagination: {
+        ...this.state.getLatestValue().pagination,
+        nextCursor: pagination.nextCursor,
+        prevCursor: pagination.prevCursor,
+      },
       isStateStale: false,
     });
   };
