@@ -1438,6 +1438,88 @@ describe('ChannelPaginator', () => {
         );
       });
 
+      describe('replacing the cache-seeded window with the refreshed first page', () => {
+        const channel = (id: string) => new Channel(client, 'type', id, {});
+
+        const seedAndSync = async (cached: Channel[], pageSize: number) => {
+          await setUpOfflineDb({ isSynced: false });
+          getChannelsForQuery.mockResolvedValue({ channels: cached.map(() => ({})) });
+          vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue(cached);
+          const queryChannels = vi.spyOn(client, 'queryChannelsAndHydrate');
+          const paginator = new ChannelPaginator({
+            client,
+            filters: {},
+            paginatorOptions: { pageSize },
+          });
+
+          await paginator.toTail(); // cold start: surface the cache, defer the query
+          expect(paginator.items).toEqual(cached);
+          client.offlineDb!.syncManager.isSynced = true;
+          const runDeferredRefresh = async () => {
+            const calls = scheduleSyncStatusChangeCallback.mock.calls;
+            await calls[calls.length - 1][1]();
+          };
+
+          return { paginator, queryChannels, runDeferredRefresh };
+        };
+
+        it('drops cached channels the server no longer returns and paginates after the page', async () => {
+          // Regression: the refresh MERGED into the cache, so channels hidden, deleted or left while the
+          // app was closed stayed in the list, and pagination continued from the end of page 1 while the
+          // whole cache stayed loaded - the next pages re-fetched cached channels and looked stuck.
+          const { paginator, queryChannels, runDeferredRefresh } = await seedAndSync(
+            ['a', 'hidden', 'b', 'c', 'd'].map(channel),
+            2,
+          );
+          queryChannels
+            .mockResolvedValueOnce({
+              channels: [channel('a'), channel('b')],
+              duration: '0.1ms',
+            })
+            .mockResolvedValueOnce({
+              channels: [channel('c'), channel('d')],
+              duration: '0.1ms',
+            });
+
+          await runDeferredRefresh();
+
+          expect(queryChannels.mock.calls[0][0]).toEqual(
+            expect.objectContaining({ offset: 0 }),
+          );
+          expect(paginator.items?.map(({ id }) => id)).toEqual(['a', 'b']);
+          expect(paginator.offset).toBe(2);
+
+          await paginator.toTail();
+
+          expect(queryChannels.mock.calls[1][0]).toEqual(
+            expect.objectContaining({ offset: 2 }),
+          );
+          expect(paginator.items?.map(({ id }) => id)).toEqual(['a', 'b', 'c', 'd']);
+        });
+
+        it('replaces the cached window in a single update, without blanking it', async () => {
+          const { paginator, queryChannels, runDeferredRefresh } = await seedAndSync(
+            ['a', 'hidden'].map(channel),
+            2,
+          );
+          queryChannels.mockResolvedValueOnce({
+            channels: [channel('a')],
+            duration: '0.1ms',
+          });
+          const publishedItems: Array<string[] | undefined> = [];
+          const unsubscribe = paginator.state.subscribeWithSelector(
+            ({ items }) => ({ items }),
+            ({ items }) => publishedItems.push(items?.map(({ id }) => id)),
+          );
+          publishedItems.length = 0; // drop the subscription's initial value
+
+          await runDeferredRefresh();
+          unsubscribe();
+
+          expect(publishedItems).toEqual([['a']]);
+        });
+      });
+
       it('does not continue from the seeded position once the sync completes', async () => {
         const { cached, paginator, queryChannels } = await seedFromCache();
 

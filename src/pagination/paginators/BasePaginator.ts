@@ -944,6 +944,17 @@ export abstract class BasePaginator<T, Q> {
    * {@link setIntervals}), which bypasses the per-interval {@link commitInterval}/{@link dropInterval}
    * publishing. No-ops when the views are already empty so a reset does not emit needlessly.
    */
+  /**
+   * Drops every loaded interval and item without publishing anything, so the next ingest starts from
+   * empty storage while `state.items` keeps showing the previous window until the caller publishes.
+   */
+  protected clearItemStorage() {
+    this.setIntervals([]);
+    this.setActiveInterval(undefined);
+    this._itemIndex.clear();
+    this.clearIntervalViews();
+  }
+
   protected clearIntervalViews() {
     this._pendingViewChangedIds.clear();
     const { logicalHead, logicalTail, anchoredHead } =
@@ -3130,10 +3141,7 @@ export abstract class BasePaginator<T, Q> {
     // adjacent pages merge; filter/sort changes clear it via `resetState()` in their setters.
     const isForcedReset = reset === 'yes' && !keepPreviousItems;
     if (isForcedReset) {
-      this.setIntervals([]);
-      this.setActiveInterval(undefined);
-      this._itemIndex.clear();
-      this.clearIntervalViews();
+      this.clearItemStorage();
       this.state.next(this.getStateBeforeFirstQuery());
     } else if (reset === 'yes' && !forcedQueryShape) {
       // A `keepPreviousItems` refresh (reconnect / pull-to-refresh) must still restart pagination from
