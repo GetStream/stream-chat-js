@@ -3243,6 +3243,12 @@ export abstract class BasePaginator<T, Q> {
     stateUpdate.items = filteredItems;
 
     const isJumpQuery = !!queryShape && this.isJumpQueryShape(queryShape);
+    // A non-destructive refresh merges page 1 into the window it kept, so the ids that window held
+    // have to be read before the ingest below adds the page to it.
+    const keptItemIds =
+      isFirstPage && keepPreviousItems && !this.isCursorPagination && this.items?.length
+        ? new Set(this.items.map((item) => this.getItemId(item)))
+        : undefined;
     const interval = this.ingestPage({
       page: stateUpdate.items,
       policy: isJumpQuery ? 'strict-overlap-only' : 'auto',
@@ -3313,6 +3319,19 @@ export abstract class BasePaginator<T, Q> {
       // todo: we could keep the offset in two directions (initial tailward offset would be taken from config.initialOffset)
       const startOffset = this.offset ?? 0;
       stateUpdate.offset = startOffset + items.length;
+      // After a `keepPreviousItems` refresh whose page connects to the kept window, continue from the window's end instead of re-fetching it.
+      const lastPageItem = items[items.length - 1];
+      if (
+        interval &&
+        keptItemIds &&
+        lastPageItem &&
+        keptItemIds.has(this.getItemId(lastPageItem))
+      ) {
+        stateUpdate.offset = Math.max(
+          stateUpdate.offset,
+          startOffset + this.intervalToItems(interval).length,
+        );
+      }
       // Only hasMoreTail depends on the page result. hasMoreHead is fixed by where the loaded window
       // starts (offset 0 => head loaded) and was anchored once at the reset (getStateBeforeFirstQuery);
       // the offset only grows tailward from here, so leave hasMoreHead untouched.

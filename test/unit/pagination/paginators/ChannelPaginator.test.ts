@@ -1675,6 +1675,32 @@ describe('ChannelPaginator', () => {
       expect(paginator.offset).toBe(1);
       expect(paginator.items?.map(({ cid }) => cid)).toEqual([channel1.cid]);
     });
+
+    it('continues after the loaded list when a non-destructive refresh re-fetched page 1', async () => {
+      // The refresh `ChannelManager.recover()` runs on reconnect. Regression: it left the position at
+      // the end of page 1 while every loaded page stayed in the list, so the next two pages were
+      // re-fetched (offset 2, then 4) before anything new arrived.
+      const channel = (id: string) => new Channel(client, 'type', id, {});
+      const [a, b, c, d, e, f, g] = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map(channel);
+      const paginator = new ChannelPaginator({
+        client,
+        paginatorOptions: { pageSize: 2 },
+      });
+      const spy = mockPages([[a, b], [c, d], [e, f], [a, b], [g]]);
+
+      await paginator.toTail();
+      await paginator.toTail();
+      await paginator.toTail();
+      await paginator.toTail({ keepPreviousItems: true, reset: 'yes' });
+
+      expect(spy.mock.calls[3][0]).toMatchObject({ offset: 0 });
+      expect(paginator.items).toHaveLength(6);
+
+      await paginator.toTail();
+
+      expect(spy.mock.calls[4][0]).toMatchObject({ offset: 6 });
+      expect(paginator.items).toHaveLength(7);
+    });
   });
 
   describe('predefined filter response metadata', () => {
