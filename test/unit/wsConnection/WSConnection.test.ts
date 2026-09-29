@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StreamChat } from '../../../src';
 import { StableWSConnection } from '../../../src/connection';
+import {
+  ConnectionState,
+  WSConnectionFallback,
+} from '../../../src/connection/WSConnectionFallback';
 
 describe('client.wsConnection', () => {
   let client: StreamChat;
@@ -99,6 +103,21 @@ describe('client.wsConnection', () => {
 
       expect(currentApply).toHaveBeenCalledWith(false);
       expect(staleApply).not.toHaveBeenCalled();
+    });
+
+    it('routes network status to the long-poll once switched to it', () => {
+      const socket = new StableWSConnection({ wsConnection: client.wsConnection });
+      client.wsConnection.connection = socket;
+      const fallback = new WSConnectionFallback({ client });
+      client.wsConnection.fallback = fallback;
+
+      const socketApply = vi.spyOn(socket, '_applyNetworkStatus');
+      const fallbackApply = vi.spyOn(fallback, '_applyNetworkStatus');
+
+      client.networkConnection.setStatus(false);
+
+      expect(fallbackApply).toHaveBeenCalledWith(false);
+      expect(socketApply).not.toHaveBeenCalled();
     });
 
     it('registers exactly one listener however many sockets come and go', () => {
@@ -312,6 +331,35 @@ describe('client.wsConnection', () => {
       await client.wsConnection.disconnect(0);
 
       expect(disconnect).toHaveBeenCalledWith(0);
+    });
+
+    it('forwards disconnect to the long-poll too', async () => {
+      const connection = client.wsConnection.connection;
+      if (!connection) throw new Error('socket missing');
+      const disconnect = vi.spyOn(connection, 'disconnect').mockResolvedValue(undefined);
+      const fallback = new WSConnectionFallback({ client });
+      client.wsConnection.fallback = fallback;
+      const fallbackDisconnect = vi
+        .spyOn(fallback, 'disconnect')
+        .mockResolvedValue(undefined);
+
+      await client.wsConnection.disconnect(0);
+
+      expect(disconnect).toHaveBeenCalledWith(0);
+      expect(fallbackDisconnect).toHaveBeenCalledWith(0);
+    });
+
+    it('forwards isConnecting from the long-poll once switched to it', () => {
+      const connection = client.wsConnection.connection;
+      if (!connection) throw new Error('socket missing');
+      connection.isConnecting = true;
+      const fallback = new WSConnectionFallback({ client });
+      client.wsConnection.fallback = fallback;
+
+      expect(client.wsConnection.isConnecting).toBe(false);
+
+      fallback.state = ConnectionState.Connecting;
+      expect(client.wsConnection.isConnecting).toBe(true);
     });
 
     it('forwards onlineStatusChanged, which React Native still calls directly', () => {

@@ -1,6 +1,5 @@
 import type { AxiosRequestConfig, CancelTokenSource } from 'axios';
 import axios from 'axios';
-import type { Unsubscribe } from '@stream-io/state-store';
 import type { StreamChat } from '../client';
 import { retryInterval, sleep } from '../utils';
 import { isAPIError, isConnectionIDError, isErrorRetryable } from '../errors';
@@ -26,23 +25,11 @@ export class WSConnectionFallback {
   consecutiveFailures: number;
   connectionID?: string;
   cancelToken?: CancelTokenSource;
-  /** Stands in for v9's `window` online/offline listeners: set in the constructor, undone by `disconnect()`. */
-  private unsubscribeNetworkStatus?: Unsubscribe;
 
   constructor({ client }: { client: StreamChat }) {
     this.client = client;
     this.state = ConnectionState.Init;
     this.consecutiveFailures = 0;
-
-    this.unsubscribeNetworkStatus = client.networkConnection.state.subscribeWithSelector(
-      ({ isOnline }) => ({ isOnline }),
-      ({ isOnline }, previous) => {
-        // Changes only, as a `window` listener saw them: the first call is the current value, and
-        // `undefined` means no reporter has said anything yet.
-        if (!previous || typeof isOnline !== 'boolean') return;
-        this._onlineStatusChanged({ type: isOnline ? 'online' : 'offline' });
-      },
-    );
   }
 
   _log(msg: string, extra: UR = {}, level: LogLevel = 'info') {
@@ -72,18 +59,28 @@ export class WSConnectionFallback {
     this.state = state;
   }
 
-  /** @private */
-  _onlineStatusChanged = (event: { type: string }) => {
-    this._log(`_onlineStatusChanged() - ${event.type}`);
+  /**
+   * Applies a change in the device's network status. Stands in for v9's `window` online/offline
+   * listeners: `WSConnection` routes the network-status store here once it has switched to this
+   * long-poll.
+   *
+   * @internal
+   */
+  _applyNetworkStatus = (online: boolean) => {
+    // Closed on purpose by `disconnect()`: going offline would move it to `Closed`, and the next
+    // online would reconnect it.
+    if (this.state === ConnectionState.Disconnected) return;
 
-    if (event.type === 'offline') {
+    this._log(`_applyNetworkStatus() - ${online ? 'online' : 'offline'}`);
+
+    if (!online) {
       this._setState(ConnectionState.Closed);
       this.cancelToken?.cancel('disconnect() is called');
       this.cancelToken = undefined;
       return;
     }
 
-    if (event.type === 'online' && this.state === ConnectionState.Closed) {
+    if (this.state === ConnectionState.Closed) {
       this.connect(true);
     }
   };
@@ -211,10 +208,12 @@ export class WSConnectionFallback {
    */
   isHealthy = () => !!this.connectionID && this.state === ConnectionState.Connected;
 
-  disconnect = async (timeout = 2000) => {
-    this.unsubscribeNetworkStatus?.();
-    this.unsubscribeNetworkStatus = undefined;
+  /** Whether a connect request is in flight. */
+  get isConnecting() {
+    return this.state === ConnectionState.Connecting;
+  }
 
+  disconnect = async (timeout = 2000) => {
     this._setState(ConnectionState.Disconnected);
     this.cancelToken?.cancel('disconnect() is called');
     this.cancelToken = undefined;

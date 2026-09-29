@@ -60,7 +60,6 @@ import type {
   UserResponse,
 } from './types';
 import { isWSFailure } from './errors';
-import { WSConnectionFallback } from './connection/WSConnectionFallback';
 import type { APIError } from './errors';
 import { chatLoggerSystem } from './logger';
 import { queueOrRun } from './offline-support/queueableOperations';
@@ -188,7 +187,7 @@ export class StreamChat extends ChatApi {
   /**
    * The connection id — the WebSocket's, or the long-poll's after an `enableWSFallback`
    * switch — and the one place the rest of the client reads it from. The long-poll keeps its
-   * own copy (`wsFallback.connectionID`) only to address its own polls and close.
+   * own copy (`wsConnection.fallback.connectionID`) only to address its own polls and close.
    *
    * The server keys channel watches and presence subscriptions by it, so a request carrying either
    * waits here for the handshake rather than racing it. See `requiresConnectionId` in
@@ -241,8 +240,6 @@ export class StreamChat extends ChatApi {
   userAgent?: string;
   wsBaseURL?: string;
   wsConnection: WSConnection;
-  /** The long-poll transport, set once `enableWSFallback` has switched away from the WebSocket. */
-  wsFallback?: WSConnectionFallback;
   wsPromise: ConnectAPIResponse | null;
   private _wsPromiseSettled = true;
   private _wsConnectId = 0;
@@ -659,10 +656,7 @@ export class StreamChat extends ChatApi {
       this.cleaningIntervalRef = undefined;
     }
 
-    await Promise.all([
-      this.wsConnection?.disconnect(timeout),
-      this.wsFallback?.disconnect(timeout),
-    ]);
+    await this.wsConnection?.disconnect(timeout);
 
     this.offlineDb?.executeQuerySafely(
       async (db) => {
@@ -1422,44 +1416,10 @@ export class StreamChat extends ChatApi {
       throw Error('Property clientId is not set');
     }
 
-    try {
-      // if fallback is used before, continue using it instead of waiting for WS to fail
-      if (this.wsFallback) {
-        return await this.wsFallback.connect();
-      }
-
-      // `wsConnection` builds and owns the socket; the reconnection logic and the connect timeout
-      // (`config.connectTimeoutMs`) live in there.
-      return await this.wsConnection.connect();
-    } catch (error) {
-      // run fallback only if it's WS/Network error and not a normal API error
-      // make sure the device is online before even trying the longpoll. The default reporter on
-      // hosts without a network API mirrors the WebSocket, so its "offline" only means the socket
-      // is down, and is ignored.
-      const { networkConnection } = this;
-      const isDeviceOffline =
-        networkConnection.isOnline === false &&
-        !networkConnection.isStatusDerivedFromSocket;
-      if (
-        this.wsConnection.config.enableWSFallback &&
-        isWSFailure(error as APIError) &&
-        !isDeviceOffline
-      ) {
-        logger.withExtraTags('connect').info('WS failed, fallback to longpoll');
-        this.dispatchEvent({ type: 'transport.changed', mode: 'longpoll' });
-
-        this.wsConnection.connection?._destroyCurrentWSConnection();
-        void this.wsConnection.disconnect(); // close WS so no retry
-        this.wsFallback = new WSConnectionFallback({ client: this });
-        return await this.wsFallback.connect();
-      }
-
-      // A failure the socket does not retry leaves nothing else to settle the pending connection id.
-      if (!isWSFailure(error as APIError)) {
-        this.connectionIdManager.rejectConnectionId(error);
-      }
-      throw error;
-    }
+    // `wsConnection` builds and owns the socket — and, with `enableWSFallback`, the long-poll it
+    // switches to; the reconnection logic and the connect timeout (`config.connectTimeoutMs`) live
+    // in there.
+    return await this.wsConnection.connect();
   }
 
   /**

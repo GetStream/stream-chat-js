@@ -1,6 +1,5 @@
 import sinon from 'sinon';
 import { CanceledError } from 'axios';
-import { StateStore } from '@stream-io/state-store';
 
 import * as utils from '../../../src/utils';
 import * as errors from '../../../src/errors';
@@ -21,7 +20,6 @@ describe('WSConnectionFallback', () => {
 		_settleConnectPromises: sinon.spy(),
 		_markActiveChannelsWatchInterrupted: sinon.spy(),
 		connectionIdManager: new ConnectionIdManager(),
-		networkConnection: { state: new StateStore({ isOnline: undefined }) },
 		wsConnection: {
 			isHealthy: false,
 			// Like the real one: reports whether the status changed.
@@ -50,25 +48,6 @@ describe('WSConnectionFallback', () => {
 			expect(c.client).to.be.eql(client);
 			expect(c.state).to.be.eql(ConnectionState.Init);
 			expect(c.consecutiveFailures).to.be.eql(0);
-		});
-
-		it('should follow network status changes, not the current value', async () => {
-			const client = newClient();
-			client.networkConnection.state.partialNext({ isOnline: false });
-			const c = new WSConnectionFallback({ client });
-			c._onlineStatusChanged = sinon.spy();
-			expect(c._onlineStatusChanged.called).to.be.false;
-
-			client.networkConnection.state.partialNext({ isOnline: true });
-			client.networkConnection.state.partialNext({ isOnline: false });
-			expect(c._onlineStatusChanged.args).to.be.eql([
-				[{ type: 'online' }],
-				[{ type: 'offline' }],
-			]);
-
-			// unknown is not offline
-			client.networkConnection.state.partialNext({ isOnline: undefined });
-			expect(c._onlineStatusChanged.calledTwice).to.be.true;
 		});
 	});
 
@@ -127,30 +106,56 @@ describe('WSConnectionFallback', () => {
 		});
 	});
 
-	describe('_onlineStatusChanged,', () => {
-		it('should call connect for online event an Closed state', () => {
+	describe('_applyNetworkStatus', () => {
+		it('should call connect for online status in Closed state', () => {
 			const c = new WSConnectionFallback({ client: newClient() });
 			c.connect = sinon.spy();
-			c._onlineStatusChanged({ type: 'online' });
+			c._applyNetworkStatus(true);
 			expect(c.connect.called).to.be.false;
 
 			c.state = ConnectionState.Closed;
-			c._onlineStatusChanged({ type: 'online' });
+			c._applyNetworkStatus(true);
 			expect(c.connect.calledOnceWithExactly(true)).to.be.true;
 		});
 
-		it('should go to Close state on offline event', () => {
+		it('should go to Close state on offline status', () => {
 			const c = new WSConnectionFallback({ client: newClient() });
 			const spy = sinon.spy();
 			c.cancelToken = { cancel: spy };
-			c._onlineStatusChanged({ type: 'offline' });
+			c._applyNetworkStatus(false);
 			expect(c.state).to.be.eql(ConnectionState.Closed);
 			expect(spy.calledOnce).to.be.true;
 			expect(c.cancelToken).to.be.undefined;
 
-			c._onlineStatusChanged({ type: 'offline' });
+			c._applyNetworkStatus(false);
 			expect(c.state).to.be.eql(ConnectionState.Closed);
 			expect(c.cancelToken).to.be.undefined;
+		});
+	});
+
+	describe('isConnecting', () => {
+		it('is true only in Connecting state', () => {
+			const c = new WSConnectionFallback({ client: newClient() });
+			expect(c.isConnecting).to.be.false;
+
+			for (const state of Object.values(ConnectionState)) {
+				c.state = state;
+				expect(c.isConnecting).to.be.eql(state === ConnectionState.Connecting);
+			}
+		});
+
+		it('is true while the connect request is pending', async () => {
+			const c = new WSConnectionFallback({ client: newClient() });
+			let respond;
+			c._req = () => new Promise((resolve) => (respond = resolve));
+			c._poll = sinon.spy();
+
+			const connecting = c.connect();
+			expect(c.isConnecting).to.be.true;
+
+			respond({ event: { connection_id: 'id' } });
+			await connecting;
+			expect(c.isConnecting).to.be.false;
 		});
 	});
 
@@ -181,15 +186,21 @@ describe('WSConnectionFallback', () => {
 	});
 
 	describe('disconnect', () => {
-		it('should stop following network status', async () => {
-			const client = newClient();
-			const c = new WSConnectionFallback({ client });
+		it('should ignore network status until it connects again', async () => {
+			const c = new WSConnectionFallback({ client: newClient() });
 			c._req = () => null;
 			await c.disconnect();
-			c._onlineStatusChanged = sinon.spy();
-			client.networkConnection.state.partialNext({ isOnline: false });
-			client.networkConnection.state.partialNext({ isOnline: true });
-			expect(c._onlineStatusChanged.called).to.be.false;
+			c.connect = sinon.spy();
+
+			// going offline would otherwise move it to Closed, and back online reconnect it
+			c._applyNetworkStatus(false);
+			c._applyNetworkStatus(true);
+			expect(c.state).to.be.eql(ConnectionState.Disconnected);
+			expect(c.connect.called).to.be.false;
+
+			c.state = ConnectionState.Connected;
+			c._applyNetworkStatus(false);
+			expect(c.state).to.be.eql(ConnectionState.Closed);
 		});
 
 		it('should cancel requests and set the state correctly', async () => {

@@ -205,8 +205,9 @@ device is offline; the stand-in's "offline" does not count, since it only means 
 After the switch, **this same store describes the long-poll**: `client.wsConnection.isHealthy` and
 `state` report whether it is up, `connection.recovered` follows its reconnects, and
 `client.connectionIdManager` holds its connection id. The long-poll follows `client.networkConnection`
-too — it closes when the device goes offline and reconnects when it comes back — but, as in v9, only
-until its first `closeConnection()` or `disconnectUser()`, which stops it listening for good.
+too — it closes when the device goes offline and reconnects when it comes back — except while
+`closeConnection()` or `disconnectUser()` has closed it, until it is reconnected. v9 stopped listening
+for good at its first disconnect.
 
 ### Timing and transport settings
 

@@ -583,8 +583,11 @@ client switches to HTTP long-polling, dispatches `transport.changed` with
 - Its status is `client.wsConnection.state`, as for the WebSocket, since `connection.changed` is gone.
 - A reconnect recovers state through the usual connection recovery; `client.recoverState()` is gone.
 - It takes online/offline changes from `client.networkConnection` instead of `window` events, so a
-  network status reporter you install, such as one wrapping NetInfo, reaches it too. As in v9, it
-  stops listening at its first `closeConnection()` / `disconnectUser()` and does not start again.
+  network status reporter you install, such as one wrapping NetInfo, reaches it too. It ignores them
+  while closed by `closeConnection()` / `disconnectUser()` and follows them again once reconnected;
+  v9 stopped listening for good at its first disconnect.
+- `client.wsFallback` moved to `client.wsConnection.fallback`, beside the socket.
+  `client.wsConnection.isConnecting` reports the long-poll's connect attempts once switched.
 - State is also recovered after `closeConnection()` → `openConnection()`, which v9's long-poll never
   did: recovery follows the status store rather than being called from `connect()`.
 - The switch is skipped when a network status reporter says the device is offline: the browser's,
@@ -687,7 +690,7 @@ kept reporting an id for a socket that was gone. Read `client._getConnectionID()
 `client.connectionIdManager.connectionId`) instead — both are dropped the moment the connection
 stops being healthy.
 
-`client.wsFallback.connectionID` survives from v9, because the long-poll addresses its own polls and
+`client.wsConnection.fallback.connectionID` (v9's `client.wsFallback.connectionID`) survives from v9, because the long-poll addresses its own polls and
 close with it, and it behaves as in v9: it is not cleared when the long-poll goes down, only when it
 reconnects or is disconnected. Read `client._getConnectionID()` for the long-poll's id too.
 
