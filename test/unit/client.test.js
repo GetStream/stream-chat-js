@@ -2557,8 +2557,10 @@ describe('Client WSFallback', () => {
 
 		expect(calls[0]).toMatchObject({
 			url: expect.stringMatching(/\/api\/v2\/longpoll$/),
-			// authenticated by the Authorization header, so the message carries no token
-			params: { json: expect.objectContaining({ token: '', products: ['chat'] }) },
+			// authenticated by the Authorization header, so the message carries only a placeholder
+			params: {
+				json: expect.objectContaining({ token: 'anonymous', products: ['chat'] }),
+			},
 			timeout: 8000,
 		});
 		expect(calls[1]).toMatchObject({

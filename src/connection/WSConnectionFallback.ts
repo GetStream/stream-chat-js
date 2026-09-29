@@ -186,8 +186,9 @@ export class WSConnectionFallback {
     this.connectionID = undefined; // connect should be sent with empty connection_id so API creates one
     try {
       const { event } = await this._req<{ event: ConnectionOpen }>(
-        // Authenticated by the request's `Authorization` header, so the message carries no token.
-        { json: this.client._buildWSAuthPayload('') },
+        // Authenticated by the request's `Authorization` header, so the message carries only a
+        // placeholder token.
+        { json: this.client._buildWSAuthPayload() },
         { timeout: 8000 }, // 8s
         reconnect,
       );

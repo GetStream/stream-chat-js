@@ -402,7 +402,7 @@ describe('WSConnectionFallback', () => {
 
 			expect(await c.connect()).to.be.eql(health);
 			// authenticated by the Authorization header, so the message carries no token
-			expect(c.client._buildWSAuthPayload.calledOnceWithExactly('')).to.be.true;
+			expect(c.client._buildWSAuthPayload.calledOnceWithExactly()).to.be.true;
 			expect(c._poll.calledOnce).to.be.true;
 			expect(c._req.calledOnceWithExactly({ json: 'payload' }, { timeout: 8000 }, false))
 				.to.be.true;
