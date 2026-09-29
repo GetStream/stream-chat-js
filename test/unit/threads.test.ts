@@ -265,6 +265,38 @@ describe('Threads 2.0', () => {
           expect(stateAfter.participants).to.equal(hydrationState.participants);
         });
 
+        it('resets replies pagination to match the hydrated (reloaded) replies', () => {
+          const replies = Array.from(
+            { length: 5 },
+            (_, i) =>
+              generateMsg({
+                parent_id: parentMessageResponse.id,
+                created_at: new Date(Date.now() + 1000 * i).toISOString(),
+              }) as MessageResponse,
+          );
+          // all replies were loaded (e.g. user scrolled to the top), so there is no previous page
+          const thread = createTestThread({
+            latest_replies: replies,
+            reply_count: replies.length,
+          });
+          expect(thread.state.getLatestValue().pagination.prevCursor).to.be.null;
+
+          // reload returns only the latest replies, so older ones have to be paginated again
+          const hydrationThread = createTestThread({
+            latest_replies: replies.slice(-2),
+            reply_count: replies.length,
+          });
+          expect(hydrationThread.state.getLatestValue().pagination.prevCursor).to.equal(
+            replies[3].id,
+          );
+
+          thread.hydrateState(hydrationThread);
+
+          const stateAfter = thread.state.getLatestValue();
+          expect(stateAfter.replies).to.have.lengthOf(2);
+          expect(stateAfter.pagination.prevCursor).to.equal(replies[3].id);
+        });
+
         it('retains failed replies after hydration', () => {
           const thread = createTestThread();
           const hydrationThread = createTestThread({
