@@ -1,4 +1,5 @@
 import sinon from 'sinon';
+import { CanceledError } from 'axios';
 import { generateMsg } from './test-utils/generateMessage';
 import { getClientWithUser } from './test-utils/getClient';
 
@@ -2510,21 +2511,25 @@ describe('Client WSFallback', () => {
 	let client;
 	let socketConnect;
 
-	/** Answers the long-poll: connects with `connectionId`, holds polls until cancelled. */
+	/**
+	 * Answers the long-poll at the axios layer, so the generated `longPoll()` path runs: connects
+	 * with `connectionId`, holds polls until aborted.
+	 */
 	const fakeLongPoll = (connectionId = 'new_id') => {
 		const calls = [];
-		vi.spyOn(client.api, 'doAxiosRequest').mockImplementation(
-			(type, url, data, config) => {
-				calls.push({ url, params: config.params });
-				if (config.params?.json) {
-					return Promise.resolve({
-						event: { type: 'connection.ok', connection_id: connectionId },
-					});
-				}
-				if (config.params?.close) return Promise.resolve({});
-				return new Promise((_, reject) => config.cancelToken?.promise.then(reject));
-			},
-		);
+		const respond = (data) => Promise.resolve({ data, status: 200, headers: {} });
+		vi.spyOn(client.axiosInstance, 'request').mockImplementation((config) => {
+			calls.push({ url: config.url, params: config.params, timeout: config.timeout });
+			if (config.params?.json) {
+				return respond({
+					event: { type: 'connection.ok', connection_id: connectionId },
+				});
+			}
+			if (config.params?.close) return respond({});
+			return new Promise((_, reject) =>
+				config.signal?.addEventListener('abort', () => reject(new CanceledError())),
+			);
+		});
 		return calls;
 	};
 
@@ -2546,9 +2551,19 @@ describe('Client WSFallback', () => {
 	});
 
 	it('should try wsFallback if WebSocket fails', async () => {
-		fakeLongPoll();
+		const calls = fakeLongPoll();
 
 		const health = await client.connectUser({ id: 'amin' }, userToken);
+
+		expect(calls[0]).toMatchObject({
+			url: expect.stringMatching(/\/api\/v2\/longpoll$/),
+			params: { json: expect.objectContaining({ products: ['chat'] }) },
+			timeout: 8000,
+		});
+		expect(calls[1]).toMatchObject({
+			params: { connection_id: 'new_id' },
+			timeout: 30000,
+		});
 
 		expect(health).toMatchObject({ type: 'connection.ok', connection_id: 'new_id' });
 		// the socket's own connect timeout, not a shortened one
@@ -2655,7 +2670,7 @@ describe('Client WSFallback', () => {
 
 		expect(socketConnect).toHaveBeenCalledTimes(1);
 		expect(client.wsConnection.fallback).toBeUndefined();
-		expect(client.api.doAxiosRequest).not.toHaveBeenCalled();
+		expect(client.axiosInstance.request).not.toHaveBeenCalled();
 	});
 
 	it('should ignore fallback if a network reporter says the device is offline', async () => {

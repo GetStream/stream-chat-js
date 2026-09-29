@@ -1,11 +1,10 @@
-import type { AxiosRequestConfig, CancelTokenSource } from 'axios';
 import axios from 'axios';
 import type { StreamChat } from '../client';
 import { retryInterval, sleep } from '../utils';
 import { isAPIError, isConnectionIDError, isErrorRetryable } from '../errors';
 import { chatLoggerSystem } from '../logger';
 import type { LogLevel } from '../logger';
-import type { ConnectionOpen, Event } from '../types';
+import type { ConnectionOpen, Event, StreamRequestOptions } from '../types';
 
 type UR = Record<string, unknown>;
 
@@ -24,7 +23,7 @@ export class WSConnectionFallback {
   state: ConnectionState;
   consecutiveFailures: number;
   connectionID?: string;
-  cancelToken?: CancelTokenSource;
+  abortController?: AbortController;
 
   constructor({ client }: { client: StreamChat }) {
     this.client = client;
@@ -75,8 +74,8 @@ export class WSConnectionFallback {
 
     if (!online) {
       this._setState(ConnectionState.Closed);
-      this.cancelToken?.cancel('disconnect() is called');
-      this.cancelToken = undefined;
+      this.abortController?.abort();
+      this.abortController = undefined;
       return;
     }
 
@@ -87,24 +86,23 @@ export class WSConnectionFallback {
 
   /** @private */
   _req = async <T = UR>(
-    params: UR,
-    config: AxiosRequestConfig,
+    params: NonNullable<Parameters<StreamChat['longPoll']>[0]>,
+    config: Pick<StreamRequestOptions, 'timeout'>,
     retry: boolean,
   ): Promise<T> => {
-    if (!this.cancelToken && !params.close) {
-      this.cancelToken = axios.CancelToken.source();
+    if (!this.abortController && !params.close) {
+      this.abortController = new AbortController();
     }
 
     try {
-      const res = await this.client.api.doAxiosRequest<T>(
-        'get',
-        (this.client.baseURL as string).replace(':3030', ':8900') + '/api/v2/longpoll', // replace port if present for testing with local API
-        undefined,
-        { ...config, cancelToken: this.cancelToken?.token, params },
-      );
+      const res = await this.client.longPoll(params, {
+        ...config,
+        signal: this.abortController?.signal,
+      });
 
       this.consecutiveFailures = 0; // always reset in case of no error
-      return res;
+      // The spec declares no response body, so the generated response type is `{}`.
+      return res as T;
     } catch (error: any) {
       this.consecutiveFailures += 1;
 
@@ -137,7 +135,7 @@ export class WSConnectionFallback {
           return;
         }
 
-        /** client.api.doAxiosRequest will take care of TOKEN_EXPIRED error */
+        /** client.longPoll's request layer will take care of TOKEN_EXPIRED error */
 
         if (isConnectionIDError(error)) {
           this._log(`_poll() - ConnectionID error, connecting without ID...`);
@@ -179,7 +177,7 @@ export class WSConnectionFallback {
     this.connectionID = undefined; // connect should be sent with empty connection_id so API creates one
     try {
       const { event } = await this._req<{ event: ConnectionOpen }>(
-        { json: this.client._buildWSAuthMessage() },
+        { json: this.client._buildWSAuthPayload() },
         { timeout: 8000 }, // 8s
         reconnect,
       );
@@ -215,8 +213,8 @@ export class WSConnectionFallback {
 
   disconnect = async (timeout = 2000) => {
     this._setState(ConnectionState.Disconnected);
-    this.cancelToken?.cancel('disconnect() is called');
-    this.cancelToken = undefined;
+    this.abortController?.abort();
+    this.abortController = undefined;
 
     const connection_id = this.connectionID;
     this.connectionID = undefined;

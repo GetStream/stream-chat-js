@@ -13,9 +13,8 @@ import { describe, it, expect, afterEach, vi, beforeAll, beforeEach } from 'vite
 
 describe('WSConnectionFallback', () => {
 	const newClient = (overrides) => ({
-		baseURL: '',
-		api: { doAxiosRequest: sinon.spy() },
-		_buildWSAuthMessage: sinon.stub().returns('payload'),
+		longPoll: sinon.spy(),
+		_buildWSAuthPayload: sinon.stub().returns('payload'),
 		dispatchEvent: sinon.spy(),
 		_settleConnectPromises: sinon.spy(),
 		_markActiveChannelsWatchInterrupted: sinon.spy(),
@@ -121,15 +120,15 @@ describe('WSConnectionFallback', () => {
 		it('should go to Close state on offline status', () => {
 			const c = new WSConnectionFallback({ client: newClient() });
 			const spy = sinon.spy();
-			c.cancelToken = { cancel: spy };
+			c.abortController = { abort: spy };
 			c._applyNetworkStatus(false);
 			expect(c.state).to.be.eql(ConnectionState.Closed);
 			expect(spy.calledOnce).to.be.true;
-			expect(c.cancelToken).to.be.undefined;
+			expect(c.abortController).to.be.undefined;
 
 			c._applyNetworkStatus(false);
 			expect(c.state).to.be.eql(ConnectionState.Closed);
-			expect(c.cancelToken).to.be.undefined;
+			expect(c.abortController).to.be.undefined;
 		});
 	});
 
@@ -208,15 +207,15 @@ describe('WSConnectionFallback', () => {
 			c._req = sinon.spy();
 			const connection_id = 'id';
 			c.connectionID = connection_id;
-			const cancel = sinon.spy();
-			c.cancelToken = { cancel };
+			const abort = sinon.spy();
+			c.abortController = { abort };
 			const timeout = 500;
 			await c.disconnect(timeout);
 
 			expect(c.state).to.be.eql(ConnectionState.Disconnected);
 			expect(c.connectionID).to.be.undefined;
-			expect(c.cancelToken).to.be.undefined;
-			expect(cancel.calledOnce).to.be.true;
+			expect(c.abortController).to.be.undefined;
+			expect(abort.calledOnce).to.be.true;
 			expect(
 				c._req.calledOnceWithExactly({ close: true, connection_id }, { timeout }, false),
 			).to.be.true;
@@ -230,16 +229,15 @@ describe('WSConnectionFallback', () => {
 	});
 
 	describe('_req', () => {
-		it('should set cancel token', async () => {
+		it('should set abort controller', async () => {
 			const c = new WSConnectionFallback({ client: newClient() });
-			expect(c.cancelToken).to.be.undefined;
+			expect(c.abortController).to.be.undefined;
 			await c._req({}, {});
-			expect(c.cancelToken).to.not.be.undefined;
-			expect(c.cancelToken.cancel).to.be.a('function');
+			expect(c.abortController).to.be.instanceOf(AbortController);
 
-			c.cancelToken = undefined;
+			c.abortController = undefined;
 			await c._req({ close: true }, {});
-			expect(c.cancelToken).to.be.undefined;
+			expect(c.abortController).to.be.undefined;
 		});
 
 		it('should send the request correctly', async () => {
@@ -249,36 +247,32 @@ describe('WSConnectionFallback', () => {
 			const config = { timeout: 100 };
 			await c._req(params, config);
 			expect(
-				c.client.api.doAxiosRequest.calledOnceWithExactly(
-					'get',
-					'/api/v2/longpoll',
-					undefined,
-					{ ...config, cancelToken: c.cancelToken.token, params },
-				),
+				c.client.longPoll.calledOnceWithExactly(params, {
+					...config,
+					signal: c.abortController.signal,
+				}),
 			).to.be.true;
 		});
 
-		it('should rewrite the local test port to the long-poll server', async () => {
-			const c = new WSConnectionFallback({
-				client: newClient({ baseURL: 'http://localhost:3030' }),
-			});
+		it('should abort the request in flight when going offline', async () => {
+			const c = new WSConnectionFallback({ client: newClient() });
+			await c._req({}, {});
+			const [, { signal }] = c.client.longPoll.lastCall.args;
 
-			await c._req({ close: true, connection_id: 'id' }, { timeout: 100 });
-			const [, url, , config] = c.client.api.doAxiosRequest.lastCall.args;
-			expect(url).to.be.eql('http://localhost:8900/api/v2/longpoll');
-			expect(config.params).to.be.eql({ close: true, connection_id: 'id' });
+			c._applyNetworkStatus(false);
+			expect(signal.aborted).to.be.true;
 		});
 
 		it('should keep track of consecutive failures', async () => {
 			// ok-err-err-ok-ok...
-			const doAxiosRequest = vi
+			const longPoll = vi
 				.fn()
 				.mockResolvedValueOnce()
 				.mockRejectedValueOnce()
 				.mockRejectedValueOnce()
 				.mockResolvedValue();
 			const c = new WSConnectionFallback({
-				client: newClient({ api: { doAxiosRequest } }),
+				client: newClient({ longPoll }),
 			});
 
 			expect(c.consecutiveFailures).toBe(0);
@@ -295,10 +289,10 @@ describe('WSConnectionFallback', () => {
 		});
 
 		it('should not retry for non-retryable errors', async () => {
-			const doAxiosRequest = sinon.stub().rejects();
+			const longPoll = sinon.stub().rejects();
 			sinon.stub(errors, 'isErrorRetryable').returns(false);
 			const c = new WSConnectionFallback({
-				client: newClient({ api: { doAxiosRequest } }),
+				client: newClient({ longPoll }),
 			});
 			sinon.spy(c);
 
@@ -309,10 +303,10 @@ describe('WSConnectionFallback', () => {
 		});
 
 		it('should not retry when retry flag is false', async () => {
-			const doAxiosRequest = sinon.stub().rejects();
+			const longPoll = sinon.stub().rejects();
 			sinon.stub(errors, 'isErrorRetryable').returns(true);
 			const c = new WSConnectionFallback({
-				client: newClient({ api: { doAxiosRequest } }),
+				client: newClient({ longPoll }),
 			});
 			sinon.spy(c);
 
@@ -323,7 +317,7 @@ describe('WSConnectionFallback', () => {
 		});
 
 		it('should retry errors if it is retryable', async () => {
-			const doAxiosRequest = sinon.stub().rejects();
+			const longPoll = sinon.stub().rejects();
 
 			vi.spyOn(errors, 'isErrorRetryable')
 				.mockReturnValueOnce(true)
@@ -333,7 +327,7 @@ describe('WSConnectionFallback', () => {
 			vi.spyOn(utils, 'sleep').mockResolvedValue();
 
 			const c = new WSConnectionFallback({
-				client: newClient({ api: { doAxiosRequest } }),
+				client: newClient({ longPoll }),
 			});
 			sinon.spy(c, '_req');
 
@@ -363,7 +357,7 @@ describe('WSConnectionFallback', () => {
 			c._poll = sinon.spy();
 
 			expect(await c.connect()).to.be.eql(health);
-			expect(c.client._buildWSAuthMessage.calledOnce).to.be.true;
+			expect(c.client._buildWSAuthPayload.calledOnce).to.be.true;
 			expect(c._poll.calledOnce).to.be.true;
 			expect(c._req.calledOnceWithExactly({ json: 'payload' }, { timeout: 8000 }, false))
 				.to.be.true;

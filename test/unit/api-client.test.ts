@@ -125,6 +125,19 @@ describe('ApiClient request options', () => {
     expect((firstConfig() as { onUploadProgress?: unknown }).onUploadProgress).to.be
       .undefined;
   });
+
+  it('forwards the timeout from the request options to axios', async () => {
+    await sendRequest({ timeout: 30000 } as StreamRequestOptions);
+
+    expect((firstConfig() as AxiosRequestConfig).timeout).to.equal(30000);
+  });
+
+  // An explicit `undefined` makes axios fall back to the instance timeout.
+  it('sends no timeout key when none is given', async () => {
+    await sendRequest({ signal: new AbortController().signal });
+
+    expect(firstConfig()).not.toHaveProperty('timeout');
+  });
 });
 
 describe('ApiClient rate limit metadata', () => {
@@ -389,6 +402,59 @@ describe('ApiClient multipart encoding', () => {
 
     expect(firstConfig().signal).to.equal(controller.signal);
     expect(firstConfig().timeout).to.equal(0);
+  });
+
+  it('lets a caller timeout override the upload default', async () => {
+    await client.api.sendRequest(
+      'POST',
+      '/api/v2/uploads/file',
+      undefined,
+      undefined,
+      { file: new File(['x'], 'a.jpg', { type: 'image/jpeg' }) },
+      'multipart/form-data',
+      { timeout: 1000 },
+    );
+
+    expect(firstConfig().timeout).to.equal(1000);
+    expect(firstConfig().maxContentLength).to.equal(Infinity);
+    expect(firstConfig().maxBodyLength).to.equal(Infinity);
+  });
+});
+
+describe('ApiClient long-poll URL', () => {
+  let client: StreamChat;
+  let requestSpy: ReturnType<typeof vi.spyOn>;
+
+  const urlOfCall = (index: number) =>
+    (requestSpy.mock.calls[index][0] as AxiosRequestConfig).url;
+
+  beforeEach(() => {
+    client = getClientWithUser();
+    requestSpy = vi
+      .spyOn(client.axiosInstance, 'request')
+      .mockResolvedValue({ data: {}, status: 200, headers: {} });
+  });
+
+  it('sends the long-poll to its own port on a local API', async () => {
+    client.setBaseURL('http://localhost:3030');
+
+    await client.longPoll({ close: true, connection_id: 'id' });
+    await client.api.sendRequest('GET', '/api/v2/chat/channels');
+
+    expect(urlOfCall(0)).to.equal('http://localhost:8900/api/v2/longpoll');
+    expect((requestSpy.mock.calls[0][0] as AxiosRequestConfig).params).toMatchObject({
+      close: true,
+      connection_id: 'id',
+    });
+    expect(urlOfCall(1)).to.equal('http://localhost:3030/api/v2/chat/channels');
+  });
+
+  it('leaves a production base URL alone', async () => {
+    client.setBaseURL('https://chat.stream-io-api.com');
+
+    await client.longPoll({ connection_id: 'id' });
+
+    expect(urlOfCall(0)).to.equal('https://chat.stream-io-api.com/api/v2/longpoll');
   });
 });
 

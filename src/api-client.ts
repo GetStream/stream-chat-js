@@ -13,6 +13,9 @@ const logger = chatLoggerSystem.getLogger('api-client');
 
 const MULTIPART_CONTENT_TYPE = 'multipart/form-data';
 
+/** The WebSocket fallback's endpoint, which a local API serves on its own port. */
+const LONG_POLL_PATH = '/api/v2/longpoll';
+
 /**
  * Upload requests must not inherit the axios instance timeout (3s by default) or the size
  * caps - either would abort a large or slow upload.
@@ -62,8 +65,8 @@ export class ApiClient {
       params: queryParams,
       headers: { 'Content-Type': requestContentType },
       ...(isMultipart ? UPLOAD_REQUEST_DEFAULTS : {}),
-      // Keep this last so a caller-supplied signal wins - and keep it returning only the keys
-      // it owns, so it can never clobber the upload defaults above.
+      // Keep this last so a caller-supplied signal and timeout win - and keep it returning only
+      // the keys it owns, so it can never clobber the upload defaults above.
       ...toAxiosRequestConfig(options),
     });
   }
@@ -107,7 +110,12 @@ export class ApiClient {
       }
     }
     if (resolved.startsWith('/')) {
-      resolved = this.client.baseURL + resolved;
+      const baseURL =
+        resolved === LONG_POLL_PATH
+          ? // replace port if present for testing with local API
+            this.client.baseURL?.replace(':3030', ':8900')
+          : this.client.baseURL;
+      resolved = baseURL + resolved;
     }
     return resolved;
   }
@@ -311,11 +319,15 @@ const isUsableAbortSignal = (signal: unknown): signal is AbortSignal =>
 const toAxiosRequestConfig = ({
   signal,
   onUploadProgress,
+  timeout,
 }: StreamRequestOptions = {}): AxiosRequestConfig => ({
   signal: isUsableAbortSignal(signal) ? signal : undefined,
   // Same reasoning as `isUsableAbortSignal`: an options object revived from a persisted
   // offline-db task payload has lost its functions.
   onUploadProgress: typeof onUploadProgress === 'function' ? onUploadProgress : undefined,
+  // Only when set: an explicit `undefined` would clobber the upload defaults' `timeout: 0`, and
+  // axios would fall back to the instance timeout.
+  ...(typeof timeout === 'number' ? { timeout } : {}),
 });
 
 const errorIsApiError = (error: unknown): error is AxiosError<APIError> => {

@@ -528,6 +528,10 @@ export type StreamRequestOptions = {
   signal?: AbortSignal;
   /** Only meaningful for upload (multipart) requests; ignored everywhere else. */
   onUploadProgress?: (event: StreamProgressEvent) => void;
+  /**
+   * Milliseconds before this request is aborted.
+   */
+  timeout?: number;
 };
 
 export * from './gen/models';

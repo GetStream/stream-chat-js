@@ -2349,16 +2349,23 @@ export class StreamChat extends ChatApi {
    *
    * @returns The JSON-encoded auth message.
    */
-  _buildWSAuthMessage = () =>
-    JSON.stringify({
-      // The server requires a non-empty token even for anonymous connections, but
-      // skips JWT parsing for any string that is not shaped like one. Anonymous users
-      // have no token, so send a placeholder the server accepts and ignores.
-      token: this.tokenManager.getToken() || 'anonymous',
-      // `connect()` rejects before reaching this when `_user` is unset.
-      user_details: this._user as ConnectUserDetailsRequest,
-      products: ['chat'],
-    } satisfies WSAuthMessage);
+  _buildWSAuthMessage = () => JSON.stringify(this._buildWSAuthPayload());
+
+  /**
+   * The auth message itself — what {@link _buildWSAuthMessage} encodes for the WebSocket, and what
+   * the long-poll fallback sends as `longPoll()`'s `json` query param.
+   *
+   * @private
+   */
+  _buildWSAuthPayload = (): WSAuthMessage => ({
+    // The server requires a non-empty token even for anonymous connections, but
+    // skips JWT parsing for any string that is not shaped like one. Anonymous users
+    // have no token, so send a placeholder the server accepts and ignores.
+    token: this.tokenManager.getToken() || 'anonymous',
+    // `connect()` rejects before reaching this when `_user` is unset.
+    user_details: this._user as ConnectUserDetailsRequest,
+    products: ['chat'],
+  });
 
   /**
    * Queries poll answers.
