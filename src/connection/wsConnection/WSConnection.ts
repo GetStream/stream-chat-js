@@ -40,17 +40,13 @@ const logger = chatLoggerSystem.getLogger('client');
  * itself.
  *
  * **With `enableWSFallback`, the store can describe the long-poll instead.** Once {@link connect}
- * has switched to `WSConnectionFallback` ({@link fallback}), that class writes {@link state}
- * through {@link _setStatus}, and {@link connection} is left holding the disconnected socket. The
- * client never switches back, so from then on `state`, {@link isHealthy}, {@link isConnecting} and
- * the network-status subscription follow the long-poll.
+ * has switched to `WSConnectionFallback` ({@link fallback}).
  */
 export class WSConnection extends WithSubscriptions {
   state: StateStore<WSConnectionState>;
   /**
    * The live socket, or `null` before the first {@link connect}. Built and replaced here, not from
-   * outside — reach for {@link isHealthy} rather than this. After an `enableWSFallback` switch it
-   * keeps the socket that failed, disconnected, since nothing builds a new one again.
+   * outside — reach for {@link isHealthy} rather than this.
    *
    * @internal
    */
