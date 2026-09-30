@@ -1457,10 +1457,9 @@ export class StreamChat extends ChatApi {
     ...args: Parameters<ChatApi['stopWatchingChannel']>
   ) {
     const [request, requestOptions] = args;
-    // Guarded as the request layer guards it: a signal revived from a persisted offline-db task has
-    // lost `addEventListener`, and only the wait needs one.
     const signal = requestOptions?.signal;
     const connectionId = await this.connectionIdManager.getConnectionId(
+      // Check if signal is still usable - if it is read from offline DB, it has lost `addEventListener`.
       typeof signal?.addEventListener === 'function' ? signal : undefined,
     );
 
