@@ -26,11 +26,24 @@ export type EntityStoreSubscriber = {
    * publish.
    */
   flushState?: () => void;
+  /**
+   * Optional: called by {@link EntityStore.changeId} when this subscriber's link moves from `oldId`
+   * to `newId`, before the change notification. A subscriber that keeps its own list of linked ids
+   * implements it to rename the entry; otherwise its later `unlink(oldId)` would miss the moved link
+   * and the entity would never be released.
+   */
+  onIdChanged?: (oldId: string, newId: string) => void;
 };
 
 export type EntityStoreOptions<T> = {
   /** Extracts the canonical id an entity is stored and addressed under. */
   getEntityId: (entity: T) => string;
+  /**
+   * Called with an entity after its entry is removed because its last holder unlinked, or because
+   * {@link EntityStore.clear} ran. A store of class instances uses it to tear the instance down
+   * (unsubscribe listeners, stop timers). Optional.
+   */
+  onRelease?: (entity: T) => void;
 };
 
 /**
@@ -71,14 +84,16 @@ export class EntityStore<T> {
   private byId = new Map<string, T>();
   private subscribers = new Map<string, Set<EntityStoreSubscriber>>();
   private readonly getEntityId: (entity: T) => string;
+  private readonly onRelease?: (entity: T) => void;
 
   private transactionDepth = 0;
   private pendingChanged = new Map<EntityStoreSubscriber, Set<string>>();
   /** Ids whose {@link EntityStore.flushSubscribers} was requested while a transaction was open. */
   private pendingFlushIds?: Set<string>;
 
-  constructor({ getEntityId }: EntityStoreOptions<T>) {
+  constructor({ getEntityId, onRelease }: EntityStoreOptions<T>) {
     this.getEntityId = getEntityId;
+    this.onRelease = onRelease;
   }
 
   // ---- reads ----
@@ -109,6 +124,79 @@ export class EntityStore<T> {
     this.autoFlush();
   }
 
+  /**
+   * Returns the entity stored under `id`, passing it to `hydrate` first, or stores and returns the
+   * result of `create` when `id` is not stored. A stored entity is never replaced, which is what a
+   * store of class instances needs: every caller asking for `id` gets the same instance, and fresh
+   * data is applied to it through `hydrate`.
+   *
+   * Storing a new entity notifies the subscribers already linked to `id`. Hydrating does not — the
+   * stored reference is unchanged, and the entity publishes its own state changes.
+   */
+  getOrCreate(id: string, create: () => T, hydrate?: (stored: T) => void): T {
+    if (this.byId.has(id)) {
+      const stored = this.byId.get(id) as T;
+      hydrate?.(stored);
+      return stored;
+    }
+    const entity = create();
+    this.byId.set(id, entity);
+    this.markDirty(id);
+    this.autoFlush();
+    return entity;
+  }
+
+  /**
+   * Moves an entity and its holders from `oldId` to `newId`, for ids assigned after storing. Moved
+   * holders get {@link EntityStoreSubscriber.onIdChanged}, then holders of both ids are notified.
+   * Returns `false` without changes when `oldId` is not stored, the ids are equal, or `newId` holds
+   * another entity (merging is the caller's decision).
+   *
+   * @example
+   * // a channel created from members is stored under a temporary cid until the server assigns one
+   * store.getOrCreate('messaging:!members-ann,bob', () => channel);
+   * store.changeId('messaging:!members-ann,bob', 'messaging:e3b0c442'); // after `channel.watch()`
+   */
+  changeId(oldId: string, newId: string): boolean {
+    if (oldId === newId || !this.byId.has(oldId) || this.byId.has(newId)) return false;
+
+    const entity = this.byId.get(oldId) as T;
+    this.byId.delete(oldId);
+    this.byId.set(newId, entity);
+
+    const moved = this.subscribers.get(oldId);
+    if (moved) {
+      // holders of oldId learn that it now resolves to undefined
+      this.markDirty(oldId);
+      this.subscribers.delete(oldId);
+      // subscribers may link an id before an entity is stored under it
+      const existing = this.subscribers.get(newId);
+      if (existing) for (const subscriber of moved) existing.add(subscriber);
+      else this.subscribers.set(newId, moved);
+    }
+    this.markDirty(newId);
+
+    if (this.pendingFlushIds?.delete(oldId)) this.pendingFlushIds.add(newId);
+    // re-keyed before autoFlush, so a holder handling the notification already reads newId
+    if (moved) for (const subscriber of moved) subscriber.onIdChanged?.(oldId, newId);
+    this.autoFlush();
+    return true;
+  }
+
+  /**
+   * Removes every entry and holder, then calls `onRelease` for each removed entity. Holders are
+   * not notified: they are dropped with the entries. Calling it on an empty store does nothing.
+   */
+  clear(): void {
+    const released = [...this.byId.values()];
+    this.byId.clear();
+    this.subscribers.clear();
+    this.pendingChanged.clear();
+    this.pendingFlushIds = undefined;
+    // released after the store is emptied, so an onRelease reading the store sees the final state
+    if (this.onRelease) for (const entity of released) this.onRelease(entity);
+  }
+
   // ---- subscription registry / refcount ----
 
   /** Registers `subscriber` for `id` (notification target + refcount). */
@@ -121,15 +209,19 @@ export class EntityStore<T> {
     subscribers.add(subscriber);
   }
 
-  /** Drops `subscriber` from `id`; GCs the canonical copy when none remain. */
+  /**
+   * Drops `subscriber` from `id`; GCs the canonical copy when none remain and passes it to
+   * `onRelease`. Unlinking a subscriber that is not linked does nothing.
+   */
   unlink(id: string, subscriber: EntityStoreSubscriber): void {
     const subscribers = this.subscribers.get(id);
-    if (!subscribers) return;
-    subscribers.delete(subscriber);
+    if (!subscribers?.delete(subscriber)) return;
     if (subscribers.size === 0) {
       this.subscribers.delete(id);
       // refcount GC: nobody holds this entity any longer.
-      this.byId.delete(id);
+      const released = this.byId.get(id);
+      const wasStored = this.byId.delete(id);
+      if (wasStored) this.onRelease?.(released as T);
     }
   }
 
@@ -196,7 +288,7 @@ export class EntityStore<T> {
 
   /**
    * Records `id` as changed for every subscriber watching it, except `subscriber` — the one that
-   * wrote it and is resposible for updating itself (see {@link EntityStore.upsert}).
+   * wrote it and is responsible for updating itself (see {@link EntityStore.upsert}).
    */
   private markDirty(id: string, subscriber?: EntityStoreSubscriber): void {
     const subscribers = this.subscribers.get(id);

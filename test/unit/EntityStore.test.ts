@@ -266,4 +266,303 @@ describe('EntityStore', () => {
       expect(log).toEqual(['sibling:changed']);
     });
   });
+
+  describe('onRelease', () => {
+    it('receives the entity when its last holder unlinks', () => {
+      const onRelease = vi.fn();
+      store = new EntityStore<LocalMessage>({ getEntityId, onRelease });
+      const a = spySubscriber();
+      const b = spySubscriber();
+      const m = msg({ id: 'm1' });
+      store.upsert(m);
+      store.link('m1', a);
+      store.link('m1', b);
+
+      store.unlink('m1', a);
+      expect(onRelease).not.toHaveBeenCalled();
+
+      store.unlink('m1', b);
+      expect(onRelease).toHaveBeenCalledTimes(1);
+      expect(onRelease).toHaveBeenCalledWith(m);
+      expect(store.has('m1')).toBe(false);
+    });
+
+    it('is not called again when the same holder unlinks twice', () => {
+      const onRelease = vi.fn();
+      store = new EntityStore<LocalMessage>({ getEntityId, onRelease });
+      const a = spySubscriber();
+      store.upsert(msg({ id: 'm1' }));
+      store.link('m1', a);
+
+      store.unlink('m1', a);
+      store.unlink('m1', a);
+      expect(onRelease).toHaveBeenCalledTimes(1);
+    });
+
+    it('does nothing when unlinking a subscriber that is not linked', () => {
+      const onRelease = vi.fn();
+      store = new EntityStore<LocalMessage>({ getEntityId, onRelease });
+      const a = spySubscriber();
+      const stranger = spySubscriber();
+      store.upsert(msg({ id: 'm1' }));
+      store.link('m1', a);
+
+      store.unlink('m1', stranger);
+      store.unlink('ghost', stranger);
+      expect(store.has('m1')).toBe(true);
+      expect(onRelease).not.toHaveBeenCalled();
+    });
+
+    it('is not called when the last holder of an id with no stored entity unlinks', () => {
+      const onRelease = vi.fn();
+      store = new EntityStore<LocalMessage>({ getEntityId, onRelease });
+      const a = spySubscriber();
+      store.link('m1', a);
+
+      store.unlink('m1', a);
+      expect(onRelease).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getOrCreate', () => {
+    it('creates, stores and returns the entity when the id is not stored', () => {
+      const m = msg({ id: 'm1' });
+      const create = vi.fn(() => m);
+      const hydrate = vi.fn();
+
+      expect(store.getOrCreate('m1', create, hydrate)).toBe(m);
+      expect(store.get('m1')).toBe(m);
+      expect(create).toHaveBeenCalledTimes(1);
+      expect(hydrate).not.toHaveBeenCalled();
+    });
+
+    it('returns the stored entity and hydrates it on a second call, without creating or replacing', () => {
+      const m = msg({ id: 'm1' });
+      store.getOrCreate('m1', () => m);
+
+      const create = vi.fn(() => msg({ id: 'm1' }));
+      const hydrate = vi.fn();
+      expect(store.getOrCreate('m1', create, hydrate)).toBe(m);
+      expect(store.get('m1')).toBe(m);
+      expect(create).not.toHaveBeenCalled();
+      expect(hydrate).toHaveBeenCalledTimes(1);
+      expect(hydrate).toHaveBeenCalledWith(m);
+    });
+
+    it('works without hydrate', () => {
+      const m = msg({ id: 'm1' });
+      store.upsert(m);
+      expect(store.getOrCreate('m1', () => msg({ id: 'm1' }))).toBe(m);
+    });
+
+    it('notifies subscribers linked before the entity was created, but not on hydrate', () => {
+      const a = spySubscriber();
+      store.link('m1', a);
+
+      store.getOrCreate('m1', () => msg({ id: 'm1' }));
+      expect(a.onEntitiesChanged).toHaveBeenCalledTimes(1);
+      expect([...a.onEntitiesChanged.mock.calls[0][0].changedIds]).toEqual(['m1']);
+
+      store.getOrCreate(
+        'm1',
+        () => msg({ id: 'm1' }),
+        () => undefined,
+      );
+      expect(a.onEntitiesChanged).toHaveBeenCalledTimes(1);
+    });
+
+    it('defers the notification to the end of a transaction', () => {
+      const a = spySubscriber();
+      store.link('m1', a);
+
+      store.transaction(() => {
+        store.getOrCreate('m1', () => msg({ id: 'm1' }));
+        expect(a.onEntitiesChanged).not.toHaveBeenCalled();
+      });
+      expect(a.onEntitiesChanged).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('changeId', () => {
+    it('calls onIdChanged on each moved holder before notifying it', () => {
+      const log: string[] = [];
+      store.upsert(msg({ id: 'temp' }));
+      store.link('temp', {
+        onEntitiesChanged: () => log.push('changed'),
+        onIdChanged: (oldId, newId) => log.push(`renamed ${oldId} -> ${newId}`),
+      });
+
+      store.changeId('temp', 'm1');
+      expect(log).toEqual(['renamed temp -> m1', 'changed']);
+    });
+
+    it('calls onIdChanged on a holder linked to both ids, and not on holders of the new id only', () => {
+      const both = { onEntitiesChanged: vi.fn(), onIdChanged: vi.fn() };
+      const newOnly = { onEntitiesChanged: vi.fn(), onIdChanged: vi.fn() };
+      store.upsert(msg({ id: 'temp' }));
+      store.link('temp', both);
+      store.link('m1', both);
+      store.link('m1', newOnly);
+
+      store.changeId('temp', 'm1');
+      expect(both.onIdChanged).toHaveBeenCalledWith('temp', 'm1');
+      expect(newOnly.onIdChanged).not.toHaveBeenCalled();
+    });
+
+    it('moves the entity and its holders to the new id', () => {
+      const onRelease = vi.fn();
+      store = new EntityStore<LocalMessage>({ getEntityId, onRelease });
+      const a = spySubscriber();
+      const m = msg({ id: 'temp' });
+      store.upsert(m);
+      store.link('temp', a);
+
+      expect(store.changeId('temp', 'm1')).toBe(true);
+      expect(store.has('temp')).toBe(false);
+      expect(store.get('m1')).toBe(m);
+
+      // the holder moved with the entry: it is notified on the new id and keeps it alive
+      a.onEntitiesChanged.mockClear();
+      store.upsert({ ...m, id: 'm1' });
+      expect(a.onEntitiesChanged).toHaveBeenCalledTimes(1);
+      store.unlink('m1', a);
+      expect(store.has('m1')).toBe(false);
+      expect(onRelease).toHaveBeenCalledTimes(1);
+    });
+
+    it('notifies holders that both ids changed', () => {
+      const a = spySubscriber();
+      store.upsert(msg({ id: 'temp' }));
+      store.link('temp', a);
+
+      store.changeId('temp', 'm1');
+      expect(a.onEntitiesChanged).toHaveBeenCalledTimes(1);
+      expect([...a.onEntitiesChanged.mock.calls[0][0].changedIds].sort()).toEqual([
+        'm1',
+        'temp',
+      ]);
+    });
+
+    it('merges the moved holders with holders already linked to the new id', () => {
+      const a = spySubscriber();
+      const b = spySubscriber();
+      store.upsert(msg({ id: 'temp' }));
+      store.link('temp', a);
+      store.link('m1', b);
+
+      store.changeId('temp', 'm1');
+      expect(b.onEntitiesChanged).toHaveBeenCalledTimes(1);
+
+      store.unlink('m1', a);
+      expect(store.has('m1')).toBe(true);
+      store.unlink('m1', b);
+      expect(store.has('m1')).toBe(false);
+    });
+
+    it('does nothing on a second call, since the old id is no longer stored', () => {
+      const m = msg({ id: 'temp' });
+      store.upsert(m);
+
+      expect(store.changeId('temp', 'm1')).toBe(true);
+      expect(store.changeId('temp', 'm1')).toBe(false);
+      expect(store.get('m1')).toBe(m);
+    });
+
+    it('does nothing when the old id is not stored or the ids are equal', () => {
+      const a = spySubscriber();
+      store.link('ghost', a);
+      store.upsert(msg({ id: 'm1' }));
+
+      expect(store.changeId('ghost', 'm2')).toBe(false);
+      expect(store.changeId('m1', 'm1')).toBe(false);
+      expect(store.has('m1')).toBe(true);
+      expect(a.onEntitiesChanged).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when the new id already holds an entity', () => {
+      const temp = msg({ id: 'temp' });
+      const existing = msg({ id: 'm1' });
+      store.upsert(temp);
+      store.upsert(existing);
+
+      expect(store.changeId('temp', 'm1')).toBe(false);
+      expect(store.get('temp')).toBe(temp);
+      expect(store.get('m1')).toBe(existing);
+    });
+
+    it('carries a flush requested inside a transaction over to the new id', () => {
+      const log: string[] = [];
+      store.upsert(msg({ id: 'temp' }));
+      store.link('temp', {
+        onEntitiesChanged: () => log.push('changed'),
+        flushState: () => log.push('flushed'),
+      });
+
+      store.transaction(() => {
+        store.flushSubscribers('temp');
+        store.changeId('temp', 'm1');
+      });
+      expect(log).toEqual(['changed', 'flushed']);
+    });
+  });
+
+  describe('clear', () => {
+    it('removes every entry and holder and releases each entity', () => {
+      const onRelease = vi.fn();
+      store = new EntityStore<LocalMessage>({ getEntityId, onRelease });
+      const a = spySubscriber();
+      const m1 = msg({ id: 'm1' });
+      const m2 = msg({ id: 'm2' });
+      store.upsert(m1);
+      store.upsert(m2);
+      store.link('m1', a);
+
+      store.clear();
+      expect(store.has('m1')).toBe(false);
+      expect(store.has('m2')).toBe(false);
+      expect(onRelease).toHaveBeenCalledTimes(2);
+      expect(onRelease).toHaveBeenCalledWith(m1);
+      expect(onRelease).toHaveBeenCalledWith(m2);
+
+      // dropped holders are neither notified nor able to re-trigger a release
+      store.upsert(msg({ id: 'm1' }));
+      expect(a.onEntitiesChanged).not.toHaveBeenCalled();
+      store.unlink('m1', a);
+      expect(store.has('m1')).toBe(true);
+      expect(onRelease).toHaveBeenCalledTimes(2);
+    });
+
+    it('does nothing on a second call', () => {
+      const onRelease = vi.fn();
+      store = new EntityStore<LocalMessage>({ getEntityId, onRelease });
+      store.upsert(msg({ id: 'm1' }));
+
+      store.clear();
+      store.clear();
+      expect(onRelease).toHaveBeenCalledTimes(1);
+    });
+
+    it('releases after the store is emptied', () => {
+      const seen: boolean[] = [];
+      store = new EntityStore<LocalMessage>({
+        getEntityId,
+        onRelease: (m) => seen.push(store.has(m.id)),
+      });
+      store.upsert(msg({ id: 'm1' }));
+
+      store.clear();
+      expect(seen).toEqual([false]);
+    });
+
+    it('drops notifications pending in an open transaction', () => {
+      const a = spySubscriber();
+      store.link('m1', a);
+
+      store.transaction(() => {
+        store.upsert(msg({ id: 'm1' }));
+        store.clear();
+      });
+      expect(a.onEntitiesChanged).not.toHaveBeenCalled();
+    });
+  });
 });

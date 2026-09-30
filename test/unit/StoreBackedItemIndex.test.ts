@@ -233,4 +233,63 @@ describe('StoreBackedItemIndex', () => {
       expect(index.has('m1')).toBe(false);
     });
   });
+
+  describe('store changeId', () => {
+    it('follows the renamed id, so a later remove releases the entity instead of leaking it', () => {
+      const onRelease = vi.fn();
+      store = new EntityStore<LocalMessage>({ getEntityId, onRelease });
+      a = new StoreBackedItemIndex({ store, owner: ownerA, getEntityId });
+      const m = msg({ id: 'temp' });
+      a.setOne(m);
+
+      store.changeId('temp', 'm1');
+      expect(a.has('temp')).toBe(false);
+      expect(a.get('m1')).toBe(m);
+
+      // with memberIds still on 'temp', this remove would unlink nothing and 'm1' would stay forever
+      a.remove('m1');
+      expect(store.has('m1')).toBe(false);
+      expect(onRelease).toHaveBeenCalledWith(m);
+    });
+
+    it('releases the renamed entity on clear()', () => {
+      const onRelease = vi.fn();
+      store = new EntityStore<LocalMessage>({ getEntityId, onRelease });
+      a = new StoreBackedItemIndex({ store, owner: ownerA, getEntityId });
+      a.setOne(msg({ id: 'temp' }));
+
+      store.changeId('temp', 'm1');
+      a.clear();
+      expect(store.has('m1')).toBe(false);
+      expect(onRelease).toHaveBeenCalledTimes(1);
+    });
+
+    it('renames only in the indexes that held the old id, and forwards the rename to their owners', () => {
+      const onIdChanged = vi.fn();
+      a = new StoreBackedItemIndex({
+        store,
+        owner: { ...ownerA, onIdChanged },
+        getEntityId,
+      });
+      a.setOne(msg({ id: 'temp' }));
+      b.setOne(msg({ id: 'm2' }));
+
+      store.changeId('temp', 'm1');
+      expect(a.has('m1')).toBe(true);
+      expect(b.has('m1')).toBe(false);
+      expect(onIdChanged).toHaveBeenCalledWith('temp', 'm1');
+    });
+
+    it('keeps each owner-less index linked separately', () => {
+      const x = new StoreBackedItemIndex({ store, getEntityId });
+      const y = new StoreBackedItemIndex({ store, getEntityId });
+      x.setOne(msg({ id: 'm1' }));
+      y.setOne(msg({ id: 'm1' }));
+
+      x.remove('m1');
+      expect(y.get('m1')).toBeDefined();
+      y.remove('m1');
+      expect(store.has('m1')).toBe(false);
+    });
+  });
 });

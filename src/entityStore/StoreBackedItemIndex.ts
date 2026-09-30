@@ -4,10 +4,10 @@ import { EntityStore, type EntityStoreSubscriber } from './EntityStore';
 export type StoreBackedItemIndexOptions<T> = {
   getEntityId: (item: T) => string;
   /**
-   * The entity that owns this index; used as the store subscriber, which also holds its refcount.
-   * Optional: an index over a private store (see `store`) has no one to fan out to, so an
-   * owner-less index just uses an internal no-op subscriber to hold its refcount. Message paginators pass themselves so
-   * cross-collection updates reach them; single-home collections (channels, reminders, …) omit it.
+   * The entity that owns this index; the index's store subscriber forwards notifications and id
+   * changes to it. Optional: an index over a private store (see `store`) has no one to fan out to.
+   * Message paginators pass themselves so cross-collection updates reach them; single-home
+   * collections (channels, reminders, …) omit it.
    */
   owner?: EntityStoreSubscriber;
   /**
@@ -18,9 +18,6 @@ export type StoreBackedItemIndexOptions<T> = {
    */
   store?: EntityStore<T>;
 };
-
-/** No-op subscriber that holds the refcount for an owner-less (private-store) index. */
-const NOOP_OWNER: EntityStoreSubscriber = { onEntitiesChanged: () => undefined };
 
 /**
  * An {@link ItemIndexApi} implementation that keeps entity **content** in an {@link EntityStore}
@@ -33,29 +30,43 @@ const NOOP_OWNER: EntityStoreSubscriber = { onEntitiesChanged: () => undefined }
  *   lives in the (possibly shared) store. This is what keeps e.g. reaction routing
  *   (`threadPaginator.getItem(id) ? thread : channel`) correct and keeps the `.values()` scans
  *   from ever walking other channels' entities.
- * - `setOne` writes content once into the store and links the owner as a subscriber (drives both
- *   notification fan-out and refcount GC). The write passes the owner as the `subscriber` to skip, so
- *   the owner is not notified of its own write (it re-emits its window inline); other subscribers of
- *   the same id ARE notified and re-project.
- * - `remove`/`clear` unlink the owner rather than hard-deleting content, so an entity still held by
+ * - `setOne` writes content once into the store and links the index's holder as a subscriber
+ *   (drives both notification fan-out and refcount GC). The write passes the holder as the
+ *   `subscriber` to skip, so the owner is not notified of its own write (it re-emits its window
+ *   inline); other subscribers of the same id ARE notified and re-project.
+ * - `remove`/`clear` unlink the holder rather than hard-deleting content, so an entity still held by
  *   another index (e.g. a `show_in_channel` reply in both the channel list and its thread) survives;
  *   the store GCs it only when the last subscriber unlinks.
+ * - When the store renames an id ({@link EntityStore.changeId}), the holder renames it in
+ *   `memberIds` too, so later reads and unlinks use the new id.
  *
  * When no shared store is supplied the index holds a private store — every id it links has exactly
- * one subscriber (its own owner), so no fan-out ever fires and removal GCs immediately, matching a plain
- * per-instance index.
+ * one subscriber (its own holder), so no fan-out ever fires and removal GCs immediately, matching a
+ * plain per-instance index.
  *
  * @template T The domain item type held by the index; collocated with the {@link EntityStore}'s.
  */
 export class StoreBackedItemIndex<T> implements ItemIndexApi<T> {
   private memberIds = new Set<string>();
   private readonly store: EntityStore<T>;
-  private readonly owner: EntityStoreSubscriber;
+  /**
+   * The subscriber this index links in the store: forwards notifications to the owner and keeps
+   * `memberIds` in step when the store renames an id. Its own object per index, so two indexes
+   * sharing an owner (or having none) still hold their links separately.
+   */
+  private readonly holder: EntityStoreSubscriber;
   private readonly getEntityId: (item: T) => string;
 
   constructor({ store, owner, getEntityId }: StoreBackedItemIndexOptions<T>) {
     this.store = store ?? new EntityStore<T>({ getEntityId });
-    this.owner = owner ?? NOOP_OWNER;
+    this.holder = {
+      onEntitiesChanged: (batch) => owner?.onEntitiesChanged(batch),
+      flushState: () => owner?.flushState?.(),
+      onIdChanged: (oldId, newId) => {
+        if (this.memberIds.delete(oldId)) this.memberIds.add(newId);
+        owner?.onIdChanged?.(oldId, newId);
+      },
+    };
     this.getEntityId = getEntityId;
   }
 
@@ -67,9 +78,9 @@ export class StoreBackedItemIndex<T> implements ItemIndexApi<T> {
 
   setOne(item: T) {
     const id = this.getEntityId(item);
-    this.store.link(id, this.owner);
+    this.store.link(id, this.holder);
     this.memberIds.add(id);
-    this.store.upsert(item, this.owner);
+    this.store.upsert(item, this.holder);
   }
 
   get(id: string): T | undefined {
@@ -83,11 +94,11 @@ export class StoreBackedItemIndex<T> implements ItemIndexApi<T> {
   remove(id: string) {
     if (!this.memberIds.has(id)) return;
     this.memberIds.delete(id);
-    this.store.unlink(id, this.owner);
+    this.store.unlink(id, this.holder);
   }
 
   clear() {
-    for (const id of this.memberIds) this.store.unlink(id, this.owner);
+    for (const id of this.memberIds) this.store.unlink(id, this.holder);
     this.memberIds.clear();
   }
 
