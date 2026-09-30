@@ -29,36 +29,6 @@ export class WSConnectionFallback {
     this.consecutiveFailures = 0;
   }
 
-  _log(msg: string, extra: Record<string, unknown> = {}, level: LogLevel = 'info') {
-    const log = logger.withExtraTags('connection_fallback');
-    log[level]('WSConnectionFallback:' + msg, extra);
-  }
-
-  _setState(state: WSFallbackConnectionState) {
-    this._log(`_setState() - ${state}`);
-
-    // transition from connecting => connected
-    if (
-      this.state === WSFallbackConnectionState.Connecting &&
-      state === WSFallbackConnectionState.Connected
-    ) {
-      this.client.wsConnection._setStatus({ isHealthy: true });
-    }
-
-    if (
-      state === WSFallbackConnectionState.Closed ||
-      state === WSFallbackConnectionState.Disconnected
-    ) {
-      // The server keyed watches by this connection id, so no request may carry it any more.
-      this.client.connectionIdManager.invalidate();
-      if (this.client.wsConnection._setStatus({ isHealthy: false })) {
-        this.client._markActiveChannelsWatchInterrupted();
-      }
-    }
-
-    this.state = state;
-  }
-
   /**
    * Applies a change in the device's network status. Stands in for v9's `window` online/offline
    * listeners: `WSConnection` routes the network-status store here once it has switched to this
@@ -85,91 +55,12 @@ export class WSConnectionFallback {
     }
   };
 
-  /** @private */
-  _req = async <T = Record<string, unknown>>(
-    params: NonNullable<Parameters<StreamChat['longPoll']>[0]>,
-    config: Pick<StreamRequestOptions, 'timeout'>,
-    retry: boolean,
-  ): Promise<T> => {
-    if (!this.abortController && !params.close) {
-      this.abortController = new AbortController();
-    }
-
-    try {
-      const res = await this.client.longPoll(params, {
-        ...config,
-        signal: this.abortController?.signal,
-      });
-
-      this.consecutiveFailures = 0; // always reset in case of no error
-      // The spec declares no response body, so the generated response type is `{}`.
-      return res as T;
-    } catch (error: any) {
-      this.consecutiveFailures += 1;
-
-      if (retry && isErrorRetryable(error)) {
-        this._log(`_req() - Retryable error, retrying request`);
-        await sleep(retryInterval(this.consecutiveFailures));
-        // A reconnect (or `disconnect()`) during the sleep replaced the connection id this request
-        // carries. Sent anyway, it would come back as a ConnectionIDNotFoundError, and `_poll` would
-        // tear down the connection that replaced it.
-        if (params.connection_id && params.connection_id !== this.connectionID) {
-          this._log(`_req() - Connection id changed, dropping the retry`);
-          throw new CanceledError(
-            'The connection id changed while the retry was waiting',
-          );
-        }
-        return this._req<T>(params, config, retry);
-      }
-
-      throw error;
-    }
-  };
-
-  /** @private */
-  _poll = async () => {
-    while (this.state === WSFallbackConnectionState.Connected) {
-      try {
-        const data = await this._req<{
-          events: Event[];
-        }>({ connection_id: this.connectionID }, { timeout: 30000 }, true); // 30s => API responds in 20s if there is no event
-
-        if (data.events?.length) {
-          for (let i = 0; i < data.events.length; i++) {
-            this.client.dispatchEvent(data.events[i]);
-          }
-        }
-      } catch (error: any) {
-        if (axios.isCancel(error)) {
-          this._log(`_poll() - axios canceled request`);
-          return;
-        }
-
-        /** client.longPoll's request layer will take care of TOKEN_EXPIRED error */
-
-        if (isConnectionIDError(error)) {
-          this._log(`_poll() - ConnectionID error, connecting without ID...`);
-          this._setState(WSFallbackConnectionState.Disconnected);
-          this.connect(true);
-          return;
-        }
-
-        if (isAPIError(error) && !isErrorRetryable(error)) {
-          this._setState(WSFallbackConnectionState.Closed);
-          // Nothing reconnects from here, so fail whatever is waiting for a connection id.
-          this.client.connectionIdManager.rejectConnectionId(error);
-          return;
-        }
-
-        await sleep(retryInterval(this.consecutiveFailures));
-      }
-    }
-  };
-
   /**
    * connect try to open a longpoll request
    *
    * @param reconnect - should be false for first call and true for subsequent calls to keep the connection alive and settle the connect promises
+   *
+   * @internal
    */
   connect = async (reconnect = false) => {
     if (this.state === WSFallbackConnectionState.Connecting) {
@@ -217,16 +108,15 @@ export class WSConnectionFallback {
   };
 
   /**
-   * isHealthy checks if there is a connectionID and connection is in Connected state
+   * Whether a connect request is in flight.
+   *
+   * @internal
    */
-  isHealthy = () =>
-    !!this.connectionID && this.state === WSFallbackConnectionState.Connected;
-
-  /** Whether a connect request is in flight. */
   get isConnecting() {
     return this.state === WSFallbackConnectionState.Connecting;
   }
 
+  /** @internal */
   disconnect = async (timeout = 2000) => {
     this._setState(WSFallbackConnectionState.Disconnected);
     this.abortController?.abort();
@@ -242,4 +132,123 @@ export class WSConnectionFallback {
       this._log(`disconnect() - Failed`, { err }, 'error');
     }
   };
+
+  private _log(
+    msg: string,
+    extra: Record<string, unknown> = {},
+    level: LogLevel = 'info',
+  ) {
+    const log = logger.withExtraTags('connection_fallback');
+    log[level]('WSConnectionFallback:' + msg, extra);
+  }
+
+  private _setState(state: WSFallbackConnectionState) {
+    this._log(`_setState() - ${state}`);
+
+    // transition from connecting => connected
+    if (
+      this.state === WSFallbackConnectionState.Connecting &&
+      state === WSFallbackConnectionState.Connected
+    ) {
+      this.client.wsConnection._setStatus({ isHealthy: true });
+    }
+
+    if (
+      state === WSFallbackConnectionState.Closed ||
+      state === WSFallbackConnectionState.Disconnected
+    ) {
+      // The server keyed watches by this connection id, so no request may carry it any more.
+      this.client.connectionIdManager.invalidate();
+      if (this.client.wsConnection._setStatus({ isHealthy: false })) {
+        this.client._markActiveChannelsWatchInterrupted();
+      }
+    }
+
+    this.state = state;
+  }
+
+  private _req = async <T = Record<string, unknown>>(
+    params: NonNullable<Parameters<StreamChat['longPoll']>[0]>,
+    config: Pick<StreamRequestOptions, 'timeout'>,
+    retry: boolean,
+  ): Promise<T> => {
+    if (!this.abortController && !params.close) {
+      this.abortController = new AbortController();
+    }
+
+    try {
+      const res = await this.client.longPoll(params, {
+        ...config,
+        signal: this.abortController?.signal,
+      });
+
+      this.consecutiveFailures = 0; // always reset in case of no error
+      // The spec declares no response body, so the generated response type is `{}`.
+      return res as T;
+    } catch (error: any) {
+      this.consecutiveFailures += 1;
+
+      if (retry && isErrorRetryable(error)) {
+        this._log(`_req() - Retryable error, retrying request`);
+        await sleep(retryInterval(this.consecutiveFailures));
+        // A reconnect (or `disconnect()`) during the sleep replaced the connection id this request
+        // carries. Sent anyway, it would come back as a ConnectionIDNotFoundError, and `_poll` would
+        // tear down the connection that replaced it.
+        if (params.connection_id && params.connection_id !== this.connectionID) {
+          this._log(`_req() - Connection id changed, dropping the retry`);
+          throw new CanceledError(
+            'The connection id changed while the retry was waiting',
+          );
+        }
+        return this._req<T>(params, config, retry);
+      }
+
+      throw error;
+    }
+  };
+
+  private _poll = async () => {
+    while (this.state === WSFallbackConnectionState.Connected) {
+      try {
+        const data = await this._req<{
+          events: Event[];
+        }>({ connection_id: this.connectionID }, { timeout: 30000 }, true); // 30s => API responds in 20s if there is no event
+
+        if (data.events?.length) {
+          for (let i = 0; i < data.events.length; i++) {
+            this.client.dispatchEvent(data.events[i]);
+          }
+        }
+      } catch (error: any) {
+        if (axios.isCancel(error)) {
+          this._log(`_poll() - axios canceled request`);
+          return;
+        }
+
+        /** client.longPoll's request layer will take care of TOKEN_EXPIRED error */
+
+        if (isConnectionIDError(error)) {
+          this._log(`_poll() - ConnectionID error, connecting without ID...`);
+          this._setState(WSFallbackConnectionState.Disconnected);
+          this.connect(true);
+          return;
+        }
+
+        if (isAPIError(error) && !isErrorRetryable(error)) {
+          this._setState(WSFallbackConnectionState.Closed);
+          // Nothing reconnects from here, so fail whatever is waiting for a connection id.
+          this.client.connectionIdManager.rejectConnectionId(error);
+          return;
+        }
+
+        await sleep(retryInterval(this.consecutiveFailures));
+      }
+    }
+  };
+
+  /**
+   * isHealthy checks if there is a connectionID and connection is in Connected state
+   */
+  private isHealthy = () =>
+    !!this.connectionID && this.state === WSFallbackConnectionState.Connected;
 }
