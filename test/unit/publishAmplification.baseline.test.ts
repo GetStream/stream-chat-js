@@ -100,11 +100,13 @@ describe('publish amplification — one event, one publish per collection', () =
       page,
       setActive: true,
     });
-    client.threads.state.next((current) => ({
-      ...current,
-      threads: [thread, ...current.threads],
-    }));
-    thread.registerSubscriptions();
+    client.threads.paginator.setItems({
+      isFirstPage: true,
+      isLastPage: true,
+      valueOrFactory: (current) => [thread, ...current],
+    });
+    // Subscribes the listed thread, and routes its events to it.
+    client.threads.registerSubscriptions();
 
     const recorder = recordPublishes({
       main: channel.messagePaginator,

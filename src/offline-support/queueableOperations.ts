@@ -114,7 +114,7 @@ export const QUEUEABLE_OPERATIONS: {
       if (!message) return;
 
       if (message.parent_id) {
-        client.threads.threadsById[message.parent_id]?.upsertReplyLocally({
+        client.threads.get(message.parent_id)?.upsertReplyLocally({
           message,
           timestampChanged: true,
         });

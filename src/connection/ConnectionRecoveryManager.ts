@@ -39,7 +39,7 @@ export const DEFAULT_CONNECTION_RECOVERY_MANAGER_CONFIG: ConnectionRecoveryManag
  * 3. **Every active thread reloads its replies** (`Thread.reload`), because none of the above touches
  *    them: a channel reload refreshes the main message list, and `ThreadManager`'s own recovery
  *    refreshes the thread *list*, reusing thread instances without rehydrating them unless something
- *    separately marked them stale — which only `user.watching.stop` does, never a reconnect.
+ *    separately marked them stale.
  *
  * It is explicitly **not** a sweep over `client.activeChannels`. Watches are a bounded server
  * resource, and after any scrolling that cache holds far more channels than a query returns — so
@@ -237,35 +237,17 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
    * Threads need their own pass because nothing else brings an open thread's replies back — a
    * channel reload refreshes the main message list, `ChannelManager.recover()` refreshes the channel
    * lists*, and `ThreadManager`'s own recovery refreshes the thread *list*, reusing existing
-   * instances without rehydrating them unless they were separately marked stale (which only
-   * `user.watching.stop` does, never a reconnect).
+   * instances without rehydrating them unless they were separately marked stale.
    *
-   * `active` is the filter that matters: `threadsById` holds every thread the list has paged in,
-   * which is not what should be re-fetched on a reconnect — only what someone is actually reading.
+   * `active` is the filter that matters: the registry also holds every thread the list has paged
+   * in, which is not what should be re-fetched on a reconnect — only what someone is actually
+   * reading. An active thread is always registered, listed or not (`thread.activate()` registers it).
    * Guarded on the owning channel the same way active channels are: a thread whose channel is being
    * torn down has nothing to recover into.
-   *
-   * NOTE: `threadsById` is the thread LIST, not a thread cache. A thread opened from a message list
-   * is constructed directly (`threadsById[id] ?? new Thread(...)`) and only reaches the list because
-   * the UI SDKs adopt it there — prepended, once its replies have loaded — which is a workaround, not
-   * a contract. Two consequences, both accepted for now and both narrow:
-   *
-   * - A reconnect landing before that adoption misses the thread. Self-limiting: the UI SDKs re-issue
-   *   the load while the reply list is still unloaded, so a thread that failed to load gets adopted on
-   *   the retry.
-   * - `ThreadManager.reload()` rebuilds `state.threads` purely from the query response, so an adopted
-   *   thread absent from that response is evicted while still active. It cannot bite within the
-   *   reconnect that caused it: this getter is read before `connection.recovered` is dispatched, and
-   *   that event is what triggers the UI SDKs' list reload. It would take a LATER reconnect, after an
-   *   eviction, to miss the thread.
-   *
-   * The fix is a real off-list registry — see the commented-out `threadCache` in `ThreadManager` — at
-   * which point this getter reads from that instead, with no change to the `active` filter.
    */
   private get recoverableActiveThreads(): Thread[] {
     const threads: Thread[] = [];
-    for (const thread of Object.values(this.client.threads.threadsById)) {
-      if (!thread) continue;
+    for (const thread of this.client.threads.registeredThreads) {
       // Read off state rather than a getter: `Thread` has no `active` accessor the way `Channel`
       // does, and adding one just for this would grow the public surface for a single internal read.
       const { active } = thread.state.getLatestValue();
@@ -273,6 +255,18 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
       threads.push(thread);
     }
     return threads;
+  }
+
+  /**
+   * An opened thread stays registered and subscribed after it closes, but a drop loses events it
+   * cannot replay. Flag only, no request: a listed one is rehydrated by the thread list's reload,
+   * and any other reloads on its next `activate()`.
+   */
+  private markInactiveThreadsStale() {
+    for (const thread of this.client.threads.registeredThreads) {
+      const { active, isStateStale } = thread.state.getLatestValue();
+      if (!active && !isStateStale) thread.state.partialNext({ isStateStale: true });
+    }
   }
 
   private recoverChannelLists = async () => {
@@ -290,6 +284,7 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
 
     const channels = this.recoverableActiveChannels;
     const threads = this.recoverableActiveThreads;
+    this.markInactiveThreadsStale();
     // Captured before the reloads so a drop *during* them can be detected afterwards. The timestamp
     // rather than the boolean, because a socket that drops and returns inside the recovery window has
     // still failed the reloads while ending up online again.

@@ -43,7 +43,7 @@ describe('ConnectionRecoveryManager', () => {
     return { channel, reload };
   };
 
-  /** Builds a thread the way a UI SDK does, without activating or adopting it. */
+  /** Builds a thread the way a UI SDK does, without activating or listing it. */
   const buildThread = (id: string) => {
     const channel = client.channel('messaging', `channel-for-${id}`);
     channel.initialized = true;
@@ -58,20 +58,18 @@ describe('ConnectionRecoveryManager', () => {
     return { thread, reload, channel };
   };
 
-  /** Mirrors what the UI SDKs do once a thread's replies have loaded: put it in the manager's list. */
-  const adopt = (thread: Thread) =>
-    client.threads.state.next((current) => ({
-      ...current,
-      threads: [thread, ...current.threads],
-    }));
+  /** Puts `thread` in the manager's list, as a `queryThreads` page would. */
+  const addToList = (thread: Thread) =>
+    client.threads.paginator.setItems({
+      isFirstPage: true,
+      isLastPage: true,
+      valueOrFactory: (current) => [thread, ...current],
+    });
 
-  /**
-   * A thread a consumer is displaying: adopted into the manager (so it is reachable through
-   * `threadsById`) and activated (so recovery selects it out of everything else in the list).
-   */
+  /** A thread a consumer is displaying, which the list also holds. */
   const activeThread = (id: string) => {
     const built = buildThread(id);
-    adopt(built.thread);
+    addToList(built.thread);
     built.thread.activate();
     return built;
   };
@@ -102,7 +100,7 @@ describe('ConnectionRecoveryManager', () => {
       // would be a burst of `getThreadAndHydrate` calls for rows on a screen, which is exactly what
       // the `active` filter exists to prevent. `ThreadManager.reload()` refreshes the list itself.
       const idle = buildThread('idle-thread');
-      adopt(idle.thread);
+      addToList(idle.thread);
       vi.spyOn(client.channelManager, 'recover').mockResolvedValue([]);
 
       online();
@@ -110,23 +108,29 @@ describe('ConnectionRecoveryManager', () => {
       expect(idle.reload).not.toHaveBeenCalled();
     });
 
-    it('KNOWN GAP: skips an active thread that has not been adopted into the manager', async () => {
-      // Not desired behaviour — a pin on an accepted trade-off. Recovery finds threads through
-      // `threadsById`, i.e. the thread LIST, and a thread opened from a message list only lands there
-      // once the UI SDK adopts it (after its replies load). A reconnect inside that window misses it,
-      // as does one after `ThreadManager.reload()` evicts it. Fixing this means giving `ThreadManager`
-      // a real off-list registry (its commented-out `threadCache`); when that lands, this test should
-      // be inverted rather than deleted.
-      const { thread, reload } = buildThread('active-but-unadopted');
+    it('reloads an active thread the list does not hold', async () => {
+      // A thread opened from a message list is registered by `activate()`, not by the list.
+      const { thread, reload } = buildThread('active-but-unlisted');
       thread.activate();
-      expect(client.threads.threadsById[thread.id]).toBeUndefined();
-      const { reload: channelReload } = activeChannel('still-open');
+      expect(client.threads.paginator.getItem(thread.id)).toBeUndefined();
       vi.spyOn(client.channelManager, 'recover').mockResolvedValue([]);
 
       online();
-      // Anchored on a reload that provably happens in the same pass.
-      await vi.waitFor(() => expect(channelReload).toHaveBeenCalledTimes(1));
-      expect(reload).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+    });
+
+    it('reloads an active thread after the list evicts it', async () => {
+      const { thread, reload } = activeThread('evicted-but-open');
+      vi.spyOn(client, 'queryThreadsAndHydrate').mockResolvedValueOnce({
+        next: undefined,
+        threads: [],
+      });
+      await client.threads.paginator.reload();
+      expect(client.threads.get(thread.id)).toBe(thread);
+      vi.spyOn(client.channelManager, 'recover').mockResolvedValue([]);
+
+      online();
+      await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
     });
 
     it('leaves a thread nobody is displaying alone', async () => {
@@ -153,6 +157,21 @@ describe('ConnectionRecoveryManager', () => {
       await vi.waitFor(() => expect(channelReload).toHaveBeenCalledTimes(1));
       expect(reload).not.toHaveBeenCalled();
       expect(thread.state.getLatestValue().active).toBe(true);
+    });
+
+    it('marks an opened thread nobody is displaying stale, without fetching it', async () => {
+      const { thread, reload } = buildThread('opened-then-closed');
+      thread.activate();
+      thread.deactivate();
+      const open = activeThread('still-open');
+      vi.spyOn(client.channelManager, 'recover').mockResolvedValue([]);
+
+      online();
+      await vi.waitFor(() => expect(open.reload).toHaveBeenCalledTimes(1));
+      expect(thread.hasStaleState).toBe(true);
+      expect(reload).not.toHaveBeenCalled();
+      // The displayed one is reloaded directly, so it is not flagged for a second reload.
+      expect(open.thread.hasStaleState).toBe(false);
     });
 
     it('one thread failing does not stop the channels or the other threads', async () => {

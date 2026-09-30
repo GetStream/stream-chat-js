@@ -3350,6 +3350,9 @@ export abstract class BasePaginator<T, Q> {
       // starts (offset 0 => head loaded) and was anchored once at the reset (getStateBeforeFirstQuery);
       // the offset only grows tailward from here, so leave hasMoreHead untouched.
       stateUpdate.hasMoreTail = items.length >= this.pageSize;
+      // Anchor a first page's hasMoreHead from the start offset, as getStateBeforeFirstQuery() does: a
+      // keepPreviousItems first page never publishes that state, and would keep a stale `true`.
+      if (isFirstPage) stateUpdate.hasMoreHead = (this.config.initialOffset ?? 0) > 0;
     }
 
     if (interval) {
