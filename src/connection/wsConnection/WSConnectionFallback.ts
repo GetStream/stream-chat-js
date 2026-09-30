@@ -6,8 +6,6 @@ import { chatLoggerSystem } from '../../logger';
 import type { LogLevel } from '../../logger';
 import type { ConnectionOpen, Event, StreamRequestOptions } from '../../types';
 
-type UR = Record<string, unknown>;
-
 const logger = chatLoggerSystem.getLogger('connection');
 
 export enum WSFallbackConnectionState {
@@ -31,7 +29,7 @@ export class WSConnectionFallback {
     this.consecutiveFailures = 0;
   }
 
-  _log(msg: string, extra: UR = {}, level: LogLevel = 'info') {
+  _log(msg: string, extra: Record<string, unknown> = {}, level: LogLevel = 'info') {
     const log = logger.withExtraTags('connection_fallback');
     log[level]('WSConnectionFallback:' + msg, extra);
   }
@@ -88,7 +86,7 @@ export class WSConnectionFallback {
   };
 
   /** @private */
-  _req = async <T = UR>(
+  _req = async <T = Record<string, unknown>>(
     params: NonNullable<Parameters<StreamChat['longPoll']>[0]>,
     config: Pick<StreamRequestOptions, 'timeout'>,
     retry: boolean,
