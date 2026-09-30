@@ -5,7 +5,7 @@ import * as utils from '../../../src/utils';
 import * as errors from '../../../src/errors';
 import { ConnectionIdManager } from '../../../src/connection/ConnectionIdManager';
 import {
-	ConnectionState,
+	WSFallbackConnectionState,
 	WSConnectionFallback,
 } from '../../../src/connection/wsConnection/WSConnectionFallback';
 
@@ -45,7 +45,7 @@ describe('WSConnectionFallback', () => {
 			const c = new WSConnectionFallback({ client });
 
 			expect(c.client).to.be.eql(client);
-			expect(c.state).to.be.eql(ConnectionState.Init);
+			expect(c.state).to.be.eql(WSFallbackConnectionState.Init);
 			expect(c.consecutiveFailures).to.be.eql(0);
 		});
 	});
@@ -54,29 +54,29 @@ describe('WSConnectionFallback', () => {
 		it('should update state correctly', function () {
 			const c = new WSConnectionFallback({ client: newClient() });
 
-			expect(c.state).to.be.eql(ConnectionState.Init);
+			expect(c.state).to.be.eql(WSFallbackConnectionState.Init);
 
-			c._setState(ConnectionState.Closed);
-			expect(c.state).to.be.eql(ConnectionState.Closed);
+			c._setState(WSFallbackConnectionState.Closed);
+			expect(c.state).to.be.eql(WSFallbackConnectionState.Closed);
 
-			c._setState(ConnectionState.Connected);
-			expect(c.state).to.be.eql(ConnectionState.Connected);
+			c._setState(WSFallbackConnectionState.Connected);
+			expect(c.state).to.be.eql(WSFallbackConnectionState.Connected);
 
-			c._setState(ConnectionState.Connecting);
-			expect(c.state).to.be.eql(ConnectionState.Connecting);
+			c._setState(WSFallbackConnectionState.Connecting);
+			expect(c.state).to.be.eql(WSFallbackConnectionState.Connecting);
 
-			c._setState(ConnectionState.Disconnected);
-			expect(c.state).to.be.eql(ConnectionState.Disconnected);
+			c._setState(WSFallbackConnectionState.Disconnected);
+			expect(c.state).to.be.eql(WSFallbackConnectionState.Disconnected);
 		});
 
 		it('should report online status to wsConnection', function () {
 			const client = newClient();
 			const c = new WSConnectionFallback({ client });
 
-			c._setState(ConnectionState.Connecting);
+			c._setState(WSFallbackConnectionState.Connecting);
 			expect(client.wsConnection._setStatus.called).to.be.false;
 
-			c._setState(ConnectionState.Connected);
+			c._setState(WSFallbackConnectionState.Connected);
 			expect(client.wsConnection._setStatus.calledOnceWithExactly({ isHealthy: true })).to
 				.be.true;
 		});
@@ -84,11 +84,11 @@ describe('WSConnectionFallback', () => {
 		it('should report offline status, drop the connection id and mark watches', function () {
 			const client = newClient();
 			const c = new WSConnectionFallback({ client });
-			c._setState(ConnectionState.Connecting);
+			c._setState(WSFallbackConnectionState.Connecting);
 			client.connectionIdManager.resolveConnectionId('id');
-			c._setState(ConnectionState.Connected);
+			c._setState(WSFallbackConnectionState.Connected);
 
-			c._setState(ConnectionState.Closed);
+			c._setState(WSFallbackConnectionState.Closed);
 			expect(client.wsConnection._setStatus.lastCall.args).to.be.eql([
 				{ isHealthy: false },
 			]);
@@ -96,11 +96,11 @@ describe('WSConnectionFallback', () => {
 			expect(client._markActiveChannelsWatchInterrupted.calledOnce).to.be.true;
 
 			// no Connecting => Connected transition, so no online status
-			c._setState(ConnectionState.Connected);
+			c._setState(WSFallbackConnectionState.Connected);
 			expect(client.wsConnection.isHealthy).to.be.false;
 
 			// already offline: nothing new to mark
-			c._setState(ConnectionState.Disconnected);
+			c._setState(WSFallbackConnectionState.Disconnected);
 			expect(client._markActiveChannelsWatchInterrupted.calledOnce).to.be.true;
 		});
 	});
@@ -112,7 +112,7 @@ describe('WSConnectionFallback', () => {
 			c._applyNetworkStatus(true);
 			expect(c.connect.called).to.be.false;
 
-			c.state = ConnectionState.Closed;
+			c.state = WSFallbackConnectionState.Closed;
 			c._applyNetworkStatus(true);
 			expect(c.connect.calledOnceWithExactly(true)).to.be.true;
 		});
@@ -122,12 +122,12 @@ describe('WSConnectionFallback', () => {
 			const spy = sinon.spy();
 			c.abortController = { abort: spy };
 			c._applyNetworkStatus(false);
-			expect(c.state).to.be.eql(ConnectionState.Closed);
+			expect(c.state).to.be.eql(WSFallbackConnectionState.Closed);
 			expect(spy.calledOnce).to.be.true;
 			expect(c.abortController).to.be.undefined;
 
 			c._applyNetworkStatus(false);
-			expect(c.state).to.be.eql(ConnectionState.Closed);
+			expect(c.state).to.be.eql(WSFallbackConnectionState.Closed);
 			expect(c.abortController).to.be.undefined;
 		});
 	});
@@ -137,9 +137,9 @@ describe('WSConnectionFallback', () => {
 			const c = new WSConnectionFallback({ client: newClient() });
 			expect(c.isConnecting).to.be.false;
 
-			for (const state of Object.values(ConnectionState)) {
+			for (const state of Object.values(WSFallbackConnectionState)) {
 				c.state = state;
-				expect(c.isConnecting).to.be.eql(state === ConnectionState.Connecting);
+				expect(c.isConnecting).to.be.eql(state === WSFallbackConnectionState.Connecting);
 			}
 		});
 
@@ -165,21 +165,21 @@ describe('WSConnectionFallback', () => {
 		});
 		it('return false with no id', () => {
 			c.connectionID = '';
-			c.state = ConnectionState.Connected;
+			c.state = WSFallbackConnectionState.Connected;
 			expect(c.isHealthy()).to.be.false;
 		});
 		it('return false with invalid state', () => {
 			c.connectionID = 'id';
-			c.state = ConnectionState.Disconnected;
+			c.state = WSFallbackConnectionState.Disconnected;
 			expect(c.isHealthy()).to.be.false;
-			c.state = ConnectionState.Closed;
+			c.state = WSFallbackConnectionState.Closed;
 			expect(c.isHealthy()).to.be.false;
-			c.state = ConnectionState.Connecting;
+			c.state = WSFallbackConnectionState.Connecting;
 			expect(c.isHealthy()).to.be.false;
 		});
 		it('return true for ID and correct state', () => {
 			c.connectionID = 'id';
-			c.state = ConnectionState.Connected;
+			c.state = WSFallbackConnectionState.Connected;
 			expect(c.isHealthy()).to.be.true;
 		});
 	});
@@ -194,12 +194,12 @@ describe('WSConnectionFallback', () => {
 			// going offline would otherwise move it to Closed, and back online reconnect it
 			c._applyNetworkStatus(false);
 			c._applyNetworkStatus(true);
-			expect(c.state).to.be.eql(ConnectionState.Disconnected);
+			expect(c.state).to.be.eql(WSFallbackConnectionState.Disconnected);
 			expect(c.connect.called).to.be.false;
 
-			c.state = ConnectionState.Connected;
+			c.state = WSFallbackConnectionState.Connected;
 			c._applyNetworkStatus(false);
-			expect(c.state).to.be.eql(ConnectionState.Closed);
+			expect(c.state).to.be.eql(WSFallbackConnectionState.Closed);
 		});
 
 		it('should cancel requests and set the state correctly', async () => {
@@ -212,7 +212,7 @@ describe('WSConnectionFallback', () => {
 			const timeout = 500;
 			await c.disconnect(timeout);
 
-			expect(c.state).to.be.eql(ConnectionState.Disconnected);
+			expect(c.state).to.be.eql(WSFallbackConnectionState.Disconnected);
 			expect(c.connectionID).to.be.undefined;
 			expect(c.abortController).to.be.undefined;
 			expect(abort.calledOnce).to.be.true;
@@ -387,9 +387,9 @@ describe('WSConnectionFallback', () => {
 		it('should skip connect if already connecting or connected', async () => {
 			const c = new WSConnectionFallback({ client: newClient() });
 			sinon.spy(c);
-			c.state = ConnectionState.Connecting;
+			c.state = WSFallbackConnectionState.Connecting;
 			expect(await c.connect()).to.be.undefined;
-			c.state = ConnectionState.Connected;
+			c.state = WSFallbackConnectionState.Connected;
 			expect(await c.connect()).to.be.undefined;
 			expect(c._setState.called).to.be.false;
 			expect(c._req.called).to.be.false;
@@ -407,7 +407,7 @@ describe('WSConnectionFallback', () => {
 			expect(c._req.calledOnceWithExactly({ json: 'payload' }, { timeout: 8000 }, false))
 				.to.be.true;
 
-			c.state = ConnectionState.Init;
+			c.state = WSFallbackConnectionState.Init;
 			c._req = sinon.stub().resolves({ event: health });
 			expect(await c.connect(true)).to.be.eql(health);
 			expect(c._req.calledOnceWithExactly({ json: 'payload' }, { timeout: 8000 }, true))
@@ -419,7 +419,7 @@ describe('WSConnectionFallback', () => {
 			c._req = sinon.stub().resolves({ event: health });
 			c._poll = sinon.spy();
 			expect(await c.connect()).to.be.eql(health);
-			expect(c.state).to.be.eql(ConnectionState.Connected);
+			expect(c.state).to.be.eql(WSFallbackConnectionState.Connected);
 			expect(c.connectionID).to.be.eql(health.connection_id);
 			expect(c.client.connectionIdManager.connectionId).to.be.eql(health.connection_id);
 
@@ -428,7 +428,7 @@ describe('WSConnectionFallback', () => {
 			c._poll = sinon.spy();
 			await expect(c.connect()).rejects.toThrow();
 			expect(c._poll.called).to.be.false;
-			expect(c.state).to.be.eql(ConnectionState.Closed);
+			expect(c.state).to.be.eql(WSFallbackConnectionState.Closed);
 			expect(c.connectionID).to.be.undefined;
 		});
 
@@ -507,7 +507,7 @@ describe('WSConnectionFallback', () => {
 			await c.disconnect();
 			cancel();
 			await expect(connecting).rejects.toThrow();
-			expect(c.state).to.be.eql(ConnectionState.Disconnected);
+			expect(c.state).to.be.eql(WSFallbackConnectionState.Disconnected);
 
 			// so the next online edge does not reconnect it
 			c.connect = sinon.spy();
@@ -524,17 +524,17 @@ describe('WSConnectionFallback', () => {
 			expect(await c._poll()).to.be.undefined;
 			expect(c._req.called).to.be.false;
 
-			c.state = ConnectionState.Connecting;
+			c.state = WSFallbackConnectionState.Connecting;
 			expect(await c._poll()).to.be.undefined;
 			expect(c._req.called).to.be.false;
 		});
 
 		it('should send request in correct format', async () => {
 			const c = new WSConnectionFallback({ client: newClient() });
-			c.state = ConnectionState.Connected;
+			c.state = WSFallbackConnectionState.Connected;
 			c.connectionID = 'id';
 			c._req = async () => {
-				c.state = ConnectionState.Closed;
+				c.state = WSFallbackConnectionState.Closed;
 				return {};
 			};
 			sinon.spy(c, '_req');
@@ -546,10 +546,10 @@ describe('WSConnectionFallback', () => {
 
 		it('should dispatch incoming events', async () => {
 			const c = new WSConnectionFallback({ client: newClient() });
-			c.state = ConnectionState.Connected;
+			c.state = WSFallbackConnectionState.Connected;
 
 			c._req = async () => {
-				c.state = ConnectionState.Closed;
+				c.state = WSFallbackConnectionState.Closed;
 				return { events: ['1', '2'] };
 			};
 			await c._poll();
@@ -560,7 +560,7 @@ describe('WSConnectionFallback', () => {
 
 		it('should reconnect if ConnectionID err', async () => {
 			const c = new WSConnectionFallback({ client: newClient() });
-			c.state = ConnectionState.Connected;
+			c.state = WSFallbackConnectionState.Connected;
 			c.connect = sinon.spy();
 			c._req = async () => {
 				const err = new Error();
@@ -569,7 +569,7 @@ describe('WSConnectionFallback', () => {
 			};
 
 			await c._poll();
-			expect(c.state).to.be.eql(ConnectionState.Disconnected);
+			expect(c.state).to.be.eql(WSFallbackConnectionState.Disconnected);
 			expect(c.connect.calledOnceWithExactly(true)).to.be.true;
 		});
 
@@ -577,12 +577,12 @@ describe('WSConnectionFallback', () => {
 			vi.spyOn(errors, 'isErrorRetryable').mockReturnValue(false);
 			vi.spyOn(errors, 'isAPIError').mockReturnValue(true);
 			const c = new WSConnectionFallback({ client: newClient() });
-			c.state = ConnectionState.Connected;
+			c.state = WSFallbackConnectionState.Connected;
 			c.client.connectionIdManager.resolveConnectionId('id');
 			c._req = sinon.stub().rejects(new Error('stop'));
 
 			await c._poll();
-			expect(c.state).to.be.eql(ConnectionState.Closed);
+			expect(c.state).to.be.eql(WSFallbackConnectionState.Closed);
 			// nothing reconnects from here, so nothing may wait for an id
 			expect(() => c.client.connectionIdManager.getConnectionId()).toThrow();
 		});
@@ -590,10 +590,10 @@ describe('WSConnectionFallback', () => {
 		it('should continue retrying for random errors', async () => {
 			let counter = 0;
 			vi.spyOn(utils, 'sleep').mockImplementation(() => {
-				if (++counter > 2) c.state = ConnectionState.Disconnected;
+				if (++counter > 2) c.state = WSFallbackConnectionState.Disconnected;
 			});
 			const c = new WSConnectionFallback({ client: newClient() });
-			c.state = ConnectionState.Connected;
+			c.state = WSFallbackConnectionState.Connected;
 			c._req = sinon.stub().rejects();
 
 			await c._poll();

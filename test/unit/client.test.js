@@ -8,7 +8,7 @@ import { StreamChat } from '../../src/client';
 import { ChatApi } from '../../src/gen-imports';
 import { chatLoggerSystem } from '../../src/logger';
 import { StableWSConnection } from '../../src/connection';
-import { ConnectionState } from '../../src/connection/wsConnection/WSConnectionFallback';
+import { WSFallbackConnectionState } from '../../src/connection/wsConnection/WSConnectionFallback';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
 import { generateThreadResponse } from './test-utils/generateThreadResponse';
 import {
@@ -2576,13 +2576,15 @@ describe('Client WSFallback', () => {
 		expect(health).toMatchObject({ type: 'connection.ok', connection_id: 'new_id' });
 		// the socket's own connect timeout, not a shortened one
 		expect(socketConnect).toHaveBeenCalledWith(undefined);
-		expect(client.wsConnection.fallback.state).toBe(ConnectionState.Connected);
+		expect(client.wsConnection.fallback.state).toBe(WSFallbackConnectionState.Connected);
 		expect(client.wsConnection.fallback.connectionID).toBe('new_id');
 		expect(client.wsConnection.isHealthy).toBe(true);
 		expect(client.connectionIdManager.connectionId).toBe('new_id');
 
 		await client.disconnectUser();
-		expect(client.wsConnection.fallback.state).toBe(ConnectionState.Disconnected);
+		expect(client.wsConnection.fallback.state).toBe(
+			WSFallbackConnectionState.Disconnected,
+		);
 		expect(client.wsConnection.isHealthy).toBe(false);
 	});
 
@@ -2633,7 +2635,7 @@ describe('Client WSFallback', () => {
 
 		expect(client.wsConnection.fallback).toBe(fallback);
 		expect(socketConnect).toHaveBeenCalledTimes(1);
-		expect(client.wsConnection.fallback.state).toBe(ConnectionState.Connected);
+		expect(client.wsConnection.fallback.state).toBe(WSFallbackConnectionState.Connected);
 	});
 
 	it('should connect a token provider on the kept long-poll after disconnectUser', async () => {
@@ -2645,7 +2647,7 @@ describe('Client WSFallback', () => {
 
 		expect(health).toMatchObject({ type: 'connection.ok', connection_id: 'new_id' });
 		expect(socketConnect).toHaveBeenCalledTimes(1);
-		expect(client.wsConnection.fallback.state).toBe(ConnectionState.Connected);
+		expect(client.wsConnection.fallback.state).toBe(WSFallbackConnectionState.Connected);
 		expect(calls.filter((call) => call.params?.json).at(-1)).toMatchObject({
 			authorization: userToken,
 		});
@@ -2658,12 +2660,14 @@ describe('Client WSFallback', () => {
 		client.networkConnection.setStatusReporter(null);
 
 		client.networkConnection.setStatus(false);
-		expect(client.wsConnection.fallback.state).toBe(ConnectionState.Closed);
+		expect(client.wsConnection.fallback.state).toBe(WSFallbackConnectionState.Closed);
 		expect(client.wsConnection.isHealthy).toBe(false);
 
 		client.networkConnection.setStatus(true);
 		await vi.waitFor(() =>
-			expect(client.wsConnection.fallback.state).toBe(ConnectionState.Connected),
+			expect(client.wsConnection.fallback.state).toBe(
+				WSFallbackConnectionState.Connected,
+			),
 		);
 		expect(client.wsConnection.isHealthy).toBe(true);
 		expect(socketApply).not.toHaveBeenCalled();
@@ -2716,6 +2720,6 @@ describe('Client WSFallback', () => {
 
 		await client.connectUser({ id: 'amin' }, userToken);
 
-		expect(client.wsConnection.fallback.state).toBe(ConnectionState.Connected);
+		expect(client.wsConnection.fallback.state).toBe(WSFallbackConnectionState.Connected);
 	});
 });

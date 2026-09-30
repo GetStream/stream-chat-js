@@ -10,7 +10,7 @@ type UR = Record<string, unknown>;
 
 const logger = chatLoggerSystem.getLogger('connection');
 
-export enum ConnectionState {
+export enum WSFallbackConnectionState {
   Closed = 'CLOSED',
   Connected = 'CONNECTED',
   Connecting = 'CONNECTING',
@@ -20,14 +20,14 @@ export enum ConnectionState {
 
 export class WSConnectionFallback {
   client: StreamChat;
-  state: ConnectionState;
+  state: WSFallbackConnectionState;
   consecutiveFailures: number;
   connectionID?: string;
   abortController?: AbortController;
 
   constructor({ client }: { client: StreamChat }) {
     this.client = client;
-    this.state = ConnectionState.Init;
+    this.state = WSFallbackConnectionState.Init;
     this.consecutiveFailures = 0;
   }
 
@@ -36,18 +36,21 @@ export class WSConnectionFallback {
     log[level]('WSConnectionFallback:' + msg, extra);
   }
 
-  _setState(state: ConnectionState) {
+  _setState(state: WSFallbackConnectionState) {
     this._log(`_setState() - ${state}`);
 
     // transition from connecting => connected
     if (
-      this.state === ConnectionState.Connecting &&
-      state === ConnectionState.Connected
+      this.state === WSFallbackConnectionState.Connecting &&
+      state === WSFallbackConnectionState.Connected
     ) {
       this.client.wsConnection._setStatus({ isHealthy: true });
     }
 
-    if (state === ConnectionState.Closed || state === ConnectionState.Disconnected) {
+    if (
+      state === WSFallbackConnectionState.Closed ||
+      state === WSFallbackConnectionState.Disconnected
+    ) {
       // The server keyed watches by this connection id, so no request may carry it any more.
       this.client.connectionIdManager.invalidate();
       if (this.client.wsConnection._setStatus({ isHealthy: false })) {
@@ -68,18 +71,18 @@ export class WSConnectionFallback {
   _applyNetworkStatus = (online: boolean) => {
     // Closed on purpose by `disconnect()`: going offline would move it to `Closed`, and the next
     // online would reconnect it.
-    if (this.state === ConnectionState.Disconnected) return;
+    if (this.state === WSFallbackConnectionState.Disconnected) return;
 
     this._log(`_applyNetworkStatus() - ${online ? 'online' : 'offline'}`);
 
     if (!online) {
-      this._setState(ConnectionState.Closed);
+      this._setState(WSFallbackConnectionState.Closed);
       this.abortController?.abort();
       this.abortController = undefined;
       return;
     }
 
-    if (this.state === ConnectionState.Closed) {
+    if (this.state === WSFallbackConnectionState.Closed) {
       this.connect(true);
     }
   };
@@ -127,7 +130,7 @@ export class WSConnectionFallback {
 
   /** @private */
   _poll = async () => {
-    while (this.state === ConnectionState.Connected) {
+    while (this.state === WSFallbackConnectionState.Connected) {
       try {
         const data = await this._req<{
           events: Event[];
@@ -148,13 +151,13 @@ export class WSConnectionFallback {
 
         if (isConnectionIDError(error)) {
           this._log(`_poll() - ConnectionID error, connecting without ID...`);
-          this._setState(ConnectionState.Disconnected);
+          this._setState(WSFallbackConnectionState.Disconnected);
           this.connect(true);
           return;
         }
 
         if (isAPIError(error) && !isErrorRetryable(error)) {
-          this._setState(ConnectionState.Closed);
+          this._setState(WSFallbackConnectionState.Closed);
           // Nothing reconnects from here, so fail whatever is waiting for a connection id.
           this.client.connectionIdManager.rejectConnectionId(error);
           return;
@@ -171,16 +174,16 @@ export class WSConnectionFallback {
    * @param reconnect - should be false for first call and true for subsequent calls to keep the connection alive and settle the connect promises
    */
   connect = async (reconnect = false) => {
-    if (this.state === ConnectionState.Connecting) {
+    if (this.state === WSFallbackConnectionState.Connecting) {
       this._log('connect() - connecting already in progress', { reconnect }, 'warn');
       return;
     }
-    if (this.state === ConnectionState.Connected) {
+    if (this.state === WSFallbackConnectionState.Connected) {
       this._log('connect() - already connected and polling', { reconnect }, 'warn');
       return;
     }
 
-    this._setState(ConnectionState.Connecting);
+    this._setState(WSFallbackConnectionState.Connecting);
     // Before anything awaits, so a watch issued now waits for this connection's id.
     this.client.connectionIdManager.arm();
     this.connectionID = undefined; // connect should be sent with empty connection_id so API creates one
@@ -196,7 +199,7 @@ export class WSConnectionFallback {
       // The id is published before the status says the connection is up, as the WebSocket does.
       this.connectionID = event.connection_id;
       this.client.connectionIdManager.resolveConnectionId(event.connection_id);
-      this._setState(ConnectionState.Connected);
+      this._setState(WSFallbackConnectionState.Connected);
       this.client.dispatchEvent(event);
       this._poll();
       if (reconnect) {
@@ -206,8 +209,8 @@ export class WSConnectionFallback {
     } catch (err) {
       // `disconnect()` has already set the state of an attempt it cancelled. Overwriting it with
       // Closed would let the next online edge in `_applyNetworkStatus` reconnect it.
-      if (this.state !== ConnectionState.Disconnected)
-        this._setState(ConnectionState.Closed);
+      if (this.state !== WSFallbackConnectionState.Disconnected)
+        this._setState(WSFallbackConnectionState.Closed);
       // Nothing retries a failed connect, so fail whatever is waiting for a connection id. A cancel
       // comes from `disconnect()`, which leaves them waiting for the next connection instead.
       if (!axios.isCancel(err)) this.client.connectionIdManager.rejectConnectionId(err);
@@ -218,15 +221,16 @@ export class WSConnectionFallback {
   /**
    * isHealthy checks if there is a connectionID and connection is in Connected state
    */
-  isHealthy = () => !!this.connectionID && this.state === ConnectionState.Connected;
+  isHealthy = () =>
+    !!this.connectionID && this.state === WSFallbackConnectionState.Connected;
 
   /** Whether a connect request is in flight. */
   get isConnecting() {
-    return this.state === ConnectionState.Connecting;
+    return this.state === WSFallbackConnectionState.Connecting;
   }
 
   disconnect = async (timeout = 2000) => {
-    this._setState(ConnectionState.Disconnected);
+    this._setState(WSFallbackConnectionState.Disconnected);
     this.abortController?.abort();
     this.abortController = undefined;
 

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StreamChat } from '../../../src';
 import { StableWSConnection } from '../../../src/connection';
 import {
-  ConnectionState,
+  WSFallbackConnectionState,
   WSConnectionFallback,
 } from '../../../src/connection/wsConnection/WSConnectionFallback';
 
@@ -358,7 +358,7 @@ describe('client.wsConnection', () => {
 
       expect(client.wsConnection.isConnecting).toBe(false);
 
-      fallback.state = ConnectionState.Connecting;
+      fallback.state = WSFallbackConnectionState.Connecting;
       expect(client.wsConnection.isConnecting).toBe(true);
     });
 
