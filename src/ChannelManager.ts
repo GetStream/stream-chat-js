@@ -17,6 +17,7 @@ import { getChannel } from './pagination/utility.queryChannel';
 import type { Channel } from './channel';
 import { ChannelWatchStatus } from './channel_state';
 import { runDetached } from './utils';
+import { EntityStore } from './entityStore/EntityStore';
 
 export type ChannelManagerEventHandlerContext = {
   channelManager: ChannelManager;
@@ -400,6 +401,18 @@ export type ChannelManagerOptions = {
 export class ChannelManager extends WithSubscriptions {
   client: StreamChat;
   state: StateStore<ChannelManagerState>;
+  /**
+   * Every `Channel` instance, one per cid. A channel created from members, before the server assigns
+   * its id, is stored under its temporary cid until {@link ChannelManager.changeChannelId} moves it.
+   * The last holder leaving, or a removal, tears the channel down with `_disconnect()`.
+   *
+   * @internal
+   */
+  readonly channelStore = new EntityStore<Channel>({
+    getEntityId: (channel) => channel.cid,
+    onRelease: (channel) => channel._disconnect(),
+  });
+
   protected _pipelines = new Map<
     SupportedEventType,
     EventHandlerPipeline<EventHandlerContext>
@@ -464,6 +477,68 @@ export class ChannelManager extends WithSubscriptions {
 
   get paginators(): ChannelPaginator[] {
     return this.state.getLatestValue().paginators;
+  }
+
+  /** The stored channel for `cid`, if any. */
+  get(cid: string): Channel | undefined {
+    return this.channelStore.get(cid);
+  }
+
+  /** Every stored channel. */
+  values(): Channel[] {
+    return this.channelStore.values();
+  }
+
+  // `client.activeChannels` mirrors the channel store until every reader moves to get() / values().
+
+  /**
+   * Returns the channel stored under `cid`, passing it to `hydrate`, or stores and returns the result
+   * of `create`.
+   *
+   * @internal
+   */
+  getOrCreateChannel(
+    cid: string,
+    create: () => Channel,
+    hydrate?: (stored: Channel) => void,
+  ): Channel {
+    const channel = this.channelStore.getOrCreate(cid, create, hydrate);
+    this.client.activeChannels[cid] = channel;
+    return channel;
+  }
+
+  /**
+   * Moves a channel from its temporary cid to the one the server assigned. Returns `false` when
+   * `oldCid` isn't stored or `newCid` already holds another channel.
+   *
+   * @internal
+   */
+  changeChannelId(oldCid: string, newCid: string): boolean {
+    if (!this.channelStore.changeId(oldCid, newCid)) return false;
+    const channel = this.client.activeChannels[oldCid];
+    delete this.client.activeChannels[oldCid];
+    this.client.activeChannels[newCid] = channel;
+    return true;
+  }
+
+  /**
+   * Removes the channel stored under `cid` whatever holds it, tearing it down with `_disconnect()`.
+   *
+   * @internal
+   */
+  removeChannel(cid: string) {
+    this.channelStore.remove(cid);
+    delete this.client.activeChannels[cid];
+  }
+
+  /**
+   * Removes and tears down every stored channel.
+   *
+   * @internal
+   */
+  clearChannels() {
+    this.channelStore.clear();
+    this.client.activeChannels = {};
   }
 
   get pipelines(): Map<SupportedEventType, EventHandlerPipeline<EventHandlerContext>> {

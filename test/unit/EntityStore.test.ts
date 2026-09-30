@@ -506,6 +506,65 @@ describe('EntityStore', () => {
     });
   });
 
+  describe('remove', () => {
+    it('removes the entry whatever holds it and releases the entity', () => {
+      const onRelease = vi.fn();
+      store = new EntityStore<LocalMessage>({ getEntityId, onRelease });
+      const a = spySubscriber();
+      const m = msg({ id: 'm1' });
+      store.upsert(m);
+      store.link('m1', a);
+
+      store.remove('m1');
+
+      expect(store.has('m1')).toBe(false);
+      expect(onRelease).toHaveBeenCalledWith(m);
+      expect(a.onEntitiesChanged).toHaveBeenCalledTimes(1);
+      expect([...a.onEntitiesChanged.mock.calls[0][0].changedIds]).toEqual(['m1']);
+    });
+
+    it('drops the holders, so a later unlink or upsert does not reach them', () => {
+      const onRelease = vi.fn();
+      store = new EntityStore<LocalMessage>({ getEntityId, onRelease });
+      const a = spySubscriber();
+      store.upsert(msg({ id: 'm1' }));
+      store.link('m1', a);
+      store.remove('m1');
+      a.onEntitiesChanged.mockClear();
+
+      store.unlink('m1', a);
+      store.upsert(msg({ id: 'm1' }));
+
+      expect(a.onEntitiesChanged).not.toHaveBeenCalled();
+      expect(onRelease).toHaveBeenCalledTimes(1);
+    });
+
+    it('does nothing on a second call or for an ID that is not stored', () => {
+      const onRelease = vi.fn();
+      store = new EntityStore<LocalMessage>({ getEntityId, onRelease });
+      store.upsert(msg({ id: 'm1' }));
+
+      store.remove('m1');
+      store.remove('m1');
+      store.remove('ghost');
+
+      expect(onRelease).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('values', () => {
+    it('returns every stored entity', () => {
+      const m1 = msg({ id: 'm1' });
+      const m2 = msg({ id: 'm2' });
+      store.upsert(m1);
+      store.upsert(m2);
+
+      expect(store.values()).toEqual([m1, m2]);
+      store.remove('m1');
+      expect(store.values()).toEqual([m2]);
+    });
+  });
+
   describe('clear', () => {
     it('removes every entry and holder and releases each entity', () => {
       const onRelease = vi.fn();

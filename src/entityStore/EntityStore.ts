@@ -106,6 +106,11 @@ export class EntityStore<T> {
     return this.byId.has(id);
   }
 
+  /** Every stored entity, in insertion order. */
+  values(): T[] {
+    return [...this.byId.values()];
+  }
+
   // ---- writes ----
 
   /**
@@ -181,6 +186,22 @@ export class EntityStore<T> {
     if (moved) for (const subscriber of moved) subscriber.onIdChanged?.(oldId, newId);
     this.autoFlush();
     return true;
+  }
+
+  /**
+   * Removes the entry stored under `id` whatever holds it, drops its holders and calls `onRelease`
+   * with the entity. Holders are notified that `id` changed (it now resolves to `undefined`).
+   * Removing an ID that isn't stored does nothing.
+   */
+  remove(id: string): void {
+    if (!this.byId.has(id)) return;
+    const entity = this.byId.get(id) as T;
+    this.byId.delete(id);
+    this.markDirty(id);
+    this.subscribers.delete(id);
+    this.pendingFlushIds?.delete(id);
+    this.onRelease?.(entity);
+    this.autoFlush();
   }
 
   /**

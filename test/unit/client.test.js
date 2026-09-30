@@ -2357,12 +2357,12 @@ describe('activeChannels eviction when the current user is removed (#2599)', () 
 
 	it('evicts the channel from activeChannels and disconnects it on notification.removed_from_channel', () => {
 		const channel = client.channel('messaging', 'ch-removed');
-		const disconnectSpy = vi.spyOn(channel, '_disconnect');
 		expect(client.activeChannels[channel.cid]).to.equal(channel);
 
 		client.dispatchEvent(removedFromChannelEvent(channel));
 
-		expect(disconnectSpy).toHaveBeenCalledTimes(1);
+		expect(channel.pendingDisposal).to.equal(true);
+		expect(client.channelManager.get(channel.cid)).to.be.undefined;
 		expect(client.activeChannels[channel.cid]).to.be.undefined;
 	});
 
@@ -2448,8 +2448,6 @@ describe('activeChannels eviction when the current user is removed (#2599)', () 
 	it('still evicts on channel.deleted and notification.channel_deleted (no regression)', () => {
 		const deleted = client.channel('messaging', 'deleted-1');
 		const notifDeleted = client.channel('messaging', 'deleted-2');
-		const deletedDisconnect = vi.spyOn(deleted, '_disconnect');
-		const notifDeletedDisconnect = vi.spyOn(notifDeleted, '_disconnect');
 
 		client.dispatchEvent({
 			type: 'channel.deleted',
@@ -2464,8 +2462,10 @@ describe('activeChannels eviction when the current user is removed (#2599)', () 
 			channel_id: notifDeleted.id,
 		});
 
-		expect(deletedDisconnect).toHaveBeenCalledTimes(1);
-		expect(notifDeletedDisconnect).toHaveBeenCalledTimes(1);
+		expect(deleted.pendingDisposal).to.equal(true);
+		expect(notifDeleted.pendingDisposal).to.equal(true);
+		expect(client.channelManager.get(deleted.cid)).to.be.undefined;
+		expect(client.channelManager.get(notifDeleted.cid)).to.be.undefined;
 		expect(client.activeChannels[deleted.cid]).to.be.undefined;
 		expect(client.activeChannels[notifDeleted.cid]).to.be.undefined;
 	});

@@ -810,11 +810,8 @@ export class StreamChat extends ChatApi {
 
     const closePromise = this.closeConnection(timeout);
 
-    for (const channel of Object.values(this.activeChannels)) {
-      channel._disconnect();
-    }
-    // ensure we no longer return inactive channels
-    this.activeChannels = {};
+    // tears every channel down and ensures we no longer return inactive channels
+    this.channelManager.clearChannels();
     // reset client state
     this.state = new ClientState({ client: this });
     // reset thread manager
@@ -1254,7 +1251,7 @@ export class StreamChat extends ChatApi {
       postListenerCallbacks.push(() => {
         if (!cid) return;
 
-        delete this.activeChannels[cid];
+        this.channelManager.removeChannel(cid);
       });
     }
 
@@ -1267,7 +1264,7 @@ export class StreamChat extends ChatApi {
       this.activeChannels[cid]?._disconnect();
 
       postListenerCallbacks.push(() => {
-        delete this.activeChannels[cid];
+        this.channelManager.removeChannel(cid);
       });
     }
 
@@ -1784,8 +1781,8 @@ export class StreamChat extends ChatApi {
    * It's a helper method for `client.channel()` method, used to create unique conversation or
    * channel based on member list instead of ID.
    *
-   * If the channel already exists in `activeChannels` list, then we simply return it, since that
-   * means the same channel was already requested or created.
+   * If the channel already exists in the channel store (`client.channelManager`), we return it,
+   * since that means the same channel was already requested or created.
    *
    * Otherwise we create a new instance of Channel class and return it.
    *
@@ -1798,9 +1795,8 @@ export class StreamChat extends ChatApi {
   getChannelByMembers = (channelType: string, custom: ChannelInput) => {
     // Check if the channel already exists.
     // Only allow 1 channel object per cid
-    // Mirrors the same expression in `channel.ts` (`_initializeState`), which recomputes this
-    // temp cid to evict the stale `activeChannels` entry once the server assigns a real id —
-    // the two must agree exactly. `user_id` became optional in the v2 spec while
+    // Mirrors the same expression in `Channel.query`, which recomputes this temp cid to move the
+    // stored channel to its real cid once the server assigns one — the two must agree exactly. `user_id` became optional in the v2 spec while
     // `MemberUserRequest.id` is required, so `{ user: { id } }` is now a valid member spec.
     const memberIds = (custom.members ?? []).map((member) =>
       typeof member === 'string' ? member : member.user_id || member.user?.id || '',
@@ -1812,45 +1808,37 @@ export class StreamChat extends ChatApi {
       throw Error('Please specify atleast one member when creating unique conversation');
     }
 
-    // channel could exist in `activeChannels` list with either one of the following two keys:
-    // 1. cid - Which gets set on channel only after calling channel.query or channel.watch or channel.create
-    // 2. Sorted membersStr - E.g., "messaging:amin,vishal" OR "messaging:amin,jaap,tom"
-    //                        This is set when you create a channel, but haven't queried yet. After query,
-    //                        we will replace it with `cid`
-    for (const key in this.activeChannels) {
-      const channel = this.activeChannels[key];
-      if (channel.pendingDisposal) {
-        continue;
-      }
-
-      if (key === tempCid) {
-        return channel;
-      }
-
-      if (key.indexOf(`${channelType}:!members-`) === 0) {
-        const membersStrInExistingChannel = Object.keys(channel.state.members)
-          .sort()
-          .join(',');
-        if (membersStrInExistingChannel === membersStr) {
-          return channel;
-        }
-      }
+    // The channel is stored under one of two keys:
+    // 1. its temporary cid built from the sorted member IDs, until channel.query / watch / create
+    //    returns the real cid, which then replaces it (Channel.query calls changeChannelId);
+    // 2. the real cid, which for a distinct channel has a server-generated `!members-` id.
+    const { channelManager } = this;
+    if (channelManager.get(tempCid)?.pendingDisposal)
+      channelManager.removeChannel(tempCid);
+    if (!channelManager.get(tempCid)) {
+      const existing = channelManager
+        .values()
+        .find(
+          (channel) =>
+            !channel.pendingDisposal &&
+            channel.type === channelType &&
+            channel.id?.startsWith('!members-') &&
+            Object.keys(channel.state.members).sort().join(',') === membersStr,
+        );
+      if (existing) return existing;
     }
 
-    const channel = new Channel(this, channelType, undefined, custom);
-
-    // For the time being set the key as membersStr, since we don't know the cid yet.
-    // In channel.query, we will replace it with 'cid'.
-    this.activeChannels[tempCid] = channel;
-
-    return channel;
+    return channelManager.getOrCreateChannel(
+      tempCid,
+      () => new Channel(this, channelType, undefined, custom),
+    );
   };
 
   /**
    * It's a helper method for `client.channel()`, used to retrieve a channel given its ID.
    *
-   * If the channel already exists in `activeChannels` list, then we simply return it, since that
-   * means the same channel was already requested or created.
+   * If the channel already exists in the channel store (`client.channelManager`), we return it,
+   * since that means the same channel was already requested or created.
    *
    * Otherwise we create a new instance of `Channel` class and return it.
    *
@@ -1866,30 +1854,27 @@ export class StreamChat extends ChatApi {
       throw Error(`Invalid channel id ${channelId}, can't contain the : character`);
     }
 
-    // only allow 1 channel object per cid
+    // only allow 1 channel object per cid; a torn-down one is replaced by a fresh instance
     const cid = `${channelType}:${channelId}`;
-    if (
-      cid in this.activeChannels &&
-      this.activeChannels[cid] &&
-      !this.activeChannels[cid].pendingDisposal
-    ) {
-      const channel = this.activeChannels[cid];
-      // Only overwrite the existing channel's custom data when the caller actually provided some.
-      // A caller passing other fields (e.g. `{ members }`, or even `{ members: undefined }`) yields a
-      // non-empty object with no `.custom`; the previous `Object.keys(custom).length > 0` guard let
-      // that through and then set `custom: custom.custom` (undefined), wiping the channel's existing
-      // custom data (e.g. its name). Guarding on `custom.custom` keeps genuine custom updates while
-      // leaving the existing custom intact when the caller omits it.
-      if (custom.custom !== undefined) {
-        channel.data = { ...channel.data, custom: custom.custom };
-        channel._data = { ...channel._data, custom: custom.custom };
-      }
-      return channel;
-    }
-    const channel = new Channel(this, channelType, channelId, custom);
-    this.activeChannels[channel.cid] = channel;
+    if (this.channelManager.get(cid)?.pendingDisposal)
+      this.channelManager.removeChannel(cid);
 
-    return channel;
+    return this.channelManager.getOrCreateChannel(
+      cid,
+      () => new Channel(this, channelType, channelId, custom),
+      (channel) => {
+        // Only overwrite the existing channel's custom data when the caller actually provided some.
+        // A caller passing other fields (e.g. `{ members }`, or even `{ members: undefined }`) yields a
+        // non-empty object with no `.custom`; the previous `Object.keys(custom).length > 0` guard let
+        // that through and then set `custom: custom.custom` (undefined), wiping the channel's existing
+        // custom data (e.g. its name). Guarding on `custom.custom` keeps genuine custom updates while
+        // leaving the existing custom intact when the caller omits it.
+        if (custom.custom !== undefined) {
+          channel.data = { ...channel.data, custom: custom.custom };
+          channel._data = { ...channel._data, custom: custom.custom };
+        }
+      },
+    );
   };
 
   /**

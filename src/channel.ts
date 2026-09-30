@@ -1904,14 +1904,15 @@ export class Channel extends WithMessageOperations(ChannelApi) {
         state.members.map((member) => member.user_id || member.user?.id || ''),
       );
 
-      if (tempChannelCid && tempChannelCid in this.getClient().activeChannels) {
-        // This gets set in `client.channel()` function, when channel is created
-        // using members, not id.
-        delete this.getClient().activeChannels[tempChannelCid];
-      }
-
-      if (!(this.cid in this.getClient().activeChannels)) {
-        this.getClient().activeChannels[this.cid] = this;
+      // `client.channel(type, { members })` stored this channel under the temporary cid; the same
+      // instance moves to the real one. If another instance already holds the real cid, both stay.
+      const { channelManager } = this.getClient();
+      const moved =
+        !!tempChannelCid &&
+        channelManager.get(tempChannelCid) === this &&
+        channelManager.changeChannelId(tempChannelCid, this.cid);
+      if (!moved && !channelManager.get(this.cid)) {
+        channelManager.getOrCreateChannel(this.cid, () => this);
       }
     }
 
