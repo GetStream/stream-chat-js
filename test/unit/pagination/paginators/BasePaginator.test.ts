@@ -515,6 +515,117 @@ describe('BasePaginator', () => {
       await refreshPromise;
     });
 
+    it('ends the list only on a page shorter than pageSize, not on a larger capped response (offset)', async () => {
+      const paginator = new Paginator({ pageSize: 2 });
+      const load = async (items: TestItem[]) => {
+        const loadPromise = paginator.toTail();
+        await sleep(0);
+        paginator.queryResolve({ items });
+        await loadPromise;
+      };
+
+      // More than a page, as a refresh that asked for more and was capped by the server returns.
+      await load([a, b, c, d]);
+      expect(paginator.hasMoreTail).toBe(true);
+
+      await load([v, x]);
+      expect(paginator.hasMoreTail).toBe(true);
+
+      await load([y]);
+      expect(paginator.hasMoreTail).toBe(false);
+    });
+
+    describe('keepPreviousItems + reset: where pagination continues after the refresh (offset)', () => {
+      const e: TestItem = { id: 'e', age: 18, name: 'E' };
+      const f: TestItem = { id: 'f', age: 16, name: 'F' };
+
+      const setup = async () => {
+        const offsetAtQueryShape: number[] = [];
+        class OffsetProbePaginator extends IncompletePaginator {
+          getNextQueryShape = vi.fn(() => {
+            offsetAtQueryShape.push(this.offset);
+            return defaultNextQueryShape;
+          });
+        }
+        const paginator = new OffsetProbePaginator({ pageSize: 2 });
+        for (const page of [
+          [a, b],
+          [c, d],
+          [e, f],
+        ]) {
+          const pagePromise = paginator.toTail();
+          await sleep(0);
+          paginator.queryResolve({ items: page });
+          await pagePromise;
+        }
+        expect(paginator.offset).toBe(6);
+
+        const refresh = async (page: TestItem[]) => {
+          const refreshPromise = paginator.executeQuery({
+            keepPreviousItems: true,
+            reset: 'yes',
+          });
+          await sleep(0);
+          expect(offsetAtQueryShape.at(-1)).toBe(0);
+          paginator.queryResolve({ items: page });
+          await refreshPromise;
+        };
+
+        const nextPageOffset = async () => {
+          const nextPromise = paginator.toTail();
+          await sleep(0);
+          const offset = offsetAtQueryShape.at(-1);
+          paginator.queryResolve({ items: [] });
+          await nextPromise;
+          return offset;
+        };
+
+        return { nextPageOffset, paginator, refresh };
+      };
+
+      it('continues from the end of the kept window, not from the end of page 1', async () => {
+        // Regression: the refresh reset the offset to page 1 and left it there, so the next pages
+        // re-fetched what was already loaded (offset 2, then 4) before anything new arrived.
+        const { nextPageOffset, paginator, refresh } = await setup();
+
+        await refresh([a, b]);
+
+        expect(paginator.items?.map((item) => item.id)).toEqual([
+          'a',
+          'b',
+          'c',
+          'd',
+          'e',
+          'f',
+        ]);
+        expect(paginator.offset).toBe(6);
+        expect(await nextPageOffset()).toBe(6);
+      });
+
+      it('counts the items that entered the list with the refreshed page', async () => {
+        const { nextPageOffset, paginator, refresh } = await setup();
+
+        // `v` entered the list at the top, pushing `b` onto page 2. The page still ends in the kept
+        // window, so the loaded window is contiguous and the server now has 7 items up to its end.
+        await refresh([v, a]);
+
+        expect(paginator.items).toHaveLength(7);
+        expect(paginator.offset).toBe(7);
+        expect(await nextPageOffset()).toBe(7);
+      });
+
+      it('continues from the end of page 1 when the page does not connect to the kept window', async () => {
+        // More than a page of new items entered above the kept window: the items between the page and
+        // the window are unknown, so continuing past the window would skip them.
+        const { nextPageOffset, paginator, refresh } = await setup();
+
+        await refresh([x, y]);
+
+        expect(paginator.offset).toBe(2);
+        expect(await nextPageOffset()).toBe(2);
+      });
+    });
+
     it('anchors hasMoreHead from a new start offset when the window is re-established via reset (offset)', async () => {
       // To start a window mid-list, set the start offset and reset. isFirstPage is true,
       // getStateBeforeFirstQuery runs, and hasMoreHead is anchored from the (new) start offset.
