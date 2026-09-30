@@ -515,6 +515,26 @@ describe('BasePaginator', () => {
       await refreshPromise;
     });
 
+    it('ends the list only on a page shorter than pageSize, not on a larger capped response (offset)', async () => {
+      const paginator = new Paginator({ pageSize: 2 });
+      const load = async (items: TestItem[]) => {
+        const loadPromise = paginator.toTail();
+        await sleep(0);
+        paginator.queryResolve({ items });
+        await loadPromise;
+      };
+
+      // More than a page, as a refresh that asked for more and was capped by the server returns.
+      await load([a, b, c, d]);
+      expect(paginator.hasMoreTail).toBe(true);
+
+      await load([v, x]);
+      expect(paginator.hasMoreTail).toBe(true);
+
+      await load([y]);
+      expect(paginator.hasMoreTail).toBe(false);
+    });
+
     describe('keepPreviousItems + reset: where pagination continues after the refresh (offset)', () => {
       const e: TestItem = { id: 'e', age: 18, name: 'E' };
       const f: TestItem = { id: 'f', age: 16, name: 'F' };
