@@ -95,22 +95,6 @@ const getCachedChannelFromEvent = (
   return cid ? cache[cid] : undefined;
 };
 
-const reEmit: EventHandlerPipelineHandler<EventHandlerContext> = ({
-  event,
-  ctx: { channelManager },
-}) => {
-  if (!event.cid) return;
-  const channel = channelManager.client.activeChannels[event.cid];
-  if (!channel) return;
-  channelManager.paginators.forEach((paginator) => {
-    const items = paginator.items;
-    const { state } = paginator.locateByItem(channel);
-    if ((state?.currentIndex ?? -1) > -1 && items) {
-      paginator.state.partialNext({ items: [...items] });
-    }
-  });
-};
-
 const removeItem: EventHandlerPipelineHandler<EventHandlerContext> = ({
   event,
   ctx: { channelManager },
@@ -185,6 +169,32 @@ const updateLists: EventHandlerPipelineHandler<EventHandlerContext> = async ({
 
   if (!channel) return;
 
+  routeToPaginators(channelManager, channel);
+
+  // AFTER routing, and not awaited: the row relocates immediately off the event, and the watch (plus
+  // the state it hydrates) lands whenever it lands. `channel.hidden` is excluded — a channel being
+  // hidden is the one routed event that must not resurrect a watch.
+  if (event.type !== 'channel.hidden') {
+    restoreInterruptedWatch(channel, channelManager.client);
+  }
+};
+
+/**
+ * Re-inserts a loaded channel whose data changed in place (`channel.updated`, `channel.truncated`), so
+ * a list sorted or filtered by a changed field moves or drops it. Channels that aren't loaded are
+ * ignored: these events don't make an unknown channel relevant.
+ */
+const reinsertItem: EventHandlerPipelineHandler<EventHandlerContext> = ({
+  event,
+  ctx: { channelManager },
+}) => {
+  const channel = getCachedChannelFromEvent(event, channelManager.client.activeChannels);
+  if (!channel) return;
+  routeToPaginators(channelManager, channel);
+};
+
+/** Ingests `channel` into the lists that match and own it, and removes it from the rest. */
+function routeToPaginators(channelManager: ChannelManager, channel: Channel) {
   const matchingPaginators = channelManager.paginators.filter((p) =>
     p.matchesFilter(channel),
   );
@@ -212,14 +222,7 @@ const updateLists: EventHandlerPipelineHandler<EventHandlerContext> = async ({
     // (`paginator.boost`) for integrators to opt into for specific channels (VIP/mention/deep-link).
     paginator.ingestItem(channel);
   });
-
-  // AFTER routing, and not awaited: the row relocates immediately off the event, and the watch (plus
-  // the state it hydrates) lands whenever it lands. `channel.hidden` is excluded — a channel being
-  // hidden is the one routed event that must not resurrect a watch.
-  if (event.type !== 'channel.hidden') {
-    restoreInterruptedWatch(channel, channelManager.client);
-  }
-};
+}
 
 // we have to make sure that client.activeChannels is always up-to-date
 const channelDeletedHandler: LabeledEventHandler<EventHandlerContext> = {
@@ -227,17 +230,13 @@ const channelDeletedHandler: LabeledEventHandler<EventHandlerContext> = {
   id: 'ChannelManager:default-handler:channel.deleted',
 };
 
-// fixme: this handler should not be handled by the channel manager but as Channel does not have reactive state,
-// we need to re-emit the whole list to reflect the changes
 const channelUpdatedHandler: LabeledEventHandler<EventHandlerContext> = {
-  handle: reEmit,
+  handle: reinsertItem,
   id: 'ChannelManager:default-handler:channel.updated',
 };
 
-// fixme: this handler should not be handled by the channel manager but as Channel does not have reactive state,
-// we need to re-emit the whole list to reflect the changes
 const channelTruncatedHandler: LabeledEventHandler<EventHandlerContext> = {
-  handle: reEmit,
+  handle: reinsertItem,
   id: 'ChannelManager:default-handler:channel.truncated',
 };
 

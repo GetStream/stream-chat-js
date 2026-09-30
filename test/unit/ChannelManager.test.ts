@@ -1527,37 +1527,82 @@ describe('ChannelManager', () => {
   describe.each(['channel.updated', 'channel.truncated'] as EventTypes[])(
     'event %s',
     (eventType) => {
-      it('re-emits item lists for paginators that already contain the channel', async () => {
+      it('re-inserts the channel into matching lists and removes it from the rest', async () => {
         const channelManager = new ChannelManager({ client });
         const ch = makeChannel('messaging:3');
         client.activeChannels[ch.cid] = ch;
 
-        const p1 = new ChannelPaginator({ client });
-        const p2 = new ChannelPaginator({ client });
-        p1.state.partialNext({ items: [ch] });
-        vi.spyOn(p1, 'locateByItem').mockReturnValue({
-          state: { currentIndex: 0, insertionIndex: 1 },
-        });
-        vi.spyOn(p2, 'locateByItem').mockReturnValue({
-          state: { currentIndex: -1, insertionIndex: 1 },
-        });
-        const partialNextSpy1 = vi.spyOn(p1.state, 'partialNext');
-        const partialNextSpy2 = vi.spyOn(p2.state, 'partialNext');
-
-        channelManager.insertPaginator({ paginator: p1 });
+        const p = new ChannelPaginator({ client });
+        const matchesFilterSpy = vi.spyOn(p, 'matchesFilter').mockReturnValue(true);
+        const ingestItemSpy = vi.spyOn(p, 'ingestItem').mockReturnValue(true);
+        const removeItemSpy = vi
+          .spyOn(p, 'removeItem')
+          .mockReturnValue({ state: { currentIndex: 0, insertionIndex: 1 } });
+        channelManager.insertPaginator({ paginator: p });
         channelManager.registerSubscriptions();
 
         client.dispatchEvent({ type: eventType, cid: ch.cid });
         await vi.waitFor(() => {
-          expect(partialNextSpy2).toHaveBeenCalledTimes(0);
-          expect(partialNextSpy1).toHaveBeenCalledTimes(1);
-          const last = partialNextSpy1.mock.calls.at(-1)![0];
-          expect(last.items!.length).toBe(1);
-          expect(last.items![0]).toStrictEqual(ch);
+          expect(ingestItemSpy).toHaveBeenCalledWith(ch);
+          expect(removeItemSpy).not.toHaveBeenCalled();
         });
+
+        matchesFilterSpy.mockReturnValue(false);
+        client.dispatchEvent({ type: eventType, cid: ch.cid });
+        await vi.waitFor(() => {
+          expect(removeItemSpy).toHaveBeenCalledWith({ item: ch });
+          expect(ingestItemSpy).toHaveBeenCalledTimes(1);
+        });
+      });
+
+      it('ignores a channel that is not loaded', async () => {
+        const channelManager = new ChannelManager({ client });
+        const p = new ChannelPaginator({ client });
+        vi.spyOn(p, 'matchesFilter').mockReturnValue(true);
+        const ingestItemSpy = vi.spyOn(p, 'ingestItem');
+        channelManager.insertPaginator({ paginator: p });
+        channelManager.registerSubscriptions();
+
+        client.dispatchEvent({ type: eventType, cid: 'messaging:unknown' });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(mockGetChannel).not.toHaveBeenCalled();
+        expect(ingestItemSpy).not.toHaveBeenCalled();
       });
     },
   );
+
+  it('moves a channel in a list sorted by name after channel.updated renames it', async () => {
+    const paginator = new ChannelPaginator({
+      client,
+      filters: { type: 'messaging' },
+      sort: [{ direction: 1, field: 'name' }],
+    });
+    const channels = ['a', 'b', 'c'].map((name) => {
+      const channel = makeChannel(`messaging:${name}`);
+      channel.data = { ...channel.data, name };
+      client.activeChannels[channel.cid] = channel;
+      return channel;
+    });
+    paginator.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: channels });
+    const channelManager = new ChannelManager({ client, paginators: [paginator] });
+    channelManager.registerSubscriptions();
+
+    const [renamed] = channels;
+    client.dispatchEvent({
+      type: 'channel.updated',
+      cid: renamed.cid,
+      channel: { ...renamed.data, name: 'd' } as ChannelResponse,
+    });
+
+    await vi.waitFor(() => {
+      expect(paginator.items?.map((channel) => channel.data?.name)).toEqual([
+        'b',
+        'c',
+        'd',
+      ]);
+    });
+  });
 
   describe.each([
     'channel.visible',
