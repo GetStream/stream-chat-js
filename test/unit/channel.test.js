@@ -4599,3 +4599,56 @@ describe('Channel active flag (mark-read stays UI-driven)', () => {
 		expect(spy).not.toHaveBeenCalled();
 	});
 });
+
+describe('Channel _disconnect called more than once', () => {
+	let client;
+	let channel;
+
+	beforeEach(() => {
+		client = getClientWithUser({ id: 'ann' });
+		channel = client.channel('messaging', uuidv4());
+	});
+
+	it('tears the channel down only on the first call', () => {
+		const unregisterReceipts = vi.spyOn(
+			channel.messageReceiptsTracker,
+			'unregisterSubscriptions',
+		);
+		const unregisterCooldown = vi.spyOn(channel.cooldownTimer, 'unregisterSubscriptions');
+		const disposeMessages = vi.spyOn(channel.messagePaginator, 'dispose');
+		const disposePinned = vi.spyOn(channel.pinnedMessagesPaginator, 'dispose');
+
+		channel._disconnect();
+		channel._disconnect();
+
+		expect(channel.pendingDisposal).to.equal(true);
+		expect(unregisterReceipts).toHaveBeenCalledTimes(1);
+		expect(unregisterCooldown).toHaveBeenCalledTimes(1);
+		expect(disposeMessages).toHaveBeenCalledTimes(1);
+		expect(disposePinned).toHaveBeenCalledTimes(1);
+	});
+
+	it('keeps the subscriptions another consumer registered on the cooldown timer and receipts tracker', () => {
+		// e.g. a UI component that registered them too
+		channel.cooldownTimer.registerSubscriptions();
+		channel.messageReceiptsTracker.registerSubscriptions();
+
+		channel._disconnect();
+		channel._disconnect();
+
+		expect(channel.cooldownTimer.hasSubscriptions).to.equal(true);
+		expect(channel.messageReceiptsTracker.hasSubscriptions).to.equal(true);
+	});
+
+	it('does not publish channel state again on the second call', () => {
+		channel._disconnect();
+		const listener = vi.fn();
+		const unsubscribe = channel.state.subscribe(listener);
+		listener.mockClear();
+
+		channel._disconnect();
+
+		expect(listener).not.toHaveBeenCalled();
+		unsubscribe();
+	});
+});

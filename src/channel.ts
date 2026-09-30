@@ -2932,6 +2932,8 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   }
 
   _disconnect() {
+    // tear down once: a second run would drop subscription counts other consumers hold
+    if (this.pendingDisposal) return;
     logger.withExtraTags('_disconnect', this.cid).info('Disconnecting the channel.');
 
     // Tear down the channel.state subscriptions BEFORE flipping `pendingDisposal` — that setter
