@@ -186,7 +186,7 @@ export class NetworkConnectionObserver extends WithSubscriptions {
    *
    * @internal
    */
-  public get isStatusDerivedFromSocket(): boolean {
+  public get usesDefaultWSConnectionNetworkStatusReporter(): boolean {
     return (
       this.installedReporter !== undefined &&
       this.installedReporter === this.defaultReporter &&

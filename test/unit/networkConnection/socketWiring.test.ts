@@ -31,21 +31,26 @@ const clientWithSocket = () => {
 };
 
 describe('socket ↔ network wiring', () => {
-  describe('isStatusDerivedFromSocket', () => {
+  describe('usesDefaultWSConnectionNetworkStatusReporter', () => {
     it('is true under the host default that mirrors the socket', () => {
-      expect(new StreamChat('api-key').networkConnection.isStatusDerivedFromSocket).toBe(
-        true,
-      );
+      expect(
+        new StreamChat('api-key').networkConnection
+          .usesDefaultWSConnectionNetworkStatusReporter,
+      ).toBe(true);
     });
 
     it('is false once another reporter is installed, or the reporter is cleared', () => {
       const client = new StreamChat('api-key');
 
       client.networkConnection.setStatusReporter(fakeReporter().reporter);
-      expect(client.networkConnection.isStatusDerivedFromSocket).toBe(false);
+      expect(client.networkConnection.usesDefaultWSConnectionNetworkStatusReporter).toBe(
+        false,
+      );
 
       client.networkConnection.setStatusReporter(null);
-      expect(client.networkConnection.isStatusDerivedFromSocket).toBe(false);
+      expect(client.networkConnection.usesDefaultWSConnectionNetworkStatusReporter).toBe(
+        false,
+      );
     });
   });
 

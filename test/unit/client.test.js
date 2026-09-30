@@ -2718,7 +2718,9 @@ describe('Client WSFallback', () => {
 	it('should fall back anyway when the offline reading only mirrors the WebSocket', async () => {
 		fakeLongPoll();
 		// the host default without a network API: its "offline" only means the socket is down
-		expect(client.networkConnection.isStatusDerivedFromSocket).toBe(true);
+		expect(client.networkConnection.usesDefaultWSConnectionNetworkStatusReporter).toBe(
+			true,
+		);
 		client.networkConnection.state.partialNext({ isOnline: false });
 
 		await client.connectUser({ id: 'amin' }, userToken);

@@ -278,7 +278,7 @@ export class WSConnection extends WithSubscriptions {
       const { networkConnection } = this.client;
       const isDeviceOffline =
         networkConnection.isOnline === false &&
-        !networkConnection.isStatusDerivedFromSocket;
+        !networkConnection.usesDefaultWSConnectionNetworkStatusReporter;
       if (
         this.config.enableWSFallback &&
         isWSFailure(error as APIError) &&
