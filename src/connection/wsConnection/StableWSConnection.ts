@@ -366,17 +366,6 @@ export class StableWSConnection {
         await this.client.tokenManager.loadToken();
       }
 
-      // if `disconnect()` was called while the token was loading, abort the connection attempt.
-      if (this.isDisconnected) {
-        this.isConnecting = false;
-        logger
-          .withExtraTags('_connect')
-          .debug(
-            'Aborting connect: disconnect() was called while the token was loading.',
-          );
-        return;
-      }
-
       this._setupConnectionPromise();
       const wsURL = this._buildUrl();
       // Built before the socket exists on purpose: the token is guaranteed loaded by
@@ -471,11 +460,10 @@ export class StableWSConnection {
     }
 
     try {
-      // Nothing comes back when `_connect` bailed out because `disconnect()` ran in the meantime.
-      if (await this._connect()) {
-        this.client._settleConnectPromises();
-        this.consecutiveFailures = 0;
-      }
+      await this._connect();
+      this.client._settleConnectPromises();
+
+      this.consecutiveFailures = 0;
     } catch (error: any) {
       this._applyHealth(false);
       this.consecutiveFailures += 1;
