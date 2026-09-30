@@ -154,7 +154,7 @@ export class WSConnectionFallback {
     // transition from connecting => connected
     if (
       previous === WSFallbackConnectionState.Connecting &&
-      state === WSFallbackConnectionState.Connected
+      this.state === WSFallbackConnectionState.Connected
     ) {
       this.client.wsConnection._setStatus({ isHealthy: true });
     }
