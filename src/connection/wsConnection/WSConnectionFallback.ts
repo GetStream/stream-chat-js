@@ -148,17 +148,20 @@ export class WSConnectionFallback {
   private _setState(state: WSFallbackConnectionState) {
     this._log(`_setState() - ${state}`);
 
+    const previous = this.state;
+    this.state = state;
+
     // transition from connecting => connected
     if (
-      this.state === WSFallbackConnectionState.Connecting &&
+      previous === WSFallbackConnectionState.Connecting &&
       state === WSFallbackConnectionState.Connected
     ) {
       this.client.wsConnection._setStatus({ isHealthy: true });
     }
 
     if (
-      state === WSFallbackConnectionState.Closed ||
-      state === WSFallbackConnectionState.Disconnected
+      this.state === WSFallbackConnectionState.Closed ||
+      this.state === WSFallbackConnectionState.Disconnected
     ) {
       // The server keyed watches by this connection id, so no request may carry it any more.
       this.client.connectionIdManager.invalidate();
@@ -166,8 +169,6 @@ export class WSConnectionFallback {
         this.client._markActiveChannelsWatchInterrupted();
       }
     }
-
-    this.state = state;
   }
 
   private _req = async <T = Record<string, unknown>>(

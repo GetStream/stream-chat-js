@@ -103,6 +103,68 @@ describe('WSConnectionFallback', () => {
 			c._setState(WSFallbackConnectionState.Disconnected);
 			expect(client._markActiveChannelsWatchInterrupted.calledOnce).to.be.true;
 		});
+
+		it('should already be in the new state when it reports the status', function () {
+			const client = newClient();
+			const c = new WSConnectionFallback({ client });
+			const seen = [];
+			client.wsConnection._setStatus = sinon.spy(() => seen.push(c.state));
+
+			c._setState(WSFallbackConnectionState.Connecting);
+			c._setState(WSFallbackConnectionState.Connected);
+			c._setState(WSFallbackConnectionState.Closed);
+			c._setState(WSFallbackConnectionState.Disconnected);
+			expect(seen).to.be.eql([
+				WSFallbackConnectionState.Connected,
+				WSFallbackConnectionState.Closed,
+				WSFallbackConnectionState.Disconnected,
+			]);
+		});
+
+		it('should not be closed again by the socket-mirroring reporter on disconnect()', async function () {
+			const client = newClient();
+			const c = new WSConnectionFallback({ client });
+			c._req = sinon.stub().resolves();
+			c.state = WSFallbackConnectionState.Connected;
+			client.wsConnection.isHealthy = true;
+			// the reporter forwards the socket's status as the network's, which is routed back here
+			const setStatus = client.wsConnection._setStatus;
+			client.wsConnection._setStatus = sinon.spy(function (status) {
+				const changed = setStatus.call(this, status);
+				if (changed) c._applyNetworkStatus(status.isHealthy);
+				return changed;
+			});
+
+			await c.disconnect();
+			expect(c.state).to.be.eql(WSFallbackConnectionState.Disconnected);
+			// a nested `_setState(Closed)` would have reported the status a second time
+			expect(client.wsConnection._setStatus.calledOnce).to.be.true;
+		});
+
+		it('should keep a transition a status subscriber makes', async function () {
+			const client = newClient();
+			const c = new WSConnectionFallback({ client });
+			c._req = sinon.spy(async (params) => {
+				if (params.json) return { event: { connection_id: 'id' } };
+				if (params.close) return;
+				// a poll: stop the loop, so a regression fails instead of hanging
+				c.state = WSFallbackConnectionState.Closed;
+				return {};
+			});
+			// an integrator closing the connection as soon as it comes up
+			const setStatus = client.wsConnection._setStatus;
+			client.wsConnection._setStatus = sinon.spy(function (status) {
+				const changed = setStatus.call(this, status);
+				if (changed && status.isHealthy) c.disconnect();
+				return changed;
+			});
+
+			await c.connect();
+			expect(c.state).to.be.eql(WSFallbackConnectionState.Disconnected);
+			// only the connect and the close: no poll on a disconnected connection
+			expect(c._req.callCount).to.be.eql(2);
+			expect(c._req.secondCall.args[0].close).to.be.true;
+		});
 	});
 
 	describe('_applyNetworkStatus', () => {
