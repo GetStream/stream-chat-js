@@ -4,7 +4,7 @@ import { StableWSConnection } from '../../../src/connection';
 import {
   ConnectionState,
   WSConnectionFallback,
-} from '../../../src/connection/WSConnectionFallback';
+} from '../../../src/connection/wsConnection/WSConnectionFallback';
 
 describe('client.wsConnection', () => {
   let client: StreamChat;

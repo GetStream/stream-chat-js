@@ -1,7 +1,7 @@
 import { StateStore } from '@stream-io/state-store';
 import { WithSubscriptions } from '../../utils/WithSubscriptions';
 import { StableWSConnection } from '../../connection';
-import { WSConnectionFallback } from '../WSConnectionFallback';
+import { WSConnectionFallback } from './WSConnectionFallback';
 import { isWSFailure } from '../../errors';
 import { ConfigController } from '../../configuration/ConfigController';
 import { chatLoggerSystem } from '../../logger';

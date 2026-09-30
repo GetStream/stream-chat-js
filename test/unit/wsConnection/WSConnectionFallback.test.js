@@ -7,7 +7,7 @@ import { ConnectionIdManager } from '../../../src/connection/ConnectionIdManager
 import {
 	ConnectionState,
 	WSConnectionFallback,
-} from '../../../src/connection/WSConnectionFallback';
+} from '../../../src/connection/wsConnection/WSConnectionFallback';
 
 import { describe, it, expect, afterEach, vi, beforeAll, beforeEach } from 'vitest';
 

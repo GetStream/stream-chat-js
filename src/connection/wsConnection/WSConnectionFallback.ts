@@ -1,10 +1,10 @@
 import axios, { CanceledError } from 'axios';
-import type { StreamChat } from '../client';
-import { retryInterval, sleep } from '../utils';
-import { isAPIError, isConnectionIDError, isErrorRetryable } from '../errors';
-import { chatLoggerSystem } from '../logger';
-import type { LogLevel } from '../logger';
-import type { ConnectionOpen, Event, StreamRequestOptions } from '../types';
+import type { StreamChat } from '../../client';
+import { retryInterval, sleep } from '../../utils';
+import { isAPIError, isConnectionIDError, isErrorRetryable } from '../../errors';
+import { chatLoggerSystem } from '../../logger';
+import type { LogLevel } from '../../logger';
+import type { ConnectionOpen, Event, StreamRequestOptions } from '../../types';
 
 type UR = Record<string, unknown>;
 

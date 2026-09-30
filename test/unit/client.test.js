@@ -8,7 +8,7 @@ import { StreamChat } from '../../src/client';
 import { ChatApi } from '../../src/gen-imports';
 import { chatLoggerSystem } from '../../src/logger';
 import { StableWSConnection } from '../../src/connection';
-import { ConnectionState } from '../../src/connection/WSConnectionFallback';
+import { ConnectionState } from '../../src/connection/wsConnection/WSConnectionFallback';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
 import { generateThreadResponse } from './test-utils/generateThreadResponse';
 import {
