@@ -36,6 +36,8 @@ export type WSConnectionConfig = {
    */
   connectTimeoutMs: number;
   /**
+   * Whether to enable the WebSocket fallback mechanism. Only enable this feature if you expect clients to be in environments where WebSocket connections might be blocked. Most integrators shouldn't need to turn on this flag.
+   *
    * Falls back to HTTP long-polling when the WebSocket cannot connect, for networks that block
    * WebSockets. Defaults to `false`. The WebSocket connects within {@link connectTimeoutMs}, as
    * without the flag; lower it to switch sooner. The client dispatches
