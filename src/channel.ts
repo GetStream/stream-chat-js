@@ -226,7 +226,6 @@ export const DEFAULT_CHANNEL_CONFIG: ChannelConfig = deepFreezeConfig({
  */
 export class Channel extends WithMessageOperations(ChannelApi) {
   _client: StreamChat;
-  data: Partial<ChannelResponse> | undefined;
   _data: ChannelInput;
   cid: string;
   /**  */
@@ -294,14 +293,14 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     super(client, type, id);
 
     this._client = client;
-    // used by the frontend, gets updated:
-    this.data = data as Partial<ChannelResponse>;
     // this._data is used for the requests...
     this._data = { ...data };
     this.cid = `${type}:${id}`;
     this.listeners = new Map();
     // perhaps the state variable should be private
     this.state = new ChannelState(this);
+    // after the state exists: the `data` setter writes to it
+    this.data = data as Partial<ChannelResponse>;
     this.lastTypingEvent = null;
     this.isTyping = false;
 
@@ -789,10 +788,8 @@ export class Channel extends WithMessageOperations(ChannelApi) {
    * @returns The server response.
    */
   override async update(...args: Parameters<ChannelApi['update']>) {
-    const previousData = this.data;
     const data = await super.update(...args);
     this.data = data.channel;
-    this.state.syncStateFromChannelData(this.data, previousData);
     return data;
   }
 
@@ -818,9 +815,7 @@ export class Channel extends WithMessageOperations(ChannelApi) {
       newCapabilities &&
       [...currentCapabilities].sort().join() !== [...newCapabilities].sort().join();
 
-    const previousData = this.data;
     this.data = channel;
-    this.state.syncStateFromChannelData(this.data, previousData);
     // If the capabiltities are changed, we trigger the `capabilities.changed` event.
     if (capabilitiesChanged) {
       this.getClient().dispatchEvent({
@@ -1420,6 +1415,48 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   }
 
   /**
+   * The channel's server-provided data, read from `state.data`. Assigning publishes `data`,
+   * `memberCount` and `ownCapabilities` in one state update. An assigned object that omits
+   * `member_count` or `own_capabilities` gets the last known value carried over onto a copy, so a
+   * partial update doesn't wipe them and raw readers (e.g. `channelHasReadEvents`) stay consistent
+   * with the store. The assigned object itself is never changed; editing `channel.data.x` in place
+   * doesn't reach the state.
+   */
+  get data(): Partial<ChannelResponse> | undefined {
+    return this.state.getLatestValue().data;
+  }
+
+  set data(next: Partial<ChannelResponse> | undefined) {
+    const previous = this.state.getLatestValue().data;
+    const carriedMemberCount =
+      typeof next?.member_count !== 'number' && typeof previous?.member_count === 'number'
+        ? previous.member_count
+        : undefined;
+    // `own_capabilities` stays undefined until known, so "not loaded" isn't read as "none" (#1732)
+    const carriedCapabilities =
+      !Array.isArray(next?.own_capabilities) && Array.isArray(previous?.own_capabilities)
+        ? [...previous.own_capabilities]
+        : undefined;
+
+    const data =
+      next && (carriedMemberCount !== undefined || carriedCapabilities)
+        ? {
+            ...next,
+            ...(carriedMemberCount !== undefined && { member_count: carriedMemberCount }),
+            ...(carriedCapabilities && { own_capabilities: carriedCapabilities }),
+          }
+        : next;
+
+    const memberCount = data?.member_count ?? carriedMemberCount;
+    const ownCapabilities = data?.own_capabilities ?? carriedCapabilities;
+    this.state.partialNext({
+      data,
+      memberCount: memberCount ?? this.state.getLatestValue().memberCount,
+      ownCapabilities: ownCapabilities ? [...ownCapabilities] : [],
+    });
+  }
+
+  /**
    * Whether the channel has been torn down and is awaiting disposal (deleted, the current user
    * removed, or the client disconnected). Store-backed and reactive.
    *
@@ -1589,9 +1626,7 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     // with no socket at all.
     const state = await this.query(combined, 'latest', requestOptions);
     this.initialized = true;
-    const previousData = this.data;
     this.data = state.channel;
-    this.state.syncStateFromChannelData(this.data, previousData);
 
     // The message paginator is seeded synchronously inside query() (before read-state hydration),
     // so a channel opened via watch() alone — a deep-link restore, a search result, a freshly
@@ -1940,9 +1975,7 @@ export class Channel extends WithMessageOperations(ChannelApi) {
       ]
         .sort()
         .join();
-    const previousData = this.data;
     this.data = channel;
-    this.state.syncStateFromChannelData(this.data, previousData);
     this.offlineMode = false;
 
     if (areCapabilitiesChanged) {
@@ -2669,7 +2702,6 @@ export class Channel extends WithMessageOperations(ChannelApi) {
           if (isFrozenChanged) {
             this.query({ state: false, messages: { limit: 0 }, watchers: { limit: 0 } });
           }
-          const previousChannelData = channel.data;
           const newChannelData = {
             ...event.channel,
             hidden: event.channel?.hidden ?? channel.data?.hidden,
@@ -2678,7 +2710,6 @@ export class Channel extends WithMessageOperations(ChannelApi) {
               event.channel?.own_capabilities ?? channel.data?.own_capabilities,
           };
           channel.data = newChannelData;
-          channel.state.syncStateFromChannelData(channel.data, previousChannelData);
         }
         break;
       case 'reaction.new':
@@ -2695,14 +2726,12 @@ export class Channel extends WithMessageOperations(ChannelApi) {
         }
         break;
       case 'channel.hidden': {
-        const previousChannelData = channel.data;
         channel.data = {
           // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           ...channel.data!,
           blocked: event.channel?.blocked ?? false,
           hidden: true,
         };
-        channel.state.syncStateFromChannelData(channel.data, previousChannelData);
         if (event.clear_history) {
           this.messagePaginator.clearStateAndCache();
           this.pinnedMessagesPaginator.clearStateAndCache();
@@ -2710,14 +2739,12 @@ export class Channel extends WithMessageOperations(ChannelApi) {
         break;
       }
       case 'channel.visible': {
-        const previousChannelData = channel.data;
         channel.data = {
           // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           ...channel.data!,
           blocked: event.channel?.blocked ?? false,
           hidden: false,
         };
-        channel.state.syncStateFromChannelData(channel.data, previousChannelData);
         this.getClient().offlineDb?.handleChannelVisibilityEvent({ event });
         break;
       }

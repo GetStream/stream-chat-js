@@ -53,7 +53,6 @@ describe('CooldownTimer', () => {
 
       const previous = channel.data;
       channel.data = { ...previous, cooldown: 30 } as Partial<ChannelResponse>;
-      channel.state.syncStateFromChannelData(channel.data, previous);
 
       expect(channel.cooldownTimer.cooldownConfigSeconds).toBe(30);
     });
@@ -67,7 +66,6 @@ describe('CooldownTimer', () => {
         ...previous,
         own_capabilities: ['skip-slow-mode'],
       } as Partial<ChannelResponse>;
-      channel.state.syncStateFromChannelData(channel.data, previous);
 
       expect(channel.cooldownTimer.canSkipCooldown).toBe(true);
     });
@@ -89,7 +87,6 @@ describe('CooldownTimer', () => {
 
       const previous = channel.data;
       channel.data = { ...previous, cooldown: 30 } as Partial<ChannelResponse>;
-      channel.state.syncStateFromChannelData(channel.data, previous);
 
       expect(channel.cooldownTimer.cooldownConfigSeconds).toBe(0);
     });

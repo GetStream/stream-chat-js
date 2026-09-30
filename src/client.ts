@@ -1621,9 +1621,7 @@ export class StreamChat extends ChatApi {
 
       this._addChannelConfig(channelState.channel);
       const c = this.channel(channelState.channel.type, channelState.channel.id);
-      const previousData = c.data;
       c.data = channelState.channel;
-      c.state.syncStateFromChannelData(c.data, previousData);
       c.offlineMode = offlineMode;
       c.initialized = !offlineMode;
       // Same precedence `queryChannels` applies to the request: an explicit caller choice wins,
@@ -1882,9 +1880,7 @@ export class StreamChat extends ChatApi {
       // custom data (e.g. its name). Guarding on `custom.custom` keeps genuine custom updates while
       // leaving the existing custom intact when the caller omits it.
       if (custom.custom !== undefined) {
-        const previousData = channel.data;
         channel.data = { ...channel.data, custom: custom.custom };
-        channel.state.syncStateFromChannelData(channel.data, previousData);
         channel._data = { ...channel._data, custom: custom.custom };
       }
       return channel;

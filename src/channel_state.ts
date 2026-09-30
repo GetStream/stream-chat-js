@@ -221,7 +221,8 @@ export class ChannelState extends StateStore<ChannelStateData> {
       memberCount: 0,
       membership: {} as ChannelMemberResponse,
       ownCapabilities: [],
-      data: channel?.data,
+      // written by the `Channel.data` setter, which the channel calls once its state exists
+      data: undefined,
       muteStatus: { muted: false, createdAt: null, expiresAt: null },
       initialized: false,
       offlineMode: false,
@@ -230,7 +231,6 @@ export class ChannelState extends StateStore<ChannelStateData> {
       aiState: AIStates.Idle,
     });
     this._channel = channel;
-    this.syncStateFromChannelData(channel?.data);
     this.pending_messages = [];
   }
 
@@ -293,67 +293,6 @@ export class ChannelState extends StateStore<ChannelStateData> {
     if (this._channel?.messageComposer) {
       this._channel.messageComposer.textComposer.setTyping(typing);
     }
-  }
-
-  /**
-   * Reflects the channel's server-provided `data` into the unified store and derives the
-   * `memberCount` and `ownCapabilities` slices from it.
-   *
-   * `fallbackData` (the previous `channel.data`) makes both derived fields sticky: a data update
-   * that omits `member_count`/`own_capabilities` keeps the last known value rather than wiping it.
-   * The sticky value is written back onto `data` as a plain field (only when `data` itself is
-   * missing it) so raw readers — e.g. `channelHasReadEvents`, which inspects
-   * `channel.data.own_capabilities` directly — stay consistent with the store. `own_capabilities`
-   * is never coerced to `[]` while unknown, so "not yet loaded" is not mistaken for "explicitly no
-   * capabilities" (regression #1732). This replaces the previous `Object.defineProperty` machinery;
-   * direct in-place mutation of `channel.data.member_count`/`own_capabilities` no longer syncs to
-   * the store — reassign `channel.data` (as the WS handlers do) instead.
-   */
-  syncStateFromChannelData(
-    data: Channel['data'],
-    fallbackData: Channel['data'] = this._channel?.data,
-  ) {
-    const fallbackMemberCount =
-      typeof fallbackData?.member_count === 'number'
-        ? fallbackData.member_count
-        : this.getLatestValue().memberCount;
-
-    const memberCount =
-      typeof data?.member_count === 'number'
-        ? data.member_count
-        : typeof fallbackMemberCount === 'number'
-          ? fallbackMemberCount
-          : undefined;
-
-    const ownCapabilities = Array.isArray(data?.own_capabilities)
-      ? [...data.own_capabilities]
-      : Array.isArray(fallbackData?.own_capabilities)
-        ? [...fallbackData.own_capabilities]
-        : undefined;
-
-    // Carry a genuinely-known previous value forward onto the new `data` object when the update
-    // omits it — never fabricate one (an empty channel keeps `data === {}`, its `own_capabilities`
-    // undefined). This is a plain assignment, not an accessor.
-    if (data && typeof data === 'object') {
-      if (
-        typeof data.member_count !== 'number' &&
-        typeof fallbackData?.member_count === 'number'
-      ) {
-        data.member_count = fallbackData.member_count;
-      }
-      if (
-        !Array.isArray(data.own_capabilities) &&
-        Array.isArray(fallbackData?.own_capabilities)
-      ) {
-        data.own_capabilities = [...fallbackData.own_capabilities];
-      }
-    }
-
-    this.partialNext({
-      data,
-      memberCount: memberCount ?? 0,
-      ownCapabilities: ownCapabilities ?? [],
-    });
   }
 
   setTypingEvent(userID: string, event: Event) {

@@ -1376,13 +1376,11 @@ describe('StreamChat.queryChannels', async () => {
 			ownCapabilities: ['send-message', 'read-events'],
 		});
 
-		const previousData = channel.data;
 		channel.data = {
 			...channel.data,
 			member_count: 8,
 			own_capabilities: ['send-message'],
 		};
-		channel.state.syncStateFromChannelData(channel.data, previousData);
 
 		expect(channel.state.member_count).to.equal(8);
 		expect(channel.state.getLatestValue()).to.deep.include({
