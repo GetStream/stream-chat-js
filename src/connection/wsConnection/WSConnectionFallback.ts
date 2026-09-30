@@ -245,10 +245,4 @@ export class WSConnectionFallback {
       }
     }
   };
-
-  /**
-   * isHealthy checks if there is a connectionID and connection is in Connected state
-   */
-  private isHealthy = () =>
-    !!this.connectionID && this.state === WSFallbackConnectionState.Connected;
 }

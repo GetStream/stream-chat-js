@@ -158,32 +158,6 @@ describe('WSConnectionFallback', () => {
 		});
 	});
 
-	describe('isHealthy', () => {
-		const c = new WSConnectionFallback({ client: newClient() });
-		it('return undefined by default', () => {
-			expect(c.isHealthy()).to.be.false;
-		});
-		it('return false with no id', () => {
-			c.connectionID = '';
-			c.state = WSFallbackConnectionState.Connected;
-			expect(c.isHealthy()).to.be.false;
-		});
-		it('return false with invalid state', () => {
-			c.connectionID = 'id';
-			c.state = WSFallbackConnectionState.Disconnected;
-			expect(c.isHealthy()).to.be.false;
-			c.state = WSFallbackConnectionState.Closed;
-			expect(c.isHealthy()).to.be.false;
-			c.state = WSFallbackConnectionState.Connecting;
-			expect(c.isHealthy()).to.be.false;
-		});
-		it('return true for ID and correct state', () => {
-			c.connectionID = 'id';
-			c.state = WSFallbackConnectionState.Connected;
-			expect(c.isHealthy()).to.be.true;
-		});
-	});
-
 	describe('disconnect', () => {
 		it('should ignore network status until it connects again', async () => {
 			const c = new WSConnectionFallback({ client: newClient() });
