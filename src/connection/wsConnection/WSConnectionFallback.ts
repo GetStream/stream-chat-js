@@ -20,7 +20,6 @@ export class WSConnectionFallback {
   client: StreamChat;
   state: WSFallbackConnectionState;
   consecutiveFailures: number;
-  connectionID?: string;
   abortController?: AbortController;
 
   constructor({ client }: { client: StreamChat }) {
@@ -75,7 +74,6 @@ export class WSConnectionFallback {
     this._setState(WSFallbackConnectionState.Connecting);
     // Before anything awaits, so a watch issued now waits for this connection's id.
     this.client.connectionIdManager.arm();
-    this.connectionID = undefined; // connect should be sent with empty connection_id so API creates one
     try {
       const { event } = await this._req<{ event: ConnectionOpen }>(
         // Authenticated by the request's `Authorization` header, so the message carries only a
@@ -86,7 +84,6 @@ export class WSConnectionFallback {
       );
 
       // The id is published before the status says the connection is up, as the WebSocket does.
-      this.connectionID = event.connection_id;
       this.client.connectionIdManager.resolveConnectionId(event.connection_id);
       this._setState(WSFallbackConnectionState.Connected);
       this.client.dispatchEvent(event);
@@ -116,17 +113,23 @@ export class WSConnectionFallback {
     return this.state === WSFallbackConnectionState.Connecting;
   }
 
-  /** @internal */
-  disconnect = async (timeout = 2000) => {
+  /**
+   * Stops polling and tells the server to close `connectionId`.
+   *
+   * @param timeout - The close request's timeout, in milliseconds.
+   * @param connectionId - The id to close. Passed in rather than read from
+   *   `client.connectionIdManager`, because `WSConnection.disconnect()` disconnects the old socket
+   *   first, and that drops the manager's id.
+   *
+   * @internal
+   */
+  disconnect = async (timeout = 2000, connectionId?: string) => {
     this._setState(WSFallbackConnectionState.Disconnected);
     this.abortController?.abort();
     this.abortController = undefined;
 
-    const connection_id = this.connectionID;
-    this.connectionID = undefined;
-
     try {
-      await this._req({ close: true, connection_id }, { timeout }, false);
+      await this._req({ close: true, connection_id: connectionId }, { timeout }, false);
       this._log(`disconnect() - Closed connectionID`);
     } catch (err) {
       this._log(`disconnect() - Failed`, { err }, 'error');
@@ -191,10 +194,13 @@ export class WSConnectionFallback {
       if (retry && isErrorRetryable(error)) {
         this._log(`_req() - Retryable error, retrying request`);
         await sleep(retryInterval(this.consecutiveFailures));
-        // A reconnect (or `disconnect()`) during the sleep replaced the connection id this request
-        // carries. Sent anyway, it would come back as a ConnectionIDNotFoundError, and `_poll` would
-        // tear down the connection that replaced it.
-        if (params.connection_id && params.connection_id !== this.connectionID) {
+        // A reconnect, `disconnect()` or going offline during the sleep dropped the connection id
+        // this request carries. Sent anyway, it would come back as a ConnectionIDNotFoundError, and
+        // `_poll` would tear down the connection that replaced it.
+        if (
+          params.connection_id &&
+          params.connection_id !== this.client.connectionIdManager.connectionId
+        ) {
           this._log(`_req() - Connection id changed, dropping the retry`);
           throw new CanceledError(
             'The connection id changed while the retry was waiting',
@@ -212,7 +218,11 @@ export class WSConnectionFallback {
       try {
         const data = await this._req<{
           events: Event[];
-        }>({ connection_id: this.connectionID }, { timeout: 30000 }, true); // 30s => API responds in 20s if there is no event
+        }>(
+          { connection_id: this.client.connectionIdManager.connectionId },
+          { timeout: 30000 }, // 30s => API responds in 20s if there is no event
+          true,
+        );
 
         if (data.events?.length) {
           for (let i = 0; i < data.events.length; i++) {

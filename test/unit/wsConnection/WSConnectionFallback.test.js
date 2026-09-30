@@ -180,14 +180,12 @@ describe('WSConnectionFallback', () => {
 			const c = new WSConnectionFallback({ client: newClient() });
 			c._req = sinon.spy();
 			const connection_id = 'id';
-			c.connectionID = connection_id;
 			const abort = sinon.spy();
 			c.abortController = { abort };
 			const timeout = 500;
-			await c.disconnect(timeout);
+			await c.disconnect(timeout, connection_id);
 
 			expect(c.state).to.be.eql(WSFallbackConnectionState.Disconnected);
-			expect(c.connectionID).to.be.undefined;
 			expect(c.abortController).to.be.undefined;
 			expect(abort.calledOnce).to.be.true;
 			expect(
@@ -316,10 +314,11 @@ describe('WSConnectionFallback', () => {
 			// once, so a retry that is not dropped fails instead of looping
 			vi.spyOn(errors, 'isErrorRetryable').mockReturnValueOnce(true);
 			const c = new WSConnectionFallback({ client: newClient({ longPoll }) });
-			c.connectionID = 'old';
+			c.client.connectionIdManager.resolveConnectionId('old');
 			// a reconnect lands while the retry sleeps
 			vi.spyOn(utils, 'sleep').mockImplementation(async () => {
-				c.connectionID = 'new';
+				c.client.connectionIdManager.invalidate();
+				c.client.connectionIdManager.resolveConnectionId('new');
 			});
 
 			const error = await c._req({ connection_id: 'old' }, {}, true).catch((e) => e);
@@ -331,12 +330,28 @@ describe('WSConnectionFallback', () => {
 			const longPoll = sinon.stub().rejects();
 			vi.spyOn(errors, 'isErrorRetryable').mockReturnValueOnce(true);
 			const c = new WSConnectionFallback({ client: newClient({ longPoll }) });
-			c.connectionID = 'old';
+			c.client.connectionIdManager.resolveConnectionId('old');
 			vi.spyOn(utils, 'sleep').mockImplementation(async () => {
-				c.connectionID = undefined;
+				c.client.connectionIdManager.invalidate();
 			});
 
 			const error = await c._req({ connection_id: 'old' }, {}, true).catch((e) => e);
+			expect(axios.isCancel(error)).to.be.true;
+			expect(longPoll.calledOnce).to.be.true;
+		});
+
+		it('should drop a retry whose connection went offline while it waited', async () => {
+			const longPoll = sinon.stub().rejects();
+			vi.spyOn(errors, 'isErrorRetryable').mockReturnValueOnce(true);
+			const c = new WSConnectionFallback({ client: newClient({ longPoll }) });
+			c.client.connectionIdManager.resolveConnectionId('old');
+			c.state = WSFallbackConnectionState.Connected;
+			vi.spyOn(utils, 'sleep').mockImplementation(async () => {
+				c._applyNetworkStatus(false);
+			});
+
+			const error = await c._req({ connection_id: 'old' }, {}, true).catch((e) => e);
+			expect(c.state).to.be.eql(WSFallbackConnectionState.Closed);
 			expect(axios.isCancel(error)).to.be.true;
 			expect(longPoll.calledOnce).to.be.true;
 		});
@@ -348,7 +363,7 @@ describe('WSConnectionFallback', () => {
 			vi.spyOn(errors, 'isErrorRetryable').mockReturnValue(true);
 			vi.spyOn(utils, 'sleep').mockResolvedValue();
 			const c = new WSConnectionFallback({ client: newClient({ longPoll }) });
-			c.connectionID = 'id';
+			c.client.connectionIdManager.resolveConnectionId('id');
 
 			await c._req({ connection_id: 'id' }, {}, true);
 			expect(longPoll.calledTwice).to.be.true;
@@ -388,13 +403,12 @@ describe('WSConnectionFallback', () => {
 				.to.be.true;
 		});
 
-		it('should update state and connectionID', async () => {
+		it('should update state and the connection id', async () => {
 			let c = new WSConnectionFallback({ client: newClient() });
 			c._req = sinon.stub().resolves({ event: health });
 			c._poll = sinon.spy();
 			expect(await c.connect()).to.be.eql(health);
 			expect(c.state).to.be.eql(WSFallbackConnectionState.Connected);
-			expect(c.connectionID).to.be.eql(health.connection_id);
 			expect(c.client.connectionIdManager.connectionId).to.be.eql(health.connection_id);
 
 			c = new WSConnectionFallback({ client: newClient() });
@@ -403,7 +417,7 @@ describe('WSConnectionFallback', () => {
 			await expect(c.connect()).rejects.toThrow();
 			expect(c._poll.called).to.be.false;
 			expect(c.state).to.be.eql(WSFallbackConnectionState.Closed);
-			expect(c.connectionID).to.be.undefined;
+			expect(c.client.connectionIdManager.connectionId).to.be.undefined;
 		});
 
 		it('should only start polling after connect', async () => {
@@ -506,7 +520,7 @@ describe('WSConnectionFallback', () => {
 		it('should send request in correct format', async () => {
 			const c = new WSConnectionFallback({ client: newClient() });
 			c.state = WSFallbackConnectionState.Connected;
-			c.connectionID = 'id';
+			c.client.connectionIdManager.resolveConnectionId('id');
 			c._req = async () => {
 				c.state = WSFallbackConnectionState.Closed;
 				return {};

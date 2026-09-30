@@ -346,7 +346,23 @@ describe('client.wsConnection', () => {
       await client.wsConnection.disconnect(0);
 
       expect(disconnect).toHaveBeenCalledWith(0);
-      expect(fallbackDisconnect).toHaveBeenCalledWith(0);
+      expect(fallbackDisconnect).toHaveBeenCalledWith(0, undefined);
+    });
+
+    it("closes the long-poll with the connection id the socket's disconnect drops", async () => {
+      const fallback = new WSConnectionFallback({ client });
+      client.wsConnection.fallback = fallback;
+      const longPoll = vi.spyOn(client, 'longPoll').mockResolvedValue({});
+      client.connectionIdManager.resolveConnectionId('long-poll-id');
+
+      await client.wsConnection.disconnect(0);
+
+      // the socket's disconnect ran first and dropped it from the manager
+      expect(client.connectionIdManager.connectionId).toBeUndefined();
+      expect(longPoll).toHaveBeenCalledWith(
+        { close: true, connection_id: 'long-poll-id' },
+        expect.objectContaining({ timeout: 0 }),
+      );
     });
 
     it('forwards isConnecting from the long-poll once switched to it', () => {

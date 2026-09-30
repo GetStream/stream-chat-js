@@ -15,9 +15,9 @@ const logger = chatLoggerSystem.getLogger('connection');
  *
  * The id lives here and nowhere else. A copy kept on the socket outlives the socket it belongs to,
  * and a copy in `client.wsConnection.state` cannot be invalidated by a socket that has already been
- * replaced; either way requests go out keyed to a connection the server has torn down. The one
- * exception is `WSConnectionFallback.connectionID`, kept from v9 so the long-poll can address
- * its own polls and close — including the close after this manager has already dropped the id.
+ * replaced; either way requests go out keyed to a connection the server has torn down. The long-poll
+ * keeps no copy either: `WSConnection.disconnect()` reads the id before the socket's `disconnect()`
+ * drops it, and hands it to the long-poll's close.
  *
  * {@link StableWSConnection} drives the lifecycle: {@link arm} before a socket opens,
  * {@link resolveConnectionId} on the hello frame, {@link invalidate} when it drops or is closed

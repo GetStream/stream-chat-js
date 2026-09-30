@@ -690,9 +690,10 @@ kept reporting an id for a socket that was gone. Read `client._getConnectionID()
 `client.connectionIdManager.connectionId`) instead — both are dropped the moment the connection
 stops being healthy.
 
-`client.wsConnection.fallback.connectionID` (v9's `client.wsFallback.connectionID`) survives from v9, because the long-poll addresses its own polls and
-close with it, and it behaves as in v9: it is not cleared when the long-poll goes down, only when it
-reconnects or is disconnected. Read `client._getConnectionID()` for the long-poll's id too.
+`client.wsConnection.fallback.connectionID` (v9's `client.wsFallback.connectionID`) is **removed**
+for the same reason: it was not cleared when the long-poll went down, only when it reconnected or
+was disconnected. The long-poll reads its id from `client.connectionIdManager` like everything else,
+so read `client._getConnectionID()` for the long-poll's id too.
 
 The consequence for mobile apps: `closeConnection()` (the documented background/foreground seam)
 now makes the gated calls above throw until `openConnection()` has been called, even though the

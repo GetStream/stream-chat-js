@@ -186,8 +186,7 @@ export class StreamChat extends ChatApi {
   networkConnection: NetworkConnectionObserver;
   /**
    * The connection id — the WebSocket's, or the long-poll's after an `enableWSFallback`
-   * switch — and the one place the rest of the client reads it from. The long-poll keeps its
-   * own copy (`wsConnection.fallback.connectionID`) only to address its own polls and close.
+   * switch — and the one place the rest of the client reads it from.
    *
    * The server keys channel watches and presence subscriptions by it, so a request carrying either
    * waits here for the handshake rather than racing it. See `requiresConnectionId` in
@@ -813,9 +812,11 @@ export class StreamChat extends ChatApi {
 
     this._rejectPendingWsPromise(teardownReason);
     this.wsPromise = null;
-    this.connectionIdManager.rejectConnectionId(teardownReason);
 
     const closePromise = this.closeConnection(timeout);
+    // After starting the close, which reads the connection id synchronously: after an
+    // `enableWSFallback` switch the long-poll's close request has to carry it.
+    this.connectionIdManager.rejectConnectionId(teardownReason);
 
     for (const channel of Object.values(this.activeChannels)) {
       channel._disconnect();

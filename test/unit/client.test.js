@@ -2577,7 +2577,6 @@ describe('Client WSFallback', () => {
 		// the socket's own connect timeout, not a shortened one
 		expect(socketConnect).toHaveBeenCalledWith(undefined);
 		expect(client.wsConnection.fallback.state).toBe(WSFallbackConnectionState.Connected);
-		expect(client.wsConnection.fallback.connectionID).toBe('new_id');
 		expect(client.wsConnection.isHealthy).toBe(true);
 		expect(client.connectionIdManager.connectionId).toBe('new_id');
 
@@ -2586,6 +2585,10 @@ describe('Client WSFallback', () => {
 			WSFallbackConnectionState.Disconnected,
 		);
 		expect(client.wsConnection.isHealthy).toBe(false);
+		// the close still carries the id, although the socket's disconnect dropped it first
+		expect(calls.at(-1)).toMatchObject({
+			params: { close: true, connection_id: 'new_id' },
+		});
 	});
 
 	it('should fire transport.changed and connection.ok events', async () => {

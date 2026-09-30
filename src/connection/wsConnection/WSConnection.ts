@@ -322,9 +322,12 @@ export class WSConnection extends WithSubscriptions {
    * (2s when omitted).
    */
   async disconnect(timeout?: number): Promise<void> {
+    // Read before the socket's `disconnect()` drops it: after a switch it is the long-poll's id,
+    // which the long-poll's close request has to carry.
+    const connectionId = this.client.connectionIdManager.connectionId;
     await Promise.all([
       this.connection?.disconnect(timeout),
-      this.fallback?.disconnect(timeout),
+      this.fallback?.disconnect(timeout, connectionId),
     ]);
   }
 
