@@ -132,7 +132,7 @@ export class ThreadPaginator extends BasePaginator<Thread, QueryThreadsRequest> 
    * `isLoading`; a reload of a loaded list does not, since `isLoading` with items means the next page.
    */
   reload = async ({ limit = this.pageSize }: { limit?: number } = {}) => {
-    const isFirstLoad = this.items === undefined;
+    const isFirstLoad = !this.hasResults;
     if (isFirstLoad) this.state.partialNext({ isLoading: true });
     let replaced = false;
     try {

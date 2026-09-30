@@ -411,7 +411,7 @@ export class ThreadManager extends WithSubscriptions {
       const parentId = event.message?.parent_id;
       if (!parentId) return;
 
-      if (!this.isListLoaded) return;
+      if (!this.paginator.hasResults) return;
       const { unseenThreadIds } = this.state.getLatestValue();
 
       if (this.paginator.getItem(parentId)) {
@@ -449,11 +449,6 @@ export class ThreadManager extends WithSubscriptions {
     return super.unregisterSubscriptions();
   };
 
-  /** A page has landed: `master`'s `ready`. A failed first load or a reset leaves it unset. */
-  private get isListLoaded() {
-    return this.paginator.items !== undefined;
-  }
-
   /**
    * Loads the first page, or re-queries a loaded list in place, sized to what is loaded plus the
    * unseen threads. Skipped once loaded unless forced or something changed; the list survives a
@@ -463,7 +458,12 @@ export class ThreadManager extends WithSubscriptions {
   public reload = async ({ force = false } = {}) => {
     if (this.isReloadInFlight) return;
     const { isThreadOrderStale, unseenThreadIds } = this.state.getLatestValue();
-    if (!force && this.isListLoaded && !unseenThreadIds.length && !isThreadOrderStale)
+    if (
+      !force &&
+      this.paginator.hasResults &&
+      !unseenThreadIds.length &&
+      !isThreadOrderStale
+    )
       return;
     const { items, pageSize } = this.paginator;
     const limit = (items?.length ?? 0) + unseenThreadIds.length;

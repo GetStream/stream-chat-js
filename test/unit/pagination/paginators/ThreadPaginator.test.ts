@@ -203,6 +203,20 @@ describe('ThreadPaginator', () => {
     );
   });
 
+  it('shows no loading state while a loaded empty list reloads', async () => {
+    // An empty page records no query shape, so `isInitialized` stays false; the list is loaded.
+    respond([]);
+    await client.threads.reload();
+    const loading: boolean[] = [];
+    client.threads.paginator.state.subscribe(({ isLoading }) => loading.push(isLoading));
+    respond([makeThread('a')]);
+
+    await client.threads.reload({ force: true });
+
+    expect(ids()).toEqual(['a']);
+    expect(loading).not.toContain(true);
+  });
+
   it('shows no loading state while a loaded list reloads, keeping it until the reload lands', async () => {
     respond([makeThread('a')]);
     await client.threads.reload();

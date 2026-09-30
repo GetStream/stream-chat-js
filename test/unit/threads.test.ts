@@ -2486,6 +2486,20 @@ describe('Threads 2.0', () => {
           );
         });
 
+        it('tracks new unseen threads once an empty first page has landed', async () => {
+          // An empty page records no query shape, so `isInitialized` stays false; the list is loaded.
+          await loadList(threadManager, []);
+
+          client.dispatchEvent({
+            type: 'notification.thread_message_new',
+            message: generateMsg({ parent_id: uuidv4() }) as MessageResponse,
+          });
+
+          expect(threadManager.state.getLatestValue().unseenThreadIds).to.have.lengthOf(
+            1,
+          );
+        });
+
         it('deduplicates unseen threads', () => {
           setList(threadManager, [createTestThread()]);
           const parentMessageId = uuidv4();
