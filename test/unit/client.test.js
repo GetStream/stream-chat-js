@@ -1888,6 +1888,68 @@ describe('user.updated propagates to message + pinned paginators', () => {
 	});
 });
 
+describe('user.updated propagates to channel members, watchers and read states', () => {
+	let client;
+	let channel;
+	const bob = { id: 'bob', name: 'Bob' };
+
+	beforeEach(async () => {
+		client = await getClientWithUser();
+		channel = client.channel('messaging', 'user-updated-members');
+		channel.state.partialNext({
+			members: { bob: { user: bob, user_id: 'bob' } },
+			watchers: { bob },
+			read: { bob: { user: bob, unread_messages: 0 } },
+		});
+		client.state.updateUserReference(bob, channel.cid);
+	});
+
+	it('publishes new member, watcher and read objects in one state update', () => {
+		const before = channel.state.getLatestValue();
+		const listener = vi.fn();
+		const unsubscribe = channel.state.subscribe(listener);
+		listener.mockClear();
+
+		client._handleClientEvent({ type: 'user.updated', user: { ...bob, name: 'Robert' } });
+		unsubscribe();
+
+		expect(listener).toHaveBeenCalledTimes(1);
+		const after = channel.state.getLatestValue();
+		expect(after.members.bob.user.name).toBe('Robert');
+		expect(after.watchers.bob.name).toBe('Robert');
+		expect(after.read.bob.user.name).toBe('Robert');
+		// replaced, not edited in place, so selectors comparing references see the change
+		expect(before.members.bob.user.name).toBe('Bob');
+		expect(before.read.bob.user.name).toBe('Bob');
+	});
+
+	it('re-renders a subscriber of channel.state.members', () => {
+		const names = [];
+		const unsubscribe = channel.state.subscribeWithSelector(
+			({ members }) => ({ members }),
+			({ members }) => names.push(members.bob?.user?.name),
+		);
+
+		client._handleClientEvent({ type: 'user.updated', user: { ...bob, name: 'Robert' } });
+		unsubscribe();
+
+		expect(names).toEqual(['Bob', 'Robert']);
+	});
+
+	it('does not publish for a channel that does not contain the user', () => {
+		const other = client.channel('messaging', 'user-updated-other');
+		client.state.updateUserReference(bob, other.cid);
+		const listener = vi.fn();
+		const unsubscribe = other.state.subscribe(listener);
+		listener.mockClear();
+
+		client._handleClientEvent({ type: 'user.updated', user: { ...bob, name: 'Robert' } });
+		unsubscribe();
+
+		expect(listener).not.toHaveBeenCalled();
+	});
+});
+
 describe('user.updated preserves the own-user-only fields on client.user', () => {
 	let client;
 

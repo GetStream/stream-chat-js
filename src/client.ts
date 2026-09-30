@@ -1030,6 +1030,7 @@ export class StreamChat extends ChatApi {
 
   /**
    * Updates the members, watchers and read references of the currently active channels that contain this user.
+   * Each channel gets new objects in one state update, so its subscribers re-render.
    *
    * @param user - The updated user.
    */
@@ -1037,17 +1038,17 @@ export class StreamChat extends ChatApi {
     const refMap = this.state.userChannelReferences[user.id] || {};
     for (const channelId in refMap) {
       const channel = this.activeChannels[channelId];
-      if (channel?.state) {
-        if (channel.state.members[user.id]) {
-          channel.state.members[user.id].user = user;
-        }
-        if (channel.state.watchers[user.id]) {
-          channel.state.watchers[user.id] = user;
-        }
-        if (channel.state.read[user.id]) {
-          channel.state.read[user.id].user = user;
-        }
-      }
+      if (!channel?.state) continue;
+      const { members, watchers, read } = channel.state.getLatestValue();
+      const member = members[user.id];
+      const readState = read[user.id];
+      const hasWatcher = !!watchers[user.id];
+      if (!member && !hasWatcher && !readState) continue;
+      channel.state.partialNext({
+        ...(member && { members: { ...members, [user.id]: { ...member, user } } }),
+        ...(hasWatcher && { watchers: { ...watchers, [user.id]: user } }),
+        ...(readState && { read: { ...read, [user.id]: { ...readState, user } } }),
+      });
     }
   };
 
