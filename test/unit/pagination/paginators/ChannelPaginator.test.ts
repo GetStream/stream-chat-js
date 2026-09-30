@@ -1807,20 +1807,51 @@ describe('ChannelPaginator', () => {
         client,
         paginatorOptions: { pageSize: 2 },
       });
-      const spy = mockPages([[a, b], [c, d], [e, f], [a, b], [g]]);
+      // The refresh asks for all 6 loaded channels; the server caps it at 4.
+      const spy = mockPages([[a, b], [c, d], [e, f], [a, b, c, d], [g]]);
 
       await paginator.toTail();
       await paginator.toTail();
       await paginator.toTail();
       await paginator.toTail({ keepPreviousItems: true, reset: 'yes' });
 
-      expect(spy.mock.calls[3][0]).toMatchObject({ offset: 0 });
+      expect(spy.mock.calls[3][0]).toMatchObject({ limit: 6, offset: 0 });
       expect(paginator.items).toHaveLength(6);
+      // A capped response is not the end of the list.
+      expect(paginator.hasMoreTail).toBe(true);
 
       await paginator.toTail();
 
-      expect(spy.mock.calls[4][0]).toMatchObject({ offset: 6 });
+      expect(spy.mock.calls[4][0]).toMatchObject({ limit: 2, offset: 6 });
       expect(paginator.items).toHaveLength(7);
+    });
+
+    it('asks for one page when not refreshing, even at offset 0 with channels loaded', async () => {
+      // Only a non-destructive refresh asks for more than a page. Here the offset drops back to 0 after a
+      // removal while live-ingested channels are still loaded, and the next page must still be one page.
+      const dated = (id: string, date: string) => {
+        const datedChannel = new Channel(client, 'type', id, {});
+        setLastMessageAt(datedChannel, new Date(date));
+        return datedChannel;
+      };
+      const a = dated('a', '2020-01-01');
+      const paginator = new ChannelPaginator({
+        client,
+        filters: {},
+        paginatorOptions: { pageSize: 1 },
+      });
+      const spy = mockPages([[a], []]);
+
+      await paginator.toTail();
+      paginator.ingestItem(dated('b', '2020-01-02'));
+      paginator.ingestItem(dated('c', '2020-01-03'));
+      paginator.removeItem({ item: a });
+      expect(paginator.offset).toBe(0);
+      expect(paginator.items).toHaveLength(2);
+
+      await paginator.toTail();
+
+      expect(spy.mock.calls[1][0]).toMatchObject({ limit: 1, offset: 0 });
     });
   });
 

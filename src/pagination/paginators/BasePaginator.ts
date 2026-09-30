@@ -985,7 +985,7 @@ export abstract class BasePaginator<T, Q> {
    * Subclasses must return the query shape.
    */
   protected getNextQueryShape(
-    _params: Pick<PaginationQueryParams<Q>, 'direction'> = {},
+    _params: Pick<PaginationQueryParams<Q>, 'direction'> & { pageSize?: number } = {},
   ): Q {
     throw new Error('Paginator.getNextQueryShape() is not implemented');
   }
@@ -3153,7 +3153,13 @@ export abstract class BasePaginator<T, Q> {
       });
     }
 
-    const queryShape = forcedQueryShape ?? this.getNextQueryShape({ direction });
+    // A non-destructive refresh re-fetches as much of the loaded list as the server returns at once.
+    const isRefresh = reset === 'yes' && keepPreviousItems && !forcedQueryShape;
+    const pageSize = isRefresh
+      ? Math.max(this.pageSize, this.items?.length ?? 0)
+      : this.pageSize;
+    const queryShape =
+      forcedQueryShape ?? this.getNextQueryShape({ direction, pageSize });
 
     const isFirstPage = this.isFirstPageQuery({ queryShape, reset });
 
@@ -3343,7 +3349,7 @@ export abstract class BasePaginator<T, Q> {
       // Only hasMoreTail depends on the page result. hasMoreHead is fixed by where the loaded window
       // starts (offset 0 => head loaded) and was anchored once at the reset (getStateBeforeFirstQuery);
       // the offset only grows tailward from here, so leave hasMoreHead untouched.
-      stateUpdate.hasMoreTail = items.length === this.pageSize;
+      stateUpdate.hasMoreTail = items.length >= this.pageSize;
     }
 
     if (interval) {

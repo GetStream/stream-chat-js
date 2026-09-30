@@ -511,11 +511,13 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   }
 
   // invoked inside BasePaginator.executeQuery() to keep it as a query descriptor;
-  protected getNextQueryShape(): ChannelQueryShape {
+  protected getNextQueryShape({
+    pageSize,
+  }: { pageSize?: number } = {}): ChannelQueryShape {
     const shape: ChannelQueryShape = {
       filter_conditions: this.buildQueryFilters(),
       ...this.options,
-      limit: this.pageSize,
+      limit: pageSize ?? this.pageSize,
       offset: this.offset,
     };
 
