@@ -1117,6 +1117,45 @@ describe('ChannelPaginator', () => {
       );
     });
 
+    it('persists only the first page, including after paginating and live reorders', async () => {
+      await setUpOfflineDb({ isSynced: true });
+      const [a, b, c, d] = ['a', 'b', 'c', 'd'].map((id, index) => {
+        const channel = new Channel(client, 'type', id, {});
+        setLastMessageAt(channel, new Date(Date.UTC(1970, 0, 10 - index)));
+        return channel;
+      });
+      vi.spyOn(client, 'queryChannelsAndHydrate')
+        .mockResolvedValueOnce({ channels: [a, b], duration: '0.1ms' })
+        .mockResolvedValueOnce({ channels: [c, d], duration: '0.1ms' });
+      const paginator = new ChannelPaginator({
+        client,
+        filters: {},
+        paginatorOptions: { pageSize: 2 },
+        sort: [{ field: 'last_message_at', direction: -1 }],
+      });
+
+      await paginator.toTail();
+      expect(upsertCidsForQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({ cids: [a.cid, b.cid] }),
+      );
+      upsertCidsForQuery.mockClear();
+
+      // A later page cannot change the first page, so it is not written.
+      await paginator.toTail();
+
+      expect(paginator.items).toHaveLength(4);
+      expect(upsertCidsForQuery).not.toHaveBeenCalled();
+
+      // `d` receives a newer message and moves to the top.
+      setLastMessageAt(d, new Date(Date.UTC(1970, 0, 20)));
+      paginator.boost(d.cid, { seq: paginator.maxBoostSeq + 1 });
+      paginator.ingestItem(d);
+
+      expect(upsertCidsForQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({ cids: [d.cid, a.cid] }),
+      );
+    });
+
     it('does not persist when a removal changed nothing', async () => {
       await setUpOfflineDb({ isSynced: true });
       vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
@@ -1438,6 +1477,88 @@ describe('ChannelPaginator', () => {
         );
       });
 
+      describe('replacing the cache-seeded window with the refreshed first page', () => {
+        const channel = (id: string) => new Channel(client, 'type', id, {});
+
+        const seedAndSync = async (cached: Channel[], pageSize: number) => {
+          await setUpOfflineDb({ isSynced: false });
+          getChannelsForQuery.mockResolvedValue({ channels: cached.map(() => ({})) });
+          vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue(cached);
+          const queryChannels = vi.spyOn(client, 'queryChannelsAndHydrate');
+          const paginator = new ChannelPaginator({
+            client,
+            filters: {},
+            paginatorOptions: { pageSize },
+          });
+
+          await paginator.toTail(); // cold start: surface the cache, defer the query
+          expect(paginator.items).toEqual(cached);
+          client.offlineDb!.syncManager.isSynced = true;
+          const runDeferredRefresh = async () => {
+            const calls = scheduleSyncStatusChangeCallback.mock.calls;
+            await calls[calls.length - 1][1]();
+          };
+
+          return { paginator, queryChannels, runDeferredRefresh };
+        };
+
+        it('drops cached channels the server no longer returns and paginates after the page', async () => {
+          // Regression: the refresh MERGED into the cache, so channels hidden, deleted or left while the
+          // app was closed stayed in the list, and pagination continued from the end of page 1 while the
+          // whole cache stayed loaded - the next pages re-fetched cached channels and looked stuck.
+          const { paginator, queryChannels, runDeferredRefresh } = await seedAndSync(
+            ['a', 'hidden', 'b', 'c', 'd'].map(channel),
+            2,
+          );
+          queryChannels
+            .mockResolvedValueOnce({
+              channels: [channel('a'), channel('b')],
+              duration: '0.1ms',
+            })
+            .mockResolvedValueOnce({
+              channels: [channel('c'), channel('d')],
+              duration: '0.1ms',
+            });
+
+          await runDeferredRefresh();
+
+          expect(queryChannels.mock.calls[0][0]).toEqual(
+            expect.objectContaining({ offset: 0 }),
+          );
+          expect(paginator.items?.map(({ id }) => id)).toEqual(['a', 'b']);
+          expect(paginator.offset).toBe(2);
+
+          await paginator.toTail();
+
+          expect(queryChannels.mock.calls[1][0]).toEqual(
+            expect.objectContaining({ offset: 2 }),
+          );
+          expect(paginator.items?.map(({ id }) => id)).toEqual(['a', 'b', 'c', 'd']);
+        });
+
+        it('replaces the cached window in a single update, without blanking it', async () => {
+          const { paginator, queryChannels, runDeferredRefresh } = await seedAndSync(
+            ['a', 'hidden'].map(channel),
+            2,
+          );
+          queryChannels.mockResolvedValueOnce({
+            channels: [channel('a')],
+            duration: '0.1ms',
+          });
+          const publishedItems: Array<string[] | undefined> = [];
+          const unsubscribe = paginator.state.subscribeWithSelector(
+            ({ items }) => ({ items }),
+            ({ items }) => publishedItems.push(items?.map(({ id }) => id)),
+          );
+          publishedItems.length = 0; // drop the subscription's initial value
+
+          await runDeferredRefresh();
+          unsubscribe();
+
+          expect(publishedItems).toEqual([['a']]);
+        });
+      });
+
       it('does not continue from the seeded position once the sync completes', async () => {
         const { cached, paginator, queryChannels } = await seedFromCache();
 
@@ -1674,6 +1795,63 @@ describe('ChannelPaginator', () => {
 
       expect(paginator.offset).toBe(1);
       expect(paginator.items?.map(({ cid }) => cid)).toEqual([channel1.cid]);
+    });
+
+    it('continues after the loaded list when a non-destructive refresh re-fetched page 1', async () => {
+      // The refresh `ChannelManager.recover()` runs on reconnect. Regression: it left the position at
+      // the end of page 1 while every loaded page stayed in the list, so the next two pages were
+      // re-fetched (offset 2, then 4) before anything new arrived.
+      const channel = (id: string) => new Channel(client, 'type', id, {});
+      const [a, b, c, d, e, f, g] = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map(channel);
+      const paginator = new ChannelPaginator({
+        client,
+        paginatorOptions: { pageSize: 2 },
+      });
+      // The refresh asks for all 6 loaded channels; the server caps it at 4.
+      const spy = mockPages([[a, b], [c, d], [e, f], [a, b, c, d], [g]]);
+
+      await paginator.toTail();
+      await paginator.toTail();
+      await paginator.toTail();
+      await paginator.toTail({ keepPreviousItems: true, reset: 'yes' });
+
+      expect(spy.mock.calls[3][0]).toMatchObject({ limit: 6, offset: 0 });
+      expect(paginator.items).toHaveLength(6);
+      // A capped response is not the end of the list.
+      expect(paginator.hasMoreTail).toBe(true);
+
+      await paginator.toTail();
+
+      expect(spy.mock.calls[4][0]).toMatchObject({ limit: 2, offset: 6 });
+      expect(paginator.items).toHaveLength(7);
+    });
+
+    it('asks for one page when not refreshing, even at offset 0 with channels loaded', async () => {
+      // Only a non-destructive refresh asks for more than a page. Here the offset drops back to 0 after a
+      // removal while live-ingested channels are still loaded, and the next page must still be one page.
+      const dated = (id: string, date: string) => {
+        const datedChannel = new Channel(client, 'type', id, {});
+        setLastMessageAt(datedChannel, new Date(date));
+        return datedChannel;
+      };
+      const a = dated('a', '2020-01-01');
+      const paginator = new ChannelPaginator({
+        client,
+        filters: {},
+        paginatorOptions: { pageSize: 1 },
+      });
+      const spy = mockPages([[a], []]);
+
+      await paginator.toTail();
+      paginator.ingestItem(dated('b', '2020-01-02'));
+      paginator.ingestItem(dated('c', '2020-01-03'));
+      paginator.removeItem({ item: a });
+      expect(paginator.offset).toBe(0);
+      expect(paginator.items).toHaveLength(2);
+
+      await paginator.toTail();
+
+      expect(spy.mock.calls[1][0]).toMatchObject({ limit: 1, offset: 0 });
     });
   });
 
