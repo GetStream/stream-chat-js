@@ -2591,14 +2591,17 @@ describe('Client WSFallback', () => {
 		});
 	});
 
-	it('should fire transport.changed and connection.ok events', async () => {
+	it('should fire connection.fallback_activated and connection.ok events', async () => {
 		fakeLongPoll();
 		const dispatchEvent = vi.spyOn(client, 'dispatchEvent');
 
 		await client.connectUser({ id: 'amin' }, userToken);
 
 		expect(dispatchEvent).toHaveBeenCalledWith(
-			expect.objectContaining({ type: 'transport.changed', mode: 'longpoll' }),
+			expect.objectContaining({
+				type: 'connection.fallback_activated',
+				mode: 'longpoll',
+			}),
 		);
 		expect(dispatchEvent).toHaveBeenCalledWith(
 			expect.objectContaining({ type: 'connection.ok', connection_id: 'new_id' }),

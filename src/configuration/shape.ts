@@ -509,7 +509,7 @@ const WS_CONNECTION_FIELDS: Record<keyof WSConnectionConfig, ConfigNode> = {
   },
   enableWSFallback: {
     description:
-      'Falls back to HTTP long-polling (`/api/v2/longpoll`) when the WebSocket cannot connect, for networks that block WebSockets. The WebSocket connects within `connectTimeoutMs`, as without the flag; lower it to switch sooner. Dispatches `transport.changed` when it switches, and stays on long-poll from then on. Defaults to `false`. Was `StreamChatOptions.enableWSFallback`.',
+      'Falls back to HTTP long-polling (`/api/v2/longpoll`) when the WebSocket cannot connect, for networks that block WebSockets. The WebSocket connects within `connectTimeoutMs`, as without the flag; lower it to switch sooner. Dispatches `connection.fallback_activated` when it switches, and stays on long-poll from then on. Defaults to `false`. Was `StreamChatOptions.enableWSFallback`.',
     kind: 'value',
     type: 'boolean',
   },

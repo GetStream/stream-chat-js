@@ -285,7 +285,10 @@ export class WSConnection extends WithSubscriptions {
         !isDeviceOffline
       ) {
         logger.withExtraTags('connect').info('WS failed, fallback to longpoll');
-        this.client.dispatchEvent({ type: 'transport.changed', mode: 'longpoll' });
+        this.client.dispatchEvent({
+          type: 'connection.fallback_activated',
+          mode: 'longpoll',
+        });
 
         next._destroyCurrentWSConnection();
         void next.disconnect(); // close WS so no retry

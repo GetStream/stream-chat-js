@@ -576,10 +576,12 @@ client.config.set({ client: { wsConnection: { enableWSFallback: true } } });
 With it on, the WebSocket connects as it would without the flag, within `connectTimeoutMs` (15s by
 default). v9 gave it 6s while the flag was on, through `client.defaultWSTimeoutWithFallback`, which is
 gone: lower `connectTimeoutMs` to switch sooner. If the WebSocket fails with a network error, the
-client switches to HTTP long-polling, dispatches `transport.changed` with
+client switches to HTTP long-polling, dispatches `connection.fallback_activated` with
 `mode: 'longpoll'`, and stays on long-poll for the rest of its lifetime. What else changed around it:
 
 - It polls `/api/v2/longpoll` instead of `/longpoll`.
+- The switch event is `connection.fallback_activated`, renamed from `transport.changed`. Its payload
+  is unchanged: `mode: 'longpoll'`.
 - Its status is `client.wsConnection.state`, as for the WebSocket, since `connection.changed` is gone.
 - A reconnect recovers state through the usual connection recovery; `client.recoverState()` is gone.
 - It takes online/offline changes from `client.networkConnection` instead of `window` events, so a
@@ -1320,7 +1322,7 @@ For each source file that touches the SDK:
 17. **Fix upload call sites.** `channel.sendFile` / `sendImage` are now `channel.uploadFile` / `uploadImage`, and take a request object: `{ file }`, where `file` is a `File`, a `Blob`, or a React-Native `{ uri, name, type }` descriptor — no `Buffer`, no readable streams. The MIME type still has to be explicit on the React-Native path, it just lives on the descriptor rather than in a separate `contentType` argument. `axiosRequestConfig` becomes `requestOptions` (`{ onUploadProgress, signal }`), and the routes moved to `/api/v2/…`.
 18. **Delete bundler shims** added for `stream-chat`'s Node-only deps (`crypto`, `https`, `zlib`, `jsonwebtoken`, `ws`) — `package.json#browser` is gone because nothing imports them anymore.
 19. **Handle the new connect hello event.** Anything keyed on the _first_ `health.check` (seeding `client.user`, unread counts, "connected" UI state) should listen for `connection.ok` instead; periodic `health.check` events are unchanged. Narrow on `event.type` before reading fields off the resolved `ConnectionOpen`.
-20. **Move `enableWSFallback`** from the client options to `client.config.set({ client: { wsConnection: { enableWSFallback: true } } })`. `transport.changed` is unchanged. Delete reads of `client.defaultWSTimeoutWithFallback` (lower `connectTimeoutMs` if you relied on the faster switch), and read the long-poll's status from `client.wsConnection.state` rather than `connection.changed`.
+20. **Move `enableWSFallback`** from the client options to `client.config.set({ client: { wsConnection: { enableWSFallback: true } } })`. Rename `transport.changed` listeners to `connection.fallback_activated`; the payload (`mode: 'longpoll'`) is unchanged. Delete reads of `client.defaultWSTimeoutWithFallback` (lower `connectTimeoutMs` if you relied on the faster switch), and read the long-poll's status from `client.wsConnection.state` rather than `connection.changed`.
 21. **Replace `client.setLocalDevice(device)` / the `device` client option** with an explicit `await client.createDevice({ id, push_provider, push_provider_name? })` after connecting.
 22. **Polyfill `atob`** if your React Native / Hermes target lacks it (`typeof atob === 'undefined'`); `UserFromToken` depends on it during `connectUser`.
 23. **Call `liveLocationManager.dispose()`** when you are finished with a manager you constructed, alongside whatever `unregisterSubscriptions()` you already call. Nothing will fail to compile: `dispose()` is the _configuration_ teardown, and until it runs the client's configuration registry holds a handle to the manager — a long-lived client and many short-lived managers will accumulate them. `unregisterSubscriptions()` is unchanged and stays ref-counted, so it deliberately no longer releases configuration; it never should have, since with two callers sharing a manager the first to leave stopped a still-live instance from tracking `client.config`. `SearchController` already worked this way.

@@ -38,8 +38,9 @@ export type WSConnectionConfig = {
   /**
    * Falls back to HTTP long-polling when the WebSocket cannot connect, for networks that block
    * WebSockets. Defaults to `false`. The WebSocket connects within {@link connectTimeoutMs}, as
-   * without the flag; lower it to switch sooner. The client dispatches `transport.changed` with
-   * `mode: 'longpoll'` when it switches, and stays on long-poll from then on.
+   * without the flag; lower it to switch sooner. The client dispatches
+   * `connection.fallback_activated` with `mode: 'longpoll'` when it switches, and stays on long-poll
+   * from then on.
    */
   enableWSFallback: boolean;
   /**

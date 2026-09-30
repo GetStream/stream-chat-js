@@ -210,7 +210,7 @@ type LocalEvent = (
     })
   | { type: 'connection.recovered' }
   // `enableWSFallback` switched from the WebSocket to long-polling.
-  | ({ type: 'transport.changed' } & { mode: string })
+  | ({ type: 'connection.fallback_activated' } & { mode: string })
   | ({ type: 'offline_reactions.queried' } & {
       offlineReactions: ReactionResponse[];
     })
