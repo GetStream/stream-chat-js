@@ -4,9 +4,9 @@ import { EntityStore, type EntityStoreSubscriber } from './EntityStore';
 export type StoreBackedItemIndexOptions<T> = {
   getEntityId: (item: T) => string;
   /**
-   * The list that owns this index; the index's holder passes the store's notifications and id
-   * renames on to it. Message paginators pass themselves so updates from other lists reach them.
-   * Channel lists omit it: a channel publishes its own changes through `channel.state`.
+   * The list that owns this index; the index's holder passes the store's notifications, id renames
+   * and removals on to it. Paginators pass themselves, so updates from other lists and removals from
+   * the store reach them.
    */
   owner?: EntityStoreSubscriber;
   /**
@@ -41,6 +41,8 @@ export type StoreBackedItemIndexOptions<T> = {
  *   that made the change is skipped; it updates itself.
  * - "an id you hold was renamed" ({@link EntityStore.changeId}): applied to `memberIds`, so a later
  *   remove unlinks the renamed entry rather than missing it.
+ * - "an item you hold was removed" ({@link EntityStore.remove}, {@link EntityStore.clear}): the id
+ *   leaves `memberIds`, and the owner gets the removed item so it can drop it from its windows.
  *
  * Without a shared store, the index makes a private one and behaves like a plain per-list map.
  *
@@ -55,9 +57,9 @@ export class StoreBackedItemIndex<T> implements ItemIndexApi<T> {
    * holder remains. The store tells holders apart by object reference, so every index gets its own,
    * even two indexes with the same owner or with none.
    *
-   * It also receives what the store sends this index: change notifications, passed on to the owner,
-   * and id renames ({@link EntityStore.changeId}), applied to `memberIds` so a later remove unlinks
-   * the renamed entry.
+   * It also receives what the store sends this index: change notifications and removals, passed on
+   * to the owner, and id renames ({@link EntityStore.changeId}), applied to `memberIds` so a later
+   * remove unlinks the renamed entry.
    */
   private readonly holder: EntityStoreSubscriber;
   private readonly getEntityId: (item: T) => string;
@@ -70,6 +72,11 @@ export class StoreBackedItemIndex<T> implements ItemIndexApi<T> {
       onIdChanged: (oldId, newId) => {
         if (this.memberIds.delete(oldId)) this.memberIds.add(newId);
         owner?.onIdChanged?.(oldId, newId);
+      },
+      onEntityRemoved: (id, entity) => {
+        // the owner first: dropping the item from its windows still reads it through this index
+        owner?.onEntityRemoved?.(id, entity);
+        this.memberIds.delete(id);
       },
     };
     this.getEntityId = getEntityId;

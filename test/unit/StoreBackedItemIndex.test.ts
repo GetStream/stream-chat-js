@@ -234,6 +234,35 @@ describe('StoreBackedItemIndex', () => {
     });
   });
 
+  describe('store removal', () => {
+    it('drops a removed item from the index and hands it to the owner', () => {
+      const onEntityRemoved = vi.fn();
+      a = new StoreBackedItemIndex({
+        store,
+        owner: { ...ownerA, onEntityRemoved },
+        getEntityId,
+      });
+      const m = msg({ id: 'm1' });
+      a.setOne(m);
+      b.setOne(m);
+
+      store.remove('m1');
+
+      expect(onEntityRemoved).toHaveBeenCalledWith('m1', m);
+      expect(a.has('m1')).toBe(false);
+      expect(b.has('m1')).toBe(false);
+    });
+
+    it('drops every item on clear()', () => {
+      a.setOne(msg({ id: 'm1' }));
+      a.setOne(msg({ id: 'm2' }));
+
+      store.clear();
+
+      expect(a.values()).toEqual([]);
+    });
+  });
+
   describe('store changeId', () => {
     it('follows the renamed id, so a later remove releases the entity instead of leaking it', () => {
       const onRelease = vi.fn();

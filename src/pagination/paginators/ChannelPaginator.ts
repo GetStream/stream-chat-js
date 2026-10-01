@@ -296,10 +296,12 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     super({
       hasPaginationQueryShapeChanged,
       // the index is this list's holder in the store: a channel stays stored while the list lists it
-      itemIndex: new StoreBackedItemIndex<Channel>({
-        getEntityId: (channel) => channel.cid,
-        store: store ?? client.channelManager?.channelStore,
-      }),
+      createItemIndex: (owner) =>
+        new StoreBackedItemIndex<Channel>({
+          getEntityId: (channel) => channel.cid,
+          owner: owner as ChannelPaginator,
+          store: store ?? client.channelManager?.channelStore,
+        }),
       retryCount: DEFAULT_QUERY_CHANNELS_RETRY_COUNT,
       ...paginatorOptions,
     });
@@ -736,6 +738,22 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     if (!this.matchesFilter(channel)) this._itemIndex.remove(channel.cid);
     if (changed) this.persistLoadedCids();
     return changed;
+  }
+
+  /**
+   * Entity-store subscriber (as the owner of its index). A channel publishes its own changes through
+   * `channel.state`, so the list has nothing to re-project when the store reports a change.
+   */
+  onEntitiesChanged(): void {
+    return;
+  }
+
+  /**
+   * Entity-store subscriber: the store removed a channel this list holds (a known end, logout), so
+   * the list drops it from its windows.
+   */
+  onEntityRemoved(id: string, channel: unknown): void {
+    this.removeItem({ id, item: channel as Channel });
   }
 
   resetState() {

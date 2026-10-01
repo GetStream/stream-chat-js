@@ -33,6 +33,14 @@ export type EntityStoreSubscriber = {
    * and the entity would never be released.
    */
   onIdChanged?: (oldId: string, newId: string) => void;
+  /**
+   * Optional: called when the store removes an entity this subscriber holds, through
+   * {@link EntityStore.remove} or {@link EntityStore.clear}, with the removed entity. Called after
+   * its holders are dropped but while the entity can still be read, so a list can locate the item
+   * and drop it on its side, and its unlink changes nothing. Not called when the last holder
+   * unlinks: nobody holds the entity then.
+   */
+  onEntityRemoved?: (id: string, entity: unknown) => void;
 };
 
 export type EntityStoreOptions<T> = {
@@ -190,30 +198,40 @@ export class EntityStore<T> {
 
   /**
    * Removes the entry stored under `id` whatever holds it, drops its holders and calls `onRelease`
-   * with the entity. Holders are notified that `id` changed (it now resolves to `undefined`).
-   * Removing an ID that isn't stored does nothing.
+   * with the entity. Each holder gets {@link EntityStoreSubscriber.onEntityRemoved}, and is notified
+   * that `id` changed (it now resolves to `undefined`). Removing an ID that isn't stored does nothing.
    */
   remove(id: string): void {
     if (!this.byId.has(id)) return;
     const entity = this.byId.get(id) as T;
-    this.byId.delete(id);
+    const holders = this.subscribers.get(id);
     this.markDirty(id);
     this.subscribers.delete(id);
     this.pendingFlushIds?.delete(id);
+    if (holders) for (const holder of holders) holder.onEntityRemoved?.(id, entity);
+    this.byId.delete(id);
     this.onRelease?.(entity);
     this.autoFlush();
   }
 
   /**
-   * Removes every entry and holder, then calls `onRelease` for each removed entity. Holders are
-   * not notified: they are dropped with the entries. Calling it on an empty store does nothing.
+   * Removes every entry and holder. Each holder gets {@link EntityStoreSubscriber.onEntityRemoved}
+   * for every entity it held, then `onRelease` is called for each removed entity. Calling it on an
+   * empty store does nothing.
    */
   clear(): void {
-    const released = [...this.byId.values()];
-    this.byId.clear();
-    this.subscribers.clear();
+    const holdersById = this.subscribers;
+    this.subscribers = new Map();
     this.pendingChanged.clear();
     this.pendingFlushIds = undefined;
+    // holders are dropped first, so a list removing the item on its side unlinks nothing
+    for (const [id, holders] of holdersById) {
+      const entity = this.byId.get(id);
+      if (entity !== undefined)
+        for (const holder of holders) holder.onEntityRemoved?.(id, entity);
+    }
+    const released = [...this.byId.values()];
+    this.byId = new Map();
     // released after the store is emptied, so an onRelease reading the store sees the final state
     if (this.onRelease) for (const entity of released) this.onRelease(entity);
   }

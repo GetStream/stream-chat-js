@@ -552,6 +552,69 @@ describe('EntityStore', () => {
     });
   });
 
+  describe('onEntityRemoved', () => {
+    const removalSubscriber = (
+      onEntityRemoved: (id: string, entity: unknown) => void,
+    ) => ({
+      onEntitiesChanged: vi.fn(),
+      onEntityRemoved: vi.fn(onEntityRemoved),
+    });
+
+    it('is called on every holder by remove(), with the entity still readable', () => {
+      const m = msg({ id: 'm1' });
+      store.upsert(m);
+      const seen: unknown[] = [];
+      const a = removalSubscriber((id) => seen.push(store.get(id)));
+      const b = removalSubscriber(() => undefined);
+      store.link('m1', a);
+      store.link('m1', b);
+
+      store.remove('m1');
+
+      expect(a.onEntityRemoved).toHaveBeenCalledWith('m1', m);
+      expect(b.onEntityRemoved).toHaveBeenCalledWith('m1', m);
+      expect(seen).toEqual([m]);
+      expect(store.has('m1')).toBe(false);
+    });
+
+    it('lets a holder unlink during the call without releasing the entity twice', () => {
+      const onRelease = vi.fn();
+      store = new EntityStore<LocalMessage>({ getEntityId, onRelease });
+      store.upsert(msg({ id: 'm1' }));
+      const a = removalSubscriber((id) => store.unlink(id, a));
+      store.link('m1', a);
+
+      store.remove('m1');
+
+      expect(onRelease).toHaveBeenCalledTimes(1);
+    });
+
+    it('is called by clear() for every entity a holder held', () => {
+      const m1 = msg({ id: 'm1' });
+      const m2 = msg({ id: 'm2' });
+      store.upsert(m1);
+      store.upsert(m2);
+      const a = removalSubscriber(() => undefined);
+      store.link('m1', a);
+      store.link('m2', a);
+
+      store.clear();
+
+      expect(a.onEntityRemoved).toHaveBeenCalledWith('m1', m1);
+      expect(a.onEntityRemoved).toHaveBeenCalledWith('m2', m2);
+    });
+
+    it('is not called when the last holder unlinks', () => {
+      store.upsert(msg({ id: 'm1' }));
+      const a = removalSubscriber(() => undefined);
+      store.link('m1', a);
+
+      store.unlink('m1', a);
+
+      expect(a.onEntityRemoved).not.toHaveBeenCalled();
+    });
+  });
+
   describe('values', () => {
     it('returns every stored entity', () => {
       const m1 = msg({ id: 'm1' });

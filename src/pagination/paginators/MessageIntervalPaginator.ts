@@ -248,6 +248,14 @@ export class MessageIntervalPaginator extends BasePaginator<
   }
 
   /**
+   * Entity-store subscriber: the store removed a message this paginator holds, so it drops it from
+   * its windows.
+   */
+  onEntityRemoved(id: string, message: unknown): void {
+    this.removeItem({ id, item: message as LocalMessage });
+  }
+
+  /**
    * Entity-store subscriber flush (the optional `EntityStoreSubscriber.flushState`): the `EntityStore`
    * calls this after an optimistic (local-user) write so the change renders without throttle delay.
    * Delegates to the base's generic {@link BasePaginator.flushPendingPublishes}.

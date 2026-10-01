@@ -534,6 +534,7 @@ export class ChannelManager extends WithSubscriptions {
 
   /**
    * Removes the channel stored under `cid` whatever holds it, tearing it down with `_disconnect()`.
+   * Every list holding it drops it too, as the store's removal reaches each list's index.
    *
    * @internal
    */

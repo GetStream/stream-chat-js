@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getClientWithUser } from './test-utils/getClient';
 import { generateChannel } from './test-utils/generateChannel';
+import { generateMsg } from './test-utils/generateMessage';
+import { formatMessage } from '../../src/utils';
 import { ChannelPaginator, ChannelWatchStatus } from '../../src';
 import type {
   ChannelStateResponseFields,
@@ -254,5 +256,99 @@ describe('channel lists as holders', () => {
     expect(channel.pendingDisposal).toBe(false);
     expect(teamB.items).toEqual([channel]);
     expect(teamA.items).toEqual([]);
+  });
+});
+
+describe('known ends and logout', () => {
+  let client: StreamChat;
+
+  beforeEach(() => {
+    client = getClientWithUser({ id: 'ann' });
+  });
+
+  // a channel every hold keeps: listed, opened and watched
+  const heldChannel = () => {
+    const channel = client.channel('messaging', 'general');
+    const paginator = new ChannelPaginator({ client, filters: {} });
+    paginator.setItems({
+      isFirstPage: true,
+      isLastPage: true,
+      valueOrFactory: [channel],
+    });
+    client.channelManager.setPaginators([paginator]);
+    client.channelManager.registerSubscriptions();
+    channel.activate();
+    channel.watchStatus = ChannelWatchStatus.Watching;
+    return { channel, paginator };
+  };
+
+  it.each([
+    'channel.deleted',
+    'notification.channel_deleted',
+    'notification.removed_from_channel',
+  ])(
+    'removes the channel from the store and every list on %s, whatever holds it',
+    async (type) => {
+      const { channel, paginator } = heldChannel();
+
+      client.dispatchEvent({
+        type,
+        cid: channel.cid,
+        channel_type: channel.type,
+        channel_id: channel.id,
+      } as never);
+
+      expect(channel.pendingDisposal).toBe(true);
+      expect(client.channelManager.get(channel.cid)).toBeUndefined();
+      await vi.waitFor(() => expect(paginator.items ?? []).toEqual([]));
+    },
+  );
+
+  it('removes every channel from the store and every list on logout', async () => {
+    const { channel, paginator } = heldChannel();
+
+    await client.disconnectUser();
+
+    expect(channel.pendingDisposal).toBe(true);
+    expect(client.channelManager.values()).toEqual([]);
+    expect(paginator.items ?? []).toEqual([]);
+  });
+});
+
+describe('store removals reach the lists', () => {
+  let client: StreamChat;
+
+  beforeEach(() => {
+    client = getClientWithUser({ id: 'ann' });
+  });
+
+  it('drops a channel removed from the channel store from every list holding it', () => {
+    const channel = client.channel('messaging', 'general');
+    const first = new ChannelPaginator({ client, filters: {} });
+    const second = new ChannelPaginator({ client, filters: {} });
+    first.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: [channel] });
+    second.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: [channel] });
+
+    client.channelManager.channelStore.remove(channel.cid);
+
+    expect(first.items).toEqual([]);
+    expect(second.items).toEqual([]);
+  });
+
+  it('drops a message removed from the message store from the message list', () => {
+    const channel = client.channel('messaging', 'general');
+    const message = formatMessage(generateMsg({ id: 'm1' }));
+    channel.messagePaginator.setItems({
+      isFirstPage: true,
+      isLastPage: true,
+      valueOrFactory: [message],
+    });
+
+    client.messageStore.remove('m1');
+    expect(channel.messagePaginator.items).toEqual([]);
+
+    // the list let go of it rather than only hiding it: storing the message again doesn't bring it back
+    client.messageStore.upsert(message);
+    expect(channel.messagePaginator.getItem('m1')).toBeUndefined();
   });
 });
