@@ -249,15 +249,13 @@ describe('narrowing and recovery, together', () => {
     const channel = client.channel('messaging', channelId ?? generated.channel.id);
 
     vi.spyOn(client.api, 'sendRequest').mockResolvedValue({
-      body: {
-        ...mockChannelQueryResponse,
-        channel: {
-          ...mockChannelQueryResponse.channel,
-          ...generated.channel,
-          config: {
-            ...mockChannelQueryResponse.channel.config,
-            shared_locations: sharedLocations,
-          },
+      ...mockChannelQueryResponse,
+      channel: {
+        ...mockChannelQueryResponse.channel,
+        ...generated.channel,
+        config: {
+          ...mockChannelQueryResponse.channel.config,
+          shared_locations: sharedLocations,
         },
       },
       metadata: {},
@@ -296,31 +294,27 @@ describe('narrowing and recovery, together', () => {
 
     vi.spyOn(client.api, 'sendRequest')
       .mockResolvedValueOnce({
-        body: {
-          ...mockChannelQueryResponse,
-          channel: {
-            ...mockChannelQueryResponse.channel,
-            cid: 'messaging:recovery-channel',
-            id: 'recovery-channel',
-            config: {
-              ...mockChannelQueryResponse.channel.config,
-              shared_locations: false,
-            },
+        ...mockChannelQueryResponse,
+        channel: {
+          ...mockChannelQueryResponse.channel,
+          cid: 'messaging:recovery-channel',
+          id: 'recovery-channel',
+          config: {
+            ...mockChannelQueryResponse.channel.config,
+            shared_locations: false,
           },
         },
         metadata: {},
       } as never)
       .mockResolvedValueOnce({
-        body: {
-          ...mockChannelQueryResponse,
-          channel: {
-            ...mockChannelQueryResponse.channel,
-            cid: 'messaging:recovery-channel',
-            id: 'recovery-channel',
-            config: {
-              ...mockChannelQueryResponse.channel.config,
-              shared_locations: true,
-            },
+        ...mockChannelQueryResponse,
+        channel: {
+          ...mockChannelQueryResponse.channel,
+          cid: 'messaging:recovery-channel',
+          id: 'recovery-channel',
+          config: {
+            ...mockChannelQueryResponse.channel.config,
+            shared_locations: true,
           },
         },
         metadata: {},

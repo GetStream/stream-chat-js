@@ -172,6 +172,43 @@ describe('ApiClient rate limit metadata', () => {
   });
 });
 
+describe('ApiClient response shape', () => {
+  let client: StreamChat;
+
+  beforeEach(() => {
+    client = getClientWithUser();
+    vi.spyOn(client.axiosInstance, 'request').mockResolvedValue({
+      data: { duration: '1ms', channels: [] },
+      status: 200,
+      headers: {},
+    });
+  });
+
+  it('resolves to the response body with the metadata merged in', async () => {
+    const response = await client.api.sendRequest('GET', '/api/v2/chat/channels');
+
+    expect(response).toEqual({
+      duration: '1ms',
+      channels: [],
+      metadata: expect.objectContaining({ response_code: 200 }),
+    });
+    expect(response).not.toHaveProperty('body');
+  });
+
+  it('rejects rather than throws when the request cannot be built', async () => {
+    // The generated methods return this promise without awaiting it, so a synchronous throw would
+    // escape a caller's `.catch()`. A lone surrogate makes `encodeURIComponent` throw on the path.
+    let request: Promise<unknown> | undefined;
+    expect(() => {
+      request = client.api.sendRequest('GET', '/api/v2/chat/channels/{id}', {
+        id: '\uD800',
+      });
+    }).not.toThrow();
+
+    await expect(request).rejects.toThrow(URIError);
+  });
+});
+
 describe('ApiClient header precedence', () => {
   let client: StreamChat;
   let requestSpy: ReturnType<typeof vi.spyOn>;

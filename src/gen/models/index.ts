@@ -116,14 +116,33 @@ export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Omit<T, Keys> &
     [K in Keys]-?: Required<Pick<T, K>> & Partial<Record<Exclude<Keys, K>, undefined>>;
   }[Keys];
 export interface AIAudioConfigRequest {
+  /**
+   * Bodyguard credentials profile to classify transcripts with. Applies to the NLP engine only; ignored when LLM configurability is enabled. Empty falls back to the app-pinned profile, then the organization's top-level credentials
+   */
   profile?: string;
+  /**
+   * Deprecated pre-split rule list. Still the live config while no engine config exists; once one does it is kept as a fallback for whichever engine has none of its own
+   */
   rules?: Array<BodyguardRule>;
+  ai_text_config?: AITextConfig;
+  llm_config?: LLMConfig;
 }
 
 export interface AIAudioConfigResponse {
+  /**
+   * Whether the engine selected by the application's LLM configurability flag has a rule that does something. Derived, not stored
+   */
   enabled: boolean;
+  /**
+   * Bodyguard credentials profile transcripts are classified with. Applies to the NLP engine only
+   */
   profile: string;
+  /**
+   * The active engine's rules, flattened into the pre-split shape for clients that predate the per-engine configs. This is the whole config for a policy that has no per-engine config stored
+   */
   rules: Array<BodyguardRule>;
+  ai_text_config?: AITextConfig;
+  llm_config?: LLMConfig;
 }
 
 export interface AIImageConfig {
@@ -763,7 +782,7 @@ export interface BlockListResponse {
    */
   name: string;
   /**
-   * Block list type. One of: regex, domain, domain_allowlist, email, email_allowlist, word
+   * Block list type. One of: regex, domain, domain_allowlist, email, email_allowlist, word, word_allowlist
    */
   type: string;
   /**
@@ -903,7 +922,8 @@ export interface BulkActionAppealsRequest {
    */
   unban?: UnbanActionRequestPayload;
   /**
-   * Deprecated: use restore instead — it now also reverses a block or shadow block. Configuration for unblock action.
+   * @deprecated
+   * Deprecated: Use restore instead, which now also reverses a block or shadow block. Configuration for unblock action.
    */
   unblock?: UnblockActionRequestPayload;
 }
@@ -1086,6 +1106,9 @@ export interface ChannelConfigWithInfo {
   blocklist_behavior?: 'flag' | 'block' | 'shadow_block';
   partition_size?: number;
   partition_ttl?: string;
+  /**
+   * Sets the push notification level for a channel type
+   */
   push_level?: 'all' | 'all_mentions' | 'mentions' | 'direct_mentions' | 'none';
   allowed_flag_reasons?: Array<string>;
   blocklists?: Array<BlockListOptions>;
@@ -2141,6 +2164,9 @@ export interface ConfigOverridesRequest {
    * Maximum message length
    */
   max_message_length?: number;
+  /**
+   * Overrides the push notification level for this channel
+   */
   push_level?: 'all' | 'all_mentions' | 'mentions' | 'direct_mentions' | 'none';
   /**
    * Enable/disable quotes
@@ -2228,6 +2254,7 @@ export interface ConfigResponse {
   automod_toxicity_config?: AutomodToxicityConfig;
   block_list_config?: BlockListConfig;
   flood_config?: FloodConfig;
+  intent_config?: IntentConfigResponse;
   llm_config?: LLMConfig;
   velocity_filter_config?: VelocityFilterConfig;
   video_call_rule_config?: VideoCallRuleConfig;
@@ -2241,6 +2268,29 @@ export interface ConnectUserDetailsRequest {
   name?: string;
   custom?: CustomUserData;
   privacy_settings?: PrivacySettingsResponse;
+}
+
+export interface ConnectedEvent {
+  /**
+   * The connection_id for this client
+   */
+  connection_id: string;
+  created_at: TimestampNS;
+  me: OwnUserResponse;
+  /**
+   * The type of event: "connection.ok" in this case
+   */
+  type: string;
+}
+
+export interface ConnectionErrorEvent {
+  connection_id: string;
+  created_at: TimestampNS;
+  error: APIError;
+  /**
+   * The type of event: "connection.error" in this case
+   */
+  type: string;
 }
 
 export interface ContentCountRuleParameters {
@@ -2275,9 +2325,16 @@ export interface CreateBlockListRequest {
   is_substring_matching_enabled?: boolean;
   team?: string;
   /**
-   * Block list type. One of: regex, domain, domain_allowlist, email, email_allowlist, word
+   * Block list type. One of: regex, domain, domain_allowlist, email, email_allowlist, word, word_allowlist
    */
-  type?: 'regex' | 'domain' | 'domain_allowlist' | 'email' | 'email_allowlist' | 'word';
+  type?:
+    | 'regex'
+    | 'domain'
+    | 'domain_allowlist'
+    | 'email'
+    | 'email_allowlist'
+    | 'word'
+    | 'word_allowlist';
 }
 
 export interface CreateBlockListResponse {
@@ -2407,6 +2464,7 @@ export interface CreateQueueRequest {
 }
 
 export interface CreateReminderRequest {
+  expires_at?: Date;
   remind_at?: Date;
 }
 
@@ -3251,6 +3309,10 @@ export interface FilterConfigResponse {
    */
   ai_image_labels?: Array<string>;
   /**
+   * Labels the image OCR pipeline can flag, available as filter values on the `label` field under the ai_image category. The app's LLM labels when LLM configurability is enabled, otherwise the AI text labels. OCR and image-classification labels share the `label` field, so a name present in both matches either.
+   */
+  ai_image_ocr_labels?: Array<string>;
+  /**
    * AI text moderation labels available as filter values
    */
   ai_text_labels?: Array<string>;
@@ -3361,6 +3423,7 @@ export interface FloodSimilarConfig {
 }
 
 export interface FloodSimilarRuleParameters {
+  min_text_length?: number;
   similarity_distance?: number;
   threshold?: number;
   time_window?: string;
@@ -3378,6 +3441,10 @@ export interface FullUserResponse {
   shadow_banned: boolean;
   total_unread_count: number;
   unread_channels: number;
+  /**
+   * @deprecated
+   * Deprecated: Use total_unread_count instead.
+   */
   unread_count: number;
   unread_threads: number;
   updated_at: TimestampNS;
@@ -3758,6 +3825,82 @@ export interface ImportBlockListResponse {
    */
   duration: string;
   task_id: string;
+}
+
+export interface IntentConfigRequest {
+  /**
+   * Topics to classify conversation text against (max 20, labels must be unique)
+   */
+  topics?: Array<IntentTopicRequest>;
+}
+
+export interface IntentConfigResponse {
+  /**
+   * Topics conversation text is classified against
+   */
+  topics: Array<IntentTopicResponse>;
+}
+
+export interface IntentTopicRequest {
+  /**
+   * Unique topic label (e.g. purchase_intent)
+   */
+  label: string;
+  /**
+   * How long the buffer collects items before scoring runs
+   */
+  analysis_cooldown_seconds?: number;
+  /**
+   * Optional description used in the classification prompt; the label alone is used when empty
+   */
+  description?: string;
+  /**
+   * Whether this topic is evaluated
+   */
+  enabled?: boolean;
+  /**
+   * Items buffered per conversation before scoring runs early
+   */
+  max_captured_items?: number;
+  /**
+   * Suppresses this topic for a user and conversation after it fires; 0 uses the default
+   */
+  refire_cooldown_seconds?: number;
+  /**
+   * Conversation score (0-100) required to fire moderation.intent_detected
+   */
+  score_threshold?: number;
+}
+
+export interface IntentTopicResponse {
+  /**
+   * How long the buffer collects items before scoring runs
+   */
+  analysis_cooldown_seconds: number;
+  /**
+   * Whether this topic is evaluated
+   */
+  enabled: boolean;
+  /**
+   * Unique topic label (e.g. purchase_intent)
+   */
+  label: string;
+  /**
+   * Items buffered per conversation before scoring runs early
+   */
+  max_captured_items: number;
+  /**
+   * Conversation score (0-100) required to fire moderation.intent_detected
+   */
+  score_threshold: number;
+  /**
+   * Optional description used in the classification prompt; the label alone is used when empty
+   */
+  description?: string;
+  /**
+   * Suppresses this topic for a user and conversation after it fires; 0 uses the default
+   */
+  refire_cooldown_seconds?: number;
 }
 
 export interface KeyframeOCRRuleParameters {
@@ -5865,6 +6008,10 @@ export interface OwnUserResponse {
   role: string;
   total_unread_count: number;
   unread_channels: number;
+  /**
+   * @deprecated
+   * Deprecated: Use total_unread_count instead.
+   */
   unread_count: number;
   unread_threads: number;
   updated_at: TimestampNS;
@@ -7193,6 +7340,11 @@ export interface QueryRemindersRequest {
       operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte';
     };
 
+    expires_at: {
+      type: Date | string;
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$lt' | '$lte';
+    };
+
     message_id: {
       type: string;
       operators: '$eq' | '$in';
@@ -7244,7 +7396,7 @@ export interface QueryReviewQueueRequest {
    */
   sort?: Array<SortParamRequest>;
   /**
-   * Filter conditions for review queue items. Accepts built-in fields (e.g. status, channel_cid, severity, recommended_action) and customer-supplied moderation_payload.custom keys: any key that is not a built-in field is matched against the item's custom moderation data (e.g. {"location_id": "loc-42"}). Use filter_config.filterable_custom_keys to discover which custom keys the app exposes as chips.
+   * Filter conditions for review queue items. Accepts built-in fields (e.g. status, channel_cid, severity, recommended_action) and customer-supplied moderation_payload.custom keys: any key that is not a built-in field is matched against the item's custom moderation data (e.g. {"location_id": "loc-42"}). Use filter_config.filterable_custom_keys to discover which custom keys the app exposes as chips. content_text searches the moderated text: "$q" is a keyword search (terms ANDed, no adjacency) over the indexed tsvector, while "$eq" (or "$in" for several wordings) matches the text exactly. The exact form is unindexed, so scope it with date_range rather than running it across the whole queue.
    */
   filter?: Filters<{
     ai_text_severity: {
@@ -7305,6 +7457,11 @@ export interface QueryReviewQueueRequest {
     config_key: {
       type: string;
       operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
+    };
+
+    content_text: {
+      type: string;
+      operators: '$eq' | '$in' | '$q';
     };
 
     created_at: {
@@ -8150,6 +8307,7 @@ export interface ReminderResponseData {
   message_id: string;
   updated_at: TimestampNS;
   user_id: string;
+  expires_at?: TimestampNS;
   remind_at?: TimestampNS;
   /**
    * Represents channel in chat
@@ -9129,7 +9287,8 @@ export interface SubmitActionRequest {
    */
   unban?: UnbanActionRequestPayload;
   /**
-   * Deprecated: use restore instead — it now also reverses a block or shadow block. Configuration for unblock action.
+   * @deprecated
+   * Deprecated: Use restore instead, which now also reverses a block or shadow block. Configuration for unblock action.
    */
   unblock?: UnblockActionRequestPayload;
 }
@@ -9920,6 +10079,7 @@ export interface UpdateQueueRequest {
 }
 
 export interface UpdateReminderRequest {
+  expires_at?: Date;
   remind_at?: Date;
 }
 
@@ -9994,7 +10154,7 @@ export interface UpdateUsersResponse {
   duration: string;
   /**
    * @deprecated
-   * Deprecated: always empty. Removing a user from a team no longer deletes their memberships in that team's channels, so there is no task to poll
+   * Deprecated: Always empty. Removing a user from a team no longer deletes their memberships in that team's channels, so there is no task to poll.
    */
   membership_deletion_task_id: string;
   /**
@@ -10129,6 +10289,7 @@ export interface UpsertConfigRequest {
   bodyguard_config?: AITextConfig;
   flood_config?: FloodConfig;
   google_vision_config?: GoogleVisionConfig;
+  intent_config?: IntentConfigRequest;
   llm_config?: LLMConfig;
   rule_builder_config?: RuleBuilderConfig;
   velocity_filter_config?: VelocityFilterConfig;
@@ -10934,6 +11095,8 @@ export type WSEvent =
   | ({ type: 'channel.unfrozen' } & ChannelUnFrozenEvent)
   | ({ type: 'channel.updated' } & ChannelUpdatedEvent)
   | ({ type: 'channel.visible' } & ChannelVisibleEvent)
+  | ({ type: 'connection.error' } & ConnectionErrorEvent)
+  | ({ type: 'connection.ok' } & ConnectedEvent)
   | ({ type: 'draft.deleted' } & DraftDeletedEvent)
   | ({ type: 'draft.updated' } & DraftUpdatedEvent)
   | ({ type: 'health.check' } & HealthCheckEvent)

@@ -154,17 +154,21 @@ import type {
 export class ChatApi {
   constructor(public readonly apiClient: ApiClient) {}
 
-  async getApp(
+  getApp(
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<GetApplicationResponse>> {
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<GetApplicationResponse>
-    >('GET', '/api/v2/app', undefined, undefined, undefined, undefined, requestOptions);
-
-    return { ...response.body, metadata: response.metadata };
+    return this.apiClient.sendRequest<GetApplicationResponse>(
+      'GET',
+      '/api/v2/app',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      requestOptions,
+    );
   }
 
-  async listBlockLists(
+  listBlockLists(
     request?: { team?: string; cursor?: string; limit?: number },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<ListBlockListResponse>> {
@@ -174,9 +178,7 @@ export class ChatApi {
       limit: request?.limit,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<ListBlockListResponse>
-    >(
+    return this.apiClient.sendRequest<ListBlockListResponse>(
       'GET',
       '/api/v2/blocklists',
       undefined,
@@ -185,11 +187,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async createBlockList(
+  createBlockList(
     request: CreateBlockListRequest,
 
     requestOptions?: StreamRequestOptions,
@@ -205,9 +205,7 @@ export class ChatApi {
       type: request?.type,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<CreateBlockListResponse>
-    >(
+    return this.apiClient.sendRequest<CreateBlockListResponse>(
       'POST',
       '/api/v2/blocklists',
       undefined,
@@ -216,11 +214,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async importBlockList(
+  importBlockList(
     request: ImportBlockListRequest & { id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<ImportBlockListResponse>> {
@@ -232,9 +228,7 @@ export class ChatApi {
       chunk_size: request?.chunk_size,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<ImportBlockListResponse>
-    >(
+    return this.apiClient.sendRequest<ImportBlockListResponse>(
       'POST',
       '/api/v2/blocklists/{id}/import',
       pathParams,
@@ -243,11 +237,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async deleteBlockList(
+  deleteBlockList(
     request: { name: string; team?: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<Response>> {
@@ -258,7 +250,7 @@ export class ChatApi {
       name: request?.name,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<Response>>(
+    return this.apiClient.sendRequest<Response>(
       'DELETE',
       '/api/v2/blocklists/{name}',
       pathParams,
@@ -267,11 +259,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async updateBlockList(
+  updateBlockList(
     request: UpdateBlockListRequest & { name: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<UpdateBlockListResponse>> {
@@ -287,9 +277,7 @@ export class ChatApi {
       words: request?.words,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<UpdateBlockListResponse>
-    >(
+    return this.apiClient.sendRequest<UpdateBlockListResponse>(
       'PUT',
       '/api/v2/blocklists/{name}',
       pathParams,
@@ -298,11 +286,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async queryChannels(
+  queryChannels(
     request?: QueryChannelsRequest & { connection_id?: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<QueryChannelsResponse>> {
@@ -325,9 +311,7 @@ export class ChatApi {
       sort_values: request?.sort_values,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<QueryChannelsResponse>
-    >(
+    return this.apiClient.sendRequest<QueryChannelsResponse>(
       'POST',
       '/api/v2/chat/channels',
       undefined,
@@ -336,11 +320,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async deleteChannels(
+  deleteChannels(
     request: DeleteChannelsRequest,
 
     requestOptions?: StreamRequestOptions,
@@ -350,9 +332,7 @@ export class ChatApi {
       hard_delete: request?.hard_delete,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<DeleteChannelsResponse>
-    >(
+    return this.apiClient.sendRequest<DeleteChannelsResponse>(
       'POST',
       '/api/v2/chat/channels/delete',
       undefined,
@@ -361,11 +341,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async markDelivered(
+  markDelivered(
     request?: MarkDeliveredRequest,
 
     requestOptions?: StreamRequestOptions,
@@ -374,9 +352,7 @@ export class ChatApi {
       latest_delivered_messages: request?.latest_delivered_messages,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<MarkDeliveredResponse>
-    >(
+    return this.apiClient.sendRequest<MarkDeliveredResponse>(
       'POST',
       '/api/v2/chat/channels/delivered',
       undefined,
@@ -385,11 +361,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async groupedQueryChannels(
+  groupedQueryChannels(
     request?: GroupedQueryChannelsRequest & { connection_id?: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<GroupedQueryChannelsResponse>> {
@@ -403,9 +377,7 @@ export class ChatApi {
       groups: request?.groups,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<GroupedQueryChannelsResponse>
-    >(
+    return this.apiClient.sendRequest<GroupedQueryChannelsResponse>(
       'POST',
       '/api/v2/chat/channels/grouped',
       undefined,
@@ -414,11 +386,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async markChannelsRead(
+  markChannelsRead(
     request?: MarkChannelsReadRequest,
 
     requestOptions?: StreamRequestOptions,
@@ -427,7 +397,7 @@ export class ChatApi {
       read_by_channel: request?.read_by_channel,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<MarkReadResponse>>(
+    return this.apiClient.sendRequest<MarkReadResponse>(
       'POST',
       '/api/v2/chat/channels/read',
       undefined,
@@ -436,11 +406,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async getOrCreateDistinctChannel(
+  getOrCreateDistinctChannel(
     request: ChannelGetOrCreateRequest & { type: string; connection_id?: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<ChannelStateResponse>> {
@@ -463,9 +431,7 @@ export class ChatApi {
       watchers: request?.watchers,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<ChannelStateResponse>
-    >(
+    return this.apiClient.sendRequest<ChannelStateResponse>(
       'POST',
       '/api/v2/chat/channels/{type}/query',
       pathParams,
@@ -474,11 +440,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async deleteChannel(
+  deleteChannel(
     request: { type: string; id: string; hard_delete?: boolean },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<DeleteChannelResponse>> {
@@ -490,9 +454,7 @@ export class ChatApi {
       id: request?.id,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<DeleteChannelResponse>
-    >(
+    return this.apiClient.sendRequest<DeleteChannelResponse>(
       'DELETE',
       '/api/v2/chat/channels/{type}/{id}',
       pathParams,
@@ -501,11 +463,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async getChannel(
+  getChannel(
     request: {
       type: string;
       id: string;
@@ -537,9 +497,7 @@ export class ChatApi {
       id: request?.id,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<ChannelStateResponse>
-    >(
+    return this.apiClient.sendRequest<ChannelStateResponse>(
       'GET',
       '/api/v2/chat/channels/{type}/{id}',
       pathParams,
@@ -548,11 +506,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async updateChannelPartial(
+  updateChannelPartial(
     request: UpdateChannelPartialRequest & { type: string; id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<UpdateChannelPartialResponse>> {
@@ -565,9 +521,7 @@ export class ChatApi {
       set: request?.set,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<UpdateChannelPartialResponse>
-    >(
+    return this.apiClient.sendRequest<UpdateChannelPartialResponse>(
       'PATCH',
       '/api/v2/chat/channels/{type}/{id}',
       pathParams,
@@ -576,11 +530,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async updateChannel(
+  updateChannel(
     request: UpdateChannelRequest & { type: string; id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<UpdateChannelResponse>> {
@@ -604,9 +556,7 @@ export class ChatApi {
       message: request?.message,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<UpdateChannelResponse>
-    >(
+    return this.apiClient.sendRequest<UpdateChannelResponse>(
       'POST',
       '/api/v2/chat/channels/{type}/{id}',
       pathParams,
@@ -615,11 +565,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async deleteDraft(
+  deleteDraft(
     request: { type: string; id: string; parent_id?: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<Response>> {
@@ -631,7 +579,7 @@ export class ChatApi {
       id: request?.id,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<Response>>(
+    return this.apiClient.sendRequest<Response>(
       'DELETE',
       '/api/v2/chat/channels/{type}/{id}/draft',
       pathParams,
@@ -640,11 +588,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async getDraft(
+  getDraft(
     request: { type: string; id: string; parent_id?: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<GetDraftResponse>> {
@@ -656,7 +602,7 @@ export class ChatApi {
       id: request?.id,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<GetDraftResponse>>(
+    return this.apiClient.sendRequest<GetDraftResponse>(
       'GET',
       '/api/v2/chat/channels/{type}/{id}/draft',
       pathParams,
@@ -665,11 +611,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async createDraft(
+  createDraft(
     request: CreateDraftRequest & { type: string; id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<CreateDraftResponse>> {
@@ -681,9 +625,7 @@ export class ChatApi {
       message: request?.message,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<CreateDraftResponse>
-    >(
+    return this.apiClient.sendRequest<CreateDraftResponse>(
       'POST',
       '/api/v2/chat/channels/{type}/{id}/draft',
       pathParams,
@@ -692,11 +634,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async sendEvent(
+  sendEvent(
     request: SendEventRequest & { type: string; id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<EventResponse>> {
@@ -708,7 +648,7 @@ export class ChatApi {
       event: request?.event,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<EventResponse>>(
+    return this.apiClient.sendRequest<EventResponse>(
       'POST',
       '/api/v2/chat/channels/{type}/{id}/event',
       pathParams,
@@ -717,11 +657,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async deleteChannelFile(
+  deleteChannelFile(
     request: { type: string; id: string; url?: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<Response>> {
@@ -733,7 +671,7 @@ export class ChatApi {
       id: request?.id,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<Response>>(
+    return this.apiClient.sendRequest<Response>(
       'DELETE',
       '/api/v2/chat/channels/{type}/{id}/file',
       pathParams,
@@ -742,11 +680,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async uploadChannelFile(
+  uploadChannelFile(
     request: UploadChannelFileRequest & { type: string; id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<UploadChannelFileResponse>> {
@@ -759,9 +695,7 @@ export class ChatApi {
       user: request?.user,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<UploadChannelFileResponse>
-    >(
+    return this.apiClient.sendRequest<UploadChannelFileResponse>(
       'POST',
       '/api/v2/chat/channels/{type}/{id}/file',
       pathParams,
@@ -770,11 +704,9 @@ export class ChatApi {
       'multipart/form-data',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async hideChannel(
+  hideChannel(
     request: HideChannelRequest & { type: string; id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<HideChannelResponse>> {
@@ -786,9 +718,7 @@ export class ChatApi {
       clear_history: request?.clear_history,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<HideChannelResponse>
-    >(
+    return this.apiClient.sendRequest<HideChannelResponse>(
       'POST',
       '/api/v2/chat/channels/{type}/{id}/hide',
       pathParams,
@@ -797,11 +727,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async deleteChannelImage(
+  deleteChannelImage(
     request: { type: string; id: string; url?: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<Response>> {
@@ -813,7 +741,7 @@ export class ChatApi {
       id: request?.id,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<Response>>(
+    return this.apiClient.sendRequest<Response>(
       'DELETE',
       '/api/v2/chat/channels/{type}/{id}/image',
       pathParams,
@@ -822,11 +750,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async uploadChannelImage(
+  uploadChannelImage(
     request: UploadChannelRequest & { type: string; id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<UploadChannelResponse>> {
@@ -840,9 +766,7 @@ export class ChatApi {
       user: request?.user,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<UploadChannelResponse>
-    >(
+    return this.apiClient.sendRequest<UploadChannelResponse>(
       'POST',
       '/api/v2/chat/channels/{type}/{id}/image',
       pathParams,
@@ -851,11 +775,9 @@ export class ChatApi {
       'multipart/form-data',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async updateMemberPartial(
+  updateMemberPartial(
     request: UpdateMemberPartialRequest & { type: string; id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<UpdateMemberPartialResponse>> {
@@ -868,9 +790,7 @@ export class ChatApi {
       set: request?.set,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<UpdateMemberPartialResponse>
-    >(
+    return this.apiClient.sendRequest<UpdateMemberPartialResponse>(
       'PATCH',
       '/api/v2/chat/channels/{type}/{id}/member',
       pathParams,
@@ -879,11 +799,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async sendMessage(
+  sendMessage(
     request: SendMessageRequest & { type: string; id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<SendMessageResponse>> {
@@ -900,9 +818,7 @@ export class ChatApi {
       skip_push: request?.skip_push,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<SendMessageResponse>
-    >(
+    return this.apiClient.sendRequest<SendMessageResponse>(
       'POST',
       '/api/v2/chat/channels/{type}/{id}/message',
       pathParams,
@@ -911,11 +827,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async getManyMessages(
+  getManyMessages(
     request: {
       type: string;
       id: string;
@@ -933,9 +847,7 @@ export class ChatApi {
       id: request?.id,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<GetManyMessagesResponse>
-    >(
+    return this.apiClient.sendRequest<GetManyMessagesResponse>(
       'GET',
       '/api/v2/chat/channels/{type}/{id}/messages',
       pathParams,
@@ -944,11 +856,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async getPinnedMessages(
+  getPinnedMessages(
     request: {
       type: string;
       id: string;
@@ -990,9 +900,7 @@ export class ChatApi {
       id: request?.id,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<GetPinnedMessagesResponse>
-    >(
+    return this.apiClient.sendRequest<GetPinnedMessagesResponse>(
       'GET',
       '/api/v2/chat/channels/{type}/{id}/pinned_messages',
       pathParams,
@@ -1001,11 +909,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async getOrCreateChannel(
+  getOrCreateChannel(
     request: ChannelGetOrCreateRequest & {
       type: string;
       id: string;
@@ -1033,9 +939,7 @@ export class ChatApi {
       watchers: request?.watchers,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<ChannelStateResponse>
-    >(
+    return this.apiClient.sendRequest<ChannelStateResponse>(
       'POST',
       '/api/v2/chat/channels/{type}/{id}/query',
       pathParams,
@@ -1044,11 +948,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async markRead(
+  markRead(
     request: MarkReadRequest & { type: string; id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<MarkReadResponse>> {
@@ -1061,7 +963,7 @@ export class ChatApi {
       thread_id: request?.thread_id,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<MarkReadResponse>>(
+    return this.apiClient.sendRequest<MarkReadResponse>(
       'POST',
       '/api/v2/chat/channels/{type}/{id}/read',
       pathParams,
@@ -1070,11 +972,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async showChannel(
+  showChannel(
     request: ShowChannelRequest & { type: string; id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<ShowChannelResponse>> {
@@ -1084,9 +984,7 @@ export class ChatApi {
     };
     const body = {};
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<ShowChannelResponse>
-    >(
+    return this.apiClient.sendRequest<ShowChannelResponse>(
       'POST',
       '/api/v2/chat/channels/{type}/{id}/show',
       pathParams,
@@ -1095,11 +993,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async stopWatchingChannel(
+  stopWatchingChannel(
     request: ChannelStopWatchingRequest & {
       type: string;
       id: string;
@@ -1116,7 +1012,7 @@ export class ChatApi {
     };
     const body = {};
 
-    const response = await this.apiClient.sendRequest<StreamResponse<Response>>(
+    return this.apiClient.sendRequest<Response>(
       'POST',
       '/api/v2/chat/channels/{type}/{id}/stop-watching',
       pathParams,
@@ -1125,11 +1021,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async truncateChannel(
+  truncateChannel(
     request: TruncateChannelRequest & { type: string; id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<TruncateChannelResponse>> {
@@ -1145,9 +1039,7 @@ export class ChatApi {
       message: request?.message,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<TruncateChannelResponse>
-    >(
+    return this.apiClient.sendRequest<TruncateChannelResponse>(
       'POST',
       '/api/v2/chat/channels/{type}/{id}/truncate',
       pathParams,
@@ -1156,11 +1048,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async markUnread(
+  markUnread(
     request: MarkUnreadRequest & { type: string; id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<Response>> {
@@ -1174,7 +1064,7 @@ export class ChatApi {
       thread_id: request?.thread_id,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<Response>>(
+    return this.apiClient.sendRequest<Response>(
       'POST',
       '/api/v2/chat/channels/{type}/{id}/unread',
       pathParams,
@@ -1183,11 +1073,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async queryDrafts(
+  queryDrafts(
     request?: QueryDraftsRequest,
 
     requestOptions?: StreamRequestOptions,
@@ -1200,9 +1088,7 @@ export class ChatApi {
       filter: request?.filter,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<QueryDraftsResponse>
-    >(
+    return this.apiClient.sendRequest<QueryDraftsResponse>(
       'POST',
       '/api/v2/chat/drafts/query',
       undefined,
@@ -1211,11 +1097,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async queryMembers(
+  queryMembers(
     request?: { payload?: QueryMembersPayload },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<MembersResponse>> {
@@ -1223,7 +1107,7 @@ export class ChatApi {
       payload: request?.payload,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<MembersResponse>>(
+    return this.apiClient.sendRequest<MembersResponse>(
       'GET',
       '/api/v2/chat/members',
       undefined,
@@ -1232,11 +1116,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async deleteMessage(
+  deleteMessage(
     request: { id: string; hard?: boolean; delete_for_me?: boolean },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<DeleteMessageResponse>> {
@@ -1248,9 +1130,7 @@ export class ChatApi {
       id: request?.id,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<DeleteMessageResponse>
-    >(
+    return this.apiClient.sendRequest<DeleteMessageResponse>(
       'DELETE',
       '/api/v2/chat/messages/{id}',
       pathParams,
@@ -1259,11 +1139,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async getMessage(
+  getMessage(
     request: { id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<GetMessageResponse>> {
@@ -1271,7 +1149,7 @@ export class ChatApi {
       id: request?.id,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<GetMessageResponse>>(
+    return this.apiClient.sendRequest<GetMessageResponse>(
       'GET',
       '/api/v2/chat/messages/{id}',
       pathParams,
@@ -1280,11 +1158,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async updateMessage(
+  updateMessage(
     request: UpdateMessageRequest & { id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<UpdateMessageResponse>> {
@@ -1297,9 +1173,7 @@ export class ChatApi {
       skip_push: request?.skip_push,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<UpdateMessageResponse>
-    >(
+    return this.apiClient.sendRequest<UpdateMessageResponse>(
       'POST',
       '/api/v2/chat/messages/{id}',
       pathParams,
@@ -1308,11 +1182,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async updateMessagePartial(
+  updateMessagePartial(
     request: UpdateMessagePartialRequest & { id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<UpdateMessagePartialResponse>> {
@@ -1326,9 +1198,7 @@ export class ChatApi {
       set: request?.set,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<UpdateMessagePartialResponse>
-    >(
+    return this.apiClient.sendRequest<UpdateMessagePartialResponse>(
       'PUT',
       '/api/v2/chat/messages/{id}',
       pathParams,
@@ -1337,11 +1207,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async runMessageAction(
+  runMessageAction(
     request: MessageActionRequest & { id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<MessageActionResponse>> {
@@ -1352,9 +1220,7 @@ export class ChatApi {
       form_data: request?.form_data,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<MessageActionResponse>
-    >(
+    return this.apiClient.sendRequest<MessageActionResponse>(
       'POST',
       '/api/v2/chat/messages/{id}/action',
       pathParams,
@@ -1363,11 +1229,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async sendReaction(
+  sendReaction(
     request: SendReactionRequest & { id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<SendReactionResponse>> {
@@ -1380,9 +1244,7 @@ export class ChatApi {
       skip_push: request?.skip_push,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<SendReactionResponse>
-    >(
+    return this.apiClient.sendRequest<SendReactionResponse>(
       'POST',
       '/api/v2/chat/messages/{id}/reaction',
       pathParams,
@@ -1391,11 +1253,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async deleteReaction(
+  deleteReaction(
     request: { id: string; type: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<DeleteReactionResponse>> {
@@ -1404,9 +1264,7 @@ export class ChatApi {
       type: request?.type,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<DeleteReactionResponse>
-    >(
+    return this.apiClient.sendRequest<DeleteReactionResponse>(
       'DELETE',
       '/api/v2/chat/messages/{id}/reaction/{type}',
       pathParams,
@@ -1415,11 +1273,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async getReactions(
+  getReactions(
     request: { id: string; limit?: number; offset?: number },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<GetReactionsResponse>> {
@@ -1431,9 +1287,7 @@ export class ChatApi {
       id: request?.id,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<GetReactionsResponse>
-    >(
+    return this.apiClient.sendRequest<GetReactionsResponse>(
       'GET',
       '/api/v2/chat/messages/{id}/reactions',
       pathParams,
@@ -1442,11 +1296,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async queryReactions(
+  queryReactions(
     request: QueryReactionsRequest & { id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<QueryReactionsResponse>> {
@@ -1461,9 +1313,7 @@ export class ChatApi {
       filter: request?.filter,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<QueryReactionsResponse>
-    >(
+    return this.apiClient.sendRequest<QueryReactionsResponse>(
       'POST',
       '/api/v2/chat/messages/{id}/reactions',
       pathParams,
@@ -1472,11 +1322,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async translateMessage(
+  translateMessage(
     request: TranslateMessageRequest & { id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<TranslateMessageResponse>> {
@@ -1487,9 +1335,7 @@ export class ChatApi {
       language: request?.language,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<TranslateMessageResponse>
-    >(
+    return this.apiClient.sendRequest<TranslateMessageResponse>(
       'POST',
       '/api/v2/chat/messages/{id}/translate',
       pathParams,
@@ -1498,11 +1344,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async castPollVote(
+  castPollVote(
     request: CastPollVoteRequest & { message_id: string; poll_id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<PollVoteResponse>> {
@@ -1514,7 +1358,7 @@ export class ChatApi {
       vote: request?.vote,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<PollVoteResponse>>(
+    return this.apiClient.sendRequest<PollVoteResponse>(
       'POST',
       '/api/v2/chat/messages/{message_id}/polls/{poll_id}/vote',
       pathParams,
@@ -1523,11 +1367,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async deletePollVote(
+  deletePollVote(
     request: { message_id: string; poll_id: string; vote_id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<PollVoteResponse>> {
@@ -1537,7 +1379,7 @@ export class ChatApi {
       vote_id: request?.vote_id,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<PollVoteResponse>>(
+    return this.apiClient.sendRequest<PollVoteResponse>(
       'DELETE',
       '/api/v2/chat/messages/{message_id}/polls/{poll_id}/vote/{vote_id}',
       pathParams,
@@ -1546,11 +1388,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async deleteReminder(
+  deleteReminder(
     request: { message_id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<DeleteReminderResponse>> {
@@ -1558,9 +1398,7 @@ export class ChatApi {
       message_id: request?.message_id,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<DeleteReminderResponse>
-    >(
+    return this.apiClient.sendRequest<DeleteReminderResponse>(
       'DELETE',
       '/api/v2/chat/messages/{message_id}/reminders',
       pathParams,
@@ -1569,11 +1407,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async updateReminder(
+  updateReminder(
     request: UpdateReminderRequest & { message_id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<UpdateReminderResponse>> {
@@ -1581,12 +1417,11 @@ export class ChatApi {
       message_id: request?.message_id,
     };
     const body = {
+      expires_at: request?.expires_at,
       remind_at: request?.remind_at,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<UpdateReminderResponse>
-    >(
+    return this.apiClient.sendRequest<UpdateReminderResponse>(
       'PATCH',
       '/api/v2/chat/messages/{message_id}/reminders',
       pathParams,
@@ -1595,11 +1430,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async createReminder(
+  createReminder(
     request: CreateReminderRequest & { message_id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<CreateReminderResponse>> {
@@ -1607,12 +1440,11 @@ export class ChatApi {
       message_id: request?.message_id,
     };
     const body = {
+      expires_at: request?.expires_at,
       remind_at: request?.remind_at,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<CreateReminderResponse>
-    >(
+    return this.apiClient.sendRequest<CreateReminderResponse>(
       'POST',
       '/api/v2/chat/messages/{message_id}/reminders',
       pathParams,
@@ -1621,11 +1453,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async getReplies(
+  getReplies(
     request: {
       parent_id: string;
       limit?: number;
@@ -1653,7 +1483,7 @@ export class ChatApi {
       parent_id: request?.parent_id,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<GetRepliesResponse>>(
+    return this.apiClient.sendRequest<GetRepliesResponse>(
       'GET',
       '/api/v2/chat/messages/{parent_id}/replies',
       pathParams,
@@ -1662,11 +1492,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async queryMessageFlags(
+  queryMessageFlags(
     request?: { payload?: QueryMessageFlagsPayload },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<QueryMessageFlagsResponse>> {
@@ -1674,9 +1502,7 @@ export class ChatApi {
       payload: request?.payload,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<QueryMessageFlagsResponse>
-    >(
+    return this.apiClient.sendRequest<QueryMessageFlagsResponse>(
       'GET',
       '/api/v2/chat/moderation/flags/message',
       undefined,
@@ -1685,11 +1511,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async muteChannel(
+  muteChannel(
     request?: MuteChannelRequest,
 
     requestOptions?: StreamRequestOptions,
@@ -1699,9 +1523,7 @@ export class ChatApi {
       channel_cids: request?.channel_cids,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<MuteChannelResponse>
-    >(
+    return this.apiClient.sendRequest<MuteChannelResponse>(
       'POST',
       '/api/v2/chat/moderation/mute/channel',
       undefined,
@@ -1710,11 +1532,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async unmuteChannel(
+  unmuteChannel(
     request?: UnmuteChannelRequest,
 
     requestOptions?: StreamRequestOptions,
@@ -1724,7 +1544,7 @@ export class ChatApi {
       channel_cids: request?.channel_cids,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<UnmuteResponse>>(
+    return this.apiClient.sendRequest<UnmuteResponse>(
       'POST',
       '/api/v2/chat/moderation/unmute/channel',
       undefined,
@@ -1733,11 +1553,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async queryBannedUsers(
+  queryBannedUsers(
     request?: { payload?: QueryBannedUsersPayload },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<QueryBannedUsersResponse>> {
@@ -1745,9 +1563,7 @@ export class ChatApi {
       payload: request?.payload,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<QueryBannedUsersResponse>
-    >(
+    return this.apiClient.sendRequest<QueryBannedUsersResponse>(
       'GET',
       '/api/v2/chat/query_banned_users',
       undefined,
@@ -1756,11 +1572,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async queryFutureChannelBans(
+  queryFutureChannelBans(
     request?: { payload?: QueryFutureChannelBansPayload },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<QueryFutureChannelBansResponse>> {
@@ -1768,9 +1582,7 @@ export class ChatApi {
       payload: request?.payload,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<QueryFutureChannelBansResponse>
-    >(
+    return this.apiClient.sendRequest<QueryFutureChannelBansResponse>(
       'GET',
       '/api/v2/chat/query_future_channel_bans',
       undefined,
@@ -1779,11 +1591,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async queryReminders(
+  queryReminders(
     request?: QueryRemindersRequest,
 
     requestOptions?: StreamRequestOptions,
@@ -1796,9 +1606,7 @@ export class ChatApi {
       filter: request?.filter,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<QueryRemindersResponse>
-    >(
+    return this.apiClient.sendRequest<QueryRemindersResponse>(
       'POST',
       '/api/v2/chat/reminders/query',
       undefined,
@@ -1807,11 +1615,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async search(
+  search(
     request?: { payload?: SearchPayload },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<SearchResponse>> {
@@ -1819,7 +1625,7 @@ export class ChatApi {
       payload: request?.payload,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<SearchResponse>>(
+    return this.apiClient.sendRequest<SearchResponse>(
       'GET',
       '/api/v2/chat/search',
       undefined,
@@ -1828,11 +1634,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async sync(
+  sync(
     request: SyncRequest & {
       with_inaccessible_cids?: boolean;
       watch?: boolean;
@@ -1850,7 +1654,7 @@ export class ChatApi {
       channel_cids: request?.channel_cids,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<SyncResponse>>(
+    return this.apiClient.sendRequest<SyncResponse>(
       'POST',
       '/api/v2/chat/sync',
       undefined,
@@ -1859,11 +1663,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async queryThreads(
+  queryThreads(
     request?: QueryThreadsRequest & { connection_id?: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<QueryThreadsResponse>> {
@@ -1882,9 +1684,7 @@ export class ChatApi {
       filter: request?.filter,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<QueryThreadsResponse>
-    >(
+    return this.apiClient.sendRequest<QueryThreadsResponse>(
       'POST',
       '/api/v2/chat/threads',
       undefined,
@@ -1893,11 +1693,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async getThread(
+  getThread(
     request: {
       message_id: string;
       watch?: boolean;
@@ -1919,7 +1717,7 @@ export class ChatApi {
       message_id: request?.message_id,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<GetThreadResponse>>(
+    return this.apiClient.sendRequest<GetThreadResponse>(
       'GET',
       '/api/v2/chat/threads/{message_id}',
       pathParams,
@@ -1928,11 +1726,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async updateThreadPartial(
+  updateThreadPartial(
     request: UpdateThreadPartialRequest & { message_id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<UpdateThreadPartialResponse>> {
@@ -1944,9 +1740,7 @@ export class ChatApi {
       set: request?.set,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<UpdateThreadPartialResponse>
-    >(
+    return this.apiClient.sendRequest<UpdateThreadPartialResponse>(
       'PATCH',
       '/api/v2/chat/threads/{message_id}',
       pathParams,
@@ -1955,16 +1749,12 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async unreadCounts(
+  unreadCounts(
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<WrappedUnreadCountsResponse>> {
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<WrappedUnreadCountsResponse>
-    >(
+    return this.apiClient.sendRequest<WrappedUnreadCountsResponse>(
       'GET',
       '/api/v2/chat/unread',
       undefined,
@@ -1973,11 +1763,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async deleteDevice(
+  deleteDevice(
     request: { id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<Response>> {
@@ -1985,7 +1773,7 @@ export class ChatApi {
       id: request?.id,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<Response>>(
+    return this.apiClient.sendRequest<Response>(
       'DELETE',
       '/api/v2/devices',
       undefined,
@@ -1994,16 +1782,12 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async listDevices(
+  listDevices(
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<ListDevicesResponse>> {
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<ListDevicesResponse>
-    >(
+    return this.apiClient.sendRequest<ListDevicesResponse>(
       'GET',
       '/api/v2/devices',
       undefined,
@@ -2012,11 +1796,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async createDevice(
+  createDevice(
     request: CreateDeviceRequest,
 
     requestOptions?: StreamRequestOptions,
@@ -2029,7 +1811,7 @@ export class ChatApi {
       voip_token: request?.voip_token,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<Response>>(
+    return this.apiClient.sendRequest<Response>(
       'POST',
       '/api/v2/devices',
       undefined,
@@ -2038,11 +1820,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async createGuest(
+  createGuest(
     request: CreateGuestRequest,
 
     requestOptions?: StreamRequestOptions,
@@ -2051,9 +1831,7 @@ export class ChatApi {
       user: request?.user,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<CreateGuestResponse>
-    >(
+    return this.apiClient.sendRequest<CreateGuestResponse>(
       'POST',
       '/api/v2/guest',
       undefined,
@@ -2062,21 +1840,19 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async longPoll(
-    request?: { close?: boolean; connection_id?: string; json?: WSAuthMessage },
+  longPoll(
+    request?: { connection_id?: string; close?: boolean; json?: WSAuthMessage },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<{}>> {
     const queryParams = {
-      close: request?.close,
       connection_id: request?.connection_id,
+      close: request?.close,
       json: request?.json,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<{}>>(
+    return this.apiClient.sendRequest<{}>(
       'GET',
       '/api/v2/longpoll',
       undefined,
@@ -2085,11 +1861,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async getOG(
+  getOG(
     request: { url: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<GetOGResponse>> {
@@ -2097,7 +1871,7 @@ export class ChatApi {
       url: request?.url,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<GetOGResponse>>(
+    return this.apiClient.sendRequest<GetOGResponse>(
       'GET',
       '/api/v2/og',
       undefined,
@@ -2106,11 +1880,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async createPoll(
+  createPoll(
     request: CreatePollRequest,
 
     requestOptions?: StreamRequestOptions,
@@ -2130,7 +1902,7 @@ export class ChatApi {
       custom: request?.custom,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<PollResponse>>(
+    return this.apiClient.sendRequest<PollResponse>(
       'POST',
       '/api/v2/polls',
       undefined,
@@ -2139,11 +1911,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async updatePoll(
+  updatePoll(
     request: UpdatePollRequest,
 
     requestOptions?: StreamRequestOptions,
@@ -2162,7 +1932,7 @@ export class ChatApi {
       custom: request?.custom,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<PollResponse>>(
+    return this.apiClient.sendRequest<PollResponse>(
       'PUT',
       '/api/v2/polls',
       undefined,
@@ -2171,11 +1941,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async queryPolls(
+  queryPolls(
     request?: QueryPollsRequest,
 
     requestOptions?: StreamRequestOptions,
@@ -2188,7 +1956,7 @@ export class ChatApi {
       filter: request?.filter,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<QueryPollsResponse>>(
+    return this.apiClient.sendRequest<QueryPollsResponse>(
       'POST',
       '/api/v2/polls/query',
       undefined,
@@ -2197,11 +1965,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async deletePoll(
+  deletePoll(
     request: { poll_id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<Response>> {
@@ -2209,7 +1975,7 @@ export class ChatApi {
       poll_id: request?.poll_id,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<Response>>(
+    return this.apiClient.sendRequest<Response>(
       'DELETE',
       '/api/v2/polls/{poll_id}',
       pathParams,
@@ -2218,11 +1984,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async getPoll(
+  getPoll(
     request: { poll_id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<PollResponse>> {
@@ -2230,7 +1994,7 @@ export class ChatApi {
       poll_id: request?.poll_id,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<PollResponse>>(
+    return this.apiClient.sendRequest<PollResponse>(
       'GET',
       '/api/v2/polls/{poll_id}',
       pathParams,
@@ -2239,11 +2003,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async updatePollPartial(
+  updatePollPartial(
     request: UpdatePollPartialRequest & { poll_id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<PollResponse>> {
@@ -2255,7 +2017,7 @@ export class ChatApi {
       set: request?.set,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<PollResponse>>(
+    return this.apiClient.sendRequest<PollResponse>(
       'PATCH',
       '/api/v2/polls/{poll_id}',
       pathParams,
@@ -2264,11 +2026,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async createPollOption(
+  createPollOption(
     request: CreatePollOptionRequest & { poll_id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<PollOptionResponse>> {
@@ -2280,7 +2040,7 @@ export class ChatApi {
       custom: request?.custom,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<PollOptionResponse>>(
+    return this.apiClient.sendRequest<PollOptionResponse>(
       'POST',
       '/api/v2/polls/{poll_id}/options',
       pathParams,
@@ -2289,11 +2049,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async updatePollOption(
+  updatePollOption(
     request: UpdatePollOptionRequest & { poll_id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<PollOptionResponse>> {
@@ -2306,7 +2064,7 @@ export class ChatApi {
       custom: request?.custom,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<PollOptionResponse>>(
+    return this.apiClient.sendRequest<PollOptionResponse>(
       'PUT',
       '/api/v2/polls/{poll_id}/options',
       pathParams,
@@ -2315,11 +2073,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async deletePollOption(
+  deletePollOption(
     request: { poll_id: string; option_id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<Response>> {
@@ -2328,7 +2084,7 @@ export class ChatApi {
       option_id: request?.option_id,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<Response>>(
+    return this.apiClient.sendRequest<Response>(
       'DELETE',
       '/api/v2/polls/{poll_id}/options/{option_id}',
       pathParams,
@@ -2337,11 +2093,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async getPollOption(
+  getPollOption(
     request: { poll_id: string; option_id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<PollOptionResponse>> {
@@ -2350,7 +2104,7 @@ export class ChatApi {
       option_id: request?.option_id,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<PollOptionResponse>>(
+    return this.apiClient.sendRequest<PollOptionResponse>(
       'GET',
       '/api/v2/polls/{poll_id}/options/{option_id}',
       pathParams,
@@ -2359,11 +2113,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async queryPollVotes(
+  queryPollVotes(
     request: QueryPollVotesRequest & { poll_id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<PollVotesResponse>> {
@@ -2378,7 +2130,7 @@ export class ChatApi {
       filter: request?.filter,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<PollVotesResponse>>(
+    return this.apiClient.sendRequest<PollVotesResponse>(
       'POST',
       '/api/v2/polls/{poll_id}/votes',
       pathParams,
@@ -2387,11 +2139,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async updatePushNotificationPreferences(
+  updatePushNotificationPreferences(
     request: UpsertPushPreferencesRequest,
 
     requestOptions?: StreamRequestOptions,
@@ -2400,9 +2150,7 @@ export class ChatApi {
       preferences: request?.preferences,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<UpsertPushPreferencesResponse>
-    >(
+    return this.apiClient.sendRequest<UpsertPushPreferencesResponse>(
       'POST',
       '/api/v2/push_preferences',
       undefined,
@@ -2411,11 +2159,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async searchRoles(
+  searchRoles(
     request: {
       query: string;
       limit?: number;
@@ -2433,9 +2179,7 @@ export class ChatApi {
       include_global_roles: request?.include_global_roles,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<SearchRolesResponse>
-    >(
+    return this.apiClient.sendRequest<SearchRolesResponse>(
       'GET',
       '/api/v2/roles/search',
       undefined,
@@ -2444,11 +2188,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async deleteFile(
+  deleteFile(
     request?: { url?: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<Response>> {
@@ -2456,7 +2198,7 @@ export class ChatApi {
       url: request?.url,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<Response>>(
+    return this.apiClient.sendRequest<Response>(
       'DELETE',
       '/api/v2/uploads/file',
       undefined,
@@ -2465,11 +2207,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async uploadFile(
+  uploadFile(
     request?: FileUploadRequest,
 
     requestOptions?: StreamRequestOptions,
@@ -2479,7 +2219,7 @@ export class ChatApi {
       user: request?.user,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<FileUploadResponse>>(
+    return this.apiClient.sendRequest<FileUploadResponse>(
       'POST',
       '/api/v2/uploads/file',
       undefined,
@@ -2488,11 +2228,9 @@ export class ChatApi {
       'multipart/form-data',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async deleteImage(
+  deleteImage(
     request?: { url?: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<Response>> {
@@ -2500,7 +2238,7 @@ export class ChatApi {
       url: request?.url,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<Response>>(
+    return this.apiClient.sendRequest<Response>(
       'DELETE',
       '/api/v2/uploads/image',
       undefined,
@@ -2509,11 +2247,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async uploadImage(
+  uploadImage(
     request?: ImageUploadRequest,
 
     requestOptions?: StreamRequestOptions,
@@ -2524,9 +2260,7 @@ export class ChatApi {
       user: request?.user,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<ImageUploadResponse>
-    >(
+    return this.apiClient.sendRequest<ImageUploadResponse>(
       'POST',
       '/api/v2/uploads/image',
       undefined,
@@ -2535,11 +2269,9 @@ export class ChatApi {
       'multipart/form-data',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async listUserGroups(
+  listUserGroups(
     request?: {
       limit?: number;
       id_gt?: string;
@@ -2555,9 +2287,7 @@ export class ChatApi {
       team_id: request?.team_id,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<ListUserGroupsResponse>
-    >(
+    return this.apiClient.sendRequest<ListUserGroupsResponse>(
       'GET',
       '/api/v2/usergroups',
       undefined,
@@ -2566,11 +2296,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async createUserGroup(
+  createUserGroup(
     request: CreateUserGroupRequest,
 
     requestOptions?: StreamRequestOptions,
@@ -2583,9 +2311,7 @@ export class ChatApi {
       member_ids: request?.member_ids,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<CreateUserGroupResponse>
-    >(
+    return this.apiClient.sendRequest<CreateUserGroupResponse>(
       'POST',
       '/api/v2/usergroups',
       undefined,
@@ -2594,11 +2320,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async searchUserGroups(
+  searchUserGroups(
     request: {
       query: string;
       limit?: number;
@@ -2616,9 +2340,7 @@ export class ChatApi {
       team_id: request?.team_id,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<SearchUserGroupsResponse>
-    >(
+    return this.apiClient.sendRequest<SearchUserGroupsResponse>(
       'GET',
       '/api/v2/usergroups/search',
       undefined,
@@ -2627,11 +2349,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async deleteUserGroup(
+  deleteUserGroup(
     request: { id: string; team_id?: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<Response>> {
@@ -2642,7 +2362,7 @@ export class ChatApi {
       id: request?.id,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<Response>>(
+    return this.apiClient.sendRequest<Response>(
       'DELETE',
       '/api/v2/usergroups/{id}',
       pathParams,
@@ -2651,11 +2371,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async getUserGroup(
+  getUserGroup(
     request: { id: string; team_id?: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<GetUserGroupResponse>> {
@@ -2666,9 +2384,7 @@ export class ChatApi {
       id: request?.id,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<GetUserGroupResponse>
-    >(
+    return this.apiClient.sendRequest<GetUserGroupResponse>(
       'GET',
       '/api/v2/usergroups/{id}',
       pathParams,
@@ -2677,11 +2393,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async updateUserGroup(
+  updateUserGroup(
     request: UpdateUserGroupRequest & { id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<UpdateUserGroupResponse>> {
@@ -2694,9 +2408,7 @@ export class ChatApi {
       team_id: request?.team_id,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<UpdateUserGroupResponse>
-    >(
+    return this.apiClient.sendRequest<UpdateUserGroupResponse>(
       'PUT',
       '/api/v2/usergroups/{id}',
       pathParams,
@@ -2705,11 +2417,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async addUserGroupMembers(
+  addUserGroupMembers(
     request: AddUserGroupMembersRequest & { id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<AddUserGroupMembersResponse>> {
@@ -2722,9 +2432,7 @@ export class ChatApi {
       team_id: request?.team_id,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<AddUserGroupMembersResponse>
-    >(
+    return this.apiClient.sendRequest<AddUserGroupMembersResponse>(
       'POST',
       '/api/v2/usergroups/{id}/members',
       pathParams,
@@ -2733,11 +2441,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async removeUserGroupMembers(
+  removeUserGroupMembers(
     request: RemoveUserGroupMembersRequest & { id: string },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<RemoveUserGroupMembersResponse>> {
@@ -2749,9 +2455,7 @@ export class ChatApi {
       team_id: request?.team_id,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<RemoveUserGroupMembersResponse>
-    >(
+    return this.apiClient.sendRequest<RemoveUserGroupMembersResponse>(
       'POST',
       '/api/v2/usergroups/{id}/members/delete',
       pathParams,
@@ -2760,11 +2464,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async queryUsers(
+  queryUsers(
     request?: { payload?: QueryUsersPayload },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<QueryUsersResponse>> {
@@ -2772,7 +2474,7 @@ export class ChatApi {
       payload: request?.payload,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<QueryUsersResponse>>(
+    return this.apiClient.sendRequest<QueryUsersResponse>(
       'GET',
       '/api/v2/users',
       undefined,
@@ -2781,11 +2483,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async updateUsersPartial(
+  updateUsersPartial(
     request: UpdateUsersPartialRequest,
 
     requestOptions?: StreamRequestOptions,
@@ -2794,9 +2494,7 @@ export class ChatApi {
       users: request?.users,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<UpdateUsersResponse>
-    >(
+    return this.apiClient.sendRequest<UpdateUsersResponse>(
       'PATCH',
       '/api/v2/users',
       undefined,
@@ -2805,11 +2503,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async updateUsers(
+  updateUsers(
     request: UpdateUsersRequest,
 
     requestOptions?: StreamRequestOptions,
@@ -2818,9 +2514,7 @@ export class ChatApi {
       users: request?.users,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<UpdateUsersResponse>
-    >(
+    return this.apiClient.sendRequest<UpdateUsersResponse>(
       'POST',
       '/api/v2/users',
       undefined,
@@ -2829,16 +2523,12 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async getBlockedUsers(
+  getBlockedUsers(
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<GetBlockedUsersResponse>> {
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<GetBlockedUsersResponse>
-    >(
+    return this.apiClient.sendRequest<GetBlockedUsersResponse>(
       'GET',
       '/api/v2/users/block',
       undefined,
@@ -2847,11 +2537,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async blockUsers(
+  blockUsers(
     request: BlockUsersRequest,
 
     requestOptions?: StreamRequestOptions,
@@ -2860,7 +2548,7 @@ export class ChatApi {
       blocked_user_id: request?.blocked_user_id,
     };
 
-    const response = await this.apiClient.sendRequest<StreamResponse<BlockUsersResponse>>(
+    return this.apiClient.sendRequest<BlockUsersResponse>(
       'POST',
       '/api/v2/users/block',
       undefined,
@@ -2869,16 +2557,12 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async getUserLiveLocations(
+  getUserLiveLocations(
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<SharedLocationsResponse>> {
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<SharedLocationsResponse>
-    >(
+    return this.apiClient.sendRequest<SharedLocationsResponse>(
       'GET',
       '/api/v2/users/live_locations',
       undefined,
@@ -2887,11 +2571,9 @@ export class ChatApi {
       undefined,
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async updateLiveLocation(
+  updateLiveLocation(
     request: UpdateLiveLocationRequest,
 
     requestOptions?: StreamRequestOptions,
@@ -2903,9 +2585,7 @@ export class ChatApi {
       longitude: request?.longitude,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<SharedLocationResponse>
-    >(
+    return this.apiClient.sendRequest<SharedLocationResponse>(
       'PUT',
       '/api/v2/users/live_locations',
       undefined,
@@ -2914,11 +2594,9 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 
-  async unblockUsers(
+  unblockUsers(
     request: UnblockUsersRequest,
 
     requestOptions?: StreamRequestOptions,
@@ -2927,9 +2605,7 @@ export class ChatApi {
       blocked_user_id: request?.blocked_user_id,
     };
 
-    const response = await this.apiClient.sendRequest<
-      StreamResponse<UnblockUsersResponse>
-    >(
+    return this.apiClient.sendRequest<UnblockUsersResponse>(
       'POST',
       '/api/v2/users/unblock',
       undefined,
@@ -2938,7 +2614,5 @@ export class ChatApi {
       'application/json',
       requestOptions,
     );
-
-    return { ...response.body, metadata: response.metadata };
   }
 }

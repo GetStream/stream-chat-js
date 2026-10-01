@@ -1,7 +1,13 @@
 import type { AxiosRequestConfig, AxiosResponse, Method } from 'axios';
 import { AxiosError } from 'axios';
 
-import type { APIError, RateLimit, RequestMetadata, StreamRequestOptions } from './types';
+import type {
+  APIError,
+  RateLimit,
+  RequestMetadata,
+  StreamRequestOptions,
+  StreamResponse,
+} from './types';
 import { StreamAPIError } from './types';
 import { chatCodes, randomId, retryInterval } from './utils';
 import { toFormData } from './upload-utils';
@@ -44,7 +50,14 @@ export class ApiClient {
     return this.client.tokenManager.getToken();
   }
 
-  sendRequest<T>(
+  /**
+   * The transport of the generated API classes, which return what it resolves to as-is: the
+   * response body with the request's `metadata` merged in.
+   *
+   * `async` so that a synchronous throw here (URL resolution, form encoding) still reaches the
+   * caller as a rejection - the generated methods return this promise without awaiting it.
+   */
+  async sendRequest<T>(
     method: Method,
     url: string,
     pathParams?: Record<string, string>,
@@ -52,7 +65,7 @@ export class ApiClient {
     body?: unknown,
     requestContentType?: string,
     options?: StreamRequestOptions,
-  ): Promise<{ body: T; metadata: RequestMetadata }> {
+  ): Promise<StreamResponse<T>> {
     const resolvedUrl = this.resolveUrl(url, pathParams);
     const isMultipart = requestContentType === MULTIPART_CONTENT_TYPE;
 
@@ -61,7 +74,7 @@ export class ApiClient {
         ? toFormData(body as Record<string, unknown>)
         : body;
 
-    return this._doRequest<T>(method, resolvedUrl, requestBody, {
+    const response = await this._doRequest<T>(method, resolvedUrl, requestBody, {
       params: queryParams,
       headers: { 'Content-Type': requestContentType },
       ...(isMultipart ? UPLOAD_REQUEST_DEFAULTS : {}),
@@ -69,6 +82,8 @@ export class ApiClient {
       // the keys it owns, so it can never clobber the upload defaults above.
       ...toAxiosRequestConfig(options),
     });
+
+    return { ...response.body, metadata: response.metadata };
   }
 
   async doAxiosRequest<T>(

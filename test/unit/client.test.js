@@ -1145,7 +1145,7 @@ describe('message update', () => {
 			_updateMessageSpy.mockRestore();
 			sendRequestSpy = vi
 				.spyOn(client.api, 'sendRequest')
-				.mockResolvedValue({ body: {}, metadata: {} });
+				.mockResolvedValue({ metadata: {} });
 		});
 
 		it('strips composer-internal localMetadata from outgoing attachments', async () => {
@@ -1858,7 +1858,7 @@ describe('message deletion', () => {
 
 		beforeEach(() => {
 			sendRequestSpy = vi.spyOn(client.api, 'sendRequest').mockResolvedValue({
-				body: { message: { id: messageId } },
+				message: { id: messageId },
 				metadata: {},
 			});
 		});

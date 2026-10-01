@@ -99,7 +99,7 @@ import type {
   WSEvent,
 } from './gen/models';
 import { ChatApi } from './gen-imports';
-import type { ConnectedEvent, StreamResponse } from './types';
+import type { StreamResponse } from './types';
 
 function isString(value: unknown): value is string {
   return typeof value === 'string' || value instanceof String;
@@ -1205,7 +1205,7 @@ export class StreamChat extends ChatApi {
     }
   };
 
-  _handleClientEvent(event: WSEvent | ConnectedEvent) {
+  _handleClientEvent(event: WSEvent) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const client = this;
     const postListenerCallbacks = [];
