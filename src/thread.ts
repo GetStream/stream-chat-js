@@ -358,8 +358,8 @@ export class Thread extends WithMessageOperations(WithSubscriptions) {
   };
 
   /**
-   * Declares that a consumer has stopped displaying this thread (mirrors `channel.deactivate()`).
-   * Only flips `active` back to `false` once the last holder deactivates.
+   * Declares that a consumer has stopped displaying this thread. Only flips `active` back to
+   * `false` once the last holder deactivates.
    */
   public deactivate = () => {
     if (this._activeRefCount === 0) return;

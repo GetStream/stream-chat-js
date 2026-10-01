@@ -4557,23 +4557,23 @@ describe('Channel active flag (mark-read stays UI-driven)', () => {
 		client.activeChannels[channel.cid] = channel;
 	});
 
-	it('refcounts activate()/deactivate() behind the reactive active flag', () => {
+	it('refcounts activate() behind the reactive active flag, released by the function it returns', () => {
 		expect(channel.active).to.equal(false);
 		expect(channel.state.getLatestValue().active).to.equal(false);
 
-		channel.activate();
+		const releaseFirst = channel.activate();
 		expect(channel.active).to.equal(true);
 
-		channel.activate(); // a second mount holds another ref
+		const releaseSecond = channel.activate(); // a second mount holds another ref
 		expect(channel.active).to.equal(true);
 
-		channel.deactivate(); // one holder remains → still active
+		releaseFirst(); // one holder remains → still active
 		expect(channel.active).to.equal(true);
 
-		channel.deactivate(); // last holder leaves → inactive
-		expect(channel.active).to.equal(false);
+		releaseFirst(); // a repeated release does nothing
+		expect(channel.active).to.equal(true);
 
-		channel.deactivate(); // underflow guard → stays inactive
+		releaseSecond(); // last holder leaves → inactive
 		expect(channel.active).to.equal(false);
 	});
 
@@ -4638,6 +4638,31 @@ describe('Channel _disconnect called more than once', () => {
 
 		expect(channel.cooldownTimer.hasSubscriptions).to.equal(true);
 		expect(channel.messageReceiptsTracker.hasSubscriptions).to.equal(true);
+	});
+
+	it('publishes pendingDisposal only after the teardown, in one update with watchStatus', () => {
+		const seen = [];
+		channel.state.subscribeWithSelector(
+			({ pendingDisposal, watchStatus }) => ({ pendingDisposal, watchStatus }),
+			({ pendingDisposal, watchStatus }) => {
+				if (!pendingDisposal) return;
+				seen.push({
+					cooldownSubscribed: channel.cooldownTimer.hasSubscriptions,
+					receiptsSubscribed: channel.messageReceiptsTracker.hasSubscriptions,
+					watchStatus,
+				});
+			},
+		);
+
+		channel._disconnect();
+
+		expect(seen).toEqual([
+			{
+				cooldownSubscribed: false,
+				receiptsSubscribed: false,
+				watchStatus: ChannelWatchStatus.NotWatching,
+			},
+		]);
 	});
 
 	it('does not publish channel state again on the second call', () => {

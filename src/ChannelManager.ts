@@ -17,7 +17,7 @@ import { getChannel } from './pagination/utility.queryChannel';
 import type { Channel } from './channel';
 import { ChannelWatchStatus } from './channel_state';
 import { runDetached } from './utils';
-import { EntityStore } from './entityStore/EntityStore';
+import { EntityStore, type EntityStoreSubscriber } from './entityStore/EntityStore';
 
 export type ChannelManagerEventHandlerContext = {
   channelManager: ChannelManager;
@@ -398,6 +398,20 @@ export type ChannelManagerOptions = {
   ownershipResolver?: PaginatorOwnershipResolver | string[];
 };
 
+/**
+ * Holds that keep a channel in the channel store besides the channel lists:
+ * - `activated`: from the first `channel.activate()` until logout or a known end. It outlives the
+ *   `active` flag, which the release function from `activate()` unsets.
+ * - `watching`: while the channel is watched or its interrupted watch waits to be restored
+ *   (`watching` / `wasWatching`).
+ */
+export type ChannelHold = 'activated' | 'watching';
+
+// a holder only keeps the channel stored; a class-instance store sends no change notifications
+const createHolder = (): EntityStoreSubscriber => ({
+  onEntitiesChanged: () => undefined,
+});
+
 export class ChannelManager extends WithSubscriptions {
   client: StreamChat;
   state: StateStore<ChannelManagerState>;
@@ -412,6 +426,12 @@ export class ChannelManager extends WithSubscriptions {
     getEntityId: (channel) => channel.cid,
     onRelease: (channel) => channel._disconnect(),
   });
+  private readonly holders: Record<ChannelHold, EntityStoreSubscriber> = {
+    activated: createHolder(),
+    watching: createHolder(),
+  };
+  // It records which key each Channel is stored under, so holdChannel and releaseChannel link and unlink the right entry. The key each channel is stored under: its cid, or its temporary cid for locally created channels until the server assigns one
+  private readonly storeKeys = new WeakMap<Channel, string>();
 
   protected _pipelines = new Map<
     SupportedEventType,
@@ -503,6 +523,7 @@ export class ChannelManager extends WithSubscriptions {
     hydrate?: (stored: Channel) => void,
   ): Channel {
     const channel = this.channelStore.getOrCreate(cid, create, hydrate);
+    this.storeKeys.set(channel, cid);
     this.client.activeChannels[cid] = channel;
     return channel;
   }
@@ -516,9 +537,33 @@ export class ChannelManager extends WithSubscriptions {
   changeChannelId(oldCid: string, newCid: string): boolean {
     if (!this.channelStore.changeId(oldCid, newCid)) return false;
     const channel = this.client.activeChannels[oldCid];
+    this.storeKeys.set(channel, newCid);
     delete this.client.activeChannels[oldCid];
     this.client.activeChannels[newCid] = channel;
     return true;
+  }
+
+  /**
+   * Adds `hold` to a stored channel. Does nothing for a channel that isn't stored.
+   *
+   * @internal
+   */
+  holdChannel(channel: Channel, hold: ChannelHold) {
+    const key = this.storeKeys.get(channel);
+    if (key === undefined || this.channelStore.get(key) !== channel) return;
+    this.channelStore.link(key, this.holders[hold]);
+  }
+
+  /**
+   * Releases `hold` on a stored channel; the channel is torn down if that was its last holder.
+   * Releasing a hold the channel doesn't have does nothing.
+   *
+   * @internal
+   */
+  releaseChannel(channel: Channel, hold: ChannelHold) {
+    const key = this.storeKeys.get(channel);
+    if (key === undefined || this.channelStore.get(key) !== channel) return;
+    this.channelStore.unlink(key, this.holders[hold]);
   }
 
   /**

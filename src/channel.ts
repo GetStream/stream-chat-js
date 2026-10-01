@@ -1487,6 +1487,14 @@ export class Channel extends WithMessageOperations(ChannelApi) {
 
   set watchStatus(watchStatus: ChannelWatchStatus) {
     this.state.partialNext({ watchStatus });
+    if (this.pendingDisposal) return;
+    // kept stored while watched, and while a watch lost to a dropped socket waits to be restored
+    const { channelManager } = this.getClient();
+    if (watchStatus === ChannelWatchStatus.NotWatching) {
+      channelManager.releaseChannel(this, 'watching');
+    } else {
+      channelManager.holdChannel(this, 'watching');
+    }
   }
 
   /**
@@ -1499,30 +1507,33 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   }
 
   /**
-   * Declares that a consumer is now consuming this channel's own state (mirrors
-   * `thread.activate()`). Refcounted, as a single `Channel` instance can be held by several
-   * consumers at once, so it stays active until the last one deactivates.
+   * Declares that a consumer is now consuming this channel's own state, and returns the function
+   * that ends it. Refcounted, as a single `Channel` instance can be held by several consumers at
+   * once, so it stays active until the last one releases. Calling a release function again does
+   * nothing.
    *
    * While active, the channel's own state takes precedence over bulk state writes: channel-list
    * hydration does not re-seed its message list (its own `channel.reload()` owns that window).
+   *
+   * The first call also keeps the channel in the channel store for the session, until logout or
+   * a known end (deleted, or the user removed from it). Releasing only unsets `active`.
    */
-  activate = () => {
+  activate = (): (() => void) => {
     this._activeRefCount += 1;
     if (this._activeRefCount === 1) {
       this.state.partialNext({ active: true });
     }
-  };
+    this.getClient().channelManager.holdChannel(this, 'activated');
 
-  /**
-   * Declares that a consumer has stopped consuming this channel (mirrors `thread.deactivate()`).
-   * Only flips `active` back to `false` once the last holder deactivates.
-   */
-  deactivate = () => {
-    if (this._activeRefCount === 0) return;
-    this._activeRefCount -= 1;
-    if (this._activeRefCount === 0) {
-      this.state.partialNext({ active: false });
-    }
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this._activeRefCount -= 1;
+      if (this._activeRefCount === 0) {
+        this.state.partialNext({ active: false });
+      }
+    };
   };
 
   /**
@@ -2964,8 +2975,8 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     if (this.pendingDisposal) return;
     logger.withExtraTags('_disconnect', this.cid).info('Disconnecting the channel.');
 
-    // Tear down the channel.state subscriptions BEFORE flipping `pendingDisposal` — that setter
-    // now publishes to the store, so no subscriber handler runs against a half-torn-down channel.
+    // Tear down the channel.state subscriptions BEFORE flipping `pendingDisposal` — that publishes to
+    // the store, so no subscriber handler runs against a half-torn-down channel.
 
     // Runs the `'channel'` setup function's teardown and removes this channel from the configuration
     // store's subscribers. Cleared so a repeated `_disconnect` cannot double-run it.
@@ -2974,14 +2985,19 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     this.unsubscribeServerConfig?.();
     this.unsubscribeServerConfig = undefined;
     this.messageReceiptsTracker.unregisterSubscriptions();
-    // A deleted channel (or one the user was removed from) must not be re-watched — see #2599.
-    this.watchStatus = ChannelWatchStatus.NotWatching;
-    this.pendingDisposal = true;
     this.cooldownTimer.unregisterSubscriptions();
     // Release the store-backed paginators so the message store no longer pins this removed channel
     // (and its whole message graph) through its subscriber registry. The channel is being discarded
     // here (pending disposal + deleted from activeChannels, never reused), mirroring Thread teardown.
     this.messagePaginator.dispose();
     this.pinnedMessagesPaginator.dispose();
+
+    // One update, last. A deleted channel (or one the user was removed from) must not be re-watched
+    // — see #2599. Written directly rather than through the `watchStatus` setter, so teardown releases
+    // no hold and cannot re-enter itself through the store.
+    this.state.partialNext({
+      pendingDisposal: true,
+      watchStatus: ChannelWatchStatus.NotWatching,
+    });
   }
 }
