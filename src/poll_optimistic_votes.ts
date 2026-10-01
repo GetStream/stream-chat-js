@@ -1,6 +1,7 @@
-import type { StateStore } from './store';
-import type { PollState } from './poll';
-import type { APIResponse, CastVoteAPIResponse, PollResponse, PollVote } from './types';
+import type { StreamChat } from './client';
+import type { Poll, PollState } from './poll';
+import type { PollResponse, PollVote } from './types';
+import { generateUUIDv4 } from './utils';
 
 type OptionId = string;
 
@@ -9,8 +10,6 @@ type VoteState = Pick<
   PollState,
   'latest_votes_by_option' | 'ownVotesByOptionId' | 'vote_count' | 'vote_counts_by_option'
 >;
-
-type CastVoteResponse = APIResponse & CastVoteAPIResponse;
 
 // An own vote change is the server vote of a cast, or the option of a removal
 type OwnVoteChange = { optionId: OptionId; vote?: PollVote };
@@ -37,8 +36,13 @@ export class OptimisticPollVotes {
   private requestQueue: Promise<unknown> = Promise.resolve();
   private catchUpTimeout?: ReturnType<typeof setTimeout>;
 
-  constructor(private readonly state: StateStore<PollState>) {
-    this.serverVoteState = pickVoteState(state.getLatestValue());
+  private readonly client: StreamChat;
+  private readonly poll: Poll;
+
+  constructor({ client, poll }: { client: StreamChat; poll: Poll }) {
+    this.client = client;
+    this.poll = poll;
+    this.serverVoteState = pickVoteState(poll.data);
   }
 
   get serverOwnVotes() {
@@ -50,8 +54,56 @@ export class OptimisticPollVotes {
     ...this.serverVoteState,
   });
 
+  /**
+   * Casts a vote for an option, shown right away through a placeholder vote. In polls with unique
+   * votes, it replaces the existing own votes.
+   */
+  castVote = (optionId: OptionId, messageId: string) => {
+    const sendRequest = () =>
+      this.client.castPollVote(messageId, this.poll.id, { option_id: optionId });
+    const state = this.poll.data;
+    // already voted for this option, there is nothing to show
+    if (state.ownVotesByOptionId[optionId]) return this.send(sendRequest);
+
+    const replacedVotes = state.enforce_unique_vote
+      ? Object.values(state.ownVotesByOptionId)
+      : [];
+    this.poll.state.partialNext(
+      applyOwnVoteDelta(state, {
+        add: [this.createPlaceholderVote(optionId)],
+        remove: replacedVotes,
+      }),
+    );
+    return this.track(sendRequest, (response) => ({
+      optionId,
+      vote: response.vote as PollVote,
+    }));
+  };
+
+  // Removes a vote, right away.
+  removeVote = (voteId: string, messageId: string) => {
+    const sendRequest = (id: string) =>
+      this.client.removePollVote(messageId, this.poll.id, id);
+    const state = this.poll.data;
+    const vote = Object.values(state.ownVotesByOptionId).find(({ id }) => id === voteId);
+    // not a shown own vote, there is nothing to show
+    if (!vote?.option_id) return this.send(() => sendRequest(voteId));
+
+    const optionId = vote.option_id;
+    this.poll.state.partialNext(applyOwnVoteDelta(state, { remove: [vote] }));
+    return this.track(
+      // runs when the removal's turn comes, so a preceding cast of the vote has finished
+      () => {
+        const serverVoteId = this.getServerVoteId(vote);
+        // the vote's cast failed, so there is nothing to remove
+        return serverVoteId ? sendRequest(serverVoteId) : Promise.resolve(undefined);
+      },
+      () => ({ optionId }),
+    );
+  };
+
   // Sends a vote request once the previous one has finished, whether it succeeded or not.
-  send = <T>(sendRequest: () => Promise<T>): Promise<T> => {
+  private send = <T>(sendRequest: () => Promise<T>): Promise<T> => {
     const request = this.requestQueue.then(sendRequest);
     const queue = request.then(
       () => undefined,
@@ -63,39 +115,6 @@ export class OptimisticPollVotes {
       if (this.requestQueue === queue) this.scheduleCatchUp();
     });
     return request;
-  };
-
-  // Casts `vote`, a placeholder. In polls with unique votes, it replaces the existing own votes.
-  cast = (sendRequest: () => Promise<CastVoteResponse>, { vote }: { vote: PollVote }) => {
-    const state = this.state.getLatestValue();
-    const replacedVotes = state.enforce_unique_vote
-      ? Object.values(state.ownVotesByOptionId)
-      : [];
-    this.state.partialNext(
-      applyOwnVoteDelta(state, { add: [vote], remove: replacedVotes }),
-    );
-    return this.track(sendRequest, (response) => ({
-      optionId: vote.option_id as OptionId,
-      vote: response.vote as PollVote,
-    }));
-  };
-
-  remove = <T>(
-    sendRequest: (voteId: string) => Promise<T>,
-    { vote }: { vote: PollVote },
-  ) => {
-    this.state.partialNext(
-      applyOwnVoteDelta(this.state.getLatestValue(), { remove: [vote] }),
-    );
-    return this.track(
-      // runs when the removal's turn comes, so a preceding cast of the vote has finished
-      () => {
-        const voteId = this.getServerVoteId(vote);
-        // the vote's cast failed, so there is nothing to remove
-        return voteId ? sendRequest(voteId) : Promise.resolve(undefined);
-      },
-      () => ({ optionId: vote.option_id as OptionId }),
-    );
   };
 
   // Stores the vote state of a WS vote event and returns the vote fields to show, if any.
@@ -152,7 +171,21 @@ export class OptimisticPollVotes {
   // A failed or skipped request gets no WS event, so it counts as confirmed right away.
   private settleWithoutEvent = () => {
     this.pendingCount = Math.max(this.pendingCount - 1, 0);
-    if (this.pendingCount === 0) this.state.partialNext(this.takeServerVoteState());
+    if (this.pendingCount === 0) this.poll.state.partialNext(this.takeServerVoteState());
+  };
+
+  // The vote shown for a cast until the server's vote arrives
+  private createPlaceholderVote = (optionId: OptionId): PollVote => {
+    const now = new Date().toISOString();
+    return {
+      created_at: now,
+      id: `local-${generateUUIDv4()}`,
+      option_id: optionId,
+      poll_id: this.poll.id,
+      updated_at: now,
+      user: this.client.user,
+      user_id: this.client.userID,
+    };
   };
 
   /**
@@ -192,7 +225,7 @@ export class OptimisticPollVotes {
    * contain the other users' votes too.
    */
   private applySucceededChanges = () => {
-    const { enforce_unique_vote } = this.state.getLatestValue();
+    const { enforce_unique_vote } = this.poll.data;
     let ownVotesByOptionId = { ...this.serverVoteState.ownVotesByOptionId };
     for (const { optionId, vote } of this.succeededChanges) {
       if (!vote) {
@@ -207,7 +240,7 @@ export class OptimisticPollVotes {
     this.serverVoteState = { ...this.serverVoteState, ownVotesByOptionId };
     this.pendingCount = 0;
     // also drops a failed vote that was still shown
-    this.state.partialNext(this.takeServerVoteState());
+    this.poll.state.partialNext(this.takeServerVoteState());
   };
 }
 

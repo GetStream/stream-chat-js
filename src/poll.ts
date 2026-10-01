@@ -1,5 +1,4 @@
 import { StateStore } from './store';
-import { generateUUIDv4 } from './utils';
 import type { StreamChat } from './client';
 import { getMaxVotedOptionIds, OptimisticPollVotes } from './poll_optimistic_votes';
 import type {
@@ -102,7 +101,7 @@ export class Poll {
     this.id = poll.id;
 
     this.state = new StateStore<PollState>(this.getInitialStateFromPollResponse(poll));
-    this.optimisticVotes = new OptimisticPollVotes(this.state);
+    this.optimisticVotes = new OptimisticPollVotes({ client: this.client, poll: this });
   }
 
   private getInitialStateFromPollResponse = (poll: PollInitOptions['poll']) => {
@@ -371,25 +370,7 @@ export class Poll {
       return;
     }
 
-    const sendRequest = () =>
-      this.client.castPollVote(messageId, this.id as string, { option_id: optionId });
-
-    // Already voted for this option, there is nothing to apply optimistically.
-    if (ownVotesByOptionId[optionId]) return await this.optimisticVotes.send(sendRequest);
-
-    const now = new Date().toISOString();
-    // shown until the server's vote arrives
-    const vote: PollVote = {
-      created_at: now,
-      id: `local-${generateUUIDv4()}`,
-      option_id: optionId,
-      poll_id: this.id,
-      updated_at: now,
-      user: this.client.user,
-      user_id: this.client.userID,
-    };
-
-    return await this.optimisticVotes.cast(sendRequest, { vote });
+    return await this.optimisticVotes.castVote(optionId, messageId);
   };
 
   /**
@@ -397,23 +378,8 @@ export class Poll {
    * requests are sent in order, so removing a vote whose cast is not confirmed yet uses the vote
    * id from the cast's response; if that cast failed, there is nothing to remove.
    */
-  removeVote = async (voteId: string, messageId: string) => {
-    const vote = Object.values(this.data.ownVotesByOptionId).find(
-      (ownVote) => ownVote.id === voteId,
-    );
-
-    if (!vote?.option_id) {
-      return await this.optimisticVotes.send(() =>
-        this.client.removePollVote(messageId, this.id as string, voteId),
-      );
-    }
-
-    return await this.optimisticVotes.remove(
-      (resolvedVoteId) =>
-        this.client.removePollVote(messageId, this.id as string, resolvedVoteId),
-      { vote },
-    );
-  };
+  removeVote = async (voteId: string, messageId: string) =>
+    await this.optimisticVotes.removeVote(voteId, messageId);
 
   addAnswer = async (answerText: string, messageId: string) =>
     await this.client.addPollAnswer(messageId, this.id as string, answerText);
