@@ -537,7 +537,7 @@ export class MessageIntervalPaginator extends BasePaginator<
 
   /**
    * Seed the paginator with the page a channel-open query just fetched (`Channel.query` for
-   * `watch`/`create`, and `client.hydrateActiveChannels`).
+   * `watch`/`create`, and `client.hydrateChannels`).
    *
    * These paths hydrate the channel read state in the SAME synchronous tick they add messages
    * (`Channel._initializeState`), and the read patch drives `MessageReceiptsTracker`, which resolves

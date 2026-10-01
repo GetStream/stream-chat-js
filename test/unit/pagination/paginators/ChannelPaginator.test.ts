@@ -1156,7 +1156,7 @@ describe('ChannelPaginator', () => {
         getChannelsForQuery.mockResolvedValue({
           channels: [{ channel: cachedChannel.data }],
         });
-        vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue([cachedChannel]);
+        vi.spyOn(client, 'hydrateChannels').mockReturnValue([cachedChannel]);
         const queryChannels = vi
           .spyOn(client, 'queryChannelsAndHydrate')
           .mockResolvedValue({ channels: [], duration: '0.1ms' });
@@ -1188,7 +1188,7 @@ describe('ChannelPaginator', () => {
           client.offlineDb!.syncManager.isSynced = true;
           return { channels: [{ channel: cachedChannel.data }] };
         });
-        vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue([cachedChannel]);
+        vi.spyOn(client, 'hydrateChannels').mockReturnValue([cachedChannel]);
         const queryChannels = vi
           .spyOn(client, 'queryChannelsAndHydrate')
           .mockResolvedValue({ channels: [cachedChannel], duration: '0.1ms' });
@@ -1238,7 +1238,7 @@ describe('ChannelPaginator', () => {
         getChannelsForQuery.mockResolvedValue({
           channels: [{ channel: cachedChannel.data }],
         });
-        vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue([cachedChannel]);
+        vi.spyOn(client, 'hydrateChannels').mockReturnValue([cachedChannel]);
         vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
           channels: [cachedChannel],
           duration: '0.1ms',
@@ -1274,7 +1274,7 @@ describe('ChannelPaginator', () => {
         const b = new Channel(client, 'type', 'b', {});
         const c = new Channel(client, 'type', 'c', {});
         getChannelsForQuery.mockResolvedValue({ channels: [{}, {}, {}] });
-        vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue([a, b, c]);
+        vi.spyOn(client, 'hydrateChannels').mockReturnValue([a, b, c]);
         vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
           channels: [a, b, c],
           duration: '0.1ms',
@@ -1356,7 +1356,7 @@ describe('ChannelPaginator', () => {
           new Channel(client, 'type', 'c', {}),
         ];
         getChannelsForQuery.mockResolvedValue({ channels: cached.map(() => ({})) });
-        vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue(cached);
+        vi.spyOn(client, 'hydrateChannels').mockReturnValue(cached);
         const queryChannels = vi
           .spyOn(client, 'queryChannelsAndHydrate')
           .mockResolvedValue({ channels: cached, duration: '0.1ms' });
@@ -1408,7 +1408,7 @@ describe('ChannelPaginator', () => {
         const channel = (id: string) => new Channel(client, 'type', id, {});
         const cached = [channel('a'), channel('b')];
         getChannelsForQuery.mockResolvedValue({ channels: cached.map(() => ({})) });
-        vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue(cached);
+        vi.spyOn(client, 'hydrateChannels').mockReturnValue(cached);
         const queryChannels = vi
           .spyOn(client, 'queryChannelsAndHydrate')
           .mockResolvedValueOnce({ channels: cached, duration: '0.1ms' })
@@ -1476,7 +1476,7 @@ describe('ChannelPaginator', () => {
           channels: channels.map(() => ({})),
           predefinedFilter,
         });
-        vi.spyOn(client, 'hydrateActiveChannels').mockReturnValue(channels);
+        vi.spyOn(client, 'hydrateChannels').mockReturnValue(channels);
         const queryChannels = vi
           .spyOn(client, 'queryChannelsAndHydrate')
           .mockResolvedValue({ channels: [], duration: '0.1ms' });

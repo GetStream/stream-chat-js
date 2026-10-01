@@ -359,7 +359,7 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 		client.wsConnection._setStatus({ isHealthy: true });
 		client.connectionIdManager.resolveConnectionId('connection-id');
 		channel = client.channel('messaging', 'watching-id');
-		client.activeChannels[channel.cid] = channel;
+		client.channelManager.getOrCreateChannel(channel.cid, () => channel);
 		mockQueryResponse(generateChannel({ channel: { id: 'watching-id' } }));
 	});
 
@@ -510,7 +510,7 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 	it('demotes Watching to WasWatching when the connection is interrupted', async () => {
 		await channel.watch();
 
-		client._markActiveChannelsWatchInterrupted();
+		client.channelManager.markChannelsWatchInterrupted();
 
 		expect(channel.watchStatus).to.equal(ChannelWatchStatus.WasWatching);
 	});
@@ -519,30 +519,30 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 		await channel.watch();
 		await channel.stopWatching();
 
-		client._markActiveChannelsWatchInterrupted();
+		client.channelManager.markChannelsWatchInterrupted();
 
 		// the whole point of the third state: a reconnect must not resurrect this watch
 		expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
 	});
 
 	it('leaves a never-watched channel NotWatching when the connection is interrupted', () => {
-		client._markActiveChannelsWatchInterrupted();
+		client.channelManager.markChannelsWatchInterrupted();
 
 		expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
 	});
 
 	it('does not demote WasWatching any further on a second interruption', async () => {
 		await channel.watch();
-		client._markActiveChannelsWatchInterrupted();
+		client.channelManager.markChannelsWatchInterrupted();
 
-		client._markActiveChannelsWatchInterrupted();
+		client.channelManager.markChannelsWatchInterrupted();
 
 		expect(channel.watchStatus).to.equal(ChannelWatchStatus.WasWatching);
 	});
 
 	it('returns to Watching when a re-watch succeeds after an interruption', async () => {
 		await channel.watch();
-		client._markActiveChannelsWatchInterrupted();
+		client.channelManager.markChannelsWatchInterrupted();
 		expect(channel.watchStatus).to.equal(ChannelWatchStatus.WasWatching);
 
 		await channel.watch();
@@ -553,10 +553,10 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 	it('is demoted across every active channel at once', async () => {
 		await channel.watch();
 		const other = client.channel('messaging', 'other-id');
-		client.activeChannels[other.cid] = other;
+		client.channelManager.getOrCreateChannel(other.cid, () => other);
 		other.watchStatus = ChannelWatchStatus.Watching;
 
-		client._markActiveChannelsWatchInterrupted();
+		client.channelManager.markChannelsWatchInterrupted();
 
 		expect(channel.watchStatus).to.equal(ChannelWatchStatus.WasWatching);
 		expect(other.watchStatus).to.equal(ChannelWatchStatus.WasWatching);
@@ -565,7 +565,7 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 	it('is set by channel-list hydration, which watches by default', () => {
 		const response = generateChannel({ channel: { id: 'hydrated-id' } });
 
-		const [hydrated] = client.hydrateActiveChannels([response]);
+		const [hydrated] = client.hydrateChannels([response]);
 
 		expect(hydrated.watchStatus).to.equal(ChannelWatchStatus.Watching);
 	});
@@ -573,17 +573,17 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 	it('is NOT set by hydration when the caller opted out of watching', () => {
 		const response = generateChannel({ channel: { id: 'unwatched-id' } });
 
-		const [hydrated] = client.hydrateActiveChannels([response], {}, { watch: false });
+		const [hydrated] = client.hydrateChannels([response], {}, { watch: false });
 
 		expect(hydrated.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
 	});
 
 	it('leaves WasWatching intact when hydration does not watch', async () => {
 		await channel.watch();
-		client._markActiveChannelsWatchInterrupted();
+		client.channelManager.markChannelsWatchInterrupted();
 		const response = generateChannel({ channel: { id: 'watching-id' } });
 
-		client.hydrateActiveChannels([response], {}, { watch: false });
+		client.hydrateChannels([response], {}, { watch: false });
 
 		// a non-watching hydrate neither starts nor ends a watch
 		expect(channel.watchStatus).to.equal(ChannelWatchStatus.WasWatching);
@@ -593,7 +593,7 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 		client.wsConnection._setStatus({ isHealthy: false });
 		const response = generateChannel({ channel: { id: 'no-connection-id' } });
 
-		const [hydrated] = client.hydrateActiveChannels([response]);
+		const [hydrated] = client.hydrateChannels([response]);
 
 		expect(hydrated.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
 	});
@@ -601,7 +601,7 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 	it('is NOT set by offline hydration (state without a live watch)', () => {
 		const response = generateChannel({ channel: { id: 'offline-id' } });
 
-		const [hydrated] = client.hydrateActiveChannels([response], { offlineMode: true });
+		const [hydrated] = client.hydrateChannels([response], { offlineMode: true });
 
 		expect(hydrated.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
 		expect(hydrated.offlineMode).to.equal(true);
@@ -617,7 +617,7 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 
 	it('is demoted when the WS connection reports itself unhealthy', async () => {
 		await channel.watch();
-		const sweep = vi.spyOn(client, '_markActiveChannelsWatchInterrupted');
+		const sweep = vi.spyOn(client.channelManager, 'markChannelsWatchInterrupted');
 		const connection = new StableWSConnection({ wsConnection: client.wsConnection });
 		connection.isHealthy = true;
 
@@ -630,7 +630,7 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 		await channel.watch();
 		channel._disconnect();
 
-		expect(() => client._markActiveChannelsWatchInterrupted()).not.to.throw();
+		expect(() => client.channelManager.markChannelsWatchInterrupted()).not.to.throw();
 		expect(channel.state.getLatestValue().watchStatus).to.equal(
 			ChannelWatchStatus.NotWatching,
 		);
@@ -726,7 +726,7 @@ describe('Channel AI indicator state (channel.state.aiState)', function () {
 	it('closeConnection resets aiState to Idle across active channels', async () => {
 		const { channel } = setupChannel();
 		const client = channel.getClient();
-		client.activeChannels[channel.cid] = channel;
+		client.channelManager.getOrCreateChannel(channel.cid, () => channel);
 		channel._handleChannelEvent({
 			type: 'ai_indicator.update',
 			ai_state: 'AI_STATE_GENERATING',
@@ -2782,7 +2782,7 @@ describe('Uninitialized Channel', () => {
 	});
 
 	// Regression coverage for https://github.com/GetStream/stream-chat-js/issues/1732
-	// `client.channel(type, id)` registers the channel in `activeChannels` with
+	// `client.channel(type, id)` registers the channel in the channel store with
 	// `initialized = false`. Before the fix, a `message.new` arriving in that
 	// window went dispatchEvent → _handleChannelEvent → _countMessageAsUnread →
 	// muteStatus() → _checkInitialized() and threw, aborting the rest of the
@@ -2806,7 +2806,7 @@ describe('Uninitialized Channel', () => {
 		it('does not throw for channels left uninitialized by query({ watch: false })', () => {
 			// Production path called out in the issue: screens that fetch via
 			// `query({ watch: false, state: false })` leave the channel in
-			// activeChannels with initialized=false indefinitely. We simulate
+			// the channel store with initialized=false indefinitely. We simulate
 			// that final state — `initialized` is never flipped to true.
 			expect(channel.initialized).to.be.false;
 			expect(() => client.dispatchEvent(buildMessageNewEvent())).not.to.throw();
@@ -2991,7 +2991,7 @@ describe('Channels - Constructor', function () {
 	});
 });
 
-describe('Ensure single channel per cid on client activeChannels state', () => {
+describe('Ensure single channel per cid in the channel store', () => {
 	const clientVish = new StreamChat('', '');
 	const user = { id: 'user' };
 	const channelType = 'messaging';
@@ -3010,7 +3010,7 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 	clientVish.connectUser();
 
 	it('channel created using id - case 1', async () => {
-		clientVish.activeChannels = {};
+		clientVish.channelManager.clearChannels();
 
 		const channelVishId = uuidv4();
 		const mockedChannelResponse = generateChannel({
@@ -3029,8 +3029,8 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 
 		const cid = `${channelType}:${channelVishId}`;
 
-		expect(Object.keys(clientVish.activeChannels)).to.contain(cid);
-		expect(clientVish.activeChannels[cid]).to.contain(channelVish_copy1);
+		expect(clientVish.channelManager.get(cid)).to.not.be.undefined;
+		expect(clientVish.channelManager.get(cid)).to.contain(channelVish_copy1);
 
 		await channelVish_copy1.watch();
 		const channelVish_copy2 = clientVish.channel('messaging', channelVishId);
@@ -3038,7 +3038,7 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
 	});
 	it('channel created using id - case 2', async () => {
-		clientVish.activeChannels = {};
+		clientVish.channelManager.clearChannels();
 
 		const channelVishId = uuidv4();
 		const mockedChannelResponse = generateChannel({
@@ -3058,13 +3058,13 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 
 		const cid = `${channelType}:${channelVishId}`;
 
-		expect(Object.keys(clientVish.activeChannels)).to.contain(cid);
-		expect(clientVish.activeChannels[cid]).to.contain(channelVish_copy1);
+		expect(clientVish.channelManager.get(cid)).to.not.be.undefined;
+		expect(clientVish.channelManager.get(cid)).to.contain(channelVish_copy1);
 
 		const channelVish_copy2 = clientVish.channel('messaging', channelVishId);
 
-		expect(Object.keys(clientVish.activeChannels)).to.contain(cid);
-		expect(clientVish.activeChannels[cid]).to.contain(channelVish_copy1);
+		expect(clientVish.channelManager.get(cid)).to.not.be.undefined;
+		expect(clientVish.channelManager.get(cid)).to.contain(channelVish_copy1);
 
 		await channelVish_copy1.watch();
 		await channelVish_copy2.watch();
@@ -3073,7 +3073,7 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 	});
 
 	it('channel created using member list - case 1', async () => {
-		clientVish.activeChannels = {};
+		clientVish.channelManager.clearChannels();
 
 		// Mock channel.watch call.
 		const userVish = generateUser();
@@ -3096,16 +3096,16 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 
 		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
 
-		// activeChannels should have tmpCid now.
-		expect(Object.keys(clientVish.activeChannels)).to.contain(tmpCid);
-		expect(clientVish.activeChannels[tmpCid]).to.contain(channelVish_copy1);
+		// the channel store should have tmpCid now.
+		expect(clientVish.channelManager.get(tmpCid)).to.not.be.undefined;
+		expect(clientVish.channelManager.get(tmpCid)).to.contain(channelVish_copy1);
 
 		await channelVish_copy1.watch();
 
 		// tempCid should be replaced with actual cid at this point.
-		expect(Object.keys(clientVish.activeChannels)).to.not.contain(tmpCid);
-		expect(Object.keys(clientVish.activeChannels)).to.contain(channelVish_copy1.cid);
-		expect(clientVish.activeChannels[channelVish_copy1.cid]).to.contain(
+		expect(clientVish.channelManager.get(tmpCid)).to.be.undefined;
+		expect(clientVish.channelManager.get(channelVish_copy1.cid)).to.not.be.undefined;
+		expect(clientVish.channelManager.get(channelVish_copy1.cid)).to.contain(
 			channelVish_copy1,
 		);
 
@@ -3114,14 +3114,14 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		});
 
 		// Should not populate tmpCid again.
-		expect(Object.keys(clientVish.activeChannels)).to.not.contain(tmpCid);
+		expect(clientVish.channelManager.get(tmpCid)).to.be.undefined;
 
 		await channelVish_copy2.watch();
 		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
 	});
 
 	it('channel created using member list - case 2', async () => {
-		clientVish.activeChannels = {};
+		clientVish.channelManager.clearChannels();
 
 		const userVish = generateUser();
 		const userAmin = generateUser();
@@ -3148,17 +3148,17 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 
 		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
 
-		// activeChannels should have tmpCid now.
-		expect(Object.keys(clientVish.activeChannels)).to.contain(tmpCid);
-		expect(clientVish.activeChannels[tmpCid]).to.contain(channelVish_copy1);
+		// the channel store should have tmpCid now.
+		expect(clientVish.channelManager.get(tmpCid)).to.not.be.undefined;
+		expect(clientVish.channelManager.get(tmpCid)).to.contain(channelVish_copy1);
 
 		const channelVish_copy2 = clientVish.channel('messaging', {
 			members: [userVish.id, userAmin.id],
 		});
 
-		// activeChannels still should have tmpCid now.
-		expect(Object.keys(clientVish.activeChannels)).to.contain(tmpCid);
-		expect(clientVish.activeChannels[tmpCid]).to.contain(channelVish_copy2);
+		// the channel store still should have tmpCid now.
+		expect(clientVish.channelManager.get(tmpCid)).to.not.be.undefined;
+		expect(clientVish.channelManager.get(tmpCid)).to.contain(channelVish_copy2);
 
 		await channelVish_copy1.watch();
 		await channelVish_copy2.watch();
@@ -3167,7 +3167,7 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 	});
 
 	it('channel created using member list - case 3', async () => {
-		clientVish.activeChannels = {};
+		clientVish.channelManager.clearChannels();
 
 		// Mock channel.watch call.
 		const userVish = generateUser();
@@ -3190,16 +3190,16 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 
 		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
 
-		// activeChannels should have tmpCid now.
-		expect(Object.keys(clientVish.activeChannels)).to.contain(tmpCid);
-		expect(clientVish.activeChannels[tmpCid]).to.contain(channelVish_copy1);
+		// the channel store should have tmpCid now.
+		expect(clientVish.channelManager.get(tmpCid)).to.not.be.undefined;
+		expect(clientVish.channelManager.get(tmpCid)).to.contain(channelVish_copy1);
 
 		await channelVish_copy1.watch();
 
 		// tempCid should be replaced with actual cid at this point.
-		expect(Object.keys(clientVish.activeChannels)).to.not.contain(tmpCid);
-		expect(Object.keys(clientVish.activeChannels)).to.contain(channelVish_copy1.cid);
-		expect(clientVish.activeChannels[channelVish_copy1.cid]).to.contain(
+		expect(clientVish.channelManager.get(tmpCid)).to.be.undefined;
+		expect(clientVish.channelManager.get(channelVish_copy1.cid)).to.not.be.undefined;
+		expect(clientVish.channelManager.get(channelVish_copy1.cid)).to.contain(
 			channelVish_copy1,
 		);
 
@@ -3208,14 +3208,14 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 		});
 
 		// Should not populate tmpCid again.
-		expect(Object.keys(clientVish.activeChannels)).to.not.contain(tmpCid);
+		expect(clientVish.channelManager.get(tmpCid)).to.be.undefined;
 
 		await channelVish_copy2.watch();
 		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
 	});
 
 	it('channel created using member list - case 4', async () => {
-		clientVish.activeChannels = {};
+		clientVish.channelManager.clearChannels();
 
 		const userVish = generateUser();
 		const userAmin = generateUser();
@@ -3242,17 +3242,17 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 
 		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
 
-		// activeChannels should have tmpCid now.
-		expect(Object.keys(clientVish.activeChannels)).to.contain(tmpCid);
-		expect(clientVish.activeChannels[tmpCid]).to.contain(channelVish_copy1);
+		// the channel store should have tmpCid now.
+		expect(clientVish.channelManager.get(tmpCid)).to.not.be.undefined;
+		expect(clientVish.channelManager.get(tmpCid)).to.contain(channelVish_copy1);
 
 		const channelVish_copy2 = clientVish.channel('messaging', undefined, {
 			members: [userVish.id, userAmin.id],
 		});
 
-		// activeChannels still should have tmpCid now.
-		expect(Object.keys(clientVish.activeChannels)).to.contain(tmpCid);
-		expect(clientVish.activeChannels[tmpCid]).to.contain(channelVish_copy2);
+		// the channel store still should have tmpCid now.
+		expect(clientVish.channelManager.get(tmpCid)).to.not.be.undefined;
+		expect(clientVish.channelManager.get(tmpCid)).to.contain(channelVish_copy2);
 
 		await channelVish_copy1.watch();
 		await channelVish_copy2.watch();
@@ -3261,7 +3261,7 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 	});
 
 	it('channel created using type only', async () => {
-		clientVish.activeChannels = {};
+		clientVish.channelManager.clearChannels();
 
 		const userVish = generateUser();
 		const userAmin = generateUser();
@@ -3288,27 +3288,27 @@ describe('Ensure single channel per cid on client activeChannels state', () => {
 
 		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
 
-		// activeChannels should have tmpCid now.
-		expect(Object.keys(clientVish.activeChannels)).not.to.contain(tmpCid);
+		// the channel store should have tmpCid now.
+		expect(clientVish.channelManager.get(tmpCid)).to.be.undefined;
 
 		const channelVish_copy2 = clientVish.channel('messaging', undefined, {
 			custom: 'X',
 		});
 
-		// activeChannels still should have tmpCid now.
-		expect(Object.keys(clientVish.activeChannels)).not.to.contain(tmpCid);
+		// the channel store still should have tmpCid now.
+		expect(clientVish.channelManager.get(tmpCid)).to.be.undefined;
 
-		expect(Object.keys(clientVish.activeChannels)).not.to.contain(channelVish_copy1.cid);
-		expect(Object.keys(clientVish.activeChannels)).not.to.contain(channelVish_copy2.cid);
+		expect(clientVish.channelManager.get(channelVish_copy1.cid)).to.be.undefined;
+		expect(clientVish.channelManager.get(channelVish_copy2.cid)).to.be.undefined;
 
 		await channelVish_copy1.watch();
 		await channelVish_copy2.watch();
 
 		expect(channelVish_copy1).not.to.be.equal(channelVish_copy2);
 
-		expect(Object.keys(clientVish.activeChannels)).to.contain(channelVish_copy1.cid);
-		expect(Object.keys(clientVish.activeChannels)).to.contain(channelVish_copy2.cid);
-		expect(clientVish.activeChannels[channelVish_copy1.cid]).not.to.contain(
+		expect(clientVish.channelManager.get(channelVish_copy1.cid)).to.not.be.undefined;
+		expect(clientVish.channelManager.get(channelVish_copy2.cid)).to.not.be.undefined;
+		expect(clientVish.channelManager.get(channelVish_copy1.cid)).not.to.contain(
 			channelVish_copy2,
 		);
 	});
@@ -4554,7 +4554,7 @@ describe('Channel active flag (mark-read stays UI-driven)', () => {
 	beforeEach(() => {
 		client = getClientWithUser({ id: 'me' });
 		channel = new Channel(client, 'messaging', 'active-x', {});
-		client.activeChannels[channel.cid] = channel;
+		client.channelManager.getOrCreateChannel(channel.cid, () => channel);
 	});
 
 	it('refcounts activate() behind the reactive active flag, released by the function it returns', () => {

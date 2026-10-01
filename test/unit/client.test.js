@@ -383,20 +383,18 @@ describe('Client active channels cache', () => {
 		_setOwnUnreadCount(next) {
 			this.state.unreadCount = next;
 		},
+		// the channel store tears a channel down when it is cleared
+		_disconnect() {},
 	});
 
 	beforeEach(() => {
-		client.activeChannels = {
-			vish: makeChannelMock(1),
-			vish2: makeChannelMock(2),
-		};
+		client.channelManager.clearChannels();
+		client.channelManager.getOrCreateChannel('vish', () => makeChannelMock(1));
+		client.channelManager.getOrCreateChannel('vish2', () => makeChannelMock(2));
 	});
 
 	const countUnreadChannels = (channels) =>
-		Object.values(channels).reduce(
-			(prevSum, currSum) => prevSum + currSum.state.unreadCount,
-			0,
-		);
+		channels.reduce((prevSum, currSum) => prevSum + currSum.state.unreadCount, 0);
 
 	it('should mark all active channels as read on notification.mark_read event if event.unread_channels is 0', function () {
 		client.dispatchEvent({
@@ -404,7 +402,7 @@ describe('Client active channels cache', () => {
 			unread_channels: 0,
 		});
 
-		expect(countUnreadChannels(client.activeChannels)).to.be.equal(0);
+		expect(countUnreadChannels(client.channelManager.values())).to.be.equal(0);
 	});
 
 	it('should not mark any active channel as read on notification.mark_read event if event.unread_channels > 0', function () {
@@ -413,7 +411,7 @@ describe('Client active channels cache', () => {
 			unread_channels: 1,
 		});
 
-		expect(countUnreadChannels(client.activeChannels)).to.be.equal(3);
+		expect(countUnreadChannels(client.channelManager.values())).to.be.equal(3);
 	});
 });
 
@@ -1504,8 +1502,8 @@ describe('StreamChat.queryChannels', async () => {
 			.stub(client, 'queryChannels')
 			.resolves({ channels: mockedChannelsQueryResponse });
 		await client.queryChannelsAndHydrate();
-		expect(Object.keys(client.activeChannels).length).to.be.greaterThan(0);
-		Object.values(client.activeChannels).forEach((channel) => {
+		expect(client.channelManager.values().length).to.be.greaterThan(0);
+		client.channelManager.values().forEach((channel) => {
 			expect(channel.messagePaginator.items).to.have.length(
 				DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE,
 			);
@@ -1525,8 +1523,8 @@ describe('StreamChat.queryChannels', async () => {
 			.stub(client, 'queryChannels')
 			.resolves({ channels: mockedChannelQueryResponse });
 		await client.queryChannelsAndHydrate();
-		expect(Object.keys(client.activeChannels).length).to.be.greaterThan(0);
-		Object.values(client.activeChannels).forEach((channel) => {
+		expect(client.channelManager.values().length).to.be.greaterThan(0);
+		client.channelManager.values().forEach((channel) => {
 			expect(channel.messagePaginator.items).to.have.length(
 				DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE - 1,
 			);
@@ -2336,11 +2334,11 @@ describe('X-Stream-Client header', () => {
 // Regression coverage for GetStream/stream-chat-react#2599.
 // When the current user is removed from a channel the server sends a
 // `notification.removed_from_channel` event. Previously the client only evicted
-// channels from `activeChannels` on deletion, so a removed-from channel lingered:
+// channels from the channel store on deletion, so a removed-from channel lingered:
 // later `message.new` / `notification.message_new` events were still delivered to
 // it, and connection recovery refreshed it, re-promoting it in downstream lists.
 // Eviction is what keeps it out of both paths.
-describe('activeChannels eviction when the current user is removed (#2599)', () => {
+describe('channel store eviction when the current user is removed (#2599)', () => {
 	let client;
 	const currentUserId = 'current-user';
 
@@ -2355,15 +2353,15 @@ describe('activeChannels eviction when the current user is removed (#2599)', () 
 		channel_id: channel.id,
 	});
 
-	it('evicts the channel from activeChannels and disconnects it on notification.removed_from_channel', () => {
+	it('evicts the channel from the channel store and disconnects it on notification.removed_from_channel', () => {
 		const channel = client.channel('messaging', 'ch-removed');
-		expect(client.activeChannels[channel.cid]).to.equal(channel);
+		expect(client.channelManager.get(channel.cid)).to.equal(channel);
 
 		client.dispatchEvent(removedFromChannelEvent(channel));
 
 		expect(channel.pendingDisposal).to.equal(true);
 		expect(client.channelManager.get(channel.cid)).to.be.undefined;
-		expect(client.activeChannels[channel.cid]).to.be.undefined;
+		expect(client.channelManager.get(channel.cid)).to.be.undefined;
 	});
 
 	it('evicts regardless of channel type (does not special-case the channel type)', () => {
@@ -2373,7 +2371,7 @@ describe('activeChannels eviction when the current user is removed (#2599)', () 
 			client.channel('gaming', 'game-1'),
 		];
 		channels.forEach((channel) => {
-			expect(client.activeChannels[channel.cid]).to.equal(channel);
+			expect(client.channelManager.get(channel.cid)).to.equal(channel);
 		});
 
 		channels.forEach((channel) => {
@@ -2381,7 +2379,7 @@ describe('activeChannels eviction when the current user is removed (#2599)', () 
 		});
 
 		channels.forEach((channel) => {
-			expect(client.activeChannels[channel.cid]).to.be.undefined;
+			expect(client.channelManager.get(channel.cid)).to.be.undefined;
 		});
 	});
 
@@ -2408,7 +2406,7 @@ describe('activeChannels eviction when the current user is removed (#2599)', () 
 		// new messages and got re-promoted in the ChannelList).
 		client.dispatchEvent(messageNewEvent);
 		expect(handleChannelEventSpy).not.toHaveBeenCalled();
-		expect(client.activeChannels[channel.cid]).to.be.undefined;
+		expect(client.channelManager.get(channel.cid)).to.be.undefined;
 	});
 
 	it('does not reload the evicted channel on connection recovery', async () => {
@@ -2442,7 +2440,7 @@ describe('activeChannels eviction when the current user is removed (#2599)', () 
 		});
 
 		expect(disconnectSpy).not.toHaveBeenCalled();
-		expect(client.activeChannels[channel.cid]).to.equal(channel);
+		expect(client.channelManager.get(channel.cid)).to.equal(channel);
 	});
 
 	it('still evicts on channel.deleted and notification.channel_deleted (no regression)', () => {
@@ -2466,8 +2464,8 @@ describe('activeChannels eviction when the current user is removed (#2599)', () 
 		expect(notifDeleted.pendingDisposal).to.equal(true);
 		expect(client.channelManager.get(deleted.cid)).to.be.undefined;
 		expect(client.channelManager.get(notifDeleted.cid)).to.be.undefined;
-		expect(client.activeChannels[deleted.cid]).to.be.undefined;
-		expect(client.activeChannels[notifDeleted.cid]).to.be.undefined;
+		expect(client.channelManager.get(deleted.cid)).to.be.undefined;
+		expect(client.channelManager.get(notifDeleted.cid)).to.be.undefined;
 	});
 });
 

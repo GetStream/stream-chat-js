@@ -72,7 +72,6 @@ describe('ChannelManager channel store', () => {
 
     expect(channel.pendingDisposal).toBe(true);
     expect(client.channelManager.values()).toEqual([]);
-    expect(client.activeChannels).toEqual({});
   });
 });
 
@@ -187,7 +186,7 @@ describe('channel lists as holders', () => {
     second.removeItem({ item: channel });
     expect(channel.pendingDisposal).toBe(true);
     expect(client.channelManager.get(channel.cid)).toBeUndefined();
-    expect(client.activeChannels[channel.cid]).toBeUndefined();
+    expect(client.channelManager.get(channel.cid)).toBeUndefined();
   });
 
   it('keeps a listed channel that is also watched or opened', () => {

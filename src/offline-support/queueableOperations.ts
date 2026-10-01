@@ -48,8 +48,8 @@ export type QueueableOperation<T extends QueueableType> = {
  * The channel an operation runs on: the caller's own instance when it has one, and otherwise resolved
  * from the task.
  *
- * Preferring the caller's instance is not an optimisation. `client.channel()` returns the cached
- * instance only while it is in `activeChannels` and not `pendingDisposal` — otherwise it CONSTRUCTS a
+ * Preferring the caller's instance is not an optimisation. `client.channel()` returns the stored
+ * instance only while it is in the channel store and not `pendingDisposal` — otherwise it CONSTRUCTS a
  * new `Channel`, which builds paginators and a composer and registers subscriptions. A first attempt
  * always has the real instance in hand, so it should never risk that.
  *

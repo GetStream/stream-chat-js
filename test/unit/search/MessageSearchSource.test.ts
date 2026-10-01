@@ -361,7 +361,7 @@ describe('MessageSearchSource', () => {
     const m1 = generateMsg({ cid: 'cid1' });
     const m2 = generateMsg({ cid: 'cid2' });
     searchSource.channelQueryFilters = { type: 'abc' };
-    client.activeChannels = { cid1: {} as any };
+    client.channelManager.getOrCreateChannel('cid1', () => ({}) as any);
     searchMock.mockResolvedValueOnce({
       results: [{ message: m1 }, { message: m2 }],
       next: undefined,
@@ -382,7 +382,7 @@ describe('MessageSearchSource', () => {
 
   it('does not call queryChannels if all channels are loaded locally', async () => {
     const m1 = generateMsg({ cid: 'cid1' });
-    client.activeChannels = { cid1: {} as any };
+    client.channelManager.getOrCreateChannel('cid1', () => ({}) as any);
     searchMock.mockResolvedValueOnce({
       results: [{ message: m1 }],
       next: undefined,
@@ -404,7 +404,7 @@ describe('MessageSearchSource', () => {
     });
     const m1 = generateMsg({ cid: 'cid1' });
     const m2 = generateMsg({ cid: 'cid2' });
-    client.activeChannels = { cid1: {} as any };
+    client.channelManager.getOrCreateChannel('cid1', () => ({}) as any);
     searchMock.mockResolvedValueOnce({
       results: [{ message: m1 }, { message: m2 }],
       next: undefined,

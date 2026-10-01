@@ -155,12 +155,12 @@ describe('client.queryChannels and the WebSocket', () => {
     it('records Watching only when the query that set it actually watched', async () => {
       const response = generateChannel({ channel: { id: 'watched' } });
 
-      const [watched] = client.hydrateActiveChannels([response]);
+      const [watched] = client.hydrateChannels([response]);
       expect(watched.watchStatus).toBe(ChannelWatchStatus.Watching);
 
       // Offline hydration populates state without a live watch, so it must never count.
       const offline = generateChannel({ channel: { id: 'from-db' } });
-      const [hydrated] = client.hydrateActiveChannels([offline], { offlineMode: true });
+      const [hydrated] = client.hydrateChannels([offline], { offlineMode: true });
       expect(hydrated.watchStatus).toBe(ChannelWatchStatus.NotWatching);
     });
 
@@ -171,7 +171,7 @@ describe('client.queryChannels and the WebSocket', () => {
       client.wsConnection._setStatus({ isHealthy: false });
       const response = generateChannel({ channel: { id: 'socket-down' } });
 
-      const [hydrated] = client.hydrateActiveChannels([response]);
+      const [hydrated] = client.hydrateChannels([response]);
 
       expect(hydrated.watchStatus).toBe(ChannelWatchStatus.NotWatching);
     });

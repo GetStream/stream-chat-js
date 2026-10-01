@@ -18,7 +18,7 @@ describe('ChannelState clean', () => {
 		client = new StreamChat();
 		client.user = { id: 'observer' };
 		channel = new Channel(client, 'live', 'stream', {});
-		client.activeChannels[channel.cid] = channel;
+		client.channelManager.getOrCreateChannel(channel.cid, () => channel);
 	});
 
 	it('should remove any stale typing events', async () => {
@@ -517,7 +517,7 @@ describe('ChannelState unified store', () => {
 		const client = new StreamChat();
 		client.user = { id: 'me' };
 		const channel = new Channel(client, 'messaging', 'lifecycle', {});
-		client.activeChannels[channel.cid] = channel;
+		client.channelManager.getOrCreateChannel(channel.cid, () => channel);
 
 		expect(channel.initialized).to.equal(false);
 		expect(channel.offlineMode).to.equal(false);

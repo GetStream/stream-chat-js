@@ -90,10 +90,10 @@ const getCidFromEvent = (event: PipelineEvent): string | undefined => {
 
 const getCachedChannelFromEvent = (
   event: PipelineEvent,
-  cache: Record<string, Channel>,
+  channelManager: ChannelManager,
 ): Channel | undefined => {
   const cid = getCidFromEvent(event);
-  return cid ? cache[cid] : undefined;
+  return cid ? channelManager.get(cid) : undefined;
 };
 
 const removeItem: EventHandlerPipelineHandler<EventHandlerContext> = ({
@@ -104,7 +104,7 @@ const removeItem: EventHandlerPipelineHandler<EventHandlerContext> = ({
   // `event.channel` only, and the legacy ChannelManager removed by `event.cid || event.channel?.cid`
   const cid = getCidFromEvent(event);
   if (!cid) return;
-  const channel = channelManager.client.activeChannels[cid];
+  const channel = channelManager.get(cid);
   channelManager.paginators.forEach((paginator) => {
     paginator.removeItem({ id: cid, item: channel });
   });
@@ -115,10 +115,7 @@ const removeItem: EventHandlerPipelineHandler<EventHandlerContext> = ({
 export const ignoreEventsForUnknownChannels: EventHandlerPipelineHandler<
   EventHandlerContext
 > = ({ event, ctx: { channelManager } }) => {
-  const channel: Channel | undefined = getCachedChannelFromEvent(
-    event,
-    channelManager.client.activeChannels,
-  );
+  const channel = getCachedChannelFromEvent(event, channelManager);
   if (!channel) return { action: 'stop' };
 };
 
@@ -152,10 +149,7 @@ const updateLists: EventHandlerPipelineHandler<EventHandlerContext> = async ({
   event,
   ctx: { channelManager },
 }) => {
-  let channel: Channel | undefined = getCachedChannelFromEvent(
-    event,
-    channelManager.client.activeChannels,
-  );
+  let channel: Channel | undefined = getCachedChannelFromEvent(event, channelManager);
 
   if (!channel) {
     const [type, id] = getCidFromEvent(event)?.split(':') ?? [];
@@ -189,7 +183,7 @@ const reinsertItem: EventHandlerPipelineHandler<EventHandlerContext> = ({
   event,
   ctx: { channelManager },
 }) => {
-  const channel = getCachedChannelFromEvent(event, channelManager.client.activeChannels);
+  const channel = getCachedChannelFromEvent(event, channelManager);
   if (!channel) return;
   routeToPaginators(channelManager, channel);
 };
@@ -203,7 +197,6 @@ function routeToPaginators(channelManager: ChannelManager, channel: Channel) {
   channelManager.ingestChannel(channel);
 }
 
-// we have to make sure that client.activeChannels is always up-to-date
 const channelDeletedHandler: LabeledEventHandler<EventHandlerContext> = {
   handle: removeItem,
   id: 'ChannelManager:default-handler:channel.deleted',
@@ -274,7 +267,7 @@ const readStateChangedHandler: LabeledEventHandler<EventHandlerContext> = {
     if (event.thread_id) return;
 
     // a mark-all-read names no channel, so there is no target to route
-    const channel = getCachedChannelFromEvent(event, client.activeChannels);
+    const channel = getCachedChannelFromEvent(event, channelManager);
     if (!channel) return;
 
     // hot path: `message.read` fires on every channel the user opens
@@ -402,13 +395,7 @@ export class ChannelManager extends WithSubscriptions {
    */
   readonly channelStore = new EntityStore<Channel>({
     getEntityId: (channel) => channel.cid,
-    onRelease: (channel) => {
-      const key = this.storeKeys.get(channel);
-      if (key !== undefined && this.client.activeChannels[key] === channel) {
-        delete this.client.activeChannels[key];
-      }
-      channel._disconnect();
-    },
+    onRelease: (channel) => channel._disconnect(),
   });
   private readonly holders: Record<ChannelHold, EntityStoreSubscriber> = {
     activated: createHolder(),
@@ -493,8 +480,6 @@ export class ChannelManager extends WithSubscriptions {
     return this.channelStore.values();
   }
 
-  // `client.activeChannels` mirrors the channel store until every reader moves to get() / values().
-
   /**
    * Returns the channel stored under `cid`, passing it to `hydrate`, or stores and returns the result
    * of `create`.
@@ -508,7 +493,6 @@ export class ChannelManager extends WithSubscriptions {
   ): Channel {
     const channel = this.channelStore.getOrCreate(cid, create, hydrate);
     this.storeKeys.set(channel, cid);
-    this.client.activeChannels[cid] = channel;
     return channel;
   }
 
@@ -519,11 +503,9 @@ export class ChannelManager extends WithSubscriptions {
    * @internal
    */
   changeChannelId(oldCid: string, newCid: string): boolean {
-    if (!this.channelStore.changeId(oldCid, newCid)) return false;
-    const channel = this.client.activeChannels[oldCid];
+    const channel = this.channelStore.get(oldCid);
+    if (!channel || !this.channelStore.changeId(oldCid, newCid)) return false;
     this.storeKeys.set(channel, newCid);
-    delete this.client.activeChannels[oldCid];
-    this.client.activeChannels[newCid] = channel;
     return true;
   }
 
@@ -557,7 +539,6 @@ export class ChannelManager extends WithSubscriptions {
    */
   removeChannel(cid: string) {
     this.channelStore.remove(cid);
-    delete this.client.activeChannels[cid];
   }
 
   /**
@@ -567,7 +548,50 @@ export class ChannelManager extends WithSubscriptions {
    */
   clearChannels() {
     this.channelStore.clear();
-    this.client.activeChannels = {};
+  }
+
+  /**
+   * Fans the client-owned `mutedChannels` out to every stored channel's reactive `state.muteStatus`.
+   * Each channel republishes only when its own mute status actually changed, so this stays cheap on
+   * the frequent `health.check` path.
+   *
+   * @internal
+   */
+  reflectMutedChannels() {
+    for (const channel of this.values()) channel._syncMuteStatus();
+  }
+
+  /**
+   * Resets the AI indicator state to `Idle` on every stored channel. Invoked from `closeConnection`
+   * as it's a deliberate shutdown and will not natively trigger a WS event.
+   *
+   * @internal
+   */
+  resetAIStateOnChannels() {
+    for (const channel of this.values()) channel.state.resetAIState();
+  }
+
+  /**
+   * Demotes every actively-watched channel to `WasWatching`. The server keys watches by connection
+   * ID, so losing the socket ends every watch this client held — a reconnect issues a NEW id and the
+   * channels have to be re-queried to watch again. `WasWatching` is what records that they should be.
+   *
+   * Only `Watching` is demoted: a channel the consumer stopped on purpose, or one that was torn
+   * down, stays `NotWatching` and must not be resurrected by a reconnect.
+   *
+   * Invoked from two places, because neither covers the other: `StableWSConnection._setHealth(false)`
+   * for an abnormal close/error, and `closeConnection()` for a deliberate shutdown (e.g. mobile
+   * backgrounding), whose `disconnect()` writes the status through `_applyHealth` and so never
+   * reaches `_setHealth`.
+   *
+   * @internal
+   */
+  markChannelsWatchInterrupted() {
+    for (const channel of this.values()) {
+      if (channel.watchStatus === ChannelWatchStatus.Watching) {
+        channel.watchStatus = ChannelWatchStatus.WasWatching;
+      }
+    }
   }
 
   get pipelines(): Map<SupportedEventType, EventHandlerPipeline<EventHandlerContext>> {

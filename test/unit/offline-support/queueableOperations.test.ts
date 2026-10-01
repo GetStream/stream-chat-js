@@ -89,7 +89,7 @@ describe('runQueueableOperation', () => {
 /**
  * Which channel instance an operation runs on.
  *
- * `client.channel()` returns the cached instance only while it is in `activeChannels` and not
+ * `client.channel()` returns the cached instance only while it is in the channel store and not
  * `pendingDisposal` — otherwise it CONSTRUCTS one, paginators and subscriptions included. A first
  * attempt always has the real instance in hand, so it must never go through that lookup.
  */

@@ -236,8 +236,6 @@ const channelSortPathResolver: PathResolver<Channel> = (channel, path) => {
   }
 };
 
-// todo: maybe items could be just an array of {cid: string} and the data would be retrieved from client.activeChannels
-// todo: maybe we should introduce client._cache.channels  that would be reactive and orchestrator would subscribe to client._cache.channels state to keep all the dependent state in sync
 /**
  * A paginated channel list. Filters are described along three independent axes — the names follow them:
  *
@@ -607,7 +605,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
         if (cachedQuery.predefinedFilter) {
           this.applyPredefinedFilterResponse(cachedQuery.predefinedFilter);
         }
-        return this.client.hydrateActiveChannels(cachedQuery.channels, {
+        return this.client.hydrateChannels(cachedQuery.channels, {
           offlineMode: true,
           skipInitialization: [], // passing empty array will clear out the existing messages from channel state, this removes the possibility of duplicate messages
         });

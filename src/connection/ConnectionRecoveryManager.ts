@@ -41,14 +41,14 @@ export const DEFAULT_CONNECTION_RECOVERY_MANAGER_CONFIG: ConnectionRecoveryManag
  *    refreshes the thread *list*, reusing thread instances without rehydrating them unless something
  *    separately marked them stale — which only `user.watching.stop` does, never a reconnect.
  *
- * It is explicitly **not** a sweep over `client.activeChannels`. Watches are a bounded server
- * resource, and after any scrolling that cache holds far more channels than a query returns — so
+ * It is explicitly **not** a sweep over the channel store (`client.channelManager.values()`). Watches
+ * are a bounded server resource, and after any scrolling that store holds far more channels than a query returns — so
  * re-watching all of them would be both wasteful and a watch-limit hazard. Channels outside the
  * refreshed pages come back demand-driven, when an event proves them relevant (see
  * `restoreInterruptedWatch` in `ChannelManager`).
  *
  * This replaces the removed `client.recoverState()` bulk query
- * (`cid: { $in: activeChannels }, limit: 30`), which invented its own query shape unrelated to any
+ * (`cid: { $in: <every loaded channel> }, limit: 30`), which invented its own query shape unrelated to any
  * list's filters and silently dropped everything past the thirtieth channel.
  *
  * ### Triggers, and why there are two
@@ -223,12 +223,9 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
    * decision anyway — it is "the channel being read must show the truth".
    */
   private get recoverableActiveChannels(): Channel[] {
-    const channels: Channel[] = [];
-    for (const cid in this.client.activeChannels) {
-      const channel = this.client.activeChannels[cid];
-      if (channel?.active && !channel.pendingDisposal) channels.push(channel);
-    }
-    return channels;
+    return this.client.channelManager
+      .values()
+      .filter((channel) => channel.active && !channel.pendingDisposal);
   }
 
   /**

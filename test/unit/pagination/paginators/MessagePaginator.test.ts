@@ -3131,7 +3131,7 @@ describe('MessagePaginator', () => {
     });
   });
 
-  // seedFirstPageSync is the synchronous channel-open seed (Channel.query / hydrateActiveChannels).
+  // seedFirstPageSync is the synchronous channel-open seed (Channel.query / hydrateChannels).
   // With `options.reconcile` it doubles as the reconnect / re-hydrate fold: over an already-loaded
   // window it delegates to mergeNewestPage (merge + destructive reconcile + disjoint rebuild), whose
   // internals are covered above — these tests pin only the ROUTING decision (which branch it picks).

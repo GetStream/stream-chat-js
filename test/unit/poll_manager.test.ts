@@ -296,7 +296,7 @@ describe('PollManager', () => {
       expect(spy.calledWith([...prevMessages, ...messages], true)).to.be.false;
     });
 
-    it('populates pollCache on client.hydrateActiveChannels', async () => {
+    it('populates pollCache on client.hydrateChannels', async () => {
       const mockedChannelsQueryResponse = [];
 
       let pollMessages: MessageResponse[] = [];
@@ -310,7 +310,7 @@ describe('PollManager', () => {
         });
       }
 
-      client.hydrateActiveChannels(mockedChannelsQueryResponse);
+      client.hydrateChannels(mockedChannelsQueryResponse);
 
       expect(client.polls.data.size).to.equal(pollMessages.length);
       // Map.prototype.keys() preserves the insertion order so we can do this

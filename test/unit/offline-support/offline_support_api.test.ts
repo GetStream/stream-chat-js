@@ -602,7 +602,7 @@ describe('OfflineSupportApi', () => {
           channel: { id: 'channel123', type: 'messaging' },
           read: [readResponse],
         } as ChannelStateResponseFields);
-        client.hydrateActiveChannels([channelResponse]);
+        client.hydrateChannels([channelResponse]);
 
         // to make sure queriesWithChannelGuard always passes
         offlineDb.channelExists.mockResolvedValue(true);
@@ -675,7 +675,7 @@ describe('OfflineSupportApi', () => {
             channel: { id: 'no-read-events', own_capabilities: [], type: 'messaging' },
             read: [generateReadResponse({ user: client.user })],
           } as ChannelAPIResponse);
-          client.hydrateActiveChannels([noReadEventsResponse]);
+          client.hydrateChannels([noReadEventsResponse]);
 
           const result = await offlineDb.handleNewMessage({
             event: { ...baseEvent, cid: noReadEventsResponse.channel.cid },
@@ -696,7 +696,7 @@ describe('OfflineSupportApi', () => {
           const localUnreadResponse = generateChannel({
             channel: { id: 'local-unread', own_capabilities: [], type: 'messaging' },
           } as unknown as ChannelAPIResponse);
-          client.hydrateActiveChannels([localUnreadResponse]);
+          client.hydrateChannels([localUnreadResponse]);
 
           const result = await offlineDb.handleNewMessage({
             event: { ...baseEvent, cid: localUnreadResponse.channel.cid },
@@ -736,7 +736,7 @@ describe('OfflineSupportApi', () => {
           expect(result).toEqual(mockUpsertMessagesQueries);
         });
 
-        it('should not call upsertReads event.cid does not exist in client.activeChannels', async () => {
+        it('should not call upsertReads event.cid does not exist in the channel store', async () => {
           const eventWithDifferentCid = { ...baseEvent, cid: 'channel321' };
 
           const result = await offlineDb.handleNewMessage({
@@ -1064,11 +1064,15 @@ describe('OfflineSupportApi', () => {
         it('creates the missing channel row and retries, in one batch', async () => {
           failWriteSucceedBuild();
           offlineDb.channelExists.mockResolvedValue(false);
-          client.activeChannels['messaging:c1'] = {
-            data: { cid: 'messaging:c1' },
-            initialized: true,
-            pendingDisposal: false,
-          } as never;
+          client.channelManager.getOrCreateChannel(
+            'messaging:c1',
+            () =>
+              ({
+                data: { cid: 'messaging:c1' },
+                initialized: true,
+                pendingDisposal: false,
+              }) as never,
+          );
 
           const result = await offlineDb.upsertMessageWithChannelGuard({ message });
 
@@ -1091,7 +1095,7 @@ describe('OfflineSupportApi', () => {
         it('skips the write when there is no channel row and nothing to build one from', async () => {
           failWriteSucceedBuild();
           offlineDb.channelExists.mockResolvedValue(false);
-          delete client.activeChannels['messaging:c1'];
+          client.channelManager.removeChannel('messaging:c1');
 
           const result = await offlineDb.upsertMessageWithChannelGuard({ message });
 
@@ -1685,7 +1689,7 @@ describe('OfflineSupportApi', () => {
             channel: { id: 'to-truncate', type: 'messaging' },
             read: [readResponse],
           } as ChannelStateResponseFields);
-          client.hydrateActiveChannels([channelResponse]);
+          client.hydrateChannels([channelResponse]);
         });
 
         afterEach(() => {
@@ -1716,7 +1720,7 @@ describe('OfflineSupportApi', () => {
 
         it('calls deleteMessagesForChannel and upsertReads with correct arguments and returns combined queries', async () => {
           const countUnreadSpy = vi
-            .spyOn(client.activeChannels[truncatedEvent.channel!.cid], 'countUnread')
+            .spyOn(client.channelManager.get(truncatedEvent.channel!.cid), 'countUnread')
             .mockReturnValue(2);
 
           const result = await offlineDb.handleChannelTruncatedEvent({
@@ -1783,7 +1787,7 @@ describe('OfflineSupportApi', () => {
 
         it('handles missing truncated_at gracefully with unread count 0', async () => {
           const countUnreadSpy = vi.spyOn(
-            client.activeChannels[truncatedEvent.channel!.cid],
+            client.channelManager.get(truncatedEvent.channel!.cid),
             'countUnread',
           );
           const channelWithoutTruncatedAt = truncatedEvent.channel!;
@@ -1837,7 +1841,7 @@ describe('OfflineSupportApi', () => {
           const localChannelResponse = generateChannel({
             channel: { id: 'local-truncate', own_capabilities: [], type: 'messaging' },
           } as unknown as ChannelAPIResponse);
-          client.hydrateActiveChannels([localChannelResponse]);
+          client.hydrateChannels([localChannelResponse]);
           const event = {
             ...truncatedEvent,
             channel: {
@@ -1846,7 +1850,7 @@ describe('OfflineSupportApi', () => {
             } as ChannelResponse,
           };
           vi.spyOn(
-            client.activeChannels[localChannelResponse.channel.cid],
+            client.channelManager.get(localChannelResponse.channel.cid),
             'countUnread',
           ).mockReturnValue(3);
 
@@ -1874,7 +1878,7 @@ describe('OfflineSupportApi', () => {
               type: 'messaging',
             },
           } as ChannelAPIResponse);
-          client.hydrateActiveChannels([localChannelResponse]);
+          client.hydrateChannels([localChannelResponse]);
           const event = {
             ...truncatedEvent,
             channel: {
@@ -2198,7 +2202,7 @@ describe('OfflineSupportApi', () => {
             const localChannelResponse = generateChannel({
               channel: { id: 'local-read', own_capabilities: [], type: 'messaging' },
             } as unknown as ChannelAPIResponse);
-            client.hydrateActiveChannels([localChannelResponse]);
+            client.hydrateChannels([localChannelResponse]);
             const event = {
               ...dummyEvent,
               type: 'message.read_locally',
@@ -2226,7 +2230,7 @@ describe('OfflineSupportApi', () => {
                 type: 'messaging',
               },
             } as ChannelAPIResponse);
-            client.hydrateActiveChannels([readEventsResponse]);
+            client.hydrateChannels([readEventsResponse]);
             const event = {
               ...dummyEvent,
               type: 'message.read_locally',
@@ -2243,7 +2247,7 @@ describe('OfflineSupportApi', () => {
             const localChannelResponse = generateChannel({
               channel: { id: 'local-read-off', own_capabilities: [], type: 'messaging' },
             } as ChannelAPIResponse);
-            client.hydrateActiveChannels([localChannelResponse]);
+            client.hydrateChannels([localChannelResponse]);
             const event = {
               ...dummyEvent,
               type: 'message.read_locally',

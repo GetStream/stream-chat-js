@@ -209,7 +209,8 @@ export class MessageSearchSource<
 
     const cids = Array.from(
       items.reduce((acc, message) => {
-        if (message.cid && !this.client.activeChannels[message.cid]) acc.add(message.cid);
+        if (message.cid && !this.client.channelManager.get(message.cid))
+          acc.add(message.cid);
         return acc;
       }, new Set<string>()),
     );

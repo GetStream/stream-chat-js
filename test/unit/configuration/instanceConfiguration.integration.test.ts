@@ -489,7 +489,7 @@ describe('instance configuration — cross-instance', () => {
         channel: { id: 'permissive', config: { typing_events: true } as never },
       });
 
-      client.hydrateActiveChannels([restricted, permissive]);
+      client.hydrateChannels([restricted, permissive]);
 
       expect(client.channel('messaging', 'restricted').config.typingEvents.enabled).toBe(
         false,

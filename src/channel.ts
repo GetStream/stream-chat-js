@@ -255,9 +255,8 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   public readonly pinnedMessagesPaginator: PinnedMessagePaginator;
   public readonly cooldownTimer: CooldownTimer;
   /**
-   * Teardown for this channel's configuration subscription, released by {@link _disconnect}. Channels
-   * are retained in `client.activeChannels`, so leaving this subscribed would keep growing the
-   * configuration store's handler set across reconnects.
+   * Teardown for this channel's configuration subscription, released by {@link _disconnect}. Left
+   * subscribed, a torn-down channel would stay in the configuration store's handler set for good.
    */
   private unsubscribeConfiguration?: Unsubscribe;
   /** Teardown for the server-config re-derivation subscription, released by {@link _disconnect}. */
@@ -1462,9 +1461,8 @@ export class Channel extends WithMessageOperations(ChannelApi) {
    *
    * One-way and terminal — there is no counterpart that revives the instance. Its resources are
    * already released ({@link Channel._disconnect} disposes the paginators and unregisters the
-   * subscriptions) and the client drops it from `activeChannels` right after, so nothing should
-   * touch it: it is skipped by the `client.activeChannels` lookups (so `client.channel(…)` mints a
-   * fresh instance), never re-watched on recovery, refused as a source of `channel.data` by the
+   * subscriptions) and the channel store drops it, so nothing should touch it: `client.channel(…)`
+   * mints a fresh instance for its cid, never re-watched on recovery, refused as a source of `channel.data` by the
    * offline DB, and `getClient()` throws on it so a reference held across a `disconnectUser()`
    * fails loudly instead of quietly requesting on a client with no user.
    */
@@ -2846,7 +2844,7 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     }
 
     // Seed the message paginator's `lastMessageAt` aggregate from the server's authoritative
-    // `last_message_at`. The first-page seed (Channel.query / client.hydrateActiveChannels) also
+    // `last_message_at`. The first-page seed (Channel.query / client.hydrateChannels) also
     // advances it from ingested messages; both feed the same monotonic max, so this additionally
     // covers the path where the paginator seed is skipped (an already-loaded channel the viewer has
     // jumped away from, where re-seeding would clobber their window).
@@ -2988,7 +2986,7 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     this.cooldownTimer.unregisterSubscriptions();
     // Release the store-backed paginators so the message store no longer pins this removed channel
     // (and its whole message graph) through its subscriber registry. The channel is being discarded
-    // here (pending disposal + deleted from activeChannels, never reused), mirroring Thread teardown.
+    // here (pending disposal + removed from the channel store, never reused), mirroring Thread teardown.
     this.messagePaginator.dispose();
     this.pinnedMessagesPaginator.dispose();
 
