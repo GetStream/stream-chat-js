@@ -13,6 +13,9 @@ const logger = chatLoggerSystem.getLogger('api-client');
 
 const MULTIPART_CONTENT_TYPE = 'multipart/form-data';
 
+/** The WebSocket fallback's endpoint, which a local API serves on its own port. */
+const LONG_POLL_PATH = '/api/v2/longpoll';
+
 /**
  * Upload requests must not inherit the axios instance timeout (3s by default) or the size
  * caps - either would abort a large or slow upload.
@@ -62,8 +65,8 @@ export class ApiClient {
       params: queryParams,
       headers: { 'Content-Type': requestContentType },
       ...(isMultipart ? UPLOAD_REQUEST_DEFAULTS : {}),
-      // Keep this last so a caller-supplied signal wins - and keep it returning only the keys
-      // it owns, so it can never clobber the upload defaults above.
+      // Keep this last so a caller-supplied signal and timeout win - and keep it returning only
+      // the keys it owns, so it can never clobber the upload defaults above.
       ...toAxiosRequestConfig(options),
     });
   }
@@ -107,7 +110,12 @@ export class ApiClient {
       }
     }
     if (resolved.startsWith('/')) {
-      resolved = this.client.baseURL + resolved;
+      const baseURL =
+        resolved === LONG_POLL_PATH
+          ? // replace port if present for testing with local API
+            this.client.baseURL?.replace(':3030', ':8900')
+          : this.client.baseURL;
+      resolved = baseURL + resolved;
     }
     return resolved;
   }
@@ -185,6 +193,7 @@ export class ApiClient {
       };
     }
 
+    await this.client.tokenManager.tokenReady();
     const initialRequestConfig = this.populateRequestConfigWithDefaults(additionalConfig);
 
     const clientRequestId = initialRequestConfig.headers?.[
@@ -265,45 +274,33 @@ export class ApiClient {
 
 /**
  * Whether a request registers a server-side subscription, and so must not be sent before the
- * handshake has produced a connection id.
+ * handshake has produced a connection id: one with a `watch` or `presence` flag set.
  *
  * The server keys watches and presence by that id and answers `200` while registering nothing when it
  * is missing, so a request that races the handshake yields a channel that never receives an event.
+ *
+ * The two generated operations that declare `connection_id` without a flag set it themselves:
+ * `stopWatchingChannel` through `StreamChat`'s override, and `longPoll`'s endpoint through the
+ * long-poll fallback. `test/unit/codegen/connectionIdEndpoints.test.ts` pins that set, so a new one
+ * surfaces there.
  */
 export const requiresConnectionId = (
   params: Record<string, unknown> | undefined,
   body: unknown,
 ) => {
   const payload = params?.payload as Record<string, unknown> | undefined;
-  // Guarded rather than `body ?? undefined`: the `in` checks below throw on a string body.
   const requestBody = (typeof body === 'object' && body !== null ? body : undefined) as
     | Record<string, unknown>
     | undefined;
 
-  if (
+  return Boolean(
     params?.watch ||
     params?.presence ||
     payload?.watch ||
     payload?.presence ||
     requestBody?.watch ||
-    requestBody?.presence
-  ) {
-    return true;
-  }
-
-  // A flag that is present and false is a deliberate "do not subscribe", so it must not fall through
-  // to the parameter check below — that is what made an explicit `watch: false` wait for a socket.
-  if (
-    [params, payload, requestBody].some(
-      (source) => source && ('watch' in source || 'presence' in source),
-    )
-  ) {
-    return false;
-  }
-
-  // Some operations subscribe without carrying a flag — stop-watching and long polling — and are
-  // recognised by the generated `connection_id` parameter instead.
-  return Boolean(params && 'connection_id' in params);
+    requestBody?.presence,
+  );
 };
 
 /**
@@ -323,11 +320,15 @@ const isUsableAbortSignal = (signal: unknown): signal is AbortSignal =>
 const toAxiosRequestConfig = ({
   signal,
   onUploadProgress,
+  timeout,
 }: StreamRequestOptions = {}): AxiosRequestConfig => ({
   signal: isUsableAbortSignal(signal) ? signal : undefined,
   // Same reasoning as `isUsableAbortSignal`: an options object revived from a persisted
   // offline-db task payload has lost its functions.
   onUploadProgress: typeof onUploadProgress === 'function' ? onUploadProgress : undefined,
+  // Only when set: an explicit `undefined` would clobber the upload defaults' `timeout: 0`, and
+  // axios would fall back to the instance timeout.
+  ...(typeof timeout === 'number' ? { timeout } : {}),
 });
 
 const errorIsApiError = (error: unknown): error is AxiosError<APIError> => {

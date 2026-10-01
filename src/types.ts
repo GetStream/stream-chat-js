@@ -209,6 +209,8 @@ type LocalEvent = (
       };
     })
   | { type: 'connection.recovered' }
+  // `enableWSFallback` switched from the WebSocket to long-polling.
+  | ({ type: 'connection.fallback_activated' } & { mode: string })
   | ({ type: 'offline_reactions.queried' } & {
       offlineReactions: ReactionResponse[];
     })
@@ -526,6 +528,10 @@ export type StreamRequestOptions = {
   signal?: AbortSignal;
   /** Only meaningful for upload (multipart) requests; ignored everywhere else. */
   onUploadProgress?: (event: StreamProgressEvent) => void;
+  /**
+   * Milliseconds before this request is aborted.
+   */
+  timeout?: number;
 };
 
 export * from './gen/models';

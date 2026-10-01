@@ -2067,10 +2067,11 @@ export class ChatApi {
   }
 
   async longPoll(
-    request?: { connection_id?: string; json?: WSAuthMessage },
+    request?: { close?: boolean; connection_id?: string; json?: WSAuthMessage },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<{}>> {
     const queryParams = {
+      close: request?.close,
       connection_id: request?.connection_id,
       json: request?.json,
     };

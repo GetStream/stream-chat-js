@@ -193,7 +193,8 @@ export class StreamChat extends ChatApi {
    */
   networkConnection: NetworkConnectionObserver;
   /**
-   * The WebSocket connection id, and the one place it lives.
+   * The connection id — the WebSocket's, or the long-poll's after an `enableWSFallback`
+   * switch — and the one place the rest of the client reads it from.
    *
    * The server keys channel watches and presence subscriptions by it, so a request carrying either
    * waits here for the handshake rather than racing it. See `requiresConnectionId` in
@@ -646,8 +647,12 @@ export class StreamChat extends ChatApi {
    * So when your app goes to background, you can call `client.closeConnection`.
    * And when app comes back to foreground, call `client.openConnection`.
    *
+   * After an `enableWSFallback` switch it closes the long-poll as well, telling the server to
+   * close its connection id.
+   *
    * @param timeout - Max number of milliseconds to wait for the WebSocket close event before forcefully assuming
    *   successful disconnection. See https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent (optional).
+   *   The long-poll's close request uses it as its timeout (2s when omitted).
    */
   closeConnection = async (timeout?: number) => {
     this._resetAIStateOnActiveChannels();
@@ -676,7 +681,8 @@ export class StreamChat extends ChatApi {
   };
 
   /**
-   * Creates a new WebSocket connection with the current user.
+   * Creates a new WebSocket connection with the current user. After an `enableWSFallback` switch it
+   * reconnects the long-poll instead: the client never goes back to the WebSocket.
    *
    * @returns The WebSocket connect promise, or an empty resolved promise if a connection is already active.
    */
@@ -814,9 +820,11 @@ export class StreamChat extends ChatApi {
 
     this._rejectPendingWsPromise(teardownReason);
     this.wsPromise = null;
-    this.connectionIdManager.rejectConnectionId(teardownReason);
 
     const closePromise = this.closeConnection(timeout);
+    // After starting the close, which reads the connection id synchronously: after an
+    // `enableWSFallback` switch the long-poll's close request has to carry it.
+    this.connectionIdManager.rejectConnectionId(teardownReason);
 
     for (const channel of Object.values(this.activeChannels)) {
       channel._disconnect();
@@ -840,10 +848,11 @@ export class StreamChat extends ChatApi {
     this.unsubscribeClientConfiguration?.();
     this.unsubscribeClientConfiguration = undefined;
 
-    // Since we wipe all user data already, we should reset token manager as well
+    // Deferred so the long-poll close can still authenticate. By the time it settles a
+    // connectUser() / connectAnonymousUser() may have set the next user and their token.
     closePromise
       .finally(() => {
-        this.tokenManager.reset();
+        if (!this.userId) this.tokenManager.reset();
       })
       .catch((err) =>
         logger
@@ -1310,10 +1319,13 @@ export class StreamChat extends ChatApi {
    * Only `Watching` is demoted: a channel the consumer stopped on purpose, or one that was torn
    * down, stays `NotWatching` and must not be resurrected by a reconnect.
    *
-   * Invoked from two places, because neither covers the other: `StableWSConnection._setHealth(false)`
-   * for an abnormal close/error, and `closeConnection()` for a deliberate shutdown (e.g. mobile
-   * backgrounding), whose `disconnect()` writes the status through `_applyHealth` and so never
-   * reaches `_setHealth`.
+   * Invoked from two places on the WebSocket, because neither covers the other:
+   * `StableWSConnection._setHealth(false)` for an abnormal close/error, and
+   * `closeConnection()` for a deliberate shutdown (e.g. mobile backgrounding), whose
+   * `disconnect()` writes the status through `_applyHealth` and so never reaches
+   * `_setHealth`. After an `enableWSFallback` switch the long-poll calls it too, from
+   * `WSConnectionFallback._setState()` whenever going closed or disconnected takes the
+   * status offline.
    */
   _markActiveChannelsWatchInterrupted() {
     for (const cid in this.activeChannels) {
@@ -1373,10 +1385,11 @@ export class StreamChat extends ChatApi {
    * Requests no longer settle against these: waiting for a connection id is the
    * {@link ConnectionIdManager}'s job, applied centrally in `ApiClient`.
    *
-   * Called by `StableWSConnection._reconnect()`. Recovery itself is owned by
-   * {@link ConnectionRecoveryManager}, which subscribes to the connection lifecycle and so covers
-   * every reconnect path — including `closeConnection()` → `openConnection()` (mobile backgrounding),
-   * which never reaches `_reconnect()` at all.
+   * Called by `StableWSConnection._reconnect()`, and by `WSConnectionFallback.connect(true)`
+   * for the long-poll's own reconnects. Recovery itself is owned by
+   * {@link ConnectionRecoveryManager}, which subscribes to the connection lifecycle and so
+   * covers every reconnect path — including `closeConnection()` → `openConnection()` (mobile
+   * backgrounding), which reaches neither.
    *
    * @internal
    */
@@ -1412,17 +1425,10 @@ export class StreamChat extends ChatApi {
       throw Error('Property clientId is not set');
     }
 
-    try {
-      // `wsConnection` builds and owns the socket; the reconnection logic and the connect timeout
-      // (`config.connectTimeoutMs`) live in there.
-      return await this.wsConnection.connect();
-    } catch (error) {
-      // A failure the socket does not retry leaves nothing else to settle the pending connection id.
-      if (!isWSFailure(error as APIError)) {
-        this.connectionIdManager.rejectConnectionId(error);
-      }
-      throw error;
-    }
+    // `wsConnection` builds and owns the socket — and, with `enableWSFallback`, the long-poll it
+    // switches to; the reconnection logic and the connect timeout (`config.connectTimeoutMs`) live
+    // in there.
+    return await this.wsConnection.connect();
   }
 
   /**
@@ -1440,6 +1446,35 @@ export class StreamChat extends ChatApi {
     this.state.updateUsers(data.users);
 
     return data;
+  }
+
+  /**
+   * Stops watching a channel on this client's connection.
+   *
+   * It carries no `watch` flag, so the request layer does not hold it, but it is connection-scoped
+   * by definition: it tells the server which connection should stop watching. So it waits for this
+   * client's connection id exactly as a watching request does — through a handshake or a reconnect,
+   * until the caller's abort signal fires — and throws when there is no connection and none is being
+   * established.
+   *
+   * @param ...args - `[request, requestOptions]`. `request.connection_id` is replaced by this
+   *   client's connection id.
+   * @returns The server response.
+   */
+  override async stopWatchingChannel(
+    ...args: Parameters<ChatApi['stopWatchingChannel']>
+  ) {
+    const [request, requestOptions] = args;
+    const signal = requestOptions?.signal;
+    const connectionId = await this.connectionIdManager.getConnectionId(
+      // Check if signal is still usable - if it is read from offline DB, it has lost `addEventListener`.
+      typeof signal?.addEventListener === 'function' ? signal : undefined,
+    );
+
+    return super.stopWatchingChannel(
+      { ...request, connection_id: connectionId },
+      requestOptions,
+    );
   }
 
   /**
@@ -2326,15 +2361,26 @@ export class StreamChat extends ChatApi {
    * @returns The JSON-encoded auth message.
    */
   _buildWSAuthMessage = () =>
-    JSON.stringify({
-      // The server requires a non-empty token even for anonymous connections, but
-      // skips JWT parsing for any string that is not shaped like one. Anonymous users
-      // have no token, so send a placeholder the server accepts and ignores.
-      token: this.tokenManager.getToken() || 'anonymous',
-      // `connect()` rejects before reaching this when `_user` is unset.
-      user_details: this._user as ConnectUserDetailsRequest,
-      products: ['chat'],
-    } satisfies WSAuthMessage);
+    JSON.stringify(this._buildWSAuthPayload(this.tokenManager.getToken()));
+
+  /**
+   * The auth message itself — what {@link _buildWSAuthMessage} encodes for the WebSocket, and what
+   * the long-poll fallback sends as `longPoll()`'s `json` query param.
+   *
+   * @private
+   *
+   * @param token - The token the message carries. The long-poll passes none: it authenticates
+   *   through the request's `Authorization` header instead.
+   */
+  _buildWSAuthPayload = (token?: string): WSAuthMessage => ({
+    // The server requires a non-empty token, but skips JWT parsing for any string that is not
+    // shaped like one. Anonymous users have no token, and the long-poll does not send one, so both
+    // send a placeholder the server accepts and ignores.
+    token: token || 'anonymous',
+    // `connect()` rejects before reaching this when `_user` is unset.
+    user_details: this._user as ConnectUserDetailsRequest,
+    products: ['chat'],
+  });
 
   /**
    * Queries poll answers.

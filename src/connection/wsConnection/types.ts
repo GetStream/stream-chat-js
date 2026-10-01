@@ -2,7 +2,8 @@ import type { StableWSConnection } from '../../connection';
 
 export type WSConnectionState = {
   /**
-   * Is this client's WebSocket up.
+   * Is this client's WebSocket up. After an `enableWSFallback` switch, whether its long-poll is up,
+   * since the long-poll writes this store from then on.
    *
    * Deliberately the same field name as `client.networkConnection.state`'s — both answer the same
    * question about a different connection, which is why the two objects are named as parallels. The
@@ -15,7 +16,9 @@ export type WSConnectionState = {
 };
 
 /**
- * The WebSocket's timing knobs.
+ * The WebSocket's settings: its timing knobs, what it is built from (`webSocketImpl`,
+ * `urlParams`, `connection`), and {@link enableWSFallback}, the switch to long-polling when it
+ * cannot connect.
  *
  * Declared, validated, and durable across reconnects. {@link offlineNotificationDisplayDelayMs} is
  * the odd one out: the only field here this package does not act on itself.
@@ -23,8 +26,8 @@ export type WSConnectionState = {
  * The network-recovery retry is deliberately **not** configurable, and stays a constant in
  * `config.ts`: nothing could reach it, so exposing it would add surface rather than preserve it.
  *
- * All in **milliseconds**, and named with the unit, because a bare `pingInterval` reads equally well
- * as seconds.
+ * The timings are all in **milliseconds**, and named with the unit, because a bare `pingInterval`
+ * reads equally well as seconds.
  */
 export type WSConnectionConfig = {
   /**
@@ -32,6 +35,16 @@ export type WSConnectionConfig = {
    * of 15s allows between two and three attempts of the underlying retry.
    */
   connectTimeoutMs: number;
+  /**
+   * Whether to enable the WebSocket fallback mechanism. Only enable this feature if you expect clients to be in environments where WebSocket connections might be blocked. Most integrators shouldn't need to turn on this flag.
+   *
+   * Falls back to HTTP long-polling when the WebSocket cannot connect, for networks that block
+   * WebSockets. Defaults to `false`. The WebSocket connects within {@link connectTimeoutMs}, as
+   * without the flag; lower it to switch sooner. The client dispatches
+   * `connection.fallback_activated` with `mode: 'longpoll'` when it switches, and stays on long-poll
+   * from then on.
+   */
+  enableWSFallback: boolean;
   /**
    * How often a health-check ping goes out while the socket is up.
    *

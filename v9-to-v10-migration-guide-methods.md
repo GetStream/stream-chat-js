@@ -22,7 +22,7 @@ Before applying any per-method entry below, apply these repo-wide renames — th
 
 The `secret` parameter, `client.secret`, `client._isUsingServerAuth()`, and all server-only methods are gone. Where a v9 method took a `user_id?` / `userID?` / `currentUserID?` override, that argument has been dropped in v10 (the connected user is always used).
 
-**Every request-issuing method takes an optional trailing `requestOptions`.** The per-method signatures below omit it for readability, but every method generated from the OpenAPI spec ends with `requestOptions?: StreamRequestOptions` — currently `{ signal?: AbortSignal }` — and so does every hand-written wrapper around one, on both `StreamChat` and `Channel`. It is always **last**, immediately after the method's own arguments, and is never serialized into the request:
+**Every request-issuing method takes an optional trailing `requestOptions`.** The per-method signatures below omit it for readability, but every method generated from the OpenAPI spec ends with `requestOptions?: StreamRequestOptions` — currently `{ signal?: AbortSignal; onUploadProgress?; timeout?: number }`, where `timeout` overrides `axiosRequestConfig.timeout` for that request — and so does every hand-written wrapper around one, on both `StreamChat` and `Channel`. It is always **last**, immediately after the method's own arguments, and is never serialized into the request:
 
 ```ts
 const controller = new AbortController();
@@ -459,7 +459,7 @@ A bare URI `string` is still accepted and normalized into `{ uri }`, with the na
 
 **No node input.** v10 dropped the `form-data` dependency for the platform's global `FormData`, and with it every node-only input: `Buffer` and readable streams are no longer accepted. Backend uploads move to `@stream-io/node-sdk` — see [`v9-to-v10-migration-guide-server-side.md`](./v9-to-v10-migration-guide-server-side.md#uploads-from-node-are-gone).
 
-**`axiosRequestConfig` → `requestOptions`.** The last argument is now `StreamRequestOptions`, carrying `onUploadProgress` and `signal`. `timeout: 0` and unbounded `maxContentLength` / `maxBodyLength` are applied automatically for multipart and are no longer caller-overridable.
+**`axiosRequestConfig` → `requestOptions`.** The last argument is now `StreamRequestOptions`, carrying `onUploadProgress` and `signal`. `timeout: 0` and unbounded `maxContentLength` / `maxBodyLength` are applied automatically for multipart; of the three, only the timeout is caller-overridable, through `requestOptions.timeout`.
 
 ```ts
 // v9

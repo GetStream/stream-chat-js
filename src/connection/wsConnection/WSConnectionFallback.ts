@@ -1,0 +1,259 @@
+import axios, { CanceledError } from 'axios';
+import type { StreamChat } from '../../client';
+import { retryInterval, sleep } from '../../utils';
+import { isAPIError, isConnectionIDError, isErrorRetryable } from '../../errors';
+import { chatLoggerSystem } from '../../logger';
+import type { LogLevel } from '../../logger';
+import type { ConnectionOpen, Event, StreamRequestOptions } from '../../types';
+
+const logger = chatLoggerSystem.getLogger('connection');
+
+export enum WSFallbackConnectionState {
+  Closed = 'CLOSED',
+  Connected = 'CONNECTED',
+  Connecting = 'CONNECTING',
+  Disconnected = 'DISCONNECTED',
+  Init = 'INIT',
+}
+
+export class WSConnectionFallback {
+  client: StreamChat;
+  state: WSFallbackConnectionState;
+  consecutiveFailures: number;
+  abortController?: AbortController;
+
+  constructor({ client }: { client: StreamChat }) {
+    this.client = client;
+    this.state = WSFallbackConnectionState.Init;
+    this.consecutiveFailures = 0;
+  }
+
+  /**
+   * Applies a change in the device's network status. Stands in for v9's `window` online/offline
+   * listeners: `WSConnection` routes the network-status store here once it has switched to this
+   * long-poll.
+   *
+   * @internal
+   */
+  _applyNetworkStatus = (online: boolean) => {
+    // Closed on purpose by `disconnect()`: going offline would move it to `Closed`, and the next
+    // online would reconnect it.
+    if (this.state === WSFallbackConnectionState.Disconnected) return;
+
+    this._log(`_applyNetworkStatus() - ${online ? 'online' : 'offline'}`);
+
+    if (!online) {
+      this._setState(WSFallbackConnectionState.Closed);
+      this.abortController?.abort();
+      this.abortController = undefined;
+      return;
+    }
+
+    if (this.state === WSFallbackConnectionState.Closed) {
+      this.connect(true);
+    }
+  };
+
+  /**
+   * connect try to open a longpoll request
+   *
+   * @param reconnect - should be false for first call and true for subsequent calls to keep the connection alive and settle the connect promises
+   *
+   * @internal
+   */
+  connect = async (reconnect = false) => {
+    if (this.state === WSFallbackConnectionState.Connecting) {
+      this._log('connect() - connecting already in progress', { reconnect }, 'warn');
+      return;
+    }
+    if (this.state === WSFallbackConnectionState.Connected) {
+      this._log('connect() - already connected and polling', { reconnect }, 'warn');
+      return;
+    }
+
+    this._setState(WSFallbackConnectionState.Connecting);
+    // Before anything awaits, so a watch issued now waits for this connection's id.
+    this.client.connectionIdManager.arm();
+    try {
+      const { event } = await this._req<{ event: ConnectionOpen }>(
+        // Authenticated by the request's `Authorization` header, so the message carries only a
+        // placeholder token.
+        { json: this.client._buildWSAuthPayload() },
+        { timeout: 8000 }, // 8s
+        reconnect,
+      );
+
+      // The id is published before the status says the connection is up, as the WebSocket does.
+      this.client.connectionIdManager.resolveConnectionId(event.connection_id);
+      this._setState(WSFallbackConnectionState.Connected);
+      this.client.dispatchEvent(event);
+      this._poll();
+      if (reconnect) {
+        this.client._settleConnectPromises();
+      }
+      return event;
+    } catch (err) {
+      // `disconnect()` has already set the state of an attempt it cancelled. Overwriting it with
+      // Closed would let the next online edge in `_applyNetworkStatus` reconnect it.
+      if (this.state !== WSFallbackConnectionState.Disconnected)
+        this._setState(WSFallbackConnectionState.Closed);
+      // Nothing retries a failed connect, so fail whatever is waiting for a connection id. A cancel
+      // comes from `disconnect()`, which leaves them waiting for the next connection instead.
+      if (!axios.isCancel(err)) this.client.connectionIdManager.rejectConnectionId(err);
+      throw err;
+    }
+  };
+
+  /**
+   * Whether a connect request is in flight.
+   *
+   * @internal
+   */
+  get isConnecting() {
+    return this.state === WSFallbackConnectionState.Connecting;
+  }
+
+  /**
+   * Stops polling and tells the server to close `connectionId`.
+   *
+   * @param timeout - The close request's timeout, in milliseconds.
+   * @param connectionId - The id to close. Passed in rather than read from
+   *   `client.connectionIdManager`, because `WSConnection.disconnect()` disconnects the old socket
+   *   first, and that drops the manager's id.
+   *
+   * @internal
+   */
+  disconnect = async (timeout = 2000, connectionId?: string) => {
+    this._setState(WSFallbackConnectionState.Disconnected);
+    this.abortController?.abort();
+    this.abortController = undefined;
+
+    try {
+      await this._req({ close: true, connection_id: connectionId }, { timeout }, false);
+      this._log(`disconnect() - Closed connectionID`);
+    } catch (err) {
+      this._log(`disconnect() - Failed`, { err }, 'error');
+    }
+  };
+
+  private _log(
+    msg: string,
+    extra: Record<string, unknown> = {},
+    level: LogLevel = 'info',
+  ) {
+    const log = logger.withExtraTags('connection_fallback');
+    log[level]('WSConnectionFallback:' + msg, extra);
+  }
+
+  private _setState(state: WSFallbackConnectionState) {
+    this._log(`_setState() - ${state}`);
+
+    const previous = this.state;
+    this.state = state;
+
+    // transition from connecting => connected
+    if (
+      previous === WSFallbackConnectionState.Connecting &&
+      this.state === WSFallbackConnectionState.Connected
+    ) {
+      this.client.wsConnection._setStatus({ isHealthy: true });
+    }
+
+    if (
+      this.state === WSFallbackConnectionState.Closed ||
+      this.state === WSFallbackConnectionState.Disconnected
+    ) {
+      // The server keyed watches by this connection id, so no request may carry it any more.
+      this.client.connectionIdManager.invalidate();
+      if (this.client.wsConnection._setStatus({ isHealthy: false })) {
+        this.client._markActiveChannelsWatchInterrupted();
+      }
+    }
+  }
+
+  private _req = async <T = Record<string, unknown>>(
+    params: NonNullable<Parameters<StreamChat['longPoll']>[0]>,
+    config: Pick<StreamRequestOptions, 'timeout'>,
+    retry: boolean,
+  ): Promise<T> => {
+    if (!this.abortController && !params.close) {
+      this.abortController = new AbortController();
+    }
+
+    try {
+      const res = await this.client.longPoll(params, {
+        ...config,
+        signal: this.abortController?.signal,
+      });
+
+      this.consecutiveFailures = 0; // always reset in case of no error
+      // The spec declares no response body, so the generated response type is `{}`.
+      return res as T;
+    } catch (error: any) {
+      this.consecutiveFailures += 1;
+
+      if (retry && isErrorRetryable(error)) {
+        this._log(`_req() - Retryable error, retrying request`);
+        await sleep(retryInterval(this.consecutiveFailures));
+        // A reconnect, `disconnect()` or going offline during the sleep dropped the connection id
+        // this request carries. Sent anyway, it would come back as a ConnectionIDNotFoundError, and
+        // `_poll` would tear down the connection that replaced it.
+        if (
+          params.connection_id &&
+          params.connection_id !== this.client.connectionIdManager.connectionId
+        ) {
+          this._log(`_req() - Connection id changed, dropping the retry`);
+          throw new CanceledError(
+            'The connection id changed while the retry was waiting',
+          );
+        }
+        return this._req<T>(params, config, retry);
+      }
+
+      throw error;
+    }
+  };
+
+  private _poll = async () => {
+    while (this.state === WSFallbackConnectionState.Connected) {
+      try {
+        const data = await this._req<{
+          events: Event[];
+        }>(
+          { connection_id: this.client.connectionIdManager.connectionId },
+          { timeout: 30000 }, // 30s => API responds in 20s if there is no event
+          true,
+        );
+
+        if (data.events?.length) {
+          for (let i = 0; i < data.events.length; i++) {
+            this.client.dispatchEvent(data.events[i]);
+          }
+        }
+      } catch (error: any) {
+        if (axios.isCancel(error)) {
+          this._log(`_poll() - axios canceled request`);
+          return;
+        }
+
+        /** client.longPoll's request layer will take care of TOKEN_EXPIRED error */
+
+        if (isConnectionIDError(error)) {
+          this._log(`_poll() - ConnectionID error, connecting without ID...`);
+          this._setState(WSFallbackConnectionState.Disconnected);
+          this.connect(true);
+          return;
+        }
+
+        if (isAPIError(error) && !isErrorRetryable(error)) {
+          this._setState(WSFallbackConnectionState.Closed);
+          // Nothing reconnects from here, so fail whatever is waiting for a connection id.
+          this.client.connectionIdManager.rejectConnectionId(error);
+          return;
+        }
+
+        await sleep(retryInterval(this.consecutiveFailures));
+      }
+    }
+  };
+}

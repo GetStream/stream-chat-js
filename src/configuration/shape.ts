@@ -507,6 +507,12 @@ const WS_CONNECTION_FIELDS: Record<keyof WSConnectionConfig, ConfigNode> = {
     kind: 'value',
     type: 'number',
   },
+  enableWSFallback: {
+    description:
+      'Falls back to HTTP long-polling (`/api/v2/longpoll`) when the WebSocket cannot connect, for networks that block WebSockets. The WebSocket connects within `connectTimeoutMs`, as without the flag; lower it to switch sooner. Dispatches `connection.fallback_activated` when it switches, and stays on long-poll from then on. Defaults to `false`. Was `StreamChatOptions.enableWSFallback`.',
+    kind: 'value',
+    type: 'boolean',
+  },
   offlineNotificationDisplayDelayMs: {
     description:
       'How long a drop must last before a UI reports it. Most drops resolve in under a second, so a banner showing all of them makes a working application look broken. Nothing in this package waits on it: it is here so the UI SDKs share one value. Zero holds nothing back, landing on the next task.',
@@ -574,7 +580,7 @@ const CLIENT_FIELDS: Record<keyof ClientDeclarativeConfig, ConfigNode> = {
   },
   wsConnection: {
     description:
-      "This client's WebSocket: how long to wait for it, how often to ping it, how long it may go quiet before being declared dead, and how long a drop must last before a UI reports it.",
+      "This client's WebSocket: how long to wait for it, how often to ping it, how long it may go quiet before being declared dead, how long a drop must last before a UI reports it, and whether to fall back to long-polling when it cannot connect.",
     fields: WS_CONNECTION_FIELDS,
     kind: 'group',
   },
