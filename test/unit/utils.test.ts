@@ -774,6 +774,20 @@ describe('request-payload date direction', () => {
       expect(payload.shared_location).not.toHaveProperty('created_at');
     });
 
+    it('leaves out client-only fields, which the server would store as custom data', () => {
+      const payload = toUpdatedMessagePayload(
+        generateMsg({
+          error: { message: 'x' },
+          reaction_scores: { like: 1 },
+          status: 'received',
+        }),
+      );
+
+      for (const key of ['error', 'reaction_scores', 'status']) {
+        expect(payload).not.toHaveProperty(key);
+      }
+    });
+
     it('reads pinned-ness nullishly, so an epoch pin still counts as pinned', () => {
       expect(toUpdatedMessagePayload(generateMsg({ pinned_at: 0 })).pinned).toBe(true);
       expect(toUpdatedMessagePayload(generateMsg({ pinned_at: undefined })).pinned).toBe(

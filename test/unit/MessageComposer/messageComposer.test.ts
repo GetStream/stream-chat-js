@@ -1597,16 +1597,15 @@ describe('MessageComposer', () => {
               sum_scores: 1,
             },
           },
-          reaction_scores: {
-            like: 1,
-          },
-          status: 'received',
           text: 'Test message',
           type: 'regular',
           user_id: 'user-id',
         },
         sendOptions: {},
       });
+      // Client-only fields stay on `localMessage`; sent, the server would store them as custom data.
+      expect(result?.message).not.toHaveProperty('status');
+      expect(result?.message).not.toHaveProperty('reaction_scores');
     });
 
     describe('with pending attachment uploads', () => {

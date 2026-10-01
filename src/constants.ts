@@ -19,6 +19,7 @@ export const RESERVED_UPDATED_MESSAGE_FIELDS = Object.freeze({
   latest_reactions: true,
   own_reactions: true,
   reaction_counts: true,
+  reaction_scores: true,
   reply_count: true,
   // MessageRequest text related fields that shouldn't be in update
   i18n: true,
@@ -27,6 +28,6 @@ export const RESERVED_UPDATED_MESSAGE_FIELDS = Object.freeze({
   __html: true,
   user: true,
 });
-export const LOCAL_MESSAGE_FIELDS = Object.freeze({ error: true });
+export const LOCAL_MESSAGE_FIELDS = Object.freeze({ error: true, status: true });
 export const DEFAULT_QUERY_CHANNELS_RETRY_COUNT = 3;
 export const DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES = 1000; // 1 second
