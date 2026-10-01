@@ -4,55 +4,60 @@ import { EntityStore, type EntityStoreSubscriber } from './EntityStore';
 export type StoreBackedItemIndexOptions<T> = {
   getEntityId: (item: T) => string;
   /**
-   * The entity that owns this index; the index's store subscriber forwards notifications and id
-   * changes to it. Optional: an index over a private store (see `store`) has no one to fan out to.
-   * Message paginators pass themselves so cross-collection updates reach them; single-home
-   * collections (channels, reminders, …) omit it.
+   * The list that owns this index; the index's holder passes the store's notifications and id
+   * renames on to it. Message paginators pass themselves so updates from other lists reach them.
+   * Channel lists omit it: a channel publishes its own changes through `channel.state`.
    */
   owner?: EntityStoreSubscriber;
   /**
-   * The shared, client-global store that holds the canonical content. Optional: when omitted the
-   * index provisions a **private** {@link EntityStore} of its own, so it behaves exactly like a
-   * plain, per-instance index — same code path, no shared content, no fan-out. This is the mode used
-   * by single-home collections and by detached paginators (e.g. built without a client, in tests).
+   * The store the items live in, shared with other lists (the message store, the channel store).
+   * Optional: without it the index makes a private store and behaves like a plain per-list map, as
+   * single-home collections and paginators built without a client (in tests) do.
    */
   store?: EntityStore<T>;
 };
 
 /**
- * An {@link ItemIndexApi} implementation that keeps entity **content** in an {@link EntityStore}
- * while keeping **membership** local.
+ * The item index of one list (a paginator). The list's items live in an {@link EntityStore}, which
+ * can be shared with other lists; the index itself only records which ids belong to this list
+ * (`memberIds`) and stands for the list in the store with one `holder` object.
  *
- * A consumer sees the same minimal CRUD surface ({@link ItemIndexApi}), but:
+ * Example: the "Inbox" and "Work" channel lists both show channel C.
  *
- * - `get`/`has`/`values`/`entries` are scoped to *this* index's membership (`memberIds`), so
- *   `getItem(id)` still means "does THIS index hold the id" — even though the canonical object
- *   lives in the (possibly shared) store. This is what keeps e.g. reaction routing
- *   (`threadPaginator.getItem(id) ? thread : channel`) correct and keeps the `.values()` scans
- *   from ever walking other channels' entities.
- * - `setOne` writes content once into the store and links the index's holder as a subscriber
- *   (drives both notification fan-out and refcount GC). The write passes the holder as the
- *   `subscriber` to skip, so the owner is not notified of its own write (it re-emits its window
- *   inline); other subscribers of the same id ARE notified and re-project.
- * - `remove`/`clear` unlink the holder rather than hard-deleting content, so an entity still held by
- *   another index (e.g. a `show_in_channel` reply in both the channel list and its thread) survives;
- *   the store GCs it only when the last subscriber unlinks.
- * - When the store renames an id ({@link EntityStore.changeId}), the holder renames it in
- *   `memberIds` too, so later reads and unlinks use the new id.
+ * 1. Inbox adds C (`setOne`): its index adds C's id to `memberIds`, links Inbox's holder for C in
+ *    the store, and saves C there. Work does the same with its own holder, so the store keeps one C
+ *    with the holders {Inbox, Work}.
+ * 2. Inbox reads (`get`, `has`, `values`, `entries`): the index checks its own `memberIds` first,
+ *    then takes the item from the store. A list only ever sees its own items, which is what lets
+ *    `threadPaginator.getItem(id)` tell a thread's reply from a channel message.
+ * 3. Inbox drops C (`remove`, `clear`): its index forgets the id and unlinks Inbox's holder. C stays
+ *    while Work holds it; once the last holder unlinks, the store drops C (and calls its
+ *    `onRelease`). The store tells holders apart by object, so every index has its own.
  *
- * When no shared store is supplied the index holds a private store — every id it links has exactly
- * one subscriber (its own holder), so no fan-out ever fires and removal GCs immediately, matching a
- * plain per-instance index.
+ * The store also talks back through the holder:
  *
- * @template T The domain item type held by the index; collocated with the {@link EntityStore}'s.
+ * - "an item you hold changed": passed on to the owner, so a list re-renders when another list
+ *   updates a shared item (a reaction written by the channel list reaches the open thread). The list
+ *   that made the change is skipped; it updates itself.
+ * - "an id you hold was renamed" ({@link EntityStore.changeId}): applied to `memberIds`, so a later
+ *   remove unlinks the renamed entry rather than missing it.
+ *
+ * Without a shared store, the index makes a private one and behaves like a plain per-list map.
+ *
+ * @template T The item type held by the index and its store.
  */
 export class StoreBackedItemIndex<T> implements ItemIndexApi<T> {
   private memberIds = new Set<string>();
   private readonly store: EntityStore<T>;
   /**
-   * The subscriber this index links in the store: forwards notifications to the owner and keeps
-   * `memberIds` in step when the store renames an id. Its own object per index, so two indexes
-   * sharing an owner (or having none) still hold their links separately.
+   * This index's identity in the store. Linking it for an id keeps that entity stored while the
+   * index lists it; unlinking it on remove or clear lets the store drop the entity once no other
+   * holder remains. The store tells holders apart by object reference, so every index gets its own,
+   * even two indexes with the same owner or with none.
+   *
+   * It also receives what the store sends this index: change notifications, passed on to the owner,
+   * and id renames ({@link EntityStore.changeId}), applied to `memberIds` so a later remove unlinks
+   * the renamed entry.
    */
   private readonly holder: EntityStoreSubscriber;
   private readonly getEntityId: (item: T) => string;

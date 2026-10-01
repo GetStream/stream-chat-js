@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getClientWithUser } from './test-utils/getClient';
 import { generateChannel } from './test-utils/generateChannel';
-import { ChannelWatchStatus } from '../../src';
+import { ChannelPaginator, ChannelWatchStatus } from '../../src';
 import type {
   ChannelStateResponseFields,
   QueryChannelsResponse,
@@ -160,5 +160,100 @@ describe('channel holds', () => {
 
     expect(channel.pendingDisposal).toBe(false);
     expect(client.channelManager.get('messaging:!members-xyz')).toBe(channel);
+  });
+});
+
+describe('channel lists as holders', () => {
+  let client: StreamChat;
+
+  beforeEach(() => {
+    client = getClientWithUser({ id: 'ann' });
+  });
+
+  const list = (filters: Record<string, unknown> = { type: 'messaging' }) =>
+    new ChannelPaginator({ client, filters });
+
+  it('keeps a listed channel until every list that holds it lets it go', () => {
+    const channel = client.channel('messaging', 'general');
+    const first = list();
+    const second = list();
+    first.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: [channel] });
+    second.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: [channel] });
+
+    first.removeItem({ item: channel });
+    expect(channel.pendingDisposal).toBe(false);
+    expect(client.channelManager.get(channel.cid)).toBe(channel);
+
+    second.removeItem({ item: channel });
+    expect(channel.pendingDisposal).toBe(true);
+    expect(client.channelManager.get(channel.cid)).toBeUndefined();
+    expect(client.activeChannels[channel.cid]).toBeUndefined();
+  });
+
+  it('keeps a listed channel that is also watched or opened', () => {
+    const watched = client.channel('messaging', 'watched');
+    const opened = client.channel('messaging', 'opened');
+    watched.watchStatus = ChannelWatchStatus.Watching;
+    opened.activate();
+    const paginator = list();
+    paginator.setItems({
+      isFirstPage: true,
+      isLastPage: true,
+      valueOrFactory: [watched, opened],
+    });
+
+    paginator.removeItem({ item: watched });
+    paginator.removeItem({ item: opened });
+
+    expect(watched.pendingDisposal).toBe(false);
+    expect(opened.pendingDisposal).toBe(false);
+  });
+
+  it('lets go of its channels when its state is reset', () => {
+    const channel = client.channel('messaging', 'general');
+    const paginator = list();
+    paginator.setItems({
+      isFirstPage: true,
+      isLastPage: true,
+      valueOrFactory: [channel],
+    });
+
+    paginator.resetState();
+
+    expect(channel.pendingDisposal).toBe(true);
+  });
+
+  it('lets go of a channel that stops matching its filter', () => {
+    const channel = client.channel('messaging', 'general');
+    channel.data = { ...channel.data, team: 'a' };
+    const paginator = list({ team: 'a' });
+    paginator.setItems({
+      isFirstPage: true,
+      isLastPage: true,
+      valueOrFactory: [channel],
+    });
+
+    channel.data = { ...channel.data, team: 'b' };
+    paginator.ingestItem(channel);
+
+    expect(paginator.items).toEqual([]);
+    expect(channel.pendingDisposal).toBe(true);
+  });
+
+  it('keeps the instance when a channel moves from one list to another', () => {
+    const channel = client.channel('messaging', 'general');
+    channel.data = { ...channel.data, team: 'a' };
+    const teamA = list({ team: 'a' });
+    const teamB = list({ team: 'b' });
+    teamA.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: [channel] });
+    teamB.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: [] });
+    client.channelManager.setPaginators([teamA, teamB]);
+
+    channel.data = { ...channel.data, team: 'b' };
+    client.channelManager.ingestChannel(channel);
+
+    expect(channel.pendingDisposal).toBe(false);
+    expect(teamB.items).toEqual([channel]);
+    expect(teamA.items).toEqual([]);
   });
 });

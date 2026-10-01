@@ -196,33 +196,11 @@ const reinsertItem: EventHandlerPipelineHandler<EventHandlerContext> = ({
 
 /** Ingests `channel` into the lists that match and own it, and removes it from the rest. */
 function routeToPaginators(channelManager: ChannelManager, channel: Channel) {
-  const matchingPaginators = channelManager.paginators.filter((p) =>
-    p.matchesFilter(channel),
-  );
-  const matchingIds = new Set(matchingPaginators.map((p) => p.id));
-
-  const ownerIds = channelManager.resolveOwnership(channel, matchingPaginators);
-
-  channelManager.paginators.forEach((paginator) => {
-    if (!matchingIds.has(paginator.id)) {
-      // remove if it does not match the filter anymore
-      paginator.removeItem({ item: channel });
-      return;
-    }
-
-    // Only if owners are specified, the items is removed from the non-owner matching paginators
-    if (ownerIds.size > 0 && !ownerIds.has(paginator.id)) {
-      // matched, but not selected to own - remove to enforce exclusivity
-      paginator.removeItem({ item: channel });
-      return;
-    }
-
-    // Selected owner: ingest. The manager never boosts by default on any event — the sort is the
-    // single source of truth for order, so a channel that just became relevant (new message, added,
-    // unhidden) relocates via its updated sort key. Boosting remains a public per-paginator primitive
-    // (`paginator.boost`) for integrators to opt into for specific channels (VIP/mention/deep-link).
-    paginator.ingestItem(channel);
-  });
+  // The manager never boosts by default on any event — the sort is the single source of truth for
+  // order, so a channel that just became relevant (new message, added, unhidden) relocates via its
+  // updated sort key. Boosting remains a public per-paginator primitive (`paginator.boost`) for
+  // integrators to opt into for specific channels (VIP/mention/deep-link).
+  channelManager.ingestChannel(channel);
 }
 
 // we have to make sure that client.activeChannels is always up-to-date
@@ -424,7 +402,13 @@ export class ChannelManager extends WithSubscriptions {
    */
   readonly channelStore = new EntityStore<Channel>({
     getEntityId: (channel) => channel.cid,
-    onRelease: (channel) => channel._disconnect(),
+    onRelease: (channel) => {
+      const key = this.storeKeys.get(channel);
+      if (key !== undefined && this.client.activeChannels[key] === channel) {
+        delete this.client.activeChannels[key];
+      }
+      channel._disconnect();
+    },
   });
   private readonly holders: Record<ChannelHold, EntityStoreSubscriber> = {
     activated: createHolder(),
@@ -654,19 +638,22 @@ export class ChannelManager extends WithSubscriptions {
    */
   ingestChannel(channel: Channel) {
     const matchingPaginators = this.paginators.filter((p) => p.matchesFilter(channel));
-    const matchingIds = new Set(matchingPaginators.map((p) => p.id));
+    const matchingPaginatorIds = new Set(matchingPaginators.map((p) => p.id));
     const ownerIds = this.resolveOwnership(channel, matchingPaginators);
 
-    this.paginators.forEach((paginator) => {
-      const isMatch = matchingIds.has(paginator.id);
-      const isOwner = ownerIds.size === 0 || ownerIds.has(paginator.id);
-      if (isMatch && isOwner) {
-        paginator.ingestItem(channel);
-      } else {
-        // Not a match, or matched but not the selected owner — enforce exclusivity.
-        paginator.removeItem({ item: channel });
-      }
-    });
+    // Owners ingest before the other lists remove: each list holds the channel in the store, and a
+    // list that removed it first could be its last holder and tear it down.
+    const removingPaginators: ChannelPaginator[] = [];
+    for (const paginator of this.paginators) {
+      const isOwner =
+        matchingPaginatorIds.has(paginator.id) &&
+        (ownerIds.size === 0 || ownerIds.has(paginator.id));
+      if (isOwner) paginator.ingestItem(channel);
+      // we need to postpone the removal into another loop to make sure
+      // the channel is not removed from entity store due to the lack of holders
+      else removingPaginators.push(paginator);
+    }
+    for (const paginator of removingPaginators) paginator.removeItem({ item: channel });
   }
 
   /**

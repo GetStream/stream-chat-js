@@ -16,6 +16,7 @@ import { FilterBuilder } from '../FilterBuilder';
 import { makeComparator } from '../sortCompiler';
 import { filterConstrainsField, itemMatchesFilter } from '../filterCompiler';
 import { StoreBackedItemIndex } from '../../entityStore/StoreBackedItemIndex';
+import type { EntityStore } from '../../entityStore/EntityStore';
 import { generateUUIDv4 } from '../../utils';
 import type { StreamChat } from '../../client';
 import type { Channel } from '../../channel';
@@ -84,6 +85,13 @@ export type ChannelPaginatorOptions = {
   requestOptions?: ChannelPaginatorRequestOptions;
   sort?: SortParamRequest[];
   sortComparatorFactory?: ChannelSortComparatorFactory;
+  /**
+   * The channel store the list's index holds its channels in. Defaults to `client.channelManager`'s
+   * store, so every list shares one instance per cid and keeps the channels it lists stored.
+   *
+   * @internal
+   */
+  store?: EntityStore<Channel>;
 };
 
 /**
@@ -285,11 +293,14 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     requestOptions,
     sort,
     sortComparatorFactory,
+    store,
   }: ChannelPaginatorOptions) {
     super({
       hasPaginationQueryShapeChanged,
+      // the index is this list's holder in the store: a channel stays stored while the list lists it
       itemIndex: new StoreBackedItemIndex<Channel>({
         getEntityId: (channel) => channel.cid,
+        store: store ?? client.channelManager?.channelStore,
       }),
       retryCount: DEFAULT_QUERY_CHANNELS_RETRY_COUNT,
       ...paginatorOptions,
@@ -723,8 +734,16 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
 
   ingestItem(channel: Channel): boolean {
     const changed = super.ingestItem(channel);
+    // a channel that left the result set is no longer listed, so the list stops holding it
+    if (!this.matchesFilter(channel)) this._itemIndex.remove(channel.cid);
     if (changed) this.persistLoadedCids();
     return changed;
+  }
+
+  resetState() {
+    super.resetState();
+    // nothing is listed anymore, so the list holds no channels
+    this._itemIndex.clear();
   }
 
   removeItem(params: { id?: string; item?: Channel }): ItemCoordinates {
