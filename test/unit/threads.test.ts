@@ -2707,7 +2707,11 @@ describe('Threads 2.0', () => {
 
         it('ensure marks a thread it builds stale, so it loads its data once when opened', () => {
           client.threads.registerSubscriptions();
-          const parentMessage = { ...parentMessageResponse, id: uuidv4() };
+          const parentMessage = {
+            ...parentMessageResponse,
+            id: uuidv4(),
+            reply_count: 2,
+          };
 
           const thread = client.threads.ensure({ channel, parentMessage });
           const reload = vi.spyOn(thread, 'reload').mockResolvedValue(undefined);
@@ -2715,6 +2719,24 @@ describe('Threads 2.0', () => {
           expect(thread.hasStaleState).to.be.true;
           thread.activate();
           expect(reload).toHaveBeenCalledOnce();
+          client.threads.unregisterSubscriptions();
+        });
+
+        it('ensure builds a thread with no replies up to date, so opening it sends no request', () => {
+          client.threads.registerSubscriptions();
+          const parentMessage = {
+            ...parentMessageResponse,
+            id: uuidv4(),
+            reply_count: 0,
+          };
+
+          const thread = client.threads.ensure({ channel, parentMessage });
+          const reload = vi.spyOn(thread, 'reload').mockResolvedValue(undefined);
+          thread.activate();
+
+          // there is no server-side thread yet: getThread would answer 404
+          expect(thread.hasStaleState).to.be.false;
+          expect(reload).not.toHaveBeenCalled();
           client.threads.unregisterSubscriptions();
         });
 
