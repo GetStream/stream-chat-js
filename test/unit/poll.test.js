@@ -1126,6 +1126,146 @@ describe('Poll optimistic updates', () => {
 
 		const ownOptionIds = (poll) => Object.keys(poll.data.ownVotesByOptionId);
 
+		describe('while other users vote', () => {
+			const optionB = '7312e983-b042-4596-b5ce-f9e82deb363f';
+			const otherVote = (optionId, id = 'user2-vote') => ({
+				...user2Votes[0],
+				id,
+				option_id: optionId,
+			});
+			const sorted = (ids) => [...ids].sort();
+
+			it('counts their vote on the option the own vote is pending on', () => {
+				const poll = createPoll();
+				vi.spyOn(client, 'castPollVote').mockReturnValue(new Promise(() => {}));
+				const base = pollResponse.vote_counts_by_option;
+
+				poll.castVote(optionC, messageId);
+				poll.handleVoteCasted(
+					voteEvent('poll.vote_casted', otherVote(optionC), { ...base, [optionC]: 1 }),
+				);
+
+				// held back until the own vote is confirmed
+				expect(poll.data.ownVotesByOptionId[optionC].id).toMatch(/^local-/);
+				expect(poll.data.vote_counts_by_option[optionC]).toBe(1);
+
+				const vote = serverVote(optionC);
+				poll.handleVoteCasted(
+					voteEvent('poll.vote_casted', vote, { ...base, [optionC]: 2 }),
+				);
+
+				expect(poll.data.ownVotesByOptionId[optionC]).toBe(vote);
+				expect(poll.data.vote_counts_by_option).toEqual({ ...base, [optionC]: 2 });
+				expect(poll.data.vote_count).toBe(pollResponse.vote_count + 2);
+				expect(sorted(poll.data.maxVotedOptionIds)).toEqual(sorted([optionA, optionC]));
+			});
+
+			it('applies their removal on another option once the own vote is confirmed', () => {
+				const poll = createPoll();
+				vi.spyOn(client, 'castPollVote').mockReturnValue(new Promise(() => {}));
+				const base = pollResponse.vote_counts_by_option;
+				const before = poll.data;
+
+				poll.castVote(optionC, messageId);
+				poll.handleVoteRemoved(
+					voteEvent('poll.vote_removed', user2Votes[1], { ...base, [optionA]: 1 }),
+				);
+				expect(poll.data.vote_counts_by_option[optionA]).toBe(2);
+
+				poll.handleVoteCasted(
+					voteEvent('poll.vote_casted', serverVote(optionC), {
+						...base,
+						[optionA]: 1,
+						[optionC]: 1,
+					}),
+				);
+
+				expect(sorted(ownOptionIds(poll))).toEqual(
+					sorted([...Object.keys(before.ownVotesByOptionId), optionC]),
+				);
+				expect(poll.data.vote_counts_by_option).toEqual({
+					...base,
+					[optionA]: 1,
+					[optionC]: 1,
+				});
+				expect(poll.data.vote_count).toBe(pollResponse.vote_count);
+			});
+
+			it('applies their vote changes in polls with unique votes', () => {
+				const poll = createUniquePoll();
+				vi.spyOn(client, 'castPollVote').mockReturnValue(new Promise(() => {}));
+				const unique = { enforce_unique_vote: true };
+
+				poll.castVote(optionA, messageId);
+				poll.handleVoteCasted(
+					voteEvent('poll.vote_casted', otherVote(optionC), { [optionC]: 1 }, unique),
+				);
+				poll.handleVoteChanged(
+					voteEvent('poll.vote_changed', otherVote(optionA), { [optionA]: 1 }, unique),
+				);
+				expect(ownOptionIds(poll)).toEqual([optionA]);
+				expect(poll.data.vote_counts_by_option).toEqual({ [optionA]: 1 });
+
+				const vote = serverVote(optionA);
+				poll.handleVoteCasted(
+					voteEvent('poll.vote_casted', vote, { [optionA]: 2 }, unique),
+				);
+				expect(poll.data.ownVotesByOptionId).toEqual({ [optionA]: vote });
+				expect(poll.data.vote_counts_by_option).toEqual({ [optionA]: 2 });
+
+				// nothing pending anymore, so their next change is shown right away
+				poll.handleVoteChanged(
+					voteEvent(
+						'poll.vote_changed',
+						otherVote(optionC),
+						{ [optionA]: 1, [optionC]: 1 },
+						unique,
+					),
+				);
+				expect(poll.data.ownVotesByOptionId).toEqual({ [optionA]: vote });
+				expect(poll.data.vote_counts_by_option).toEqual({ [optionA]: 1, [optionC]: 1 });
+				expect(poll.data.vote_count).toBe(2);
+			});
+
+			it('keeps their vote on the option of a pending own removal', () => {
+				const poll = createPoll();
+				const ownVote = poll.data.ownVotesByOptionId[optionD];
+				vi.spyOn(client, 'removePollVote').mockReturnValue(new Promise(() => {}));
+				const base = pollResponse.vote_counts_by_option;
+
+				poll.removeVote(ownVote.id, messageId);
+				poll.handleVoteCasted(
+					voteEvent('poll.vote_casted', otherVote(optionD), { ...base, [optionD]: 2 }),
+				);
+				expect(poll.data.ownVotesByOptionId[optionD]).toBeUndefined();
+				expect(poll.data.vote_counts_by_option[optionD]).toBeUndefined();
+
+				poll.handleVoteRemoved(
+					voteEvent('poll.vote_removed', ownVote, { ...base, [optionD]: 1 }),
+				);
+
+				expect(poll.data.ownVotesByOptionId[optionD]).toBeUndefined();
+				expect(poll.data.vote_counts_by_option).toEqual({ ...base, [optionD]: 1 });
+				expect(poll.data.vote_count).toBe(pollResponse.vote_count);
+				expect(poll.data.latest_votes_by_option).toEqual({});
+			});
+
+			it('shows their votes right away when no own vote change is pending', () => {
+				const poll = createPoll();
+				const before = poll.data;
+
+				poll.handleVoteCasted(
+					voteEvent('poll.vote_casted', otherVote(optionB, 'new-vote'), {
+						...pollResponse.vote_counts_by_option,
+						[optionB]: 2,
+					}),
+				);
+
+				expect(poll.data.ownVotesByOptionId).toEqual(before.ownVotesByOptionId);
+				expect(poll.data.vote_counts_by_option[optionB]).toBe(2);
+			});
+		});
+
 		it('keeps showing the latest vote while WS events of earlier votes arrive in unique polls', () => {
 			const poll = createUniquePoll();
 			vi.spyOn(client, 'castPollVote').mockReturnValue(new Promise(() => {}));

@@ -188,7 +188,8 @@ export class OptimisticPollVotes {
    * A WS event of an own vote change got lost, so the server's own votes are stale. All requests
    * have finished (the timeout starts once nothing is left to send and a new request cancels it),
    * so applying the succeeded changes in order gives the server's own votes (changes whose events
-   * did arrive end up the same). The next WS event brings the vote counts.
+   * did arrive end up the same). They are shown with the vote counts of the last WS event, which
+   * contain the other users' votes too.
    */
   private applySucceededChanges = () => {
     const { enforce_unique_vote } = this.state.getLatestValue();
@@ -205,9 +206,8 @@ export class OptimisticPollVotes {
 
     this.serverVoteState = { ...this.serverVoteState, ownVotesByOptionId };
     this.pendingCount = 0;
-    this.succeededChanges = [];
     // also drops a failed vote that was still shown
-    this.state.partialNext({ ownVotesByOptionId });
+    this.state.partialNext(this.takeServerVoteState());
   };
 }
 
