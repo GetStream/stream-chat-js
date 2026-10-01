@@ -1,9 +1,8 @@
 import { StateStore } from './store';
 import type { StreamChat } from './client';
 import { generateUUIDv4 } from './utils';
+import { getMaxVotedOptionIds, OptimisticPollVotes } from './poll_optimistic_votes';
 import type {
-  APIResponse,
-  CastVoteAPIResponse,
   Event,
   PartialPollUpdate,
   PollAnswer,
@@ -93,13 +92,7 @@ export class Poll {
   public readonly state: StateStore<PollState>;
   public id: string;
   private client: StreamChat;
-  // In-flight optimistic casts, keyed by the id of the local placeholder vote. Lets
-  // removeVote resolve the real vote id when the user undoes a vote before the server
-  // has confirmed it.
-  private pendingVoteCasts = new Map<
-    string,
-    Promise<APIResponse & CastVoteAPIResponse>
-  >();
+  private optimisticVotes: OptimisticPollVotes;
   // Set whenever server data (WS event or rehydration) confirms that the poll is closed,
   // so that a failed optimistic close does not reopen a poll that is actually closed.
   private closeConfirmed = false;
@@ -109,6 +102,7 @@ export class Poll {
     this.id = poll.id;
 
     this.state = new StateStore<PollState>(this.getInitialStateFromPollResponse(poll));
+    this.optimisticVotes = new OptimisticPollVotes(this.state);
   }
 
   private getInitialStateFromPollResponse = (poll: PollInitOptions['poll']) => {
@@ -140,16 +134,45 @@ export class Poll {
     };
   };
 
+  // persists only the server's votes, never the optimistic ones
   private upsertOfflineDb = () => {
+    const serverState = this.optimisticVotes.withServerVotes(this.data);
     this.client.offlineDb?.executeQuerySafely(
-      (db) => db.upsertPoll({ poll: mapPollStateToResponse(this) }),
+      (db) => db.upsertPoll({ poll: mapPollStateToResponse(this, serverState) }),
       { method: 'upsertPoll' },
     );
   };
 
   public reinitializeState = (poll: PollInitOptions['poll']) => {
     if (poll.is_closed) this.closeConfirmed = true;
-    this.state.partialNext(this.getInitialStateFromPollResponse(poll));
+    const initialState = this.getInitialStateFromPollResponse(poll);
+    this.optimisticVotes.reset(initialState);
+    this.state.partialNext(initialState);
+  };
+
+  // Hands the vote state of a WS vote event to the optimistic votes, which decide whether to show it.
+  private updateFromVoteEvent = (
+    event: Event & {
+      created_at: string;
+      poll: PollResponse;
+      poll_vote: PollVote | PollAnswer;
+    },
+    ownVotesByOptionId: Record<OptionId, PollVote>,
+    answerState: Pick<PollState, 'latest_answers' | 'ownAnswer'>,
+  ) => {
+    const isOwnVote = event.poll_vote.user_id === this.client.userID;
+    const shownVoteState = this.optimisticVotes.handleVoteEvent(event.poll, {
+      confirmsOwnVote:
+        isOwnVote && !isVoteAnswer(event.poll_vote) && !!event.poll_vote.option_id,
+      ownVotesByOptionId,
+    });
+    this.state.partialNext({
+      ...answerState,
+      answers_count: event.poll.answers_count,
+      lastActivityAt: new Date(event.created_at),
+      ...shownVoteState,
+    });
+    this.upsertOfflineDb();
   };
 
   get data(): PollState {
@@ -185,34 +208,24 @@ export class Poll {
     const isOwnVote = event.poll_vote.user_id === this.client.userID;
     let latestAnswers = [...(currentState.latest_answers as PollAnswer[])];
     let ownAnswer = currentState.ownAnswer;
-    const ownVotesByOptionId = { ...currentState.ownVotesByOptionId };
-    let maxVotedOptionIds = currentState.maxVotedOptionIds;
+    const ownVotesByOptionId = { ...this.optimisticVotes.serverOwnVotes };
 
     if (isOwnVote) {
       if (isVoteAnswer(event.poll_vote)) {
         ownAnswer = event.poll_vote;
       } else if (event.poll_vote.option_id) {
-        this.dropPendingVoteCast(ownVotesByOptionId[event.poll_vote.option_id]);
         ownVotesByOptionId[event.poll_vote.option_id] = event.poll_vote;
       }
     }
 
     if (isVoteAnswer(event.poll_vote)) {
       latestAnswers = [event.poll_vote, ...latestAnswers];
-    } else {
-      maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
     }
 
-    const pollEnrichData = extractPollEnrichedData(event.poll);
-    this.state.partialNext({
-      ...pollEnrichData,
+    this.updateFromVoteEvent(event, ownVotesByOptionId, {
       latest_answers: latestAnswers,
-      lastActivityAt: new Date(event.created_at),
       ownAnswer,
-      ownVotesByOptionId,
-      maxVotedOptionIds,
     });
-    this.upsertOfflineDb();
   };
 
   public handleVoteChanged = (event: Event) => {
@@ -223,8 +236,7 @@ export class Poll {
     const isOwnVote = event.poll_vote.user_id === this.client.userID;
     let latestAnswers = [...(currentState.latest_answers as PollAnswer[])];
     let ownAnswer = currentState.ownAnswer;
-    let ownVotesByOptionId = currentState.ownVotesByOptionId;
-    let maxVotedOptionIds = currentState.maxVotedOptionIds;
+    let ownVotesByOptionId = this.optimisticVotes.serverOwnVotes;
 
     if (isOwnVote) {
       if (isVoteAnswer(event.poll_vote)) {
@@ -234,7 +246,6 @@ export class Poll {
         ];
         ownAnswer = event.poll_vote;
       } else if (event.poll_vote.option_id) {
-        this.dropPendingVoteCast(ownVotesByOptionId[event.poll_vote.option_id]);
         if (event.poll.enforce_unique_vote) {
           ownVotesByOptionId = { [event.poll_vote.option_id]: event.poll_vote };
         } else {
@@ -256,24 +267,15 @@ export class Poll {
         if (ownAnswer?.id === event.poll_vote.id) {
           ownAnswer = undefined;
         }
-        maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
       }
     } else if (isVoteAnswer(event.poll_vote)) {
       latestAnswers = [event.poll_vote, ...latestAnswers];
-    } else {
-      maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
     }
 
-    const pollEnrichData = extractPollEnrichedData(event.poll);
-    this.state.partialNext({
-      ...pollEnrichData,
+    this.updateFromVoteEvent(event, ownVotesByOptionId, {
       latest_answers: latestAnswers,
-      lastActivityAt: new Date(event.created_at),
       ownAnswer,
-      ownVotesByOptionId,
-      maxVotedOptionIds,
     });
-    this.upsertOfflineDb();
   };
 
   public handleVoteRemoved = (event: Event) => {
@@ -283,31 +285,21 @@ export class Poll {
     const isOwnVote = event.poll_vote.user_id === this.client.userID;
     let latestAnswers = [...(currentState.latest_answers as PollAnswer[])];
     let ownAnswer = currentState.ownAnswer;
-    const ownVotesByOptionId = { ...currentState.ownVotesByOptionId };
-    let maxVotedOptionIds = currentState.maxVotedOptionIds;
+    const ownVotesByOptionId = { ...this.optimisticVotes.serverOwnVotes };
 
     if (isVoteAnswer(event.poll_vote)) {
       latestAnswers = latestAnswers.filter((answer) => answer.id !== event.poll_vote.id);
       if (isOwnVote) {
         ownAnswer = undefined;
       }
-    } else {
-      maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
-      if (isOwnVote && event.poll_vote.option_id) {
-        delete ownVotesByOptionId[event.poll_vote.option_id];
-      }
+    } else if (isOwnVote && event.poll_vote.option_id) {
+      delete ownVotesByOptionId[event.poll_vote.option_id];
     }
 
-    const pollEnrichData = extractPollEnrichedData(event.poll);
-    this.state.partialNext({
-      ...pollEnrichData,
+    this.updateFromVoteEvent(event, ownVotesByOptionId, {
       latest_answers: latestAnswers,
-      lastActivityAt: new Date(event.created_at),
       ownAnswer,
-      ownVotesByOptionId,
-      maxVotedOptionIds,
     });
-    this.upsertOfflineDb();
   };
 
   query = async (id: string) => {
@@ -399,23 +391,7 @@ export class Poll {
     // in polls with unique votes, casting a vote changes the existing one
     const replacedVotes = enforce_unique_vote ? Object.values(ownVotesByOptionId) : [];
 
-    this.pendingVoteCasts.set(localVote.id, request);
-    this.state.partialNext(
-      applyOwnVoteDelta(this.data, { add: [localVote], remove: replacedVotes }),
-    );
-
-    try {
-      return await request;
-    } catch (error) {
-      this.pendingVoteCasts.delete(localVote.id);
-      // revert only if neither a WS event nor another user action replaced the local vote
-      if (this.data.ownVotesByOptionId[optionId]?.id === localVote.id) {
-        this.state.partialNext(
-          applyOwnVoteDelta(this.data, { add: replacedVotes, remove: [localVote] }),
-        );
-      }
-      throw error;
-    }
+    return await this.optimisticVotes.cast(request, { replacedVotes, vote: localVote });
   };
 
   /**
@@ -427,39 +403,16 @@ export class Poll {
     const vote = Object.values(this.data.ownVotesByOptionId).find(
       (ownVote) => ownVote.id === voteId,
     );
-    const pendingCast = this.pendingVoteCasts.get(voteId);
 
-    if (vote) {
-      this.state.partialNext(applyOwnVoteDelta(this.data, { remove: [vote] }));
+    if (!vote?.option_id) {
+      return await this.client.removePollVote(messageId, this.id as string, voteId);
     }
 
-    let resolvedVoteId = voteId;
-    if (pendingCast) {
-      try {
-        resolvedVoteId = (await pendingCast).vote.id;
-      } catch {
-        // the cast failed, so the vote was never created
-        return;
-      }
-    }
-
-    try {
-      return await this.client.removePollVote(
-        messageId,
-        this.id as string,
-        resolvedVoteId,
-      );
-    } catch (error) {
-      // restore only if nothing has taken the vote's place in the meantime
-      if (vote?.option_id && !this.data.ownVotesByOptionId[vote.option_id]) {
-        this.state.partialNext(applyOwnVoteDelta(this.data, { add: [vote] }));
-      }
-      throw error;
-    }
-  };
-
-  private dropPendingVoteCast = (vote?: PollVote) => {
-    if (vote) this.pendingVoteCasts.delete(vote.id);
+    return await this.optimisticVotes.remove(
+      (resolvedVoteId) =>
+        this.client.removePollVote(messageId, this.id as string, resolvedVoteId),
+      { vote },
+    );
   };
 
   addAnswer = async (answerText: string, messageId: string) =>
@@ -483,77 +436,6 @@ export class Poll {
       params.sort,
       params.options,
     );
-}
-
-function getMaxVotedOptionIds(voteCountsByOption: PollResponse['vote_counts_by_option']) {
-  let maxVotes = 0;
-  let winningOptions: string[] = [];
-  for (const [id, count] of Object.entries(voteCountsByOption ?? {})) {
-    if (count > maxVotes) {
-      winningOptions = [id];
-      maxVotes = count;
-    } else if (count === maxVotes) {
-      winningOptions.push(id);
-    }
-  }
-  return winningOptions;
-}
-
-/**
- * Applies the current user's added and removed votes to the poll state, keeping own votes,
- * vote counts, latest votes and the max-voted options consistent. Used for optimistic updates
- * and their reverts. Returns new objects so that state selectors pick up the change.
- */
-export function applyOwnVoteDelta(
-  state: PollState,
-  { add = [], remove = [] }: { add?: PollVote[]; remove?: PollVote[] },
-): Pick<
-  PollState,
-  | 'latest_votes_by_option'
-  | 'maxVotedOptionIds'
-  | 'ownVotesByOptionId'
-  | 'vote_count'
-  | 'vote_counts_by_option'
-> {
-  const ownVotesByOptionId = { ...state.ownVotesByOptionId };
-  const voteCountsByOption = { ...state.vote_counts_by_option };
-  // null for anonymous polls, in which case there is nothing to update
-  const latestVotesByOption = state.latest_votes_by_option
-    ? { ...state.latest_votes_by_option }
-    : state.latest_votes_by_option;
-  let voteCount = state.vote_count ?? 0;
-
-  for (const vote of remove) {
-    const optionId = vote.option_id;
-    if (!optionId) continue;
-    delete ownVotesByOptionId[optionId];
-    voteCountsByOption[optionId] = Math.max((voteCountsByOption[optionId] ?? 0) - 1, 0);
-    voteCount = Math.max(voteCount - 1, 0);
-    if (latestVotesByOption?.[optionId]) {
-      latestVotesByOption[optionId] = latestVotesByOption[optionId].filter(
-        (latestVote) => latestVote.id !== vote.id,
-      );
-    }
-  }
-
-  for (const vote of add) {
-    const optionId = vote.option_id;
-    if (!optionId) continue;
-    ownVotesByOptionId[optionId] = vote;
-    voteCountsByOption[optionId] = (voteCountsByOption[optionId] ?? 0) + 1;
-    voteCount += 1;
-    if (latestVotesByOption && state.voting_visibility !== 'anonymous') {
-      latestVotesByOption[optionId] = [vote, ...(latestVotesByOption[optionId] ?? [])];
-    }
-  }
-
-  return {
-    latest_votes_by_option: latestVotesByOption,
-    maxVotedOptionIds: getMaxVotedOptionIds(voteCountsByOption),
-    ownVotesByOptionId,
-    vote_count: voteCount,
-    vote_counts_by_option: voteCountsByOption,
-  };
 }
 
 function getOwnVotesByOptionId(ownVotes: PollVote[]) {
@@ -581,7 +463,10 @@ export function extractPollData(pollResponse: PollResponse): PollData {
   };
 }
 
-export function mapPollStateToResponse(poll: Poll): PollResponse {
+export function mapPollStateToResponse(
+  poll: Poll,
+  state: PollState = poll.data,
+): PollResponse {
   const {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     lastActivityAt,
@@ -590,7 +475,7 @@ export function mapPollStateToResponse(poll: Poll): PollResponse {
     ownVotesByOptionId,
     ownAnswer,
     ...restState
-  } = poll.data;
+  } = state;
   const ownVotes = [
     ...Object.values(ownVotesByOptionId),
     ...(ownAnswer ? [ownAnswer] : []),
