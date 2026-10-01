@@ -1,6 +1,6 @@
 import { StateStore } from './store';
-import type { StreamChat } from './client';
 import { generateUUIDv4 } from './utils';
+import type { StreamChat } from './client';
 import { getMaxVotedOptionIds, OptimisticPollVotes } from './poll_optimistic_votes';
 import type {
   Event,
@@ -371,15 +371,15 @@ export class Poll {
       return;
     }
 
-    const request = this.client.castPollVote(messageId, this.id as string, {
-      option_id: optionId,
-    });
+    const sendRequest = () =>
+      this.client.castPollVote(messageId, this.id as string, { option_id: optionId });
 
     // Already voted for this option, there is nothing to apply optimistically.
-    if (ownVotesByOptionId[optionId]) return await request;
+    if (ownVotesByOptionId[optionId]) return await this.optimisticVotes.send(sendRequest);
 
     const now = new Date().toISOString();
-    const localVote: PollVote = {
+    // shown until the server's vote arrives
+    const vote: PollVote = {
       created_at: now,
       id: `local-${generateUUIDv4()}`,
       option_id: optionId,
@@ -391,7 +391,7 @@ export class Poll {
     // in polls with unique votes, casting a vote changes the existing one
     const replacedVotes = enforce_unique_vote ? Object.values(ownVotesByOptionId) : [];
 
-    return await this.optimisticVotes.cast(request, { replacedVotes, vote: localVote });
+    return await this.optimisticVotes.cast(sendRequest, { replacedVotes, vote });
   };
 
   /**
@@ -405,7 +405,9 @@ export class Poll {
     );
 
     if (!vote?.option_id) {
-      return await this.client.removePollVote(messageId, this.id as string, voteId);
+      return await this.optimisticVotes.send(() =>
+        this.client.removePollVote(messageId, this.id as string, voteId),
+      );
     }
 
     return await this.optimisticVotes.remove(

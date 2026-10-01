@@ -23,6 +23,7 @@ const CATCH_UP_TIMEOUT_MS = 3000;
  * While any of them is not confirmed by its WS event, vote events are only stored, as the server
  * state they carry does not contain the pending changes yet. Once all are confirmed (a failed
  * request counts as confirmed), the server's vote state is shown, which also reverts failed changes.
+ * Vote requests are sent one after another, so the server applies them in the order they were made.
  * A lost WS event is recovered from after CATCH_UP_TIMEOUT_MS (see applySucceededChanges).
  */
 export class OptimisticPollVotes {
@@ -30,12 +31,10 @@ export class OptimisticPollVotes {
   private serverVoteState: VoteState;
   // Own vote changes not confirmed by a WS event yet
   private pendingCount = 0;
-  // Own vote requests not finished yet
-  private inFlightCount = 0;
-  // Cast requests by local placeholder vote id, to remove a vote known only by its placeholder
-  private castRequests = new Map<string, Promise<CastVoteResponse>>();
   // Own vote changes whose requests succeeded since the server's vote state was last shown
   private succeededChanges: OwnVoteChange[] = [];
+  // Settles once the last vote request sent has finished
+  private requestQueue: Promise<unknown> = Promise.resolve();
   private catchUpTimeout?: ReturnType<typeof setTimeout>;
 
   constructor(private readonly state: StateStore<PollState>) {
@@ -51,46 +50,51 @@ export class OptimisticPollVotes {
     ...this.serverVoteState,
   });
 
-  // Casts `vote`, a local placeholder. `replacedVotes` are the own votes it replaces in unique polls.
+  // Sends a vote request once the previous one has finished, whether it succeeded or not.
+  send = <T>(sendRequest: () => Promise<T>): Promise<T> => {
+    const request = this.requestQueue.then(sendRequest);
+    const queue = request.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.requestQueue = queue;
+    // once nothing is left to send, wait for the WS events of the pending changes
+    queue.then(() => {
+      if (this.requestQueue === queue) this.scheduleCatchUp();
+    });
+    return request;
+  };
+
+  // Casts `vote`, a placeholder. `replacedVotes` are the own votes it replaces in unique polls.
   cast = (
-    request: Promise<CastVoteResponse>,
+    sendRequest: () => Promise<CastVoteResponse>,
     { replacedVotes, vote }: { replacedVotes: PollVote[]; vote: PollVote },
   ) => {
-    this.castRequests.set(vote.id, request);
     this.state.partialNext(
       applyOwnVoteDelta(this.state.getLatestValue(), {
         add: [vote],
         remove: replacedVotes,
       }),
     );
-    return this.track(
-      () => request,
-      (response) => ({
-        optionId: vote.option_id as OptionId,
-        vote: response.vote as PollVote,
-      }),
-    );
+    return this.track(sendRequest, (response) => ({
+      optionId: vote.option_id as OptionId,
+      vote: response.vote as PollVote,
+    }));
   };
 
   remove = <T>(
     sendRequest: (voteId: string) => Promise<T>,
     { vote }: { vote: PollVote },
   ) => {
-    const castRequest = this.castRequests.get(vote.id);
     this.state.partialNext(
       applyOwnVoteDelta(this.state.getLatestValue(), { remove: [vote] }),
     );
     return this.track(
-      async () => {
-        // an unconfirmed cast's vote only has a placeholder id, so wait for the real one
-        const voteId = castRequest
-          ? await castRequest.then(
-              (response) => response.vote.id,
-              () => undefined,
-            )
-          : vote.id;
-        // if the cast failed, the vote never existed and there is nothing to remove
-        return voteId ? sendRequest(voteId) : undefined;
+      // runs when the removal's turn comes, so a preceding cast of the vote has finished
+      () => {
+        const voteId = this.getServerVoteId(vote);
+        // the vote's cast failed, so there is nothing to remove
+        return voteId ? sendRequest(voteId) : Promise.resolve(undefined);
       },
       () => ({ optionId: vote.option_id as OptionId }),
     );
@@ -118,7 +122,6 @@ export class OptimisticPollVotes {
   reset = (pollState: PollState) => {
     this.serverVoteState = pickVoteState(pollState);
     this.pendingCount = 0;
-    this.castRequests.clear();
     this.succeededChanges = [];
     clearTimeout(this.catchUpTimeout);
   };
@@ -130,12 +133,11 @@ export class OptimisticPollVotes {
     toChange: (response: T) => OwnVoteChange,
   ) => {
     this.pendingCount += 1;
-    this.inFlightCount += 1;
     clearTimeout(this.catchUpTimeout);
 
     let response: T | undefined;
     try {
-      response = await sendRequest();
+      response = await this.send(sendRequest);
     } catch (error) {
       this.settleWithoutEvent();
       throw error;
@@ -145,27 +147,32 @@ export class OptimisticPollVotes {
       return;
     }
 
-    this.inFlightCount -= 1;
     this.succeededChanges.push(toChange(response));
-    this.scheduleCatchUp();
     return response;
   };
 
   // A failed or skipped request gets no WS event, so it counts as confirmed right away.
   private settleWithoutEvent = () => {
-    this.inFlightCount -= 1;
     this.pendingCount = Math.max(this.pendingCount - 1, 0);
-    if (this.pendingCount === 0) {
-      this.state.partialNext(this.takeServerVoteState());
-    } else {
-      this.scheduleCatchUp();
+    if (this.pendingCount === 0) this.state.partialNext(this.takeServerVoteState());
+  };
+
+  /**
+   * The server id of a vote to remove, once everything sent before the removal has finished. Casts
+   * and removals of an option alternate, so the option's last succeeded change tells: a cast is the
+   * vote being removed (e.g. a placeholder), a removal means the cast in between failed. Without
+   * one, the server's own vote of the option is the vote being removed.
+   */
+  private getServerVoteId = (vote: PollVote) => {
+    for (let i = this.succeededChanges.length - 1; i >= 0; i--) {
+      const change = this.succeededChanges[i];
+      if (change.optionId === vote.option_id) return change.vote?.id;
     }
+    return this.serverVoteState.ownVotesByOptionId[vote.option_id as OptionId]?.id;
   };
 
   private takeServerVoteState = () => {
     clearTimeout(this.catchUpTimeout);
-    // the server's own votes have no placeholders
-    this.castRequests.clear();
     this.succeededChanges = [];
     return {
       ...this.serverVoteState,
@@ -180,12 +187,13 @@ export class OptimisticPollVotes {
   };
 
   /**
-   * A WS event of an own vote change got lost, so the server's own votes are stale. As no request
-   * is in flight, applying the succeeded changes in order gives the server's own votes (changes
-   * whose events did arrive end up the same). The next WS event brings the vote counts.
+   * A WS event of an own vote change got lost, so the server's own votes are stale. All requests
+   * have finished (the timeout starts once nothing is left to send and a new request cancels it),
+   * so applying the succeeded changes in order gives the server's own votes (changes whose events
+   * did arrive end up the same). The next WS event brings the vote counts.
    */
   private applySucceededChanges = () => {
-    if (this.pendingCount === 0 || this.inFlightCount > 0) return;
+    if (this.pendingCount === 0) return;
     const { enforce_unique_vote } = this.state.getLatestValue();
     let ownVotesByOptionId = { ...this.serverVoteState.ownVotesByOptionId };
     for (const { optionId, vote } of this.succeededChanges) {
@@ -200,7 +208,6 @@ export class OptimisticPollVotes {
 
     this.serverVoteState = { ...this.serverVoteState, ownVotesByOptionId };
     this.pendingCount = 0;
-    this.castRequests.clear();
     this.succeededChanges = [];
     // also drops a failed vote that was still shown
     this.state.partialNext({ ownVotesByOptionId });

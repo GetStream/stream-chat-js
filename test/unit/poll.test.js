@@ -1218,10 +1218,13 @@ describe('Poll optimistic updates', () => {
 				.mockReturnValueOnce(requests[1].promise)
 				.mockReturnValueOnce(requests[2].promise);
 
-			poll.castVote(optionA, messageId);
+			const castA = poll.castVote(optionA, messageId);
 			const castC = poll.castVote(optionC, messageId);
 			const castD = poll.castVote(optionD, messageId);
 
+			const voteA = serverVote(optionA);
+			requests[0].resolve({ vote: voteA });
+			await castA;
 			requests[1].reject(new Error('failed'));
 			await expect(castC).rejects.toThrow('failed');
 			expect(ownOptionIds(poll)).toEqual([optionD]);
@@ -1231,7 +1234,6 @@ describe('Poll optimistic updates', () => {
 			await expect(castD).rejects.toThrow('failed');
 			expect(ownOptionIds(poll)).toEqual([optionD]);
 
-			const voteA = serverVote(optionA);
 			poll.handleVoteCasted(voteEvent('poll.vote_casted', voteA, { [optionA]: 1 }));
 			expect(poll.data.ownVotesByOptionId).toEqual({ [optionA]: voteA });
 			expect(poll.data.vote_counts_by_option).toEqual({ [optionA]: 1 });
@@ -1307,6 +1309,96 @@ describe('Poll optimistic updates', () => {
 			expect(poll.data.ownVotesByOptionId[optionC]).toBe(vote);
 		});
 
+		describe('sends vote requests in the order they were made', () => {
+			it('removes each vote by its own id when the same option is tapped repeatedly', async () => {
+				const poll = createPoll();
+				const calls = [];
+				vi.spyOn(client, 'castPollVote').mockImplementation(async () => {
+					const vote = serverVote(optionC, `vote-${calls.length}`);
+					calls.push(`cast ${vote.id}`);
+					return { vote };
+				});
+				vi.spyOn(client, 'removePollVote').mockImplementation(async (_, __, voteId) => {
+					calls.push(`remove ${voteId}`);
+					return { vote: serverVote(optionC, voteId) };
+				});
+				const toggle = () => {
+					const vote = poll.data.ownVotesByOptionId[optionC];
+					return vote
+						? poll.removeVote(vote.id, messageId)
+						: poll.castVote(optionC, messageId);
+				};
+
+				await Promise.all([toggle(), toggle(), toggle(), toggle()]);
+
+				expect(calls).toEqual([
+					'cast vote-0',
+					'remove vote-0',
+					'cast vote-2',
+					'remove vote-2',
+				]);
+			});
+
+			it('sends a vote only after the previous one finished in polls with unique votes', async () => {
+				const poll = createUniquePoll();
+				const castA = deferred();
+				const castPollVoteSpy = vi
+					.spyOn(client, 'castPollVote')
+					.mockReturnValueOnce(castA.promise)
+					.mockResolvedValueOnce({ vote: serverVote(optionC) });
+
+				poll.castVote(optionA, messageId);
+				const castC = poll.castVote(optionC, messageId);
+				await vi.waitFor(() => expect(castPollVoteSpy).toHaveBeenCalledTimes(1));
+				expect(castPollVoteSpy).toHaveBeenLastCalledWith(messageId, pollId, {
+					option_id: optionA,
+				});
+
+				castA.resolve({ vote: serverVote(optionA) });
+				await castC;
+				expect(castPollVoteSpy).toHaveBeenCalledTimes(2);
+				expect(castPollVoteSpy).toHaveBeenLastCalledWith(messageId, pollId, {
+					option_id: optionC,
+				});
+			});
+
+			it('does not remove a vote again when undoing a vote whose cast failed', async () => {
+				const poll = createPoll();
+				const voteC = serverVote(optionC, 'vote-c');
+				vi.spyOn(client, 'castPollVote')
+					.mockResolvedValueOnce({ vote: voteC })
+					.mockRejectedValueOnce(new Error('failed'));
+				const removePollVoteSpy = vi
+					.spyOn(client, 'removePollVote')
+					.mockResolvedValue({ vote: voteC });
+				const toggle = () => {
+					const vote = poll.data.ownVotesByOptionId[optionC];
+					return (
+						vote ? poll.removeVote(vote.id, messageId) : poll.castVote(optionC, messageId)
+					).catch(() => undefined);
+				};
+
+				// cast, undo, cast (fails), undo
+				await Promise.all([toggle(), toggle(), toggle(), toggle()]);
+
+				expect(removePollVoteSpy).toHaveBeenCalledTimes(1);
+				expect(removePollVoteSpy).toHaveBeenCalledWith(messageId, pollId, 'vote-c');
+			});
+
+			it('keeps sending votes after a failed one', async () => {
+				const poll = createPoll();
+				vi.spyOn(client, 'castPollVote')
+					.mockRejectedValueOnce(new Error('failed'))
+					.mockResolvedValueOnce({ vote: serverVote(optionC) });
+
+				const failed = poll.castVote(optionC, messageId);
+				await expect(failed).rejects.toThrow('failed');
+				await expect(poll.castVote(optionC, messageId)).resolves.toEqual({
+					vote: serverVote(optionC),
+				});
+			});
+		});
+
 		describe('when a WS event never arrives', () => {
 			const optionB = '7312e983-b042-4596-b5ce-f9e82deb363f';
 			const otherUserVote = {
@@ -1354,14 +1446,14 @@ describe('Poll optimistic updates', () => {
 			it('waits for vote requests still in flight before rebuilding the own votes', async () => {
 				const poll = createPoll();
 				const slowRequest = deferred();
-				vi.spyOn(client, 'castPollVote')
-					.mockReturnValueOnce(slowRequest.promise)
-					.mockResolvedValueOnce({ vote: serverVote(optionD, 'vote-d') });
+				vi.spyOn(client, 'castPollVote').mockReturnValueOnce(slowRequest.promise);
 				const removed = poll.data.ownVotesByOptionId[optionD];
 				vi.spyOn(client, 'removePollVote').mockResolvedValue({ vote: removed });
 
+				// the removal succeeds and starts the timeout, the cast that follows is slow
+				const removal = poll.removeVote(removed.id, messageId);
 				poll.castVote(optionC, messageId);
-				await poll.removeVote(removed.id, messageId);
+				await removal;
 				vi.advanceTimersByTime(3000);
 
 				// the cast of C may still fail, so events are still held back
