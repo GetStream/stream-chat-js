@@ -65,16 +65,14 @@ export class OptimisticPollVotes {
     return request;
   };
 
-  // Casts `vote`, a placeholder. `replacedVotes` are the own votes it replaces in unique polls.
-  cast = (
-    sendRequest: () => Promise<CastVoteResponse>,
-    { replacedVotes, vote }: { replacedVotes: PollVote[]; vote: PollVote },
-  ) => {
+  // Casts `vote`, a placeholder. In polls with unique votes, it replaces the existing own votes.
+  cast = (sendRequest: () => Promise<CastVoteResponse>, { vote }: { vote: PollVote }) => {
+    const state = this.state.getLatestValue();
+    const replacedVotes = state.enforce_unique_vote
+      ? Object.values(state.ownVotesByOptionId)
+      : [];
     this.state.partialNext(
-      applyOwnVoteDelta(this.state.getLatestValue(), {
-        add: [vote],
-        remove: replacedVotes,
-      }),
+      applyOwnVoteDelta(state, { add: [vote], remove: replacedVotes }),
     );
     return this.track(sendRequest, (response) => ({
       optionId: vote.option_id as OptionId,
@@ -193,7 +191,6 @@ export class OptimisticPollVotes {
    * did arrive end up the same). The next WS event brings the vote counts.
    */
   private applySucceededChanges = () => {
-    if (this.pendingCount === 0) return;
     const { enforce_unique_vote } = this.state.getLatestValue();
     let ownVotesByOptionId = { ...this.serverVoteState.ownVotesByOptionId };
     for (const { optionId, vote } of this.succeededChanges) {

@@ -347,12 +347,12 @@ export class Poll {
     await this.client.deletePollOption(this.id as string, optionId);
 
   /**
-   * Casts a vote for an option. The vote is applied to the state optimistically through a
-   * local placeholder vote, which the subsequent WS event replaces with the server vote.
-   * If the request fails, the optimistic change is reverted.
+   * Casts a vote for an option. The vote is shown right away through a local placeholder vote,
+   * which the server's vote replaces once the WS events of all pending vote changes arrived.
+   * If the request fails, the change is reverted.
    */
   castVote = async (optionId: string, messageId: string) => {
-    const { enforce_unique_vote, max_votes_allowed, ownVotesByOptionId } = this.data;
+    const { max_votes_allowed, ownVotesByOptionId } = this.data;
 
     const reachedVoteLimit =
       max_votes_allowed && max_votes_allowed === Object.keys(ownVotesByOptionId).length;
@@ -388,16 +388,14 @@ export class Poll {
       user: this.client.user,
       user_id: this.client.userID,
     };
-    // in polls with unique votes, casting a vote changes the existing one
-    const replacedVotes = enforce_unique_vote ? Object.values(ownVotesByOptionId) : [];
 
-    return await this.optimisticVotes.cast(sendRequest, { replacedVotes, vote });
+    return await this.optimisticVotes.cast(sendRequest, { vote });
   };
 
   /**
-   * Removes a vote. The vote is removed from the state optimistically and restored if the
-   * request fails. Removing a vote whose cast is still in flight waits for the cast to
-   * resolve the real vote id; if that cast fails, there is nothing to remove.
+   * Removes a vote. The vote is removed right away and restored if the request fails. Vote
+   * requests are sent in order, so removing a vote whose cast is not confirmed yet uses the vote
+   * id from the cast's response; if that cast failed, there is nothing to remove.
    */
   removeVote = async (voteId: string, messageId: string) => {
     const vote = Object.values(this.data.ownVotesByOptionId).find(
