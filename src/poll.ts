@@ -325,9 +325,11 @@ export class Poll {
   /**
    * Closes the poll. The poll is marked as closed optimistically and the change is
    * reverted if the request fails, unless the server confirmed the close meanwhile.
+   * Does nothing if the poll is already closed.
    */
   close = async () => {
-    const previouslyClosed = this.data.is_closed;
+    if (this.data.is_closed) return;
+
     this.closeConfirmed = false;
     this.state.partialNext({ is_closed: true });
 
@@ -335,7 +337,7 @@ export class Poll {
       return await this.client.closePoll(this.id as string);
     } catch (error) {
       if (!this.closeConfirmed) {
-        this.state.partialNext({ is_closed: previouslyClosed });
+        this.state.partialNext({ is_closed: false });
       }
       throw error;
     }

@@ -1043,6 +1043,17 @@ describe('Poll optimistic updates', () => {
 			expect(poll.data.is_closed).toBeFalsy();
 		});
 
+		it('does not send a request when the poll is already closed', async () => {
+			const poll = createPoll({ is_closed: true });
+			const closePollSpy = vi.spyOn(client, 'closePoll');
+			const before = poll.data;
+
+			await expect(poll.close()).resolves.toBeUndefined();
+
+			expect(closePollSpy).not.toHaveBeenCalled();
+			expect(poll.data).toBe(before);
+		});
+
 		it('keeps the poll closed when the close was confirmed by a WS event', async () => {
 			const poll = createPoll();
 			const request = deferred();
