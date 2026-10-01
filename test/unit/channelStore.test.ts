@@ -118,6 +118,16 @@ describe('channel holds', () => {
     expect(client.channelManager.get('messaging:general')).toBe(channel);
   });
 
+  it('can be activated after it was torn down, without holding it again', () => {
+    const channel = client.channel('messaging', 'general');
+    client.channelManager.removeChannel(channel.cid);
+
+    const release = channel.activate();
+    release();
+
+    expect(client.channelManager.get(channel.cid)).toBeUndefined();
+  });
+
   it('tears down an opened channel on a known end', () => {
     const channel = client.channel('messaging', 'general');
     channel.activate();

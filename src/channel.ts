@@ -1521,7 +1521,8 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     if (this._activeRefCount === 1) {
       this.state.partialNext({ active: true });
     }
-    this.getClient().channelManager.holdChannel(this, 'activated');
+    // `_client`, not `getClient()`, which throws on a torn-down channel; holding one does nothing
+    this._client.channelManager.holdChannel(this, 'activated');
 
     let released = false;
     return () => {

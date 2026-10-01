@@ -501,7 +501,8 @@ Unchanged signature: `partialUpdateThread(messageId, partialThreadObject)`.
 
 #### `client.hydrateActiveChannels`
 
-Unchanged.
+Renamed to `client.hydrateChannels`, with the same arguments. `client.activeChannels` itself is removed;
+see the [other changes guide](./v9-to-v10-migration-guide-other.md).
 
 #### `client.setBaseURL` / `client.setUserAgent` / `client.getUserAgent`
 
@@ -1130,11 +1131,11 @@ paginator reports no loaded page, not only on mount.
 
 ### Options
 
-| v9 option                                | v10                                                                                                                                                                                                                                                                                                                                                                               |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `lockChannelOrder`                       | `paginatorOptions.lockItemOrder`                                                                                                                                                                                                                                                                                                                                                  |
-| `abortInFlightQuery`                     | removed — a query is never started while one is in flight; `paginator.cancelScheduledQuery()` cancels a debounced one                                                                                                                                                                                                                                                             |
-| `allowNotLoadedChannelPromotionForEvent` | removed — insert the exported `ignoreEventsForUnknownChannels` handler at the head of the pipeline (`index: 0`) for the event types you want to ignore: <br>`manager.addEventHandler({ eventType: 'message.new', handle: ignoreEventsForUnknownChannels, id: 'ignore-unknown', index: 0 })` <br>It stops the chain for any event whose channel is not in `client.activeChannels`. |
+| v9 option                                | v10                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lockChannelOrder`                       | `paginatorOptions.lockItemOrder`                                                                                                                                                                                                                                                                                                                                                                               |
+| `abortInFlightQuery`                     | removed — a query is never started while one is in flight; `paginator.cancelScheduledQuery()` cancels a debounced one                                                                                                                                                                                                                                                                                          |
+| `allowNotLoadedChannelPromotionForEvent` | removed — insert the exported `ignoreEventsForUnknownChannels` handler at the head of the pipeline (`index: 0`) for the event types you want to ignore: <br>`manager.addEventHandler({ eventType: 'message.new', handle: ignoreEventsForUnknownChannels, id: 'ignore-unknown', index: 0 })` <br>It stops the chain for any event whose channel is not in the channel store (`client.channelManager.get(cid)`). |
 
 ### Event handlers
 
