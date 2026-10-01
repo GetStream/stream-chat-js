@@ -1,3 +1,13 @@
+## [10.0.0-rc.17](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.16...v10.0.0-rc.17) (2026-10-01)
+
+### ⚠ BREAKING CHANGES
+
+* reenable WS fallback (#1889)
+
+### Features
+
+* reenable WS fallback ([#1889](https://github.com/GetStream/stream-chat-js/issues/1889)) ([45841cc](https://github.com/GetStream/stream-chat-js/commit/45841cc6c4417bd2592b8c81ccac01f021cb7443))
+
 ## [10.0.0-rc.16](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.15...v10.0.0-rc.16) (2026-09-30)
 
 ### ⚠ BREAKING CHANGES
