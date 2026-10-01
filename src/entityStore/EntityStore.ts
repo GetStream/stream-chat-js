@@ -114,9 +114,14 @@ export class EntityStore<T> {
     return this.byId.has(id);
   }
 
-  /** Every stored entity, in insertion order. */
+  /** Whether `subscriber` is one of the holders of `id`. */
+  isHeldBy(id: string, subscriber: EntityStoreSubscriber): boolean {
+    return this.subscribers.get(id)?.has(subscriber) ?? false;
+  }
+
+  /** Every entity currently in the store. */
   values(): T[] {
-    return [...this.byId.values()];
+    return Array.from(this.byId.values());
   }
 
   // ---- writes ----

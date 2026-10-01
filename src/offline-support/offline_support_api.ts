@@ -1461,13 +1461,12 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * message ordered against everything queued after it.
    *
    * Keyed on a queued `send-message` task existing for this id - the only reliable statement of "the
-   * server has never seen this message". NOT on the edited message's status: both payloads are built
-   * by `localMessageToNewMessagePayload`, which strips `status` along with every other client-only
-   * field, so nothing arriving here carries one.
+   * server has never seen this message". NOT on the edited message's status: `failed` is also what a
+   * rejected edit of a message the server has carries.
    *
-   * That same normalization is why the two merge by a plain spread: both are already `MessageRequest`s,
-   * and normalizing again would map an already-flattened `mentioned_users` back over itself as
-   * `[undefined]`.
+   * Both payloads are already `MessageRequest`s (the send's from `localMessageToNewMessagePayload`, the
+   * edit's from `toUpdatedMessagePayload`), which is why they merge by a plain spread: normalizing again
+   * would map an already-flattened `mentioned_users` back over itself as `[undefined]`.
    *
    * With nothing to fold into, the edit is queued on its own and replays as an ordinary update.
    */

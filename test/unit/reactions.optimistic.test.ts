@@ -374,10 +374,11 @@ describe('optimistic reactions', () => {
         page: [formatMessage(reply)],
         setActive: true,
       });
-      client.threads.state.next((current) => ({
-        ...current,
-        threads: [thread, ...current.threads],
-      }));
+      client.threads.paginator.setItems({
+        isFirstPage: true,
+        isLastPage: true,
+        valueOrFactory: (current) => [thread, ...current],
+      });
 
       return { reply, thread };
     };
@@ -547,7 +548,9 @@ describe('optimistic reactions', () => {
         channel,
         parentMessage: buildMessage(ownTypes, { cid: channel.cid, id: parentId }),
       });
-      thread.registerSubscriptions();
+      // Thread events arrive through `client.threads`, as for an opened thread.
+      client.threads.registerSubscriptions();
+      client.threads.register(thread);
       return { parentId, thread };
     };
 

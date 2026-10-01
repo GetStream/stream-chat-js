@@ -130,6 +130,14 @@ export type ClientUser = PartializeAllBut<OwnUserResponse, 'id'> & { anon?: bool
  */
 type NotATimestampNS<T> = 0 extends 1 & T ? T : T extends TimestampNS ? never : T;
 
+/**
+ * A thread query that asked for `watch: true` came back, so the server now watches the thread's
+ * channel, the same rule `channel.watch()` and `queryChannels` apply.
+ */
+const markThreadChannelWatched = ({ channel }: Thread) => {
+  channel.watchStatus = ChannelWatchStatus.Watching;
+};
+
 export class StreamChat extends ChatApi {
   private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics
   messageDeliveryReporter: MessageDeliveryReporter;
@@ -2130,12 +2138,12 @@ export class StreamChat extends ChatApi {
     const parentMessages = response.threads.map((thread) => thread.parent_message!);
     this.polls.hydratePollCache(parentMessages);
 
-    return {
-      threads: response.threads.map(
-        (thread) => new Thread({ client: this, threadData: thread }),
-      ),
-      next: response.next,
-    };
+    const threads = response.threads.map(
+      (thread) => new Thread({ client: this, threadData: thread }),
+    );
+    if (optionsWithDefaults.watch) threads.forEach(markThreadChannelWatched);
+
+    return { threads, next: response.next };
   }
 
   /**
@@ -2175,7 +2183,10 @@ export class StreamChat extends ChatApi {
       requestOptions,
     );
 
-    return new Thread({ client: this, threadData: response.thread });
+    const thread = new Thread({ client: this, threadData: response.thread });
+    if (optionsWithDefaults.watch) markThreadChannelWatched(thread);
+
+    return thread;
   }
 
   getUserAgent = (): string => {

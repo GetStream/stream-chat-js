@@ -5,7 +5,9 @@ import {
   queueOrRun,
   runQueueableOperation,
 } from '../../../src/offline-support/queueableOperations';
-import type { PendingTask, PendingTaskTypes, StreamChat } from '../../../src';
+import { StreamChat, Thread } from '../../../src';
+import type { MessageResponse, PendingTask, PendingTaskTypes } from '../../../src';
+import { generateMsg } from '../test-utils/generateMessage';
 
 /**
  * `queueOrRun` resolves BOTH paths — queued and direct — through {@link QUEUEABLE_OPERATIONS}, so a
@@ -63,6 +65,30 @@ describe('QUEUEABLE_OPERATIONS', () => {
       .map(([type]) => type);
 
     expect(withOnReplay).toEqual(['send-message']);
+  });
+});
+
+describe('send-message replay', () => {
+  it('reaches an open thread the list does not hold', () => {
+    const client = new StreamChat('apiKey');
+    client.user = { id: 'me' };
+    const channel = client.channel('messaging', 'general');
+    const thread = new Thread({
+      channel,
+      client,
+      parentMessage: generateMsg({ cid: channel.cid }) as MessageResponse,
+    });
+    thread.activate();
+    const upsertReply = vi.spyOn(thread, 'upsertReplyLocally');
+    const message = generateMsg({ cid: channel.cid, parent_id: thread.id });
+
+    QUEUEABLE_OPERATIONS['send-message'].onReplay?.({
+      client,
+      result: { message },
+      task: { ...task, type: 'send-message' },
+    } as never);
+
+    expect(upsertReply).toHaveBeenCalledWith(expect.objectContaining({ message }));
   });
 });
 

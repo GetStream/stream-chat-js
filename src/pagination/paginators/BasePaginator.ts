@@ -944,6 +944,17 @@ export abstract class BasePaginator<T, Q> {
    * {@link setIntervals}), which bypasses the per-interval {@link commitInterval}/{@link dropInterval}
    * publishing. No-ops when the views are already empty so a reset does not emit needlessly.
    */
+  /**
+   * Drops every loaded interval and item without publishing anything, so the next ingest starts from
+   * empty storage while `state.items` keeps showing the previous window until the caller publishes.
+   */
+  protected clearItemStorage() {
+    this.setIntervals([]);
+    this.setActiveInterval(undefined);
+    this._itemIndex.clear();
+    this.clearIntervalViews();
+  }
+
   protected clearIntervalViews() {
     this._pendingViewChangedIds.clear();
     const { logicalHead, logicalTail, anchoredHead } =
@@ -974,7 +985,7 @@ export abstract class BasePaginator<T, Q> {
    * Subclasses must return the query shape.
    */
   protected getNextQueryShape(
-    _params: Pick<PaginationQueryParams<Q>, 'direction'> = {},
+    _params: Pick<PaginationQueryParams<Q>, 'direction'> & { pageSize?: number } = {},
   ): Q {
     throw new Error('Paginator.getNextQueryShape() is not implemented');
   }
@@ -3130,10 +3141,7 @@ export abstract class BasePaginator<T, Q> {
     // adjacent pages merge; filter/sort changes clear it via `resetState()` in their setters.
     const isForcedReset = reset === 'yes' && !keepPreviousItems;
     if (isForcedReset) {
-      this.setIntervals([]);
-      this.setActiveInterval(undefined);
-      this._itemIndex.clear();
-      this.clearIntervalViews();
+      this.clearItemStorage();
       this.state.next(this.getStateBeforeFirstQuery());
     } else if (reset === 'yes' && !forcedQueryShape) {
       // A `keepPreviousItems` refresh (reconnect / pull-to-refresh) must still restart pagination from
@@ -3145,7 +3153,13 @@ export abstract class BasePaginator<T, Q> {
       });
     }
 
-    const queryShape = forcedQueryShape ?? this.getNextQueryShape({ direction });
+    // A non-destructive refresh re-fetches as much of the loaded list as the server returns at once.
+    const isRefresh = reset === 'yes' && keepPreviousItems && !forcedQueryShape;
+    const pageSize = isRefresh
+      ? Math.max(this.pageSize, this.items?.length ?? 0)
+      : this.pageSize;
+    const queryShape =
+      forcedQueryShape ?? this.getNextQueryShape({ direction, pageSize });
 
     const isFirstPage = this.isFirstPageQuery({ queryShape, reset });
 
@@ -3243,6 +3257,12 @@ export abstract class BasePaginator<T, Q> {
     stateUpdate.items = filteredItems;
 
     const isJumpQuery = !!queryShape && this.isJumpQueryShape(queryShape);
+    // A non-destructive refresh merges page 1 into the window it kept, so the ids that window held
+    // have to be read before the ingest below adds the page to it.
+    const keptItemIds =
+      isFirstPage && keepPreviousItems && !this.isCursorPagination && this.items?.length
+        ? new Set(this.items.map((item) => this.getItemId(item)))
+        : undefined;
     const interval = this.ingestPage({
       page: stateUpdate.items,
       policy: isJumpQuery ? 'strict-overlap-only' : 'auto',
@@ -3313,10 +3333,26 @@ export abstract class BasePaginator<T, Q> {
       // todo: we could keep the offset in two directions (initial tailward offset would be taken from config.initialOffset)
       const startOffset = this.offset ?? 0;
       stateUpdate.offset = startOffset + items.length;
+      // After a `keepPreviousItems` refresh whose page connects to the kept window, continue from the window's end instead of re-fetching it.
+      const lastPageItem = items[items.length - 1];
+      if (
+        interval &&
+        keptItemIds &&
+        lastPageItem &&
+        keptItemIds.has(this.getItemId(lastPageItem))
+      ) {
+        stateUpdate.offset = Math.max(
+          stateUpdate.offset,
+          startOffset + this.intervalToItems(interval).length,
+        );
+      }
       // Only hasMoreTail depends on the page result. hasMoreHead is fixed by where the loaded window
       // starts (offset 0 => head loaded) and was anchored once at the reset (getStateBeforeFirstQuery);
       // the offset only grows tailward from here, so leave hasMoreHead untouched.
-      stateUpdate.hasMoreTail = items.length === this.pageSize;
+      stateUpdate.hasMoreTail = items.length >= this.pageSize;
+      // Anchor a first page's hasMoreHead from the start offset, as getStateBeforeFirstQuery() does: a
+      // keepPreviousItems first page never publishes that state, and would keep a stale `true`.
+      if (isFirstPage) stateUpdate.hasMoreHead = (this.config.initialOffset ?? 0) > 0;
     }
 
     if (interval) {
@@ -3362,7 +3398,8 @@ export abstract class BasePaginator<T, Q> {
 
     const state = this.getStateAfterQuery(stateUpdate, isFirstPage);
     if (updateState) this.state.next(state);
-    this.populateOfflineDbAfterQuery({ items: state.items, queryShape });
+    // Only the first page is cached and a later page cannot change it.
+    if (isFirstPage) this.populateOfflineDbAfterQuery({ items: state.items, queryShape });
 
     return {
       stateCandidate: state,

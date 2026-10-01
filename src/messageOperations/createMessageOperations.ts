@@ -1,7 +1,7 @@
 import { createMessageOperationsPersistence } from './persistence';
 import { keepSendOrderWhilePendingUploadsAllowed } from './sendOrdering';
 import { settlePendingAttachmentUploads } from './settlePendingAttachmentUploads';
-import { localMessageToNewMessagePayload } from '../utils';
+import { toUpdatedMessagePayload } from '../utils';
 import { MessageOperations } from './MessageOperations';
 import type { Channel } from '../channel';
 import type { Thread } from '../thread';
@@ -70,7 +70,7 @@ export const createMessageOperations = (collection: Channel | Thread) => {
       channel.pinnedMessagesPaginator.removeItem({ id });
 
       if (parentId) {
-        client.threads.threadsById[parentId]?.messagePaginator.removeItem({ id });
+        client.threads.get(parentId)?.messagePaginator.removeItem({ id });
       }
     },
     ...(parentMessageId
@@ -129,7 +129,7 @@ export const createMessageOperations = (collection: Channel | Thread) => {
       update: async (m, o) => {
         const result = await channel.getClient().updateMessage({
           id: m.id,
-          message: localMessageToNewMessagePayload(m),
+          message: toUpdatedMessagePayload(m),
           ...o,
         });
         return { message: result.message };

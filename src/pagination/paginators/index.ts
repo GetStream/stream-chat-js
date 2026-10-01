@@ -5,3 +5,4 @@ export * from './MessagePaginator';
 export * from './PinnedMessagePaginator';
 export * from './ReminderPaginator';
 export * from './UserGroupPaginator';
+export * from './ThreadPaginator';

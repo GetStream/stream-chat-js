@@ -46,6 +46,17 @@
 - `ChannelState.membership` initializes to `undefined` (was `{}`); `ChannelState.typing` values are now `EventPayload<'typing.start' | 'typing.stop'>` (were `Event`); read receipts merged with the generated `ReadStateResponse`.
 - Composer attachments now nest `mime_type` / `file_size` / `duration` under `.custom`. `LocationComposer` state holds the **request** shape, so its `end_at` is a `Date` (was ISO string) — while an `end_at` read off a message is a unix-nanosecond number. `validLocation` returns `StaticLocationPreview | null` (was `SharedLocation | null`). See the [dates guide](./v9-to-v10-migration-guide-dates.md).
 - Composer configuration gained required `polls`, `attachments.enabled` and `attachments.customCdn` (all defaulted — only full-literal annotations break). The channel type's `uploads` / `polls` flags now resolve **into** that configuration, so read `composer.config` rather than `channel.serverConfig`. **Silent behaviour change:** a custom `doUploadRequest` no longer waives the `upload-file` capability — set `attachments.customCdn: true` if you upload to storage Stream does not host.
+- **`client.threads.threadsById` is removed.** It was built from the thread list alone. Use
+  `client.threads.get(id)` for the live thread (listed, or open anywhere) and
+  `client.threads.paginator.getItem(id)` for list membership. An open thread no longer has to be added to
+  the list to stay live: `thread.activate()` registers it. See below.
+- **The thread list moved to `client.threads.paginator`**, a `ThreadPaginator`. `state.threads`,
+  `state.pagination` and `state.ready` are gone from `ThreadManagerState` (as is the
+  `ThreadManagerPagination` type); read `paginator.state` (`items`, `isLoading`, `hasMoreTail`,
+  `lastQueryError`) instead. `unseenThreadIds`,
+  `isThreadOrderStale` and `unreadThreadCount` stay on `client.threads.state`.
+  `client.threads.loadNextPage()` and `client.threads.queryThreads()` are removed: use
+  `paginator.toTail()` and `client.queryThreadsAndHydrate()`. See below.
 - `Role` type renamed to `RoleName`.
 - Assorted small tightenings: `TokenManager.setTokenOrProvider` user param narrowed, `revokeTokens(before)` no longer accepts `string`.
 
@@ -891,6 +902,80 @@ const { lastConnectionDropAt } = client.threads.state.getLatestValue();
 // v10
 const { lastUnhealthyAt } = client.wsConnection.state.getLatestValue();
 ```
+
+### `ThreadManager.threadsById` removed; threads resolve through a registry
+
+`threadsById` was built from `state.threads`, so it only knew about threads the list had loaded. A
+thread opened from a message list was invisible to it: a hard delete, an offline-replayed reply,
+connection recovery and an edit composer's submit target all missed it. The workaround was to add
+the open thread to `state.threads` yourself, which put it on the thread list screen too.
+
+`ThreadManager` now keeps a registry holding the list's threads plus every **opened** one.
+`thread.activate()` registers a thread and subscribes it for the rest of the session. `deactivate()`
+does not release it, so reopening the thread reuses the loaded instance with no fetch. It is dropped
+when its channel is deleted or the user is removed from it, and on `disconnectUser()`. A reconnect
+marks every registered thread nobody is displaying stale, and it reloads the next time it is activated.
+
+```ts
+// v9
+const thread =
+  client.threads.threadsById[id] ?? new Thread({ channel, client, parentMessage });
+client.threads.state.next((s) => ({ ...s, threads: [thread, ...s.threads] })); // to keep it live
+
+// v10
+const thread = client.threads.ensure({ channel, parentMessage });
+thread.activate(); // on mount; thread.deactivate() on unmount
+```
+
+`ensure()` returns the stored instance, or builds a new one, and registers it either way, so a list
+query that lands before `activate()` reuses it rather than creating a second one. A thread it builds
+has only its parent message, so it starts stale and loads its thread data once, when it is first
+activated.
+`client.threads.get(id)` only looks a thread up, and `client.threads.paginator.getItem(id)` answers
+whether the list holds it.
+
+A thread no longer listens to the client itself: `client.threads` hands each thread event to the
+threads it holds, the way `client.polls` does for polls. A thread therefore gets events only once
+`client.threads` holds it (listed, `ensure()`d or activated) and `client.threads.registerSubscriptions()`
+has run; calling `thread.registerSubscriptions()` on a thread you built yourself is no longer enough.
+
+A thread query sent with `watch: true` (`getThreadAndHydrate()`, `queryThreadsAndHydrate()`, and
+through them `thread.reload()` and the thread list) now sets the channel's `watchStatus` to `Watching`,
+since the server does watch the thread's channel. A thread marks itself stale when that status becomes
+`NotWatching` (the watch was stopped while connected) instead of reacting to `user.watching.stop`; a
+dropped connection is handled by connection recovery, as before.
+
+### The thread list is a `ThreadPaginator`
+
+`client.threads.paginator` holds the list, in the order `queryThreads` returns it. There is no
+client-side sort, and the list does not reorder live: a reply to a listed thread still sets
+`isThreadOrderStale`, and one to an unlisted thread adds to `unseenThreadIds`, for a reload to pick up.
+
+```ts
+// v9
+const { threads, pagination } = client.threads.state.getLatestValue();
+const { isLoading, isLoadingNext, nextCursor } = pagination;
+
+// v10
+const { items, isLoading, hasMoreTail } = client.threads.paginator.state.getLatestValue();
+const threads = items ?? [];
+const isLoadingFirstPage = isLoading && !threads.length;
+const isLoadingNext = isLoading && threads.length > 0;
+```
+
+- `reload()` loads the first page, or re-queries a loaded list and replaces it in place. The first load
+  sets `paginator.isLoading`, like any paginator. A re-query of a loaded list sets no loading flag: the
+  current threads stay in `paginator.items` until the new ones land, and a failed re-query leaves them
+  untouched. There is no replacement for `pagination.isLoading` during a re-query; show the list as it is.
+- `paginator.isLoading` with threads loaded is the old `pagination.isLoadingNext`. A reload and a next
+  page are guarded independently, as before.
+- `client.threads.queryThreads()` is removed; the list queries through its paginator. For a one-off
+  query use `client.queryThreadsAndHydrate(...)`, which returns `Thread` instances.
+- `loadNextPage()` is removed. Load the next page with `client.threads.paginator.toTail()`, as for any
+  paginator. It is a no-op until a first load succeeds (the old `ready`, now
+  `paginator.items !== undefined`) and once there is no next page (the old `!nextCursor`), and a failed
+  one keeps the list and cursor so the next call retries.
+- A reset (`resetState()`, `disconnectUser()`) returns `paginator.items` to `undefined`.
 
 ### `ChannelState.membership`
 

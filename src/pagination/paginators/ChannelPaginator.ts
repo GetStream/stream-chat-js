@@ -277,6 +277,8 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
    * continuation rather than a first page. See `executeQuery`.
    */
   private _itemsLoadedFromOfflineDB = false;
+  /** The query in flight refreshes a cache-only window, so its response replaces the window. */
+  private _replaceOfflineSeedOnResponse = false;
   protected _sortComparatorFactory: ChannelSortComparatorFactory | undefined;
   sortComparator: (a: Channel, b: Channel) => number;
   filterBuilder: FilterBuilder<ChannelFilters>;
@@ -507,15 +509,26 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     if (params.isFirstPage && params.results) {
       this.applyPredefinedFilterResponse(pendingPredefinedFilter);
     }
+    const replaceOfflineSeed = this._replaceOfflineSeedOnResponse;
+    this._replaceOfflineSeedOnResponse = false;
+    if (replaceOfflineSeed && params.results) {
+      // The cache can be arbitrarily old, so merging into it is out of question as it might keep channels
+      // the server no longer returns (hidden, deleted, left). The seed stays on screen until now, then the
+      // page replaces it.
+      this.clearItemStorage();
+      return super.postQueryReconcile({ ...params, keepPreviousItems: false });
+    }
     return super.postQueryReconcile(params);
   }
 
   // invoked inside BasePaginator.executeQuery() to keep it as a query descriptor;
-  protected getNextQueryShape(): ChannelQueryShape {
+  protected getNextQueryShape({
+    pageSize,
+  }: { pageSize?: number } = {}): ChannelQueryShape {
     const shape: ChannelQueryShape = {
       filter_conditions: this.buildQueryFilters(),
       ...this.options,
-      limit: this.pageSize,
+      limit: pageSize ?? this.pageSize,
       offset: this.offset,
     };
 
@@ -561,7 +574,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     this.client.offlineDb?.executeQuerySafely(
       (db) =>
         db.upsertCidsForQuery({
-          cids,
+          cids: cids.slice(0, this.pageSize),
           filters: request.filter_conditions,
           options: request,
           predefinedFilter: this._predefinedFilter,
@@ -702,6 +715,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   }
 
   query = async (): Promise<PaginationQueryReturnValue<Channel>> => {
+    if (this._itemsLoadedFromOfflineDB) this._replaceOfflineSeedOnResponse = true;
     // A query is going out, so whatever it returns the items are no longer cache-only.
     this._itemsLoadedFromOfflineDB = false;
     // get the params only if they were not generated previously

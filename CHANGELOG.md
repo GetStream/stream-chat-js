@@ -1,3 +1,17 @@
+## [10.0.0-rc.16](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.15...v10.0.0-rc.16) (2026-09-30)
+
+### ⚠ BREAKING CHANGES
+
+* thread paginator and manager revamp (#1888)
+
+### Bug Fixes
+
+* channel paginator merging bugs ([#1894](https://github.com/GetStream/stream-chat-js/issues/1894)) ([dbbbd75](https://github.com/GetStream/stream-chat-js/commit/dbbbd750f1073b77b2c9de10657e0eb3462c1832)), closes [#1865](https://github.com/GetStream/stream-chat-js/issues/1865)
+
+### Features
+
+* thread paginator and manager revamp ([#1888](https://github.com/GetStream/stream-chat-js/issues/1888)) ([d1562aa](https://github.com/GetStream/stream-chat-js/commit/d1562aa61d45402af715edd11ee42aa97e484456))
+
 ## [10.0.0-rc.15](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.14...v10.0.0-rc.15) (2026-09-25)
 
 ### ⚠ BREAKING CHANGES
