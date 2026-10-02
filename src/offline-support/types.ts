@@ -449,19 +449,19 @@ export type PendingTaskTypes = {
  * type is a compile error until both its signature and its resolver exist, rather than a runtime
  * "Tried to execute invalid pending task type" the first time somebody queues one.
  *
- * The `_`-prefixed forms deliberately: the public `sendMessage` / `updateMessage` / … queue, so
- * resolving to those would make a replay queue itself again instead of hitting the server.
+ * Each resolves to a method that only sends the request — a queueing one would make a replay queue
+ * itself again instead of hitting the server. Hence the drafts' `_`-prefixed forms.
  *
  * @internal
  */
 export type QueueableOperationSignatures = {
   'create-draft': Channel['_createDraft'];
   'delete-draft': Channel['_deleteDraft'];
-  'delete-message': StreamChat['_deleteMessage'];
-  'delete-reaction': Channel['_deleteReaction'];
-  'send-message': Channel['_sendMessage'];
-  'send-reaction': Channel['_sendReaction'];
-  'update-message': StreamChat['_updateMessage'];
+  'delete-message': StreamChat['deleteMessage'];
+  'delete-reaction': StreamChat['deleteReaction'];
+  'send-message': Channel['sendMessage'];
+  'send-reaction': StreamChat['sendReaction'];
+  'update-message': StreamChat['updateMessage'];
 };
 
 export type QueueableType = keyof QueueableOperationSignatures;

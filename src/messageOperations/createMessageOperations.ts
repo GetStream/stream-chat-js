@@ -1,4 +1,6 @@
-import { createMessageOperationsPersistence } from './persistence';
+import { isQueuedForReplay } from './optimistic';
+import { queueOrRun } from '../offline-support/queueableOperations';
+import { getPendingTaskChannelData } from '../offline-support/util';
 import { keepSendOrderWhilePendingUploadsAllowed } from './sendOrdering';
 import { settlePendingAttachmentUploads } from './settlePendingAttachmentUploads';
 import { toUpdatedMessagePayload } from '../utils';
@@ -8,7 +10,7 @@ import type { Thread } from '../thread';
 
 /**
  * Builds the `MessageOperations` a message collection owns, shared by `Channel` and `Thread` so the
- * two cannot drift — the same reason {@link createMessageOperationsPersistence} exists.
+ * two cannot drift.
  *
  * Everything it needs is derivable from the collection: a `Thread` sends against its parent channel
  * and stamps its own id as `parent_id`, a `Channel` against itself with no stamp.
@@ -19,7 +21,9 @@ export const createMessageOperations = (collection: Channel | Thread) => {
   // closes a module-load cycle back to `channel.ts`) or a duck-type that a codegen run could silently
   // invert.
   const paginator = collection.messagePaginator;
-  const { channel, parentMessageId } = paginator;
+  // The explicit type is needed because `_checkHasId` is an assertion function.
+  const channel: Channel = paginator.channel;
+  const { parentMessageId } = paginator;
 
   return new MessageOperations({
     sequenceRequests: (kind, request) =>
@@ -37,8 +41,28 @@ export const createMessageOperations = (collection: Channel | Thread) => {
         channelCid: channel.cid,
         client: channel.getClient(),
       }),
-    ...createMessageOperationsPersistence({ channel }),
     channel,
+    // We don't wait for the offline DB here. It only mirrors what's in memory, so if it isn't ready
+    // or the write fails, the message operation should carry on as if nothing happened.
+    // Replies are stored under their channel, like any other message.
+    persist: (message) => {
+      channel.getClient().offlineDb?.executeQuerySafely(
+        (db) =>
+          db.upsertMessageWithChannelGuard({
+            message: { ...message, cid: channel.cid },
+          }),
+        { method: 'messageOperations:persist' },
+      );
+    },
+    purge: (id) => {
+      channel
+        .getClient()
+        .offlineDb?.executeQuerySafely((db) => db.hardDeleteMessage({ id }), {
+          method: 'messageOperations:purge',
+        });
+    },
+    isQueued: (messageId, types) =>
+      isQueuedForReplay(channel.getClient(), messageId, types),
     ingest: (m) => {
       const store = channel.getClient().messageStore;
       // The paginator is the entry point whenever it can hold the message — it owns interval
@@ -77,62 +101,108 @@ export const createMessageOperations = (collection: Channel | Thread) => {
       ? {
           normalizeOutgoingMessage: (m) => ({ ...m, parent_id: parentMessageId }),
         }
-      : {}),
+      : {
+          // We stop typing before the send and don't wait for it. A send with an upload can take as
+          // long as the transfer, and everyone would see us typing the whole time.
+          beforeSend: () => {
+            if (collection.messageComposer.config.text.publishTypingEvents) {
+              channel.stopTyping().catch(() => undefined);
+            }
+          },
+        }),
+    // Hands an integrator's handler exactly the documented fields, not whatever else the params carry.
     handlers: () => {
-      const { requestHandlers } = channel.configState.getLatestValue();
-      const deleteMessageRequest = requestHandlers?.deleteMessageRequest;
-      const sendMessageRequest = requestHandlers?.sendMessageRequest;
-      const retrySendMessageRequest = requestHandlers?.retrySendMessageRequest;
-      const updateMessageRequest = requestHandlers?.updateMessageRequest;
+      const {
+        deleteMessageRequest,
+        retrySendMessageRequest,
+        sendMessageRequest,
+        updateMessageRequest,
+      } = channel.configState.getLatestValue().requestHandlers ?? {};
       return {
-        delete: deleteMessageRequest
-          ? (p) =>
-              deleteMessageRequest({
-                localMessage: p.localMessage,
-                options: p.options,
-              })
-          : undefined,
-        send: sendMessageRequest
-          ? (p) =>
-              sendMessageRequest({
-                localMessage: p.localMessage,
-                message: p.message,
-                options: p.options,
-              })
-          : undefined,
-        retry: retrySendMessageRequest
-          ? (p) =>
-              retrySendMessageRequest({
-                localMessage: p.localMessage,
-                message: p.message,
-                options: p.options,
-              })
-          : undefined,
-        update: updateMessageRequest
-          ? (p) =>
-              updateMessageRequest({
-                localMessage: p.localMessage,
-                options: p.options,
-              })
-          : undefined,
+        delete:
+          deleteMessageRequest &&
+          (({ localMessage, options }, defaultRequest) =>
+            deleteMessageRequest({ localMessage, options }, defaultRequest)),
+        retry:
+          retrySendMessageRequest &&
+          (({ localMessage, message, options }, defaultRequest) =>
+            retrySendMessageRequest({ localMessage, message, options }, defaultRequest)),
+        send:
+          sendMessageRequest &&
+          (({ localMessage, message, options }, defaultRequest) =>
+            sendMessageRequest({ localMessage, message, options }, defaultRequest)),
+        update:
+          updateMessageRequest &&
+          (({ localMessage, options }, defaultRequest) =>
+            updateMessageRequest({ localMessage, options }, defaultRequest)),
       };
     },
+    // The HTTP requests, through the offline queue so they replay on reconnect.
     defaults: {
       delete: async (id, o) => {
-        const result = await channel.getClient().deleteMessage({ id, ...o });
+        const result = await queueOrRun({
+          client: channel.getClient(),
+          task: { messageId: id, payload: [{ id, ...o }], type: 'delete-message' },
+        });
         return { message: result.message };
       },
       send: async (m, o) => {
-        const result = await channel.sendMessage({ message: m, ...o });
+        channel._checkHasId();
+        const result = await queueOrRun({
+          channel,
+          client: channel.getClient(),
+          // Nothing to key a queue entry on without a message id, so it runs but is not queued.
+          queue: !!m.id,
+          task: {
+            channelId: channel.id,
+            channelType: channel.type,
+            messageId: m.id,
+            payload: [{ message: m, ...o }],
+            type: 'send-message',
+          },
+        });
         return { message: result.message };
       },
       update: async (m, o) => {
-        const result = await channel.getClient().updateMessage({
-          id: m.id,
-          message: toUpdatedMessagePayload(m),
-          ...o,
+        const request = { id: m.id, message: toUpdatedMessagePayload(m), ...o };
+        const result = await queueOrRun({
+          client: channel.getClient(),
+          task: {
+            ...getPendingTaskChannelData(m.cid),
+            messageId: m.id,
+            payload: [request],
+            type: 'update-message',
+          },
         });
         return { message: result.message };
+      },
+      sendReaction: async (...args) => {
+        channel._checkHasId();
+        return await queueOrRun({
+          channel,
+          client: channel.getClient(),
+          task: {
+            channelId: channel.id,
+            channelType: channel.type,
+            messageId: args[0].id,
+            payload: args,
+            type: 'send-reaction',
+          },
+        });
+      },
+      deleteReaction: async (...args) => {
+        channel._checkHasId();
+        return await queueOrRun({
+          channel,
+          client: channel.getClient(),
+          task: {
+            channelId: channel.id,
+            channelType: channel.type,
+            messageId: args[0].id,
+            payload: args,
+            type: 'delete-reaction',
+          },
+        });
       },
     },
   });

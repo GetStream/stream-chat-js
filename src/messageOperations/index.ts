@@ -1,25 +1,21 @@
 export { MessageOperations } from './MessageOperations';
 export { createMessageOperations } from './createMessageOperations';
-export { WithMessageOperations } from './WithMessageOperations';
-export { createMessageOperationsPersistence } from './persistence';
 export { MessageOperationStatePolicy } from './MessageOperationStatePolicy';
 export { applyReactionLocally } from './applyReactionLocally';
 export { reflectReactionEvent } from './reflectReactionEvent';
 export {
-  addReactionOptimistically,
   applyMessageChangeLocally,
-  deleteReactionOptimistically,
   isQueuedForReplay,
   REMOVE_MESSAGE,
 } from './optimistic';
 export type {
   MessageChange,
-  LocalMessageAccessor,
   MessageChangeProducer,
   RevertLocalChange,
 } from './optimistic';
 export type { OptimisticOutcome } from './MessageOperationStatePolicy';
 export type {
+  DefaultOperationRequest,
   MessageOperationsContext,
   MessageOperationsHandlers,
   OperationKind,

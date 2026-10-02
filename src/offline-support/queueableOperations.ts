@@ -95,12 +95,11 @@ export const QUEUEABLE_OPERATIONS: {
   },
   'delete-message': {
     logFailureAs: { message: 'Deleting the message failed.', method: 'deleteMessage' },
-    run: ({ client, task }) => client._deleteMessage(...task.payload),
+    run: ({ client, task }) => client.deleteMessage(...task.payload),
   },
   'delete-reaction': {
     logFailureAs: { message: 'Deleting the reaction failed.', method: 'deleteReaction' },
-    run: ({ channel, client, task }) =>
-      channelOf(client, task, channel)._deleteReaction(...task.payload),
+    run: ({ client, task }) => client.deleteReaction(...task.payload),
   },
   'send-message': {
     logFailureAs: { message: 'Sending the message failed.', method: 'sendMessage' },
@@ -122,16 +121,15 @@ export const QUEUEABLE_OPERATIONS: {
       channelOf(client, task).messagePaginator.trackLastMessage(formatMessage(message));
     },
     run: ({ channel, client, task }) =>
-      channelOf(client, task, channel)._sendMessage(...task.payload),
+      channelOf(client, task, channel).sendMessage(...task.payload),
   },
   'send-reaction': {
     logFailureAs: { message: 'Sending the reaction failed.', method: 'sendReaction' },
-    run: ({ channel, client, task }) =>
-      channelOf(client, task, channel)._sendReaction(...task.payload),
+    run: ({ client, task }) => client.sendReaction(...task.payload),
   },
   'update-message': {
     logFailureAs: { message: 'Updating the message failed.', method: 'updateMessage' },
-    run: ({ client, task }) => client._updateMessage(...task.payload),
+    run: ({ client, task }) => client.updateMessage(...task.payload),
   },
 };
 

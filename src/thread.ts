@@ -20,7 +20,7 @@ import { ChannelWatchStatus } from './channel_state';
 import type { StreamChat } from './client';
 import type { CustomThreadData } from './custom_types';
 import { MessageComposer } from './messageComposer';
-import { createMessageOperations, WithMessageOperations } from './messageOperations';
+import { createMessageOperations } from './messageOperations';
 import type { MessageOperations } from './messageOperations';
 import { nowNs } from './utils/time';
 import { WithSubscriptions } from './utils/WithSubscriptions';
@@ -103,7 +103,7 @@ export type ThreadConfig = {
  */
 export const DEFAULT_THREAD_CONFIG: ThreadConfig = deepFreezeConfig({});
 
-export class Thread extends WithMessageOperations(WithSubscriptions) {
+export class Thread extends WithSubscriptions {
   /** The shared configuration machinery — see {@link ConfigController}. */
   private readonly configController = new ConfigController<ThreadConfig>({
     defaults: DEFAULT_THREAD_CONFIG,

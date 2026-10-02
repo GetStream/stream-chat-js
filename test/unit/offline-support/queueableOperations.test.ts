@@ -28,7 +28,7 @@ const makeClient = ({
 }: {
   deleteMessage?: () => Promise<unknown>;
   offlineDb?: unknown;
-} = {}) => ({ _deleteMessage: deleteMessage, offlineDb }) as unknown as StreamChat;
+} = {}) => ({ deleteMessage, offlineDb }) as unknown as StreamChat;
 
 const dbThatQueues = (result: unknown) => ({ queueTask: vi.fn(async () => result) });
 
@@ -120,64 +120,81 @@ describe('runQueueableOperation', () => {
  * attempt always has the real instance in hand, so it must never go through that lookup.
  */
 describe('channel resolution', () => {
-  const reactionTask = {
+  const sendTask = {
     channelId: 'general',
     channelType: 'messaging',
     messageId: 'm1',
-    payload: [{ id: 'm1', reaction: { type: 'love' } }],
-    type: 'send-reaction',
+    payload: [{ message: { id: 'm1', text: 'hi' } }],
+    type: 'send-message',
   } as unknown as PendingTask;
 
   it("runs on the caller's own channel instance, without looking one up", async () => {
-    const callerChannel = { _sendReaction: vi.fn(async () => ({})) };
+    const callerChannel = { sendMessage: vi.fn(async () => ({})) };
     const lookup = vi.fn();
     const client = { channel: lookup } as unknown as StreamChat;
 
     await runQueueableOperation({
       channel: callerChannel as never,
       client,
-      task: reactionTask,
+      task: sendTask,
     });
 
-    expect(callerChannel._sendReaction).toHaveBeenCalledWith({
-      id: 'm1',
-      reaction: { type: 'love' },
+    expect(callerChannel.sendMessage).toHaveBeenCalledWith({
+      message: { id: 'm1', text: 'hi' },
     });
     expect(lookup).not.toHaveBeenCalled();
   });
 
   it('resolves the channel from the task when there is no caller instance (a replay)', async () => {
-    const resolved = { _sendReaction: vi.fn(async () => ({})) };
+    const resolved = { sendMessage: vi.fn(async () => ({})) };
     const lookup = vi.fn(() => resolved);
     const client = { channel: lookup } as unknown as StreamChat;
 
-    await runQueueableOperation({ client, task: reactionTask });
+    await runQueueableOperation({ client, task: sendTask });
 
     expect(lookup).toHaveBeenCalledWith('messaging', 'general');
-    expect(resolved._sendReaction).toHaveBeenCalledTimes(1);
+    expect(resolved.sendMessage).toHaveBeenCalledTimes(1);
   });
 
   it("still runs when the task carries no channel id, as long as the caller's instance is given", async () => {
     // A `Channel` with no id yet cannot key a task, but a direct send on it has always worked.
-    const callerChannel = { _sendReaction: vi.fn(async () => ({})) };
+    const callerChannel = { sendMessage: vi.fn(async () => ({})) };
     const client = { channel: vi.fn() } as unknown as StreamChat;
 
     await runQueueableOperation({
       channel: callerChannel as never,
       client,
-      task: { ...reactionTask, channelId: undefined } as unknown as PendingTask,
+      task: { ...sendTask, channelId: undefined } as unknown as PendingTask,
     });
 
-    expect(callerChannel._sendReaction).toHaveBeenCalledTimes(1);
+    expect(callerChannel.sendMessage).toHaveBeenCalledTimes(1);
   });
 
   it('throws for a replay of a channel-scoped task with no channel to resolve', async () => {
     await expect(
       runQueueableOperation({
         client: { channel: vi.fn() } as unknown as StreamChat,
-        task: { ...reactionTask, channelId: undefined } as unknown as PendingTask,
+        task: { ...sendTask, channelId: undefined } as unknown as PendingTask,
       }),
     ).rejects.toThrow(/without a channel type and id/);
+  });
+
+  it('runs a reaction on the client, which needs no channel', async () => {
+    const sendReaction = vi.fn(async () => ({}));
+    const lookup = vi.fn();
+    const client = { channel: lookup, sendReaction } as unknown as StreamChat;
+
+    await runQueueableOperation({
+      client,
+      task: {
+        ...sendTask,
+        payload: [{ id: 'm1', reaction: { type: 'love' } }],
+        type: 'send-reaction',
+      } as unknown as PendingTask,
+    });
+
+    expect(sendReaction).toHaveBeenCalledWith({ id: 'm1', reaction: { type: 'love' } });
+    expect(lookup).not.toHaveBeenCalled();
   });
 });
 

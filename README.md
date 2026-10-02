@@ -60,10 +60,12 @@ const channel = client.channel('messaging', 'test-channel', {
 await channel.create();
 
 // send message
-const { message } = await channel.sendMessage({ text: 'This is a test message' });
+const { message } = await channel.sendMessage({
+  message: { text: 'This is a test message' },
+});
 
 // send reaction
-await channel.sendReaction(message.id, { type: 'love', user: { id: 'vishal-1' } });
+await client.sendReaction({ id: message.id, reaction: { type: 'love' } });
 ```
 
 The `StreamChat` client is set up to allow extension of the base types through use of module augmentation, custom types will carry through to all client returns and provide code-completion to queries (if supported). To extend Stream's entities with custom data you'll have to create a declaration file and make sure it's loaded by TypeScript, [see the list of extendable interfaces](https://github.com/GetStream/stream-chat-js/blob/master/src/custom_types.ts) and the example bellow using two of the most common ones:

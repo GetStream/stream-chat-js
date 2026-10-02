@@ -5,10 +5,6 @@ import {
   REMOVE_MESSAGE,
 } from '../../../src/messageOperations/optimistic';
 import type { StreamChat } from '../../../src/client';
-import type {
-  LocalMessageChange,
-  LocalMessageAccessor,
-} from '../../../src/messageOperations/optimistic';
 import type { LocalMessage } from '../../../src/types';
 import { convertDateToTimestamp } from '../test-utils/time';
 
@@ -22,21 +18,32 @@ const message = (overrides?: Partial<LocalMessage>): LocalMessage =>
     ...overrides,
   }) as LocalMessage;
 
+/** Memory (`store`) and the offline-DB mirror (`db`), both seeded with the same row. */
 const makeState = (seed?: LocalMessage) => {
   const store = new Map<string, LocalMessage>();
-  if (seed) store.set(seed.id, seed);
+  const db = new Map<string, LocalMessage>();
+  if (seed) {
+    store.set(seed.id, seed);
+    db.set(seed.id, seed);
+  }
 
-  const state: LocalMessageAccessor = {
+  const state: Parameters<typeof applyMessageChangeLocally>[0] = {
     get: (id) => store.get(id),
     ingest: (m) => {
       store.set(m.id, m);
+    },
+    persist: (m) => {
+      db.set(m.id, m);
+    },
+    purge: (id) => {
+      db.delete(id);
     },
     remove: (id) => {
       store.delete(id);
     },
   };
 
-  return { state, store };
+  return { db, state, store };
 };
 
 describe('applyMessageChangeLocally', () => {
@@ -52,6 +59,17 @@ describe('applyMessageChangeLocally', () => {
     expect(typeof undo).toBe('function');
   });
 
+  it('mirrors the write into the offline DB', () => {
+    const { db, state, store } = makeState(message({ text: 'before' }));
+
+    applyMessageChangeLocally(state, {
+      messageId: 'm1',
+      produce: (current) => ({ ...current!, text: 'after' }),
+    });
+
+    expect(db.get('m1')).toBe(store.get('m1'));
+  });
+
   it('hands produce the copy currently held', () => {
     const existing = message();
     const { state } = makeState(existing);
@@ -63,7 +81,7 @@ describe('applyMessageChangeLocally', () => {
   });
 
   it('does nothing when produce declines the change', () => {
-    const { state, store } = makeState();
+    const { db, state, store } = makeState();
     const change = applyMessageChangeLocally(state, {
       messageId: 'm1',
       produce: () => undefined,
@@ -71,12 +89,13 @@ describe('applyMessageChangeLocally', () => {
 
     expect(change).toBeUndefined();
     expect(store.size).toBe(0);
+    expect(db.size).toBe(0);
   });
 
   describe('undo', () => {
     it('restores the previous copy and reports that it reverted', () => {
       const existing = message({ text: 'before' });
-      const { state, store } = makeState(existing);
+      const { db, state, store } = makeState(existing);
 
       const undo = applyMessageChangeLocally(state, {
         messageId: 'm1',
@@ -85,10 +104,11 @@ describe('applyMessageChangeLocally', () => {
 
       expect(undo?.()).toBe(true);
       expect(store.get('m1')).toBe(existing);
+      expect(db.get('m1')).toBe(existing);
     });
 
     it('does not clobber a fresher copy that landed while the request was in flight', () => {
-      const { state, store } = makeState(message({ text: 'before' }));
+      const { db, state, store } = makeState(message({ text: 'before' }));
 
       const undo = applyMessageChangeLocally(state, {
         messageId: 'm1',
@@ -97,13 +117,15 @@ describe('applyMessageChangeLocally', () => {
 
       const fromWebsocket = message({ text: 'from WS' });
       state.ingest(fromWebsocket);
+      state.persist(fromWebsocket);
 
       expect(undo?.()).toBe(false);
       expect(store.get('m1')).toBe(fromWebsocket);
+      expect(db.get('m1')).toBe(fromWebsocket);
     });
 
     it('removes a message it added, when there was nothing to restore', () => {
-      const { state, store } = makeState();
+      const { db, state, store } = makeState();
 
       const undo = applyMessageChangeLocally(state, {
         messageId: 'm1',
@@ -111,15 +133,17 @@ describe('applyMessageChangeLocally', () => {
       });
 
       expect(store.has('m1')).toBe(true);
+      expect(db.has('m1')).toBe(true);
       expect(undo?.()).toBe(true);
       expect(store.has('m1')).toBe(false);
+      expect(db.has('m1')).toBe(false);
     });
   });
 
   describe('REMOVE_MESSAGE', () => {
     it('removes the message and puts it back on undo', () => {
       const existing = message();
-      const { state, store } = makeState(existing);
+      const { db, state, store } = makeState(existing);
 
       const undo = applyMessageChangeLocally(state, {
         messageId: 'm1',
@@ -127,13 +151,16 @@ describe('applyMessageChangeLocally', () => {
       });
 
       expect(store.has('m1')).toBe(false);
+      expect(db.has('m1')).toBe(false);
       expect(undo?.()).toBe(true);
       expect(store.get('m1')).toBe(existing);
+      expect(db.get('m1')).toBe(existing);
     });
 
     it('is a no-op when nothing was held', () => {
       const { state } = makeState();
       const remove = vi.spyOn(state, 'remove');
+      const purge = vi.spyOn(state, 'purge');
 
       expect(
         applyMessageChangeLocally(state, {
@@ -142,6 +169,7 @@ describe('applyMessageChangeLocally', () => {
         }),
       ).toBeUndefined();
       expect(remove).not.toHaveBeenCalled();
+      expect(purge).not.toHaveBeenCalled();
     });
   });
 });
