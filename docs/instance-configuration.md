@@ -171,6 +171,10 @@ client.config.set({
 });
 ```
 
+A message request handler also receives the default request as a second argument — the HTTP call
+through the offline queue — so it can add something around the request and still send it the default
+way: `sendMessageRequest: (params, defaultRequest) => defaultRequest(params)`.
+
 `markReadRequest` returns `Promise<EventAPIResponse | null>`, and `channel.markRead()` /
 `thread.markRead()` resolve to a different response shape — so return `null` after delegating rather
 than forwarding their result directly.

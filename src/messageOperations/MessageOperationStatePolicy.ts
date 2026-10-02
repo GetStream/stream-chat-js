@@ -46,6 +46,30 @@ const isHardDelete = (options: unknown) =>
   !!(options as DeleteMessageOptions | undefined)?.hard;
 
 /**
+ * Closes each phase's branches on the kind. A new `OperationKind` fails to compile at every call until
+ * that phase decides what the kind does, instead of quietly getting another kind's rules.
+ */
+const unhandledKind = (kind: never): never => {
+  throw new Error(`Unhandled message operation kind: ${String(kind)}`);
+};
+
+/**
+ * The queued tasks that mean a failed request is still pending, so its optimistic state stays.
+ *
+ * A send has none. One that never reached the server has to settle as `failed` even when its task is
+ * queued, because the retry affordance is the only way the user can get that message out.
+ */
+const PENDING_WHEN_QUEUED: Record<OperationKind, readonly QueueableType[]> = {
+  delete: ['delete-message'],
+  retry: [],
+  send: [],
+  // An edit of a message the server has never seen is folded into that message's queued send
+  // (`AbstractOfflineDB.handleUpdateMessagePendingTask`), so it leaves no `update-message` row of
+  // its own.
+  update: ['update-message', 'send-message'],
+};
+
+/**
  * The local-state half of every message operation: what to show before the request resolves, what to
  * do with the server's answer, and what to do when it fails.
  *
@@ -105,8 +129,8 @@ export class MessageOperationStatePolicy {
     }
 
     if (kind === 'update') {
-      // Preserve the status: an edit must not turn a received message into `sending`, and an edit of a
-      // message that never left the device has to stay `failed`.
+      // An edit keeps the message's status. A message the server already has must not go back to
+      // `sending`, and one that never left the device has to stay `failed`.
       const isFailed = localMessage.status === 'failed';
       const editedAt = nowNs();
       const applied: LocalMessage = {
@@ -123,21 +147,25 @@ export class MessageOperationStatePolicy {
       return { applied, previous };
     }
 
-    const applied: LocalMessage = {
-      ...localMessage,
-      error: undefined,
-      status:
-        !localMessage.status || localMessage.status === 'failed'
-          ? 'sending'
-          : localMessage.status,
-    };
-    this.ctx.ingest(applied);
-    // Write-ahead, pessimistically FAILED. If the app dies between here and the server's ack the
-    // message comes back as failed and retryable rather than disappearing; a success overwrites it
-    // below. The retry payload does not need persisting alongside it — `MessageOperations.retry`
-    // reconstructs it from the message when `failedSendCache` is cold.
-    this.ctx.persist({ ...applied, status: 'failed' });
-    return { applied, previous };
+    if (kind === 'send' || kind === 'retry') {
+      const applied: LocalMessage = {
+        ...localMessage,
+        error: undefined,
+        status:
+          !localMessage.status || localMessage.status === 'failed'
+            ? 'sending'
+            : localMessage.status,
+      };
+      this.ctx.ingest(applied);
+      // Write-ahead, pessimistically FAILED. If the app dies between here and the server's ack the
+      // message comes back as failed and retryable rather than disappearing; a success overwrites
+      // it below. The retry payload does not need persisting alongside it —
+      // `MessageOperations.retry` reconstructs it from the message when `failedSendCache` is cold.
+      this.ctx.persist({ ...applied, status: 'failed' });
+      return { applied, previous };
+    }
+
+    return unhandledKind(kind);
   }
 
   success<K extends OperationKind>({
@@ -176,30 +204,36 @@ export class MessageOperationStatePolicy {
       return;
     }
 
-    const existing = this.ctx.get(messageId);
+    if (kind === 'update' || kind === 'send' || kind === 'retry') {
+      const existing = this.ctx.get(messageId);
 
-    const nothingWroteSinceOptimistic =
-      !!optimistic?.applied && existing === optimistic.applied;
+      const nothingWroteSinceOptimistic =
+        !!optimistic?.applied && existing === optimistic.applied;
 
-    // Reached only when something else did write since the optimistic step. For an edit both copies
-    // are then server derived, so comparing their timestamps compares one clock against itself. For a
-    // send the copy that landed is a `message.new` WS event, which is server derived too.
-    const serverNewer = !existing || formatted.updated_at > existing.updated_at;
-    const serverSameOrNewer = !existing || formatted.updated_at >= existing.updated_at;
-    const existingIsOurOptimisticSend = existing?.status === 'sending';
+      // Reached only when something else did write since the optimistic step. For an edit both
+      // copies are then server derived, so comparing their timestamps compares one clock against
+      // itself. For a send the copy that landed is a `message.new` WS event, which is server derived
+      // too.
+      const serverNewer = !existing || formatted.updated_at > existing.updated_at;
+      const serverSameOrNewer = !existing || formatted.updated_at >= existing.updated_at;
+      const existingIsOurOptimisticSend = existing?.status === 'sending';
 
-    const applyServerCopy =
-      nothingWroteSinceOptimistic ||
-      serverNewer ||
-      (existingIsOurOptimisticSend && serverSameOrNewer);
+      const applyServerCopy =
+        nothingWroteSinceOptimistic ||
+        serverNewer ||
+        (existingIsOurOptimisticSend && serverSameOrNewer);
 
-    if (!applyServerCopy) return;
+      if (!applyServerCopy) return;
 
-    this.ctx.ingest(formatted);
-    // Persist only what was actually applied, so the row can never disagree with memory. For
-    // send/retry this is also what supersedes the pessimistic `failed` write-ahead — and when the copy
-    // is declined it is because a fresher one already landed, whose own path wrote the row.
-    this.ctx.persist(formatted);
+      this.ctx.ingest(formatted);
+      // Persist only what was actually applied, so the row can never disagree with memory. For
+      // send/retry this is also what supersedes the pessimistic `failed` write-ahead — and when the
+      // copy is declined it is because a fresher one already landed, whose own path wrote the row.
+      this.ctx.persist(formatted);
+      return;
+    }
+
+    return unhandledKind(kind);
   }
 
   async failure<K extends OperationKind>({
@@ -229,22 +263,12 @@ export class MessageOperationStatePolicy {
       return;
     }
 
-    // Queued for replay: pending, not failed. Leave the optimistic state exactly as it stands.
-    //
-    // Deliberately scoped to update/delete. A send that never reached the server has to settle as
-    // `failed` even when its task is queued, because the retry affordance is the only way the user can
-    // get that message out.
-    //
-    // An update also accepts `send-message`, because an edit of a message the server has never seen is
-    // folded into that message's queued send (`AbstractOfflineDB.handleUpdateMessagePendingTask`) and
-    // so leaves no `update-message` row of its own.
+    // A request waiting in the offline queue hasn't failed, it just hasn't been sent yet, so the
+    // optimistic state stays exactly as it is.
+    const pendingTaskTypes = PENDING_WHEN_QUEUED[kind];
     const queued =
-      kind !== 'send' &&
-      kind !== 'retry' &&
-      (await this.ctx.isQueued(
-        messageId,
-        kind === 'delete' ? ['delete-message'] : ['update-message', 'send-message'],
-      ));
+      pendingTaskTypes.length > 0 &&
+      (await this.ctx.isQueued(messageId, pendingTaskTypes));
 
     if (kind === 'delete') {
       if (!queued) this.revertDelete({ messageId, optimistic, options });
@@ -266,9 +290,14 @@ export class MessageOperationStatePolicy {
       return;
     }
 
-    const failed: LocalMessage = { ...localMessage, error: parsed, status: 'failed' };
-    this.ctx.ingest(failed);
-    this.ctx.persist(failed);
+    if (kind === 'send' || kind === 'retry') {
+      const failed: LocalMessage = { ...localMessage, error: parsed, status: 'failed' };
+      this.ctx.ingest(failed);
+      this.ctx.persist(failed);
+      return;
+    }
+
+    return unhandledKind(kind);
   }
 
   private revertDelete<K extends OperationKind>({

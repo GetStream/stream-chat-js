@@ -10,6 +10,7 @@ import type {
 } from '../types';
 import type { QueueableType } from '../offline-support/types';
 import type { Channel } from '../channel';
+import type { StreamChat } from '../client';
 
 export type OperationKind = 'send' | 'retry' | 'update' | 'delete';
 
@@ -39,8 +40,18 @@ export type OperationParams<K extends OperationKind> = {
 
 export type OperationResponse = { message: MessageResponse };
 
+/** What an operation sends when nothing replaces it: the HTTP request, through the offline queue. */
+export type DefaultOperationRequest<K extends OperationKind> = (
+  params: OperationParams<K>,
+) => Promise<OperationResponse>;
+
+/**
+ * Replaces an operation's request. Call `defaultRequest` (with the params as given, or changed) to
+ * send it the default way, offline queueing included.
+ */
 export type OperationRequestFn<K extends OperationKind> = (
   params: OperationParams<K>,
+  defaultRequest: DefaultOperationRequest<K>,
 ) => Promise<OperationResponse>;
 
 export type MessageOperationsHandlers = {
@@ -82,6 +93,9 @@ export type MessageOperationsContext = {
 
   normalizeOutgoingMessage?: (m: MessageRequest) => MessageRequest;
 
+  /** Runs first on every send (not a retry). This is where the typing indicator is stopped. */
+  beforeSend?: () => void;
+
   /**
    * Lets the owner run a request on its own instead of in parallel — the server dates a message
    * on arrival, so a short text sent after a photo would otherwise be dated first. Wraps the
@@ -109,14 +123,16 @@ export type MessageOperationsContext = {
   }>;
 
   /**
-   * The owner's own API calls, used when nothing overrides them. Each operation resolves its
-   * request as: a per-call `requestFn`, else the integrator's {@link handlers}, else these — so a
-   * `Channel` reaches its endpoints and a `Thread` its own without this module knowing either.
+   * The HTTP requests, through the offline queue — used when nothing overrides them. Each operation
+   * resolves its request as: a per-call `requestFn`, else the integrator's {@link handlers}, else
+   * these. A replaced request still reaches them through its `defaultRequest`.
    */
   defaults: {
     delete: (id: string, o?: DeleteMessageOptions) => Promise<OperationResponse>;
     send: (m: MessageRequest, o?: SendMessageOptions) => Promise<OperationResponse>;
     update: (m: LocalMessage, o?: UpdateMessageOptions) => Promise<OperationResponse>;
+    sendReaction: StreamChat['sendReaction'];
+    deleteReaction: StreamChat['deleteReaction'];
   };
 
   handlers: () => MessageOperationsHandlers;

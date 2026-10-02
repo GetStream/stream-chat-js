@@ -139,7 +139,7 @@ describe('optimistic edit/delete routing', () => {
       expect(channel.messagePaginator.getItem(reply.id)).toBeDefined();
       expect(thread.messagePaginator.getItem(reply.id)).toBeDefined();
 
-      await channel.deleteMessageWithLocalUpdate({
+      await channel.messageOperations.delete({
         localMessage: formatMessage(reply) as LocalMessage,
         options: { hard: true },
       });
@@ -154,7 +154,7 @@ describe('optimistic edit/delete routing', () => {
       const { reply, thread } = setupSharedReply({ listed: false });
       vi.spyOn(client, 'deleteMessage').mockResolvedValue({} as never);
 
-      await channel.deleteMessageWithLocalUpdate({
+      await channel.messageOperations.delete({
         localMessage: formatMessage(reply) as LocalMessage,
         options: { hard: true },
       });
@@ -186,7 +186,7 @@ describe('optimistic edit/delete routing', () => {
       });
       vi.spyOn(client, 'deleteMessage').mockResolvedValue({} as never);
 
-      await channel.deleteMessageWithLocalUpdate({
+      await channel.messageOperations.delete({
         localMessage: formatMessage(reply) as LocalMessage,
         options: { hard: true },
       });
@@ -202,7 +202,7 @@ describe('optimistic edit/delete routing', () => {
       // the reconcile.
       vi.spyOn(client, 'updateMessage').mockReturnValue(new Promise(() => {}) as never);
 
-      thread.updateMessageWithLocalUpdate({
+      thread.messageOperations.update({
         localMessage: {
           ...formatMessage(parentMessage),
           text: 'parent after',
@@ -220,7 +220,7 @@ describe('optimistic edit/delete routing', () => {
       });
       vi.spyOn(client, 'updateMessage').mockReturnValue(new Promise(() => {}) as never);
 
-      thread.updateMessageWithLocalUpdate({
+      thread.messageOperations.update({
         localMessage: {
           ...formatMessage(parentMessage),
           text: 'parent after',
@@ -235,7 +235,7 @@ describe('optimistic edit/delete routing', () => {
       const { parentId, parentMessage, thread } = setupThread();
       vi.spyOn(client, 'updateMessage').mockReturnValue(new Promise(() => {}) as never);
 
-      thread.updateMessageWithLocalUpdate({
+      thread.messageOperations.update({
         localMessage: {
           ...formatMessage(parentMessage),
           text: 'parent after',
@@ -251,7 +251,7 @@ describe('optimistic edit/delete routing', () => {
       const { parentMessage, thread } = setupThread({ seedParentInChannel: true });
       vi.spyOn(client, 'deleteMessage').mockReturnValue(new Promise(() => {}) as never);
 
-      thread.deleteMessageWithLocalUpdate({
+      thread.messageOperations.delete({
         localMessage: formatMessage(parentMessage) as LocalMessage,
       });
 
@@ -270,7 +270,7 @@ describe('optimistic edit/delete routing', () => {
         .spyOn(client, 'updateMessage')
         .mockResolvedValue({ message: { ...reply, text: 'reply after' } } as never);
 
-      await thread.updateMessageWithLocalUpdate({
+      await thread.messageOperations.update({
         localMessage: {
           ...formatMessage(reply),
           text: 'reply after',
@@ -298,7 +298,7 @@ describe('optimistic edit/delete routing', () => {
       expect(channel.messagePaginator.getItem(shown.id)).toBeDefined();
       vi.spyOn(client, 'deleteMessage').mockReturnValue(new Promise(() => {}) as never);
 
-      thread.deleteMessageWithLocalUpdate({
+      thread.messageOperations.delete({
         localMessage: formatMessage(shown) as LocalMessage,
         options: { hard: true },
       });
@@ -311,7 +311,7 @@ describe('optimistic edit/delete routing', () => {
       const { reply, thread } = setupThread();
       vi.spyOn(client, 'updateMessage').mockReturnValue(new Promise(() => {}) as never);
 
-      thread.updateMessageWithLocalUpdate({
+      thread.messageOperations.update({
         localMessage: { ...formatMessage(reply), text: 'reply after' } as LocalMessage,
       });
 
@@ -328,7 +328,7 @@ describe('optimistic edit/delete routing', () => {
       seedChannel(channel, message);
       vi.spyOn(client, 'updateMessage').mockReturnValue(new Promise(() => {}) as never);
 
-      channel.updateMessageWithLocalUpdate({
+      channel.messageOperations.update({
         localMessage: { ...formatMessage(message), text: 'after' } as LocalMessage,
       });
 
@@ -340,7 +340,7 @@ describe('optimistic edit/delete routing', () => {
       seedChannel(channel, message);
       vi.spyOn(client, 'deleteMessage').mockReturnValue(new Promise(() => {}) as never);
 
-      channel.deleteMessageWithLocalUpdate({
+      channel.messageOperations.delete({
         localMessage: formatMessage(message) as LocalMessage,
       });
 
@@ -355,7 +355,7 @@ describe('optimistic edit/delete routing', () => {
       seedChannel(channel, message);
       vi.spyOn(client, 'deleteMessage').mockReturnValue(new Promise(() => {}) as never);
 
-      channel.deleteMessageWithLocalUpdate({
+      channel.messageOperations.delete({
         localMessage: formatMessage(message) as LocalMessage,
         options: { hard: true },
       });
@@ -401,7 +401,7 @@ describe('optimistic edit/delete routing', () => {
       // Offline: `queueTask` short-circuits before any HTTP, and the direct attempt that
       // `client.updateMessage` falls through to fails too.
       client.wsConnection = { isHealthy: false } as StableWSConnection;
-      vi.spyOn(client, '_updateMessage').mockRejectedValue(
+      vi.spyOn(client, 'updateMessage').mockRejectedValue(
         Object.assign(new Error('network down'), { code: 9 }),
       );
 
@@ -418,7 +418,7 @@ describe('optimistic edit/delete routing', () => {
       seedChannel(channel, message);
 
       await expect(
-        channel.updateMessageWithLocalUpdate({
+        channel.messageOperations.update({
           localMessage: { ...formatMessage(message), text: 'after' } as LocalMessage,
         }),
       ).rejects.toThrow();
@@ -460,7 +460,7 @@ describe('optimistic edit/delete routing', () => {
       } as unknown as PendingTask);
 
       await expect(
-        channel.updateMessageWithLocalUpdate({
+        channel.messageOperations.update({
           localMessage: { ...formatMessage(message), text: 'after' } as LocalMessage,
         }),
       ).rejects.toThrow();

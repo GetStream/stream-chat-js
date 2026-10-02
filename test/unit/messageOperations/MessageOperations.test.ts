@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MessageOperations } from '../../../src/messageOperations/MessageOperations';
 import type { Channel } from '../../../src/channel';
+import type { MessageOperationsContext } from '../../../src/messageOperations/types';
 import type { LocalMessage, Message, MessageResponse } from '../../../src/types';
 import { msToNs, nowNs } from '../../../src/utils/time';
 
@@ -290,6 +291,77 @@ describe('MessageOperations', () => {
     expect(sendCalls[1].options).toEqual(cachedOptions);
     expect(sendCalls[2].message.text).toBe('local text');
     expect(sendCalls[2].options).toBeUndefined();
+  });
+
+  it('resends an error-type message as regular, in state and on the wire', async () => {
+    const store: Store = new Map();
+    const sent: Message[] = [];
+    const ops = new MessageOperations({
+      ...stateHooks(store),
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      handlers: () => ({}),
+      defaults: {
+        delete: defaultDelete,
+        send: async (message) => {
+          sent.push(message);
+          throw new Error('still failing');
+        },
+        update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+      },
+    });
+
+    await expect(
+      ops.retry({ localMessage: makeLocalMessage({ id: 'm1', type: 'error' }) }),
+    ).rejects.toThrow('still failing');
+
+    expect(sent[0].type).toBe('regular');
+    expect(store.get('m1')?.type).toBe('regular');
+  });
+
+  describe('retry request resolution', () => {
+    const retryOps = (handlers: ReturnType<MessageOperationsContext['handlers']>) => {
+      const store: Store = new Map();
+      const defaultSend = vi.fn(async () => ({
+        message: makeMessageResponse({ id: 'm1' }),
+      }));
+      const ops = new MessageOperations({
+        ...stateHooks(store),
+        ingest: (m) => store.set(m.id, m),
+        get: (id) => store.get(id),
+        handlers: () => handlers,
+        defaults: {
+          delete: defaultDelete,
+          send: defaultSend,
+          update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+        },
+      });
+      return { defaultSend, ops };
+    };
+    const reply = async () => ({ message: makeMessageResponse({ id: 'm1' }) });
+
+    it('prefers a registered retry handler over the send handler', async () => {
+      const retry = vi.fn(reply);
+      const send = vi.fn(reply);
+      const { defaultSend, ops } = retryOps({ retry, send });
+
+      await ops.retry({ localMessage: makeLocalMessage({ id: 'm1' }) });
+
+      expect(retry).toHaveBeenCalledTimes(1);
+      expect(send).not.toHaveBeenCalled();
+      expect(defaultSend).not.toHaveBeenCalled();
+    });
+
+    it('falls back to the send handler when no retry handler is registered', async () => {
+      const send = vi.fn(reply);
+      const { defaultSend, ops } = retryOps({ send });
+
+      await ops.retry({ localMessage: makeLocalMessage({ id: 'm1', text: 'again' }) });
+
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send.mock.calls[0][0].message?.text).toBe('again');
+      expect(defaultSend).not.toHaveBeenCalled();
+    });
   });
 
   // The Resend path: `send()` caches the exact payload it failed with, and `retry()` prefers that
@@ -631,14 +703,81 @@ describe('MessageOperations', () => {
     const localMessage = makeLocalMessage({ id: 'm1', status: 'received' });
     await ops.delete({ localMessage, options: { hard: true } });
 
-    expect(configuredDelete).toHaveBeenCalledWith({
-      localMessage,
-      options: { hard: true },
-    });
+    expect(configuredDelete).toHaveBeenCalledWith(
+      { localMessage, options: { hard: true } },
+      expect.any(Function),
+    );
     // A hard delete REMOVES the message rather than re-ingesting the response copy — the same branch
     // the `message.deleted` WS handler takes on `event.hard_delete`. Ingesting it (which is what this
     // used to assert) put a message the server had just destroyed back into the list.
     expect(store.has('m1')).toBe(false);
+  });
+});
+
+describe('MessageOperations — a replacing request can delegate to the default', () => {
+  const setup = (handlers: ReturnType<MessageOperationsContext['handlers']>) => {
+    const store: Store = new Map();
+    const defaults = {
+      delete: vi.fn(async (id: string) => ({ message: makeMessageResponse({ id }) })),
+      send: vi.fn(async (m: Message) => ({ message: makeMessageResponse({ id: m.id }) })),
+      update: vi.fn(async (m: LocalMessage) => ({
+        message: makeMessageResponse({ id: m.id }),
+      })),
+    };
+    const ops = new MessageOperations({
+      ...stateHooks(store),
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      handlers: () => handlers,
+      defaults: defaults as unknown as MessageOperationsContext['defaults'],
+    });
+    return { defaults, ops };
+  };
+
+  it('send: the default receives the params the handler passes on', async () => {
+    const { defaults, ops } = setup({
+      send: (p, defaultRequest) =>
+        defaultRequest({ ...p, message: { ...p.message, text: 'tweaked' } }),
+    });
+
+    await ops.send({ localMessage: makeLocalMessage({ id: 'm1' }) });
+
+    expect(defaults.send).toHaveBeenCalledTimes(1);
+    expect(defaults.send.mock.calls[0][0]).toMatchObject({ id: 'm1', text: 'tweaked' });
+  });
+
+  it('retry: the send handler it falls back to can delegate too', async () => {
+    const { defaults, ops } = setup({ send: (p, defaultRequest) => defaultRequest(p) });
+
+    await ops.retry({ localMessage: makeLocalMessage({ id: 'm1', text: 'again' }) });
+
+    expect(defaults.send).toHaveBeenCalledTimes(1);
+    expect(defaults.send.mock.calls[0][0]).toMatchObject({ text: 'again' });
+  });
+
+  it('update: the default receives the edited message the handler passes on', async () => {
+    const { defaults, ops } = setup({
+      update: (p, defaultRequest) =>
+        defaultRequest({ ...p, localMessage: { ...p.localMessage, text: 'tweaked' } }),
+    });
+
+    await ops.update({
+      localMessage: makeLocalMessage({ id: 'm1', status: 'received' }),
+    });
+
+    expect(defaults.update.mock.calls[0][0]).toMatchObject({ id: 'm1', text: 'tweaked' });
+  });
+
+  it('delete: the default receives the options the handler passes on', async () => {
+    const { defaults, ops } = setup({
+      delete: (p, defaultRequest) => defaultRequest({ ...p, options: { hard: true } }),
+    });
+
+    await ops.delete({
+      localMessage: makeLocalMessage({ id: 'm1', status: 'received' }),
+    });
+
+    expect(defaults.delete).toHaveBeenCalledWith('m1', { hard: true });
   });
 });
 
@@ -650,7 +789,10 @@ describe('MessageOperations — optimistic lifecycle', () => {
   const harness = ({
     isQueued = false,
     seed,
-  }: { isQueued?: boolean; seed?: LocalMessage } = {}) => {
+  }: {
+    isQueued?: boolean | ((messageId: string, types: readonly string[]) => boolean);
+    seed?: LocalMessage;
+  } = {}) => {
     const store: Store = new Map();
     if (seed) store.set(seed.id, seed);
     const persisted: LocalMessage[] = [];
@@ -667,7 +809,8 @@ describe('MessageOperations — optimistic lifecycle', () => {
       get: (id: string) => store.get(id),
       handlers: () => ({}),
       ingest: (m: LocalMessage) => store.set(m.id, m),
-      isQueued: () => isQueued,
+      isQueued: (messageId: string, types: readonly string[]) =>
+        typeof isQueued === 'function' ? isQueued(messageId, types) : isQueued,
       persist: (m: LocalMessage) => persisted.push(m),
       purge: (id: string) => purged.push(id),
       remove: (id: string) => {
@@ -926,6 +1069,19 @@ describe('MessageOperations — optimistic lifecycle', () => {
       expect(removed).toContain('m1');
       expect(store.has('m1')).toBe(false);
       expect(purged).toContain('m1');
+    });
+
+    it('removes a copy that re-arrived while the hard delete was in flight', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received' });
+      const { ops, purged, store } = harness({ seed });
+
+      await ops.delete({ localMessage: seed, options: { hard: true } }, async () => {
+        store.set('m1', makeLocalMessage({ id: 'm1', text: 're-arrived' }));
+        return { message: makeMessageResponse({ id: 'm1' }) };
+      });
+
+      expect(store.has('m1')).toBe(false);
+      expect(purged.filter((id) => id === 'm1')).toHaveLength(2);
     });
 
     /**
@@ -1193,6 +1349,118 @@ describe('MessageOperations — optimistic lifecycle', () => {
       // Deliberately unlike update/delete: v9 showed an offline send as failed-and-retryable, and the
       // retry affordance is the only way the user gets that message out.
       expect(store.get('m1')?.status).toBe('failed');
+    });
+  });
+
+  describe('rules the other tests do not pin', () => {
+    it('writes the server copy of a soft delete to the offline DB', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received', text: 'hi' });
+      const { lastPersisted, ops } = harness({ seed });
+
+      await ops.delete({ localMessage: seed }, async () => ({
+        message: makeMessageResponse({
+          id: 'm1',
+          text: 'This message was deleted.',
+          type: 'deleted',
+        }),
+      }));
+
+      // The optimistic row is already `deleted`, so only the server's text tells the two apart.
+      expect(lastPersisted()?.text).toBe('This message was deleted.');
+    });
+
+    it('applies a newer server copy even after another write landed during the request', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received', text: 'before' });
+      const { ops, store } = harness({ seed });
+
+      await ops.update({ localMessage: { ...seed, text: 'after' } }, async () => {
+        // An older event lands while the request is open, so the optimistic copy is no longer held.
+        store.set(
+          'm1',
+          makeLocalMessage({
+            id: 'm1',
+            status: 'received',
+            text: 'older event',
+            updated_at: nowNs() - msToNs(60_000),
+          }),
+        );
+        return {
+          message: makeMessageResponse({ id: 'm1', text: 'after', updated_at: nowNs() }),
+        };
+      });
+
+      expect(store.get('m1')?.text).toBe('after');
+    });
+
+    it('treats a failed delete as queued only when its own delete task is queued', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received' });
+      const { ops, store } = harness({
+        isQueued: (_id, types) => types.includes('delete-message'),
+        seed,
+      });
+
+      await rejects(
+        ops.delete({ localMessage: seed }, async () => {
+          throw new Error('offline');
+        }),
+      );
+
+      expect(store.get('m1')?.type).toBe('deleted');
+    });
+
+    it('builds a failed edit on the copy held now, not the one the edit started from', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received', text: 'before' });
+      const { ops, store } = harness({ seed });
+      const reactionGroups = {
+        like: {
+          count: 1,
+          first_reaction_at: nowNs(),
+          last_reaction_at: nowNs(),
+          sum_scores: 1,
+        },
+      } as unknown as LocalMessage['reaction_groups'];
+
+      await rejects(
+        ops.update({ localMessage: { ...seed, text: 'after' } }, async () => {
+          // A reaction arrives while the edit is in flight.
+          store.set('m1', {
+            ...(store.get('m1') as LocalMessage),
+            reaction_groups: reactionGroups,
+          });
+          throw Object.assign(new Error('not allowed'), { code: 17 });
+        }),
+      );
+
+      expect(store.get('m1')?.status).toBe('failed');
+      expect(store.get('m1')?.reaction_groups).toEqual(reactionGroups);
+    });
+
+    it('writes the failure reason of a failed send to the offline DB', async () => {
+      const { lastPersisted, ops } = harness();
+
+      await rejects(
+        ops.send({ localMessage: makeLocalMessage({ id: 'm1' }) }, async () => {
+          throw Object.assign(new Error('boom'), { code: 17 });
+        }),
+      );
+
+      // The write-ahead row is already `failed`; only the final write carries the error.
+      expect(lastPersisted()?.status).toBe('failed');
+      expect(lastPersisted()?.error).toBeDefined();
+    });
+
+    it('settles a failed send or retry without reading the offline queue', async () => {
+      const isQueued = vi.fn(() => true);
+      const { ops } = harness({ isQueued });
+      const fail = async () => {
+        throw new Error('offline');
+      };
+
+      await rejects(ops.send({ localMessage: makeLocalMessage({ id: 'm1' }) }, fail));
+      await rejects(ops.retry({ localMessage: makeLocalMessage({ id: 'm2' }) }, fail));
+
+      // A send ends as failed whatever is queued, so asking the queue would only cost a DB read.
+      expect(isQueued).not.toHaveBeenCalled();
     });
   });
 });

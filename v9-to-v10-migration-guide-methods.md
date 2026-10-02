@@ -143,12 +143,14 @@ client.updateMessage(message, userId?, options?);
 client.deleteMessage(messageID, hardDelete?);
 
 // v10 — inherited/overridden from ChatApi
-client.updateMessage(request: Parameters<ChatApi['updateMessage']>[0] & { message: { cid?: string } });
+client.updateMessage(request: Parameters<ChatApi['updateMessage']>[0]);
 // request: { id, message, skip_enrich_url? }
 client.deleteMessage(request: { id: string; hard?: boolean; delete_for_me?: boolean });
 ```
 
-Note: `hardDelete` boolean is now `hard` on the request. `user_id` override is gone.
+Note: `hardDelete` boolean is now `hard` on the request. `user_id` override is gone. Both are now the
+HTTP request only and no longer queue for offline replay — see
+[one HTTP call and one full call per message action](#removed-after-1000-rc16--one-http-call-and-one-full-call-per-message-action).
 
 #### `client.partialUpdateMessage` / `client.ephemeralUpdateMessage` / `client.undeleteMessage`
 
@@ -415,7 +417,7 @@ Why it went away: the v9 mechanism armed a single controller on the client and t
 - **Where it is accepted:** every generated method and every hand-written wrapper around one — see the global note above.
 - **Last resort:** for a request with no wrapper at all, `client.api.sendRequest(method, url, pathParams, queryParams, body, contentType, { signal })` is the layer that reads the option and puts `signal` on the axios request config.
 - **Search sources** already do this internally: `BaseSearchSource` owns an `AbortController` per query and passes `SearchQueryOptions` (`{ signal }`, structurally the same type) into each source's `query()`, which forwards it as the request options. A custom `BaseSearchSource` subclass should forward the `options` argument it receives rather than arm anything itself.
-- **With offline support enabled:** cancelling a call that can be queued (`sendMessage`, `sendReaction`, `deleteReaction`, `updateMessage`, `deleteMessage`, `createDraft`, `deleteDraft`) does **not** queue it for replay — an aborted request is treated as a definitive rejection, and any optimistic local update is rolled back. Cancelling means the operation is dropped, not deferred.
+- **With offline support enabled:** cancelling a call that can be queued (`createDraft`, `deleteDraft`) does **not** queue it for replay — an aborted request is treated as a definitive rejection, and any optimistic local update is rolled back. Cancelling means the operation is dropped, not deferred.
 
 #### `client.uploadFile` / `client.uploadImage`
 
@@ -677,9 +679,11 @@ Both are `@internal`. The consumer-visible effects:
 
 **No longer throw on an unqueried channel** (they never needed the query response): `sendEvent()`, `sendAction()`, `hide()`, `show()`. For `sendEvent`/`hide`/`show` the id is still required, and the generated `ChannelApi` raises the `isn't yet created` error itself — so on a members-only channel the error message changes from `hasn't been initialized` to `isn't yet created`. `sendAction()` is keyed by message id and now works on a channel that was never queried.
 
-**Relaxed from `_checkInitialized()` to `_checkHasId()`**: `deleteReaction()`, `banUser()`, `unbanUser()`, `muteStatus()`. These need an id or a cid, not the query response — so they now succeed on a channel that has an id but has not been queried yet.
+**Relaxed from `_checkInitialized()` to `_checkHasId()`**: `banUser()`, `unbanUser()`, `muteStatus()`. These need an id or a cid, not the query response — so they now succeed on a channel that has an id but has not been queried yet.
 
-**Newly guarded with `_checkHasId()`**: `sendMessage()`, `sendReaction()`, `createDraft()`, `deleteDraft()`, `mute()`, `unmute()`. These previously asserted nothing and read `this.id`/`this.cid` regardless. On a members-only channel the first four wrote an offline-queue task keyed by an `undefined` channel id before failing further down, and `mute()`/`unmute()` sent the placeholder `type:!members-a,b` cid to the server. They now fail up front with the actionable error instead. Call `channel.create()` or `channel.watch()` first — that is what assigns the id.
+**Newly guarded with `_checkHasId()`**: `sendMessage()`, `createDraft()`, `deleteDraft()`, `mute()`, `unmute()`. These previously asserted nothing and read `this.id`/`this.cid` regardless. On a members-only channel the queueing ones wrote an offline-queue task keyed by an `undefined` channel id before failing further down, and `mute()`/`unmute()` sent the placeholder `type:!members-a,b` cid to the server. They now fail up front with the actionable error instead. Call `channel.create()` or `channel.watch()` first — that is what assigns the id.
+
+`messageOperations.send` on a members-only channel fails with the same error and is not queued, since a task without a channel id could never be replayed. Reactions are addressed by message id alone, so `messageOperations.addReaction` / `deleteReaction` need no channel id: they work, and queue, on a members-only channel.
 
 `channel._channelURL()` — **REMOVED after `10.0.0-rc.4`**, no replacement. It built a `{baseURL}/channels/{type}/{id}` string for the hand-rolled request layer that no longer exists; every request now goes through the generated API client, which resolves its own paths. Nothing in the SDK called it. If you were using it to build a URL yourself, construct it inline.
 
@@ -715,6 +719,10 @@ await channel.sendMessage({ text: 'hi' }, { skip_push: true });
 await channel.sendMessage({ message: { text: 'hi' }, skip_push: true });
 ```
 
+`channel.sendMessage` is the HTTP request only: it no longer queues for offline replay and writes no
+local state. `channel.messageOperations.send` is the full send — see
+[one HTTP call and one full call per message action](#removed-after-1000-rc16--one-http-call-and-one-full-call-per-message-action).
+
 #### `channel.sendEvent`
 
 ```ts
@@ -749,21 +757,25 @@ channel.queryMembers(request?: { payload?: Partial<QueryMembersPayload> });
 
 For rewriting the `sort` value, see `v9-to-v10-migration-guide-sort.md`.
 
-#### `channel.sendReaction` / `channel._sendReaction` / `channel.deleteReaction` / `channel._deleteReaction`
+#### `channel.sendReaction` / `channel.deleteReaction` — removed
 
 ```ts
 // v9
 channel.sendReaction(messageID, reaction: Reaction, options?);
 channel.deleteReaction(messageID, reactionType, user_id?);
 
-// v10
-channel.sendReaction(request: Parameters<ChatApi['sendReaction']>[0]);
+// v10 — the HTTP request
+client.sendReaction(request: Parameters<ChatApi['sendReaction']>[0]);
 // { id: messageId, reaction, enforce_unique?, skip_push? }
-channel.deleteReaction(request: Parameters<ChatApi['deleteReaction']>[0]);
+client.deleteReaction(request: Parameters<ChatApi['deleteReaction']>[0]);
 // { id: messageId, type: reactionType }
+
+// v10 — the full operation (optimistic state + offline queue)
+channel.messageOperations.addReaction({ messageId, reaction, options? });
+channel.messageOperations.deleteReaction({ messageId, type });
 ```
 
-`user_id` overrides dropped. `_sendReaction` and `_deleteReaction` take the same shape as their public counterparts.
+`user_id` overrides dropped.
 
 #### `channel.getReactions`
 
@@ -1386,6 +1398,58 @@ type CustomMarkReadRequestFn = (
 
 The `Partial<>` is deliberate: it lets a handler return just `{ event }` without fabricating a `duration`, and it means a handler can delegate straight to the SDK — `markReadRequest: ({ channel, options }) => channel.markRead(options)` — which the `rc` signature rejected because `MarkReadResponse.event` is optional. `CustomThreadMarkReadRequestFn` takes `{ thread, options? }` instead of `{ channel, options? }` and additionally permits a `void` return.
 
+## Removed after `10.0.0-rc.16` — one HTTP call and one full call per message action
+
+Each message action now has exactly two entry points: the HTTP request alone, and the full operation
+(optimistic state, offline queue, reconciling the response, rollback on failure).
+
+| Action          | HTTP request only       | Full operation                                              |
+| --------------- | ----------------------- | ----------------------------------------------------------- |
+| send            | `channel.sendMessage`   | `channel.messageOperations.send` (or `thread.` for a reply) |
+| retry a send    | —                       | `messageOperations.retry`                                   |
+| edit            | `client.updateMessage`  | `messageOperations.update`                                  |
+| delete          | `client.deleteMessage`  | `messageOperations.delete`                                  |
+| add reaction    | `client.sendReaction`   | `messageOperations.addReaction`                             |
+| remove reaction | `client.deleteReaction` | `messageOperations.deleteReaction`                          |
+
+| Removed                                                                                                                      | Use instead                                              |
+| ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `sendMessageWithLocalUpdate(p)` on `Channel` / `Thread`                                                                      | `messageOperations.send(p)`                              |
+| `retrySendMessageWithLocalUpdate(p)`                                                                                         | `messageOperations.retry(p)`                             |
+| `updateMessageWithLocalUpdate(p)`                                                                                            | `messageOperations.update(p)`                            |
+| `deleteMessageWithLocalUpdate(p)`                                                                                            | `messageOperations.delete(p)`                            |
+| `addReactionWithLocalUpdate(p)` / `deleteReactionWithLocalUpdate(p)`                                                         | `messageOperations.addReaction(p)` / `deleteReaction(p)` |
+| `channel.sendReaction(r)` / `channel.deleteReaction(r)`                                                                      | `client.sendReaction(r)` / `client.deleteReaction(r)`    |
+| `channel._sendMessage`, `client._updateMessage`, `client._deleteMessage`, `channel._sendReaction`, `channel._deleteReaction` | the HTTP method above                                    |
+
+Parameters are unchanged.
+
+**Behaviour change for direct callers:** `channel.sendMessage`, `client.updateMessage` and
+`client.deleteMessage` no longer queue for offline replay; they used to. Call the full operation
+where that matters. Drafts are unchanged — `channel.createDraft` / `deleteDraft` still queue.
+
+**A thread reply now stops typing.** `thread.messageOperations.send` sends `typing.stop` for the
+thread (with its `parent_id`) before the reply goes out, as a channel send already did for the
+channel. It follows the thread composer's `publishTypingEvents` setting. Before, a reply left the
+thread's typing indicator running until it timed out.
+
+**A request handler can delegate to the default.** Each `requestHandlers` entry now receives the
+default request — the HTTP call through the offline queue — as a second argument. A handler that
+called `channel.sendMessage` inside to get queueing should call it instead:
+
+```ts
+client.config.set({
+  channel: {
+    requestHandlers: {
+      sendMessageRequest: async (params, defaultRequest) => {
+        await auditLog.record('message.send', { id: params.localMessage.id });
+        return await defaultRequest(params);
+      },
+    },
+  },
+});
+```
+
 ## Removed after `10.0.0-rc.4` — redundant guards and pass-throughs
 
 Skip this section if you are upgrading from v9 only in the sense that these methods still existed in `10.0.0-rc.4`; if you are on v9 they are simply gone in v10 final. Each was either a method whose entire body forwarded to another one, or a runtime check that restated something the type system already enforces.
@@ -1469,7 +1533,7 @@ client.config.set({
   },
 });
 
-await channel.updateMessageWithLocalUpdate({ localMessage });
+await channel.messageOperations.update({ localMessage });
 ```
 
 A handler needing to vary by message branches on what it is given — `localMessage.id`, custom fields,
@@ -1525,7 +1589,7 @@ client.config.set({
 
 Only code that referenced one of the seven **by name** needs editing. Code that derives its types
 positionally — `NonNullable<ChannelConfig['requestHandlers']>['sendMessageRequest']`, or
-`Parameters<typeof channel.sendMessageWithLocalUpdate>[0]` — is unaffected.
+`Parameters<typeof channel.messageOperations.send>[0]` — is unaffected.
 
 `CustomMarkReadRequestFn` and `CustomThreadMarkReadRequestFn` are **not** affected: mark-read is not
 a message operation and has no `OperationKind`.

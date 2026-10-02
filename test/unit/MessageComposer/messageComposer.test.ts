@@ -165,7 +165,7 @@ const offlineModeMessageComposerSetup = ({
 /**
  * Stubs the send request the way an integrator does — through the registered handler seam
  * (`configState.requestHandlers`), which is what `MessageOperations` consults. There is deliberately
- * no per-call override on `sendMessageWithLocalUpdate`: it would win over whatever the host SDK
+ * no per-call override on `messageOperations.send`: it would win over whatever the host SDK
  * registered, so the SDK does not offer callers that footgun.
  */
 const stubSendRequest = (
@@ -1772,7 +1772,7 @@ describe('MessageComposer', () => {
               resolveSend = resolve;
             }),
         );
-        const sendPromise = mockChannel.sendMessageWithLocalUpdate({
+        const sendPromise = mockChannel.messageOperations.send({
           localMessage: composed!.localMessage,
           message: composed!.message,
           options: composed!.sendOptions,
@@ -1797,7 +1797,7 @@ describe('MessageComposer', () => {
           updated_at: composed!.localMessage.updated_at + msToNs(100),
         });
         stubSendRequest(mockChannel, async () => ({ message: serverMessage }));
-        await mockChannel.sendMessageWithLocalUpdate({
+        await mockChannel.messageOperations.send({
           localMessage: composed!.localMessage,
           message: composed!.message,
           options: composed!.sendOptions,
@@ -1827,7 +1827,7 @@ describe('MessageComposer', () => {
           });
           return { message: serverMessage };
         });
-        await mockChannel.sendMessageWithLocalUpdate({
+        await mockChannel.messageOperations.send({
           localMessage: composed!.localMessage,
           message: composed!.message,
           options: composed!.sendOptions,
@@ -1860,7 +1860,7 @@ describe('MessageComposer', () => {
             }),
           };
         });
-        await mockChannel.sendMessageWithLocalUpdate({
+        await mockChannel.messageOperations.send({
           localMessage: composed!.localMessage,
           message: composed!.message,
           options: composed!.sendOptions,
@@ -1893,7 +1893,7 @@ describe('MessageComposer', () => {
             }),
           };
         });
-        await mockChannel.sendMessageWithLocalUpdate({
+        await mockChannel.messageOperations.send({
           localMessage: composed!.localMessage,
           message: composed!.message,
           options: composed!.sendOptions,
@@ -1923,7 +1923,7 @@ describe('MessageComposer', () => {
             updated_at: serverUpdatedAt,
           }),
         }));
-        await mockChannel.sendMessageWithLocalUpdate({
+        await mockChannel.messageOperations.send({
           localMessage: composed!.localMessage,
           message: composed!.message,
           options: composed!.sendOptions,
@@ -1946,7 +1946,7 @@ describe('MessageComposer', () => {
           throw apiError;
         });
         await expect(
-          mockChannel.sendMessageWithLocalUpdate({
+          mockChannel.messageOperations.send({
             localMessage: composed!.localMessage,
             message: composed!.message,
             options: composed!.sendOptions,
@@ -3164,7 +3164,7 @@ describe('MessageComposer submit lifecycle', () => {
     withText(messageComposer);
 
     let textWhileInFlight: string | undefined;
-    vi.spyOn(mockChannel, 'sendMessageWithLocalUpdate').mockImplementation(async () => {
+    vi.spyOn(mockChannel.messageOperations, 'send').mockImplementation(async () => {
       textWhileInFlight = messageComposer.textComposer.text;
     });
 
@@ -3178,9 +3178,7 @@ describe('MessageComposer submit lifecycle', () => {
   it('does not put the composition back when the send fails', async () => {
     const { messageComposer, mockChannel } = setup();
     withText(messageComposer);
-    vi.spyOn(mockChannel, 'sendMessageWithLocalUpdate').mockRejectedValue(
-      new Error('nope'),
-    );
+    vi.spyOn(mockChannel.messageOperations, 'send').mockRejectedValue(new Error('nope'));
 
     const sent = await messageComposer.send();
 
@@ -3194,9 +3192,7 @@ describe('MessageComposer submit lifecycle', () => {
     const { messageComposer, mockChannel } = setup();
     withText(messageComposer);
     const addError = vi.spyOn(messageComposer.client.notifications, 'addError');
-    vi.spyOn(mockChannel, 'sendMessageWithLocalUpdate').mockRejectedValue(
-      new Error('nope'),
-    );
+    vi.spyOn(mockChannel.messageOperations, 'send').mockRejectedValue(new Error('nope'));
 
     await expect(messageComposer.send()).resolves.toBe('failed');
 
@@ -3209,8 +3205,8 @@ describe('MessageComposer submit lifecycle', () => {
 
   it('returns false and sends nothing when there is nothing to compose', async () => {
     const { messageComposer, mockChannel } = setup();
-    const sendMessageWithLocalUpdate = vi
-      .spyOn(mockChannel, 'sendMessageWithLocalUpdate')
+    const send = vi
+      .spyOn(mockChannel.messageOperations, 'send')
       .mockResolvedValue(undefined);
 
     const sent = await messageComposer.send();
@@ -3218,14 +3214,14 @@ describe('MessageComposer submit lifecycle', () => {
     // Told apart from a failed request: nothing left the composer, so a caller must not treat this
     // as content that now lives in the message list.
     expect(sent).toBe('nothing-to-send');
-    expect(sendMessageWithLocalUpdate).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
   });
 
   it('keeps drafted content and releases only the poll when submitting a poll message', async () => {
     const { messageComposer, mockChannel } = setup({ channelConfig: { polls: true } });
     withText(messageComposer, 'vote please');
     messageComposer.state.partialNext({ pollId: 'poll-1' });
-    vi.spyOn(mockChannel, 'sendMessageWithLocalUpdate').mockResolvedValue(undefined);
+    vi.spyOn(mockChannel.messageOperations, 'send').mockResolvedValue(undefined);
 
     expect(messageComposer.retainsCompositionOnSubmit).toBe(true);
 
@@ -3235,17 +3231,17 @@ describe('MessageComposer submit lifecycle', () => {
     expect(messageComposer.textComposer.text).toBe('vote please');
   });
 
-  it('routes an update through updateMessageWithLocalUpdate', async () => {
+  it('routes an update through messageOperations.update', async () => {
     const { messageComposer, mockChannel } = setup();
     withText(messageComposer);
-    const updateMessageWithLocalUpdate = vi
-      .spyOn(mockChannel, 'updateMessageWithLocalUpdate')
+    const update = vi
+      .spyOn(mockChannel.messageOperations, 'update')
       .mockResolvedValue(undefined);
 
     const updated = await messageComposer.update();
 
     expect(updated).toBe('sent');
-    expect(updateMessageWithLocalUpdate).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -3265,7 +3261,7 @@ describe('MessageComposerConfig.retainCompositionOnSubmit', () => {
     const { messageComposer, mockChannel } = setup({
       config: { retainCompositionOnSubmit },
     });
-    vi.spyOn(mockChannel, 'sendMessageWithLocalUpdate').mockResolvedValue(undefined);
+    vi.spyOn(mockChannel.messageOperations, 'send').mockResolvedValue(undefined);
 
     messageComposer.textComposer.state.partialNext({ text: 'keep me' });
     await messageComposer.send();
@@ -3278,7 +3274,7 @@ describe('MessageComposerConfig.retainCompositionOnSubmit', () => {
     const { messageComposer, mockChannel } = setup({
       config: { retainCompositionOnSubmit: () => false },
     });
-    vi.spyOn(mockChannel, 'sendMessageWithLocalUpdate').mockResolvedValue(undefined);
+    vi.spyOn(mockChannel.messageOperations, 'send').mockResolvedValue(undefined);
 
     messageComposer.textComposer.state.partialNext({ text: 'let me go' });
     await messageComposer.send();
@@ -3289,7 +3285,7 @@ describe('MessageComposerConfig.retainCompositionOnSubmit', () => {
 
 describe('MessageComposer poll release on submit', () => {
   const sendSucceeds = (mockChannel: Channel) =>
-    vi.spyOn(mockChannel, 'sendMessageWithLocalUpdate').mockResolvedValue(undefined);
+    vi.spyOn(mockChannel.messageOperations, 'send').mockResolvedValue(undefined);
 
   it('detaches the poll that was submitted', () => {
     const { messageComposer, mockChannel } = setup({ channelConfig: { polls: true } });
