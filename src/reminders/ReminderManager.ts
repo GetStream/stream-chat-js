@@ -7,13 +7,8 @@ import { ReminderPaginator } from '../pagination';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 import type { ReminderResponseBaseOrResponse } from './Reminder';
 import type { StreamChat } from '../client';
-import type {
-  CreateReminderOptions,
-  Event,
-  EventPayload,
-  LocalMessage,
-  MessageResponse,
-} from '../types';
+import type { ChatApi } from '../gen/chat/ChatApi';
+import type { Event, EventPayload, LocalMessage, MessageResponse } from '../types';
 
 const oneMinute = 60 * 1000;
 const oneHour = 60 * oneMinute;
@@ -278,36 +273,36 @@ export class ReminderManager extends WithSubscriptions {
   // WS event handling END //
 
   // API calls START //
-  upsertReminder = async (options: CreateReminderOptions) => {
-    const { message_id } = options;
+  upsertReminder = async (...args: Parameters<ChatApi['createReminder']>) => {
+    const [{ message_id }] = args;
     if (this.getFromState(message_id)) {
       try {
-        return await this.updateReminder(options);
+        return await this.updateReminder(...args);
       } catch (error) {
         if (isReminderDoesNotExistError(error as Error)) {
-          return await this.createReminder(options);
+          return await this.createReminder(...args);
         }
         throw error;
       }
     } else {
       try {
-        return await this.createReminder(options);
+        return await this.createReminder(...args);
       } catch (error) {
         if (isReminderExistsError(error as Error)) {
-          return await this.updateReminder(options);
+          return await this.updateReminder(...args);
         }
         throw error;
       }
     }
   };
 
-  createReminder = async (options: CreateReminderOptions) => {
-    const response = await this.client.createReminder(options);
+  createReminder = async (...args: Parameters<ChatApi['createReminder']>) => {
+    const response = await this.client.createReminder(...args);
     return this.upsertToState({ data: response.reminder, overwrite: false });
   };
 
-  updateReminder = async (options: CreateReminderOptions) => {
-    const response = await this.client.updateReminder(options);
+  updateReminder = async (...args: Parameters<ChatApi['updateReminder']>) => {
+    const response = await this.client.updateReminder(...args);
     return this.upsertToState({ data: response.reminder });
   };
 

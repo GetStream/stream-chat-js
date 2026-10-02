@@ -124,7 +124,7 @@ describe('channel resolution', () => {
     channelId: 'general',
     channelType: 'messaging',
     messageId: 'm1',
-    payload: [{ id: 'm1', reaction: { type: 'love' } }],
+    payload: [{ id: 'm1' }, { reaction: { type: 'love' } }],
     type: 'send-reaction',
   } as unknown as PendingTask;
 
@@ -139,10 +139,10 @@ describe('channel resolution', () => {
       task: reactionTask,
     });
 
-    expect(callerChannel._sendReaction).toHaveBeenCalledWith({
-      id: 'm1',
-      reaction: { type: 'love' },
-    });
+    expect(callerChannel._sendReaction).toHaveBeenCalledWith(
+      { id: 'm1' },
+      { reaction: { type: 'love' } },
+    );
     expect(lookup).not.toHaveBeenCalled();
   });
 

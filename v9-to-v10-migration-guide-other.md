@@ -1274,11 +1274,11 @@ channel.messagePaginator.config.pageSize; // 50
 // v9
 await reminderManager.upsertReminder({ messageId, remind_at, ... });
 
-// v10
-await reminderManager.upsertReminder({ message_id, remind_at, ... });
+// v10 — the message id is a path parameter, so it is its own argument
+await reminderManager.upsertReminder({ message_id }, { remind_at, ... });
 ```
 
-Same shift applies to `deleteReminder`, `updateReminder`, `createReminder`, `queryReminders`, and the internal state lookup helpers. Rewriting the property is mechanical, but easy to miss on TypeScript projects that had `messageId` inferred from a variable of that name.
+`createReminder` and `updateReminder` take the same `({ message_id }, request?)` pair, where `request` is `{ remind_at?, expires_at? }` (`remind_at` is a `Date`); `deleteReminder(messageId)` still takes the id alone. The `messageId` → `message_id` rename also applies to `queryReminders` filters and the internal state lookup helpers. Rewriting the property is mechanical, but easy to miss on TypeScript projects that had `messageId` inferred from a variable of that name — and a `remind_at` left in the first argument is not a compile error when it arrives through a spread (see [path parameters](./v9-to-v10-migration-guide-methods.md#global-renames-applied-everywhere)).
 
 `ReminderManager.ReminderEvent` is now `EventPayload<`reminder.${string}` | 'notification.reminder_due'>`; the v9 hand-rolled shape (`{ cid, created_at, message_id, reminder, type, user_id }`) is not exported anymore.
 

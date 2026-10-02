@@ -347,7 +347,7 @@ describe('ReminderManager', () => {
       const reminderResponse = generateReminderResponse();
       // The response wraps the reminder, like updateReminder's below: the spec used to
       // declare this endpoint as returning ReminderResponseData bare (CHA-4993).
-      vi.spyOn(client, 'createReminder').mockResolvedValueOnce({
+      const createReminderSpy = vi.spyOn(client, 'createReminder').mockResolvedValueOnce({
         duration: '0ms',
         reminder: reminderResponse,
         metadata: {} as RequestMetadata,
@@ -355,9 +355,15 @@ describe('ReminderManager', () => {
       const stateUpdateSpy = vi
         .spyOn(manager, 'upsertToState')
         .mockReturnValueOnce(undefined);
-      await manager.createReminder({
-        message_id: reminderResponse.message_id,
-      });
+      const remindAt = new Date();
+      await manager.createReminder(
+        { message_id: reminderResponse.message_id },
+        { remind_at: remindAt },
+      );
+      expect(createReminderSpy).toHaveBeenCalledWith(
+        { message_id: reminderResponse.message_id },
+        { remind_at: remindAt },
+      );
       expect(stateUpdateSpy).toHaveBeenCalledWith({
         data: reminderResponse,
         overwrite: false,

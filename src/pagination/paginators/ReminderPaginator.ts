@@ -85,12 +85,13 @@ export class ReminderPaginator extends BasePaginator<
   }: Required<
     Pick<PaginationQueryParams<QueryRemindersRequest>, 'direction'>
   >): QueryRemindersRequest {
-    const cursor = this.cursor?.[direction];
+    const cursor = this.cursor?.[direction] ?? undefined;
     return {
       filter: this.filters,
       sort: this.sort,
       limit: this.pageSize,
-      [direction]: cursor,
+      // The request names its cursors after the response's `next` / `prev`, not after the direction.
+      ...(cursor ? { [direction === 'tailward' ? 'next' : 'prev']: cursor } : {}),
     };
   }
 

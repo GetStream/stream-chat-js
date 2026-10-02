@@ -676,7 +676,7 @@ describe('Threads 2.0', () => {
           expect(minimalThread.messagePaginator.state.getLatestValue().items).to.be
             .undefined;
           await minimalThread.reload();
-          expect(stub.firstCall.args[0]?.reply_limit).to.equal(
+          expect(stub.firstCall.args[1]?.reply_limit).to.equal(
             minimalThread.messagePaginator.pageSize,
           );
 
@@ -691,7 +691,7 @@ describe('Threads 2.0', () => {
             reply_count: pageSize + 20,
           });
           await wide.reload();
-          expect(stub.secondCall.args[0]?.reply_limit).to.equal(pageSize + 7);
+          expect(stub.secondCall.args[1]?.reply_limit).to.equal(pageSize + 7);
 
           // ⚠️ Loaded window SMALLER than a page → still a page. Regression guard: a thread created in
           // the current session holds exactly one reply (the one just sent), and sizing the request to
@@ -705,7 +705,7 @@ describe('Threads 2.0', () => {
             reply_count: 40,
           });
           await narrow.reload();
-          expect(stub.thirdCall.args[0]?.reply_limit).to.equal(pageSize);
+          expect(stub.thirdCall.args[1]?.reply_limit).to.equal(pageSize);
         });
 
         it('merges the fetched page into a thread whose only reply was ingested live', async () => {
@@ -892,7 +892,7 @@ describe('Threads 2.0', () => {
 
           await thread.reload();
 
-          const limit = stub.firstCall.args[0]?.reply_limit;
+          const limit = stub.firstCall.args[1]?.reply_limit;
           expect(limit).to.equal(undefined);
           expect(Number.isNaN(limit as number)).to.equal(false);
         });

@@ -96,18 +96,18 @@ All v9 methods that took `(filters, sort, options, ...)` as positional arguments
 
 POST-style endpoints — `sort` lives directly on the request body:
 
-| Method                                                        | Sort location  |
-| ------------------------------------------------------------- | -------------- |
-| `client.queryChannels(request)` / `queryChannelsAndHydrate`   | `request.sort` |
-| `client.queryReactions(request)` / `queryReactionsAndHydrate` | `request.sort` |
-| `client.queryThreads(request)` / `queryThreadsAndHydrate`     | `request.sort` |
-| `client.queryDrafts(request)`                                 | `request.sort` |
-| `client.queryPolls(request)`                                  | `request.sort` |
-| `client.queryPollVotes(request)` / `queryPollAnswers`         | `request.sort` |
-| `client.queryReminders(request)`                              | `request.sort` |
-| `client.moderation.queryAppeals(request)`                     | `request.sort` |
-| `client.moderation.queryReviewQueue(request)`                 | `request.sort` |
-| `client.moderation.queryModerationConfigs(request)`           | `request.sort` |
+| Method                                                                | Sort location  |
+| --------------------------------------------------------------------- | -------------- |
+| `client.queryChannels(request)` / `queryChannelsAndHydrate`           | `request.sort` |
+| `client.queryReactions({ id }, request)` / `queryReactionsAndHydrate` | `request.sort` |
+| `client.queryThreads(request)` / `queryThreadsAndHydrate`             | `request.sort` |
+| `client.queryDrafts(request)`                                         | `request.sort` |
+| `client.queryPolls(request)`                                          | `request.sort` |
+| `client.queryPollVotes({ poll_id }, request)` / `queryPollAnswers`    | `request.sort` |
+| `client.queryReminders(request)`                                      | `request.sort` |
+| `client.moderation.queryAppeals(request)`                             | `request.sort` |
+| `client.moderation.queryReviewQueue(request)`                         | `request.sort` |
+| `client.moderation.queryModerationConfigs(request)`                   | `request.sort` |
 
 GET-style endpoints — `sort` lives inside the `payload` query param object:
 

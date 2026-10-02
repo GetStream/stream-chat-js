@@ -121,6 +121,14 @@ export class ApiClient {
     let resolved = url;
     if (pathParams) {
       for (const [key, value] of Object.entries(pathParams)) {
+        // The generated methods take path params as their own argument and pass it here as-is, so a
+        // key with no placeholder is a query or body field handed to the wrong argument - one the
+        // request would otherwise drop without a word.
+        if (!url.includes(`{${key}}`)) {
+          throw new Error(
+            `"${key}" is not a path parameter of ${url}; pass it in the request argument instead.`,
+          );
+        }
         resolved = resolved.replace(`{${key}}`, encodeURIComponent(value));
       }
     }

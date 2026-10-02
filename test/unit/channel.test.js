@@ -3697,7 +3697,8 @@ describe('send reaction flow', () => {
 	const reaction = { type: 'love' };
 	const options = { enforce_unique: true, skip_push: true };
 	// Reactions are now sent as a single request object: sendReaction({ id, reaction, ...flags }).
-	const request = { id: messageId, reaction, ...options };
+	const pathParams = { id: messageId };
+	const request = { reaction, ...options };
 
 	let client;
 	let channel;
@@ -3732,7 +3733,7 @@ describe('send reaction flow', () => {
 		});
 
 		it('queues task if offlineDb exists', async () => {
-			await channel.sendReaction(request);
+			await channel.sendReaction(pathParams, request);
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 
@@ -3742,7 +3743,7 @@ describe('send reaction flow', () => {
 					channelId: 'test',
 					channelType: 'messaging',
 					messageId,
-					payload: [request],
+					payload: [pathParams, request],
 					type: 'send-reaction',
 				},
 			});
@@ -3753,9 +3754,10 @@ describe('send reaction flow', () => {
 		it('queues requestOptions alongside the request so replay forwards them', async () => {
 			const controller = new AbortController();
 
-			await channel.sendReaction(request, { signal: controller.signal });
+			await channel.sendReaction(pathParams, request, { signal: controller.signal });
 
 			expect(queueTaskSpy.mock.calls[0][0].task.payload).to.deep.equal([
+				pathParams,
 				request,
 				{ signal: controller.signal },
 			]);
@@ -3764,19 +3766,19 @@ describe('send reaction flow', () => {
 		it('falls back to _sendReaction if offlineDb throws', async () => {
 			client.offlineDb.queueTask.mockRejectedValue(new Error('Offline failure'));
 
-			await channel.sendReaction(request);
+			await channel.sendReaction(pathParams, request);
 
 			expect(channel._sendReaction).toHaveBeenCalledTimes(1);
-			expect(channel._sendReaction).toHaveBeenCalledWith(request);
+			expect(channel._sendReaction).toHaveBeenCalledWith(pathParams, request);
 		});
 
 		it('falls back to _sendReaction if offlineDb is undefined', async () => {
 			client.offlineDb = undefined;
 
-			await channel.sendReaction(request);
+			await channel.sendReaction(pathParams, request);
 
 			expect(channel._sendReaction).toHaveBeenCalledTimes(1);
-			expect(channel._sendReaction).toHaveBeenCalledWith(request);
+			expect(channel._sendReaction).toHaveBeenCalledWith(pathParams, request);
 		});
 	});
 
@@ -3786,7 +3788,7 @@ describe('send reaction flow', () => {
 				.spyOn(client.api, 'sendRequest')
 				.mockResolvedValue({ metadata: {} });
 
-			await channel._sendReaction(request);
+			await channel._sendReaction(pathParams, request);
 
 			expect(sendRequestSpy).toHaveBeenCalledTimes(1);
 			expect(sendRequestSpy).toHaveBeenCalledWith(
@@ -3806,7 +3808,7 @@ describe('send reaction flow', () => {
 				metadata: {},
 			});
 
-			const result = await channel._sendReaction(request);
+			const result = await channel._sendReaction(pathParams, request);
 
 			expect(result.message).toMatchObject({ id: messageId });
 		});
@@ -4256,6 +4258,26 @@ describe('share location', () => {
 			live_location: expect.objectContaining(liveLocation),
 			type: 'live_location_sharing.stopped',
 		});
+	});
+
+	it('stops sharing with only the request fields, whatever the location carries', async () => {
+		const { channel, updateLiveLocationSpy } = await setup();
+
+		// The request is sent as given, so the location's other fields would reach the server.
+		await channel.stopLiveLocationSharing({
+			...liveLocation,
+			channel_cid: 'messaging:test',
+		});
+
+		expect(updateLiveLocationSpy).toHaveBeenCalledWith(
+			{
+				end_at: expect.any(Date),
+				latitude: liveLocation.latitude,
+				longitude: liveLocation.longitude,
+				message_id: liveLocation.message_id,
+			},
+			undefined,
+		);
 	});
 });
 

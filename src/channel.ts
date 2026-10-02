@@ -878,11 +878,11 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     payload: UpdateLiveLocationRequest,
     requestOptions?: StreamRequestOptions,
   ) {
+    // Picked rather than spread: callers hand over a whole shared location (`created_by_device_id`,
+    // `channel_cid`, timestamps, …), and the request is sent as given.
+    const { latitude, longitude, message_id } = payload;
     const location = await this.getClient().updateLiveLocation(
-      {
-        ...payload,
-        end_at: new Date(),
-      },
+      { end_at: new Date(), latitude, longitude, message_id },
       requestOptions,
     );
     this.getClient().dispatchEvent({
@@ -1194,10 +1194,8 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     requestOptions?: StreamRequestOptions,
   ) {
     return this.getClient().runMessageAction(
-      {
-        id: messageId,
-        form_data: formData,
-      },
+      { id: messageId },
+      { form_data: formData },
       requestOptions,
     );
   }
@@ -1848,10 +1846,8 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     const state = this.id
       ? await this.getOrCreate(queryPayload, requestOptions)
       : await this.getClient().getOrCreateDistinctChannel(
-          {
-            type: this.type,
-            ...queryPayload,
-          },
+          { type: this.type },
+          queryPayload,
           requestOptions,
         );
 

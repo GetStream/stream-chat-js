@@ -74,6 +74,38 @@ describe('ReminderPaginator', () => {
     expect(paginator.cursor?.tailward).toBeNull();
   });
 
+  it('sends the tailward cursor as the request `next`', async () => {
+    const paginator = new ReminderPaginator(client, { pageSize: 2 });
+    const spy = vi.spyOn(client, 'queryReminders');
+    spy.mockResolvedValueOnce(
+      response(
+        [
+          makeReminder('m1', '2020-01-01T00:00:00.000Z'),
+          makeReminder('m2', '2020-01-02T00:00:00.000Z'),
+        ],
+        { next: 'c1' },
+      ),
+    );
+    await paginator.executeQuery({});
+    // A first page carries no cursor at all - neither the request's nor a direction-named key.
+    expect(spy.mock.calls[0][0]).toEqual({
+      filter: undefined,
+      limit: 2,
+      sort: undefined,
+    });
+
+    spy.mockResolvedValueOnce(response([makeReminder('m3', '2020-01-03T00:00:00.000Z')]));
+    await paginator.toTail();
+
+    // The request is sent as given, so a `tailward` key would reach the server and `next` would not.
+    expect(spy.mock.calls[1][0]).toEqual({
+      filter: undefined,
+      limit: 2,
+      next: 'c1',
+      sort: undefined,
+    });
+  });
+
   it('orders by the requested sort; changing sort resets and re-orders', async () => {
     const paginator = new ReminderPaginator(client, { pageSize: 3 });
     const page = [
