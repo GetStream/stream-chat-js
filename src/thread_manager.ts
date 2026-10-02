@@ -232,7 +232,7 @@ export class ThreadManager extends WithSubscriptions {
     const { channel } = thread;
     if (this.disposalListeners.has(channel)) return;
     if (channel.pendingDisposal) {
-      this.releaseChannel(channel);
+      this.releaseThreadsOfChannel(channel);
       return;
     }
     this.disposalListeners.set(
@@ -240,14 +240,14 @@ export class ThreadManager extends WithSubscriptions {
       channel.state.subscribeWithSelector(
         ({ pendingDisposal }) => ({ pendingDisposal }),
         ({ pendingDisposal }) => {
-          if (pendingDisposal) this.releaseChannel(channel);
+          if (pendingDisposal) this.releaseThreadsOfChannel(channel);
         },
       ),
     );
   };
 
   /** The channel was disposed, so its threads are unusable: release every one of them. */
-  private releaseChannel = (channel: Channel) => {
+  private releaseThreadsOfChannel = (channel: Channel) => {
     this.disposalListeners.get(channel)?.();
     this.disposalListeners.delete(channel);
     const onChannel = (thread: Thread) => thread.channel === channel;

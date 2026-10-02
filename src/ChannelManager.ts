@@ -401,7 +401,8 @@ export class ChannelManager extends WithSubscriptions {
     activated: createHolder(),
     watching: createHolder(),
   };
-  // It records which key each Channel is stored under, so holdChannel and releaseChannel link and unlink the right entry. The key each channel is stored under: its cid, or its temporary cid for locally created channels until the server assigns one
+  // The key each channel is stored under: its cid, or its temporary cid until the server assigns the
+  // real one. `register` and `release` link and unlink holds under it.
   private readonly storeKeys = new WeakMap<Channel, string>();
 
   protected _pipelines = new Map<
@@ -613,7 +614,7 @@ export class ChannelManager extends WithSubscriptions {
    *
    * @internal
    */
-  holdChannel(channel: Channel, hold: ChannelHold) {
+  register(channel: Channel, hold: ChannelHold) {
     const key = this.storeKeys.get(channel);
     if (key === undefined || this.channelStore.get(key) !== channel) return;
     this.channelStore.link(key, this.holders[hold]);
@@ -625,7 +626,7 @@ export class ChannelManager extends WithSubscriptions {
    *
    * @internal
    */
-  releaseChannel(channel: Channel, hold: ChannelHold) {
+  release(channel: Channel, hold: ChannelHold) {
     const key = this.storeKeys.get(channel);
     if (key === undefined || this.channelStore.get(key) !== channel) return;
     this.channelStore.unlink(key, this.holders[hold]);

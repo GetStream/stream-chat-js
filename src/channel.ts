@@ -1490,9 +1490,9 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     // kept stored while watched, and while a watch lost to a dropped socket waits to be restored
     const { channelManager } = this.getClient();
     if (watchStatus === ChannelWatchStatus.NotWatching) {
-      channelManager.releaseChannel(this, 'watching');
+      channelManager.release(this, 'watching');
     } else {
-      channelManager.holdChannel(this, 'watching');
+      channelManager.register(this, 'watching');
     }
   }
 
@@ -1523,7 +1523,7 @@ export class Channel extends WithMessageOperations(ChannelApi) {
       this.state.partialNext({ active: true });
     }
     // `_client`, not `getClient()`, which throws on a torn-down channel; holding one does nothing
-    this._client.channelManager.holdChannel(this, 'activated');
+    this._client.channelManager.register(this, 'activated');
 
     let released = false;
     return () => {
