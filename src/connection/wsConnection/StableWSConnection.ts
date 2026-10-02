@@ -1,7 +1,7 @@
 import { chatCodes, randomId, retryInterval, sleep } from '../../utils';
 import { chatLoggerSystem } from '../../logger';
 import { WS_NETWORK_RECOVERY_RETRY_MS } from './config';
-import type { ConnectAPIResponse, ConnectedEvent, ConnectionOpen } from '../../types';
+import type { ConnectAPIResponse, ConnectionOpen } from '../../types';
 import type { WSConnection } from './WSConnection';
 import type { StreamChat } from '../../client';
 import type { APIError } from '../../errors';
@@ -9,23 +9,6 @@ import type { WSEvent } from '../../gen/models';
 import type { WSConnectionConfig } from './types';
 
 const logger = chatLoggerSystem.getLogger('connection');
-
-/**
- * Wire frames are handed through as they arrive. Every server-sent date is the unix-nanosecond
- * number the API puts on the wire (the generator runs with `response_dates_as_number=true`), so
- * there is nothing left to decode — the per-model decoders that used to turn those numbers into
- * `Date` objects no longer exist.
- *
- * `connection.ok` is still not published in the OpenAPI spec, so it is typed by the hand-written
- * `ConnectedEvent` overlay in `types.ts` rather than by `src/gen`. Remove that overlay, and this
- * branch, once the backend adds the event to the spec and `src/gen` is regenerated.
- */
-const decodeConnectionEvent = (
-  data: { type: string } & Record<string, unknown>,
-): WSEvent | ConnectedEvent =>
-  data.type === 'connection.ok'
-    ? (data as unknown as ConnectedEvent)
-    : (data as unknown as WSEvent);
 
 // Type guards to check WebSocket error type
 const isCloseEvent = (
@@ -590,7 +573,7 @@ export class StableWSConnection {
     });
     if (typeof event.data !== 'string') return;
     const data = JSON.parse(event.data);
-    const decodedData = decodeConnectionEvent(data);
+    const decodedData = data as WSEvent;
 
     // we wait till the first message before we consider the connection open..
     // the reason for this is that auth errors and similar errors trigger a ws.onopen and immediately

@@ -96,18 +96,18 @@ All v9 methods that took `(filters, sort, options, ...)` as positional arguments
 
 POST-style endpoints — `sort` lives directly on the request body:
 
-| Method                                                        | Sort location  |
-| ------------------------------------------------------------- | -------------- |
-| `client.queryChannels(request)` / `queryChannelsAndHydrate`   | `request.sort` |
-| `client.queryReactions(request)` / `queryReactionsAndHydrate` | `request.sort` |
-| `client.queryThreads(request)` / `queryThreadsAndHydrate`     | `request.sort` |
-| `client.queryDrafts(request)`                                 | `request.sort` |
-| `client.queryPolls(request)`                                  | `request.sort` |
-| `client.queryPollVotes(request)` / `queryPollAnswers`         | `request.sort` |
-| `client.queryReminders(request)`                              | `request.sort` |
-| `client.moderation.queryAppeals(request)`                     | `request.sort` |
-| `client.moderation.queryReviewQueue(request)`                 | `request.sort` |
-| `client.moderation.queryModerationConfigs(request)`           | `request.sort` |
+| Method                                                                | Sort location  |
+| --------------------------------------------------------------------- | -------------- |
+| `client.queryChannels(request)` / `queryChannelsAndHydrate`           | `request.sort` |
+| `client.queryReactions({ id }, request)` / `queryReactionsAndHydrate` | `request.sort` |
+| `client.queryThreads(request)` / `queryThreadsAndHydrate`             | `request.sort` |
+| `client.queryDrafts(request)`                                         | `request.sort` |
+| `client.queryPolls(request)`                                          | `request.sort` |
+| `client.queryPollVotes({ poll_id }, request)` / `queryPollAnswers`    | `request.sort` |
+| `client.queryReminders(request)`                                      | `request.sort` |
+| `client.moderation.queryAppeals(request)`                             | `request.sort` |
+| `client.moderation.queryReviewQueue(request)`                         | `request.sort` |
+| `client.moderation.queryModerationConfigs(request)`                   | `request.sort` |
 
 GET-style endpoints — `sort` lives inside the `payload` query param object:
 
@@ -120,13 +120,13 @@ GET-style endpoints — `sort` lives inside the `payload` query param object:
 
 ### Channel methods that take `sort`
 
-| Method                                     | Sort location                                                                       |
-| ------------------------------------------ | ----------------------------------------------------------------------------------- |
-| `channel.queryMembers({ payload })`        | `payload.sort`                                                                      |
-| `channel.getPinnedMessages(options, sort)` | second positional arg (unchanged signature, but `sort` is now `SortParamRequest[]`) |
-| `channel.getReplies(request)`              | `request.sort`                                                                      |
+| Method                                       | Sort location  |
+| -------------------------------------------- | -------------- |
+| `channel.queryMembers({ payload })`          | `payload.sort` |
+| `channel.getPinnedMessages(request?)`        | `request.sort` |
+| `client.getReplies({ parent_id }, request?)` | `request.sort` |
 
-`channel.getPinnedMessages` is the one method that kept its v9-style two-positional-arg signature; only the `sort` shape changed.
+`channel.getPinnedMessages` no longer takes `sort` as a second positional argument: v9's `(options, sort)` became one request, `{ ...options, sort }`, with `requestOptions` second. `channel.getReplies` was removed after `rc.4`; call `client.getReplies` instead (see `v9-to-v10-migration-guide-methods.md`).
 
 ## Mechanical migration recipe
 

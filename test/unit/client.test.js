@@ -113,6 +113,27 @@ describe('StreamChat getInstance', () => {
 		);
 		expect(requestSpy.mock.calls[0][0].headers).to.haveOwnProperty('Pragma', 'no-cache');
 	});
+
+	// `getApp` has no request, so `requestOptions` comes after an unused `_request` slot; nothing
+	// from it may reach the query string.
+	it('getAppSettings forwards requestOptions passed after the empty request slot', async () => {
+		const client = new StreamChat('key');
+		client.tokenManager.getToken = () => 'mock-token';
+		const controller = new AbortController();
+
+		const requestSpy = vi
+			.spyOn(client.axiosInstance, 'request')
+			.mockResolvedValueOnce({ data: {}, status: 200 });
+
+		await client.getAppSettings(undefined, { signal: controller.signal, timeout: 1234 });
+
+		expect(requestSpy).toHaveBeenCalledTimes(1);
+		const config = requestSpy.mock.calls[0][0];
+		expect(config.signal).toBe(controller.signal);
+		expect(config.timeout).toBe(1234);
+		expect(config.params).not.toHaveProperty('signal');
+		expect(config.params).not.toHaveProperty('timeout');
+	});
 });
 
 describe('StreamChat config(s) store', () => {
@@ -1145,7 +1166,7 @@ describe('message update', () => {
 			_updateMessageSpy.mockRestore();
 			sendRequestSpy = vi
 				.spyOn(client.api, 'sendRequest')
-				.mockResolvedValue({ body: {}, metadata: {} });
+				.mockResolvedValue({ metadata: {} });
 		});
 
 		it('strips composer-internal localMetadata from outgoing attachments', async () => {
@@ -1160,7 +1181,7 @@ describe('message update', () => {
 				],
 			});
 
-			await client._updateMessage({ id: message.id, message });
+			await client._updateMessage({ id: message.id }, { message });
 
 			const sent = sentMessage();
 			expect(sent.attachments).toHaveLength(1);
@@ -1180,7 +1201,7 @@ describe('message update', () => {
 				],
 			});
 
-			await client._updateMessage({ id: message.id, message });
+			await client._updateMessage({ id: message.id }, { message });
 
 			expect(sentMessage().attachments).toEqual([]);
 			expect(loggerSpy).toHaveBeenCalledWith(
@@ -1198,9 +1219,10 @@ describe('message update', () => {
 				cid: 'messaging:channel-123',
 				text: 'edited',
 			});
-			const request = { id: message.id, message, skip_enrich_url: true };
+			const pathParams = { id: message.id };
+			const request = { message, skip_enrich_url: true };
 
-			await client.updateMessage(request);
+			await client.updateMessage(pathParams, request);
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 			expect(queueTaskSpy).toHaveBeenCalledWith({
@@ -1208,7 +1230,7 @@ describe('message update', () => {
 					channelId: 'channel-123',
 					channelType: 'messaging',
 					messageId: 'msg-123',
-					payload: [request],
+					payload: [pathParams, request],
 					type: 'update-message',
 				},
 			});
@@ -1221,14 +1243,15 @@ describe('message update', () => {
 				cid: 'invalid-cid',
 				text: 'edited',
 			});
-			const request = { id: message.id, message };
+			const pathParams = { id: message.id };
+			const request = { message };
 
-			await client.updateMessage(request);
+			await client.updateMessage(pathParams, request);
 
 			expect(queueTaskSpy).toHaveBeenCalledWith({
 				task: {
 					messageId: 'msg-123',
-					payload: [request],
+					payload: [pathParams, request],
 					type: 'update-message',
 				},
 			});
@@ -1239,14 +1262,15 @@ describe('message update', () => {
 				id: 'msg-123',
 				text: 'edited',
 			});
-			const request = { id: message.id, message, skip_enrich_url: true };
+			const pathParams = { id: message.id };
+			const request = { message, skip_enrich_url: true };
 
 			client.offlineDb = undefined;
 
-			await client.updateMessage(request);
+			await client.updateMessage(pathParams, request);
 
 			expect(_updateMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_updateMessageSpy).toHaveBeenCalledWith(request);
+			expect(_updateMessageSpy).toHaveBeenCalledWith(pathParams, request);
 		});
 
 		it('routes updates with local attachment metadata through offlineDb queue handling', async () => {
@@ -1264,9 +1288,10 @@ describe('message update', () => {
 					},
 				],
 			});
-			const request = { id: message.id, message };
+			const pathParams = { id: message.id };
+			const request = { message };
 
-			await client.updateMessage(request);
+			await client.updateMessage(pathParams, request);
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 			expect(queueTaskSpy).toHaveBeenCalledWith({
@@ -1276,7 +1301,7 @@ describe('message update', () => {
 					channelId: 'general',
 					channelType: 'messaging',
 					messageId: 'msg-123',
-					payload: [request],
+					payload: [pathParams, request],
 					type: 'update-message',
 				},
 			});
@@ -1294,9 +1319,10 @@ describe('message update', () => {
 					},
 				],
 			});
-			const request = { id: message.id, message };
+			const pathParams = { id: message.id };
+			const request = { message };
 
-			await client.updateMessage(request);
+			await client.updateMessage(pathParams, request);
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 			expect(queueTaskSpy).toHaveBeenCalledWith({
@@ -1306,7 +1332,7 @@ describe('message update', () => {
 					channelId: 'general',
 					channelType: 'messaging',
 					messageId: 'msg-123',
-					payload: [request],
+					payload: [pathParams, request],
 					type: 'update-message',
 				},
 			});
@@ -1318,14 +1344,15 @@ describe('message update', () => {
 				id: 'msg-123',
 				text: 'edited',
 			});
-			const request = { id: message.id, message };
+			const pathParams = { id: message.id };
+			const request = { message };
 			queueTaskSpy.mockRejectedValue(new Error('Offline failure'));
 
-			await client.updateMessage(request);
+			await client.updateMessage(pathParams, request);
 
 			expect(loggerSpy).toHaveBeenCalledTimes(1);
 			expect(_updateMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_updateMessageSpy).toHaveBeenCalledWith(request);
+			expect(_updateMessageSpy).toHaveBeenCalledWith(pathParams, request);
 		});
 
 		it('logs and falls back to _updateMessage when queueTask rethrows for failed offline edits', async () => {
@@ -1335,18 +1362,19 @@ describe('message update', () => {
 				text: 'edited',
 				message_text_updated_at: convertDateToTimestamp('2026-04-01T20:48:43.886269Z'),
 			});
-			const request = { id: failedEditedMessage.id, message: failedEditedMessage };
+			const pathParams = { id: failedEditedMessage.id };
+			const request = { message: failedEditedMessage };
 
 			client.wsConnection = { isHealthy: false };
 			queueTaskSpy.mockRejectedValue(new Error('Offline failure'));
 			_updateMessageSpy.mockResolvedValue({ message: failedEditedMessage });
 
-			const response = await client.updateMessage(request);
+			const response = await client.updateMessage(pathParams, request);
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 			expect(loggerSpy).toHaveBeenCalledTimes(1);
 			expect(_updateMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_updateMessageSpy).toHaveBeenCalledWith(request);
+			expect(_updateMessageSpy).toHaveBeenCalledWith(pathParams, request);
 			expect(response.message.text).toBe('edited');
 			expect(response.message.status).toBe('failed');
 		});
@@ -1654,13 +1682,13 @@ describe('StreamChat.queryReactions', () => {
 	});
 
 	it('should query reactions from offlineDb and dispatch offline_reactions.queried event', async () => {
+		const pathParams = { id: messageId };
 		const request = {
-			id: messageId,
 			filter,
 			sort,
 			limit: options.limit,
 		};
-		const result = await client.queryReactionsAndHydrate(request);
+		const result = await client.queryReactionsAndHydrate(pathParams, request);
 
 		expect(client.offlineDb.getReactions).toHaveBeenCalledWith({
 			messageId,
@@ -1682,39 +1710,39 @@ describe('StreamChat.queryReactions', () => {
 		]);
 
 		expect(postStub).toHaveBeenCalledTimes(1);
-		expect(postStub).toHaveBeenCalledWith(request, undefined);
+		expect(postStub).toHaveBeenCalledWith(pathParams, request);
 
 		expect(result).to.eql(postResponse);
 	});
 
 	it('should skip querying offlineDb if options.next is true', async () => {
+		const pathParams = { id: messageId };
 		const request = {
-			id: messageId,
 			filter,
 			sort,
 			next: true,
 			limit: 20,
 		};
-		await client.queryReactionsAndHydrate(request);
+		await client.queryReactionsAndHydrate(pathParams, request);
 
 		expect(client.offlineDb.getReactions).not.toHaveBeenCalled();
-		expect(postStub).toHaveBeenCalledWith(request, undefined);
+		expect(postStub).toHaveBeenCalledWith(pathParams, request);
 	});
 
 	it('should not dispatch event if offlineDb returns null', async () => {
 		client.offlineDb.getReactions.mockResolvedValue(null);
 
+		const pathParams = { id: messageId };
 		const request = {
-			id: messageId,
 			filter,
 			sort,
 			limit: 50,
 		};
-		await client.queryReactionsAndHydrate(request);
+		await client.queryReactionsAndHydrate(pathParams, request);
 
 		expect(client.offlineDb.getReactions).toHaveBeenCalledTimes(1);
 		expect(dispatchSpy).not.toHaveBeenCalled();
-		expect(postStub).toHaveBeenCalledWith(request, undefined);
+		expect(postStub).toHaveBeenCalledWith(pathParams, request);
 	});
 
 	it('should log a warning if offlineDb.getReactions throws', async () => {
@@ -1724,12 +1752,10 @@ describe('StreamChat.queryReactions', () => {
 			default: { sink: loggerSpy, level: 'trace' },
 		});
 
-		await client.queryReactionsAndHydrate({
-			id: messageId,
-			filter,
-			sort,
-			limit: options.limit,
-		});
+		await client.queryReactionsAndHydrate(
+			{ id: messageId },
+			{ filter, sort, limit: options.limit },
+		);
 
 		expect(loggerSpy).toHaveBeenCalledWith(
 			'warn',
@@ -1739,15 +1765,7 @@ describe('StreamChat.queryReactions', () => {
 			}),
 		);
 		expect(dispatchSpy).not.toHaveBeenCalled();
-		expect(postStub).toHaveBeenCalledWith(
-			{
-				id: messageId,
-				filter,
-				sort,
-				limit: 50,
-			},
-			undefined,
-		);
+		expect(postStub).toHaveBeenCalledWith({ id: messageId }, { filter, sort, limit: 50 });
 
 		chatLoggerSystem.restoreDefaults();
 	});
@@ -1794,9 +1812,9 @@ describe('message deletion', () => {
 		// (`MessageOperationStatePolicy`), so this method only queues the request. Writing it here ran
 		// ahead of the state it mirrors, and a custom `deleteMessageRequest` skipped it entirely.
 		it('queues a soft delete without touching the offline-DB row', async () => {
-			const request = { id: messageId };
+			const pathParams = { id: messageId };
 
-			await client.deleteMessage(request);
+			await client.deleteMessage(pathParams);
 
 			expect(client.offlineDb.softDeleteMessage).not.toHaveBeenCalled();
 			expect(client.offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
@@ -1805,7 +1823,7 @@ describe('message deletion', () => {
 			expect(queueTaskSpy).toHaveBeenCalledWith({
 				task: {
 					messageId,
-					payload: [request],
+					payload: [pathParams],
 					type: 'delete-message',
 				},
 			});
@@ -1813,9 +1831,10 @@ describe('message deletion', () => {
 		});
 
 		it('queues a hard delete without touching the offline-DB row', async () => {
-			const request = { id: messageId, hard: true };
+			const pathParams = { id: messageId };
+			const request = { hard: true };
 
-			await client.deleteMessage(request);
+			await client.deleteMessage(pathParams, request);
 
 			expect(client.offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
 			expect(client.offlineDb.softDeleteMessage).not.toHaveBeenCalled();
@@ -1824,7 +1843,7 @@ describe('message deletion', () => {
 			expect(queueTaskSpy).toHaveBeenCalledWith({
 				task: {
 					messageId,
-					payload: [request],
+					payload: [pathParams, request],
 					type: 'delete-message',
 				},
 			});
@@ -1833,23 +1852,23 @@ describe('message deletion', () => {
 
 		it('falls back to _deleteMessage if offlineDb is not set', async () => {
 			client.offlineDb = undefined;
-			const request = { id: messageId };
+			const pathParams = { id: messageId };
 
-			await client.deleteMessage(request);
+			await client.deleteMessage(pathParams);
 
 			expect(_deleteMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_deleteMessageSpy).toHaveBeenCalledWith(request);
+			expect(_deleteMessageSpy).toHaveBeenCalledWith(pathParams);
 		});
 
 		it('logs and falls back to _deleteMessage if offline queueing throws', async () => {
 			queueTaskSpy.mockRejectedValue(new Error('Offline failure'));
-			const request = { id: messageId };
+			const pathParams = { id: messageId };
 
-			await client.deleteMessage(request);
+			await client.deleteMessage(pathParams);
 
 			expect(loggerSpy).toHaveBeenCalledTimes(1);
 			expect(_deleteMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_deleteMessageSpy).toHaveBeenCalledWith(request);
+			expect(_deleteMessageSpy).toHaveBeenCalledWith(pathParams);
 		});
 	});
 
@@ -1858,7 +1877,7 @@ describe('message deletion', () => {
 
 		beforeEach(() => {
 			sendRequestSpy = vi.spyOn(client.api, 'sendRequest').mockResolvedValue({
-				body: { message: { id: messageId } },
+				message: { id: messageId },
 				metadata: {},
 			});
 		});
@@ -1875,10 +1894,10 @@ describe('message deletion', () => {
 		});
 
 		it('enriches the message with type="deleted" and deleted_for_me=true when delete_for_me is set', async () => {
-			const result = await client._deleteMessage({
-				id: messageId,
-				delete_for_me: true,
-			});
+			const result = await client._deleteMessage(
+				{ id: messageId },
+				{ delete_for_me: true },
+			);
 
 			expect(result.message).toMatchObject({
 				id: messageId,
@@ -1888,8 +1907,9 @@ describe('message deletion', () => {
 		});
 
 		it('does not enrich the message when delete_for_me is not set', async () => {
-			const result = await client._deleteMessage({ id: messageId, hard: true });
+			const result = await client._deleteMessage({ id: messageId }, { hard: true });
 
+			expect(sendRequestSpy.mock.calls[0][3]).toEqual({ hard: true });
 			expect(result.message).toMatchObject({ id: messageId });
 			expect(result.message).not.toHaveProperty('deleted_for_me');
 			expect(result.message).not.toHaveProperty('type');

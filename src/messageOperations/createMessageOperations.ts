@@ -119,7 +119,7 @@ export const createMessageOperations = (collection: Channel | Thread) => {
     },
     defaults: {
       delete: async (id, o) => {
-        const result = await channel.getClient().deleteMessage({ id, ...o });
+        const result = await channel.getClient().deleteMessage({ id }, o);
         return { message: result.message };
       },
       send: async (m, o) => {
@@ -127,11 +127,9 @@ export const createMessageOperations = (collection: Channel | Thread) => {
         return { message: result.message };
       },
       update: async (m, o) => {
-        const result = await channel.getClient().updateMessage({
-          id: m.id,
-          message: toUpdatedMessagePayload(m),
-          ...o,
-        });
+        const result = await channel
+          .getClient()
+          .updateMessage({ id: m.id }, { message: toUpdatedMessagePayload(m), ...o });
         return { message: result.message };
       },
     },

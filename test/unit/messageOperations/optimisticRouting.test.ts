@@ -278,7 +278,7 @@ describe('optimistic edit/delete routing', () => {
         } as LocalMessage,
       });
 
-      const sent = updateMessage.mock.calls[0][0].message as Record<string, unknown>;
+      const sent = updateMessage.mock.calls[0][1].message as Record<string, unknown>;
       expect(sent.text).toBe('reply after');
       expect(sent).not.toHaveProperty('type');
       expect(sent).not.toHaveProperty('user');

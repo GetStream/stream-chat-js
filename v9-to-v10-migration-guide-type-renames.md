@@ -40,6 +40,7 @@ v10 exposes two generated types whose names collide with v9 aliases that pointed
 | `ChannelQueryOptions`             | `ChannelGetOrCreateRequest`                | Payload for `channel.watch()`, `channel.create()`, and `channel.query()`. The v9 alias masked the OpenAPI name; v10 uses the generated name directly.                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `CommandResponse`                 | `Command`                                  | Slash-command descriptor — matches the shape stored under `channel.serverConfig.commands` (and `channel.config.availableCommands`).                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `CreatePollData`                  | `CreatePollRequest`                        | Payload for `client.createPoll()` / `PollManager.createPoll()`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `CreateReminderOptions`           | none — the call is split                   | ⚠️ **Shape change, not an alias.** v9 `{ messageId; remind_at?: string \| null; user_id? }`. The reminder methods now take `({ message_id }, request?: CreateReminderRequest)`. See [below](#createreminderoptions--updatereminderoptions--split-arguments).                                                                                                                                                                                                                                                                                                  |
 | `DraftMessagePayload`             | `MessageRequest`                           | ⚠️ **Shape change, and the payload is now nested** — `channel.createDraft` takes `{ message: MessageRequest }`. See [below](#draftmessagepayload--messagerequest).                                                                                                                                                                                                                                                                                                                                                                                            |
 | `ErrorFromResponse`               | `StreamAPIError`                           | **Runtime value**, not just a type — was `export const ErrorFromResponse = StreamAPIError;`. Rewrite `instanceof ErrorFromResponse` and `new ErrorFromResponse(...)` call sites too.                                                                                                                                                                                                                                                                                                                                                                          |
 | `EventAPIResponse`                | depends on the endpoint                    | ⚠️ **One v9 alias became three generated response types.** HTTP endpoints still return an event — only `markDelivered` lost it. See [below](#eventapiresponse--one-type-per-endpoint).                                                                                                                                                                                                                                                                                                                                                                        |
@@ -76,11 +77,12 @@ v10 exposes two generated types whose names collide with v9 aliases that pointed
 | `ThreadResponse`                  | `ThreadStateResponse`                      | The v9 alias wrapped the generated `ThreadStateResponse` with a `custom` overlay. In v10 the custom-overlay pattern is dropped and `ThreadResponse` in `stream-chat` refers to the minimal generated shape — which is missing `read`, `latest_replies`, and `draft`. Anything using those fields must switch to `ThreadStateResponse`. (`thread_participants` and `parent_message` are on both shapes.) `generateThreadResponse` in test-utils keeps its name.                                                                                                |
 | `TranslationLanguages`            | `TranslationLanguage`                      | Renamed from plural to singular. The v9 literal union is gone; the v10 alias is `TranslateMessageRequest['language']` — a hand-defined alias in `src/types.ts` that reads the `language` field type off the generated `TranslateMessageRequest` model (the underlying `client.translateMessage` endpoint is not exposed by this SDK; the request/language model is still generated).                                                                                                                                                                          |
 | `UpdateLocationPayload`           | `UpdateLiveLocationRequest`                | Payload for `channel.stopLiveLocationSharing`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `UpdateReminderOptions`           | none — the call is split                   | ⚠️ **Shape change, not an alias.** v9 alias of `CreateReminderOptions`. `updateReminder` takes `({ message_id }, request?: UpdateReminderRequest)`. See [below](#createreminderoptions--updatereminderoptions--split-arguments).                                                                                                                                                                                                                                                                                                                              |
 | `User_old`                        | `UserResponse`                             | Trivial 1:1 alias.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
 ## Rows that are shape changes, not renames
 
-Three entries in the table above were **hand-rolled object types** in v9 rather than aliases of a generated type. Renaming the identifier is necessary but not sufficient — the field sets differ, so read the field the call site actually touches.
+Some entries in the table above were **hand-rolled object types** in v9 rather than aliases of a generated type. Renaming the identifier is necessary but not sufficient — the field sets differ, so read the field the call site actually touches.
 
 ### `APIErrorResponse` → `APIError`
 
@@ -94,6 +96,24 @@ Three entries in the table above were **hand-rolled object types** in v9 rather 
 The trap is `StatusCode`: it is still a live field name elsewhere in the SDK — on WS errors and on the local error type in `src/errors.ts` — so a blind `StatusCode` → `status_code` sweep will corrupt those call sites. Only rewrite it where the value came out of `err.response.data` on an HTTP error.
 
 There is **no name collision on the public surface**: `src/errors.ts` is not re-exported from the package root, so `import { APIError } from 'stream-chat'` unambiguously resolves to the generated model. (Inside this repo, files that need both import the generated one as `Gen_APIError`.)
+
+### `CreateReminderOptions` / `UpdateReminderOptions` → split arguments
+
+v9 typed the reminder methods' single argument as `{ messageId; remind_at?: string | null; user_id? }`. v10 has no replacement type, because the message id is a path parameter and the methods take it as a separate first argument:
+
+```ts
+// v9
+await client.reminders.upsertReminder({ messageId, remind_at: date.toISOString() });
+
+// v10
+await client.reminders.upsertReminder({ message_id: messageId }, { remind_at: date });
+```
+
+- `messageId` becomes `message_id`, in the first argument.
+- `remind_at` is a `Date` in the `request` argument (`CreateReminderRequest` / `UpdateReminderRequest`, which also carry `expires_at`).
+- `user_id` is gone: it selected a user server-side, and the client acts as the connected user.
+
+To type an argument yourself, derive it from the method: `Parameters<ReminderManager['upsertReminder']>`.
 
 ### `DraftMessagePayload` → `MessageRequest`
 
@@ -197,9 +217,9 @@ Neither is a rename; both **gain** surface, so no call site breaks.
 | Type                             | Was                                                         | Now                                     |
 | -------------------------------- | ----------------------------------------------------------- | --------------------------------------- |
 | `ChannelUpdateOptions`           | `Omit<UpdateChannelRequest, 'message' \| 'members'>`        | `Omit<UpdateChannelRequest, 'message'>` |
-| `PinnedMessagePaginationOptions` | omits `'id' \| 'member_custom_include' \| 'sort' \| 'type'` | omits `'id' \| 'sort' \| 'type'`        |
+| `PinnedMessagePaginationOptions` | omits `'id' \| 'member_custom_include' \| 'sort' \| 'type'` | omits `'sort'`                          |
 
-`UpdateChannelRequest` has no `members` key (it has `add_members` / `remove_members`), so that omit was a no-op left over from an older payload shape. `member_custom_include` **is** accepted by `getPinnedMessages`, so omitting it was narrowing the API — it can now be passed through.
+`UpdateChannelRequest` has no `members` key (it has `add_members` / `remove_members`), so that omit was a no-op left over from an older payload shape. `member_custom_include` **is** accepted by `getPinnedMessages`, so omitting it was narrowing the API — it can now be passed through. `id` and `type` no longer need omitting: they are path parameters, which `getPinnedMessages` takes as its own first argument, so they are not part of the request this type is derived from.
 
 ### The v1 permission system — removed
 
@@ -374,10 +394,10 @@ asymmetry is a spec gap on the response side, not something this change introduc
 parameter of **both** `poll.createOption()` and `poll.updateOption()`. Both halves were wrong.
 
 - **`position` does not exist.** It appears nowhere in the OpenAPI spec — zero occurrences
-  across the whole generated model set — and the generated methods whitelist their body
-  fields explicitly (`createPollOption` sends `text` and `custom`; `updatePollOption` sends
-  `id`, `text` and `custom`). Anything passed as `position` was silently dropped before the
-  request left the client. It never reached the wire, so removing it changes no behaviour.
+  across the whole generated model set. In v9 it was silently dropped before the request left
+  the client. The v10 generated methods send the request object as given, with no field
+  filtering, so a `position` passed through a cast now reaches the wire as an unknown field. The
+  API ignores it, so dropping it from the call changes no behaviour.
 - **`id` was required on create.** `UpdatePollOptionRequest.id` is required, so
   `createOption()` demanded an option id that the create endpoint does not even send. Callers
   worked around it with a cast — the React Native SDK did exactly this:
@@ -428,11 +448,11 @@ export type ModerationFlagOptions = Omit<
 // { entity_creator_id?: string; custom?: Record<string, any>; moderation_payload?: ModerationPayload }
 ```
 
-- **`user_id` is gone, and it never reached the server.** `FlagRequest` has no such field, and
-  the generated `flag()` whitelists its body explicitly — `entity_id`, `entity_type`,
-  `entity_creator_id`, `reason`, `custom`, `moderation_payload` — so a `user_id` passed here
-  was discarded before the request was built. Nothing to migrate: the acting user is already
-  sent as a query parameter on every request, taken from `client.userId` by the transport.
+- **`user_id` is gone, and the server never used it.** `FlagRequest` has no such field. The
+  generated `flag()` sends its request as given, with no field filtering, so a `user_id` passed
+  here (untyped, or through a cast) goes out as an unknown body field that the API ignores. Drop
+  it: the acting user is already sent as a query parameter on every request, taken from
+  `client.userId` by the transport.
 - **`entity_creator_id` is now settable.** It is accepted by the endpoint but was absent from
   the options type, so both wrappers pinned it to `''` with no way to override. `options` is
   spread last, so passing it now wins over that default.

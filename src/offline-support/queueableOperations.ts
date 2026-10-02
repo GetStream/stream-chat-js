@@ -214,5 +214,12 @@ export const runQueueableOperation = async <T extends QueueableType>({
     );
   }
 
-  return await operation.run({ channel, client, task });
+  // A payload read back from the offline DB went through JSON, which turns an omitted argument -
+  // say no `request` between `pathParams` and `requestOptions` - into `null`, and an optional or
+  // defaulted parameter only stands in for `undefined`.
+  const payload = task.payload.map(
+    (arg) => arg ?? undefined,
+  ) as PendingTaskOf<T>['payload'];
+
+  return await operation.run({ channel, client, task: { ...task, payload } });
 };

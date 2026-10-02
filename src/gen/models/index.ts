@@ -116,14 +116,33 @@ export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Omit<T, Keys> &
     [K in Keys]-?: Required<Pick<T, K>> & Partial<Record<Exclude<Keys, K>, undefined>>;
   }[Keys];
 export interface AIAudioConfigRequest {
+  /**
+   * Bodyguard credentials profile to classify transcripts with. Applies to the NLP engine only; ignored when LLM configurability is enabled. Empty falls back to the app-pinned profile, then the organization's top-level credentials
+   */
   profile?: string;
+  /**
+   * Deprecated pre-split rule list. Still the live config while no engine config exists; once one does it is kept as a fallback for whichever engine has none of its own
+   */
   rules?: Array<BodyguardRule>;
+  ai_text_config?: AITextConfig;
+  llm_config?: LLMConfig;
 }
 
 export interface AIAudioConfigResponse {
+  /**
+   * Whether the engine selected by the application's LLM configurability flag has a rule that does something. Derived, not stored
+   */
   enabled: boolean;
+  /**
+   * Bodyguard credentials profile transcripts are classified with. Applies to the NLP engine only
+   */
   profile: string;
+  /**
+   * The active engine's rules, flattened into the pre-split shape for clients that predate the per-engine configs. This is the whole config for a policy that has no per-engine config stored
+   */
   rules: Array<BodyguardRule>;
+  ai_text_config?: AITextConfig;
+  llm_config?: LLMConfig;
 }
 
 export interface AIImageConfig {
@@ -387,9 +406,18 @@ export interface AppEventResponse {
 }
 
 export interface AppResponseFields {
+  /**
+   * A boolean value determining if async url enrichment is enabled.
+   */
   async_url_enrich_enabled: boolean;
+  /**
+   * A boolean value determining if auto translation is enabled.
+   */
   auto_translation_enabled: boolean;
   id: number;
+  /**
+   * The name of the app.
+   */
   name: string;
   placement: string;
   file_upload_config: FileUploadConfig;
@@ -763,7 +791,7 @@ export interface BlockListResponse {
    */
   name: string;
   /**
-   * Block list type. One of: regex, domain, domain_allowlist, email, email_allowlist, word
+   * Block list type. One of: regex, domain, domain_allowlist, email, email_allowlist, word, word_allowlist
    */
   type: string;
   /**
@@ -903,7 +931,8 @@ export interface BulkActionAppealsRequest {
    */
   unban?: UnbanActionRequestPayload;
   /**
-   * Deprecated: use restore instead — it now also reverses a block or shadow block. Configuration for unblock action.
+   * @deprecated
+   * Deprecated: Use restore instead, which now also reverses a block or shadow block. Configuration for unblock action.
    */
   unblock?: UnblockActionRequestPayload;
 }
@@ -1086,6 +1115,9 @@ export interface ChannelConfigWithInfo {
   blocklist_behavior?: 'flag' | 'block' | 'shadow_block';
   partition_size?: number;
   partition_ttl?: string;
+  /**
+   * Sets the push notification level for a channel type
+   */
   push_level?: 'all' | 'all_mentions' | 'mentions' | 'direct_mentions' | 'none';
   allowed_flag_reasons?: Array<string>;
   blocklists?: Array<BlockListOptions>;
@@ -1562,7 +1594,13 @@ export type ChannelOwnCapability =
   (typeof ChannelOwnCapability)[keyof typeof ChannelOwnCapability];
 
 export interface ChannelPushPreferencesResponse {
+  /**
+   * The scope level of the push notifications.
+   */
   chat_level?: string;
+  /**
+   * If provided the notifications will be disabled until the set date.
+   */
   disabled_until?: TimestampNS;
   chat_preferences?: ChatPreferencesResponse;
 }
@@ -1695,6 +1733,9 @@ export interface ChannelStateResponse {
   channel?: ChannelResponse;
   draft?: DraftResponse;
   membership?: ChannelMemberResponse;
+  /**
+   * The push preference details.
+   */
   push_preferences?: ChannelPushPreferencesResponse;
 }
 
@@ -1746,6 +1787,9 @@ export interface ChannelStateResponseFields {
   channel?: ChannelResponse;
   draft?: DraftResponse;
   membership?: ChannelMemberResponse;
+  /**
+   * The push preference details.
+   */
   push_preferences?: ChannelPushPreferencesResponse;
 }
 
@@ -2141,6 +2185,9 @@ export interface ConfigOverridesRequest {
    * Maximum message length
    */
   max_message_length?: number;
+  /**
+   * Overrides the push notification level for this channel
+   */
   push_level?: 'all' | 'all_mentions' | 'mentions' | 'direct_mentions' | 'none';
   /**
    * Enable/disable quotes
@@ -2228,6 +2275,7 @@ export interface ConfigResponse {
   automod_toxicity_config?: AutomodToxicityConfig;
   block_list_config?: BlockListConfig;
   flood_config?: FloodConfig;
+  intent_config?: IntentConfigResponse;
   llm_config?: LLMConfig;
   velocity_filter_config?: VelocityFilterConfig;
   video_call_rule_config?: VideoCallRuleConfig;
@@ -2240,7 +2288,33 @@ export interface ConnectUserDetailsRequest {
   language?: string;
   name?: string;
   custom?: CustomUserData;
+  /**
+   * The privacy settings of the user.
+   */
   privacy_settings?: PrivacySettingsResponse;
+}
+
+export interface ConnectedEvent {
+  /**
+   * The connection_id for this client
+   */
+  connection_id: string;
+  created_at: TimestampNS;
+  me: OwnUserResponse;
+  /**
+   * The type of event: "connection.ok" in this case
+   */
+  type: string;
+}
+
+export interface ConnectionErrorEvent {
+  connection_id: string;
+  created_at: TimestampNS;
+  error: APIError;
+  /**
+   * The type of event: "connection.error" in this case
+   */
+  type: string;
 }
 
 export interface ContentCountRuleParameters {
@@ -2275,9 +2349,16 @@ export interface CreateBlockListRequest {
   is_substring_matching_enabled?: boolean;
   team?: string;
   /**
-   * Block list type. One of: regex, domain, domain_allowlist, email, email_allowlist, word
+   * Block list type. One of: regex, domain, domain_allowlist, email, email_allowlist, word, word_allowlist
    */
-  type?: 'regex' | 'domain' | 'domain_allowlist' | 'email' | 'email_allowlist' | 'word';
+  type?:
+    | 'regex'
+    | 'domain'
+    | 'domain_allowlist'
+    | 'email'
+    | 'email_allowlist'
+    | 'word'
+    | 'word_allowlist';
 }
 
 export interface CreateBlockListResponse {
@@ -2390,6 +2471,9 @@ export interface CreatePollRequest {
    */
   max_votes_allowed?: number;
   team?: string;
+  /**
+   * Represents the visibility of votes in a poll.
+   */
   voting_visibility?: 'anonymous' | 'public';
   options?: Array<PollOptionInput>;
   /**
@@ -2407,6 +2491,7 @@ export interface CreateQueueRequest {
 }
 
 export interface CreateReminderRequest {
+  expires_at?: Date;
   remind_at?: Date;
 }
 
@@ -2696,11 +2781,11 @@ export interface DeliveryReceiptsResponse {
 
 export interface DeviceResponse {
   /**
-   * Date/time of creation
+   * The date when the device was created.
    */
   created_at: TimestampNS;
   /**
-   * Device ID
+   * The device identifier.
    */
   id: string;
   /**
@@ -3211,10 +3296,26 @@ export interface Field {
 }
 
 export interface FileUploadConfig {
+  /**
+   * The file size limit allowed in Bytes. 0 means no app-specific limit.
+   * This value is configurable from Stream's Dashboard App Settings.
+   */
   size_limit: number;
+  /**
+   * The allowed file extensions.
+   */
   allowed_file_extensions: Array<string>;
+  /**
+   * The allowed mime types.
+   */
   allowed_mime_types: Array<string>;
+  /**
+   * The blocked file extensions.
+   */
   blocked_file_extensions: Array<string>;
+  /**
+   * The blocked mime types.
+   */
   blocked_mime_types: Array<string>;
 }
 
@@ -3250,6 +3351,10 @@ export interface FilterConfigResponse {
    * AI image moderation labels available as filter values. Reflects the app's effective image taxonomy: custom Bodyguard taxonomy when enabled, otherwise the standard L1 label set.
    */
   ai_image_labels?: Array<string>;
+  /**
+   * Labels the image OCR pipeline can flag, available as filter values on the `label` field under the ai_image category. The app's LLM labels when LLM configurability is enabled, otherwise the AI text labels. OCR and image-classification labels share the `label` field, so a name present in both matches either.
+   */
+  ai_image_ocr_labels?: Array<string>;
   /**
    * AI text moderation labels available as filter values
    */
@@ -3361,6 +3466,7 @@ export interface FloodSimilarConfig {
 }
 
 export interface FloodSimilarRuleParameters {
+  min_text_length?: number;
   similarity_distance?: number;
   threshold?: number;
   time_window?: string;
@@ -3378,6 +3484,10 @@ export interface FullUserResponse {
   shadow_banned: boolean;
   total_unread_count: number;
   unread_channels: number;
+  /**
+   * @deprecated
+   * Deprecated: Use total_unread_count instead.
+   */
   unread_count: number;
   unread_threads: number;
   updated_at: TimestampNS;
@@ -3396,6 +3506,9 @@ export interface FullUserResponse {
   name?: string;
   revoke_tokens_issued_before?: TimestampNS;
   latest_hidden_channels?: Array<string>;
+  /**
+   * The privacy settings of the user.
+   */
   privacy_settings?: PrivacySettingsResponse;
   teams_role?: Record<string, string>;
 }
@@ -3433,6 +3546,9 @@ export interface GetApplicationResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
+  /**
+   * A type representing the app settings.
+   */
   app: AppResponseFields;
 }
 
@@ -3760,6 +3876,82 @@ export interface ImportBlockListResponse {
   task_id: string;
 }
 
+export interface IntentConfigRequest {
+  /**
+   * Topics to classify conversation text against (max 20, labels must be unique)
+   */
+  topics?: Array<IntentTopicRequest>;
+}
+
+export interface IntentConfigResponse {
+  /**
+   * Topics conversation text is classified against
+   */
+  topics: Array<IntentTopicResponse>;
+}
+
+export interface IntentTopicRequest {
+  /**
+   * Unique topic label (e.g. purchase_intent)
+   */
+  label: string;
+  /**
+   * How long the buffer collects items before scoring runs
+   */
+  analysis_cooldown_seconds?: number;
+  /**
+   * Optional description used in the classification prompt; the label alone is used when empty
+   */
+  description?: string;
+  /**
+   * Whether this topic is evaluated
+   */
+  enabled?: boolean;
+  /**
+   * Items buffered per conversation before scoring runs early
+   */
+  max_captured_items?: number;
+  /**
+   * Suppresses this topic for a user and conversation after it fires; 0 uses the default
+   */
+  refire_cooldown_seconds?: number;
+  /**
+   * Conversation score (0-100) required to fire moderation.intent_detected
+   */
+  score_threshold?: number;
+}
+
+export interface IntentTopicResponse {
+  /**
+   * How long the buffer collects items before scoring runs
+   */
+  analysis_cooldown_seconds: number;
+  /**
+   * Whether this topic is evaluated
+   */
+  enabled: boolean;
+  /**
+   * Unique topic label (e.g. purchase_intent)
+   */
+  label: string;
+  /**
+   * Items buffered per conversation before scoring runs early
+   */
+  max_captured_items: number;
+  /**
+   * Conversation score (0-100) required to fire moderation.intent_detected
+   */
+  score_threshold: number;
+  /**
+   * Optional description used in the classification prompt; the label alone is used when empty
+   */
+  description?: string;
+  /**
+   * Suppresses this topic for a user and conversation after it fires; 0 uses the default
+   */
+  refire_cooldown_seconds?: number;
+}
+
 export interface KeyframeOCRRuleParameters {
   threshold?: number;
   time_window?: string;
@@ -4075,6 +4267,9 @@ export interface MemberUserRequest {
   language?: string;
   name?: string;
   custom?: CustomUserData;
+  /**
+   * The privacy settings of the user.
+   */
   privacy_settings?: PrivacySettingsResponse;
 }
 
@@ -5865,6 +6060,10 @@ export interface OwnUserResponse {
   role: string;
   total_unread_count: number;
   unread_channels: number;
+  /**
+   * @deprecated
+   * Deprecated: Use total_unread_count instead.
+   */
   unread_count: number;
   unread_threads: number;
   updated_at: TimestampNS;
@@ -5882,7 +6081,13 @@ export interface OwnUserResponse {
   revoke_tokens_issued_before?: TimestampNS;
   blocked_user_ids?: Array<string>;
   latest_hidden_channels?: Array<string>;
+  /**
+   * The privacy settings of the user.
+   */
   privacy_settings?: PrivacySettingsResponse;
+  /**
+   * The push preference details.
+   */
   push_preferences?: PushPreferencesResponse;
   teams_role?: Record<string, string>;
   total_unread_count_by_team?: Record<string, number>;
@@ -6197,8 +6402,17 @@ export interface PollVotesResponse {
 }
 
 export interface PrivacySettingsResponse {
+  /**
+   * The settings for the delivery receipt events.
+   */
   delivery_receipts?: DeliveryReceiptsResponse;
+  /**
+   * The settings for the read receipt events.
+   */
   read_receipts?: ReadReceiptsResponse;
+  /**
+   * The settings for typing indicator events.
+   */
   typing_indicators?: TypingIndicatorsResponse;
 }
 
@@ -6243,7 +6457,13 @@ export interface PushPreferenceInput {
 
 export interface PushPreferencesResponse {
   call_level?: string;
+  /**
+   * The scope level of the push notifications.
+   */
   chat_level?: string;
+  /**
+   * If provided the notifications will be disabled until the set date.
+   */
   disabled_until?: TimestampNS;
   feeds_level?: string;
   chat_preferences?: ChatPreferencesResponse;
@@ -7193,6 +7413,11 @@ export interface QueryRemindersRequest {
       operators: '$eq' | '$gt' | '$gte' | '$lt' | '$lte';
     };
 
+    expires_at: {
+      type: Date | string;
+      operators: '$eq' | '$exists' | '$gt' | '$gte' | '$lt' | '$lte';
+    };
+
     message_id: {
       type: string;
       operators: '$eq' | '$in';
@@ -7244,7 +7469,7 @@ export interface QueryReviewQueueRequest {
    */
   sort?: Array<SortParamRequest>;
   /**
-   * Filter conditions for review queue items. Accepts built-in fields (e.g. status, channel_cid, severity, recommended_action) and customer-supplied moderation_payload.custom keys: any key that is not a built-in field is matched against the item's custom moderation data (e.g. {"location_id": "loc-42"}). Use filter_config.filterable_custom_keys to discover which custom keys the app exposes as chips.
+   * Filter conditions for review queue items. Accepts built-in fields (e.g. status, channel_cid, severity, recommended_action) and customer-supplied moderation_payload.custom keys: any key that is not a built-in field is matched against the item's custom moderation data (e.g. {"location_id": "loc-42"}). Use filter_config.filterable_custom_keys to discover which custom keys the app exposes as chips. content_text searches the moderated text: "$q" is a keyword search (terms ANDed, no adjacency) over the indexed tsvector, while "$eq" (or "$in" for several wordings) matches the text exactly. The exact form is unindexed, so scope it with date_range rather than running it across the whole queue.
    */
   filter?: Filters<{
     ai_text_severity: {
@@ -7305,6 +7530,11 @@ export interface QueryReviewQueueRequest {
     config_key: {
       type: string;
       operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
+    };
+
+    content_text: {
+      type: string;
+      operators: '$eq' | '$in' | '$q';
     };
 
     created_at: {
@@ -8150,6 +8380,7 @@ export interface ReminderResponseData {
   message_id: string;
   updated_at: TimestampNS;
   user_id: string;
+  expires_at?: TimestampNS;
   remind_at?: TimestampNS;
   /**
    * Represents channel in chat
@@ -8983,14 +9214,42 @@ export interface SharedLocationResponse {
 }
 
 export interface SharedLocationResponseData {
+  /**
+   * The CID (type:id) of the channel that the location is attached to.
+   */
   channel_cid: string;
+  /**
+   * The date when the location was created.
+   */
   created_at: TimestampNS;
+  /**
+   * The ID of the device that created the location.
+   */
   created_by_device_id: string;
+  /**
+   * The latitude of the location.
+   */
   latitude: number;
+  /**
+   * The longitude of the location.
+   */
   longitude: number;
+  /**
+   * The ID of the message that the location is attached to.
+   */
   message_id: string;
+  /**
+   * The date when the location was updated.
+   */
   updated_at: TimestampNS;
+  /**
+   * The ID of the user that created the location.
+   */
   user_id: string;
+  /**
+   * The date when the location sharing ends.
+   * If it's empty, it means the location sharing is static instead of live.
+   */
   end_at?: TimestampNS;
   /**
    * Represents channel in chat
@@ -9129,7 +9388,8 @@ export interface SubmitActionRequest {
    */
   unban?: UnbanActionRequestPayload;
   /**
-   * Deprecated: use restore instead — it now also reverses a block or shadow block. Configuration for unblock action.
+   * @deprecated
+   * Deprecated: Use restore instead, which now also reverses a block or shadow block. Configuration for unblock action.
    */
   unblock?: UnblockActionRequestPayload;
 }
@@ -9625,21 +9885,51 @@ export interface UnmuteResponse {
 }
 
 export interface UnreadCountsChannel {
+  /**
+   * The channel CID (type:id).
+   */
   channel_id: string;
+  /**
+   * The date which the current user last read the channel.
+   */
   last_read: TimestampNS;
+  /**
+   * The number of unread messages inside the channel.
+   */
   unread_count: number;
 }
 
 export interface UnreadCountsChannelType {
+  /**
+   * The number of unread channels of this channel type.
+   */
   channel_count: number;
+  /**
+   * The channel type.
+   */
   channel_type: string;
+  /**
+   * The number of unread messages of all the channels with this type.
+   */
   unread_count: number;
 }
 
 export interface UnreadCountsThread {
+  /**
+   * The date which the current user last read the thread.
+   */
   last_read: TimestampNS;
+  /**
+   * The id of the last reply which the current user read in the thread.
+   */
   last_read_message_id: string;
+  /**
+   * The message id of the root of the thread.
+   */
   parent_message_id: string;
+  /**
+   * The number of unread replies inside the thread.
+   */
   unread_count: number;
 }
 
@@ -9920,6 +10210,7 @@ export interface UpdateQueueRequest {
 }
 
 export interface UpdateReminderRequest {
+  expires_at?: Date;
   remind_at?: Date;
 }
 
@@ -9994,7 +10285,7 @@ export interface UpdateUsersResponse {
   duration: string;
   /**
    * @deprecated
-   * Deprecated: always empty. Removing a user from a team no longer deletes their memberships in that team's channels, so there is no task to poll
+   * Deprecated: Always empty. Removing a user from a team no longer deletes their memberships in that team's channels, so there is no task to poll.
    */
   membership_deletion_task_id: string;
   /**
@@ -10129,6 +10420,7 @@ export interface UpsertConfigRequest {
   bodyguard_config?: AITextConfig;
   flood_config?: FloodConfig;
   google_vision_config?: GoogleVisionConfig;
+  intent_config?: IntentConfigRequest;
   llm_config?: LLMConfig;
   rule_builder_config?: RuleBuilderConfig;
   velocity_filter_config?: VelocityFilterConfig;
@@ -10538,6 +10830,9 @@ export interface UserRequest {
    * Custom user data
    */
   custom?: CustomUserData;
+  /**
+   * The privacy settings of the user.
+   */
   privacy_settings?: PrivacySettingsResponse;
 }
 
@@ -10644,6 +10939,9 @@ export interface UserResponsePrivacyFields {
   last_active?: TimestampNS;
   name?: string;
   revoke_tokens_issued_before?: TimestampNS;
+  /**
+   * The privacy settings of the user.
+   */
   privacy_settings?: PrivacySettingsResponse;
   teams_role?: Record<string, string>;
 }
@@ -10934,6 +11232,8 @@ export type WSEvent =
   | ({ type: 'channel.unfrozen' } & ChannelUnFrozenEvent)
   | ({ type: 'channel.updated' } & ChannelUpdatedEvent)
   | ({ type: 'channel.visible' } & ChannelVisibleEvent)
+  | ({ type: 'connection.error' } & ConnectionErrorEvent)
+  | ({ type: 'connection.ok' } & ConnectedEvent)
   | ({ type: 'draft.deleted' } & DraftDeletedEvent)
   | ({ type: 'draft.updated' } & DraftUpdatedEvent)
   | ({ type: 'health.check' } & HealthCheckEvent)
@@ -11003,10 +11303,28 @@ export interface WrappedUnreadCountsResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
+  /**
+   * The total number of unread messages.
+   */
   total_unread_count: number;
+  /**
+   * The total number of unread threads.
+   */
   total_unread_threads_count: number;
+  /**
+   * The unread information per channel type.
+   */
   channel_type: Array<UnreadCountsChannelType>;
+  /**
+   * The unread information per channel.
+   */
   channels: Array<UnreadCountsChannel>;
+  /**
+   * The unread information per thread.
+   */
   threads: Array<UnreadCountsThread>;
+  /**
+   * The total number of unread messages grouped by team.
+   */
   total_unread_count_by_team?: Record<string, number>;
 }
