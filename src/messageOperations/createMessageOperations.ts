@@ -6,6 +6,7 @@ import { settlePendingAttachmentUploads } from './settlePendingAttachmentUploads
 import { toUpdatedMessagePayload } from '../utils';
 import { MessageOperations } from './MessageOperations';
 import type { Channel } from '../channel';
+import type { PendingTaskOf, QueueableType } from '../offline-support/types';
 import type { Thread } from '../thread';
 
 /**
@@ -21,9 +22,15 @@ export const createMessageOperations = (collection: Channel | Thread) => {
   // closes a module-load cycle back to `channel.ts`) or a duck-type that a codegen run could silently
   // invert.
   const paginator = collection.messagePaginator;
-  // The explicit type is needed because `_checkHasId` is an assertion function.
-  const channel: Channel = paginator.channel;
-  const { parentMessageId } = paginator;
+  const { channel, parentMessageId } = paginator;
+
+  const queued = <T extends QueueableType>(
+    task: PendingTaskOf<T>,
+    { queue = true }: { queue?: boolean } = {},
+  ) => queueOrRun({ channel, client: channel.getClient(), queue, task });
+  // Read on every call, because a channel created from its member list only gets an id once the
+  // server has created it.
+  const channelTaskData = () => ({ channelId: channel.id, channelType: channel.type });
 
   return new MessageOperations({
     sequenceRequests: (kind, request) =>
@@ -140,70 +147,50 @@ export const createMessageOperations = (collection: Channel | Thread) => {
     // The HTTP requests, through the offline queue so they replay on reconnect.
     defaults: {
       delete: async (id, o) => {
-        const result = await queueOrRun({
-          client: channel.getClient(),
-          task: { messageId: id, payload: [{ id, ...o }], type: 'delete-message' },
+        const { message } = await queued({
+          messageId: id,
+          payload: [{ id, ...o }],
+          type: 'delete-message',
         });
-        return { message: result.message };
+        return { message };
       },
       send: async (m, o) => {
-        channel._checkHasId();
-        const result = await queueOrRun({
-          channel,
-          client: channel.getClient(),
-          // Nothing to key a queue entry on without a message id, so it runs but is not queued.
-          queue: !!m.id,
-          task: {
-            channelId: channel.id,
-            channelType: channel.type,
+        const { message } = await queued(
+          {
+            ...channelTaskData(),
             messageId: m.id,
             payload: [{ message: m, ...o }],
             type: 'send-message',
           },
-        });
-        return { message: result.message };
+          // Without a message id there is nothing to key a queue entry on, so it just runs.
+          { queue: !!m.id },
+        );
+        return { message };
       },
       update: async (m, o) => {
         const request = { id: m.id, message: toUpdatedMessagePayload(m), ...o };
-        const result = await queueOrRun({
-          client: channel.getClient(),
-          task: {
-            ...getPendingTaskChannelData(m.cid),
-            messageId: m.id,
-            payload: [request],
-            type: 'update-message',
-          },
+        const { message } = await queued({
+          ...getPendingTaskChannelData(m.cid),
+          messageId: m.id,
+          payload: [request],
+          type: 'update-message',
         });
-        return { message: result.message };
+        return { message };
       },
-      sendReaction: async (...args) => {
-        channel._checkHasId();
-        return await queueOrRun({
-          channel,
-          client: channel.getClient(),
-          task: {
-            channelId: channel.id,
-            channelType: channel.type,
-            messageId: args[0].id,
-            payload: args,
-            type: 'send-reaction',
-          },
-        });
-      },
-      deleteReaction: async (...args) => {
-        channel._checkHasId();
-        return await queueOrRun({
-          channel,
-          client: channel.getClient(),
-          task: {
-            channelId: channel.id,
-            channelType: channel.type,
-            messageId: args[0].id,
-            payload: args,
-            type: 'delete-reaction',
-          },
-        });
-      },
+      sendReaction: (...args) =>
+        queued({
+          ...channelTaskData(),
+          messageId: args[0].id,
+          payload: args,
+          type: 'send-reaction',
+        }),
+      deleteReaction: (...args) =>
+        queued({
+          ...channelTaskData(),
+          messageId: args[0].id,
+          payload: args,
+          type: 'delete-reaction',
+        }),
     },
   });
 };

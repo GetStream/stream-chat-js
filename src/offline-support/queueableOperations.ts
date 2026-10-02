@@ -22,6 +22,11 @@ export type QueueableOperation<T extends QueueableType> = {
    */
   logFailureAs: { message: string; method: string };
   /**
+   * Whether a replay has to look the channel up from the task. Such a task is only queued when it
+   * carries `channelId` and `channelType`, because without them it could never be replayed.
+   */
+  needsChannel: boolean;
+  /**
    * Performs the request. Used both for a first attempt and for a replay.
    *
    * `channel` is the instance the CALLER already holds, when there is one. A first attempt comes from a
@@ -78,6 +83,7 @@ export const QUEUEABLE_OPERATIONS: {
   [T in QueueableType]: QueueableOperation<T>;
 } = {
   'create-draft': {
+    needsChannel: true,
     logFailureAs: {
       message: 'Creating the draft in the offline database failed.',
       method: 'createDraft',
@@ -86,6 +92,7 @@ export const QUEUEABLE_OPERATIONS: {
       channelOf(client, task, channel)._createDraft(...task.payload),
   },
   'delete-draft': {
+    needsChannel: true,
     logFailureAs: {
       message: 'Deleting the draft from the offline database failed.',
       method: 'deleteDraft',
@@ -94,14 +101,17 @@ export const QUEUEABLE_OPERATIONS: {
       channelOf(client, task, channel)._deleteDraft(...task.payload),
   },
   'delete-message': {
+    needsChannel: false,
     logFailureAs: { message: 'Deleting the message failed.', method: 'deleteMessage' },
     run: ({ client, task }) => client.deleteMessage(...task.payload),
   },
   'delete-reaction': {
+    needsChannel: false,
     logFailureAs: { message: 'Deleting the reaction failed.', method: 'deleteReaction' },
     run: ({ client, task }) => client.deleteReaction(...task.payload),
   },
   'send-message': {
+    needsChannel: true,
     logFailureAs: { message: 'Sending the message failed.', method: 'sendMessage' },
     /**
      * A replayed send is the first time local state learns the message exists server-side: the
@@ -124,10 +134,12 @@ export const QUEUEABLE_OPERATIONS: {
       channelOf(client, task, channel).sendMessage(...task.payload),
   },
   'send-reaction': {
+    needsChannel: false,
     logFailureAs: { message: 'Sending the reaction failed.', method: 'sendReaction' },
     run: ({ client, task }) => client.sendReaction(...task.payload),
   },
   'update-message': {
+    needsChannel: false,
     logFailureAs: { message: 'Updating the message failed.', method: 'updateMessage' },
     run: ({ client, task }) => client.updateMessage(...task.payload),
   },
@@ -171,12 +183,16 @@ export const queueOrRun = async <T extends QueueableType>({
   task: PendingTaskOf<T>;
 }): Promise<QueueableResult<T>> => {
   const { offlineDb } = client;
+  const operation = QUEUEABLE_OPERATIONS[task.type];
+  // We never queue a task that could not be replayed. It still runs once, so the request reports the
+  // problem itself, i.e that the channel has no id yet.
+  const replayable = !operation.needsChannel || !!(task.channelType && task.channelId);
 
-  if (offlineDb && queue) {
+  if (offlineDb && queue && replayable) {
     try {
       return await offlineDb.queueTask<QueueableResult<T>>({ task });
     } catch (error) {
-      const { message, method } = QUEUEABLE_OPERATIONS[task.type].logFailureAs;
+      const { message, method } = operation.logFailureAs;
       // The cid comes from the task when it carries a channel, so a channel-scoped failure is logged
       // against its channel without the caller having to say so.
       const cid =

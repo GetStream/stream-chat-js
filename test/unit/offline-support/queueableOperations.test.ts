@@ -58,6 +58,15 @@ describe('QUEUEABLE_OPERATIONS', () => {
     }
   });
 
+  it('marks exactly the operations whose replay looks the channel up', () => {
+    const needingChannel = Object.entries(QUEUEABLE_OPERATIONS)
+      .filter(([, operation]) => operation.needsChannel)
+      .map(([type]) => type)
+      .sort();
+
+    expect(needingChannel).toEqual(['create-draft', 'delete-draft', 'send-message']);
+  });
+
   it('declares replay-only follow-up work for send-message alone', () => {
     // A first attempt has an optimistic layer above it that settles local state; a replay does not.
     const withOnReplay = Object.entries(QUEUEABLE_OPERATIONS)
@@ -236,6 +245,58 @@ describe('queueOrRun', () => {
 
     expect(offlineDb.queueTask).not.toHaveBeenCalled();
     expect(deleteMessage).toHaveBeenCalledTimes(1);
+  });
+
+  describe('tasks that need their channel to be replayed', () => {
+    const sendTask = {
+      channelId: 'general',
+      channelType: 'messaging',
+      messageId: 'm1',
+      payload: [{ message: { id: 'm1', text: 'hi' } }],
+      type: 'send-message',
+    } as unknown as PendingTask;
+
+    it('does not queue one without a channel id, and runs it on the given channel instead', async () => {
+      // The channel's own request is what reports the missing id, so nothing unreplayable is stored.
+      const offlineDb = dbThatQueues('from queue');
+      const callerChannel = {
+        sendMessage: vi.fn(async () => {
+          throw new Error("This channel isn't yet created on Stream");
+        }),
+      };
+
+      await expect(
+        queueOrRun({
+          channel: callerChannel as never,
+          client: makeClient({ offlineDb }),
+          task: { ...sendTask, channelId: undefined } as unknown as PendingTask,
+        }),
+      ).rejects.toThrow(/isn't yet created/);
+      expect(offlineDb.queueTask).not.toHaveBeenCalled();
+      expect(callerChannel.sendMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it('queues one that carries its channel', async () => {
+      const offlineDb = dbThatQueues('from queue');
+
+      await expect(
+        queueOrRun({ client: makeClient({ offlineDb }), task: sendTask }),
+      ).resolves.toBe('from queue');
+      expect(offlineDb.queueTask).toHaveBeenCalledWith({ task: sendTask });
+    });
+  });
+
+  it('queues a task that runs on the client even when it has no channel id', async () => {
+    const offlineDb = dbThatQueues('from queue');
+    const clientTask = { ...task, channelId: undefined, channelType: undefined };
+
+    await expect(
+      queueOrRun({
+        client: makeClient({ offlineDb }),
+        task: clientTask as unknown as PendingTask,
+      }),
+    ).resolves.toBe('from queue');
+    expect(offlineDb.queueTask).toHaveBeenCalledTimes(1);
   });
 
   it('logs the queued failure as the operation declares, then runs it directly', async () => {

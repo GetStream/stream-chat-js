@@ -3771,6 +3771,24 @@ describe('send reaction flow', () => {
 			expect(client.sendReaction).toHaveBeenCalledTimes(1);
 			expect(client.sendReaction).toHaveBeenCalledWith(request);
 		});
+
+		it('still queues on a channel that has no id yet, since the reaction runs on the client', async () => {
+			const distinct = client.channel('messaging', undefined, {
+				members: ['user-abc', 'other-user'],
+			});
+
+			await distinct.messageOperations.addReaction({ messageId, options, reaction });
+
+			expect(queueTaskSpy).toHaveBeenCalledWith({
+				task: {
+					channelId: undefined,
+					channelType: 'messaging',
+					messageId,
+					payload: [request],
+					type: 'send-reaction',
+				},
+			});
+		});
 	});
 
 	describe('client.sendReaction (the HTTP request)', () => {
@@ -4103,6 +4121,7 @@ describe('message sending flow', () => {
 			const distinct = client.channel('messaging', undefined, {
 				members: ['user-abc', 'other-user'],
 			});
+			const sendRequestSpy = vi.spyOn(client.api, 'sendRequest');
 
 			await expect(
 				distinct.messageOperations.send({
@@ -4111,6 +4130,28 @@ describe('message sending flow', () => {
 				}),
 			).rejects.toThrow(/isn't yet created/);
 			expect(queueTaskSpy).not.toHaveBeenCalled();
+			expect(sendRequestSpy).not.toHaveBeenCalled();
+		});
+
+		it('queues with the id a channel gets once it has been created', async () => {
+			const distinct = client.channel('messaging', undefined, {
+				members: ['user-abc', 'other-user'],
+			});
+			// What `watch()` does when the server creates the channel.
+			distinct.id = 'created-later';
+
+			await distinct.messageOperations.send({
+				localMessage: formatMessage({ ...message, created_at: Date.now() }),
+				message,
+			});
+
+			expect(queueTaskSpy).toHaveBeenCalledWith({
+				task: expect.objectContaining({
+					channelId: 'created-later',
+					channelType: 'messaging',
+					type: 'send-message',
+				}),
+			});
 		});
 
 		it('sends the request directly if offlineDb throws', async () => {
