@@ -716,9 +716,10 @@ export class Channel extends WithMessageOperations(ChannelApi) {
    * that sending the reaction is queued up if it fails due to bad internet conditions and executed
    * later.
    *
-   * @param ...args - `[request, requestOptions]`. `request` holds the target message ID, the
-   *   reaction object (e.g. `{ type: 'love' }`), and optional flags such as `enforce_unique` and
-   *   `skip_push`; `requestOptions` carries per-request options such as an abort `signal`.
+   * @param ...args - `[pathParams, request, requestOptions]`. `pathParams.id` is the target message
+   *   ID; `request` holds the reaction object (e.g. `{ reaction: { type: 'love' } }`) and optional
+   *   flags such as `enforce_unique` and `skip_push`; `requestOptions` carries per-request options
+   *   such as an abort `signal`.
    *   When the call is queued for offline replay, `requestOptions` is queued with it - see the
    *   note on signal persistence in `AbstractOfflineDB.queueTask`.
    * @returns The server response.
@@ -2058,9 +2059,10 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   /**
    * Casts or cancels one or more votes on a poll.
    *
-   * @param ...args - `[request, requestOptions]`. `request` holds the target message ID, poll ID,
-   *   and the vote to cast (or an empty payload to cancel); `requestOptions` carries per-request
-   *   options such as an abort `signal` and is never serialized into the request.
+   * @param ...args - `[pathParams, request, requestOptions]`. `pathParams` holds the target
+   *   `message_id` and `poll_id`; `request` holds the vote to cast (or an empty payload to cancel);
+   *   `requestOptions` carries per-request options such as an abort `signal` and is never
+   *   serialized into the request.
    * @returns The poll vote response.
    */
   async vote(...args: Parameters<ChatApi['castPollVote']>) {

@@ -1382,16 +1382,19 @@ logger.info(msg, extra);
 
 Skip this section if you are upgrading from v9; everything here is already covered above. It exists for integrations pinned to the `rc` dist-tag, because `10.0.0-rc.1` / `rc.2` still exported five aliases that v10 final deletes outright. **No back-compat alias remains for any of them.**
 
-| Removed after `rc.2`                          | Replacement                     | Detail                                                                                                                           |
-| --------------------------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `EventAPIResponse`                            | one generated type per endpoint | [shape-change note](./v9-to-v10-migration-guide-type-renames.md#eventapiresponse--one-type-per-endpoint)                         |
-| `APIErrorResponse`                            | `APIError`                      | [shape-change note](./v9-to-v10-migration-guide-type-renames.md#apierrorresponse--apierror) — `StatusCode` → `status_code`       |
-| `DraftMessagePayload`                         | `MessageRequest`                | [shape-change note](./v9-to-v10-migration-guide-type-renames.md#draftmessagepayload--messagerequest)                             |
-| `PartializeKeys`                              | none                            | type utility; inline the built-in equivalent — see `v9-to-v10-migration-guide-other.md`                                          |
-| `QueryRemindersOptions`                       | `QueryRemindersRequest`         | see `v9-to-v10-migration-guide-other.md`                                                                                         |
-| `QueryReactionsRequestWithId` (after `rc.16`) | none — the call is split        | `queryReactions` / `queryReactionsAndHydrate` take `({ id }, request?: QueryReactionsRequest)`; there is no single type for both |
+| Removed after `rc.2`                          | Replacement                     | Detail                                                                                                                                     |
+| --------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `EventAPIResponse`                            | one generated type per endpoint | [shape-change note](./v9-to-v10-migration-guide-type-renames.md#eventapiresponse--one-type-per-endpoint)                                   |
+| `APIErrorResponse`                            | `APIError`                      | [shape-change note](./v9-to-v10-migration-guide-type-renames.md#apierrorresponse--apierror) — `StatusCode` → `status_code`                 |
+| `DraftMessagePayload`                         | `MessageRequest`                | [shape-change note](./v9-to-v10-migration-guide-type-renames.md#draftmessagepayload--messagerequest)                                       |
+| `PartializeKeys`                              | none                            | type utility; inline the built-in equivalent — see `v9-to-v10-migration-guide-other.md`                                                    |
+| `QueryRemindersOptions`                       | `QueryRemindersRequest`         | see `v9-to-v10-migration-guide-other.md`                                                                                                   |
+| `QueryReactionsRequestWithId` (after `rc.16`) | none — the call is split        | `queryReactions` / `queryReactionsAndHydrate` take `({ id }, request?: QueryReactionsRequest)`; there is no single type for both           |
+| `CreateReminderOptions` (after `rc.16`)       | none — the call is split        | the reminder methods take `({ message_id }, request?: CreateReminderRequest)`; derive from `Parameters<ReminderManager['upsertReminder']>` |
 
-`QueryReactionsRequestWithId` went later than the rest, after `rc.16`, when [path parameters became their own argument](#global-renames-applied-everywhere): it named the merged `{ id, ...request }` object, which no longer exists.
+`QueryReactionsRequestWithId` and `CreateReminderOptions` went later than the rest, after `rc.16`, when [path parameters became their own argument](#global-renames-applied-everywhere): they named the merged `{ id, ...request }` / `{ message_id, ...request }` objects, which no longer exist.
+
+**Queued offline tasks written by `rc.16` or earlier do not replay.** A pending task persists the call's argument tuple, and the `update-message`, `delete-message`, `send-reaction` and `delete-reaction` tuples changed shape with the split: `[{ id, message }]` is now `[{ id }, { message }]`, and so on. Replaying an old tuple throws (`"<key>" is not a path parameter of <path>`). If you maintain your own `AbstractOfflineDB` and ran an earlier rc, clear the pending-task table on upgrade (or bump your schema version). `stream-chat-react-native`'s offline database already recreates its tables on the v10 schema bump.
 
 `QueryRemindersOptions` is the one that moved twice: it was the full `Pager & { filter?, sort? }` shape in `rc.1`, a back-compat alias to `QueryRemindersRequest` in `rc.2`, and deleted in final. `ReminderPaginator`'s second generic parameter moved with it — `PaginatorOptions<ReminderResponseData, QueryRemindersOptions>` becomes `PaginatorOptions<ReminderResponseData, QueryRemindersRequest>`.
 

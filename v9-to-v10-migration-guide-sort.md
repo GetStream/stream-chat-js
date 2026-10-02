@@ -120,13 +120,13 @@ GET-style endpoints — `sort` lives inside the `payload` query param object:
 
 ### Channel methods that take `sort`
 
-| Method                                     | Sort location                                                                       |
-| ------------------------------------------ | ----------------------------------------------------------------------------------- |
-| `channel.queryMembers({ payload })`        | `payload.sort`                                                                      |
-| `channel.getPinnedMessages(options, sort)` | second positional arg (unchanged signature, but `sort` is now `SortParamRequest[]`) |
-| `channel.getReplies(request)`              | `request.sort`                                                                      |
+| Method                                       | Sort location  |
+| -------------------------------------------- | -------------- |
+| `channel.queryMembers({ payload })`          | `payload.sort` |
+| `channel.getPinnedMessages(request?)`        | `request.sort` |
+| `client.getReplies({ parent_id }, request?)` | `request.sort` |
 
-`channel.getPinnedMessages` is the one method that kept its v9-style two-positional-arg signature; only the `sort` shape changed.
+`channel.getPinnedMessages` no longer takes `sort` as a second positional argument: v9's `(options, sort)` became one request, `{ ...options, sort }`, with `requestOptions` second. `channel.getReplies` was removed after `rc.4`; call `client.getReplies` instead (see `v9-to-v10-migration-guide-methods.md`).
 
 ## Mechanical migration recipe
 

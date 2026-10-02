@@ -1461,8 +1461,8 @@ export class StreamChat extends ChatApi {
    * until the caller's abort signal fires — and throws when there is no connection and none is being
    * established.
    *
-   * @param ...args - `[request, requestOptions]`. `request.connection_id` is replaced by this
-   *   client's connection id.
+   * @param ...args - `[pathParams, request, requestOptions]`. `pathParams` identifies the channel
+   *   (`{ type, id }`); `request.connection_id` is replaced by this client's connection id.
    * @returns The server response.
    */
   override async stopWatchingChannel(
