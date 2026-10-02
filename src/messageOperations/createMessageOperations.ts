@@ -105,18 +105,16 @@ export const createMessageOperations = (collection: Channel | Thread) => {
       }
     },
     ...(parentMessageId
-      ? {
-          normalizeOutgoingMessage: (m) => ({ ...m, parent_id: parentMessageId }),
-        }
-      : {
-          // We stop typing before the send and don't wait for it. A send with an upload can take as
-          // long as the transfer, and everyone would see us typing the whole time.
-          beforeSend: () => {
-            if (collection.messageComposer.config.text.publishTypingEvents) {
-              channel.stopTyping().catch(() => undefined);
-            }
-          },
-        }),
+      ? { normalizeOutgoingMessage: (m) => ({ ...m, parent_id: parentMessageId }) }
+      : {}),
+    // We stop typing before the send and don't wait for it. A send with an upload can take as long
+    // as the transfer, and everyone would see us typing the whole time. A thread reply stops the
+    // typing in its thread.
+    beforeSend: () => {
+      if (collection.messageComposer.config.text.publishTypingEvents) {
+        channel.stopTyping(parentMessageId).catch(() => undefined);
+      }
+    },
     // Hands an integrator's handler exactly the documented fields, not whatever else the params carry.
     handlers: () => {
       const {

@@ -2214,20 +2214,42 @@ describe('Threads 2.0', () => {
       ]);
     });
 
-    it('stops the typing indicator on a channel send, but not on a thread reply', async () => {
-      const thread = createTestThread();
+    it('stops the channel typing indicator on a channel send', async () => {
       const stopTyping = vi.spyOn(channel, 'stopTyping').mockResolvedValue(undefined);
       captureOutgoingSend(() => undefined);
 
       await channel.messageOperations.send({
         localMessage: formatMessage(generateMsg({ cid: channel.cid }) as MessageResponse),
       });
+
       expect(stopTyping).toHaveBeenCalledTimes(1);
+      expect(stopTyping).toHaveBeenCalledWith(undefined);
+    });
+
+    it('stops the thread typing indicator on a thread reply', async () => {
+      const thread = createTestThread();
+      const stopTyping = vi.spyOn(channel, 'stopTyping').mockResolvedValue(undefined);
+      captureOutgoingSend(() => undefined);
 
       await thread.messageOperations.send({
         localMessage: formatMessage(makeReply({ parent_id: undefined })),
       });
+
       expect(stopTyping).toHaveBeenCalledTimes(1);
+      expect(stopTyping).toHaveBeenCalledWith(thread.id);
+    });
+
+    it('does not stop typing on a thread reply when its composer publishes no typing events', async () => {
+      const thread = createTestThread();
+      const stopTyping = vi.spyOn(channel, 'stopTyping').mockResolvedValue(undefined);
+      thread.messageComposer.updateConfig({ text: { publishTypingEvents: false } });
+      captureOutgoingSend(() => undefined);
+
+      await thread.messageOperations.send({
+        localMessage: formatMessage(makeReply({ parent_id: undefined })),
+      });
+
+      expect(stopTyping).not.toHaveBeenCalled();
     });
 
     it('does not stop typing when the composer publishes no typing events', async () => {

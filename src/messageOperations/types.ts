@@ -93,7 +93,7 @@ export type MessageOperationsContext = {
 
   normalizeOutgoingMessage?: (m: MessageRequest) => MessageRequest;
 
-  /** Runs first on every send (not a retry). A `Channel` stops its typing indicator here. */
+  /** Runs first on every send (not a retry). This is where the typing indicator is stopped. */
   beforeSend?: () => void;
 
   /**
