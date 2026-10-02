@@ -5,9 +5,11 @@ import type { LocalMessage } from '../types';
 import type { MessageOperationsContext } from './types';
 
 /**
- * The primitives a new optimistic operation is built from — see {@link MessageOperations.addReaction}
- * for the shape. A change that also moves the message between collections (pinning does) names that
- * collection itself, e.g. `channel.pinnedMessagesPaginator.ingestItem(...)`, and undoes it too.
+ * Helpers for showing a change to a message before the server has confirmed it. They write the change
+ * to local state and the offline DB, give back an undo that won't overwrite anything newer that arrived
+ * in the meantime, and tell whether a failed request is still queued, in which case the change stays.
+ * Moving a message into or out of another collection, as pinning would with the pinned list, is not
+ * covered here and has to be done and undone by the operation itself.
  */
 
 /**
