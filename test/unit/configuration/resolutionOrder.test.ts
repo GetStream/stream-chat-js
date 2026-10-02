@@ -25,7 +25,7 @@ describe('configuration resolution order (MessageComposer)', () => {
   });
 
   const composerFor = (config?: Parameters<typeof MessageComposer>[0]['config']) => {
-    const channel = client.channel('messaging', channelId);
+    const channel = client.channelManager.ensure({ type: 'messaging', id: channelId });
     if (!config) {
       channel.messageComposer.registerSubscriptions();
       return channel.messageComposer;
@@ -136,7 +136,7 @@ describe('imperative changes through a cycle: composer vs everything else', () =
   });
 
   it('the composer keeps one', () => {
-    const channel = client.channel('messaging', channelId);
+    const channel = client.channelManager.ensure({ type: 'messaging', id: channelId });
     channel.messageComposer.registerSubscriptions();
     channel.messageComposer.updateConfig({ text: { maxLengthOnSend: 77 } });
 
@@ -147,7 +147,7 @@ describe('imperative changes through a cycle: composer vs everything else', () =
   });
 
   it('a paginator drops one', () => {
-    const channel = client.channel('messaging', channelId);
+    const channel = client.channelManager.ensure({ type: 'messaging', id: channelId });
     channel.messagePaginator.updateConfig({ retryCount: 7 });
 
     client.config.set({ channel: { messagePaginator: { pageSize: 33 } } });
@@ -158,7 +158,7 @@ describe('imperative changes through a cycle: composer vs everything else', () =
   });
 
   it('a setup function persists for the paginator, which is the documented way round it', () => {
-    const channel = client.channel('messaging', channelId);
+    const channel = client.channelManager.ensure({ type: 'messaging', id: channelId });
     client.config.setSetupFunction('channel', ({ channel: target }) => {
       target.messagePaginator.updateConfig({ retryCount: 7 });
     });

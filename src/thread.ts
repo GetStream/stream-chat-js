@@ -140,11 +140,11 @@ export class Thread extends WithMessageOperations(WithSubscriptions) {
       if (!threadData.parent_message) {
         throw new Error('Thread parent_message is required when threadData is provided');
       }
-      const threadChannel = client.channel(
-        threadData.channel.type,
-        threadData.channel.id,
-        { custom: threadData.channel.custom },
-      );
+      const threadChannel = client.channelManager.ensure({
+        type: threadData.channel.type,
+        id: threadData.channel.id,
+        data: { custom: threadData.channel.custom },
+      });
       threadChannel._hydrateMembers({
         members: threadData.channel.members ?? [],
         overrideCurrentState: false,

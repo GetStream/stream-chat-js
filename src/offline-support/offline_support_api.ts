@@ -635,10 +635,10 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
     let channelData = channelFromEvent;
     if (!channelData && event_.channel_type && event_.channel_id) {
-      const channelFromState = this.client.channel(
-        event_.channel_type,
-        event_.channel_id,
-      );
+      const channelFromState = this.client.channelManager.ensure({
+        type: event_.channel_type,
+        id: event_.channel_id,
+      });
       if (channelFromState.initialized && !channelFromState.pendingDisposal) {
         channelData = channelFromState.data as unknown as ChannelResponse;
       }

@@ -60,7 +60,10 @@ describe('Channel count unread', function () {
 		client.user = { id: 'user' };
 		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
 
-		channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
+		channel = client.channelManager.ensure({
+			type: channelResponse.channel.type,
+			id: channelResponse.channel.id,
+		});
 		channel.initialized = true;
 		channel.lastRead = () => lastRead;
 		channel.data.own_capabilities = ['read-events'];
@@ -105,9 +108,12 @@ describe('Channel count unread', function () {
 	});
 
 	it('_countMessageAsUnread should return false for channel with read_events off', function () {
-		const channel = client.channel('messaging', {
-			members: ['tommaso'],
-			own_capabilities: [],
+		const channel = client.channelManager.ensure({
+			type: 'messaging',
+			data: {
+				members: ['tommaso'],
+				own_capabilities: [],
+			},
 		});
 		expect(channel._countMessageAsUnread({ user: { id: 'random' } })).not.to.be.ok;
 	});
@@ -239,7 +245,10 @@ describe('Channel count unread', function () {
 		let channelResponse;
 		beforeEach(() => {
 			channelResponse = generateChannel();
-			channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
+			channel = client.channelManager.ensure({
+				type: channelResponse.channel.type,
+				id: channelResponse.channel.id,
+			});
 			channel.initialized = true;
 		});
 
@@ -260,9 +269,12 @@ describe('Channel count unread', function () {
 		});
 
 		it('should return undefined if client user is not set (server-side client)', () => {
-			// client.channel() now requires a connected user, so create the channel with the user
+			// client.channelManager.ensure() now requires a connected user, so create the channel with the user
 			// set, then clear it to model a client with no connected user (userId undefined).
-			channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
+			channel = client.channelManager.ensure({
+				type: channelResponse.channel.type,
+				id: channelResponse.channel.id,
+			});
 			channel.initialized = true;
 			client.user = undefined;
 			expect(channel.lastRead()).to.be.undefined;
@@ -279,7 +291,10 @@ describe('Channel isViewingLive (unread bump gating)', function () {
 		client.user = user;
 		client.user = { id: user.id };
 		client.userMuteStatus = () => false;
-		const channel = client.channel('messaging', 'live-mode-id');
+		const channel = client.channelManager.ensure({
+			type: 'messaging',
+			id: 'live-mode-id',
+		});
 		channel.initialized = true;
 		channel.data = { ...channel.data, own_capabilities: ['read-events'] };
 		return { channel };
@@ -358,7 +373,7 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 		// that watches or subscribes to presence until one exists.
 		client.wsConnection._setStatus({ isHealthy: true });
 		client.connectionIdManager.resolveConnectionId('connection-id');
-		channel = client.channel('messaging', 'watching-id');
+		channel = client.channelManager.ensure({ type: 'messaging', id: 'watching-id' });
 		client.channelManager.getOrCreateChannel(channel.cid, () => channel);
 		mockQueryResponse(generateChannel({ channel: { id: 'watching-id' } }));
 	});
@@ -552,7 +567,7 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 
 	it('is demoted across every active channel at once', async () => {
 		await channel.watch();
-		const other = client.channel('messaging', 'other-id');
+		const other = client.channelManager.ensure({ type: 'messaging', id: 'other-id' });
 		client.channelManager.getOrCreateChannel(other.cid, () => other);
 		other.watchStatus = ChannelWatchStatus.Watching;
 
@@ -643,7 +658,10 @@ describe('Channel AI indicator state (channel.state.aiState)', function () {
 		client.user = { id: 'user' };
 		// `reload()` re-watches, and `watch()` waits for a live socket.
 		client.wsConnection._setStatus({ isHealthy: true, connectionId: 'connection-id' });
-		const channel = client.channel('messaging', 'ai-state-id');
+		const channel = client.channelManager.ensure({
+			type: 'messaging',
+			id: 'ai-state-id',
+		});
 		channel.initialized = true;
 		return { channel };
 	};
@@ -771,7 +789,7 @@ describe('Channel local unread count (readEvents.localUnreadCountEnabled)', func
 		client.userMuteStatus = () => false;
 		// client-level, so the channel built below derives it
 		client.config.setConfig('channel', { readEvents: { localUnreadCountEnabled } });
-		const channel = client.channel('messaging', 'live-id');
+		const channel = client.channelManager.ensure({ type: 'messaging', id: 'live-id' });
 		channel.initialized = true;
 		channel.data = { ...channel.data, own_capabilities: [] };
 		return { client, channel };
@@ -918,7 +936,7 @@ describe('Channel _handleChannelEvent', function () {
 		client.user = user;
 		client.user = { id: user.id };
 		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
-		channel = client.channel('messaging', 'id');
+		channel = client.channelManager.ensure({ type: 'messaging', id: 'id' });
 		channel.data.own_capabilities = ['read-events'];
 		channel.initialized = true;
 	});
@@ -2768,7 +2786,7 @@ describe('Uninitialized Channel', () => {
 		client.user = user;
 		client.user = { id: user.id };
 		client.userMuteStatus = (targetId) => targetId.startsWith('mute');
-		channel = client.channel('messaging', 'id');
+		channel = client.channelManager.ensure({ type: 'messaging', id: 'id' });
 		channel.initialized = false;
 		channel.offlineMode = false;
 	});
@@ -2782,7 +2800,7 @@ describe('Uninitialized Channel', () => {
 	});
 
 	// Regression coverage for https://github.com/GetStream/stream-chat-js/issues/1732
-	// `client.channel(type, id)` registers the channel in the channel store with
+	// `client.channelManager.ensure({ type, id })` registers the channel in the channel store with
 	// `initialized = false`. Before the fix, a `message.new` arriving in that
 	// window went dispatchEvent → _handleChannelEvent → _countMessageAsUnread →
 	// muteStatus() → _checkInitialized() and threw, aborting the rest of the
@@ -2845,8 +2863,11 @@ describe('Uninitialized Channel', () => {
 		});
 
 		it('public muteStatus() throws for a channel with no id yet', () => {
-			const distinct = client.channel('messaging', undefined, {
-				members: [user.id, otherUser.id],
+			const distinct = client.channelManager.ensure({
+				type: 'messaging',
+				data: {
+					members: [user.id, otherUser.id],
+				},
 			});
 			expect(() => distinct.muteStatus()).to.throw(/isn't yet created/);
 		});
@@ -2860,7 +2881,7 @@ describe('reactive channel mute status', () => {
 	beforeEach(() => {
 		client = new StreamChat('apiKey');
 		client.user = { id: 'me' };
-		channel = client.channel('messaging', 'mute-reactivity');
+		channel = client.channelManager.ensure({ type: 'messaging', id: 'mute-reactivity' });
 	});
 
 	it('seeds state.muteStatus from client.mutedChannels at construction', () => {
@@ -2873,7 +2894,10 @@ describe('reactive channel mute status', () => {
 			},
 		];
 
-		const preMuted = preMutedClient.channel('messaging', 'premuted');
+		const preMuted = preMutedClient.channelManager.ensure({
+			type: 'messaging',
+			id: 'premuted',
+		});
 
 		expect(preMuted.state.getLatestValue().muteStatus.muted).to.be.true;
 	});
@@ -2916,43 +2940,55 @@ describe('reactive channel mute status', () => {
 
 describe('Channels - Constructor', function () {
 	const client = new StreamChat('key');
-	// client.channel() now requires a connected user (userId derives from client.user).
+	// client.channelManager.ensure() now requires a connected user (userId derives from client.user).
 	client.user = { id: 'thierry' };
 
 	it('canonical form', function () {
-		const channel = client.channel('messaging', '123', { cool: true });
+		const channel = client.channelManager.ensure({
+			type: 'messaging',
+			id: '123',
+			data: { cool: true },
+		});
 		expect(channel.cid).to.eql('messaging:123');
 		expect(channel.id).to.eql('123');
 		expect(channel.data.cool).to.eql(true);
 	});
 
 	it('custom data merges to the right with current data', function () {
-		let channel = client.channel('messaging', 'brand_new_123', { cool: true });
+		let channel = client.channelManager.ensure({
+			type: 'messaging',
+			id: 'brand_new_123',
+			data: { cool: true },
+		});
 		expect(channel.cid).to.eql('messaging:brand_new_123');
 		expect(channel.id).to.eql('brand_new_123');
 		expect(channel.data.cool).to.eql(true);
 		// Re-fetching a cached channel now merges only the reserved `custom` payload onto existing
-		// data (getChannelById), leaving previously-set top-level data untouched.
-		channel = client.channel('messaging', 'brand_new_123', {
-			custom: { custom_cool: true },
+		// data (ensure), leaving previously-set top-level data untouched.
+		channel = client.channelManager.ensure({
+			type: 'messaging',
+			id: 'brand_new_123',
+			data: {
+				custom: { custom_cool: true },
+			},
 		});
 		expect(channel.data.cool).to.eql(true);
 		expect(channel.data.custom.custom_cool).to.eql(true);
 	});
 
 	it('default options', function () {
-		const channel = client.channel('messaging', '123');
+		const channel = client.channelManager.ensure({ type: 'messaging', id: '123' });
 		expect(channel.cid).to.eql('messaging:123');
 		expect(channel.id).to.eql('123');
 	});
 
 	it('null ID no options', function () {
-		const channel = client.channel('messaging', null);
+		const channel = client.channelManager.ensure({ type: 'messaging' });
 		expect(channel.id).to.eq(undefined);
 	});
 
 	it('undefined ID no options', function () {
-		const channel = client.channel('messaging', undefined);
+		const channel = client.channelManager.ensure({ type: 'messaging' });
 		expect(channel.id).to.eql(undefined);
 		// own_capabilities stays undefined ("not yet loaded") until the channel is hydrated,
 		// and no fields are fabricated onto an empty channel's data.
@@ -2961,30 +2997,42 @@ describe('Channels - Constructor', function () {
 	});
 
 	it('short version with options', function () {
-		const channel = client.channel('messaging', { members: ['tommaso', 'thierry'] });
+		const channel = client.channelManager.ensure({
+			type: 'messaging',
+			data: { members: ['tommaso', 'thierry'] },
+		});
 		expect(channel.data.members).to.eql(['tommaso', 'thierry']);
 		expect(channel.id).to.eql(undefined);
 	});
 
 	it('null ID with options', function () {
-		const channel = client.channel('messaging', null, {
-			members: ['tommaso', 'thierry'],
+		const channel = client.channelManager.ensure({
+			type: 'messaging',
+			data: {
+				members: ['tommaso', 'thierry'],
+			},
 		});
 		expect(channel.data.members).to.eql(['tommaso', 'thierry']);
 		expect(channel.id).to.eql(undefined);
 	});
 
 	it('empty ID  with options', function () {
-		const channel = client.channel('messaging', '', {
-			members: ['tommaso', 'thierry'],
+		const channel = client.channelManager.ensure({
+			type: 'messaging',
+			data: {
+				members: ['tommaso', 'thierry'],
+			},
 		});
 		expect(channel.data.members).to.eql(['tommaso', 'thierry']);
 		expect(channel.id).to.eql(undefined);
 	});
 
 	it('empty ID  with options', function () {
-		const channel = client.channel('messaging', undefined, {
-			members: ['tommaso', 'thierry'],
+		const channel = client.channelManager.ensure({
+			type: 'messaging',
+			data: {
+				members: ['tommaso', 'thierry'],
+			},
 		});
 		expect(channel.data.members).to.eql(['tommaso', 'thierry']);
 		expect(channel.id).to.eql(undefined);
@@ -3025,7 +3073,10 @@ describe('Ensure single channel per cid in the channel store', () => {
 				body: getOrCreateChannelApi(mockedChannelResponse).response.data,
 				metadata: {},
 			});
-		const channelVish_copy1 = clientVish.channel('messaging', channelVishId);
+		const channelVish_copy1 = clientVish.channelManager.ensure({
+			type: 'messaging',
+			id: channelVishId,
+		});
 
 		const cid = `${channelType}:${channelVishId}`;
 
@@ -3033,7 +3084,10 @@ describe('Ensure single channel per cid in the channel store', () => {
 		expect(clientVish.channelManager.get(cid)).to.contain(channelVish_copy1);
 
 		await channelVish_copy1.watch();
-		const channelVish_copy2 = clientVish.channel('messaging', channelVishId);
+		const channelVish_copy2 = clientVish.channelManager.ensure({
+			type: 'messaging',
+			id: channelVishId,
+		});
 		await channelVish_copy2.watch();
 		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
 	});
@@ -3054,14 +3108,20 @@ describe('Ensure single channel per cid in the channel store', () => {
 				metadata: {},
 			});
 
-		const channelVish_copy1 = clientVish.channel('messaging', channelVishId);
+		const channelVish_copy1 = clientVish.channelManager.ensure({
+			type: 'messaging',
+			id: channelVishId,
+		});
 
 		const cid = `${channelType}:${channelVishId}`;
 
 		expect(clientVish.channelManager.get(cid)).to.not.be.undefined;
 		expect(clientVish.channelManager.get(cid)).to.contain(channelVish_copy1);
 
-		const channelVish_copy2 = clientVish.channel('messaging', channelVishId);
+		const channelVish_copy2 = clientVish.channelManager.ensure({
+			type: 'messaging',
+			id: channelVishId,
+		});
 
 		expect(clientVish.channelManager.get(cid)).to.not.be.undefined;
 		expect(clientVish.channelManager.get(cid)).to.contain(channelVish_copy1);
@@ -3090,8 +3150,11 @@ describe('Ensure single channel per cid in the channel store', () => {
 			});
 
 		// Lets start testing
-		const channelVish_copy1 = clientVish.channel('messaging', {
-			members: [userAmin.id, userVish.id],
+		const channelVish_copy1 = clientVish.channelManager.ensure({
+			type: 'messaging',
+			data: {
+				members: [userAmin.id, userVish.id],
+			},
 		});
 
 		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
@@ -3109,8 +3172,11 @@ describe('Ensure single channel per cid in the channel store', () => {
 			channelVish_copy1,
 		);
 
-		const channelVish_copy2 = clientVish.channel('messaging', {
-			members: [userVish.id, userAmin.id],
+		const channelVish_copy2 = clientVish.channelManager.ensure({
+			type: 'messaging',
+			data: {
+				members: [userVish.id, userAmin.id],
+			},
 		});
 
 		// Should not populate tmpCid again.
@@ -3142,8 +3208,11 @@ describe('Ensure single channel per cid in the channel store', () => {
 			});
 
 		// Case 1 =======================>
-		const channelVish_copy1 = clientVish.channel('messaging', {
-			members: [userAmin.id, userVish.id],
+		const channelVish_copy1 = clientVish.channelManager.ensure({
+			type: 'messaging',
+			data: {
+				members: [userAmin.id, userVish.id],
+			},
 		});
 
 		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
@@ -3152,8 +3221,11 @@ describe('Ensure single channel per cid in the channel store', () => {
 		expect(clientVish.channelManager.get(tmpCid)).to.not.be.undefined;
 		expect(clientVish.channelManager.get(tmpCid)).to.contain(channelVish_copy1);
 
-		const channelVish_copy2 = clientVish.channel('messaging', {
-			members: [userVish.id, userAmin.id],
+		const channelVish_copy2 = clientVish.channelManager.ensure({
+			type: 'messaging',
+			data: {
+				members: [userVish.id, userAmin.id],
+			},
 		});
 
 		// the channel store still should have tmpCid now.
@@ -3184,8 +3256,11 @@ describe('Ensure single channel per cid in the channel store', () => {
 			});
 
 		// Lets start testing
-		const channelVish_copy1 = clientVish.channel('messaging', undefined, {
-			members: [userAmin.id, userVish.id],
+		const channelVish_copy1 = clientVish.channelManager.ensure({
+			type: 'messaging',
+			data: {
+				members: [userAmin.id, userVish.id],
+			},
 		});
 
 		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
@@ -3203,8 +3278,11 @@ describe('Ensure single channel per cid in the channel store', () => {
 			channelVish_copy1,
 		);
 
-		const channelVish_copy2 = clientVish.channel('messaging', undefined, {
-			members: [userVish.id, userAmin.id],
+		const channelVish_copy2 = clientVish.channelManager.ensure({
+			type: 'messaging',
+			data: {
+				members: [userVish.id, userAmin.id],
+			},
 		});
 
 		// Should not populate tmpCid again.
@@ -3236,8 +3314,11 @@ describe('Ensure single channel per cid in the channel store', () => {
 			});
 
 		// Case 1 =======================>
-		const channelVish_copy1 = clientVish.channel('messaging', undefined, {
-			members: [userAmin.id, userVish.id],
+		const channelVish_copy1 = clientVish.channelManager.ensure({
+			type: 'messaging',
+			data: {
+				members: [userAmin.id, userVish.id],
+			},
 		});
 
 		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
@@ -3246,8 +3327,11 @@ describe('Ensure single channel per cid in the channel store', () => {
 		expect(clientVish.channelManager.get(tmpCid)).to.not.be.undefined;
 		expect(clientVish.channelManager.get(tmpCid)).to.contain(channelVish_copy1);
 
-		const channelVish_copy2 = clientVish.channel('messaging', undefined, {
-			members: [userVish.id, userAmin.id],
+		const channelVish_copy2 = clientVish.channelManager.ensure({
+			type: 'messaging',
+			data: {
+				members: [userVish.id, userAmin.id],
+			},
 		});
 
 		// the channel store still should have tmpCid now.
@@ -3282,8 +3366,11 @@ describe('Ensure single channel per cid in the channel store', () => {
 			});
 
 		// Case 1 =======================>
-		const channelVish_copy1 = clientVish.channel('messaging', undefined, {
-			custom: 'X',
+		const channelVish_copy1 = clientVish.channelManager.ensure({
+			type: 'messaging',
+			data: {
+				custom: 'X',
+			},
 		});
 
 		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
@@ -3291,8 +3378,11 @@ describe('Ensure single channel per cid in the channel store', () => {
 		// the channel store should have tmpCid now.
 		expect(clientVish.channelManager.get(tmpCid)).to.be.undefined;
 
-		const channelVish_copy2 = clientVish.channel('messaging', undefined, {
-			custom: 'X',
+		const channelVish_copy2 = clientVish.channelManager.ensure({
+			type: 'messaging',
+			data: {
+				custom: 'X',
+			},
 		});
 
 		// the channel store still should have tmpCid now.
@@ -3317,7 +3407,7 @@ describe('Ensure single channel per cid in the channel store', () => {
 describe('event subscription and unsubscription', () => {
 	it('channel.on should return unsubscribe handler', async () => {
 		const client = await getClientWithUser();
-		const channel = client.channel('messaging', uuidv4());
+		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
 
 		const { unsubscribe: unsubscribe1 } = channel.on('message.new', () => {});
 		const { unsubscribe: unsubscribe2 } = channel.on(() => {});
@@ -3396,7 +3486,7 @@ describe('Channel lastMessage', async () => {
 	let client;
 	beforeEach(async () => {
 		client = await getClientWithUser();
-		channel = client.channel('messaging', uuidv4());
+		channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
 		client._addChannelConfig({ type: channel.type, config: {} });
 	});
 
@@ -3475,7 +3565,7 @@ describe('Channel last_message_at', () => {
 	let client;
 	beforeEach(async () => {
 		client = await getClientWithUser();
-		channel = client.channel('messaging', uuidv4());
+		channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
 		client._addChannelConfig({ type: channel.type, config: {} });
 		channel.state = new ChannelState(channel);
 	});
@@ -3536,7 +3626,7 @@ describe('Channel last_message_at', () => {
 describe('Channel _initializeState', () => {
 	it('should not keep members that have unwatched since last watch', async () => {
 		const client = await getClientWithUser();
-		const channel = client.channel('messaging', uuidv4());
+		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
 
 		const firstState = {
 			members: [
@@ -3574,7 +3664,7 @@ describe('Channel _initializeState', () => {
 
 	it('should merge read state without overwriting existing users', async () => {
 		const client = await getClientWithUser();
-		const channel = client.channel('messaging', uuidv4());
+		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
 		const existingUser = { id: 'existing-user' };
 		const newUser = { id: 'new-user' };
 		channel.messageReceiptsTracker.setPendingReadStoreReconcileMeta({
@@ -3614,7 +3704,7 @@ describe('Channel _initializeState', () => {
 describe('Channel.query', async () => {
 	it('seeds the message paginator with the full latest page on query', async () => {
 		const client = await getClientWithUser();
-		const channel = client.channel('messaging', uuidv4());
+		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
 		const mockedChannelQueryResponse = {
 			...mockChannelQueryResponse,
 			messages: Array.from(
@@ -3636,7 +3726,7 @@ describe('Channel.query', async () => {
 
 	it('seeds the message paginator with a partial latest page on query', async () => {
 		const client = await getClientWithUser();
-		const channel = client.channel('messaging', uuidv4());
+		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
 		const mockedChannelQueryResponse = {
 			...mockChannelQueryResponse,
 			messages: Array.from(
@@ -3656,7 +3746,7 @@ describe('Channel.query', async () => {
 
 	it(`update the messageComposer config`, async () => {
 		const client = await getClientWithUser();
-		const channel = client.channel('messaging', uuidv4());
+		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
 		expect(channel.messageComposer.config.location.enabled).toBe(true);
 
 		const sendRequestStub = sinon.stub(client.api, 'sendRequest');
@@ -3714,7 +3804,7 @@ describe('send reaction flow', () => {
 		client.setOfflineDBApi(offlineDb);
 		await client.offlineDb.init(client.userId);
 
-		channel = client.channel('messaging', 'test');
+		channel = client.channelManager.ensure({ type: 'messaging', id: 'test' });
 
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
 	});
@@ -3837,7 +3927,7 @@ describe('delete reaction flow', () => {
 		client.setOfflineDBApi(offlineDb);
 		await client.offlineDb.init(client.userId);
 
-		channel = client.channel('messaging', 'test');
+		channel = client.channelManager.ensure({ type: 'messaging', id: 'test' });
 		// trick the channel into being initialized
 		channel.initialized = true;
 
@@ -3959,7 +4049,7 @@ describe('message sending flow', () => {
 		client.setOfflineDBApi(offlineDb);
 		await client.offlineDb.init(client.userId);
 
-		channel = client.channel('messaging', 'test');
+		channel = client.channelManager.ensure({ type: 'messaging', id: 'test' });
 
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
 	});
@@ -4186,7 +4276,7 @@ describe('share location', () => {
 
 	const setup = async () => {
 		const client = await getClientWithUser({ id: 'user-abc' });
-		const channel = client.channel('messaging', 'test');
+		const channel = client.channelManager.ensure({ type: 'messaging', id: 'test' });
 		const sendMessageSpy = vi.spyOn(channel, 'sendMessage').mockResolvedValue({});
 		const dispatchEventSpy = vi.spyOn(client, 'dispatchEvent').mockResolvedValue({});
 		// stopLiveLocationSharing now goes through the generated client.updateLiveLocation.
@@ -4273,7 +4363,10 @@ describe('Channel.query — initial page size', () => {
 		// `reload()` re-watches, and `watch()` waits for a live socket.
 		client.wsConnection._setStatus({ isHealthy: true, connectionId: 'connection-id' });
 		const channelResponse = generateChannel();
-		channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
+		channel = client.channelManager.ensure({
+			type: channelResponse.channel.type,
+			id: channelResponse.channel.id,
+		});
 		channel.initialized = true;
 	});
 
@@ -4331,7 +4424,10 @@ describe('Channel.reload', () => {
 		// `watch()` waits for a live socket; a connected client has one.
 		client.wsConnection._setStatus({ isHealthy: true, connectionId: 'connection-id' });
 		const channelResponse = generateChannel();
-		channel = client.channel(channelResponse.channel.type, channelResponse.channel.id);
+		channel = client.channelManager.ensure({
+			type: channelResponse.channel.type,
+			id: channelResponse.channel.id,
+		});
 		channel.initialized = true;
 	});
 
@@ -4606,7 +4702,7 @@ describe('Channel _disconnect called more than once', () => {
 
 	beforeEach(() => {
 		client = getClientWithUser({ id: 'ann' });
-		channel = client.channel('messaging', uuidv4());
+		channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
 	});
 
 	it('tears the channel down only on the first call', () => {

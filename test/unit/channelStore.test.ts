@@ -19,16 +19,18 @@ describe('ChannelManager channel store', () => {
     client = getClientWithUser({ id: 'ann' });
   });
 
-  it('returns the same instance for a cid from client.channel()', () => {
-    const channel = client.channel('messaging', 'general');
+  it('returns the same instance for a cid from client.channelManager.ensure()', () => {
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
 
-    expect(client.channel('messaging', 'general')).toBe(channel);
+    expect(client.channelManager.ensure({ type: 'messaging', id: 'general' })).toBe(
+      channel,
+    );
     expect(client.channelManager.get('messaging:general')).toBe(channel);
     expect(client.channelManager.values()).toEqual([channel]);
   });
 
   it('hydrates the stored instance from queryChannels results instead of creating a new one', async () => {
-    const channel = client.channel('messaging', 'general');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     vi.spyOn(client, 'queryChannels').mockResolvedValue({
       channels: [generateChannel({ channel: { id: 'general', name: 'General' } })],
     } as unknown as QueryChannelsResponse);
@@ -41,7 +43,10 @@ describe('ChannelManager channel store', () => {
   });
 
   it('keeps the instance of a channel created from members when it gets its real cid', async () => {
-    const channel = client.channel('messaging', { members: ['ann', 'bob'] });
+    const channel = client.channelManager.ensure({
+      type: 'messaging',
+      data: { members: ['ann', 'bob'] },
+    });
     expect(client.channelManager.get('messaging:!members-ann,bob')).toBe(channel);
 
     vi.spyOn(client, 'getOrCreateDistinctChannel').mockResolvedValue({
@@ -53,22 +58,29 @@ describe('ChannelManager channel store', () => {
     expect(channel.cid).toBe('messaging:!members-xyz');
     expect(client.channelManager.get('messaging:!members-xyz')).toBe(channel);
     expect(client.channelManager.get('messaging:!members-ann,bob')).toBeUndefined();
-    expect(client.channel('messaging', '!members-xyz')).toBe(channel);
-    expect(client.channel('messaging', { members: ['bob', 'ann'] })).toBe(channel);
+    expect(client.channelManager.ensure({ type: 'messaging', id: '!members-xyz' })).toBe(
+      channel,
+    );
+    expect(
+      client.channelManager.ensure({
+        type: 'messaging',
+        data: { members: ['bob', 'ann'] },
+      }),
+    ).toBe(channel);
   });
 
   it('replaces a torn-down channel with a fresh instance', () => {
-    const channel = client.channel('messaging', 'general');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     channel._disconnect();
 
-    const fresh = client.channel('messaging', 'general');
+    const fresh = client.channelManager.ensure({ type: 'messaging', id: 'general' });
 
     expect(fresh).not.toBe(channel);
     expect(client.channelManager.get('messaging:general')).toBe(fresh);
   });
 
   it('tears down and drops every channel on disconnectUser', async () => {
-    const channel = client.channel('messaging', 'general');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
 
     await client.disconnectUser();
 
@@ -85,7 +97,7 @@ describe('channel holds', () => {
   });
 
   it('tears down a channel whose only hold was its watch when the watch ends', () => {
-    const channel = client.channel('messaging', 'general');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     channel.watchStatus = ChannelWatchStatus.Watching;
 
     channel.watchStatus = ChannelWatchStatus.NotWatching;
@@ -95,7 +107,7 @@ describe('channel holds', () => {
   });
 
   it('keeps a channel whose watch was interrupted, so it can be restored', () => {
-    const channel = client.channel('messaging', 'general');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     channel.watchStatus = ChannelWatchStatus.Watching;
 
     channel.watchStatus = ChannelWatchStatus.WasWatching;
@@ -105,7 +117,7 @@ describe('channel holds', () => {
   });
 
   it('keeps an opened channel for the session after it is released and unwatched', () => {
-    const channel = client.channel('messaging', 'general');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     channel.watchStatus = ChannelWatchStatus.Watching;
     const release = channel.activate();
 
@@ -119,7 +131,7 @@ describe('channel holds', () => {
   });
 
   it('can be activated after it was torn down, without holding it again', () => {
-    const channel = client.channel('messaging', 'general');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     client.channelManager.removeChannel(channel.cid);
 
     const release = channel.activate();
@@ -129,7 +141,7 @@ describe('channel holds', () => {
   });
 
   it('tears down an opened channel on a known end', () => {
-    const channel = client.channel('messaging', 'general');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     channel.activate();
 
     client.dispatchEvent({ type: 'channel.deleted', cid: channel.cid });
@@ -139,7 +151,7 @@ describe('channel holds', () => {
   });
 
   it('tears down an opened channel on logout', async () => {
-    const channel = client.channel('messaging', 'general');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     channel.activate();
 
     await client.disconnectUser();
@@ -149,7 +161,7 @@ describe('channel holds', () => {
   });
 
   it('runs the teardown once when releasing the last hold triggers it', () => {
-    const channel = client.channel('messaging', 'general');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     const unregister = vi.spyOn(channel.cooldownTimer, 'unregisterSubscriptions');
     channel.watchStatus = ChannelWatchStatus.Watching;
 
@@ -159,7 +171,10 @@ describe('channel holds', () => {
   });
 
   it('holds a channel created from members under its temporary cid, and keeps the hold when it moves', async () => {
-    const channel = client.channel('messaging', { members: ['ann', 'bob'] });
+    const channel = client.channelManager.ensure({
+      type: 'messaging',
+      data: { members: ['ann', 'bob'] },
+    });
     channel.activate();
     vi.spyOn(client, 'getOrCreateDistinctChannel').mockResolvedValue({
       ...generateChannel({ channel: { id: '!members-xyz', type: 'messaging' } }),
@@ -185,7 +200,7 @@ describe('channel lists as holders', () => {
     new ChannelPaginator({ client, filters });
 
   it('keeps a listed channel until every list that holds it lets it go', () => {
-    const channel = client.channel('messaging', 'general');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     const first = list();
     const second = list();
     first.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: [channel] });
@@ -202,8 +217,8 @@ describe('channel lists as holders', () => {
   });
 
   it('keeps a listed channel that is also watched or opened', () => {
-    const watched = client.channel('messaging', 'watched');
-    const opened = client.channel('messaging', 'opened');
+    const watched = client.channelManager.ensure({ type: 'messaging', id: 'watched' });
+    const opened = client.channelManager.ensure({ type: 'messaging', id: 'opened' });
     watched.watchStatus = ChannelWatchStatus.Watching;
     opened.activate();
     const paginator = list();
@@ -221,7 +236,7 @@ describe('channel lists as holders', () => {
   });
 
   it('lets go of its channels when its state is reset', () => {
-    const channel = client.channel('messaging', 'general');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     const paginator = list();
     paginator.setItems({
       isFirstPage: true,
@@ -235,7 +250,7 @@ describe('channel lists as holders', () => {
   });
 
   it('lets go of a channel that stops matching its filter', () => {
-    const channel = client.channel('messaging', 'general');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     channel.data = { ...channel.data, team: 'a' };
     const paginator = list({ team: 'a' });
     paginator.setItems({
@@ -252,7 +267,7 @@ describe('channel lists as holders', () => {
   });
 
   it('keeps the instance when a channel moves from one list to another', () => {
-    const channel = client.channel('messaging', 'general');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     channel.data = { ...channel.data, team: 'a' };
     const teamA = list({ team: 'a' });
     const teamB = list({ team: 'b' });
@@ -278,7 +293,7 @@ describe('known ends and logout', () => {
 
   // a channel every hold keeps: listed, opened and watched
   const heldChannel = () => {
-    const channel = client.channel('messaging', 'general');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     const paginator = new ChannelPaginator({ client, filters: {} });
     paginator.setItems({
       isFirstPage: true,
@@ -333,7 +348,7 @@ describe('store removals reach the lists', () => {
   });
 
   it('drops a channel removed from the channel store from every list holding it', () => {
-    const channel = client.channel('messaging', 'general');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     const first = new ChannelPaginator({ client, filters: {} });
     const second = new ChannelPaginator({ client, filters: {} });
     first.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: [channel] });
@@ -346,7 +361,7 @@ describe('store removals reach the lists', () => {
   });
 
   it('drops a message removed from the message store from the message list', () => {
-    const channel = client.channel('messaging', 'general');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     const message = formatMessage(generateMsg({ id: 'm1' }));
     channel.messagePaginator.setItems({
       isFirstPage: true,

@@ -4,7 +4,7 @@
 import type { AxiosInstance } from 'axios';
 import axios from 'axios';
 
-import { Channel } from './channel';
+import type { Channel } from './channel';
 import type { ChannelMuteStatus } from './channel_state';
 import { ChannelWatchStatus } from './channel_state';
 import { ClientState } from './client_state';
@@ -14,7 +14,6 @@ import { ApiClient } from './api-client';
 import {
   axiosParamsSerializer,
   formatMessage,
-  generateChannelTempCid,
   getEnv,
   invokeEventListener,
   isOwnUserBaseProperty,
@@ -27,7 +26,6 @@ import { normalizeUploadFile } from './upload-utils';
 import type {
   APIResponse,
   AppIdentifier,
-  ChannelInput,
   ChannelMute,
   ChannelOptions,
   ChannelResponse,
@@ -1580,7 +1578,10 @@ export class StreamChat extends ChatApi {
       if (!channelState.channel) continue;
 
       this._addChannelConfig(channelState.channel);
-      const c = this.channel(channelState.channel.type, channelState.channel.id);
+      const c = this.channelManager.ensure({
+        type: channelState.channel.type,
+        id: channelState.channel.id,
+      });
       c.data = channelState.channel;
       c.offlineMode = offlineMode;
       c.initialized = !offlineMode;
@@ -1686,158 +1687,6 @@ export class StreamChat extends ChatApi {
       [cid]: config,
     };
   }
-
-  /**
-   * Returns a new channel with the given type, ID and custom data.
-   *
-   * If you want to create a unique conversation between 2 or more users, you can leave out the ID
-   * parameter and provide the list of members.
-   * Make sure to await `channel.create()` or `channel.watch()` before accessing channel functions,
-   * i.e. `channel = client.channel('messaging', { members: ['tommaso', 'thierry'] })` then
-   * `await channel.create()` to assign an ID to the channel.
-   *
-   * @param channelType - The channel type.
-   * @param channelIdOrCustom - The channel ID; you can leave this out if you want to create a
-   *   conversation channel (optional).
-   * @param custom - Custom data to attach to the channel (optional, defaults to `{}`).
-   * @returns The channel object; initialize it using `channel.watch()`.
-   */
-  channel(channelType: string, channelId?: string | null, custom?: ChannelInput): Channel;
-  channel(channelType: string, custom?: ChannelInput): Channel;
-  channel(
-    channelType: string,
-    channelIdOrCustom?: string | ChannelInput | null,
-    custom: ChannelInput = {},
-  ) {
-    if (!this.userId) {
-      throw Error('Call connectUser or connectAnonymousUser before creating a channel');
-    }
-
-    if (~channelType.indexOf(':')) {
-      throw new Error(
-        `Invalid channel group ${channelType}, can't contain the : character`,
-      );
-    }
-
-    // support channel("messaging", {options})
-    if (channelIdOrCustom && typeof channelIdOrCustom === 'object') {
-      return this.getChannelByMembers(channelType, channelIdOrCustom);
-    }
-
-    // support channel("messaging", undefined, {options})
-    if (!channelIdOrCustom && typeof custom === 'object' && custom.members?.length) {
-      return this.getChannelByMembers(channelType, custom);
-    }
-
-    // support channel("messaging", null, {options})
-    // support channel("messaging", undefined, {options})
-    // support channel("messaging", "", {options})
-    if (!channelIdOrCustom) {
-      return new Channel(this, channelType, undefined, custom);
-    }
-
-    return this.getChannelById(channelType, channelIdOrCustom, custom);
-  }
-
-  /**
-   * It's a helper method for `client.channel()` method, used to create unique conversation or
-   * channel based on member list instead of ID.
-   *
-   * If the channel already exists in the channel store (`client.channelManager`), we return it,
-   * since that means the same channel was already requested or created.
-   *
-   * Otherwise we create a new instance of Channel class and return it.
-   *
-   * @private
-   *
-   * @param channelType - The channel type.
-   * @param custom - Custom data to attach to the channel.
-   * @returns The channel object; initialize it using `channel.watch()`.
-   */
-  getChannelByMembers = (channelType: string, custom: ChannelInput) => {
-    // Check if the channel already exists.
-    // Only allow 1 channel object per cid
-    // Mirrors the same expression in `Channel.query`, which recomputes this temp cid to move the
-    // stored channel to its real cid once the server assigns one — the two must agree exactly. `user_id` became optional in the v2 spec while
-    // `MemberUserRequest.id` is required, so `{ user: { id } }` is now a valid member spec.
-    const memberIds = (custom.members ?? []).map((member) =>
-      typeof member === 'string' ? member : member.user_id || member.user?.id || '',
-    );
-    const membersStr = memberIds.sort().join(',');
-    const tempCid = generateChannelTempCid(channelType, memberIds);
-
-    if (!tempCid) {
-      throw Error('Please specify atleast one member when creating unique conversation');
-    }
-
-    // The channel is stored under one of two keys:
-    // 1. its temporary cid built from the sorted member IDs, until channel.query / watch / create
-    //    returns the real cid, which then replaces it (Channel.query calls changeChannelId);
-    // 2. the real cid, which for a distinct channel has a server-generated `!members-` id.
-    const { channelManager } = this;
-    if (channelManager.get(tempCid)?.pendingDisposal)
-      channelManager.removeChannel(tempCid);
-    if (!channelManager.get(tempCid)) {
-      const existing = channelManager
-        .values()
-        .find(
-          (channel) =>
-            !channel.pendingDisposal &&
-            channel.type === channelType &&
-            channel.id?.startsWith('!members-') &&
-            Object.keys(channel.state.members).sort().join(',') === membersStr,
-        );
-      if (existing) return existing;
-    }
-
-    return channelManager.getOrCreateChannel(
-      tempCid,
-      () => new Channel(this, channelType, undefined, custom),
-    );
-  };
-
-  /**
-   * It's a helper method for `client.channel()`, used to retrieve a channel given its ID.
-   *
-   * If the channel already exists in the channel store (`client.channelManager`), we return it,
-   * since that means the same channel was already requested or created.
-   *
-   * Otherwise we create a new instance of `Channel` class and return it.
-   *
-   * @private
-   *
-   * @param channelType - The channel type.
-   * @param channelId - The channel ID.
-   * @param custom - Custom data to attach to the channel.
-   * @returns The channel object; initialize it using `channel.watch()`.
-   */
-  getChannelById = (channelType: string, channelId: string, custom: ChannelInput) => {
-    if (typeof channelId === 'string' && ~channelId.indexOf(':')) {
-      throw Error(`Invalid channel id ${channelId}, can't contain the : character`);
-    }
-
-    // only allow 1 channel object per cid; a torn-down one is replaced by a fresh instance
-    const cid = `${channelType}:${channelId}`;
-    if (this.channelManager.get(cid)?.pendingDisposal)
-      this.channelManager.removeChannel(cid);
-
-    return this.channelManager.getOrCreateChannel(
-      cid,
-      () => new Channel(this, channelType, channelId, custom),
-      (channel) => {
-        // Only overwrite the existing channel's custom data when the caller actually provided some.
-        // A caller passing other fields (e.g. `{ members }`, or even `{ members: undefined }`) yields a
-        // non-empty object with no `.custom`; the previous `Object.keys(custom).length > 0` guard let
-        // that through and then set `custom: custom.custom` (undefined), wiping the channel's existing
-        // custom data (e.g. its name). Guarding on `custom.custom` keeps genuine custom updates while
-        // leaving the existing custom intact when the caller omits it.
-        if (custom.custom !== undefined) {
-          channel.data = { ...channel.data, custom: custom.custom };
-          channel._data = { ...channel._data, custom: custom.custom };
-        }
-      },
-    );
-  };
 
   /**
    * Revoke a global ban for a user.

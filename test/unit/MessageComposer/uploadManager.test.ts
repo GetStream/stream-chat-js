@@ -13,9 +13,11 @@ const createManager = (
     config: { trackUploadProgress },
   };
   const client = {
-    channel: vi.fn().mockReturnValue({
-      messageComposer: { attachmentManager },
-    }),
+    channelManager: {
+      ensure: vi.fn().mockReturnValue({
+        messageComposer: { attachmentManager },
+      }),
+    },
   } as unknown as StreamChat;
   const manager = new UploadManager(client);
   return { manager, client, doUploadRequest };

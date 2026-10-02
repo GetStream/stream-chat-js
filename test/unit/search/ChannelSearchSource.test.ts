@@ -20,7 +20,7 @@ describe('ChannelSearchSource', () => {
   beforeEach(() => {
     client = getClientWithUser(user);
     channels = mockChannels.map((data) =>
-      client.channel(data.channel.type, data.channel.id),
+      client.channelManager.ensure({ type: data.channel.type, id: data.channel.id }),
     );
     queryChannelsMock = vi
       .spyOn(client, 'queryChannelsAndHydrate')

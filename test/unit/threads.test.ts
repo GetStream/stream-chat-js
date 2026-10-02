@@ -96,7 +96,10 @@ describe('Threads 2.0', () => {
     channelResponse = generateChannel({
       channel: { id: uuidv4(), members: [], custom: { name: 'Test channel' } },
     }).channel as ChannelResponse;
-    channel = client.channel(channelResponse.type, channelResponse.id);
+    channel = client.channelManager.ensure({
+      type: channelResponse.type,
+      id: channelResponse.id,
+    });
     channel.initialized = true;
     parentMessageResponse = generateMsg() as MessageResponse;
     threadManager = new ThreadManager({ client });
@@ -1332,7 +1335,7 @@ describe('Threads 2.0', () => {
         it("ignores another channel's watch ending", () => {
           const thread = createTestThread();
           subscribeThread(thread);
-          const other = client.channel('messaging', uuidv4());
+          const other = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
           other.watchStatus = ChannelWatchStatus.Watching;
 
           other.watchStatus = ChannelWatchStatus.NotWatching;

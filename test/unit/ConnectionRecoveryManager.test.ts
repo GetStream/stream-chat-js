@@ -36,7 +36,7 @@ describe('ConnectionRecoveryManager', () => {
 
   /** A channel a consumer has declared it is reading, i.e. what recovery reloads. */
   const activeChannel = (id: string) => {
-    const channel = client.channel('messaging', id);
+    const channel = client.channelManager.ensure({ type: 'messaging', id: id });
     channel.initialized = true;
     channel.activate();
     const reload = vi.spyOn(channel, 'reload').mockResolvedValue(undefined);
@@ -45,7 +45,10 @@ describe('ConnectionRecoveryManager', () => {
 
   /** Builds a thread the way a UI SDK does, without activating or listing it. */
   const buildThread = (id: string) => {
-    const channel = client.channel('messaging', `channel-for-${id}`);
+    const channel = client.channelManager.ensure({
+      type: 'messaging',
+      id: `channel-for-${id}`,
+    });
     channel.initialized = true;
     const thread = new Thread({
       client,
@@ -189,7 +192,7 @@ describe('ConnectionRecoveryManager', () => {
     });
 
     it('leaves channels nobody is reading alone', async () => {
-      const idle = client.channel('messaging', 'idle');
+      const idle = client.channelManager.ensure({ type: 'messaging', id: 'idle' });
       idle.initialized = true;
       // Watched before the drop, but not active — it must NOT be eagerly re-queried. Such channels
       // come back demand-driven, when an event proves them relevant.
@@ -233,7 +236,10 @@ describe('ConnectionRecoveryManager', () => {
       // recovery on `WasWatching` would strand exactly that channel forever — it would never load its
       // messages, on any subsequent reconnect. `Channel.reload()`'s own `initialized || offlineMode`
       // check is the correct gate.
-      const channel = client.channel('messaging', 'opened-offline');
+      const channel = client.channelManager.ensure({
+        type: 'messaging',
+        id: 'opened-offline',
+      });
       channel.offlineMode = true;
       channel.activate();
       expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);

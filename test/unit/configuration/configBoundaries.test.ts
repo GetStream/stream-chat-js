@@ -20,7 +20,10 @@ describe('configuration boundaries', () => {
   describe('caller-owned patches do not stay aliased', () => {
     it('updateConfig copies the patch', () => {
       const client = getClientWithUser({ id: 'user' });
-      const composer = client.channel('messaging', 'c1').messageComposer;
+      const composer = client.channelManager.ensure({
+        type: 'messaging',
+        id: 'c1',
+      }).messageComposer;
 
       const patch = { text: { maxLengthOnSend: 100 } };
       composer.updateConfig(patch);
@@ -34,7 +37,7 @@ describe('configuration boundaries', () => {
 
     it('the constructor config argument is copied', () => {
       const client = getClientWithUser({ id: 'user' });
-      const channel = client.channel('messaging', 'c2');
+      const channel = client.channelManager.ensure({ type: 'messaging', id: 'c2' });
 
       const explicit = { text: { maxLengthOnSend: 100 } };
       const composer = new MessageComposer({
@@ -52,7 +55,10 @@ describe('configuration boundaries', () => {
 
     it('still passes functions through by reference', () => {
       const client = getClientWithUser({ id: 'user' });
-      const composer = client.channel('messaging', 'c3').messageComposer;
+      const composer = client.channelManager.ensure({
+        type: 'messaging',
+        id: 'c3',
+      }).messageComposer;
       const findURLFn = () => [];
 
       composer.updateConfig({ linkPreviews: { findURLFn } });
@@ -64,7 +70,10 @@ describe('configuration boundaries', () => {
   describe('the published composer config is frozen throughout', () => {
     it('freezes every subtree, not only the ones the merge left untouched', () => {
       const client = getClientWithUser({ id: 'user' });
-      const composer = client.channel('messaging', 'c4').messageComposer;
+      const composer = client.channelManager.ensure({
+        type: 'messaging',
+        id: 'c4',
+      }).messageComposer;
 
       for (const [key, value] of Object.entries(composer.config)) {
         if (value && typeof value === 'object') {
@@ -75,7 +84,10 @@ describe('configuration boundaries', () => {
 
     it('throws on a nested write to text, the subtree serverUpperBounds always copies', () => {
       const client = getClientWithUser({ id: 'user' });
-      const composer = client.channel('messaging', 'c5').messageComposer;
+      const composer = client.channelManager.ensure({
+        type: 'messaging',
+        id: 'c5',
+      }).messageComposer;
 
       expect(() => {
         (composer.config.text as { maxLengthOnSend?: number }).maxLengthOnSend = 5;
@@ -85,7 +97,10 @@ describe('configuration boundaries', () => {
 
     it('stays frozen after a resolution that actually moves a value', () => {
       const client = getClientWithUser({ id: 'user' });
-      const composer = client.channel('messaging', 'c6').messageComposer;
+      const composer = client.channelManager.ensure({
+        type: 'messaging',
+        id: 'c6',
+      }).messageComposer;
 
       composer.updateConfig({ text: { maxLengthOnSend: 42 } });
 
@@ -172,7 +187,10 @@ describe('the composer resolves through the shared controller', () => {
       cid: 'messaging:c-layer',
       config: { shared_locations: false } as never,
     });
-    const composer = client.channel('messaging', 'c-layer').messageComposer;
+    const composer = client.channelManager.ensure({
+      type: 'messaging',
+      id: 'c-layer',
+    }).messageComposer;
     // Without this the composer never hears the server change — it is the subscription, not the
     // controller, that decides *when* to re-resolve.
     composer.registerSubscriptions();
@@ -195,7 +213,10 @@ describe('the composer resolves through the shared controller', () => {
 
   it('drops retained requests on reset, but not on a re-resolution', () => {
     const client = getClientWithUser({ id: 'user' });
-    const composer = client.channel('messaging', 'c-reset').messageComposer;
+    const composer = client.channelManager.ensure({
+      type: 'messaging',
+      id: 'c-reset',
+    }).messageComposer;
     composer.registerSubscriptions();
     const defaultMax = composer.config.text.maxLengthOnSend;
     composer.updateConfig({ text: { maxLengthOnSend: 7 } });
@@ -212,7 +233,10 @@ describe('the composer resolves through the shared controller', () => {
     const declarative = () => undefined;
     const imperative = () => undefined;
     client.config.set({ messageComposer: { commands: { sendValidator: declarative } } });
-    const composer = client.channel('messaging', 'c-validator').messageComposer;
+    const composer = client.channelManager.ensure({
+      type: 'messaging',
+      id: 'c-validator',
+    }).messageComposer;
 
     expect(composer.config.commands.sendValidator).toBe(declarative);
 
@@ -236,10 +260,10 @@ describe('the composer resolves through the shared controller', () => {
     const client = getClientWithUser({ id: 'user' });
     const declarative = () => undefined;
     client.config.set({ messageComposer: { commands: { sendValidator: declarative } } });
-    const composer = client.channel(
-      'messaging',
-      `c-silent-${_name.length}`,
-    ).messageComposer;
+    const composer = client.channelManager.ensure({
+      type: 'messaging',
+      id: `c-silent-${_name.length}`,
+    }).messageComposer;
 
     composer.updateConfig(laterLayer as never);
 
@@ -252,7 +276,10 @@ describe('the composer resolves through the shared controller', () => {
       cid: 'messaging:c-bounds',
       config: { max_message_length: 100 } as never,
     });
-    const composer = client.channel('messaging', 'c-bounds').messageComposer;
+    const composer = client.channelManager.ensure({
+      type: 'messaging',
+      id: 'c-bounds',
+    }).messageComposer;
 
     composer.updateConfig({ text: { maxLengthOnSend: 5000 } });
 
@@ -267,7 +294,10 @@ describe('the composer resolves through the shared controller', () => {
 
     const composer = new MessageComposer({
       client,
-      compositionContext: client.channel('messaging', 'c-order'),
+      compositionContext: client.channelManager.ensure({
+        type: 'messaging',
+        id: 'c-order',
+      }),
       config: { text: { maxLengthOnSend: 20 } },
     });
 

@@ -11,7 +11,8 @@ describe("the 'channel' configuration key", () => {
     client = getClientWithUser({ id: 'user' });
   });
 
-  const openChannel = (id = 'channel-id'): Channel => client.channel('messaging', id);
+  const openChannel = (id = 'channel-id'): Channel =>
+    client.channelManager.ensure({ type: 'messaging', id: id });
 
   describe('declarative configuration', () => {
     it('reaches a channel created after registration', () => {
@@ -141,7 +142,7 @@ describe("the 'channel' configuration key", () => {
       expect(openChannel().messagePaginator.config.pageSize).toBe(200);
     });
 
-    it('cannot break client.channel() by throwing', () => {
+    it('cannot break client.channelManager.ensure() by throwing', () => {
       client.config.setSetupFunction('channel', () => {
         throw new Error('boom');
       });

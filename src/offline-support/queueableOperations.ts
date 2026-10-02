@@ -48,7 +48,7 @@ export type QueueableOperation<T extends QueueableType> = {
  * The channel an operation runs on: the caller's own instance when it has one, and otherwise resolved
  * from the task.
  *
- * Preferring the caller's instance is not an optimisation. `client.channel()` returns the stored
+ * Preferring the caller's instance is not an optimisation. `client.channelManager.ensure()` returns the stored
  * instance only while it is in the channel store and not `pendingDisposal` — otherwise it CONSTRUCTS a
  * new `Channel`, which builds paginators and a composer and registers subscriptions. A first attempt
  * always has the real instance in hand, so it should never risk that.
@@ -65,7 +65,7 @@ const channelOf = (client: StreamChat, task: PendingTask, channel?: Channel): Ch
       `Cannot replay a "${task.type}" task without a channel type and id (message: ${task.messageId}).`,
     );
   }
-  return client.channel(channelType, channelId);
+  return client.channelManager.ensure({ type: channelType, id: channelId });
 };
 
 /**
@@ -155,7 +155,7 @@ export const QUEUEABLE_OPERATIONS: {
  * @internal
  *
  * @param params.channel - The channel instance the caller already holds, so a first attempt runs on
- *   that exact object rather than one `client.channel()` might reconstruct.
+ *   that exact object rather than one `client.channelManager.ensure()` might reconstruct.
  * @param params.client - Resolves the operation, and carries the offline DB when one is registered.
  * @param params.queue - Whether this task can be queued at all. `false` for a send with no message id,
  *   which there is nothing to key a queue entry on — it still runs, just not through the queue.

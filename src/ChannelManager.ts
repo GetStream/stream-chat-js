@@ -1,6 +1,6 @@
 import { EventHandlerPipeline } from './EventHandlerPipeline';
 import { WithSubscriptions } from './utils/WithSubscriptions';
-import type { EventType } from './types';
+import type { ChannelInput, EventType } from './types';
 import type { ChannelPaginator } from './pagination';
 import type { StreamChat } from './client';
 import type { Unsubscribe } from '@stream-io/state-store';
@@ -14,9 +14,9 @@ import type {
 } from './EventHandlerPipeline';
 import { filterConstrainsField } from './pagination/filterCompiler';
 import { getChannel } from './pagination/utility.queryChannel';
-import type { Channel } from './channel';
+import { Channel } from './channel';
 import { ChannelWatchStatus } from './channel_state';
-import { runDetached } from './utils';
+import { generateChannelTempCid, runDetached } from './utils';
 import { EntityStore, type EntityStoreSubscriber } from './entityStore/EntityStore';
 
 export type ChannelManagerEventHandlerContext = {
@@ -478,6 +478,105 @@ export class ChannelManager extends WithSubscriptions {
   /** Every stored channel. */
   values(): Channel[] {
     return this.channelStore.values();
+  }
+
+  /**
+   * Returns the channel for `type` and `id`, creating it if it isn't stored yet. Use this to get a
+   * channel instead of calling `new Channel()`; there is one instance per cid. A channel that was
+   * torn down is replaced by a fresh one.
+   *
+   * Leave out `id` and pass `data.members` for a distinct channel between those members. It is stored
+   * under a temporary cid built from the member IDs until `watch()`, `query()` or `create()` returns
+   * the real one; a stored distinct channel with the same members is returned instead.
+   *
+   * It doesn't hold the channel: lists, `channel.activate()` and watching do.
+   *
+   * ```ts
+   * const general = client.channelManager.ensure({ type: 'messaging', id: 'general' });
+   * const dm = client.channelManager.ensure({ type: 'messaging', data: { members: ['ann', 'bob'] } });
+   * await dm.watch();
+   * ```
+   *
+   * @param params.type - The channel type.
+   * @param params.id - The channel ID; leave it out for a distinct channel created from members.
+   * @param params.data - Data for a new channel (members, custom fields). For a stored channel only
+   *   `data.custom` is applied.
+   * @returns The channel; initialize it with `channel.watch()`.
+   */
+  ensure({
+    data = {},
+    id,
+    type,
+  }: {
+    type: string;
+    id?: string | null;
+    data?: ChannelInput;
+  }): Channel {
+    const { client } = this;
+    if (!client.userId) {
+      throw Error('Call connectUser or connectAnonymousUser before creating a channel');
+    }
+    if (type.includes(':')) {
+      throw new Error(`Invalid channel group ${type}, can't contain the : character`);
+    }
+    if (id) return this.ensureById(type, id, data);
+    if (data.members?.length) return this.ensureByMembers(type, data);
+    return new Channel(client, type, undefined, data);
+  }
+
+  private ensureById(type: string, id: string, data: ChannelInput): Channel {
+    if (id.includes(':')) {
+      throw Error(`Invalid channel id ${id}, can't contain the : character`);
+    }
+
+    const cid = `${type}:${id}`;
+    if (this.get(cid)?.pendingDisposal) this.removeChannel(cid);
+
+    return this.getOrCreateChannel(
+      cid,
+      () => new Channel(this.client, type, id, data),
+      (channel) => {
+        // Only `custom` is applied to a stored channel, and only when the caller passed it: other
+        // fields (e.g. `{ members }`) would otherwise wipe its existing custom data, such as its name.
+        if (data.custom !== undefined) {
+          channel.data = { ...channel.data, custom: data.custom };
+          channel._data = { ...channel._data, custom: data.custom };
+        }
+      },
+    );
+  }
+
+  private ensureByMembers(type: string, data: ChannelInput): Channel {
+    // `Channel.query` recomputes this temporary cid to move the channel to its real cid once the
+    // server assigns one, so both must build it the same way. A member is a user ID, `{ user_id }`
+    // or `{ user: { id } }`.
+    const memberIds = (data.members ?? []).map((member) =>
+      typeof member === 'string' ? member : member.user_id || member.user?.id || '',
+    );
+    const membersStr = [...memberIds].sort().join(',');
+    const tempCid = generateChannelTempCid(type, memberIds);
+    if (!tempCid) {
+      throw Error('Please specify atleast one member when creating unique conversation');
+    }
+
+    // Stored under the temporary cid until the server returns the real one, then under the real
+    // cid, whose id for a distinct channel starts with `!members-`.
+    if (this.get(tempCid)?.pendingDisposal) this.removeChannel(tempCid);
+    if (!this.get(tempCid)) {
+      const existing = this.values().find(
+        (channel) =>
+          !channel.pendingDisposal &&
+          channel.type === type &&
+          channel.id?.startsWith('!members-') &&
+          Object.keys(channel.state.members).sort().join(',') === membersStr,
+      );
+      if (existing) return existing;
+    }
+
+    return this.getOrCreateChannel(
+      tempCid,
+      () => new Channel(this.client, type, undefined, data),
+    );
   }
 
   /**

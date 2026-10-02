@@ -62,7 +62,7 @@ export type ApplyInstanceConfigurationParams<K extends InstanceSetupKey> = {
  *   second, so a setup function always wins for the same field;
  * - runs the previous setup function's teardown before re-applying, and again on unsubscribe;
  * - contains errors — a throwing setup function, teardown or applier is logged and never propagates,
- *   so it cannot break `client.channel()` or a `Thread` construction.
+ *   so it cannot break `client.channelManager.ensure()` or a `Thread` construction.
  *
  * Not exported from the package. It only does anything for a key in {@link InstanceSetupKey}, and those
  * keys all belong to classes this package constructs, so there is no caller outside it. `ConfigController`

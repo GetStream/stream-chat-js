@@ -124,7 +124,7 @@ describe('client event listener isolation', () => {
 
   it('still runs post-listener callbacks and channel listeners after a throw', () => {
     const client = getClientWithUser();
-    const channel = client.channel('messaging', 'evicted');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'evicted' });
     client.channelManager.getOrCreateChannel(channel.cid, () => channel);
 
     const channelListener = vi.fn();
@@ -158,7 +158,7 @@ describe('channel event listener isolation', () => {
 
   it('keeps calling later channel listeners when one throws', () => {
     const client = getClientWithUser();
-    const channel = client.channel('messaging', 'isolation');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'isolation' });
     client.channelManager.getOrCreateChannel(channel.cid, () => channel);
     const second = vi.fn();
 
@@ -175,7 +175,10 @@ describe('channel event listener isolation', () => {
 
   it('captures a rejection from an async channel listener', async () => {
     const client = getClientWithUser();
-    const channel = client.channel('messaging', 'isolation-async');
+    const channel = client.channelManager.ensure({
+      type: 'messaging',
+      id: 'isolation-async',
+    });
     client.channelManager.getOrCreateChannel(channel.cid, () => channel);
     const error = new Error('channel async boom');
     const rejections: unknown[] = [];

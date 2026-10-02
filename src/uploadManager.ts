@@ -123,7 +123,8 @@ export class UploadManager {
       throw new Error(`Invalid channelCid: ${channelCid}`);
     }
     const [channelType, channelId] = channelCid.split(colon);
-    return this.client.channel(channelType, channelId).messageComposer.attachmentManager;
+    return this.client.channelManager.ensure({ type: channelType, id: channelId })
+      .messageComposer.attachmentManager;
   }
 
   get uploads() {

@@ -370,7 +370,7 @@ describe('OfflineSupportApi', () => {
         createQueries = failsOnExecute();
         offlineDb.channelExists.mockResolvedValue(false);
         offlineDb.upsertChannelData.mockResolvedValue([{ sql: 'UPSERT', args: [] }]);
-        const clientChannelSpy = vi.spyOn(client, 'channel');
+        const clientChannelSpy = vi.spyOn(client.channelManager, 'ensure');
 
         const result = await offlineDb.queriesWithChannelGuard({ event }, createQueries);
 
@@ -390,7 +390,7 @@ describe('OfflineSupportApi', () => {
         ]);
       });
 
-      it('uses client.channel when channel data is not present in event', async () => {
+      it('uses client.channelManager.ensure when channel data is not present in event', async () => {
         const mockChannelData = { id: '123', type: 'messaging' };
         const mockChannel = {
           initialized: true,
@@ -399,7 +399,7 @@ describe('OfflineSupportApi', () => {
         };
 
         const clientChannelSpy = vi
-          .spyOn(client, 'channel')
+          .spyOn(client.channelManager, 'ensure')
           .mockReturnValue(mockChannel as unknown as Channel);
 
         const event: Event = {
@@ -415,7 +415,7 @@ describe('OfflineSupportApi', () => {
 
         const result = await offlineDb.queriesWithChannelGuard({ event }, createQueries);
 
-        expect(clientChannelSpy).toHaveBeenCalledWith('messaging', '123');
+        expect(clientChannelSpy).toHaveBeenCalledWith({ type: 'messaging', id: '123' });
         expect(offlineDb.upsertChannelData).toHaveBeenCalledWith({
           channel: mockChannelData,
           execute: false,
@@ -552,7 +552,9 @@ describe('OfflineSupportApi', () => {
           data: mockChannelData,
         };
 
-        vi.spyOn(client, 'channel').mockReturnValue(mockChannel as unknown as Channel);
+        vi.spyOn(client.channelManager, 'ensure').mockReturnValue(
+          mockChannel as unknown as Channel,
+        );
 
         await expect(
           offlineDb.queriesWithChannelGuard({ event }, createQueries),
@@ -2727,7 +2729,9 @@ describe('OfflineSupportApi', () => {
           _deleteMessageSpy = vi
             .spyOn(client, '_deleteMessage')
             .mockImplementation(vi.fn());
-          clientChannelSpy = vi.spyOn(client, 'channel').mockReturnValue(mockChannel);
+          clientChannelSpy = vi
+            .spyOn(client.channelManager, 'ensure')
+            .mockReturnValue(mockChannel);
         });
 
         afterEach(() => {
@@ -2756,7 +2760,10 @@ describe('OfflineSupportApi', () => {
 
           await offlineDb['executeTask']({ task });
 
-          expect(clientChannelSpy).toHaveBeenCalledWith(task.channelType, task.channelId);
+          expect(clientChannelSpy).toHaveBeenCalledWith({
+            type: task.channelType,
+            id: task.channelId,
+          });
           expect(mockChannel._sendReaction).toHaveBeenCalledWith(...task.payload);
         });
 

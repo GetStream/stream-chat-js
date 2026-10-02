@@ -3,7 +3,7 @@
 Suppose you want the message list to load 50 messages per page instead of the default 100.
 
 The page size lives on `channel.messagePaginator.config.pageSize`. That paginator is created inside the
-`Channel` constructor, and channels are created inside `client.channel()`, `client.queryChannels()` and
+`Channel` constructor, and channels are created inside `client.channelManager.ensure()`, `client.queryChannels()` and
 offline hydration — so by the time you hold a `Channel`, its paginator is already built. You can mutate
 it on every channel you happen to have a reference to, but you cannot make it the default for the
 channels the SDK creates on your behalf.
@@ -292,7 +292,7 @@ Pass `null` to clear a setup function; its teardown runs against every live inst
 3. **Disposing an instance tears down.** `unregisterSubscriptions()` for composers and threads,
    `_disconnect()` for channels, `disconnectUser()` for the client.
 4. **Errors are contained.** A throwing setup or teardown is caught and logged; it cannot break
-   `client.channel()` or a `Thread` construction.
+   `client.channelManager.ensure()` or a `Thread` construction.
 5. **Your function may run more than once for the same instance.** That is the contract: return a
    teardown that restores what you changed.
 6. **Order does not matter.** Registering for a key nobody has subscribed to yet, and subscribing to a
@@ -474,7 +474,7 @@ Stage 1b's precedence is pinned by tests in `test/unit/configuration/messagePagi
 argument beats a registration, and an untouched SDK default still applies.
 
 **Why the split is worth knowing.** The registry has to work before any instance exists, because
-registering configuration before `client.channel()` is the normal case, and it has to work for a key this
+registering configuration before `client.channelManager.ensure()` is the normal case, and it has to work for a key this
 package has never heard of. The resolver has to work for an instance nobody registered — a
 `SearchController` built without a client resolves configuration perfectly well and simply never hears a
 registration. Neither object could satisfy both requirements alone.
@@ -999,11 +999,11 @@ configuration into the constructors — but only for instances built **after** y
 client.config.set({
   channel: { messagePaginator: { unreadReferencePolicy: 'read-state-only' } },
 });
-const a = client.channel('messaging', 'a'); // ✅ built afterwards — applies
+const a = client.channelManager.ensure({ type: 'messaging', id: 'a' }); // ✅ built afterwards — applies
 ```
 
 ```ts
-const b = client.channel('messaging', 'b');
+const b = client.channelManager.ensure({ type: 'messaging', id: 'b' });
 client.config.set({
   channel: { messagePaginator: { unreadReferencePolicy: 'read-state-only' } },
 });

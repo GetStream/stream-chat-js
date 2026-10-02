@@ -415,7 +415,7 @@ describe('Client active channels cache', () => {
 	});
 });
 
-describe('client.channel() custom-data preservation', () => {
+describe('client.channelManager.ensure() custom-data preservation', () => {
 	let client;
 	beforeEach(async () => {
 		client = await getClientWithUser();
@@ -423,29 +423,49 @@ describe('client.channel() custom-data preservation', () => {
 
 	it("does not wipe an existing channel's custom when re-resolved with a non-custom arg", () => {
 		// First resolution seeds the channel's custom data (e.g. its display name).
-		const channel = client.channel('messaging', 'little-italy', {
-			custom: { name: 'Little-Italy' },
+		const channel = client.channelManager.ensure({
+			type: 'messaging',
+			id: 'little-italy',
+			data: {
+				custom: { name: 'Little-Italy' },
+			},
 		});
 		expect(channel.data.custom.name).to.equal('Little-Italy');
 
-		// A later `client.channel(type, id, arg)` for the SAME channel that passes other fields but
+		// A later `client.channelManager.ensure({ type, id, data })` for the SAME channel that passes other fields but
 		// no `custom` — as thread hydration and getChannel do (`{ members }`, or even
 		// `{ members: undefined }` when no members are given) — must NOT blank the channel's custom.
-		// Regression: getChannelById used to run `channel.data.custom = arg.custom` on any non-empty
+		// Regression: ensure used to run `channel.data.custom = data.custom` on any non-empty
 		// arg, wiping custom to `undefined` and dropping the channel's name from the channel list.
-		const viaMembers = client.channel('messaging', 'little-italy', {
-			members: [{ user_id: 'u2' }],
+		const viaMembers = client.channelManager.ensure({
+			type: 'messaging',
+			id: 'little-italy',
+			data: {
+				members: [{ user_id: 'u2' }],
+			},
 		});
 		expect(viaMembers).to.equal(channel); // same cached instance
 		expect(channel.data.custom.name).to.equal('Little-Italy');
 
-		client.channel('messaging', 'little-italy', { members: undefined });
+		client.channelManager.ensure({
+			type: 'messaging',
+			id: 'little-italy',
+			data: { members: undefined },
+		});
 		expect(channel.data.custom.name).to.equal('Little-Italy');
 	});
 
 	it('applies custom when the caller actually provides it', () => {
-		const channel = client.channel('messaging', 'ch-custom', { custom: { name: 'Old' } });
-		client.channel('messaging', 'ch-custom', { custom: { name: 'New' } });
+		const channel = client.channelManager.ensure({
+			type: 'messaging',
+			id: 'ch-custom',
+			data: { custom: { name: 'Old' } },
+		});
+		client.channelManager.ensure({
+			type: 'messaging',
+			id: 'ch-custom',
+			data: { custom: { name: 'New' } },
+		});
 		expect(channel.data.custom.name).to.equal('New');
 	});
 });
@@ -1854,7 +1874,10 @@ describe('user.updated propagates to message + pinned paginators', () => {
 
 	it('reflects the updated user on both messagePaginator and pinnedMessagesPaginator', () => {
 		const author = { id: 'author', name: 'Old Name' };
-		const channel = client.channel('messaging', 'user-updated-1');
+		const channel = client.channelManager.ensure({
+			type: 'messaging',
+			id: 'user-updated-1',
+		});
 		const message = generateMsg({ id: 'm1', user: author });
 		const pinned = generateMsg({
 			id: 'p1',
@@ -1893,7 +1916,10 @@ describe('user.updated propagates to channel members, watchers and read states',
 
 	beforeEach(async () => {
 		client = await getClientWithUser();
-		channel = client.channel('messaging', 'user-updated-members');
+		channel = client.channelManager.ensure({
+			type: 'messaging',
+			id: 'user-updated-members',
+		});
 		channel.state.partialNext({
 			members: { bob: { user: bob, user_id: 'bob' } },
 			watchers: { bob },
@@ -1935,7 +1961,10 @@ describe('user.updated propagates to channel members, watchers and read states',
 	});
 
 	it('does not publish for a channel that does not contain the user', () => {
-		const other = client.channel('messaging', 'user-updated-other');
+		const other = client.channelManager.ensure({
+			type: 'messaging',
+			id: 'user-updated-other',
+		});
 		client.state.updateUserReference(bob, other.cid);
 		const listener = vi.fn();
 		const unsubscribe = other.state.subscribe(listener);
@@ -2008,7 +2037,7 @@ describe('user.messages.deleted (client-level, cross-channel)', () => {
 	// from the banned user, plus a pinned message from another user. The client-level loop scans all
 	// active channels, so no explicit user->channel reference registration is needed.
 	const setupChannel = (id) => {
-		const channel = client.channel('messaging', id);
+		const channel = client.channelManager.ensure({ type: 'messaging', id: id });
 		const main = generateMsg({ id: `${id}-m`, cid: channel.cid, user: bannedUser });
 		const pinned = generateMsg({
 			id: `${id}-p`,
@@ -2116,7 +2145,7 @@ describe('user.messages.deleted — quoted_message regression (#1736)', () => {
 			quoted_message: m1,
 			quoted_message_id: m1.id,
 		});
-		const channel = client.channel(type, id);
+		const channel = client.channelManager.ensure({ type: type, id: id });
 		// `client.channel` registers the channel as active; the client-level deletion loop scans all
 		// active channels, and setItems puts the messages in the paginator (the message list source of
 		// truth) so the deletion has something to act on.
@@ -2354,7 +2383,7 @@ describe('channel store eviction when the current user is removed (#2599)', () =
 	});
 
 	it('evicts the channel from the channel store and disconnects it on notification.removed_from_channel', () => {
-		const channel = client.channel('messaging', 'ch-removed');
+		const channel = client.channelManager.ensure({ type: 'messaging', id: 'ch-removed' });
 		expect(client.channelManager.get(channel.cid)).to.equal(channel);
 
 		client.dispatchEvent(removedFromChannelEvent(channel));
@@ -2366,9 +2395,9 @@ describe('channel store eviction when the current user is removed (#2599)', () =
 
 	it('evicts regardless of channel type (does not special-case the channel type)', () => {
 		const channels = [
-			client.channel('livestream', 'stream-1'),
-			client.channel('team', 'team-1'),
-			client.channel('gaming', 'game-1'),
+			client.channelManager.ensure({ type: 'livestream', id: 'stream-1' }),
+			client.channelManager.ensure({ type: 'team', id: 'team-1' }),
+			client.channelManager.ensure({ type: 'gaming', id: 'game-1' }),
 		];
 		channels.forEach((channel) => {
 			expect(client.channelManager.get(channel.cid)).to.equal(channel);
@@ -2384,7 +2413,7 @@ describe('channel store eviction when the current user is removed (#2599)', () =
 	});
 
 	it('stops routing channel events (message.new) to the channel once it is evicted', () => {
-		const channel = client.channel('messaging', 'ch-events');
+		const channel = client.channelManager.ensure({ type: 'messaging', id: 'ch-events' });
 		const handleChannelEventSpy = vi.spyOn(channel, '_handleChannelEvent');
 		const messageNewEvent = {
 			type: 'message.new',
@@ -2410,8 +2439,8 @@ describe('channel store eviction when the current user is removed (#2599)', () =
 	});
 
 	it('does not reload the evicted channel on connection recovery', async () => {
-		const removed = client.channel('messaging', 'removed');
-		const kept = client.channel('messaging', 'kept');
+		const removed = client.channelManager.ensure({ type: 'messaging', id: 'removed' });
+		const kept = client.channelManager.ensure({ type: 'messaging', id: 'kept' });
 		// Recovery only reloads channels a consumer declared it is reading.
 		removed.activate();
 		kept.activate();
@@ -2427,7 +2456,10 @@ describe('channel store eviction when the current user is removed (#2599)', () =
 	});
 
 	it('does not evict when another user is removed (member.removed for a different user)', () => {
-		const channel = client.channel('messaging', 'ch-other-member');
+		const channel = client.channelManager.ensure({
+			type: 'messaging',
+			id: 'ch-other-member',
+		});
 		const disconnectSpy = vi.spyOn(channel, '_disconnect');
 
 		client.dispatchEvent({
@@ -2444,8 +2476,11 @@ describe('channel store eviction when the current user is removed (#2599)', () =
 	});
 
 	it('still evicts on channel.deleted and notification.channel_deleted (no regression)', () => {
-		const deleted = client.channel('messaging', 'deleted-1');
-		const notifDeleted = client.channel('messaging', 'deleted-2');
+		const deleted = client.channelManager.ensure({ type: 'messaging', id: 'deleted-1' });
+		const notifDeleted = client.channelManager.ensure({
+			type: 'messaging',
+			id: 'deleted-2',
+		});
 
 		client.dispatchEvent({
 			type: 'channel.deleted',

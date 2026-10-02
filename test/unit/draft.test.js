@@ -22,7 +22,7 @@ describe('create draft flow', () => {
 		client.setOfflineDBApi(offlineDb);
 		await client.offlineDb.init(client.userId);
 
-		channel = client.channel('messaging', 'test');
+		channel = client.channelManager.ensure({ type: 'messaging', id: 'test' });
 
 		loggerSpy = vi.fn();
 		chatLoggerSystem.configureLoggers({
@@ -98,7 +98,7 @@ describe('delete draft flow', () => {
 		client.setOfflineDBApi(offlineDb);
 		await client.offlineDb.init(client.userId);
 
-		channel = client.channel('messaging', 'test');
+		channel = client.channelManager.ensure({ type: 'messaging', id: 'test' });
 
 		loggerSpy = vi.fn();
 		chatLoggerSystem.configureLoggers({

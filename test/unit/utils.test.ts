@@ -553,7 +553,7 @@ describe('channelHasReadEvents', () => {
   const makeChannel = (own_capabilities?: ChannelOwnCapability[]) => {
     const client = new StreamChat('apiKey');
     client.user = { id: 'user' };
-    const channel = client.channel('messaging', 'cap-id');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'cap-id' });
     channel.data = { own_capabilities };
     return channel;
   };
@@ -587,7 +587,7 @@ describe('channelTracksReadLocally', () => {
     client.user = { id: 'user' };
     // client-level, so every channel this client builds derives it
     client.config.setConfig('channel', { readEvents: { localUnreadCountEnabled } });
-    const channel = client.channel('messaging', 'cap-id');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'cap-id' });
     channel.data = { own_capabilities };
     return { client, channel };
   };

@@ -47,7 +47,7 @@ describe('Custom Data Middleware', () => {
   beforeEach(() => {
     client = new StreamChat('apiKey');
     client.user = { id: 'user-id', name: 'Test User' };
-    channel = client.channel('channelType', 'channelId');
+    channel = client.channelManager.ensure({ type: 'channelType', id: 'channelId' });
     composer = new MessageComposer({
       client,
       compositionContext: channel,

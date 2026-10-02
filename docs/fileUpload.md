@@ -104,7 +104,11 @@ const response = await channel.uploadFile({
 
       const chatClient = StreamChat.getInstance(apiKey);
       chatClient.connectUser({ id: userId }, userToken);
-      const channel = chatClient.channel('messaging', userId, { members: [userId] });
+      const channel = chatClient.channelManager.ensure({
+        type: 'messaging',
+        id: userId,
+        data: { members: [userId] },
+      });
       channel.create();
 
       const handleFiles = (e) => {

@@ -263,7 +263,7 @@ export class MessageComposer extends WithSubscriptions {
       this.channel = compositionContext.channel;
     } else if (compositionContext.cid) {
       const [type, id] = compositionContext.cid.split(':');
-      this.channel = client.channel(type, id);
+      this.channel = client.channelManager.ensure({ type, id });
     } else {
       throw new Error(
         'MessageComposer requires composition context pointing to channel (channel or context.cid)',
@@ -890,7 +890,7 @@ export class MessageComposer extends WithSubscriptions {
 
   /**
    * The channel's server-side config (`client.channelServerConfigs[cid]`) is populated by `query`/`watch`,
-   * which for a channel opened via `client.channel(type, id)` happens *after* this composer was
+   * which for a channel opened via `client.channelManager.ensure({ type, id })` happens *after* this composer was
    * constructed. Left unwatched, the composer would keep the defaults it derived when `serverConfig` was
    * still undefined — so `location.enabled` would stay `true` for an app that disables `shared_locations`
    * server-side. Re-deriving when the config lands keeps the server authoritative.

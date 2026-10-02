@@ -26,7 +26,8 @@ describe("the shared 'messagePaginator' configuration key", () => {
     channelResponse = generateChannel().channel;
   });
 
-  const openChannel = () => client.channel('messaging', channelResponse.id);
+  const openChannel = () =>
+    client.channelManager.ensure({ type: 'messaging', id: channelResponse.id });
   const openThread = () => {
     const thread = new Thread({
       client,

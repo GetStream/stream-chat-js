@@ -348,19 +348,31 @@ client.userMuteStatus(targetID);
 client.userMuteStatus(targetId);
 ```
 
-#### `client.getChannelById` / `client.channel(...)` overload
+#### `client.channel()` → `client.channelManager.ensure()`
+
+`client.channel()`, `client.getChannelById()` and `client.getChannelByMembers()` are removed. Get a
+channel with `client.channelManager.ensure()`, which takes one object. It returns the stored channel for
+the cid or creates it, as `client.channel()` did, and it doesn't hold the channel: lists,
+`channel.activate()` and watching do.
 
 ```ts
 // v9
-client.channel(channelType, channelID?, custom?);
-client.channel(channelType, custom?);
-client.getChannelById(channelType, channelID, custom);
+client.channel(type, id);
+client.channel(type, id, { custom: { name } });
+client.channel(type, { members: ['ann', 'bob'] });
+client.channel(type, undefined, { members: ['ann', 'bob'] });
+client.getChannelById(type, id, custom);
 
-// v10 — same overload shape; positional param renamed
-client.channel(channelType, channelId?, custom?);
-client.channel(channelType, custom?);
-client.getChannelById(channelType, channelId, custom);
+// v10
+client.channelManager.ensure({ type, id });
+client.channelManager.ensure({ type, id, data: { custom: { name } } });
+client.channelManager.ensure({ type, data: { members: ['ann', 'bob'] } });
+client.channelManager.ensure({ type, data: { members: ['ann', 'bob'] } });
+client.channelManager.ensure({ type, id, data: custom });
 ```
+
+Mocks and spies move with it: `vi.spyOn(client, 'channel')` becomes
+`vi.spyOn(client.channelManager, 'ensure')`, called with `{ type, id, data }`.
 
 #### `client.setAnonymousUser` alias
 
@@ -672,7 +684,7 @@ Webhook verification is inherently server-side work: it needs the API secret, wh
 `_checkInitialized()` itself is unchanged — same signature, same "channel hasn't been initialized" error. What changed is **which methods call it**. It was applied inconsistently in v9: to methods that needed nothing from the query response, and not to some that did. v10 splits the two questions apart.
 
 - **`_checkInitialized()`** — "has the channel been queried?" Now called by `markRead()` and `markUnread()` only. Both read the channel's `read_events` setting, which arrives with the query response, so answering without it would silently use a default.
-- **`_checkHasId()`** — **new**, and the weaker of the two: "does the channel have an id?" It throws `Channel isn't yet created, call getOrCreateDistinctChannel() before this operation`. A channel built from members alone (`client.channel(type, { members })`) has no id until it has been queried; every other channel has one immediately.
+- **`_checkHasId()`** — **new**, and the weaker of the two: "does the channel have an id?" It throws `Channel isn't yet created, call getOrCreateDistinctChannel() before this operation`. A channel built from members alone (`client.channelManager.ensure({ type, data: { members } })`) has no id until it has been queried; every other channel has one immediately.
 
 Both are `@internal`. The consumer-visible effects:
 
@@ -1211,11 +1223,11 @@ No deprecated alias is exported — the old names are gone. For the RC deltas ou
 `getAndWatchChannel` and the `PromoteChannelParams` type existed only to serve the v9 manager's
 hand-written ordering. Replacements:
 
-| Removed                                                                                                                     | Use instead                                                                                                                                              |
-| --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `promoteChannel`, `findLastPinnedChannelIndex`, `findPinnedAtSortOrder`, `shouldConsiderPinnedChannels`, `extractSortValue` | nothing — stop reordering the list yourself; see [If you called `promoteChannel`](#if-you-called-promotechannel)                                         |
-| `isChannelPinned`, `isChannelArchived`, `shouldConsiderArchivedChannels`                                                    | `paginator.matchesFilter(channel)` with `{ pinned: true }` / `{ archived: true }` filters                                                                |
-| `getAndWatchChannel`                                                                                                        | `client.channel(type, id).watch()`. The SDK's own helper (`getChannel`, which additionally coalesces concurrent watches of the same cid) stays internal. |
+| Removed                                                                                                                     | Use instead                                                                                                                                                                |
+| --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `promoteChannel`, `findLastPinnedChannelIndex`, `findPinnedAtSortOrder`, `shouldConsiderPinnedChannels`, `extractSortValue` | nothing — stop reordering the list yourself; see [If you called `promoteChannel`](#if-you-called-promotechannel)                                                           |
+| `isChannelPinned`, `isChannelArchived`, `shouldConsiderArchivedChannels`                                                    | `paginator.matchesFilter(channel)` with `{ pinned: true }` / `{ archived: true }` filters                                                                                  |
+| `getAndWatchChannel`                                                                                                        | `client.channelManager.ensure({ type, id }).watch()`. The SDK's own helper (`getChannel`, which additionally coalesces concurrent watches of the same cid) stays internal. |
 
 #### If you called `promoteChannel`
 

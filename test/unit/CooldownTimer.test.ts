@@ -44,7 +44,7 @@ describe('CooldownTimer', () => {
   describe('derives from state rather than being refreshed', () => {
     const open = async (id: string) => {
       const client = await getClientWithUser({ id: 'user-1' });
-      return client.channel('messaging', id);
+      return client.channelManager.ensure({ type: 'messaging', id: id });
     };
 
     it('picks up a cooldown that arrives through a channel-data sync', async () => {
@@ -95,7 +95,10 @@ describe('CooldownTimer', () => {
   describe('capability changes through updatePartial', () => {
     const setup = async (own_capabilities: string[]) => {
       const client = await getClientWithUser({ id: 'user-1' });
-      const channel = client.channel('messaging', 'cooldown-capabilities');
+      const channel = client.channelManager.ensure({
+        type: 'messaging',
+        id: 'cooldown-capabilities',
+      });
       channel.data = {
         cid: channel.cid,
         cooldown: 30,
@@ -153,7 +156,7 @@ describe('CooldownTimer', () => {
     vi.setSystemTime(now);
 
     const client = await getClientWithUser({ id: 'user-1' });
-    const channel = client.channel('messaging', 'cooldown-1');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'cooldown-1' });
 
     channel.data = {
       cooldown: 12,
@@ -192,7 +195,7 @@ describe('CooldownTimer', () => {
     vi.setSystemTime(now);
 
     const client = await getClientWithUser({ id: 'user-1' });
-    const channel = client.channel('messaging', 'cooldown-0');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'cooldown-0' });
 
     channel.data = {
       own_capabilities: [],
@@ -253,7 +256,10 @@ describe('CooldownTimer', () => {
     vi.setSystemTime(now);
 
     const client = await getClientWithUser({ id: 'user-1' });
-    const channel = client.channel('messaging', 'cooldown-remaining-0');
+    const channel = client.channelManager.ensure({
+      type: 'messaging',
+      id: 'cooldown-remaining-0',
+    });
 
     channel.data = {
       cooldown: 5,
@@ -281,7 +287,10 @@ describe('CooldownTimer', () => {
     vi.setSystemTime(now);
 
     const client = await getClientWithUser({ id: 'user-1' });
-    const channel = client.channel('messaging', 'cooldown-skip');
+    const channel = client.channelManager.ensure({
+      type: 'messaging',
+      id: 'cooldown-skip',
+    });
 
     channel.data = {
       cooldown: 10,
@@ -308,7 +317,10 @@ describe('CooldownTimer', () => {
     vi.setSystemTime(now);
 
     const client = await getClientWithUser({ id: 'user-1' });
-    const channel = client.channel('messaging', 'cooldown-updated-increase');
+    const channel = client.channelManager.ensure({
+      type: 'messaging',
+      id: 'cooldown-updated-increase',
+    });
 
     // timeSince = 2s
     const lastOwnMessageAt = new Date('2026-01-01T00:00:08.000Z');
@@ -343,7 +355,10 @@ describe('CooldownTimer', () => {
     vi.setSystemTime(now);
 
     const client = await getClientWithUser({ id: 'user-1' });
-    const channel = client.channel('messaging', 'cooldown-updated-decrease-to-zero');
+    const channel = client.channelManager.ensure({
+      type: 'messaging',
+      id: 'cooldown-updated-decrease-to-zero',
+    });
 
     // timeSince = 2s
     const lastOwnMessageAt = new Date('2026-01-01T00:00:08.000Z');
@@ -378,7 +393,10 @@ describe('CooldownTimer', () => {
     vi.setSystemTime(now);
 
     const client = await getClientWithUser({ id: 'user-1' });
-    const channel = client.channel('messaging', 'cooldown-updated-to-0');
+    const channel = client.channelManager.ensure({
+      type: 'messaging',
+      id: 'cooldown-updated-to-0',
+    });
 
     // timeSince = 2s
     const lastOwnMessageAt = new Date('2026-01-01T00:00:08.000Z');
@@ -412,7 +430,7 @@ describe('CooldownTimer', () => {
     vi.setSystemTime(now);
 
     const client = await getClientWithUser({ id: 'user-1' });
-    const channel = client.channel('messaging', 'cooldown-4');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'cooldown-4' });
 
     channel.data = { cooldown: 5, own_capabilities: [] };
     channel.cooldownTimer.refresh();

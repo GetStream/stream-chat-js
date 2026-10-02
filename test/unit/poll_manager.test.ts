@@ -229,7 +229,10 @@ describe('PollManager', () => {
           messages: prevMessages,
         });
         channels.push(channelResponse);
-        client.channel(channelResponse.channel.type, channelResponse.channel.id);
+        client.channelManager.ensure({
+          type: channelResponse.channel.type,
+          id: channelResponse.channel.id,
+        });
         client.polls.hydratePollCache(prevMessages, true);
       }
 
@@ -260,7 +263,7 @@ describe('PollManager', () => {
     });
 
     it('populates pollCache on channel.query invocation', async () => {
-      const channel = client.channel('messaging', uuidv4());
+      const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
       const { messages, pollMessages } = generateRandomMessagesWithPolls(5, ``);
       const mockedChannelQueryResponse = {
         ...mockChannelQueryResponse,
@@ -275,7 +278,10 @@ describe('PollManager', () => {
     });
 
     it('populates pollCache with only new messages on channel.query invocation', async () => {
-      const channel = client.channel('messaging', mockChannelQueryResponse.channel.id);
+      const channel = client.channelManager.ensure({
+        type: 'messaging',
+        id: mockChannelQueryResponse.channel.id,
+      });
       const { messages: prevMessages, pollMessages: prevPollMessages } =
         generateRandomMessagesWithPolls(5, `_prev`);
       const { messages, pollMessages } = generateRandomMessagesWithPolls(5, ``);

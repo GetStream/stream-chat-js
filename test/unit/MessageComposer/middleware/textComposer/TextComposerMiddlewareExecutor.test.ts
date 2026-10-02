@@ -47,7 +47,7 @@ const setup = ({
   const client = getClientWithUser({ id: 'user' });
   client.queryUsers = vi.fn().mockResolvedValue({ users: [] });
 
-  const channel = client.channel('channelType', 'channelId');
+  const channel = client.channelManager.ensure({ type: 'channelType', id: 'channelId' });
   channel.keystroke = vi.fn().mockResolvedValue({});
   channel.getClient = vi.fn().mockReturnValue(client);
   stubServerConfig(channel, {

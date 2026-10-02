@@ -62,7 +62,8 @@
   `client.channelManager.values()`. A channel that nothing holds anymore (no channel list, not opened
   with `activate()`, not watched) is torn down and dropped, where v9 kept every channel until logout.
   `channel.deactivate()` is replaced by the function `activate()` returns, and
-  `client.hydrateActiveChannels()` is renamed to `client.hydrateChannels()`. See below.
+  `client.hydrateActiveChannels()` is renamed to `client.hydrateChannels()`. `client.channel()` is
+  replaced by `client.channelManager.ensure({ type, id, data })`. See below.
 - `Role` type renamed to `RoleName`.
 - Assorted small tightenings: `TokenManager.setTokenOrProvider` user param narrowed, `revokeTokens(before)` no longer accepts `string`.
 
@@ -957,8 +958,9 @@ dropped connection is handled by connection recovery, as before.
 was deleted, when the user was removed from it, or on `disconnectUser()`. Every channel ever loaded
 stayed in memory with its subscriptions and message lists.
 
-`client.channelManager` now owns a channel store with one `Channel` instance per cid. `client.channel()`
-and every query and event go through it, so they all return the same instance:
+`client.channelManager` now owns a channel store with one `Channel` instance per cid.
+`client.channelManager.ensure()`, which replaces `client.channel()`, and every query and event go
+through it, so they all return the same instance:
 
 ```ts
 // v9
@@ -980,8 +982,8 @@ becomes `true`) once nothing does:
   watch is restored.
 
 So a channel your code keeps a reference to, without listing, watching or opening it, can be torn down
-underneath you. A torn-down channel throws from `getClient()`; `client.channel(type, id)` returns a
-fresh instance. Call `activate()` on a channel you keep, as a UI does when it opens one.
+underneath you. A torn-down channel throws from `getClient()`;
+`client.channelManager.ensure({ type, id })` returns a fresh instance. Call `activate()` on a channel you keep, as a UI does when it opens one.
 
 **`channel.deactivate()` is removed.** `activate()` returns the function that ends it. Each call gets
 its own, and calling it twice does nothing, so one consumer can't end another's activation:
@@ -1009,7 +1011,7 @@ isn't changed, and `channel.data` may then not be the same object you assigned. 
 `channel.data.x` in place still doesn't reach the state; assign a new object.
 
 **One `ChannelManager` per client.** The client creates its own; constructing a second one for the same
-client is unsupported, because only `client.channelManager` sees the channels `client.channel()` creates.
+client is unsupported, because only `client.channelManager` sees the channels `ensure()` creates.
 
 ### The thread list is a `ThreadPaginator`
 
@@ -1450,4 +1452,4 @@ For each source file that touches the SDK:
 21. **Replace `client.setLocalDevice(device)` / the `device` client option** with an explicit `await client.createDevice({ id, push_provider, push_provider_name? })` after connecting.
 22. **Polyfill `atob`** if your React Native / Hermes target lacks it (`typeof atob === 'undefined'`); `UserFromToken` depends on it during `connectUser`.
 23. **Call `liveLocationManager.dispose()`** when you are finished with a manager you constructed, alongside whatever `unregisterSubscriptions()` you already call. Nothing will fail to compile: `dispose()` is the _configuration_ teardown, and until it runs the client's configuration registry holds a handle to the manager — a long-lived client and many short-lived managers will accumulate them. `unregisterSubscriptions()` is unchanged and stays ref-counted, so it deliberately no longer releases configuration; it never should have, since with two callers sharing a manager the first to leave stopped a still-live instance from tracking `client.config`. `SearchController` already worked this way.
-24. **Replace `client.activeChannels`** with `client.channelManager.get(cid)` / `client.channelManager.values()`, `channel.deactivate()` with the function `channel.activate()` returns, and `client.hydrateActiveChannels()` with `client.hydrateChannels()`. Call `activate()` on any channel your code keeps a reference to without listing, watching or opening it: a channel nothing holds is torn down.
+24. **Replace `client.activeChannels`** with `client.channelManager.get(cid)` / `client.channelManager.values()`, `channel.deactivate()` with the function `channel.activate()` returns, `client.hydrateActiveChannels()` with `client.hydrateChannels()`, and `client.channel(type, id, data)` with `client.channelManager.ensure({ type, id, data })`. Call `activate()` on any channel your code keeps a reference to without listing, watching or opening it: a channel nothing holds is torn down.

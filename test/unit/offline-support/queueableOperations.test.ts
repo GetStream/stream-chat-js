@@ -72,7 +72,7 @@ describe('send-message replay', () => {
   it('reaches an open thread the list does not hold', () => {
     const client = new StreamChat('apiKey');
     client.user = { id: 'me' };
-    const channel = client.channel('messaging', 'general');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     const thread = new Thread({
       channel,
       client,
@@ -115,7 +115,7 @@ describe('runQueueableOperation', () => {
 /**
  * Which channel instance an operation runs on.
  *
- * `client.channel()` returns the cached instance only while it is in the channel store and not
+ * `client.channelManager.ensure()` returns the stored instance only while it is in the channel store and not
  * `pendingDisposal` — otherwise it CONSTRUCTS one, paginators and subscriptions included. A first
  * attempt always has the real instance in hand, so it must never go through that lookup.
  */
@@ -131,7 +131,7 @@ describe('channel resolution', () => {
   it("runs on the caller's own channel instance, without looking one up", async () => {
     const callerChannel = { _sendReaction: vi.fn(async () => ({})) };
     const lookup = vi.fn();
-    const client = { channel: lookup } as unknown as StreamChat;
+    const client = { channelManager: { ensure: lookup } } as unknown as StreamChat;
 
     await runQueueableOperation({
       channel: callerChannel as never,
@@ -149,18 +149,18 @@ describe('channel resolution', () => {
   it('resolves the channel from the task when there is no caller instance (a replay)', async () => {
     const resolved = { _sendReaction: vi.fn(async () => ({})) };
     const lookup = vi.fn(() => resolved);
-    const client = { channel: lookup } as unknown as StreamChat;
+    const client = { channelManager: { ensure: lookup } } as unknown as StreamChat;
 
     await runQueueableOperation({ client, task: reactionTask });
 
-    expect(lookup).toHaveBeenCalledWith('messaging', 'general');
+    expect(lookup).toHaveBeenCalledWith({ type: 'messaging', id: 'general' });
     expect(resolved._sendReaction).toHaveBeenCalledTimes(1);
   });
 
   it("still runs when the task carries no channel id, as long as the caller's instance is given", async () => {
     // A `Channel` with no id yet cannot key a task, but a direct send on it has always worked.
     const callerChannel = { _sendReaction: vi.fn(async () => ({})) };
-    const client = { channel: vi.fn() } as unknown as StreamChat;
+    const client = { channelManager: { ensure: vi.fn() } } as unknown as StreamChat;
 
     await runQueueableOperation({
       channel: callerChannel as never,
@@ -174,7 +174,7 @@ describe('channel resolution', () => {
   it('throws for a replay of a channel-scoped task with no channel to resolve', async () => {
     await expect(
       runQueueableOperation({
-        client: { channel: vi.fn() } as unknown as StreamChat,
+        client: { channelManager: { ensure: vi.fn() } } as unknown as StreamChat,
         task: { ...reactionTask, channelId: undefined } as unknown as PendingTask,
       }),
     ).rejects.toThrow(/without a channel type and id/);

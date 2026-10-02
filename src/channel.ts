@@ -397,7 +397,8 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     this.initializeConfig(declarativeConfig);
 
     // Last statement of the constructor: every sub-object a setup function might reach now exists.
-    // A throwing setup function is contained by the helper, so it cannot break `client.channel()`.
+    // A throwing setup function is contained by the helper, so it cannot break
+    // `client.channelManager.ensure()`.
     this.unsubscribeConfiguration = applyInstanceConfiguration({
       args: { channel: this },
       config: client.config,
@@ -490,7 +491,7 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   getClient(): StreamChat {
     if (this.pendingDisposal) {
       throw Error(
-        `Channel ${this.cid} is pending disposal and cannot be used. Get a fresh instance via client.channel().`,
+        `Channel ${this.cid} is pending disposal and cannot be used. Get a fresh instance via client.channelManager.ensure().`,
       );
     }
     return this._client;
@@ -1461,9 +1462,9 @@ export class Channel extends WithMessageOperations(ChannelApi) {
    *
    * One-way and terminal — there is no counterpart that revives the instance. Its resources are
    * already released ({@link Channel._disconnect} disposes the paginators and unregisters the
-   * subscriptions) and the channel store drops it, so nothing should touch it: `client.channel(…)`
-   * mints a fresh instance for its cid, never re-watched on recovery, refused as a source of `channel.data` by the
-   * offline DB, and `getClient()` throws on it so a reference held across a `disconnectUser()`
+   * subscriptions) and the channel store drops it, so nothing should touch it:
+   * `client.channelManager.ensure(…)` mints a fresh instance for its cid, never re-watched on recovery,
+   * refused as a source of `channel.data` by the offline DB, and `getClient()` throws on it so a reference held across a `disconnectUser()`
    * fails loudly instead of quietly requesting on a client with no user.
    */
   get pendingDisposal() {
@@ -1914,8 +1915,9 @@ export class Channel extends WithMessageOperations(ChannelApi) {
         state.members.map((member) => member.user_id || member.user?.id || ''),
       );
 
-      // `client.channel(type, { members })` stored this channel under the temporary cid; the same
-      // instance moves to the real one. If another instance already holds the real cid, both stay.
+      // `client.channelManager.ensure({ type, data: { members } })` stored this channel under the
+      // temporary cid; the same instance moves to the real one. If another instance already holds the
+      // real cid, both stay. A channel built with neither id nor members is stored only now.
       const { channelManager } = this.getClient();
       const moved =
         !!tempChannelCid &&
@@ -1928,10 +1930,10 @@ export class Channel extends WithMessageOperations(ChannelApi) {
 
     this.getClient()._addChannelConfig(channel);
 
-    // The composer derives part of its configuration from this channel's server-side config, which for a
-    // channel opened via `client.channel(type, id)` arrives only now — after the composer was built. A
-    // composer with registered subscriptions hears about it through the store; one without has no other
-    // route, so it is told here.
+    // The composer derives part of its configuration from this channel's server-side config, which for
+    // a channel opened via `client.channelManager.ensure({ type, id })` arrives only now — after the
+    // composer was built. A composer with registered subscriptions hears about it through the store;
+    // one without has no other route, so it is told here.
     //
     // Restrictions, not a request: passing the server's value to `updateConfig` would record a server
     // *permission* as something the client asked for, and so re-enable a feature an integrator had

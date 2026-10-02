@@ -56,7 +56,7 @@ describe('MessageDeliveryReporter', () => {
     // fresh object keeps tests isolated (e.g. read_receipts set in one test can't leak into others).
     (client as any).user.privacy_settings = { delivery_receipts: { enabled: undefined } };
 
-    channel = client.channel(channelType, channelId);
+    channel = client.channelManager.ensure({ type: channelType, id: channelId });
     channel.initialized = true;
     client.channelServerConfigs[channel.cid] = {
       created_at: '',
@@ -108,7 +108,10 @@ describe('MessageDeliveryReporter', () => {
 
     // last_read < last message
     const channels = Array.from({ length: 110 }, (_, i) => {
-      const channel = client.channel(channelType, i.toString());
+      const channel = client.channelManager.ensure({
+        type: channelType,
+        id: i.toString(),
+      });
       channel.initialized = true;
       setLatest(channel, [mkMsg('m1', '2025-01-01T10:00:00Z')]);
       (channel.state as any).read['me'] = {
@@ -311,12 +314,12 @@ describe('MessageDeliveryReporter', () => {
       .mockImplementationOnce(() => new Promise((r) => (resolveFirstMarkDelivered = r)))
       .mockResolvedValueOnce({ ok: true } as any); // second request
 
-    const ch1 = client.channel('messaging', 'ch1');
+    const ch1 = client.channelManager.ensure({ type: 'messaging', id: 'ch1' });
     ch1.initialized = true;
     (ch1.state as any).read['me'] = { last_read: convertDateToTimestamp(new Date(0)) };
     setLatest(ch1, [mkMsg('m1', 1000)]);
 
-    const ch2 = client.channel('messaging', 'ch2');
+    const ch2 = client.channelManager.ensure({ type: 'messaging', id: 'ch2' });
     ch2.initialized = true;
 
     client.channelServerConfigs[ch1.cid] = {
@@ -444,7 +447,10 @@ describe('MessageDeliveryReporter', () => {
         reminders: false,
         updated_at: '',
       };
-      localChannel = client.channel(channelType, 'noReadEvents');
+      localChannel = client.channelManager.ensure({
+        type: channelType,
+        id: 'noReadEvents',
+      });
       localChannel.initialized = true;
     });
 
@@ -566,7 +572,10 @@ describe('MessageDeliveryReporter', () => {
   const receiveMessages = (count: number, startId = 0) => {
     // last_read < last message
     const channels = Array.from({ length: count }, (_, i) => {
-      const channel = client.channel(channelType, (i + startId).toString());
+      const channel = client.channelManager.ensure({
+        type: channelType,
+        id: (i + startId).toString(),
+      });
       channel.initialized = true;
       setLatest(channel, [mkMsg('m1', '2025-01-01T10:00:00Z')]);
       (channel.state as any).read['me'] = {

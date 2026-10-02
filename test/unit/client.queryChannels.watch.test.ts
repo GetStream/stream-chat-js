@@ -183,7 +183,7 @@ describe('client.queryChannels and the WebSocket', () => {
       // wait added, N concurrent openers of the same channel become one wait and one watched
       // request — the "no duplicate requests" property now actually held rather than approximated.
       const { getChannel } = await import('../../src/pagination/utility.queryChannel');
-      const channel = client.channel('messaging', 'shared');
+      const channel = client.channelManager.ensure({ type: 'messaging', id: 'shared' });
       client.wsConnection._setStatus({ isHealthy: false });
       client.wsConnection.connection = new StableWSConnection({
         wsConnection: client.wsConnection,
@@ -204,7 +204,10 @@ describe('client.queryChannels and the WebSocket', () => {
       // Why a throwing `watch()` is an acceptable outcome rather than a dead end:
       // `recoverableActiveChannels` filters on `active`, never on `watchStatus`, precisely so a
       // channel that failed to watch is picked up by the next recovery.
-      const channel = client.channel('messaging', 'failed-watch');
+      const channel = client.channelManager.ensure({
+        type: 'messaging',
+        id: 'failed-watch',
+      });
       channel.initialized = true;
       channel.activate();
       noSocketInFlight();

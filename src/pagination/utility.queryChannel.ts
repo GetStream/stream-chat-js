@@ -50,8 +50,12 @@ export const getChannel = async ({
   const theChannel =
     channel ||
     // `members` are member IDs; the OpenAPI `ChannelInput.members` expects member objects.
-    client.channel(type as string, id, {
-      members: members?.map((user_id) => ({ user_id })),
+    client.channelManager.ensure({
+      type: type as string,
+      id,
+      data: {
+        members: members?.map((user_id) => ({ user_id })),
+      },
     });
 
   // need to keep as with call to channel.watch the id can be changed from undefined to an actual ID generated server-side

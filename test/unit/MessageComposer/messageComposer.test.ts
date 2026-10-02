@@ -118,7 +118,10 @@ const setup = ({
     mockClient.channelServerConfigs[`${channelType}:${channelId}`] = channelConfig;
   }
   // Create a proper Channel instance with only the necessary attributes mocked
-  const mockChannel = mockClient.channel(channelType, channelId);
+  const mockChannel = mockClient.channelManager.ensure({
+    type: channelType,
+    id: channelId,
+  });
 
   // Mock the getClient method
   vi.spyOn(mockChannel, 'getClient').mockReturnValue(mockClient);
@@ -147,7 +150,10 @@ const offlineModeMessageComposerSetup = ({
   mockClient.setOfflineDBApi(new MockOfflineDB({ client: mockClient }));
   vi.spyOn(mockClient.offlineDb!, 'initializeDB').mockResolvedValue(false);
   // Create a proper Channel instance with only the necessary attributes mocked
-  const mockChannel = mockClient.channel('messaging', 'test-channel-id');
+  const mockChannel = mockClient.channelManager.ensure({
+    type: 'messaging',
+    id: 'test-channel-id',
+  });
 
   // Mock the getClient method
   vi.spyOn(mockChannel, 'getClient').mockReturnValue(mockClient);

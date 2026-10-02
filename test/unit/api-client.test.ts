@@ -418,7 +418,7 @@ describe('upload methods', () => {
   });
 
   it('posts channel uploads to the generated routes', async () => {
-    const channel = client.channel('messaging', 'chan-id');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'chan-id' });
 
     await channel.uploadChannelFile({ file: file() });
     expect(firstConfig().url).to.equal(
@@ -433,7 +433,7 @@ describe('upload methods', () => {
   });
 
   it('exposes uploadFile / uploadImage aliases on the channel', async () => {
-    const channel = client.channel('messaging', 'chan-id');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'chan-id' });
     const uploadChannelFile = vi.spyOn(channel, 'uploadChannelFile');
     const payload = { file: file() };
 
@@ -443,7 +443,10 @@ describe('upload methods', () => {
   });
 
   it('throws when the channel has no id yet', async () => {
-    const channel = client.channel('messaging', undefined, { members: ['a', 'b'] });
+    const channel = client.channelManager.ensure({
+      type: 'messaging',
+      data: { members: ['a', 'b'] },
+    });
 
     await expect(channel.uploadChannelFile({ file: file() })).rejects.toThrow(
       /Channel isn't yet created/,
@@ -582,7 +585,7 @@ describe('ApiClient connection id gate', () => {
           watch: true,
         }),
       // stopWatching carries no flag at all - the declared `connection_id` is its only signal
-      () => client.channel('messaging', 'id').stopWatching(),
+      () => client.channelManager.ensure({ type: 'messaging', id: 'id' }).stopWatching(),
     ];
 
     for (const call of gated) {
@@ -616,8 +619,8 @@ describe('ApiClient connection id gate', () => {
     client.connectionIdManager.reset();
 
     await client.queryChannels({ watch: false, presence: false });
-    await client
-      .channel('messaging', 'id')
+    await client.channelManager
+      .ensure({ type: 'messaging', id: 'id' })
       .getOrCreate({ watch: false, presence: false, state: true });
     await client.sync({ channel_cids: ['messaging:a'], last_sync_at: new Date() });
 

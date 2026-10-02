@@ -16,7 +16,7 @@ import {
 vi.mock('../../src/pagination/utility.queryChannel', async () => {
   return {
     getChannel: vi.fn(async ({ client, id, type }) => {
-      return client.channel(type, id);
+      return client.channelManager.ensure({ type: type, id: id });
     }),
   };
 });
@@ -32,7 +32,7 @@ describe('ChannelManager', () => {
   });
 
   // The client's own manager, configured for the test: it owns the channel store that
-  // `client.channel()` and the channel lists use, and a second manager for one client is unsupported.
+  // `client.channelManager.ensure()` and the channel lists use, and a second manager for one client is unsupported.
   const useClientManager = ({
     paginators,
     ownershipResolver,
@@ -1231,7 +1231,7 @@ describe('ChannelManager', () => {
   // Helper to create a minimal channel with needed state
   function makeChannel(cid: string) {
     const [type, id] = cid.split(':');
-    const channel = client.channel(type, id);
+    const channel = client.channelManager.ensure({ type: type, id: id });
     channel.data!.type = type;
     channel.data!.id = id;
     return channel;
