@@ -2,6 +2,7 @@ import type { StreamChat } from './client';
 import type { Poll, PollState } from './poll';
 import type { PollResponse, PollVote } from './types';
 import { generateUUIDv4 } from './utils';
+import { hasPending, withoutConcurrency } from './utils/concurrency';
 
 type OptionId = string;
 
@@ -32,8 +33,8 @@ export class OptimisticPollVotes {
   private pendingCount = 0;
   // Own vote changes whose requests succeeded since the server's vote state was last shown
   private succeededChanges: OwnVoteChange[] = [];
-  // Settles once the last vote request sent has finished
-  private requestQueue: Promise<unknown> = Promise.resolve();
+  // Vote requests with this tag are sent one after another. A symbol, so it is unique per instance.
+  private readonly requestTag = Symbol('poll-votes');
   private catchUpTimeout?: ReturnType<typeof setTimeout>;
 
   private readonly client: StreamChat;
@@ -103,18 +104,13 @@ export class OptimisticPollVotes {
   };
 
   // Sends a vote request once the previous one has finished, whether it succeeded or not.
-  private send = <T>(sendRequest: () => Promise<T>): Promise<T> => {
-    const request = this.requestQueue.then(sendRequest);
-    const queue = request.then(
-      () => undefined,
-      () => undefined,
-    );
-    this.requestQueue = queue;
-    // once nothing is left to send, wait for the WS events of the pending changes
-    queue.then(() => {
-      if (this.requestQueue === queue) this.scheduleCatchUp();
-    });
-    return request;
+  private send = async <T>(sendRequest: () => Promise<T>): Promise<T> => {
+    try {
+      return (await withoutConcurrency(this.requestTag, sendRequest)) as T;
+    } finally {
+      // once nothing is left to send, wait for the WS events of the pending changes
+      if (!hasPending(this.requestTag)) this.scheduleCatchUp();
+    }
   };
 
   // Stores the vote state of a WS vote event and returns the vote fields to show, if any.
@@ -154,17 +150,17 @@ export class OptimisticPollVotes {
 
     let response: T | undefined;
     try {
-      response = await this.send(sendRequest);
+      response = await this.send(async () => {
+        const result = await sendRequest();
+        // recorded before the next request is sent, as a removal looks up the vote id in here
+        if (result !== undefined) this.succeededChanges.push(toChange(result));
+        return result;
+      });
     } catch (error) {
       this.settleWithoutEvent();
       throw error;
     }
-    if (response === undefined) {
-      this.settleWithoutEvent();
-      return;
-    }
-
-    this.succeededChanges.push(toChange(response));
+    if (response === undefined) this.settleWithoutEvent();
     return response;
   };
 

@@ -1525,6 +1525,30 @@ describe('Poll optimistic updates', () => {
 				expect(removePollVoteSpy).toHaveBeenCalledWith(messageId, pollId, 'vote-c');
 			});
 
+			it('does not wait for the vote requests of another poll instance with the same id', async () => {
+				const otherClient = new StreamChat('apiKey');
+				otherClient.user = user2;
+				otherClient.userID = user2.id;
+				const otherPoll = new Poll({
+					client: otherClient,
+					poll: { ...pollResponse, max_votes_allowed: 3 },
+				});
+				const otherCastPollVoteSpy = vi
+					.spyOn(otherClient, 'castPollVote')
+					.mockReturnValue(new Promise(() => {}));
+				const poll = createPoll();
+				const castPollVoteSpy = vi
+					.spyOn(client, 'castPollVote')
+					.mockResolvedValue({ vote: serverVote(optionC) });
+
+				// the other instance's request never finishes
+				otherPoll.castVote(optionC, messageId);
+				await vi.waitFor(() => expect(otherCastPollVoteSpy).toHaveBeenCalledTimes(1));
+				await poll.castVote(optionC, messageId);
+
+				expect(castPollVoteSpy).toHaveBeenCalledTimes(1);
+			});
+
 			it('keeps sending votes after a failed one', async () => {
 				const poll = createPoll();
 				vi.spyOn(client, 'castPollVote')
@@ -1633,6 +1657,21 @@ describe('Poll optimistic updates', () => {
 				await poll.removeVote(poll.data.ownVotesByOptionId[optionC].id, messageId);
 
 				expect(removePollVoteSpy).toHaveBeenCalledWith(messageId, pollId, 'real-id');
+			});
+
+			it('does not rebuild the own votes after a request that failed', async () => {
+				const poll = createPoll();
+				vi.spyOn(client, 'castPollVote').mockRejectedValue(new Error('failed'));
+				const before = poll.data;
+
+				await expect(poll.castVote(optionC, messageId)).rejects.toThrow('failed');
+				const afterFailure = poll.data;
+				expect(afterFailure.ownVotesByOptionId).toEqual(before.ownVotesByOptionId);
+				expect(afterFailure.vote_counts_by_option).toEqual(before.vote_counts_by_option);
+
+				vi.advanceTimersByTime(3000);
+				expect(poll.data).toBe(afterFailure);
+				expect(vi.getTimerCount()).toBe(0);
 			});
 
 			it('does nothing when the WS events arrive in time', async () => {
