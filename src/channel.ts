@@ -750,7 +750,7 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   async deleteReaction(...args: Parameters<ChatApi['deleteReaction']>) {
     this._checkHasId();
 
-    const [request] = args;
+    const [pathParams] = args;
 
     // The optimistic reaction-row removal is handled by the local-update layer
     // (`applyReactionLocally`); here we only queue the request for replay.
@@ -760,7 +760,7 @@ export class Channel extends WithMessageOperations(ChannelApi) {
       task: {
         channelId: this.id,
         channelType: this.type,
-        messageId: request.id,
+        messageId: pathParams.id,
         payload: args,
         type: 'delete-reaction',
       },
@@ -770,9 +770,10 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   /**
    * Deletes a reaction by user and type.
    *
-   * @param ...args - `[request, requestOptions]`. `request` identifies the target message and
-   *   reaction type; `requestOptions` carries per-request options such as an abort `signal` and is
-   *   never serialized into the request.
+   * @param ...args - `[pathParams, _request, requestOptions]`. `pathParams` identifies the target
+   *   message and reaction type; `_request` is an unused placeholder (pass `undefined`);
+   *   `requestOptions` carries per-request options such as an abort `signal` and is never
+   *   serialized into the request.
    * @returns The server response.
    */
   async _deleteReaction(...args: Parameters<ChatApi['deleteReaction']>) {
@@ -848,11 +849,16 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   /**
    * Disables slow mode.
    *
+   * @param   _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
    * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The server response.
    */
-  async disableSlowMode(requestOptions?: StreamRequestOptions) {
+  async disableSlowMode(
+    _request?: Record<string, never>,
+    requestOptions?: StreamRequestOptions,
+  ) {
     return await this.update({ cooldown: 0 }, requestOptions);
   }
 
@@ -1106,11 +1112,13 @@ export class Channel extends WithMessageOperations(ChannelApi) {
    * @example
    * await channel.archive();
    *
+   * @param _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The server response.
    */
-  async archive(requestOptions?: StreamRequestOptions) {
+  async archive(_request?: Record<string, never>, requestOptions?: StreamRequestOptions) {
     return await this.updateMemberPartial({ set: { archived: true } }, requestOptions);
   }
 
@@ -1120,11 +1128,16 @@ export class Channel extends WithMessageOperations(ChannelApi) {
    * @example
    * await channel.unarchive();
    *
+   * @param _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The server response.
    */
-  async unarchive(requestOptions?: StreamRequestOptions) {
+  async unarchive(
+    _request?: Record<string, never>,
+    requestOptions?: StreamRequestOptions,
+  ) {
     return await this.updateMemberPartial({ set: { archived: false } }, requestOptions);
   }
 
@@ -1134,11 +1147,13 @@ export class Channel extends WithMessageOperations(ChannelApi) {
    * @example
    * await channel.pin();
    *
+   * @param _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The server response.
    */
-  async pin(requestOptions?: StreamRequestOptions) {
+  async pin(_request?: Record<string, never>, requestOptions?: StreamRequestOptions) {
     return await this.updateMemberPartial({ set: { pinned: true } }, requestOptions);
   }
 
@@ -1148,11 +1163,13 @@ export class Channel extends WithMessageOperations(ChannelApi) {
    * @example
    * await channel.unpin();
    *
+   * @param _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The server response.
    */
-  async unpin(requestOptions?: StreamRequestOptions) {
+  async unpin(_request?: Record<string, never>, requestOptions?: StreamRequestOptions) {
     return await this.updateMemberPartial({ set: { pinned: false } }, requestOptions);
   }
 
@@ -1277,10 +1294,15 @@ export class Channel extends WithMessageOperations(ChannelApi) {
    * Sends an event to notify watchers to clear the typing/thinking UI when the AI response starts streaming.
    * Typically used by the server connected to the AI service to inform clients that the AI response has started.
    *
+   * @param _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    */
-  async clearAIIndicator(requestOptions?: StreamRequestOptions) {
+  async clearAIIndicator(
+    _request?: Record<string, never>,
+    requestOptions?: StreamRequestOptions,
+  ) {
     await this.sendEvent(
       {
         event: {
@@ -1297,10 +1319,15 @@ export class Channel extends WithMessageOperations(ChannelApi) {
    * Sends an event to stop AI response generation, leaving the message in its current state.
    * Triggered by the user to halt the AI response process.
    *
+   * @param _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    */
-  async stopAIResponse(requestOptions?: StreamRequestOptions) {
+  async stopAIResponse(
+    _request?: Record<string, never>,
+    requestOptions?: StreamRequestOptions,
+  ) {
     await this.sendEvent(
       {
         event: {

@@ -155,6 +155,7 @@ export class ChatApi {
   constructor(public readonly apiClient: ApiClient) {}
 
   getApp(
+    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<GetApplicationResponse>> {
     return this.apiClient.sendRequest<GetApplicationResponse>(
@@ -793,6 +794,7 @@ export class ChatApi {
 
   getMessage(
     pathParams: { id: string },
+    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<GetMessageResponse>> {
     return this.apiClient.sendRequest<GetMessageResponse>(
@@ -872,6 +874,7 @@ export class ChatApi {
 
   deleteReaction(
     pathParams: { id: string; type: string },
+    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<DeleteReactionResponse>> {
     return this.apiClient.sendRequest<DeleteReactionResponse>(
@@ -951,6 +954,7 @@ export class ChatApi {
 
   deletePollVote(
     pathParams: { message_id: string; poll_id: string; vote_id: string },
+    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<PollVoteResponse>> {
     return this.apiClient.sendRequest<PollVoteResponse>(
@@ -966,6 +970,7 @@ export class ChatApi {
 
   deleteReminder(
     pathParams: { message_id: string },
+    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<DeleteReminderResponse>> {
     return this.apiClient.sendRequest<DeleteReminderResponse>(
@@ -1220,6 +1225,7 @@ export class ChatApi {
   }
 
   unreadCounts(
+    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<WrappedUnreadCountsResponse>> {
     return this.apiClient.sendRequest<WrappedUnreadCountsResponse>(
@@ -1249,6 +1255,7 @@ export class ChatApi {
   }
 
   listDevices(
+    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<ListDevicesResponse>> {
     return this.apiClient.sendRequest<ListDevicesResponse>(
@@ -1369,6 +1376,7 @@ export class ChatApi {
 
   deletePoll(
     pathParams: { poll_id: string },
+    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<Response>> {
     return this.apiClient.sendRequest<Response>(
@@ -1384,6 +1392,7 @@ export class ChatApi {
 
   getPoll(
     pathParams: { poll_id: string },
+    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<PollResponse>> {
     return this.apiClient.sendRequest<PollResponse>(
@@ -1447,6 +1456,7 @@ export class ChatApi {
 
   deletePollOption(
     pathParams: { poll_id: string; option_id: string },
+    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<Response>> {
     return this.apiClient.sendRequest<Response>(
@@ -1462,6 +1472,7 @@ export class ChatApi {
 
   getPollOption(
     pathParams: { poll_id: string; option_id: string },
+    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<PollOptionResponse>> {
     return this.apiClient.sendRequest<PollOptionResponse>(
@@ -1769,6 +1780,7 @@ export class ChatApi {
   }
 
   getBlockedUsers(
+    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<GetBlockedUsersResponse>> {
     return this.apiClient.sendRequest<GetBlockedUsersResponse>(
@@ -1798,6 +1810,7 @@ export class ChatApi {
   }
 
   getUserLiveLocations(
+    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<SharedLocationsResponse>> {
     return this.apiClient.sendRequest<SharedLocationsResponse>(

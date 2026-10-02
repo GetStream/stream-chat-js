@@ -31,15 +31,28 @@ await channel.queryMembers({ payload: { limit: 10 } }, { signal: controller.sign
 controller.abort();
 ```
 
+**`requestOptions` is never the first argument of a method that has no request.** A method whose endpoint takes no query or body fields still has a request slot in front of `requestOptions`, typed `_request?: Record<string, never>` and never read — pass `undefined` there:
+
+```ts
+await client.getAppSettings(undefined, { signal: controller.signal });
+await client.getMessage({ id: messageId }, undefined, { signal: controller.signal });
+await channel.deleteReaction({ id: messageId, type: 'love' }, undefined, {
+  timeout: 5_000,
+});
+await channel.pin(undefined, { signal: controller.signal });
+```
+
+The slot keeps `requestOptions` in the same position when the endpoint later gains a query parameter. Without it, `getApp(requestOptions)` would become `getApp(request, requestOptions)`, and options passed by existing callers would quietly go out as query parameters. The generated methods affected today are `getApp`, `unreadCounts`, `listDevices`, `getBlockedUsers`, `getUserLiveLocations`, `getMessage`, `deleteReaction`, `deletePoll`, `getPoll`, `deletePollOption`, `getPollOption`, `deletePollVote` and `deleteReminder` on `client`, and `listQueues`, `getQueue`, `getAppeal` and `deleteActionConfig` on `client.moderation`. The wrappers around them take the same shape (`client.getAppSettings`, `channel.deleteReaction`, `channel.removeVote`). So do the hand-written `Channel` conveniences that send a fixed request: `archive`, `unarchive`, `pin`, `unpin`, `disableSlowMode`, `clearAIIndicator` and `stopAIResponse`. A call that omits `requestOptions` is unaffected (`client.getAppSettings()`, `channel.pin()`). A call that passes it in the first free position is a compile error, because no `StreamRequestOptions` value is assignable to `Record<string, never>`.
+
 This replaces v9's `client.createAbortControllerForNextRequest()` — see [below](#clientcreateabortcontrollerfornextrequest). The upload methods are **not** an exception: they take the same `requestOptions`, which carries `onUploadProgress` alongside `signal`. v9's `axiosRequestConfig` parameter is gone everywhere.
 
-**Path parameters are their own argument.** A generated method whose endpoint has URL path parameters takes them as a separate first argument: `method(pathParams, request?, requestOptions?)`. `request` carries the query and body fields; a method whose arguments are all path parameters has no `request` slot. The hand-written methods that wrap one of these take the same shape (`channel.sendReaction`, `channel.vote`, `client.queryReactionsAndHydrate`, `client.queryPollAnswers`, `client.reminders.upsertReminder` / `createReminder` / `updateReminder`).
+**Path parameters are their own argument.** A generated method whose endpoint has URL path parameters takes them as a separate first argument: `method(pathParams, request?, requestOptions?)`. `request` carries the query and body fields; a method whose arguments are all path parameters keeps an unused `_request` slot so `requestOptions` stays third ([see above](#global-renames-applied-everywhere)). The hand-written methods that wrap one of these take the same shape (`channel.sendReaction`, `channel.vote`, `client.queryReactionsAndHydrate`, `client.queryPollAnswers`, `client.reminders.upsertReminder` / `createReminder` / `updateReminder`).
 
 ```ts
 await client.sendReaction({ id: messageId }, { reaction: { type: 'love' } });
 await client.deleteMessage({ id: messageId }, { hard: true });
 await client.getThread({ message_id: parentId }, { reply_limit: 10 });
-await client.getMessage({ id: messageId }); // path parameters only - no request argument
+await client.getMessage({ id: messageId }); // path parameters only - the request slot is an unused placeholder
 ```
 
 Two things to know when rewriting call sites:
@@ -185,7 +198,7 @@ client.updateMessagePartial(pathParams: { id }, request?: UpdateMessagePartialRe
 client.getMessage(messageID, options?);
 
 // v10 — inherited
-client.getMessage(pathParams: { id: string });
+client.getMessage(pathParams: { id: string }, _request?: Record<string, never>);
 ```
 
 Options like `show_deleted_message` are no longer accepted here (server-side only).
@@ -507,7 +520,7 @@ client.revokeTokens(before?: Date | null);       // string form dropped
 
 #### `client.getAppSettings`
 
-Still present but the return type changed (`Gen_GetApplicationResponse` wrapped as `StreamResponse<...>`); no signature change.
+Still present but the return type changed (`Gen_GetApplicationResponse` wrapped as `StreamResponse<...>`). It takes no arguments of its own; to pass `requestOptions`, put `undefined` in the unused `_request` slot first: `client.getAppSettings(undefined, { signal })` (see [`requestOptions`](#global-renames-applied-everywhere)).
 
 #### `client.partialUpdateThread`
 
@@ -772,7 +785,7 @@ channel.deleteReaction(messageID, reactionType, user_id?);
 
 // v10
 channel.sendReaction(pathParams: { id: messageId }, request: { reaction, enforce_unique?, skip_push? });
-channel.deleteReaction(pathParams: { id: messageId, type: reactionType });
+channel.deleteReaction(pathParams: { id: messageId, type: reactionType }, _request?: Record<string, never>);
 ```
 
 `user_id` overrides dropped. `_sendReaction` and `_deleteReaction` take the same shape as their public counterparts.
@@ -880,7 +893,7 @@ channel.pin();
 channel.unpin();
 ```
 
-These now delegate to `channel.updateMemberPartial({ set: { archived: true } })` (etc.) internally.
+These now delegate to `channel.updateMemberPartial({ set: { archived: true } })` (etc.) internally. The first parameter is an unused `_request` placeholder, so `requestOptions` goes second: `channel.pin(undefined, { signal })`. The same applies to `channel.disableSlowMode`, `channel.clearAIIndicator` and `channel.stopAIResponse`.
 
 #### `channel.muteStatus` / `channel.sendAction` / `channel.keystroke` / `channel.stopTyping`
 
@@ -1004,7 +1017,7 @@ channel.removeVote(messageId, pollId, voteId);
 
 // v10
 channel.vote(pathParams: { message_id, poll_id }, request?: { vote: { option_id?, answer_text? } });
-channel.removeVote(pathParams: { message_id, poll_id, vote_id });
+channel.removeVote(pathParams: { message_id, poll_id, vote_id }, _request?: Record<string, never>);
 ```
 
 #### `channel.createDraft` / `channel._createDraft` / `channel.deleteDraft` / `channel._deleteDraft` / `channel.getDraft`

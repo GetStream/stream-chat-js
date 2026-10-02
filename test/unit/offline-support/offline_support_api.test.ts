@@ -2857,6 +2857,28 @@ describe('OfflineSupportApi', () => {
           expect(mockChannel._deleteReaction).toHaveBeenCalledWith(...task.payload);
         });
 
+        // `deleteReaction` has no request of its own, so its `requestOptions` sits behind an unused
+        // `_request` slot. That slot persists as `null` and has to come back as `undefined`, with
+        // the options still in third position.
+        it('replays a persisted delete-reaction with requestOptions behind the empty request slot', async () => {
+          const task = generatePendingTask('delete-reaction') as PendingTask;
+          const persisted = JSON.parse(
+            JSON.stringify({
+              ...task,
+              payload: [task.payload[0], undefined, { timeout: 5000 }],
+            }),
+          ) as PendingTask;
+          expect(persisted.payload).toEqual([task.payload[0], null, { timeout: 5000 }]);
+
+          await offlineDb['executeTask']({ task: persisted });
+
+          expect(mockChannel._deleteReaction).toHaveBeenCalledWith(
+            task.payload[0],
+            undefined,
+            { timeout: 5000 },
+          );
+        });
+
         it('should call _createDraft for create-reaction task', async () => {
           const task = generatePendingTask('create-draft') as PendingTask;
 

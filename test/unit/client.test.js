@@ -113,6 +113,27 @@ describe('StreamChat getInstance', () => {
 		);
 		expect(requestSpy.mock.calls[0][0].headers).to.haveOwnProperty('Pragma', 'no-cache');
 	});
+
+	// `getApp` has no request, so `requestOptions` comes after an unused `_request` slot; nothing
+	// from it may reach the query string.
+	it('getAppSettings forwards requestOptions passed after the empty request slot', async () => {
+		const client = new StreamChat('key');
+		client.tokenManager.getToken = () => 'mock-token';
+		const controller = new AbortController();
+
+		const requestSpy = vi
+			.spyOn(client.axiosInstance, 'request')
+			.mockResolvedValueOnce({ data: {}, status: 200 });
+
+		await client.getAppSettings(undefined, { signal: controller.signal, timeout: 1234 });
+
+		expect(requestSpy).toHaveBeenCalledTimes(1);
+		const config = requestSpy.mock.calls[0][0];
+		expect(config.signal).toBe(controller.signal);
+		expect(config.timeout).toBe(1234);
+		expect(config.params).not.toHaveProperty('signal');
+		expect(config.params).not.toHaveProperty('timeout');
+	});
 });
 
 describe('StreamChat config(s) store', () => {

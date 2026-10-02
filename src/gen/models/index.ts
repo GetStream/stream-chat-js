@@ -406,9 +406,18 @@ export interface AppEventResponse {
 }
 
 export interface AppResponseFields {
+  /**
+   * A boolean value determining if async url enrichment is enabled.
+   */
   async_url_enrich_enabled: boolean;
+  /**
+   * A boolean value determining if auto translation is enabled.
+   */
   auto_translation_enabled: boolean;
   id: number;
+  /**
+   * The name of the app.
+   */
   name: string;
   placement: string;
   file_upload_config: FileUploadConfig;
@@ -1585,7 +1594,13 @@ export type ChannelOwnCapability =
   (typeof ChannelOwnCapability)[keyof typeof ChannelOwnCapability];
 
 export interface ChannelPushPreferencesResponse {
+  /**
+   * The scope level of the push notifications.
+   */
   chat_level?: string;
+  /**
+   * If provided the notifications will be disabled until the set date.
+   */
   disabled_until?: TimestampNS;
   chat_preferences?: ChatPreferencesResponse;
 }
@@ -1718,6 +1733,9 @@ export interface ChannelStateResponse {
   channel?: ChannelResponse;
   draft?: DraftResponse;
   membership?: ChannelMemberResponse;
+  /**
+   * The push preference details.
+   */
   push_preferences?: ChannelPushPreferencesResponse;
 }
 
@@ -1769,6 +1787,9 @@ export interface ChannelStateResponseFields {
   channel?: ChannelResponse;
   draft?: DraftResponse;
   membership?: ChannelMemberResponse;
+  /**
+   * The push preference details.
+   */
   push_preferences?: ChannelPushPreferencesResponse;
 }
 
@@ -2267,6 +2288,9 @@ export interface ConnectUserDetailsRequest {
   language?: string;
   name?: string;
   custom?: CustomUserData;
+  /**
+   * The privacy settings of the user.
+   */
   privacy_settings?: PrivacySettingsResponse;
 }
 
@@ -2447,6 +2471,9 @@ export interface CreatePollRequest {
    */
   max_votes_allowed?: number;
   team?: string;
+  /**
+   * Represents the visibility of votes in a poll.
+   */
   voting_visibility?: 'anonymous' | 'public';
   options?: Array<PollOptionInput>;
   /**
@@ -2754,11 +2781,11 @@ export interface DeliveryReceiptsResponse {
 
 export interface DeviceResponse {
   /**
-   * Date/time of creation
+   * The date when the device was created.
    */
   created_at: TimestampNS;
   /**
-   * Device ID
+   * The device identifier.
    */
   id: string;
   /**
@@ -3269,10 +3296,26 @@ export interface Field {
 }
 
 export interface FileUploadConfig {
+  /**
+   * The file size limit allowed in Bytes. 0 means no app-specific limit.
+   * This value is configurable from Stream's Dashboard App Settings.
+   */
   size_limit: number;
+  /**
+   * The allowed file extensions.
+   */
   allowed_file_extensions: Array<string>;
+  /**
+   * The allowed mime types.
+   */
   allowed_mime_types: Array<string>;
+  /**
+   * The blocked file extensions.
+   */
   blocked_file_extensions: Array<string>;
+  /**
+   * The blocked mime types.
+   */
   blocked_mime_types: Array<string>;
 }
 
@@ -3463,6 +3506,9 @@ export interface FullUserResponse {
   name?: string;
   revoke_tokens_issued_before?: TimestampNS;
   latest_hidden_channels?: Array<string>;
+  /**
+   * The privacy settings of the user.
+   */
   privacy_settings?: PrivacySettingsResponse;
   teams_role?: Record<string, string>;
 }
@@ -3500,6 +3546,9 @@ export interface GetApplicationResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
+  /**
+   * A type representing the app settings.
+   */
   app: AppResponseFields;
 }
 
@@ -4218,6 +4267,9 @@ export interface MemberUserRequest {
   language?: string;
   name?: string;
   custom?: CustomUserData;
+  /**
+   * The privacy settings of the user.
+   */
   privacy_settings?: PrivacySettingsResponse;
 }
 
@@ -6029,7 +6081,13 @@ export interface OwnUserResponse {
   revoke_tokens_issued_before?: TimestampNS;
   blocked_user_ids?: Array<string>;
   latest_hidden_channels?: Array<string>;
+  /**
+   * The privacy settings of the user.
+   */
   privacy_settings?: PrivacySettingsResponse;
+  /**
+   * The push preference details.
+   */
   push_preferences?: PushPreferencesResponse;
   teams_role?: Record<string, string>;
   total_unread_count_by_team?: Record<string, number>;
@@ -6344,8 +6402,17 @@ export interface PollVotesResponse {
 }
 
 export interface PrivacySettingsResponse {
+  /**
+   * The settings for the delivery receipt events.
+   */
   delivery_receipts?: DeliveryReceiptsResponse;
+  /**
+   * The settings for the read receipt events.
+   */
   read_receipts?: ReadReceiptsResponse;
+  /**
+   * The settings for typing indicator events.
+   */
   typing_indicators?: TypingIndicatorsResponse;
 }
 
@@ -6390,7 +6457,13 @@ export interface PushPreferenceInput {
 
 export interface PushPreferencesResponse {
   call_level?: string;
+  /**
+   * The scope level of the push notifications.
+   */
   chat_level?: string;
+  /**
+   * If provided the notifications will be disabled until the set date.
+   */
   disabled_until?: TimestampNS;
   feeds_level?: string;
   chat_preferences?: ChatPreferencesResponse;
@@ -9141,14 +9214,42 @@ export interface SharedLocationResponse {
 }
 
 export interface SharedLocationResponseData {
+  /**
+   * The CID (type:id) of the channel that the location is attached to.
+   */
   channel_cid: string;
+  /**
+   * The date when the location was created.
+   */
   created_at: TimestampNS;
+  /**
+   * The ID of the device that created the location.
+   */
   created_by_device_id: string;
+  /**
+   * The latitude of the location.
+   */
   latitude: number;
+  /**
+   * The longitude of the location.
+   */
   longitude: number;
+  /**
+   * The ID of the message that the location is attached to.
+   */
   message_id: string;
+  /**
+   * The date when the location was updated.
+   */
   updated_at: TimestampNS;
+  /**
+   * The ID of the user that created the location.
+   */
   user_id: string;
+  /**
+   * The date when the location sharing ends.
+   * If it's empty, it means the location sharing is static instead of live.
+   */
   end_at?: TimestampNS;
   /**
    * Represents channel in chat
@@ -9784,21 +9885,51 @@ export interface UnmuteResponse {
 }
 
 export interface UnreadCountsChannel {
+  /**
+   * The channel CID (type:id).
+   */
   channel_id: string;
+  /**
+   * The date which the current user last read the channel.
+   */
   last_read: TimestampNS;
+  /**
+   * The number of unread messages inside the channel.
+   */
   unread_count: number;
 }
 
 export interface UnreadCountsChannelType {
+  /**
+   * The number of unread channels of this channel type.
+   */
   channel_count: number;
+  /**
+   * The channel type.
+   */
   channel_type: string;
+  /**
+   * The number of unread messages of all the channels with this type.
+   */
   unread_count: number;
 }
 
 export interface UnreadCountsThread {
+  /**
+   * The date which the current user last read the thread.
+   */
   last_read: TimestampNS;
+  /**
+   * The id of the last reply which the current user read in the thread.
+   */
   last_read_message_id: string;
+  /**
+   * The message id of the root of the thread.
+   */
   parent_message_id: string;
+  /**
+   * The number of unread replies inside the thread.
+   */
   unread_count: number;
 }
 
@@ -10699,6 +10830,9 @@ export interface UserRequest {
    * Custom user data
    */
   custom?: CustomUserData;
+  /**
+   * The privacy settings of the user.
+   */
   privacy_settings?: PrivacySettingsResponse;
 }
 
@@ -10805,6 +10939,9 @@ export interface UserResponsePrivacyFields {
   last_active?: TimestampNS;
   name?: string;
   revoke_tokens_issued_before?: TimestampNS;
+  /**
+   * The privacy settings of the user.
+   */
   privacy_settings?: PrivacySettingsResponse;
   teams_role?: Record<string, string>;
 }
@@ -11166,10 +11303,28 @@ export interface WrappedUnreadCountsResponse {
    * Duration of the request in milliseconds
    */
   duration: string;
+  /**
+   * The total number of unread messages.
+   */
   total_unread_count: number;
+  /**
+   * The total number of unread threads.
+   */
   total_unread_threads_count: number;
+  /**
+   * The unread information per channel type.
+   */
   channel_type: Array<UnreadCountsChannelType>;
+  /**
+   * The unread information per channel.
+   */
   channels: Array<UnreadCountsChannel>;
+  /**
+   * The unread information per thread.
+   */
   threads: Array<UnreadCountsThread>;
+  /**
+   * The total number of unread messages grouped by team.
+   */
   total_unread_count_by_team?: Record<string, number>;
 }
