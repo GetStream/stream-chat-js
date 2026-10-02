@@ -679,9 +679,11 @@ Both are `@internal`. The consumer-visible effects:
 
 **No longer throw on an unqueried channel** (they never needed the query response): `sendEvent()`, `sendAction()`, `hide()`, `show()`. For `sendEvent`/`hide`/`show` the id is still required, and the generated `ChannelApi` raises the `isn't yet created` error itself — so on a members-only channel the error message changes from `hasn't been initialized` to `isn't yet created`. `sendAction()` is keyed by message id and now works on a channel that was never queried.
 
-**Relaxed from `_checkInitialized()` to `_checkHasId()`**: `deleteReaction()`, `banUser()`, `unbanUser()`, `muteStatus()`. These need an id or a cid, not the query response — so they now succeed on a channel that has an id but has not been queried yet.
+**Relaxed from `_checkInitialized()` to `_checkHasId()`**: `banUser()`, `unbanUser()`, `muteStatus()`. These need an id or a cid, not the query response — so they now succeed on a channel that has an id but has not been queried yet.
 
-**Newly guarded with `_checkHasId()`**: `sendMessage()`, `createDraft()`, `deleteDraft()`, `mute()`, `unmute()`, and the queued requests behind `messageOperations.send` / `addReaction` / `deleteReaction`. These previously asserted nothing and read `this.id`/`this.cid` regardless. On a members-only channel the queueing ones wrote an offline-queue task keyed by an `undefined` channel id before failing further down, and `mute()`/`unmute()` sent the placeholder `type:!members-a,b` cid to the server. They now fail up front with the actionable error instead. Call `channel.create()` or `channel.watch()` first — that is what assigns the id.
+**Newly guarded with `_checkHasId()`**: `sendMessage()`, `createDraft()`, `deleteDraft()`, `mute()`, `unmute()`. These previously asserted nothing and read `this.id`/`this.cid` regardless. On a members-only channel the queueing ones wrote an offline-queue task keyed by an `undefined` channel id before failing further down, and `mute()`/`unmute()` sent the placeholder `type:!members-a,b` cid to the server. They now fail up front with the actionable error instead. Call `channel.create()` or `channel.watch()` first — that is what assigns the id.
+
+`messageOperations.send` on a members-only channel fails with the same error and is not queued, since a task without a channel id could never be replayed. Reactions are addressed by message id alone, so `messageOperations.addReaction` / `deleteReaction` need no channel id: they work, and queue, on a members-only channel.
 
 `channel._channelURL()` — **REMOVED after `10.0.0-rc.4`**, no replacement. It built a `{baseURL}/channels/{type}/{id}` string for the hand-rolled request layer that no longer exists; every request now goes through the generated API client, which resolves its own paths. Nothing in the SDK called it. If you were using it to build a URL yourself, construct it inline.
 
@@ -1425,6 +1427,11 @@ Parameters are unchanged.
 **Behaviour change for direct callers:** `channel.sendMessage`, `client.updateMessage` and
 `client.deleteMessage` no longer queue for offline replay; they used to. Call the full operation
 where that matters. Drafts are unchanged — `channel.createDraft` / `deleteDraft` still queue.
+
+**A thread reply now stops typing.** `thread.messageOperations.send` sends `typing.stop` for the
+thread (with its `parent_id`) before the reply goes out, as a channel send already did for the
+channel. It follows the thread composer's `publishTypingEvents` setting. Before, a reply left the
+thread's typing indicator running until it timed out.
 
 **A request handler can delegate to the default.** Each `requestHandlers` entry now receives the
 default request — the HTTP call through the offline queue — as a second argument. A handler that

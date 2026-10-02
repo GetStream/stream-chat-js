@@ -30,7 +30,8 @@ export type QueueableOperation<T extends QueueableType> = {
    * Performs the request. Used both for a first attempt and for a replay.
    *
    * `channel` is the instance the CALLER already holds, when there is one. A first attempt comes from a
-   * `Channel` method and must run on that exact object; only a replay has to look one up.
+   * channel's or thread's `messageOperations`, or a `Channel` method such as `createDraft`, and must run
+   * on that exact channel; only a replay has to look one up.
    */
   run: (params: {
     channel?: Channel;
