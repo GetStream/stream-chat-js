@@ -105,8 +105,8 @@ export class MessageOperationStatePolicy {
     }
 
     if (kind === 'update') {
-      // Preserve the status: an edit must not turn a received message into `sending`, and an edit of a
-      // message that never left the device has to stay `failed`.
+      // An edit keeps the message's status. A message the server already has must not go back to
+      // `sending`, and one that never left the device has to stay `failed`.
       const isFailed = localMessage.status === 'failed';
       const editedAt = nowNs();
       const applied: LocalMessage = {
@@ -229,7 +229,8 @@ export class MessageOperationStatePolicy {
       return;
     }
 
-    // Queued for replay: pending, not failed. Leave the optimistic state exactly as it stands.
+    // A request waiting in the offline queue hasn't failed, it just hasn't been sent yet, so the
+    // optimistic state stays exactly as it is.
     //
     // Deliberately scoped to update/delete. A send that never reached the server has to settle as
     // `failed` even when its task is queued, because the retry affordance is the only way the user can
