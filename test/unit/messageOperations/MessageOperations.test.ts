@@ -1448,5 +1448,19 @@ describe('MessageOperations — optimistic lifecycle', () => {
       expect(lastPersisted()?.status).toBe('failed');
       expect(lastPersisted()?.error).toBeDefined();
     });
+
+    it('settles a failed send or retry without reading the offline queue', async () => {
+      const isQueued = vi.fn(() => true);
+      const { ops } = harness({ isQueued });
+      const fail = async () => {
+        throw new Error('offline');
+      };
+
+      await rejects(ops.send({ localMessage: makeLocalMessage({ id: 'm1' }) }, fail));
+      await rejects(ops.retry({ localMessage: makeLocalMessage({ id: 'm2' }) }, fail));
+
+      // A send ends as failed whatever is queued, so asking the queue would only cost a DB read.
+      expect(isQueued).not.toHaveBeenCalled();
+    });
   });
 });
