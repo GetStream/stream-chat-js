@@ -1103,6 +1103,37 @@ describe('Threads 2.0', () => {
       // paginator's own suite covers the query-shape/cursor mechanics; these assert the end-to-end
       // wiring through a real Thread (seeded from latest_replies) which the paginator suite doesn't.
       describe('reply pagination (messagePaginator)', () => {
+        it('continues from the oldest seeded reply on the first toTail() (id_lt), not from the newest page', async () => {
+          // Seeded out of order on purpose: the cursor is the oldest by created_at, not latest_replies[0].
+          const newest = makeReply({
+            created_at: convertDateToTimestamp('2020-01-04T00:00:00.000Z'),
+          });
+          const oldestSeeded = makeReply({
+            created_at: convertDateToTimestamp('2020-01-03T00:00:00.000Z'),
+          });
+          const thread = createTestThread({
+            latest_replies: [newest, oldestSeeded],
+            reply_count: 5,
+          });
+          const getRepliesStub = sinon
+            .stub(thread.channel.getClient(), 'getReplies')
+            .resolves({ messages: [], duration: '' } as unknown as ReturnType<
+              StreamChat['getReplies']
+            >);
+
+          await thread.messagePaginator.toTail();
+
+          expect(getRepliesStub.firstCall.args[0].id_lt).to.equal(oldestSeeded.id);
+        });
+
+        it('seeds no tailward cursor when latest_replies already holds every reply', () => {
+          const thread = createTestThread({
+            latest_replies: [makeReply(), makeReply()],
+            reply_count: 2,
+          });
+          expect(thread.messagePaginator.cursor?.tailward).to.be.null;
+        });
+
         it('loads older replies via toTail() and scopes the request to the thread parent', async () => {
           // Seeded newest window with older replies still to load (reply_count > loaded).
           const newest = makeReply({
