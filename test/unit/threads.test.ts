@@ -447,6 +447,36 @@ describe('Threads 2.0', () => {
           expect(paginatorState.hasMoreTail).to.be.false;
         });
 
+        it('continues from the oldest hydrated reply when a thread opened from a message loads', async () => {
+          // The seed has to carry the cursor a query would have set. Without it the first toTail()
+          // refetches the newest page, and RN, which pages once per list length, never asks again.
+          const thread = createMinimalThread();
+          const newer = generateMsg({
+            parent_id: parentMessageResponse.id,
+            created_at: convertDateToTimestamp('2020-01-04T00:00:00.000Z'),
+          }) as MessageResponse;
+          const older = generateMsg({
+            parent_id: parentMessageResponse.id,
+            created_at: convertDateToTimestamp('2020-01-03T00:00:00.000Z'),
+          }) as MessageResponse;
+          const hydrationThread = createTestThread({
+            latest_replies: [newer, older],
+            parentMessageOverrides: { reply_count: 5 },
+            reply_count: 5,
+          });
+
+          thread.hydrateState(hydrationThread);
+          const getRepliesStub = sinon
+            .stub(thread.channel.getClient(), 'getReplies')
+            .resolves({ messages: [], duration: '' } as unknown as ReturnType<
+              StreamChat['getReplies']
+            >);
+
+          await thread.messagePaginator.toTail();
+
+          expect(getRepliesStub.firstCall.args[0].id_lt).to.equal(older.id);
+        });
+
         it('copies state of the instance with the same id', () => {
           const thread = createTestThread();
           const hydrationThread = createTestThread();
