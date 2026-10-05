@@ -52,6 +52,10 @@ const PINNED_AT_SORT: SortParamRequest[] = [{ field: 'pinned_at', direction: 1 }
  * supports `id_around` — but no unread-coupled navigation exists.
  */
 export class PinnedMessagePaginator extends MessageIntervalPaginator {
+  protected get holderName() {
+    return 'pinned-message-paginator';
+  }
+
   constructor({
     channel,
     id,

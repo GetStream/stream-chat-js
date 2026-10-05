@@ -666,7 +666,10 @@ export abstract class BasePaginator<T, Q> {
     this._itemIndex =
       itemIndex ??
       createItemIndex?.(this) ??
-      new StoreBackedItemIndex({ getEntityId: this.getItemId.bind(this) });
+      new StoreBackedItemIndex({
+        getEntityId: this.getItemId.bind(this),
+        holderName: 'base-paginator',
+      });
   }
 
   // ---------------------------------------------------------------------------

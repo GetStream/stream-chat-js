@@ -40,6 +40,7 @@ export class SearchController {
 
   /** The shared configuration machinery — see {@link ConfigController}. */
   private readonly configController: ConfigController<SearchControllerConfig>;
+  private readonly client?: StreamChat;
   /** Teardown for the configuration subscription, when this controller was given a client. */
   private unsubscribeConfiguration?: Unsubscribe;
 
@@ -62,7 +63,13 @@ export class SearchController {
       constructorOptions: config,
     });
 
-    if (!client) return;
+    this.client = client;
+    this.subscribeConfiguration();
+  }
+
+  private subscribeConfiguration() {
+    const { client } = this;
+    if (!client || this.unsubscribeConfiguration) return;
     this.unsubscribeConfiguration = applyInstanceConfiguration({
       args: { searchController: this },
       config: client.config,
@@ -73,10 +80,25 @@ export class SearchController {
     });
   }
 
-  /** Releases the configuration subscription, running the setup function's teardown. */
+  /**
+   * Takes again what {@link SearchController.dispose} released: the configuration subscription and
+   * whatever each source holds outside itself. A no-op for what is already held, so a UI can call it
+   * on every mount, including a remount of the same instance after its cleanup disposed it.
+   */
+  registerSubscriptions() {
+    this.subscribeConfiguration();
+    this.sources.forEach((source) => source.registerSubscriptions?.());
+  }
+
+  /**
+   * Releases the configuration subscription, running the setup function's teardown, and what each
+   * source holds outside itself, such as a channel search's hold on its results in the channel
+   * store. {@link SearchController.registerSubscriptions} takes them again.
+   */
   dispose() {
     this.unsubscribeConfiguration?.();
     this.unsubscribeConfiguration = undefined;
+    this.sources.forEach((source) => source.dispose?.());
   }
 
   /**

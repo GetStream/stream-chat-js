@@ -370,7 +370,7 @@ describe('OfflineSupportApi', () => {
         createQueries = failsOnExecute();
         offlineDb.channelExists.mockResolvedValue(false);
         offlineDb.upsertChannelData.mockResolvedValue([{ sql: 'UPSERT', args: [] }]);
-        const clientChannelSpy = vi.spyOn(client.channelManager, 'ensure');
+        const clientChannelSpy = vi.spyOn(client.channelManager, 'get');
 
         const result = await offlineDb.queriesWithChannelGuard({ event }, createQueries);
 
@@ -390,7 +390,22 @@ describe('OfflineSupportApi', () => {
         ]);
       });
 
-      it('uses client.channelManager.ensure when channel data is not present in event', async () => {
+      it('does not store a channel for an event about one that is not loaded', async () => {
+        const event: Event = {
+          type: 'message.new',
+          cid: 'messaging:unknown',
+          channel_type: 'messaging',
+          channel_id: 'unknown',
+        };
+        createQueries = failsOnExecute();
+        offlineDb.channelExists.mockResolvedValue(false);
+
+        await offlineDb.queriesWithChannelGuard({ event }, createQueries);
+
+        expect(client.channelManager.get('messaging:unknown')).toBeUndefined();
+      });
+
+      it('reads the stored channel when channel data is not present in event', async () => {
         const mockChannelData = { id: '123', type: 'messaging' };
         const mockChannel = {
           initialized: true,
@@ -399,7 +414,7 @@ describe('OfflineSupportApi', () => {
         };
 
         const clientChannelSpy = vi
-          .spyOn(client.channelManager, 'ensure')
+          .spyOn(client.channelManager, 'get')
           .mockReturnValue(mockChannel as unknown as Channel);
 
         const event: Event = {
@@ -415,7 +430,7 @@ describe('OfflineSupportApi', () => {
 
         const result = await offlineDb.queriesWithChannelGuard({ event }, createQueries);
 
-        expect(clientChannelSpy).toHaveBeenCalledWith({ type: 'messaging', id: '123' });
+        expect(clientChannelSpy).toHaveBeenCalledWith('messaging:123');
         expect(offlineDb.upsertChannelData).toHaveBeenCalledWith({
           channel: mockChannelData,
           execute: false,
@@ -552,7 +567,7 @@ describe('OfflineSupportApi', () => {
           data: mockChannelData,
         };
 
-        vi.spyOn(client.channelManager, 'ensure').mockReturnValue(
+        vi.spyOn(client.channelManager, 'get').mockReturnValue(
           mockChannel as unknown as Channel,
         );
 

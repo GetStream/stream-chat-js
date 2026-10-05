@@ -10,6 +10,11 @@ export type StoreBackedItemIndexOptions<T> = {
    */
   owner?: EntityStoreSubscriber;
   /**
+   * The name the index's holder goes by in the store, for debugging tools; no spaces, e.g.
+   * `channel-paginator`.
+   */
+  holderName?: string;
+  /**
    * The store the items live in, shared with other lists (the message store, the channel store).
    * Optional: without it the index makes a private store and behaves like a plain per-list map, as
    * single-home collections and paginators built without a client (in tests) do.
@@ -64,9 +69,10 @@ export class StoreBackedItemIndex<T> implements ItemIndexApi<T> {
   private readonly holder: EntityStoreSubscriber;
   private readonly getEntityId: (item: T) => string;
 
-  constructor({ store, owner, getEntityId }: StoreBackedItemIndexOptions<T>) {
+  constructor({ store, owner, getEntityId, holderName }: StoreBackedItemIndexOptions<T>) {
     this.store = store ?? new EntityStore<T>({ getEntityId });
     this.holder = {
+      name: holderName,
       onEntitiesChanged: (batch) => owner?.onEntitiesChanged(batch),
       flushState: () => owner?.flushState?.(),
       onIdChanged: (oldId, newId) => {

@@ -301,6 +301,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       createItemIndex: (owner) =>
         new StoreBackedItemIndex<Channel>({
           getEntityId: (channel) => channel.cid,
+          holderName: 'channel-paginator',
           owner: owner as ChannelPaginator,
           store: store ?? client.channelManager?.channelStore,
         }),

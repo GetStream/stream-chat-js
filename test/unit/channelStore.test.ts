@@ -3,7 +3,7 @@ import { getClientWithUser } from './test-utils/getClient';
 import { generateChannel } from './test-utils/generateChannel';
 import { generateMsg } from './test-utils/generateMessage';
 import { formatMessage } from '../../src/utils';
-import { ChannelPaginator, ChannelWatchStatus } from '../../src';
+import { ChannelPaginator, ChannelWatchStatus, MessageComposer } from '../../src';
 import type {
   ChannelStateResponseFields,
   QueryChannelsResponse,
@@ -89,19 +89,24 @@ describe('ChannelManager channel store', () => {
   });
 });
 
-describe('channel holds', () => {
+describe('keeping channels', () => {
   let client: StreamChat;
+  const release = () => client.channelManager.releaseUnusedChannels();
 
   beforeEach(() => {
     client = getClientWithUser({ id: 'ann' });
   });
 
-  it('tears down a channel whose only hold was its watch when the watch ends', () => {
+  it('keeps a watched channel, and releases it at the next release once unwatched', () => {
     const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     channel.watchStatus = ChannelWatchStatus.Watching;
+    release();
+    expect(client.channelManager.get('messaging:general')).toBe(channel);
 
     channel.watchStatus = ChannelWatchStatus.NotWatching;
+    expect(channel.pendingDisposal).toBe(false);
 
+    release();
     expect(channel.pendingDisposal).toBe(true);
     expect(client.channelManager.get('messaging:general')).toBeUndefined();
   });
@@ -111,26 +116,44 @@ describe('channel holds', () => {
     channel.watchStatus = ChannelWatchStatus.Watching;
 
     channel.watchStatus = ChannelWatchStatus.WasWatching;
+    release();
 
     expect(channel.pendingDisposal).toBe(false);
     expect(client.channelManager.get('messaging:general')).toBe(channel);
   });
 
-  it('keeps an opened channel for the session after it is released and unwatched', () => {
+  it('keeps an active channel while it is unwatched', () => {
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
+    channel.activate();
+
+    release();
+
+    expect(channel.pendingDisposal).toBe(false);
+    expect(client.channelManager.get('messaging:general')).toBe(channel);
+  });
+
+  it('releases a channel at the next release once it is no longer active and unwatched', () => {
     const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     channel.watchStatus = ChannelWatchStatus.Watching;
-    const release = channel.activate();
+    const deactivateFirst = channel.activate();
+    const deactivateSecond = channel.activate();
 
-    release();
-    release();
+    deactivateFirst();
+    deactivateFirst();
     channel.watchStatus = ChannelWatchStatus.NotWatching;
+    release();
+    expect(channel.active).toBe(true);
+    expect(channel.pendingDisposal).toBe(false);
+
+    deactivateSecond();
+    release();
 
     expect(channel.active).toBe(false);
-    expect(channel.pendingDisposal).toBe(false);
-    expect(client.channelManager.get('messaging:general')).toBe(channel);
+    expect(channel.pendingDisposal).toBe(true);
+    expect(client.channelManager.get('messaging:general')).toBeUndefined();
   });
 
-  it('can be activated after it was torn down, without holding it again', () => {
+  it('can be activated after it was torn down, without storing it again', () => {
     const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     client.channelManager.removeChannel(channel.cid);
 
@@ -160,17 +183,17 @@ describe('channel holds', () => {
     expect(client.channelManager.values()).toEqual([]);
   });
 
-  it('runs the teardown once when releasing the last hold triggers it', () => {
+  it('runs the teardown once when releaseUnusedChannels() releases the channel', () => {
     const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     const unregister = vi.spyOn(channel.cooldownTimer, 'unregisterSubscriptions');
-    channel.watchStatus = ChannelWatchStatus.Watching;
 
-    channel.watchStatus = ChannelWatchStatus.NotWatching;
+    release();
+    release();
 
     expect(unregister).toHaveBeenCalledTimes(1);
   });
 
-  it('holds a channel created from members under its temporary cid, and keeps the hold when it moves', async () => {
+  it('keeps an opened channel created from members when it moves to its real cid', async () => {
     const channel = client.channelManager.ensure({
       type: 'messaging',
       data: { members: ['ann', 'bob'] },
@@ -183,14 +206,125 @@ describe('channel holds', () => {
     await channel.query({});
 
     channel.watchStatus = ChannelWatchStatus.NotWatching;
+    release();
 
     expect(channel.pendingDisposal).toBe(false);
     expect(client.channelManager.get('messaging:!members-xyz')).toBe(channel);
   });
+
+  it('keeps a channel while a query for it is in flight', async () => {
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
+    let respond: (value: unknown) => void = () => undefined;
+    vi.spyOn(channel, 'getOrCreate').mockReturnValue(
+      new Promise((resolve) => {
+        respond = resolve;
+      }) as never,
+    );
+
+    const watching = channel.watch();
+    release();
+    expect(channel.pendingDisposal).toBe(false);
+
+    respond(generateChannel({ channel: { id: 'general', type: 'messaging' } }));
+    await watching;
+    release();
+
+    expect(channel.watchStatus).toBe(ChannelWatchStatus.Watching);
+    expect(client.channelManager.get(channel.cid)).toBe(channel);
+  });
+
+  it("keeps a thread's channel while the thread is in client.threads", () => {
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
+    const thread = client.threads.ensure({
+      channel,
+      parentMessage: generateMsg({ cid: channel.cid }),
+    });
+
+    release();
+
+    expect(thread.channel).toBe(channel);
+    expect(client.channelManager.get(channel.cid)).toBe(channel);
+  });
+
+  it("keeps a cached composer's channel, such as a message edit's", () => {
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
+    const message = formatMessage(generateMsg({ cid: channel.cid }));
+    client.messageComposerCache.add(
+      message.id,
+      new MessageComposer({ client, compositionContext: message }),
+    );
+
+    release();
+
+    expect(client.channelManager.get(channel.cid)).toBe(channel);
+  });
+
+  it('keeps the channels a claim lists, until it is removed', () => {
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
+    const removeClaim = client.channelManager.channelStore.addClaim({
+      heldBy: () => [channel],
+      name: 'test',
+    });
+    release();
+    expect(client.channelManager.get(channel.cid)).toBe(channel);
+
+    removeClaim();
+    release();
+    expect(client.channelManager.get(channel.cid)).toBeUndefined();
+  });
+
+  it('reports what keeps each stored channel, and nothing for one the next release removes', () => {
+    const watched = client.channelManager.ensure({ type: 'messaging', id: 'watched' });
+    const opened = client.channelManager.ensure({ type: 'messaging', id: 'opened' });
+    const listed = client.channelManager.ensure({ type: 'messaging', id: 'listed' });
+    const threaded = client.channelManager.ensure({ type: 'messaging', id: 'threaded' });
+    client.channelManager.ensure({ type: 'messaging', id: 'unused' });
+    watched.watchStatus = ChannelWatchStatus.Watching;
+    opened.activate();
+    client.channelManager.channelStore.addClaim({
+      heldBy: () => [opened],
+      name: 'test',
+    });
+    new ChannelPaginator({ client, filters: {} }).setItems({
+      isFirstPage: true,
+      isLastPage: true,
+      valueOrFactory: [listed],
+    });
+    client.threads.ensure({
+      channel: threaded,
+      parentMessage: generateMsg({ cid: threaded.cid }),
+    });
+
+    const keptBy = Object.fromEntries(
+      client.channelManager.getChannelUsage().map(({ key, keptBy }) => [key, keptBy]),
+    );
+
+    expect(keptBy).toEqual({
+      'messaging:listed': ['channel-paginator'],
+      'messaging:opened': ['active', 'test'],
+      'messaging:threaded': ['threads'],
+      'messaging:unused': [],
+      'messaging:watched': ['watched'],
+    });
+  });
+
+  it('releases unused channels when the lists reload and when the connection recovers', async () => {
+    const reloaded = client.channelManager.ensure({ type: 'messaging', id: 'reloaded' });
+    await client.channelManager.reload();
+    expect(reloaded.pendingDisposal).toBe(true);
+
+    const recovered = client.channelManager.ensure({
+      type: 'messaging',
+      id: 'recovered',
+    });
+    await client.channelManager.recover();
+    expect(recovered.pendingDisposal).toBe(true);
+  });
 });
 
-describe('channel lists as holders', () => {
+describe('channel lists as users', () => {
   let client: StreamChat;
+  const release = () => client.channelManager.releaseUnusedChannels();
 
   beforeEach(() => {
     client = getClientWithUser({ id: 'ann' });
@@ -199,7 +333,7 @@ describe('channel lists as holders', () => {
   const list = (filters: Record<string, unknown> = { type: 'messaging' }) =>
     new ChannelPaginator({ client, filters });
 
-  it('keeps a listed channel until every list that holds it lets it go', () => {
+  it('keeps a listed channel until no list shows it, then releases it at the next release', () => {
     const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     const first = list();
     const second = list();
@@ -207,12 +341,13 @@ describe('channel lists as holders', () => {
     second.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: [channel] });
 
     first.removeItem({ item: channel });
-    expect(channel.pendingDisposal).toBe(false);
+    release();
     expect(client.channelManager.get(channel.cid)).toBe(channel);
 
     second.removeItem({ item: channel });
+    expect(channel.pendingDisposal).toBe(false);
+    release();
     expect(channel.pendingDisposal).toBe(true);
-    expect(client.channelManager.get(channel.cid)).toBeUndefined();
     expect(client.channelManager.get(channel.cid)).toBeUndefined();
   });
 
@@ -230,12 +365,13 @@ describe('channel lists as holders', () => {
 
     paginator.removeItem({ item: watched });
     paginator.removeItem({ item: opened });
+    release();
 
     expect(watched.pendingDisposal).toBe(false);
     expect(opened.pendingDisposal).toBe(false);
   });
 
-  it('lets go of its channels when its state is reset', () => {
+  it('stops using its channels when its state is reset', () => {
     const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     const paginator = list();
     paginator.setItems({
@@ -245,11 +381,12 @@ describe('channel lists as holders', () => {
     });
 
     paginator.resetState();
+    release();
 
     expect(channel.pendingDisposal).toBe(true);
   });
 
-  it('lets go of a channel that stops matching its filter', () => {
+  it('stops using a channel that stops matching its filter', () => {
     const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     channel.data = { ...channel.data, team: 'a' };
     const paginator = list({ team: 'a' });
@@ -261,6 +398,7 @@ describe('channel lists as holders', () => {
 
     channel.data = { ...channel.data, team: 'b' };
     paginator.ingestItem(channel);
+    release();
 
     expect(paginator.items).toEqual([]);
     expect(channel.pendingDisposal).toBe(true);
@@ -358,6 +496,19 @@ describe('store removals reach the lists', () => {
 
     expect(first.items).toEqual([]);
     expect(second.items).toEqual([]);
+  });
+
+  it('names each message list as a holder in the message store', () => {
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
+    const message = formatMessage(generateMsg({ id: 'm1', pinned: true }));
+    const page = { isFirstPage: true, isLastPage: true, valueOrFactory: [message] };
+    channel.messagePaginator.setItems(page);
+    channel.pinnedMessagesPaginator.setItems(page);
+
+    expect(client.messageStore.holderNames('m1')).toEqual([
+      'message-paginator',
+      'pinned-message-paginator',
+    ]);
   });
 
   it('drops a message removed from the message store from the message list', () => {

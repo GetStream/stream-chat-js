@@ -137,5 +137,16 @@ describe('entities that register themselves', () => {
 
       expect(controller.config.keepSingleActiveSource).toBe(true);
     });
+
+    it('hears changes again after registerSubscriptions, as a remount of the same instance needs', () => {
+      const controller = new SearchController({ client });
+      controller.dispose();
+      controller.registerSubscriptions();
+      controller.registerSubscriptions();
+
+      client.config.set({ searchController: { keepSingleActiveSource: false } });
+
+      expect(controller.config.keepSingleActiveSource).toBe(false);
+    });
   });
 });

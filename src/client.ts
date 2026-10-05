@@ -370,14 +370,21 @@ export class StreamChat extends ChatApi {
     this.messageStore = new EntityStore<LocalMessage>({
       getEntityId: (message) => message.id,
     });
+    // before the managers that hold channels in its store
+    this.channelManager = new ChannelManager({ client: this });
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
-    this.channelManager = new ChannelManager({ client: this });
     this.connectionRecovery = new ConnectionRecoveryManager({ client: this });
     this.connectionRecovery.registerSubscriptions();
     this.reminders = new ReminderManager({ client: this });
     this.messageDeliveryReporter = new MessageDeliveryReporter({ client: this });
     this.messageComposerCache = new FixedSizeQueueCache<string, MessageComposer>(64);
+    // a cached composer, such as a message edit's, keeps the channel it was built with
+    this.channelManager.channelStore.addClaim({
+      heldBy: () =>
+        this.messageComposerCache.values().map((composer) => composer.channel),
+      name: 'message-composer-cache',
+    });
 
     // Seed the declarative configuration before wiring, so a tree passed via `options.config` reaches
     // the managers above. `'client'` is the one key that cannot be configured after construction —

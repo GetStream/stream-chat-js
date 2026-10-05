@@ -59,9 +59,9 @@
   `paginator.toTail()` and `client.queryThreadsAndHydrate()`. See below.
 - **`client.activeChannels` is removed.** Channels live in a channel store owned by
   `client.channelManager`: read one with `client.channelManager.get(cid)`, all of them with
-  `client.channelManager.values()`. A channel that nothing holds anymore (no channel list, not opened
-  with `activate()`, not watched) is torn down and dropped, where v9 kept every channel until logout.
-  `channel.deactivate()` is replaced by the function `activate()` returns, and
+  `client.channelManager.values()`. A channel that is neither watched nor used (not in a channel
+  list, not opened with `activate()`, not a thread's or a cached composer's) is torn down and dropped
+  when the lists reload or the connection recovers, where v9 kept every channel until logout.
   `client.hydrateActiveChannels()` is renamed to `client.hydrateChannels()`. `client.channel()` is
   replaced by `client.channelManager.ensure({ type, id, data })`. See below.
 - `Role` type renamed to `RoleName`.
@@ -972,34 +972,44 @@ const channel = client.channelManager.get(cid);
 const all = client.channelManager.values();
 ```
 
-**A channel stays in the store while something holds it**, and is torn down (`pendingDisposal`
-becomes `true`) once nothing does:
+**A channel stays in the store while it is watched or used.** A watched channel (`watchStatus`
+`watching`, or `wasWatching` after a dropped connection, until the watch is restored) always stays:
+its events keep it current, which is what makes it worth keeping. An unwatched channel stays while
+it is used:
 
-- every channel list (`ChannelPaginator`) that has it in its loaded pages;
-- `channel.activate()`: the first call keeps the channel for the rest of the session, until
-  `disconnectUser()`, or until the channel is deleted or the user is removed from it;
-- watching: while `watchStatus` is `watching`, or `wasWatching` after a dropped connection, until the
-  watch is restored.
+- a channel list (`ChannelPaginator`) has it in its loaded pages;
+- it is active: `channel.activate()` was called and its release function not yet;
+- a `watch()`, `query()` or `create()` for it is in flight;
+- it is the channel of a thread in `client.threads`, or of a composer in
+  `client.messageComposerCache` (such as a message edit's);
+- an active channel search shows it.
 
-So a channel your code keeps a reference to, without listing, watching or opening it, can be torn down
+When the lists reload (`client.channelManager.reload()`) or the connection recovers, every stored
+channel that is neither watched nor used is torn down (`pendingDisposal` becomes `true`). It holds a
+snapshot nothing shows, so keeping it saves no request: using it again needs a query anyway. A
+deleted channel, one the user is removed from, and every channel on `disconnectUser()` are torn
+down right away, whatever uses them.
+
+So a channel your code keeps a reference to, without watching or opening it, can be torn down
 underneath you. A torn-down channel throws from `getClient()`;
-`client.channelManager.ensure({ type, id })` returns a fresh instance. Call `activate()` on a channel you keep, as a UI does when it opens one.
+`client.channelManager.ensure({ type, id })` returns a fresh instance. Call `activate()` on a channel
+you keep, as a UI does when it opens one.
 
-**`channel.deactivate()` is removed.** `activate()` returns the function that ends it. Each call gets
-its own, and calling it twice does nothing, so one consumer can't end another's activation:
+**Channel search results are not watched.** `ChannelSearchSource` queries with `watch: false` unless
+its `searchOptions` say otherwise: a result is a preview. Watch a result when the user opens it.
+
+**`channel.activate()` is new.** It declares that a consumer is showing the channel, which sets
+`channel.active`, and returns the function that ends it. Each call gets its own, and calling it twice
+does nothing, so one consumer can't end another's activation:
 
 ```ts
-// v9
-channel.activate(); // on mount
-channel.deactivate(); // on unmount
-
-// v10
 const release = channel.activate(); // on mount
 release(); // on unmount
 ```
 
-The release function only unsets `active`. It doesn't drop the channel from the store: an opened
-channel stays for the session.
+The release function unsets `active` once the last consumer releases. It doesn't drop the channel
+from the store by itself: an unwatched channel nothing else uses goes at the next release of unused
+channels.
 
 **`client.hydrateActiveChannels()` is renamed to `client.hydrateChannels()`**, with the same
 arguments.
@@ -1452,4 +1462,4 @@ For each source file that touches the SDK:
 21. **Replace `client.setLocalDevice(device)` / the `device` client option** with an explicit `await client.createDevice({ id, push_provider, push_provider_name? })` after connecting.
 22. **Polyfill `atob`** if your React Native / Hermes target lacks it (`typeof atob === 'undefined'`); `UserFromToken` depends on it during `connectUser`.
 23. **Call `liveLocationManager.dispose()`** when you are finished with a manager you constructed, alongside whatever `unregisterSubscriptions()` you already call. Nothing will fail to compile: `dispose()` is the _configuration_ teardown, and until it runs the client's configuration registry holds a handle to the manager — a long-lived client and many short-lived managers will accumulate them. `unregisterSubscriptions()` is unchanged and stays ref-counted, so it deliberately no longer releases configuration; it never should have, since with two callers sharing a manager the first to leave stopped a still-live instance from tracking `client.config`. `SearchController` already worked this way.
-24. **Replace `client.activeChannels`** with `client.channelManager.get(cid)` / `client.channelManager.values()`, `channel.deactivate()` with the function `channel.activate()` returns, `client.hydrateActiveChannels()` with `client.hydrateChannels()`, and `client.channel(type, id, data)` with `client.channelManager.ensure({ type, id, data })`. Call `activate()` on any channel your code keeps a reference to without listing, watching or opening it: a channel nothing holds is torn down.
+24. **Replace `client.activeChannels`** with `client.channelManager.get(cid)` / `client.channelManager.values()`, `client.hydrateActiveChannels()` with `client.hydrateChannels()`, and `client.channel(type, id, data)` with `client.channelManager.ensure({ type, id, data })`. Call `activate()` on any channel your code keeps a reference to without watching or opening it: a channel that is neither watched nor used is torn down when the lists reload or the connection recovers. Watch a channel search result when it is opened: search no longer watches its results.

@@ -238,6 +238,7 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   private _reloading = false;
   /** Refcount backing the reactive `active` flag (a shared Channel instance can have several consumers). */
   private _activeRefCount = 0;
+  private _channelQueriesInFlight = 0;
   push_preferences?: Gen_ChannelPushPreferencesResponse;
   /**
    * The shared configuration machinery. Owned rather than inherited — `Channel` already extends
@@ -1486,14 +1487,16 @@ export class Channel extends WithMessageOperations(ChannelApi) {
 
   set watchStatus(watchStatus: ChannelWatchStatus) {
     this.state.partialNext({ watchStatus });
-    if (this.pendingDisposal) return;
-    // kept stored while watched, and while a watch lost to a dropped socket waits to be restored
-    const { channelManager } = this.getClient();
-    if (watchStatus === ChannelWatchStatus.NotWatching) {
-      channelManager.release(this, 'watching');
-    } else {
-      channelManager.register(this, 'watching');
-    }
+  }
+
+  /**
+   * Whether a query for this channel (`watch()`, `query()`, `create()`) is waiting for its response.
+   * The channel store keeps a channel while it is loaded.
+   *
+   * @internal
+   */
+  get isQueryingChannel() {
+    return this._channelQueriesInFlight > 0;
   }
 
   /**
@@ -1514,16 +1517,14 @@ export class Channel extends WithMessageOperations(ChannelApi) {
    * While active, the channel's own state takes precedence over bulk state writes: channel-list
    * hydration does not re-seed its message list (its own `channel.reload()` owns that window).
    *
-   * The first call also keeps the channel in the channel store for the session, until logout or
-   * a known end (deleted, or the user removed from it). Releasing only unsets `active`.
+   * An active channel also stays in the channel store. Once the last consumer releases it, it is
+   * kept only while something else uses it (a watch, a channel list, a claim).
    */
   activate = (): (() => void) => {
     this._activeRefCount += 1;
     if (this._activeRefCount === 1) {
       this.state.partialNext({ active: true });
     }
-    // `_client`, not `getClient()`, which throws on a torn-down channel; holding one does nothing
-    this._client.channelManager.register(this, 'activated');
 
     let released = false;
     return () => {
@@ -1852,6 +1853,25 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   async query(
     options: ChannelGetOrCreateRequest = {},
     messageSetToAddToIfDoesNotExist: MessageSetType = 'current',
+    requestOptions?: StreamRequestOptions,
+  ) {
+    // counted until the response is applied, watch status included, so the channel store keeps a
+    // channel that is being loaded
+    this._channelQueriesInFlight += 1;
+    try {
+      return await this.runQuery(
+        options,
+        messageSetToAddToIfDoesNotExist,
+        requestOptions,
+      );
+    } finally {
+      this._channelQueriesInFlight -= 1;
+    }
+  }
+
+  private async runQuery(
+    options: ChannelGetOrCreateRequest,
+    messageSetToAddToIfDoesNotExist: MessageSetType,
     requestOptions?: StreamRequestOptions,
   ) {
     // Snapshot the loaded message ids BEFORE the network await, for a latest-window (re)seed only.
@@ -2993,9 +3013,8 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     this.messagePaginator.dispose();
     this.pinnedMessagesPaginator.dispose();
 
-    // One update, last. A deleted channel (or one the user was removed from) must not be re-watched
-    // — see #2599. Written directly rather than through the `watchStatus` setter, so teardown releases
-    // no hold and cannot re-enter itself through the store.
+    // One update, last, so subscribers see both together. A deleted channel (or one the user was
+    // removed from) must not be re-watched — see #2599.
     this.state.partialNext({
       pendingDisposal: true,
       watchStatus: ChannelWatchStatus.NotWatching,

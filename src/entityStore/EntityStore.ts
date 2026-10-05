@@ -11,11 +11,13 @@ export type EntityStoreChangeBatch = {
 };
 
 /**
- * Anything that observes entities held in an {@link EntityStore}.
+ * Anything that observes entities held in an {@link EntityStore}, linked to them by id
+ * ({@link EntityStore.link}).
  *
  * A subscriber watches a *set* of entity ids (a paginator watches all ids in its
  * intervals; a thread watches its single parent id). It is notified at most once
- * per store transaction with the subset of its watched ids that changed.
+ * per store transaction with the subset of its watched ids that changed. While linked, it also
+ * holds those entities; see {@link EntityStoreClaim} for holding without being notified.
  */
 export type EntityStoreSubscriber = {
   onEntitiesChanged: (batch: EntityStoreChangeBatch) => void;
@@ -41,6 +43,27 @@ export type EntityStoreSubscriber = {
    * unlinks: nobody holds the entity then.
    */
   onEntityRemoved?: (id: string, entity: unknown) => void;
+  /**
+   * Optional: what this subscriber is, for debugging tools that list who holds an entity. A
+   * kebab-case identifier with no spaces, e.g. `channel-paginator`.
+   */
+  name?: string;
+};
+
+/**
+ * A standing claim on entities in an {@link EntityStore}, added once with
+ * {@link EntityStore.addClaim}. Unlike a subscriber it isn't linked per id and gets no
+ * notifications: the store asks {@link EntityStoreClaim.heldBy} whenever it needs to know what is
+ * held, so the claim never reports a change.
+ */
+export type EntityStoreClaim<T> = {
+  /** The entities held by this claim right now. Matched by identity against the stored ones. */
+  heldBy: () => Iterable<T>;
+  /**
+   * Optional: what makes the claim, for debugging tools that list who holds an entity. A kebab-case
+   * identifier with no spaces, e.g. `message-composer-cache`.
+   */
+  name?: string;
 };
 
 export type EntityStoreOptions<T> = {
@@ -52,6 +75,12 @@ export type EntityStoreOptions<T> = {
    * (unsubscribe listeners, stop timers). Optional.
    */
   onRelease?: (entity: T) => void;
+  /**
+   * Whether an entry is removed when its last holder unlinks (the default). A store that decides
+   * on its own when to remove entries sets it to `false`; holders then only receive notifications,
+   * and entries leave through {@link EntityStore.remove} or {@link EntityStore.clear}.
+   */
+  releaseOnLastUnlink?: boolean;
 };
 
 /**
@@ -91,17 +120,24 @@ export type EntityStoreOptions<T> = {
 export class EntityStore<T> {
   private byId = new Map<string, T>();
   private subscribers = new Map<string, Set<EntityStoreSubscriber>>();
+  private readonly claims = new Set<EntityStoreClaim<T>>();
   private readonly getEntityId: (entity: T) => string;
   private readonly onRelease?: (entity: T) => void;
+  private readonly releaseOnLastUnlink: boolean;
 
   private transactionDepth = 0;
   private pendingChanged = new Map<EntityStoreSubscriber, Set<string>>();
   /** Ids whose {@link EntityStore.flushSubscribers} was requested while a transaction was open. */
   private pendingFlushIds?: Set<string>;
 
-  constructor({ getEntityId, onRelease }: EntityStoreOptions<T>) {
+  constructor({
+    getEntityId,
+    onRelease,
+    releaseOnLastUnlink = true,
+  }: EntityStoreOptions<T>) {
     this.getEntityId = getEntityId;
     this.onRelease = onRelease;
+    this.releaseOnLastUnlink = releaseOnLastUnlink;
   }
 
   // ---- reads ----
@@ -119,9 +155,77 @@ export class EntityStore<T> {
     return this.subscribers.get(id)?.has(subscriber) ?? false;
   }
 
+  /** Whether a subscriber linked to `id`, or a claim listing its entity, holds it. */
+  isHeld(id: string): boolean {
+    if (this.subscribers.has(id)) return true;
+    const entity = this.byId.get(id);
+    return entity !== undefined && this.claimsByEntity().has(entity);
+  }
+
+  /**
+   * The names of what holds `id`: the subscribers linked to it and the claims listing its entity;
+   * unnamed ones are left out. For debugging tools.
+   */
+  holderNames(id: string): string[] {
+    const names: string[] = [];
+    for (const subscriber of this.subscribers.get(id) ?? []) {
+      if (subscriber.name) names.push(subscriber.name);
+    }
+    const entity = this.byId.get(id);
+    const claims = entity === undefined ? [] : (this.claimsByEntity().get(entity) ?? []);
+    for (const claim of claims) {
+      if (claim.name) names.push(claim.name);
+    }
+    return names;
+  }
+
+  /**
+   * Every stored entity that neither a linked subscriber nor a claim holds, with the id it is stored
+   * under. Each claim is asked once for the whole list.
+   */
+  unheldEntries(): [string, T][] {
+    const claimed = this.claimsByEntity();
+    return this.entries().filter(
+      ([id, entity]) => !this.subscribers.has(id) && !claimed.has(entity),
+    );
+  }
+
+  /**
+   * Adds `claim`, which holds the entities its {@link EntityStoreClaim.heldBy} lists, until the
+   * returned function removes it. Entities are matched by identity, so one stored under an id other
+   * than its own (a temporary id) is still found.
+   */
+  addClaim(claim: EntityStoreClaim<T>): () => void {
+    this.claims.add(claim);
+    return () => {
+      this.claims.delete(claim);
+    };
+  }
+
+  /**
+   * Each entity the claims list, with the claims listing it, each once: a claim may list an entity
+   * several times, e.g. the threads claim lists a channel once per thread.
+   */
+  private claimsByEntity() {
+    const claimed = new Map<T, EntityStoreClaim<T>[]>();
+    for (const claim of this.claims) {
+      for (const entity of claim.heldBy()) {
+        const claims = claimed.get(entity);
+        if (!claims) claimed.set(entity, [claim]);
+        else if (!claims.includes(claim)) claims.push(claim);
+      }
+    }
+    return claimed;
+  }
+
   /** Every entity currently in the store. */
   values(): T[] {
     return Array.from(this.byId.values());
+  }
+
+  /** Every stored entity with the id it is stored under, which can differ from its own id. */
+  entries(): [string, T][] {
+    return Array.from(this.byId.entries());
   }
 
   // ---- writes ----
@@ -255,13 +359,15 @@ export class EntityStore<T> {
 
   /**
    * Drops `subscriber` from `id`; GCs the canonical copy when none remain and passes it to
-   * `onRelease`. Unlinking a subscriber that is not linked does nothing.
+   * `onRelease`, unless the store keeps unheld entries (`releaseOnLastUnlink: false`). Unlinking a
+   * subscriber that is not linked does nothing.
    */
   unlink(id: string, subscriber: EntityStoreSubscriber): void {
     const subscribers = this.subscribers.get(id);
     if (!subscribers?.delete(subscriber)) return;
     if (subscribers.size === 0) {
       this.subscribers.delete(id);
+      if (!this.releaseOnLastUnlink) return;
       // refcount GC: nobody holds this entity any longer.
       const released = this.byId.get(id);
       const wasStored = this.byId.delete(id);

@@ -213,6 +213,14 @@ export class MessageIntervalPaginator extends BasePaginator<
   LocalMessage,
   MessageQueryShape
 > {
+  /**
+   * The name this list's index goes by as a holder in the message store. A prototype getter, so it
+   * is already the subclass's while the base constructor builds the index.
+   */
+  protected get holderName() {
+    return 'message-interval-paginator';
+  }
+
   declare state: StateStore<MessagePaginatorState>;
   private readonly _id: string;
   /** The channel this list belongs to. A thread's reply list holds its parent channel. */
@@ -341,6 +349,7 @@ export class MessageIntervalPaginator extends BasePaginator<
               store: channel.getClient?.().messageStore,
               owner: owner as MessageIntervalPaginator,
               getEntityId: owner.getItemId.bind(owner),
+              holderName: (owner as MessageIntervalPaginator).holderName,
             })),
       },
       // SDK-supplied, so a declarative registration overrides them. `hasPaginationQueryShapeChanged`

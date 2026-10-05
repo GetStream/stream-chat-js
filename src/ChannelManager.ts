@@ -17,7 +17,7 @@ import { getChannel } from './pagination/utility.queryChannel';
 import { Channel } from './channel';
 import { ChannelWatchStatus } from './channel_state';
 import { generateChannelTempCid, runDetached } from './utils';
-import { EntityStore, type EntityStoreSubscriber } from './entityStore/EntityStore';
+import { EntityStore } from './entityStore/EntityStore';
 
 export type ChannelManagerEventHandlerContext = {
   channelManager: ChannelManager;
@@ -370,18 +370,23 @@ export type ChannelManagerOptions = {
 };
 
 /**
- * Holds that keep a channel in the channel store besides the channel lists:
- * - `activated`: from the first `channel.activate()` until logout or a known end. It outlives the
- *   `active` flag, which the release function from `activate()` unsets.
- * - `watching`: while the channel is watched or its interrupted watch waits to be restored
- *   (`watching` / `wasWatching`).
+ * A stored channel, the key it is stored under, and what keeps it: its own state (`'watched'`,
+ * `'active'`, `'querying-channel'`) and the names of its holders. None: the next releaseUnusedChannels() removes it.
  */
-export type ChannelHold = 'activated' | 'watching';
+export type ChannelUsage = {
+  channel: Channel;
+  key: string;
+  keptBy: string[];
+};
 
-// a holder only keeps the channel stored; a class-instance store sends no change notifications
-const createHolder = (): EntityStoreSubscriber => ({
-  onEntitiesChanged: () => undefined,
-});
+/** What in the channel's own state keeps it in the channel store. */
+const keptByOwnState = (channel: Channel) => {
+  const reasons: string[] = [];
+  if (channel.watchStatus !== ChannelWatchStatus.NotWatching) reasons.push('watched');
+  if (channel.active) reasons.push('active');
+  if (channel.isQueryingChannel) reasons.push('querying-channel');
+  return reasons;
+};
 
 export class ChannelManager extends WithSubscriptions {
   client: StreamChat;
@@ -389,21 +394,18 @@ export class ChannelManager extends WithSubscriptions {
   /**
    * Every `Channel` instance, one per cid. A channel created from members, before the server assigns
    * its id, is stored under its temporary cid until {@link ChannelManager.changeChannelId} moves it.
-   * The last holder leaving, or a removal, tears the channel down with `_disconnect()`.
+   * A channel stays until a known end or logout removes it, or
+   * {@link ChannelManager.releaseUnusedChannels} finds it neither watched nor held; either tears it
+   * down with `_disconnect()`. A channel list holds the channels it shows by linking them, which also
+   * tells it about removals and cid changes; other users hold theirs through claims.
    *
    * @internal
    */
   readonly channelStore = new EntityStore<Channel>({
     getEntityId: (channel) => channel.cid,
     onRelease: (channel) => channel._disconnect(),
+    releaseOnLastUnlink: false,
   });
-  private readonly holders: Record<ChannelHold, EntityStoreSubscriber> = {
-    activated: createHolder(),
-    watching: createHolder(),
-  };
-  // The key each channel is stored under: its cid, or its temporary cid until the server assigns the
-  // real one. `register` and `release` link and unlink holds under it.
-  private readonly storeKeys = new WeakMap<Channel, string>();
 
   protected _pipelines = new Map<
     SupportedEventType,
@@ -490,7 +492,8 @@ export class ChannelManager extends WithSubscriptions {
    * under a temporary cid built from the member IDs until `watch()`, `query()` or `create()` returns
    * the real one; a stored distinct channel with the same members is returned instead.
    *
-   * It doesn't hold the channel: lists, `channel.activate()` and watching do.
+   * Getting a channel this way doesn't keep it: one that is neither watched nor used is released by
+   * the next {@link ChannelManager.releaseUnusedChannels}.
    *
    * ```ts
    * const general = client.channelManager.ensure({ type: 'messaging', id: 'general' });
@@ -591,9 +594,7 @@ export class ChannelManager extends WithSubscriptions {
     create: () => Channel,
     hydrate?: (stored: Channel) => void,
   ): Channel {
-    const channel = this.channelStore.getOrCreate(cid, create, hydrate);
-    this.storeKeys.set(channel, cid);
-    return channel;
+    return this.channelStore.getOrCreate(cid, create, hydrate);
   }
 
   /**
@@ -603,38 +604,47 @@ export class ChannelManager extends WithSubscriptions {
    * @internal
    */
   changeChannelId(oldCid: string, newCid: string): boolean {
-    const channel = this.channelStore.get(oldCid);
-    if (!channel || !this.channelStore.changeId(oldCid, newCid)) return false;
-    this.storeKeys.set(channel, newCid);
-    return true;
+    return this.channelStore.changeId(oldCid, newCid);
   }
 
   /**
-   * Adds `hold` to a stored channel. Does nothing for a channel that isn't stored.
+   * Tears down every stored channel that is neither watched nor held. A watched channel (`watching`,
+   * or `wasWatching` until its watch is restored) stays, because its events keep it current; so does
+   * an active one ({@link Channel.activate}), one being loaded (`watch()`, `query()` or `create()` in flight), and
+   * one a holder holds in {@link ChannelManager.channelStore}: a channel list links each of its
+   * channels, while threads, the composer cache and an active channel search hold theirs through
+   * claims ({@link EntityStore.addClaim}).
+   *
+   * What remains is an unwatched snapshot nothing shows, which saves no request: using it again
+   * needs a query, which stores it again. Runs when {@link ChannelManager.reload} and
+   * {@link ChannelManager.recover} finish.
    *
    * @internal
    */
-  register(channel: Channel, hold: ChannelHold) {
-    const key = this.storeKeys.get(channel);
-    if (key === undefined || this.channelStore.get(key) !== channel) return;
-    this.channelStore.link(key, this.holders[hold]);
+  releaseUnusedChannels() {
+    for (const [key, channel] of this.channelStore.unheldEntries()) {
+      if (!keptByOwnState(channel).length) this.removeChannel(key);
+    }
   }
 
   /**
-   * Releases `hold` on a stored channel; the channel is torn down if that was its last holder.
-   * Releasing a hold the channel doesn't have does nothing.
+   * Every stored channel with what keeps it, by the same rule as
+   * {@link ChannelManager.releaseUnusedChannels}: a channel kept by nothing is released by its next
+   * call. For debugging tools.
    *
    * @internal
    */
-  release(channel: Channel, hold: ChannelHold) {
-    const key = this.storeKeys.get(channel);
-    if (key === undefined || this.channelStore.get(key) !== channel) return;
-    this.channelStore.unlink(key, this.holders[hold]);
+  getChannelUsage(): ChannelUsage[] {
+    return this.channelStore.entries().map(([key, channel]) => ({
+      channel,
+      key,
+      keptBy: [...keptByOwnState(channel), ...this.channelStore.holderNames(key)],
+    }));
   }
 
   /**
-   * Removes the channel stored under `cid` whatever holds it, tearing it down with `_disconnect()`.
-   * Every list holding it drops it too, as the store's removal reaches each list's index.
+   * Removes the channel stored under `cid` whatever uses it, tearing it down with `_disconnect()`.
+   * Every list showing it drops it too, as the store's removal reaches each list's index.
    *
    * @internal
    */
@@ -766,19 +776,13 @@ export class ChannelManager extends WithSubscriptions {
     const matchingPaginatorIds = new Set(matchingPaginators.map((p) => p.id));
     const ownerIds = this.resolveOwnership(channel, matchingPaginators);
 
-    // Owners ingest before the other lists remove: each list holds the channel in the store, and a
-    // list that removed it first could be its last holder and tear it down.
-    const removingPaginators: ChannelPaginator[] = [];
     for (const paginator of this.paginators) {
       const isOwner =
         matchingPaginatorIds.has(paginator.id) &&
         (ownerIds.size === 0 || ownerIds.has(paginator.id));
       if (isOwner) paginator.ingestItem(channel);
-      // we need to postpone the removal into another loop to make sure
-      // the channel is not removed from entity store due to the lack of holders
-      else removingPaginators.push(paginator);
+      else paginator.removeItem({ item: channel });
     }
-    for (const paginator of removingPaginators) paginator.removeItem({ item: channel });
   }
 
   /**
@@ -1044,12 +1048,15 @@ export class ChannelManager extends WithSubscriptions {
     return pipe;
   }
 
-  reload = async () =>
-    await Promise.allSettled(
+  reload = async () => {
+    const results = await Promise.allSettled(
       this.paginators.map(async (paginator) => {
         await paginator.reload();
       }),
     );
+    this.releaseUnusedChannels();
+    return results;
+  };
 
   /**
    * Re-run every loaded list's own first-page query — the channel-list half of connection recovery,
@@ -1073,12 +1080,15 @@ export class ChannelManager extends WithSubscriptions {
    * Paginators that were never queried are skipped: they run their own first query when they mount,
    * and querying them here would race it.
    */
-  recover = async () =>
-    await Promise.allSettled(
+  recover = async () => {
+    const results = await Promise.allSettled(
       this.paginators
         .filter((paginator) => paginator.isInitialized)
         .map(async (paginator) => {
           await paginator.toTail({ keepPreviousItems: true, reset: 'yes' });
         }),
     );
+    this.releaseUnusedChannels();
+    return results;
+  };
 }

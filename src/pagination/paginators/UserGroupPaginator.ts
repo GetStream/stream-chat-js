@@ -52,6 +52,7 @@ export class UserGroupPaginator extends BasePaginator<
       initialCursor: { ...ZERO_PAGE_CURSOR, headward: null },
       itemIndex: new StoreBackedItemIndex<UserGroupResponse>({
         getEntityId: (group) => group.id,
+        holderName: 'user-group-paginator',
       }),
       ...options,
     });

@@ -352,8 +352,10 @@ client.userMuteStatus(targetId);
 
 `client.channel()`, `client.getChannelById()` and `client.getChannelByMembers()` are removed. Get a
 channel with `client.channelManager.ensure()`, which takes one object. It returns the stored channel for
-the cid or creates it, as `client.channel()` did, and it doesn't hold the channel: lists,
-`channel.activate()` and watching do.
+the cid or creates it, as `client.channel()` did. Getting a channel this way doesn't keep it: one
+that is neither watched nor used is torn down when the lists reload or the connection recovers (see
+the [other changes guide](./v9-to-v10-migration-guide-other.md)). Watch it, or call
+`channel.activate()`, to keep it.
 
 ```ts
 // v9
@@ -965,6 +967,23 @@ channel.stopWatching();
 channel.stopWatching(request?: Gen_ChannelStopWatchingRequest);
 ```
 
+A channel that is no longer watched leaves the channel store when the lists reload or the
+connection recovers, unless something still uses it (a channel list, `activate()`, a thread, a
+cached composer). In v9 it stayed in `client.activeChannels` until logout.
+
+#### `channel.activate` (new)
+
+`channel.activate()` is new in v10: it sets `channel.active` and returns the function that ends the
+activation; each call gets its own, and calling it twice does nothing.
+
+```ts
+const release = channel.activate();
+release();
+```
+
+An active channel also stays in the channel store. After `release()` unsets `active`, it is kept
+only while it is watched or otherwise used.
+
 #### `channel.hide` / `channel.show`
 
 ```ts
@@ -1169,7 +1188,8 @@ The 10 named overrides (`newMessageHandler`, `channelDeletedHandler`, …), each
 
 Default-handler ids are `ChannelManager:default-handler:<event.type>` — pass them to `removeEventHandlers`
 or to `position` when inserting. Unlike v9, `channel.updated` and `channel.truncated` are **not** no-ops by
-default (they re-emit the affected lists), `channel.hidden` re-evaluates the filters instead of removing
+default: they re-insert the channel into the lists, so it moves to its new sort position, and a list
+whose filter it no longer matches drops it. `channel.hidden` re-evaluates the filters instead of removing
 the channel outright (so a list filtering `{ hidden: true }` keeps it), and
 `notification.channel_mutes_updated` re-routes every loaded channel so `muted` filters settle on their own.
 

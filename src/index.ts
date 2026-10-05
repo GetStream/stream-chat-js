@@ -55,6 +55,7 @@ export * from './messageDelivery';
 export { EntityStore } from './entityStore/EntityStore';
 export type {
   EntityStoreChangeBatch,
+  EntityStoreClaim,
   EntityStoreOptions,
   EntityStoreSubscriber,
 } from './entityStore/EntityStore';

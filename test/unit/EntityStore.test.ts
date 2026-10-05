@@ -628,6 +628,102 @@ describe('EntityStore', () => {
     });
   });
 
+  describe('releaseOnLastUnlink: false', () => {
+    it('keeps an entry when its last holder unlinks, and releases it on remove()', () => {
+      const onRelease = vi.fn();
+      const s = new EntityStore<LocalMessage>({
+        getEntityId,
+        onRelease,
+        releaseOnLastUnlink: false,
+      });
+      const holder = spySubscriber();
+      const m = msg({ id: 'm1' });
+      s.link('m1', holder);
+      s.upsert(m);
+
+      s.unlink('m1', holder);
+      expect(s.get('m1')).toBe(m);
+      expect(s.isHeld('m1')).toBe(false);
+      expect(onRelease).not.toHaveBeenCalled();
+
+      s.remove('m1');
+      expect(onRelease).toHaveBeenCalledWith(m);
+    });
+  });
+
+  describe('isHeld / entries', () => {
+    it('reports whether any holder is linked', () => {
+      const holder = spySubscriber();
+      store.upsert(msg({ id: 'm1' }));
+      expect(store.isHeld('m1')).toBe(false);
+
+      store.link('m1', holder);
+      expect(store.isHeld('m1')).toBe(true);
+    });
+
+    it('names the holders linked to an id, leaving unnamed ones out', () => {
+      store.upsert(msg({ id: 'm1' }));
+      store.link('m1', { ...spySubscriber(), name: 'list' });
+      store.link('m1', spySubscriber());
+
+      expect(store.holderNames('m1')).toEqual(['list']);
+      expect(store.holderNames('missing')).toEqual([]);
+    });
+
+    it('lists each entity with the id it is stored under', () => {
+      const m = msg({ id: 'm1' });
+      store.getOrCreate('temp', () => m);
+
+      expect(store.entries()).toEqual([['temp', m]]);
+    });
+  });
+
+  describe('addClaim', () => {
+    it('holds the entities its heldBy lists, until it is removed', () => {
+      const m1 = msg({ id: 'm1' });
+      const m2 = msg({ id: 'm2' });
+      store.upsert(m1);
+      store.upsert(m2);
+      const unregister = store.addClaim({ heldBy: () => [m1], name: 'composer' });
+
+      expect(store.isHeld('m1')).toBe(true);
+      expect(store.holderNames('m1')).toEqual(['composer']);
+      expect(store.unheldEntries()).toEqual([['m2', m2]]);
+
+      unregister();
+      expect(store.isHeld('m1')).toBe(false);
+    });
+
+    it('names a claim once for an entity it lists several times', () => {
+      const m = msg({ id: 'm1' });
+      store.upsert(m);
+      store.addClaim({ heldBy: () => [m, m, m], name: 'threads' });
+      store.addClaim({ heldBy: () => [m], name: 'composer' });
+
+      expect(store.holderNames('m1')).toEqual(['threads', 'composer']);
+    });
+
+    it('finds an entity stored under an id other than its own, by identity', () => {
+      const m = msg({ id: 'm1' });
+      store.getOrCreate('temp', () => m);
+      store.addClaim({ heldBy: () => [m], name: 'composer' });
+
+      expect(store.isHeld('temp')).toBe(true);
+      expect(store.unheldEntries()).toEqual([]);
+    });
+
+    it('reads heldBy when asked, so a change needs no report', () => {
+      const m = msg({ id: 'm1' });
+      store.upsert(m);
+      let held: LocalMessage[] = [];
+      store.addClaim({ heldBy: () => held });
+
+      expect(store.isHeld('m1')).toBe(false);
+      held = [m];
+      expect(store.isHeld('m1')).toBe(true);
+    });
+  });
+
   describe('clear', () => {
     it('removes every entry and holder and releases each entity', () => {
       const onRelease = vi.fn();

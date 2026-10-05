@@ -109,6 +109,11 @@ export class ThreadManager extends WithSubscriptions {
     this.client = client;
     this.state = new StateStore<ThreadManagerState>(THREAD_MANAGER_INITIAL_STATE);
     this.paginator = new ThreadPaginator({ client, store: this.threadStore });
+    // a thread keeps its channel, whether listed or opened
+    client.channelManager.channelStore.addClaim({
+      heldBy: () => this.registeredThreads.map((thread) => thread.channel),
+      name: 'threads',
+    });
     // Every thread entering the list gets its channel's disposal listener. Set up here rather than in
     // `registerSubscriptions()`, so it doesn't depend on a UI having mounted.
     this.paginator.state.subscribeWithSelector(

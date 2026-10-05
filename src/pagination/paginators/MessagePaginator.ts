@@ -106,6 +106,9 @@ export type LiveViewState = {
  * the "jump to first unread" navigation built on top of them.
  */
 export class MessagePaginator extends MessageIntervalPaginator {
+  protected get holderName() {
+    return 'message-paginator';
+  }
   private unreadReferencePolicy: 'snapshot' | 'read-state-only';
   /**
    * Independent unread reference state (not tied to `channel.state.read`).
