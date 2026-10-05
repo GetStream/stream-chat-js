@@ -6,6 +6,7 @@ import type {
   UpdateMessageOptions,
 } from '../types';
 import { applyReactionLocally } from './applyReactionLocally';
+import { FailedSendCache } from './FailedSendCache';
 import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
 import type { StateStore } from '@stream-io/state-store';
 import { ConfigController } from '../configuration/ConfigController';
@@ -34,12 +35,6 @@ export const DEFAULT_MESSAGE_OPERATIONS_CONFIG: MessageOperationsConfig =
     failedSendCacheTtlMs: 5 * 60 * 1000,
   });
 
-type FailedSendCacheEntry = {
-  message: MessageRequest;
-  options?: OperationParams<'send'>['options'];
-  cachedAt: number;
-};
-
 /**
  * Every optimistic operation on a message, each one method reading top to bottom.
  *
@@ -50,7 +45,7 @@ type FailedSendCacheEntry = {
 export class MessageOperations {
   private ctx: MessageOperationsContext;
   private policy: MessageOperationStatePolicy;
-  private failedSendCache = new Map<string, FailedSendCacheEntry>();
+  private readonly failedSendCache = new FailedSendCache(() => this.config);
   private readonly normalizeOutgoingMessage: NonNullable<
     MessageOperationsContext['normalizeOutgoingMessage']
   >;
@@ -112,75 +107,6 @@ export class MessageOperations {
    */
   initializeConfig(config?: Partial<MessageOperationsConfig>) {
     this.configController.initialize(config);
-  }
-
-  private pruneExpiredFailedSendCache() {
-    const now = Date.now();
-
-    for (const [messageId, entry] of this.failedSendCache) {
-      if (now - entry.cachedAt > this.config.failedSendCacheTtlMs) {
-        this.clearCachedFailedSend(messageId);
-      }
-    }
-  }
-
-  private cacheFailedSend(params: {
-    messageId: string;
-    message: MessageRequest;
-    options?: OperationParams<'send'>['options'];
-  }) {
-    this.pruneExpiredFailedSendCache();
-
-    if (
-      !this.failedSendCache.has(params.messageId) &&
-      this.failedSendCache.size >= this.config.failedSendCacheMaxSize
-    ) {
-      const oldestMessageId = this.failedSendCache.keys().next().value;
-      if (oldestMessageId) {
-        this.clearCachedFailedSend(oldestMessageId);
-      }
-    }
-
-    this.failedSendCache.set(params.messageId, {
-      cachedAt: Date.now(),
-      message: params.message,
-      options: params.options,
-    });
-  }
-
-  private getCachedFailedSend(messageId: string) {
-    const cached = this.failedSendCache.get(messageId);
-    if (!cached) return;
-
-    if (Date.now() - cached.cachedAt > this.config.failedSendCacheTtlMs) {
-      this.clearCachedFailedSend(messageId);
-      return;
-    }
-
-    return cached;
-  }
-
-  private clearCachedFailedSend(messageId: string) {
-    this.failedSendCache.delete(messageId);
-  }
-
-  /**
-   * Folds an edit into the payload cached for this message's failed send, so `retry` resends what the
-   * message contains now rather than what it contained when the send failed.
-   *
-   * This exists so a retry while offline for example is also persisted, rather than just disappearing.
-   */
-  private rewriteCachedFailedSend(localMessage: OperationParams<'send'>['localMessage']) {
-    const cached = this.getCachedFailedSend(localMessage.id);
-    if (!cached) return;
-
-    this.failedSendCache.set(localMessage.id, {
-      ...cached,
-      message: {
-        ...cached.message,
-        ...localMessageToNewMessagePayload(localMessage),
-      },
-    });
   }
 
   /**
@@ -329,7 +255,7 @@ export class MessageOperations {
     const handlers = this.ctx.handlers();
     // A failed message can carry an `error` type; what is resent is a regular message.
     const localMessage = { ...params.localMessage, type: 'regular' as const };
-    const cachedPayload = this.getCachedFailedSend(localMessage.id);
+    const cachedPayload = this.failedSendCache.get(localMessage.id);
     await this.sendWithFailedSendCache(
       'retry',
       {
@@ -362,9 +288,9 @@ export class MessageOperations {
         params,
         requestFn ? (p) => requestFn(p, defaultRequest) : defaultRequest,
       );
-      this.clearCachedFailedSend(localMessage.id);
+      this.failedSendCache.clear(localMessage.id);
     } catch (error) {
-      this.cacheFailedSend({ message, messageId: localMessage.id, options });
+      this.failedSendCache.add({ message, messageId: localMessage.id, options });
       throw error;
     }
   }
@@ -373,7 +299,7 @@ export class MessageOperations {
     params: OperationParams<'update'>,
     requestFn?: OperationRequestFn<'update'>,
   ): Promise<void> {
-    this.rewriteCachedFailedSend(params.localMessage);
+    this.failedSendCache.rewriteWithEdit(params.localMessage);
 
     const handlers = this.ctx.handlers();
     let updateOptions: UpdateMessageOptions | undefined;

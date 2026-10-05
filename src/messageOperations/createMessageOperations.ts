@@ -1,5 +1,4 @@
-import { isQueuedForReplay } from './optimistic';
-import { queueOrRun } from '../offline-support/queueableOperations';
+import { isQueuedForReplay, queueOrRun } from '../offline-support/queueableOperations';
 import { getPendingTaskChannelData } from '../offline-support/util';
 import { keepSendOrderWhilePendingUploadsAllowed } from './sendOrdering';
 import { settlePendingAttachmentUploads } from './settlePendingAttachmentUploads';
