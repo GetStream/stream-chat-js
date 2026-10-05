@@ -1,5 +1,6 @@
 import { StateStore } from './store';
 import type { StreamChat } from './client';
+import { getMaxVotedOptionIds, OptimisticPollVotes } from './poll_optimistic_votes';
 import type {
   Event,
   PartialPollUpdate,
@@ -90,12 +91,17 @@ export class Poll {
   public readonly state: StateStore<PollState>;
   public id: string;
   private client: StreamChat;
+  private optimisticVotes: OptimisticPollVotes;
+  // Set whenever server data (WS event or rehydration) confirms that the poll is closed,
+  // so that a failed optimistic close does not reopen a poll that is actually closed.
+  private closeConfirmed = false;
 
   constructor({ client, poll }: PollInitOptions) {
     this.client = client;
     this.id = poll.id;
 
     this.state = new StateStore<PollState>(this.getInitialStateFromPollResponse(poll));
+    this.optimisticVotes = new OptimisticPollVotes({ client: this.client, poll: this });
   }
 
   private getInitialStateFromPollResponse = (poll: PollInitOptions['poll']) => {
@@ -127,15 +133,45 @@ export class Poll {
     };
   };
 
+  // persists only the server's votes, never the optimistic ones
   private upsertOfflineDb = () => {
+    const serverState = this.optimisticVotes.withServerVotes(this.data);
     this.client.offlineDb?.executeQuerySafely(
-      (db) => db.upsertPoll({ poll: mapPollStateToResponse(this) }),
+      (db) => db.upsertPoll({ poll: mapPollStateToResponse(this, serverState) }),
       { method: 'upsertPoll' },
     );
   };
 
   public reinitializeState = (poll: PollInitOptions['poll']) => {
-    this.state.partialNext(this.getInitialStateFromPollResponse(poll));
+    if (poll.is_closed) this.closeConfirmed = true;
+    const initialState = this.getInitialStateFromPollResponse(poll);
+    this.optimisticVotes.reset(initialState);
+    this.state.partialNext(initialState);
+  };
+
+  // Hands the vote state of a WS vote event to the optimistic votes, which decide whether to show it.
+  private updateFromVoteEvent = (
+    event: Event & {
+      created_at: string;
+      poll: PollResponse;
+      poll_vote: PollVote | PollAnswer;
+    },
+    ownVotesByOptionId: Record<OptionId, PollVote>,
+    answerState: Pick<PollState, 'latest_answers' | 'ownAnswer'>,
+  ) => {
+    const isOwnVote = event.poll_vote.user_id === this.client.userID;
+    const shownVoteState = this.optimisticVotes.handleVoteEvent(event.poll, {
+      confirmsOwnVote:
+        isOwnVote && !isVoteAnswer(event.poll_vote) && !!event.poll_vote.option_id,
+      ownVotesByOptionId,
+    });
+    this.state.partialNext({
+      ...answerState,
+      answers_count: event.poll.answers_count,
+      lastActivityAt: new Date(event.created_at),
+      ...shownVoteState,
+    });
+    this.upsertOfflineDb();
   };
 
   get data(): PollState {
@@ -147,6 +183,7 @@ export class Poll {
     if (!isPollUpdatedEvent(event)) return;
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { id, ...pollData } = extractPollData(event.poll);
+    if (pollData.is_closed) this.closeConfirmed = true;
     // @ts-expect-error type mismatch
     this.state.partialNext({ ...pollData, lastActivityAt: new Date(event.created_at) });
     this.upsertOfflineDb();
@@ -155,6 +192,7 @@ export class Poll {
   public handlePollClosed = (event: Event) => {
     if (event.poll?.id && event.poll.id !== this.id) return;
     if (!isPollClosedEventEvent(event)) return;
+    this.closeConfirmed = true;
     this.state.partialNext({
       is_closed: true,
       lastActivityAt: new Date(event.created_at),
@@ -169,8 +207,7 @@ export class Poll {
     const isOwnVote = event.poll_vote.user_id === this.client.userID;
     let latestAnswers = [...(currentState.latest_answers as PollAnswer[])];
     let ownAnswer = currentState.ownAnswer;
-    const ownVotesByOptionId = currentState.ownVotesByOptionId;
-    let maxVotedOptionIds = currentState.maxVotedOptionIds;
+    const ownVotesByOptionId = { ...this.optimisticVotes.serverOwnVotes };
 
     if (isOwnVote) {
       if (isVoteAnswer(event.poll_vote)) {
@@ -182,20 +219,12 @@ export class Poll {
 
     if (isVoteAnswer(event.poll_vote)) {
       latestAnswers = [event.poll_vote, ...latestAnswers];
-    } else {
-      maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
     }
 
-    const pollEnrichData = extractPollEnrichedData(event.poll);
-    this.state.partialNext({
-      ...pollEnrichData,
+    this.updateFromVoteEvent(event, ownVotesByOptionId, {
       latest_answers: latestAnswers,
-      lastActivityAt: new Date(event.created_at),
       ownAnswer,
-      ownVotesByOptionId,
-      maxVotedOptionIds,
     });
-    this.upsertOfflineDb();
   };
 
   public handleVoteChanged = (event: Event) => {
@@ -206,8 +235,7 @@ export class Poll {
     const isOwnVote = event.poll_vote.user_id === this.client.userID;
     let latestAnswers = [...(currentState.latest_answers as PollAnswer[])];
     let ownAnswer = currentState.ownAnswer;
-    let ownVotesByOptionId = currentState.ownVotesByOptionId;
-    let maxVotedOptionIds = currentState.maxVotedOptionIds;
+    let ownVotesByOptionId = this.optimisticVotes.serverOwnVotes;
 
     if (isOwnVote) {
       if (isVoteAnswer(event.poll_vote)) {
@@ -238,24 +266,15 @@ export class Poll {
         if (ownAnswer?.id === event.poll_vote.id) {
           ownAnswer = undefined;
         }
-        maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
       }
     } else if (isVoteAnswer(event.poll_vote)) {
       latestAnswers = [event.poll_vote, ...latestAnswers];
-    } else {
-      maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
     }
 
-    const pollEnrichData = extractPollEnrichedData(event.poll);
-    this.state.partialNext({
-      ...pollEnrichData,
+    this.updateFromVoteEvent(event, ownVotesByOptionId, {
       latest_answers: latestAnswers,
-      lastActivityAt: new Date(event.created_at),
       ownAnswer,
-      ownVotesByOptionId,
-      maxVotedOptionIds,
     });
-    this.upsertOfflineDb();
   };
 
   public handleVoteRemoved = (event: Event) => {
@@ -265,31 +284,21 @@ export class Poll {
     const isOwnVote = event.poll_vote.user_id === this.client.userID;
     let latestAnswers = [...(currentState.latest_answers as PollAnswer[])];
     let ownAnswer = currentState.ownAnswer;
-    const ownVotesByOptionId = { ...currentState.ownVotesByOptionId };
-    let maxVotedOptionIds = currentState.maxVotedOptionIds;
+    const ownVotesByOptionId = { ...this.optimisticVotes.serverOwnVotes };
 
     if (isVoteAnswer(event.poll_vote)) {
       latestAnswers = latestAnswers.filter((answer) => answer.id !== event.poll_vote.id);
       if (isOwnVote) {
         ownAnswer = undefined;
       }
-    } else {
-      maxVotedOptionIds = getMaxVotedOptionIds(event.poll.vote_counts_by_option);
-      if (isOwnVote && event.poll_vote.option_id) {
-        delete ownVotesByOptionId[event.poll_vote.option_id];
-      }
+    } else if (isOwnVote && event.poll_vote.option_id) {
+      delete ownVotesByOptionId[event.poll_vote.option_id];
     }
 
-    const pollEnrichData = extractPollEnrichedData(event.poll);
-    this.state.partialNext({
-      ...pollEnrichData,
+    this.updateFromVoteEvent(event, ownVotesByOptionId, {
       latest_answers: latestAnswers,
-      lastActivityAt: new Date(event.created_at),
       ownAnswer,
-      ownVotesByOptionId,
-      maxVotedOptionIds,
     });
-    this.upsertOfflineDb();
   };
 
   query = async (id: string) => {
@@ -304,7 +313,26 @@ export class Poll {
   partialUpdate = async (partialPollObject: PartialPollUpdate) =>
     await this.client.partialUpdatePoll(this.id as string, partialPollObject);
 
-  close = async () => await this.client.closePoll(this.id as string);
+  /**
+   * Closes the poll. The poll is marked as closed optimistically and the change is
+   * reverted if the request fails, unless the server confirmed the close meanwhile.
+   * Does nothing if the poll is already closed.
+   */
+  close = async () => {
+    if (this.data.is_closed) return;
+
+    this.closeConfirmed = false;
+    this.state.partialNext({ is_closed: true });
+
+    try {
+      return await this.client.closePoll(this.id as string);
+    } catch (error) {
+      if (!this.closeConfirmed) {
+        this.state.partialNext({ is_closed: false });
+      }
+      throw error;
+    }
+  };
 
   delete = async () => await this.client.deletePoll(this.id as string);
 
@@ -317,6 +345,11 @@ export class Poll {
   deleteOption = async (optionId: string) =>
     await this.client.deletePollOption(this.id as string, optionId);
 
+  /**
+   * Casts a vote for an option. The vote is shown right away through a local placeholder vote,
+   * which the server's vote replaces once the WS events of all pending vote changes arrived.
+   * If the request fails, the change is reverted.
+   */
   castVote = async (optionId: string, messageId: string) => {
     const { max_votes_allowed, ownVotesByOptionId } = this.data;
 
@@ -336,13 +369,17 @@ export class Poll {
       });
       return;
     }
-    return await this.client.castPollVote(messageId, this.id as string, {
-      option_id: optionId,
-    });
+
+    return await this.optimisticVotes.castVote(optionId, messageId);
   };
 
+  /**
+   * Removes a vote. The vote is removed right away and restored if the request fails. Vote
+   * requests are sent in order, so removing a vote whose cast is not confirmed yet uses the vote
+   * id from the cast's response; if that cast failed, there is nothing to remove.
+   */
   removeVote = async (voteId: string, messageId: string) =>
-    await this.client.removePollVote(messageId, this.id as string, voteId);
+    await this.optimisticVotes.removeVote(voteId, messageId);
 
   addAnswer = async (answerText: string, messageId: string) =>
     await this.client.addPollAnswer(messageId, this.id as string, answerText);
@@ -365,20 +402,6 @@ export class Poll {
       params.sort,
       params.options,
     );
-}
-
-function getMaxVotedOptionIds(voteCountsByOption: PollResponse['vote_counts_by_option']) {
-  let maxVotes = 0;
-  let winningOptions: string[] = [];
-  for (const [id, count] of Object.entries(voteCountsByOption ?? {})) {
-    if (count > maxVotes) {
-      winningOptions = [id];
-      maxVotes = count;
-    } else if (count === maxVotes) {
-      winningOptions.push(id);
-    }
-  }
-  return winningOptions;
 }
 
 function getOwnVotesByOptionId(ownVotes: PollVote[]) {
@@ -406,7 +429,10 @@ export function extractPollData(pollResponse: PollResponse): PollData {
   };
 }
 
-export function mapPollStateToResponse(poll: Poll): PollResponse {
+export function mapPollStateToResponse(
+  poll: Poll,
+  state: PollState = poll.data,
+): PollResponse {
   const {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     lastActivityAt,
@@ -415,7 +441,7 @@ export function mapPollStateToResponse(poll: Poll): PollResponse {
     ownVotesByOptionId,
     ownAnswer,
     ...restState
-  } = poll.data;
+  } = state;
   const ownVotes = [
     ...Object.values(ownVotesByOptionId),
     ...(ownAnswer ? [ownAnswer] : []),
