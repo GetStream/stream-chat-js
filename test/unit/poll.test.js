@@ -742,11 +742,10 @@ describe('Poll', () => {
 		await poll.castVote(option_id, messageId);
 
 		expect(removePollVoteSpy).not.toHaveBeenCalled();
-		expect(castPollVoteSpy).toHaveBeenCalledWith({
-			message_id: messageId,
-			poll_id: pollResponse.id,
-			vote: { option_id },
-		});
+		expect(castPollVoteSpy).toHaveBeenCalledWith(
+			{ message_id: messageId, poll_id: pollResponse.id },
+			{ vote: { option_id } },
+		);
 		expect(addInfoNotificationSpy).not.toHaveBeenCalled();
 	});
 
@@ -768,11 +767,10 @@ describe('Poll', () => {
 		await poll.castVote(option_id, messageId);
 
 		expect(removePollVoteSpy).not.toHaveBeenCalled();
-		expect(castPollVoteSpy).toHaveBeenCalledWith({
-			message_id: messageId,
-			poll_id: pollResponse.id,
-			vote: { option_id },
-		});
+		expect(castPollVoteSpy).toHaveBeenCalledWith(
+			{ message_id: messageId, poll_id: pollResponse.id },
+			{ vote: { option_id } },
+		);
 		expect(addInfoNotificationSpy).not.toHaveBeenCalled();
 	});
 });

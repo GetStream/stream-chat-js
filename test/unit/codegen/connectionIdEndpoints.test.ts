@@ -38,14 +38,20 @@ const methodsEmittingConnectionId = () => {
   const found = new Set<string>();
 
   for (const file of walk(GEN_ROOT)) {
-    const lines = readFileSync(file, 'utf8').split('\n');
+    const source = readFileSync(file, 'utf8');
+    // Only the classes that send requests. A resource class (`ChannelApi`) restates the signatures of
+    // the operations it wraps, which would list `getOrCreate` / `stopWatching` alongside them.
+    if (!source.includes('this.apiClient.sendRequest')) continue;
+
     let currentMethod: string | undefined;
 
-    for (const line of lines) {
+    for (const line of source.split('\n')) {
       const declaration = /^\s{2}(?:async\s+)?([A-Za-z0-9_]+)\(\s*$/.exec(line);
       if (declaration) currentMethod = declaration[1];
 
-      if (line.includes('connection_id: request?.connection_id') && currentMethod) {
+      // The request is passed through as-is, so a query param shows up only in the method's
+      // signature (`request?: … & { connection_id?: string }`) and the destructure that splits it off.
+      if (/\bconnection_id\??:/.test(line) && currentMethod) {
         found.add(currentMethod);
       }
     }
@@ -63,6 +69,9 @@ describe('generated endpoints declaring connection_id', () => {
     // GET /users needs a connection id to subscribe to presence but the spec declares no
     // `connection_id` param, so it is the one operation the flag probes alone keep gated. Drop
     // those probes and queryUsers silently stops waiting.
-    expect(methodsEmittingConnectionId()).not.toContain('queryUsers');
+    const found = methodsEmittingConnectionId();
+    // Guards against a detector that matches nothing, which would pass this test by default.
+    expect(found).toContain('getOrCreateChannel');
+    expect(found).not.toContain('queryUsers');
   });
 });
