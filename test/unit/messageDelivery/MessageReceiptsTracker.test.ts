@@ -753,6 +753,30 @@ describe('MessageDeliveryReadTracker', () => {
       expect(tracker.getUserProgress(carol.id)?.lastReadRef).toEqual(ref(2000));
     });
 
+    it('takes an updated user object whose read position is unchanged', () => {
+      const bob = U('bob');
+      const renamed = { ...bob, name: 'Robert' };
+      const readState = (user: typeof bob) => ({
+        [bob.id]: {
+          last_read: 3000,
+          unread_messages: 0,
+          user,
+          last_read_message_id: 'm3',
+        },
+      });
+      tracker.ingestInitial([{ user: bob, last_read: 3000 }]);
+      const revision = tracker.snapshotStore.getLatestValue().revision;
+
+      tracker.reconcileFromReadStore({
+        previousReadState: readState(bob),
+        nextReadState: readState(renamed),
+        meta: { changedUserIds: [bob.id] },
+      });
+
+      expect(tracker.getUserProgress(bob.id)?.user).toBe(renamed);
+      expect(tracker.snapshotStore.getLatestValue().revision).toBe(revision + 1);
+    });
+
     it('accepts a read state whose last_read is the epoch', () => {
       // `0` is the epoch sentinel; a truthiness check would reject the state as invalid.
       const newcomer = U('newcomer');

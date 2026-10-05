@@ -635,7 +635,8 @@ export class MessageReceiptsTracker extends WithSubscriptions {
       ) === 0 &&
       existingUserProgress.lastDeliveredRef.msgId ===
         nextUserProgress.lastDeliveredRef.msgId;
-    const hasSameUser = existingUserProgress.user.id === nextUserProgress.user.id;
+    // by reference: an updated user (a new name or image) arrives as a new object with the same id
+    const hasSameUser = existingUserProgress.user === nextUserProgress.user;
 
     if (hasSameReadRef && hasSameDeliveredRef && hasSameUser) {
       return false;

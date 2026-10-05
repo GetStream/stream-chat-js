@@ -1947,6 +1947,19 @@ describe('user.updated propagates to channel members, watchers and read states',
 		expect(before.read.bob.user.name).toBe('Bob');
 	});
 
+	it('gives the read receipts the updated user', () => {
+		channel.state.partialNext({
+			read: { bob: { user: bob, last_read: 3000, unread_messages: 0 } },
+		});
+		channel.messageReceiptsTracker.ingestInitial([{ user: bob, last_read: 3000 }]);
+
+		client._handleClientEvent({ type: 'user.updated', user: { ...bob, name: 'Robert' } });
+
+		expect(channel.messageReceiptsTracker.getUserProgress('bob')?.user.name).toBe(
+			'Robert',
+		);
+	});
+
 	it('re-renders a subscriber of channel.state.members', () => {
 		const names = [];
 		const unsubscribe = channel.state.subscribeWithSelector(

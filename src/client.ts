@@ -1050,11 +1050,20 @@ export class StreamChat extends ChatApi {
       const readState = read[user.id];
       const hasWatcher = !!watchers[user.id];
       if (!member && !hasWatcher && !readState) continue;
+      // The receipts tracker applies a read-state change only with metadata naming the changed
+      // users; without it, its readers would keep the user's old object.
+      if (readState) {
+        channel.messageReceiptsTracker.setPendingReadStoreReconcileMeta({
+          changedUserIds: [user.id],
+        });
+      }
       channel.state.partialNext({
         ...(member && { members: { ...members, [user.id]: { ...member, user } } }),
         ...(hasWatcher && { watchers: { ...watchers, [user.id]: user } }),
         ...(readState && { read: { ...read, [user.id]: { ...readState, user } } }),
       });
+      // consumed by the tracker's read subscription; cleared in case it isn't subscribed
+      channel.messageReceiptsTracker.setPendingReadStoreReconcileMeta(undefined);
     }
   };
 
