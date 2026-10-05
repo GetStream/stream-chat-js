@@ -2931,8 +2931,9 @@ describe('OfflineDBSyncManager', () => {
         recentDate.setDate(recentDate.getDate() - 10);
         getLastSyncedAtSpy.mockResolvedValueOnce(recentDate.toString());
 
+        // 48 is RequestTimeoutError.
         const axiosError = {
-          response: { data: { code: 23 } },
+          response: { data: { code: 48 } },
         } as AxiosError<APIErrorResponse>;
 
         syncApiSpy.mockRejectedValueOnce(axiosError);
