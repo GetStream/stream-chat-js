@@ -474,7 +474,7 @@ describe('Threads 2.0', () => {
 
           await thread.messagePaginator.toTail();
 
-          expect(getRepliesStub.firstCall.args[0].id_lt).to.equal(older.id);
+          expect(getRepliesStub.firstCall.args[1]?.id_lt).to.equal(older.id);
         });
 
         it('copies state of the instance with the same id', () => {
@@ -1153,7 +1153,7 @@ describe('Threads 2.0', () => {
 
           await thread.messagePaginator.toTail();
 
-          expect(getRepliesStub.firstCall.args[0].id_lt).to.equal(oldestSeeded.id);
+          expect(getRepliesStub.firstCall.args[1]?.id_lt).to.equal(oldestSeeded.id);
         });
 
         it('seeds no tailward cursor when latest_replies already holds every reply', () => {
