@@ -278,7 +278,8 @@ describe('ConnectionRecoveryManager', () => {
 
   describe('connection.recovered', () => {
     it('is dispatched after the reload, on a path `recoverState()` never runs on', async () => {
-      // `recoverState()` is only ever called by `StableWSConnection._reconnect()`, so a
+      // `recoverState()` was only ever called on an automatic reconnect (the socket's
+      // `_reconnect()`, or v9's long-poll `connect(true)`), so a
       // `closeConnection()` → `openConnection()` cycle (mobile backgrounding) used to produce no
       // `connection.recovered` at all. Consumers that key post-recovery work off it — marking a
       // caught-up channel read, for one — silently did nothing there.

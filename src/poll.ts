@@ -325,24 +325,24 @@ export class Poll {
     await this.client.updatePoll({ ...data, id: this.id as string });
 
   partialUpdate = async (partialPollObject: PartialPollUpdate) =>
-    await this.client.updatePollPartial({
-      poll_id: this.id as string,
-      ...partialPollObject,
-    });
+    await this.client.updatePollPartial(
+      { poll_id: this.id as string },
+      partialPollObject,
+    );
 
   close = async () =>
-    await this.client.updatePollPartial({
-      poll_id: this.id as string,
-      set: { is_closed: true },
-    });
+    await this.client.updatePollPartial(
+      { poll_id: this.id as string },
+      { set: { is_closed: true } },
+    );
 
   delete = async () => await this.client.deletePoll({ poll_id: this.id as string });
 
   createOption = async (option: CreatePollOptionRequest) =>
-    await this.client.createPollOption({ poll_id: this.id as string, ...option });
+    await this.client.createPollOption({ poll_id: this.id as string }, option);
 
   updateOption = async (option: UpdatePollOptionRequest) =>
-    await this.client.updatePollOption({ poll_id: this.id as string, ...option });
+    await this.client.updatePollOption({ poll_id: this.id as string }, option);
 
   deleteOption = async (option_id: string) =>
     await this.client.deletePollOption({ poll_id: this.id as string, option_id });
@@ -366,11 +366,10 @@ export class Poll {
       });
       return;
     }
-    return await this.client.castPollVote({
-      message_id: messageId,
-      poll_id: this.id as string,
-      vote: { option_id: optionId },
-    });
+    return await this.client.castPollVote(
+      { message_id: messageId, poll_id: this.id as string },
+      { vote: { option_id: optionId } },
+    );
   };
 
   removeVote = async (voteId: string, messageId: string) =>
@@ -381,11 +380,10 @@ export class Poll {
     });
 
   addAnswer = async (answerText: string, messageId: string) =>
-    await this.client.castPollVote({
-      message_id: messageId,
-      poll_id: this.id as string,
-      vote: { answer_text: answerText },
-    });
+    await this.client.castPollVote(
+      { message_id: messageId, poll_id: this.id as string },
+      { vote: { answer_text: answerText } },
+    );
 
   removeAnswer = async (answerId: string, messageId: string) =>
     await this.client.deletePollVote({
@@ -395,20 +393,20 @@ export class Poll {
     });
 
   queryAnswers = async (params: PollAnswersQueryParams) =>
-    await this.client.queryPollVotes({
-      poll_id: this.id as string,
-      sort: params.sort,
-      filter: { ...(params.filter ?? {}), is_answer: true },
-      ...(params.options ?? {}),
-    });
+    await this.client.queryPollVotes(
+      { poll_id: this.id as string },
+      {
+        sort: params.sort,
+        filter: { ...(params.filter ?? {}), is_answer: true },
+        ...(params.options ?? {}),
+      },
+    );
 
   queryOptionVotes = async (params: PollOptionVotesQueryParams) =>
-    await this.client.queryPollVotes({
-      poll_id: this.id as string,
-      sort: params.sort,
-      filter: params.filter,
-      ...(params.options ?? {}),
-    });
+    await this.client.queryPollVotes(
+      { poll_id: this.id as string },
+      { sort: params.sort, filter: params.filter, ...(params.options ?? {}) },
+    );
 }
 
 function getMaxVotedOptionIds(

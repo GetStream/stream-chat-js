@@ -71,7 +71,8 @@ it.
 ### Everywhere else, install one — and read this if you do not
 
 A host that cannot answer the question gets a stand-in that **mirrors this client's WebSocket**, so an
-integration that forgets the setup has a signal rather than nothing at all.
+integration that forgets the setup has a signal rather than nothing at all. (It reads the WebSocket's
+status store, so after an [`enableWSFallback`](#long-poll-fallback) switch it mirrors the long-poll.)
 
 It is a safety net, not a measurement, and it has one consequence you must know about. Under it, the
 device's status is the socket's status, so `isOnline === false` whenever the socket dies **for its own
@@ -176,7 +177,7 @@ client.wsConnection.state.getLatestValue();
 // { isHealthy: boolean, lastHealthyAt: Date | null, lastUnhealthyAt: Date | null }
 ```
 
-Two things about this store are worth knowing.
+A few things about this store are worth knowing.
 
 **It records every transition**, including `disconnect()` — what `client.closeConnection()` calls, the
 documented mobile backgrounding path — and the socket's internal error paths. There is nothing it
@@ -193,6 +194,22 @@ awaits for anything that watches a channel or subscribes to presence — so thos
 reconnect instead of going out keyed to a connection the server has closed. You rarely need to read
 it; `client.connectionIdManager.connectionId` is there if you do.
 
+### Long-poll fallback
+
+With `enableWSFallback` on, a WebSocket that fails to connect with a network error — reported once
+`connectTimeoutMs` runs out — makes the client switch to HTTP long-polling against `/api/v2/longpoll`.
+It dispatches `connection.fallback_activated` with `mode: 'longpoll'` and stays on long-poll for the
+rest of the client's life, `disconnectUser()` included. The switch is skipped when a network reporter
+says the device is offline; the stand-in's "offline" does not count, since it only means the socket
+is down.
+
+After the switch, **this same store describes the long-poll**: `client.wsConnection.isHealthy` and
+`state` report whether it is up, `connection.recovered` follows its reconnects, and
+`client.connectionIdManager` holds its connection id. The long-poll follows `client.networkConnection`
+too — it closes when the device goes offline and reconnects when it comes back — except while
+`closeConnection()` or `disconnectUser()` has closed it, until it is reconnected. v9 stopped listening
+for good at its first disconnect.
+
 ### Timing and transport settings
 
 ```ts
@@ -200,6 +217,7 @@ client.config.set({
   client: {
     wsConnection: {
       connectTimeoutMs: 15000, // how long connect() waits for the server's hello
+      enableWSFallback: false, // long-poll when the WebSocket cannot connect — see above
       pingIntervalMs: 25000, // how often a health-check ping goes out — 25s is also the maximum
       healthCheckGracePeriodMs: 10000, // extra room before the socket is declared dead
       offlineNotificationDisplayDelayMs: 5000, // how long a UI holds a drop before reporting it
@@ -227,21 +245,27 @@ client.on('connection.recovered', () => {
 });
 ```
 
+With `enableWSFallback` on there is also `connection.fallback_activated`, dispatched once, when the
+client switches to long-polling. It reports the transport, not its status.
+
 There is no `connection.changed`. Connectivity used to be published twice, as the stores and as that
 event, and the two disagreed: the event was silent on `closeConnection()` and two error paths, and
 held a drop for five seconds. Subscribe to whichever store you mean instead.
 
 ## Migration
 
-| Before                                                      | Now                                                                           |
-| ----------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `client.wsConnection.onlineStatusChanged(fakeDomEvent)`     | `client.networkConnection.setStatus(isOnline)`                                |
-| `client.on('connection.changed', …)`                        | `client.wsConnection.state` or `client.networkConnection.state`, subscribed   |
-| `connection.recovered`'s `connection` field                 | gone; the event reports the socket and carries no payload                     |
-| `NetworkStatusListenerRegistrar`, `statusListenerRegistrar` | `NetworkStatusReporter`, `statusReporter`                                     |
-| `client.threads.state.lastConnectionDropAt`                 | `client.wsConnection.state.lastUnhealthyAt`                                   |
-| `client.defaultWSTimeout = 5000`                            | `client.config.set({ client: { wsConnection: { connectTimeoutMs: 5000 } } })` |
-| `new StreamChat(key, { WebSocketImpl, wsUrlParams })`       | `wsConnection` config: `webSocketImpl`, `urlParams`                           |
+| Before                                                      | Now                                                                              |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `client.wsConnection.onlineStatusChanged(fakeDomEvent)`     | `client.networkConnection.setStatus(isOnline)`                                   |
+| `client.on('connection.changed', …)`                        | `client.wsConnection.state` or `client.networkConnection.state`, subscribed      |
+| `connection.recovered`'s `connection` field                 | gone; the event reports the socket and carries no payload                        |
+| `NetworkStatusListenerRegistrar`, `statusListenerRegistrar` | `NetworkStatusReporter`, `statusReporter`                                        |
+| `client.threads.state.lastConnectionDropAt`                 | `client.wsConnection.state.lastUnhealthyAt`                                      |
+| `client.defaultWSTimeout = 5000`                            | `client.config.set({ client: { wsConnection: { connectTimeoutMs: 5000 } } })`    |
+| `new StreamChat(key, { WebSocketImpl, wsUrlParams })`       | `wsConnection` config: `webSocketImpl`, `urlParams`                              |
+| `new StreamChat(key, { enableWSFallback: true })`           | `wsConnection` config: `enableWSFallback`                                        |
+| `client.on('transport.changed', …)`                         | `client.on('connection.fallback_activated', …)`; same `mode: 'longpoll'` payload |
+| `client.defaultWSTimeoutWithFallback`                       | gone; the switch waits `connectTimeoutMs`                                        |
 
 `utils.ts` also had an internal `isOnline()` helper and an `addConnectionEventListeners()` pair. None
 was exported from the package, so there is nothing to migrate — they are gone, and

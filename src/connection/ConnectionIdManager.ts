@@ -5,7 +5,8 @@ import { chatLoggerSystem } from '../logger';
 const logger = chatLoggerSystem.getLogger('connection');
 
 /**
- * Holds the WebSocket connection id and lets callers await one that is still being negotiated.
+ * Holds the connection id — the WebSocket's, or the long-poll's after an `enableWSFallback`
+ * switch — and lets callers await one that is still being negotiated.
  *
  * The server keys channel watches and presence subscriptions by connection id, and answers `200`
  * while registering nothing when a request that needs one arrives without it. Requests carrying such
@@ -14,11 +15,14 @@ const logger = chatLoggerSystem.getLogger('connection');
  *
  * The id lives here and nowhere else. A copy kept on the socket outlives the socket it belongs to,
  * and a copy in `client.wsConnection.state` cannot be invalidated by a socket that has already been
- * replaced; either way requests go out keyed to a connection the server has torn down.
+ * replaced; either way requests go out keyed to a connection the server has torn down. The long-poll
+ * keeps no copy either: `WSConnection.disconnect()` reads the id before the socket's `disconnect()`
+ * drops it, and hands it to the long-poll's close.
  *
- * {@link StableWSConnection} drives the whole lifecycle: {@link arm} before a socket opens,
- * {@link resolveConnectionId} on the hello frame, {@link invalidate} when it drops, {@link reset} on
- * a deliberate close.
+ * {@link StableWSConnection} drives the lifecycle: {@link arm} before a socket opens,
+ * {@link resolveConnectionId} on the hello frame, {@link invalidate} when it drops or is closed
+ * deliberately, {@link rejectConnectionId} when a reconnect gives up. After an `enableWSFallback`
+ * switch, `WSConnectionFallback` drives it the same way instead.
  */
 export class ConnectionIdManager {
   connectionId?: string;

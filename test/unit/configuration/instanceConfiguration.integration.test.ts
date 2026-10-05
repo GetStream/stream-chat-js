@@ -458,15 +458,13 @@ describe('instance configuration — cross-instance', () => {
       });
 
       const responseFor = (channel: Channel, typing_events: boolean) => ({
-        body: {
-          ...mockChannelQueryResponse,
-          channel: {
-            ...mockChannelQueryResponse.channel,
-            cid: channel.cid,
-            id: channel.id,
-            type: channel.type,
-            config: { ...mockChannelQueryResponse.channel.config, typing_events },
-          },
+        ...mockChannelQueryResponse,
+        channel: {
+          ...mockChannelQueryResponse.channel,
+          cid: channel.cid,
+          id: channel.id,
+          type: channel.type,
+          config: { ...mockChannelQueryResponse.channel.config, typing_events },
         },
         metadata: {},
       });

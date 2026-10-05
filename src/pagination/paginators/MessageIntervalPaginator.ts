@@ -533,11 +533,12 @@ export class MessageIntervalPaginator extends BasePaginator<
           : undefined;
     } else {
       const { messages } = this.parentMessageId
-        ? await this.channel.getClient().getReplies({
-            parent_id: this.parentMessageId,
-            ...options,
-            sort: this.requestSort,
-          })
+        ? await this.channel
+            .getClient()
+            .getReplies(
+              { parent_id: this.parentMessageId },
+              { ...options, sort: this.requestSort },
+            )
         : await this.channel.query({
             messages: options as MessagePaginationParams,
             // todo: why do we query for watchers?
@@ -983,7 +984,7 @@ export class MessageIntervalPaginator extends BasePaginator<
     const { messages } = this.parentMessageId
       ? await this.channel
           .getClient()
-          .getReplies({ parent_id: this.parentMessageId, ...pagination })
+          .getReplies({ parent_id: this.parentMessageId }, pagination)
       : await this.channel.query({ messages: pagination });
     return Array.isArray(messages) && messages.length > 0;
   }

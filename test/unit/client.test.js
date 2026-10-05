@@ -1,4 +1,5 @@
 import sinon from 'sinon';
+import { CanceledError } from 'axios';
 import { generateMsg } from './test-utils/generateMessage';
 import { getClientWithUser } from './test-utils/getClient';
 
@@ -7,6 +8,7 @@ import { StreamChat } from '../../src/client';
 import { ChatApi } from '../../src/gen-imports';
 import { chatLoggerSystem } from '../../src/logger';
 import { StableWSConnection } from '../../src/connection';
+import { WSFallbackConnectionState } from '../../src/connection/wsConnection/WSConnectionFallback';
 import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse';
 import { generateThreadResponse } from './test-utils/generateThreadResponse';
 import {
@@ -110,6 +112,27 @@ describe('StreamChat getInstance', () => {
 			'no-cache',
 		);
 		expect(requestSpy.mock.calls[0][0].headers).to.haveOwnProperty('Pragma', 'no-cache');
+	});
+
+	// `getApp` has no request, so `requestOptions` comes after an unused `_request` slot; nothing
+	// from it may reach the query string.
+	it('getAppSettings forwards requestOptions passed after the empty request slot', async () => {
+		const client = new StreamChat('key');
+		client.tokenManager.getToken = () => 'mock-token';
+		const controller = new AbortController();
+
+		const requestSpy = vi
+			.spyOn(client.axiosInstance, 'request')
+			.mockResolvedValueOnce({ data: {}, status: 200 });
+
+		await client.getAppSettings(undefined, { signal: controller.signal, timeout: 1234 });
+
+		expect(requestSpy).toHaveBeenCalledTimes(1);
+		const config = requestSpy.mock.calls[0][0];
+		expect(config.signal).toBe(controller.signal);
+		expect(config.timeout).toBe(1234);
+		expect(config.params).not.toHaveProperty('signal');
+		expect(config.params).not.toHaveProperty('timeout');
 	});
 });
 
@@ -1009,6 +1032,58 @@ describe('Client disconnectUser', () => {
 		expect(client.tokenManager.reset.called).to.be.true;
 	});
 
+	describe('when a user connects before the close settles', () => {
+		let client;
+		let resolveClose;
+
+		beforeEach(() => {
+			client = new StreamChat('key', { allowServerSideConnect: true });
+			// the real connectUser, without a socket
+			client.openConnection = () => Promise.resolve();
+			const { resolve, promise } = Promise.withResolvers();
+			resolveClose = resolve;
+			client.wsConnection = { disconnect: () => promise };
+		});
+
+		it('keeps the next user token', async () => {
+			await client.connectUser({ id: 'a' }, async () => 'token-a');
+
+			const disconnectPromise = client.disconnectUser();
+			await client.connectUser({ id: 'b' }, async () => 'token-b');
+			resolveClose();
+			await disconnectPromise;
+
+			expect(client.tokenManager.token).to.equal('token-b');
+			expect(client.tokenManager.user.id).to.equal('b');
+		});
+
+		it('keeps the token of the same user reconnecting', async () => {
+			const user = { id: 'a' };
+			const tokenProvider = async () => 'token-a';
+			await client.connectUser(user, tokenProvider);
+
+			const disconnectPromise = client.disconnectUser();
+			await client.connectUser(user, tokenProvider);
+			resolveClose();
+			await disconnectPromise;
+
+			expect(client.tokenManager.token).to.equal('token-a');
+			expect(client.tokenManager.user).to.equal(user);
+		});
+
+		it('keeps an anonymous user anonymous', async () => {
+			await client.connectUser({ id: 'a' }, async () => 'token-a');
+
+			const disconnectPromise = client.disconnectUser();
+			await client.connectAnonymousUser();
+			resolveClose();
+			await disconnectPromise;
+
+			expect(client.anonymous).to.be.true;
+			expect(client.getAuthType()).to.equal('anonymous');
+		});
+	});
+
 	it('should clear upload manager records', async () => {
 		const client = new StreamChat('', '');
 		client.uploadManager.state.next(() => ({
@@ -1109,7 +1184,7 @@ describe('message update', () => {
 			_updateMessageSpy.mockRestore();
 			sendRequestSpy = vi
 				.spyOn(client.api, 'sendRequest')
-				.mockResolvedValue({ body: {}, metadata: {} });
+				.mockResolvedValue({ metadata: {} });
 		});
 
 		it('strips composer-internal localMetadata from outgoing attachments', async () => {
@@ -1124,7 +1199,7 @@ describe('message update', () => {
 				],
 			});
 
-			await client._updateMessage({ id: message.id, message });
+			await client._updateMessage({ id: message.id }, { message });
 
 			const sent = sentMessage();
 			expect(sent.attachments).toHaveLength(1);
@@ -1144,7 +1219,7 @@ describe('message update', () => {
 				],
 			});
 
-			await client._updateMessage({ id: message.id, message });
+			await client._updateMessage({ id: message.id }, { message });
 
 			expect(sentMessage().attachments).toEqual([]);
 			expect(loggerSpy).toHaveBeenCalledWith(
@@ -1162,9 +1237,10 @@ describe('message update', () => {
 				cid: 'messaging:channel-123',
 				text: 'edited',
 			});
-			const request = { id: message.id, message, skip_enrich_url: true };
+			const pathParams = { id: message.id };
+			const request = { message, skip_enrich_url: true };
 
-			await client.updateMessage(request);
+			await client.updateMessage(pathParams, request);
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 			expect(queueTaskSpy).toHaveBeenCalledWith({
@@ -1172,7 +1248,7 @@ describe('message update', () => {
 					channelId: 'channel-123',
 					channelType: 'messaging',
 					messageId: 'msg-123',
-					payload: [request],
+					payload: [pathParams, request],
 					type: 'update-message',
 				},
 			});
@@ -1185,14 +1261,15 @@ describe('message update', () => {
 				cid: 'invalid-cid',
 				text: 'edited',
 			});
-			const request = { id: message.id, message };
+			const pathParams = { id: message.id };
+			const request = { message };
 
-			await client.updateMessage(request);
+			await client.updateMessage(pathParams, request);
 
 			expect(queueTaskSpy).toHaveBeenCalledWith({
 				task: {
 					messageId: 'msg-123',
-					payload: [request],
+					payload: [pathParams, request],
 					type: 'update-message',
 				},
 			});
@@ -1203,14 +1280,15 @@ describe('message update', () => {
 				id: 'msg-123',
 				text: 'edited',
 			});
-			const request = { id: message.id, message, skip_enrich_url: true };
+			const pathParams = { id: message.id };
+			const request = { message, skip_enrich_url: true };
 
 			client.offlineDb = undefined;
 
-			await client.updateMessage(request);
+			await client.updateMessage(pathParams, request);
 
 			expect(_updateMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_updateMessageSpy).toHaveBeenCalledWith(request);
+			expect(_updateMessageSpy).toHaveBeenCalledWith(pathParams, request);
 		});
 
 		it('routes updates with local attachment metadata through offlineDb queue handling', async () => {
@@ -1228,9 +1306,10 @@ describe('message update', () => {
 					},
 				],
 			});
-			const request = { id: message.id, message };
+			const pathParams = { id: message.id };
+			const request = { message };
 
-			await client.updateMessage(request);
+			await client.updateMessage(pathParams, request);
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 			expect(queueTaskSpy).toHaveBeenCalledWith({
@@ -1240,7 +1319,7 @@ describe('message update', () => {
 					channelId: 'general',
 					channelType: 'messaging',
 					messageId: 'msg-123',
-					payload: [request],
+					payload: [pathParams, request],
 					type: 'update-message',
 				},
 			});
@@ -1258,9 +1337,10 @@ describe('message update', () => {
 					},
 				],
 			});
-			const request = { id: message.id, message };
+			const pathParams = { id: message.id };
+			const request = { message };
 
-			await client.updateMessage(request);
+			await client.updateMessage(pathParams, request);
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 			expect(queueTaskSpy).toHaveBeenCalledWith({
@@ -1270,7 +1350,7 @@ describe('message update', () => {
 					channelId: 'general',
 					channelType: 'messaging',
 					messageId: 'msg-123',
-					payload: [request],
+					payload: [pathParams, request],
 					type: 'update-message',
 				},
 			});
@@ -1282,14 +1362,15 @@ describe('message update', () => {
 				id: 'msg-123',
 				text: 'edited',
 			});
-			const request = { id: message.id, message };
+			const pathParams = { id: message.id };
+			const request = { message };
 			queueTaskSpy.mockRejectedValue(new Error('Offline failure'));
 
-			await client.updateMessage(request);
+			await client.updateMessage(pathParams, request);
 
 			expect(loggerSpy).toHaveBeenCalledTimes(1);
 			expect(_updateMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_updateMessageSpy).toHaveBeenCalledWith(request);
+			expect(_updateMessageSpy).toHaveBeenCalledWith(pathParams, request);
 		});
 
 		it('logs and falls back to _updateMessage when queueTask rethrows for failed offline edits', async () => {
@@ -1299,18 +1380,19 @@ describe('message update', () => {
 				text: 'edited',
 				message_text_updated_at: convertDateToTimestamp('2026-04-01T20:48:43.886269Z'),
 			});
-			const request = { id: failedEditedMessage.id, message: failedEditedMessage };
+			const pathParams = { id: failedEditedMessage.id };
+			const request = { message: failedEditedMessage };
 
 			client.wsConnection = { isHealthy: false };
 			queueTaskSpy.mockRejectedValue(new Error('Offline failure'));
 			_updateMessageSpy.mockResolvedValue({ message: failedEditedMessage });
 
-			const response = await client.updateMessage(request);
+			const response = await client.updateMessage(pathParams, request);
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 			expect(loggerSpy).toHaveBeenCalledTimes(1);
 			expect(_updateMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_updateMessageSpy).toHaveBeenCalledWith(request);
+			expect(_updateMessageSpy).toHaveBeenCalledWith(pathParams, request);
 			expect(response.message.text).toBe('edited');
 			expect(response.message.status).toBe('failed');
 		});
@@ -1616,13 +1698,13 @@ describe('StreamChat.queryReactions', () => {
 	});
 
 	it('should query reactions from offlineDb and dispatch offline_reactions.queried event', async () => {
+		const pathParams = { id: messageId };
 		const request = {
-			id: messageId,
 			filter,
 			sort,
 			limit: options.limit,
 		};
-		const result = await client.queryReactionsAndHydrate(request);
+		const result = await client.queryReactionsAndHydrate(pathParams, request);
 
 		expect(client.offlineDb.getReactions).toHaveBeenCalledWith({
 			messageId,
@@ -1644,39 +1726,39 @@ describe('StreamChat.queryReactions', () => {
 		]);
 
 		expect(postStub).toHaveBeenCalledTimes(1);
-		expect(postStub).toHaveBeenCalledWith(request, undefined);
+		expect(postStub).toHaveBeenCalledWith(pathParams, request);
 
 		expect(result).to.eql(postResponse);
 	});
 
 	it('should skip querying offlineDb if options.next is true', async () => {
+		const pathParams = { id: messageId };
 		const request = {
-			id: messageId,
 			filter,
 			sort,
 			next: true,
 			limit: 20,
 		};
-		await client.queryReactionsAndHydrate(request);
+		await client.queryReactionsAndHydrate(pathParams, request);
 
 		expect(client.offlineDb.getReactions).not.toHaveBeenCalled();
-		expect(postStub).toHaveBeenCalledWith(request, undefined);
+		expect(postStub).toHaveBeenCalledWith(pathParams, request);
 	});
 
 	it('should not dispatch event if offlineDb returns null', async () => {
 		client.offlineDb.getReactions.mockResolvedValue(null);
 
+		const pathParams = { id: messageId };
 		const request = {
-			id: messageId,
 			filter,
 			sort,
 			limit: 50,
 		};
-		await client.queryReactionsAndHydrate(request);
+		await client.queryReactionsAndHydrate(pathParams, request);
 
 		expect(client.offlineDb.getReactions).toHaveBeenCalledTimes(1);
 		expect(dispatchSpy).not.toHaveBeenCalled();
-		expect(postStub).toHaveBeenCalledWith(request, undefined);
+		expect(postStub).toHaveBeenCalledWith(pathParams, request);
 	});
 
 	it('should log a warning if offlineDb.getReactions throws', async () => {
@@ -1686,12 +1768,10 @@ describe('StreamChat.queryReactions', () => {
 			default: { sink: loggerSpy, level: 'trace' },
 		});
 
-		await client.queryReactionsAndHydrate({
-			id: messageId,
-			filter,
-			sort,
-			limit: options.limit,
-		});
+		await client.queryReactionsAndHydrate(
+			{ id: messageId },
+			{ filter, sort, limit: options.limit },
+		);
 
 		expect(loggerSpy).toHaveBeenCalledWith(
 			'warn',
@@ -1701,15 +1781,7 @@ describe('StreamChat.queryReactions', () => {
 			}),
 		);
 		expect(dispatchSpy).not.toHaveBeenCalled();
-		expect(postStub).toHaveBeenCalledWith(
-			{
-				id: messageId,
-				filter,
-				sort,
-				limit: 50,
-			},
-			undefined,
-		);
+		expect(postStub).toHaveBeenCalledWith({ id: messageId }, { filter, sort, limit: 50 });
 
 		chatLoggerSystem.restoreDefaults();
 	});
@@ -1756,9 +1828,9 @@ describe('message deletion', () => {
 		// (`MessageOperationStatePolicy`), so this method only queues the request. Writing it here ran
 		// ahead of the state it mirrors, and a custom `deleteMessageRequest` skipped it entirely.
 		it('queues a soft delete without touching the offline-DB row', async () => {
-			const request = { id: messageId };
+			const pathParams = { id: messageId };
 
-			await client.deleteMessage(request);
+			await client.deleteMessage(pathParams);
 
 			expect(client.offlineDb.softDeleteMessage).not.toHaveBeenCalled();
 			expect(client.offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
@@ -1767,7 +1839,7 @@ describe('message deletion', () => {
 			expect(queueTaskSpy).toHaveBeenCalledWith({
 				task: {
 					messageId,
-					payload: [request],
+					payload: [pathParams],
 					type: 'delete-message',
 				},
 			});
@@ -1775,9 +1847,10 @@ describe('message deletion', () => {
 		});
 
 		it('queues a hard delete without touching the offline-DB row', async () => {
-			const request = { id: messageId, hard: true };
+			const pathParams = { id: messageId };
+			const request = { hard: true };
 
-			await client.deleteMessage(request);
+			await client.deleteMessage(pathParams, request);
 
 			expect(client.offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
 			expect(client.offlineDb.softDeleteMessage).not.toHaveBeenCalled();
@@ -1786,7 +1859,7 @@ describe('message deletion', () => {
 			expect(queueTaskSpy).toHaveBeenCalledWith({
 				task: {
 					messageId,
-					payload: [request],
+					payload: [pathParams, request],
 					type: 'delete-message',
 				},
 			});
@@ -1795,23 +1868,23 @@ describe('message deletion', () => {
 
 		it('falls back to _deleteMessage if offlineDb is not set', async () => {
 			client.offlineDb = undefined;
-			const request = { id: messageId };
+			const pathParams = { id: messageId };
 
-			await client.deleteMessage(request);
+			await client.deleteMessage(pathParams);
 
 			expect(_deleteMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_deleteMessageSpy).toHaveBeenCalledWith(request);
+			expect(_deleteMessageSpy).toHaveBeenCalledWith(pathParams);
 		});
 
 		it('logs and falls back to _deleteMessage if offline queueing throws', async () => {
 			queueTaskSpy.mockRejectedValue(new Error('Offline failure'));
-			const request = { id: messageId };
+			const pathParams = { id: messageId };
 
-			await client.deleteMessage(request);
+			await client.deleteMessage(pathParams);
 
 			expect(loggerSpy).toHaveBeenCalledTimes(1);
 			expect(_deleteMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_deleteMessageSpy).toHaveBeenCalledWith(request);
+			expect(_deleteMessageSpy).toHaveBeenCalledWith(pathParams);
 		});
 	});
 
@@ -1820,7 +1893,7 @@ describe('message deletion', () => {
 
 		beforeEach(() => {
 			sendRequestSpy = vi.spyOn(client.api, 'sendRequest').mockResolvedValue({
-				body: { message: { id: messageId } },
+				message: { id: messageId },
 				metadata: {},
 			});
 		});
@@ -1837,10 +1910,10 @@ describe('message deletion', () => {
 		});
 
 		it('enriches the message with type="deleted" and deleted_for_me=true when delete_for_me is set', async () => {
-			const result = await client._deleteMessage({
-				id: messageId,
-				delete_for_me: true,
-			});
+			const result = await client._deleteMessage(
+				{ id: messageId },
+				{ delete_for_me: true },
+			);
 
 			expect(result.message).toMatchObject({
 				id: messageId,
@@ -1850,8 +1923,9 @@ describe('message deletion', () => {
 		});
 
 		it('does not enrich the message when delete_for_me is not set', async () => {
-			const result = await client._deleteMessage({ id: messageId, hard: true });
+			const result = await client._deleteMessage({ id: messageId }, { hard: true });
 
+			expect(sendRequestSpy.mock.calls[0][3]).toEqual({ hard: true });
 			expect(result.message).toMatchObject({ id: messageId });
 			expect(result.message).not.toHaveProperty('deleted_for_me');
 			expect(result.message).not.toHaveProperty('type');
@@ -2550,5 +2624,236 @@ describe('_normalizeExpiration', () => {
 		expect(() => client._normalizeExpiration(input)).toThrow(
 			/does not resolve to a valid date/,
 		);
+	});
+});
+
+describe('Client WSFallback', () => {
+	const userToken =
+		'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYW1pbiJ9.1R88K_f1CC2yrR6j1_OzMEbasfS_dxRSNbundEDBlJI';
+	const wsFailure = () =>
+		Object.assign(new Error('initial WS connection could not be established'), {
+			isWSFailure: true,
+		});
+	let client;
+	let socketConnect;
+
+	/**
+	 * Answers the long-poll at the axios layer, so the generated `longPoll()` path runs: connects
+	 * with `connectionId`, holds polls until aborted.
+	 */
+	const fakeLongPoll = (connectionId = 'new_id') => {
+		const calls = [];
+		const respond = (data) => Promise.resolve({ data, status: 200, headers: {} });
+		vi.spyOn(client.axiosInstance, 'request').mockImplementation((config) => {
+			calls.push({
+				url: config.url,
+				params: config.params,
+				timeout: config.timeout,
+				authorization: config.headers?.Authorization,
+			});
+			if (config.params?.json) {
+				return respond({
+					event: { type: 'connection.ok', connection_id: connectionId },
+				});
+			}
+			if (config.params?.close) return respond({});
+			return new Promise((_, reject) =>
+				config.signal?.addEventListener('abort', () => reject(new CanceledError())),
+			);
+		});
+		return calls;
+	};
+
+	beforeEach(() => {
+		client = new StreamChat('key', { allowServerSideConnect: true });
+		client.config.set({ client: { wsConnection: { enableWSFallback: true } } });
+		// As the real socket does: arms the connection id before failing.
+		socketConnect = vi
+			.spyOn(StableWSConnection.prototype, 'connect')
+			.mockImplementation(async () => {
+				client.connectionIdManager.arm();
+				throw wsFailure();
+			});
+	});
+
+	afterEach(async () => {
+		await client.disconnectUser();
+		vi.unstubAllGlobals();
+	});
+
+	it('should try wsFallback if WebSocket fails', async () => {
+		const calls = fakeLongPoll();
+
+		const health = await client.connectUser({ id: 'amin' }, userToken);
+
+		expect(calls[0]).toMatchObject({
+			url: expect.stringMatching(/\/api\/v2\/longpoll$/),
+			// authenticated by the Authorization header, so the message carries only a placeholder
+			params: {
+				json: expect.objectContaining({ token: 'anonymous', products: ['chat'] }),
+			},
+			timeout: 8000,
+		});
+		expect(calls[1]).toMatchObject({
+			params: { connection_id: 'new_id' },
+			timeout: 30000,
+		});
+
+		expect(health).toMatchObject({ type: 'connection.ok', connection_id: 'new_id' });
+		// the socket's own connect timeout, not a shortened one
+		expect(socketConnect).toHaveBeenCalledWith(undefined);
+		expect(client.wsConnection.fallback.state).toBe(WSFallbackConnectionState.Connected);
+		expect(client.wsConnection.isHealthy).toBe(true);
+		expect(client.connectionIdManager.connectionId).toBe('new_id');
+
+		await client.disconnectUser();
+		expect(client.wsConnection.fallback.state).toBe(
+			WSFallbackConnectionState.Disconnected,
+		);
+		expect(client.wsConnection.isHealthy).toBe(false);
+		// the close still carries the id, although the socket's disconnect dropped it first
+		expect(calls.at(-1)).toMatchObject({
+			params: { close: true, connection_id: 'new_id' },
+		});
+	});
+
+	it('should fire connection.fallback_activated and connection.ok events', async () => {
+		fakeLongPoll();
+		const dispatchEvent = vi.spyOn(client, 'dispatchEvent');
+
+		await client.connectUser({ id: 'amin' }, userToken);
+
+		expect(dispatchEvent).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: 'connection.fallback_activated',
+				mode: 'longpoll',
+			}),
+		);
+		expect(dispatchEvent).toHaveBeenCalledWith(
+			expect.objectContaining({ type: 'connection.ok', connection_id: 'new_id' }),
+		);
+	});
+
+	it('should make a watch issued during the WebSocket attempt wait for the long-poll id', async () => {
+		fakeLongPoll();
+
+		const connecting = client.connectUser({ id: 'amin' }, userToken);
+		const waiter = client.connectionIdManager.getConnectionId();
+		await connecting;
+
+		await expect(waiter).resolves.toBe('new_id');
+	});
+
+	it('should close the long-poll connection id on closeConnection', async () => {
+		const calls = fakeLongPoll();
+		await client.connectUser({ id: 'amin' }, userToken);
+
+		await client.closeConnection();
+
+		expect(calls.at(-1)).toMatchObject({
+			url: expect.stringMatching(/\/api\/v2\/longpoll$/),
+			params: { close: true, connection_id: 'new_id' },
+		});
+		expect(client.wsConnection.isHealthy).toBe(false);
+	});
+
+	it('should keep using the fallback after closeConnection -> openConnection', async () => {
+		fakeLongPoll();
+		await client.connectUser({ id: 'amin' }, userToken);
+		const fallback = client.wsConnection.fallback;
+
+		await client.closeConnection();
+		await client.openConnection();
+
+		expect(client.wsConnection.fallback).toBe(fallback);
+		expect(socketConnect).toHaveBeenCalledTimes(1);
+		expect(client.wsConnection.fallback.state).toBe(WSFallbackConnectionState.Connected);
+	});
+
+	it('should connect a token provider on the kept long-poll after disconnectUser', async () => {
+		const calls = fakeLongPoll();
+		await client.connectUser({ id: 'amin' }, userToken);
+		await client.disconnectUser();
+
+		const health = await client.connectUser({ id: 'amin' }, async () => userToken);
+
+		expect(health).toMatchObject({ type: 'connection.ok', connection_id: 'new_id' });
+		expect(socketConnect).toHaveBeenCalledTimes(1);
+		expect(client.wsConnection.fallback.state).toBe(WSFallbackConnectionState.Connected);
+		expect(calls.filter((call) => call.params?.json).at(-1)).toMatchObject({
+			authorization: userToken,
+		});
+	});
+
+	it('should route network status to the long-poll', async () => {
+		fakeLongPoll();
+		await client.connectUser({ id: 'amin' }, userToken);
+		const socketApply = vi.spyOn(client.wsConnection.connection, '_applyNetworkStatus');
+		client.networkConnection.setStatusReporter(null);
+
+		client.networkConnection.setStatus(false);
+		expect(client.wsConnection.fallback.state).toBe(WSFallbackConnectionState.Closed);
+		expect(client.wsConnection.isHealthy).toBe(false);
+
+		client.networkConnection.setStatus(true);
+		await vi.waitFor(() =>
+			expect(client.wsConnection.fallback.state).toBe(
+				WSFallbackConnectionState.Connected,
+			),
+		);
+		expect(client.wsConnection.isHealthy).toBe(true);
+		expect(socketApply).not.toHaveBeenCalled();
+	});
+
+	it('should report the long-poll connect as in flight', async () => {
+		fakeLongPoll();
+		await client.connectUser({ id: 'amin' }, userToken);
+		await client.closeConnection();
+
+		const reopening = client.openConnection();
+		expect(client.wsConnection.isConnecting).toBe(true);
+		// a second call hands back the attempt in flight instead of starting another
+		expect(client.openConnection()).toBe(reopening);
+
+		await reopening;
+		expect(client.wsConnection.isConnecting).toBe(false);
+	});
+
+	it('should ignore fallback if flag is false', async () => {
+		fakeLongPoll();
+		client.wsConnection.updateConfig({ enableWSFallback: false });
+
+		await expect(client.connectUser({ id: 'amin' }, userToken)).rejects.toThrow(
+			/initial WS connection could not be established/,
+		);
+
+		expect(socketConnect).toHaveBeenCalledTimes(1);
+		expect(client.wsConnection.fallback).toBeUndefined();
+		expect(client.axiosInstance.request).not.toHaveBeenCalled();
+	});
+
+	it('should ignore fallback if a network reporter says the device is offline', async () => {
+		fakeLongPoll();
+		client.networkConnection.setStatusReporter(null);
+		client.networkConnection.setStatus(false);
+
+		await expect(client.connectUser({ id: 'amin' }, userToken)).rejects.toThrow(
+			/initial WS connection could not be established/,
+		);
+
+		expect(client.wsConnection.fallback).toBeUndefined();
+	});
+
+	it('should fall back anyway when the offline reading only mirrors the WebSocket', async () => {
+		fakeLongPoll();
+		// the host default without a network API: its "offline" only means the socket is down
+		expect(client.networkConnection.usesDefaultWSConnectionNetworkStatusReporter).toBe(
+			true,
+		);
+		client.networkConnection.state.partialNext({ isOnline: false });
+
+		await client.connectUser({ id: 'amin' }, userToken);
+
+		expect(client.wsConnection.fallback.state).toBe(WSFallbackConnectionState.Connected);
 	});
 });

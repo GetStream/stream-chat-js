@@ -710,10 +710,12 @@ export class ChannelManager extends WithSubscriptions {
    * Only `Watching` is demoted: a channel the consumer stopped on purpose, or one that was torn
    * down, stays `NotWatching` and must not be resurrected by a reconnect.
    *
-   * Invoked from two places, because neither covers the other: `StableWSConnection._setHealth(false)`
-   * for an abnormal close/error, and `closeConnection()` for a deliberate shutdown (e.g. mobile
-   * backgrounding), whose `disconnect()` writes the status through `_applyHealth` and so never
-   * reaches `_setHealth`.
+   * Invoked from two places on the WebSocket, because neither covers the other:
+   * `StableWSConnection._setHealth(false)` for an abnormal close/error, and `closeConnection()` for a
+   * deliberate shutdown (e.g. mobile backgrounding), whose `disconnect()` writes the status through
+   * `_applyHealth` and so never reaches `_setHealth`. After an `enableWSFallback` switch the
+   * long-poll calls it too, from `WSConnectionFallback._setState()` whenever going closed or
+   * disconnected takes the status offline.
    *
    * @internal
    */

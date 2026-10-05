@@ -1,6 +1,8 @@
 import { StateStore } from '@stream-io/state-store';
 import { WithSubscriptions } from '../../utils/WithSubscriptions';
 import { StableWSConnection } from '../../connection';
+import { WSConnectionFallback } from './WSConnectionFallback';
+import { isWSFailure } from '../../errors';
 import { ConfigController } from '../../configuration/ConfigController';
 import { chatLoggerSystem } from '../../logger';
 import {
@@ -10,6 +12,7 @@ import {
 } from './config';
 import type { WSConnectionConfig, WSConnectionState } from './types';
 import type { StreamChat } from '../../client';
+import type { APIError } from '../../errors';
 import type { ConnectAPIResponse } from '../../types';
 import type { Unsubscribe } from '@stream-io/state-store';
 
@@ -35,6 +38,9 @@ const logger = chatLoggerSystem.getLogger('client');
  * socket it would leak — `client.connect()` overwrites `connection` without disconnecting the
  * previous one, leaving a dead socket still listening and still able to call `_reconnect()` on
  * itself.
+ *
+ * **With `enableWSFallback`, the store can describe the long-poll instead.** Once {@link connect}
+ * has switched to `WSConnectionFallback` ({@link fallback}).
  */
 export class WSConnection extends WithSubscriptions {
   state: StateStore<WSConnectionState>;
@@ -45,6 +51,14 @@ export class WSConnection extends WithSubscriptions {
    * @internal
    */
   connection: StableWSConnection | null = null;
+  /**
+   * The long-poll, once `enableWSFallback` has switched to it; `undefined` until then. Built by
+   * {@link connect} and never cleared: as in v9, the client does not go back to the WebSocket, not
+   * even across `disconnectUser()`.
+   *
+   * @internal
+   */
+  fallback?: WSConnectionFallback;
   /**
    * Readable by the socket this object owns, which reaches the client through its parent rather than
    * holding one of its own. Not part of the public surface — `client.wsConnection.client` is a
@@ -139,24 +153,26 @@ export class WSConnection extends WithSubscriptions {
   }
 
   /**
-   * Is this WebSocket up. Read from {@link state} rather than from the current socket, so it
-   * survives the socket being replaced and answers `false` rather than throwing before the first
-   * connect.
+   * Is this WebSocket up — or, after an `enableWSFallback` switch, the long-poll. Read from
+   * {@link state} rather than from the current socket, so it survives the socket being replaced and
+   * answers `false` rather than throwing before the first connect.
    */
   get isHealthy(): boolean {
     return this.state.getLatestValue().isHealthy;
   }
 
-  /** Whether a connection attempt is in flight. */
+  /** Whether a connection attempt is in flight — the long-poll's after an `enableWSFallback` switch. */
   get isConnecting(): boolean {
-    return this.connection?.isConnecting ?? false;
+    return (this.fallback ?? this.connection)?.isConnecting ?? false;
   }
 
   /**
-   * Records this WebSocket's status. Returns whether it changed.
+   * Records this connection's status. Returns whether it changed.
    *
-   * {@link StableWSConnection} is the only caller, and it routes **every** status transition through
-   * here — including `disconnect()`, which `closeConnection()` uses, and the two error paths.
+   * {@link StableWSConnection} routes **every** status transition through here — including
+   * `disconnect()`, which `closeConnection()` uses, and the two error paths. The one other
+   * caller is {@link fallback}, which takes over once `enableWSFallback` has switched to
+   * long-polling.
    *
    * @internal
    */
@@ -180,6 +196,9 @@ export class WSConnection extends WithSubscriptions {
    *
    * Read from the store rather than from an event, so there is one description of the device's
    * network rather than two that can disagree.
+   *
+   * After an `enableWSFallback` switch it routes to {@link fallback} instead, leaving the
+   * disconnected socket out of it.
    */
   public registerSubscriptions = (): Unsubscribe => {
     if (!this.hasSubscriptions) {
@@ -190,7 +209,7 @@ export class WSConnection extends WithSubscriptions {
             // `undefined` is *unknown*, not offline: no reporter has said anything yet, and acting on
             // it would tear down a healthy socket on every host that cannot answer the question.
             if (typeof isOnline !== 'boolean') return;
-            this.connection?._applyNetworkStatus(isOnline);
+            (this.fallback ?? this.connection)?._applyNetworkStatus(isOnline);
           },
         ),
       );
@@ -211,8 +230,16 @@ export class WSConnection extends WithSubscriptions {
    * Creation lives here rather than in the constructor because a client that never calls
    * `connectUser` should never build a socket, and here rather than in `client.connect()` because a
    * field belongs to the object that owns it.
+   *
+   * With `enableWSFallback`, a socket that fails with a network error is replaced by the long-poll
+   * ({@link fallback}), which every later call connects instead of building a socket.
    */
-  connect(timeout?: number): ConnectAPIResponse | undefined {
+  async connect(timeout?: number): ConnectAPIResponse {
+    // if fallback is used before, continue using it instead of waiting for WS to fail
+    if (this.fallback) {
+      return await this.fallback.connect();
+    }
+
     const next = this.buildConnection();
     const previous = this.connection;
 
@@ -239,8 +266,42 @@ export class WSConnection extends WithSubscriptions {
     }
 
     this.connection = next;
-    // Left to the socket to default from `config.connectTimeoutMs`, so the value lives in one place.
-    return next.connect(timeout);
+
+    try {
+      // Left to the socket to default from `config.connectTimeoutMs`, so the value lives in one place.
+      return await next.connect(timeout);
+    } catch (error) {
+      // run fallback only if it's WS/Network error and not a normal API error
+      // make sure the device is online before even trying the longpoll. The default reporter on
+      // hosts without a network API mirrors the WebSocket, so its "offline" only means the socket
+      // is down, and is ignored.
+      const { networkConnection } = this.client;
+      const isDeviceOffline =
+        networkConnection.isOnline === false &&
+        !networkConnection.usesDefaultWSConnectionNetworkStatusReporter;
+      if (
+        this.config.enableWSFallback &&
+        isWSFailure(error as APIError) &&
+        !isDeviceOffline
+      ) {
+        logger.withExtraTags('connect').info('WS failed, fallback to longpoll');
+        this.client.dispatchEvent({
+          type: 'connection.fallback_activated',
+          mode: 'longpoll',
+        });
+
+        next._destroyCurrentWSConnection();
+        void next.disconnect(); // close WS so no retry
+        this.fallback = new WSConnectionFallback({ client: this.client });
+        return await this.fallback.connect();
+      }
+
+      // A failure the socket does not retry leaves nothing else to settle the pending connection id.
+      if (!isWSFailure(error as APIError)) {
+        this.client.connectionIdManager.rejectConnectionId(error);
+      }
+      throw error;
+    }
   }
 
   /**
@@ -258,8 +319,19 @@ export class WSConnection extends WithSubscriptions {
     return new StableWSConnection({ wsConnection: this });
   }
 
-  disconnect(timeout?: number): Promise<void> | undefined {
-    return this.connection?.disconnect(timeout);
+  /**
+   * Closes the socket and, after an `enableWSFallback` switch, the long-poll too, telling the
+   * server to close its connection id. The long-poll's close request uses `timeout` as its timeout
+   * (2s when omitted).
+   */
+  async disconnect(timeout?: number): Promise<void> {
+    // Read before the socket's `disconnect()` drops it: after a switch it is the long-poll's id,
+    // which the long-poll's close request has to carry.
+    const connectionId = this.client.connectionIdManager.connectionId;
+    await Promise.all([
+      this.connection?.disconnect(timeout),
+      this.fallback?.disconnect(timeout, connectionId),
+    ]);
   }
 
   /**

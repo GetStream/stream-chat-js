@@ -276,12 +276,14 @@ describe('MessagePaginator', () => {
 
       const result = await paginator.query({});
 
-      expect(channel.getReplies).toHaveBeenCalledWith({
-        parent_id: 'parent-1',
-        id_gt: 'from-cursor',
-        limit: 30,
-        sort: [{ field: 'created_at', direction: 1 }],
-      });
+      expect(channel.getReplies).toHaveBeenCalledWith(
+        { parent_id: 'parent-1' },
+        {
+          id_gt: 'from-cursor',
+          limit: 30,
+          sort: [{ field: 'created_at', direction: 1 }],
+        },
+      );
       expect(channel.query).not.toHaveBeenCalled();
       expect(result.tailward).toBe('first-reply');
       expect(result.headward).toBe('last-reply');
@@ -320,12 +322,14 @@ describe('MessagePaginator', () => {
 
       const result = await paginator.query({});
 
-      expect(channel.getReplies).toHaveBeenCalledWith({
-        parent_id: 'parent-1',
-        id_gt: 'from-cursor',
-        limit: 30,
-        sort: [{ field: 'created_at', direction: -1 }],
-      });
+      expect(channel.getReplies).toHaveBeenCalledWith(
+        { parent_id: 'parent-1' },
+        {
+          id_gt: 'from-cursor',
+          limit: 30,
+          sort: [{ field: 'created_at', direction: -1 }],
+        },
+      );
       expect(result.items.map((message) => message.id)).toEqual([
         'oldest-reply',
         'middle-reply',
@@ -1947,7 +1951,8 @@ describe('MessagePaginator', () => {
 
       // The request itself is a correct continuation — older than the oldest loaded reply...
       expect(channel.getReplies).toHaveBeenCalledWith(
-        expect.objectContaining({ id_lt: m1.id, parent_id: 'parent-1' }),
+        { parent_id: 'parent-1' },
+        expect.objectContaining({ id_lt: m1.id }),
       );
       // ...but the page must be PREPENDED to the hydrated window, not replace it.
       expect(paginator.items?.map((message) => message.id)).toEqual([
@@ -2922,11 +2927,10 @@ describe('MessagePaginator', () => {
           candidateIds: new Set(['r1', 'r2', 'r3', 'r4']),
         });
         await flushProbe(paginator);
-        expect(channel.getReplies).toHaveBeenCalledWith({
-          parent_id: 'parent-1',
-          limit: 1,
-          id_lt: 'r2',
-        });
+        expect(channel.getReplies).toHaveBeenCalledWith(
+          { parent_id: 'parent-1' },
+          { limit: 1, id_lt: 'r2' },
+        );
         expect(channel.query).not.toHaveBeenCalled();
         expect(paginator.getItem('r1')).toBeUndefined();
       });

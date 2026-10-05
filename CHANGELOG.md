@@ -1,3 +1,27 @@
+## [10.0.0-rc.18](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.17...v10.0.0-rc.18) (2026-10-05)
+
+### ⚠ BREAKING CHANGES
+
+* adopt TS generator changes (#1896)
+
+### Bug Fixes
+
+* set thread cursor when initied from setItems ([#1898](https://github.com/GetStream/stream-chat-js/issues/1898)) ([63bef43](https://github.com/GetStream/stream-chat-js/commit/63bef437cb37d7b036d554f79a1e4b00e4826480))
+
+### Features
+
+* adopt TS generator changes ([#1896](https://github.com/GetStream/stream-chat-js/issues/1896)) ([82af6de](https://github.com/GetStream/stream-chat-js/commit/82af6de1842c25bfb9049229f88fff9c58c7fefb))
+
+## [10.0.0-rc.17](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.16...v10.0.0-rc.17) (2026-10-01)
+
+### ⚠ BREAKING CHANGES
+
+* reenable WS fallback (#1889)
+
+### Features
+
+* reenable WS fallback ([#1889](https://github.com/GetStream/stream-chat-js/issues/1889)) ([45841cc](https://github.com/GetStream/stream-chat-js/commit/45841cc6c4417bd2592b8c81ccac01f021cb7443))
+
 ## [10.0.0-rc.16](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.15...v10.0.0-rc.16) (2026-09-30)
 
 ### ⚠ BREAKING CHANGES

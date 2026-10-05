@@ -129,10 +129,10 @@ describe('optimistic reactions', () => {
       });
 
       expect(ownReactionTypes(channel.messagePaginator, message.id)).toContain('love');
-      expect(sendReaction).toHaveBeenCalledWith({
-        id: message.id,
-        reaction: { type: 'love' },
-      });
+      expect(sendReaction).toHaveBeenCalledWith(
+        { id: message.id },
+        { reaction: { type: 'love' } },
+      );
 
       await pending;
 
@@ -437,10 +437,10 @@ describe('optimistic reactions', () => {
         reaction: { type: 'love' },
       });
 
-      expect(sendReaction).toHaveBeenCalledWith({
-        id: reply.id,
-        reaction: { type: 'love' },
-      });
+      expect(sendReaction).toHaveBeenCalledWith(
+        { id: reply.id },
+        { reaction: { type: 'love' } },
+      );
       expect(threadSendReaction).toBe(sendReaction);
     });
 

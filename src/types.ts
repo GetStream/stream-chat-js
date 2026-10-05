@@ -21,6 +21,7 @@ import type {
   QueryMembersPayload,
   QueryPollsRequest,
   QueryPollVotesRequest,
+  QueryReactionsRequest,
   QueryRemindersRequest,
   QueryThreadsRequest,
   QueryUsersPayload,
@@ -78,7 +79,7 @@ export type LocalMessage = MessageResponse & {
   user_id?: string;
 };
 
-export type GetThreadOptions = Omit<Parameters<ChatApi['getThread']>[0], 'message_id'>;
+export type GetThreadOptions = NonNullable<Parameters<ChatApi['getThread']>[1]>;
 
 /**
  * The fields that exist on the connected user (`OwnUserResponse`) but not on a plain
@@ -131,8 +132,8 @@ export type Automod = ChannelConfigWithInfo['automod'];
 export type AutomodBehavior = ChannelConfigWithInfo['automod_behavior'];
 
 export type PinnedMessagePaginationOptions = Omit<
-  Parameters<ChatApi['getPinnedMessages']>[0],
-  'id' | 'sort' | 'type'
+  NonNullable<Parameters<ChatApi['getPinnedMessages']>[1]>,
+  'sort'
 >;
 
 export type QueryMembersOptions = Partial<Omit<QueryMembersPayload, 'filter_conditions'>>;
@@ -209,6 +210,8 @@ type LocalEvent = (
       };
     })
   | { type: 'connection.recovered' }
+  // `enableWSFallback` switched from the WebSocket to long-polling.
+  | ({ type: 'connection.fallback_activated' } & { mode: string })
   | ({ type: 'offline_reactions.queried' } & {
       offlineReactions: ReactionResponse[];
     })
@@ -227,25 +230,11 @@ type LocalEvent = (
     })
 ) & { received_at?: TimestampNS };
 
-/**
- * The hello event of the `/api/v2/connect` WebSocket endpoint, sent once the auth frame
- * has been accepted. The v1 endpoint used `health.check` for this instead.
- *
- * Hand-written because the event is not published in the OpenAPI spec, so it cannot
- * come from `src/gen`. Remove this — along with the `decodeConnectionEvent` shim in
- * `StableWSConnection.ts` — once the backend adds it to the spec and `src/gen` is regenerated.
- */
-export type ConnectedEvent = {
-  type: 'connection.ok';
-  connection_id: string;
-  /** Unix nanoseconds, as every other wire event carries it. */
-  created_at: TimestampNS;
-  me: OwnUserResponse;
-  /** Unix nanoseconds, as every other wire event carries it. */
-  received_at?: TimestampNS;
-};
-
-export type Event = WSEvent | ConnectedEvent | LocalEvent | keyof CustomEventTypes;
+// Two WS events miss `received_at` in API spec, so we add it to typedef here
+export type Event =
+  | (WSEvent & { received_at?: TimestampNS })
+  | LocalEvent
+  | keyof CustomEventTypes;
 export type EventType = Event['type'] | 'all';
 
 export type EventHandler<T = string> = (event: Extract<Event, { type: T }>) => void;
@@ -254,9 +243,7 @@ export type EventHandler<T = string> = (event: Extract<Event, { type: T }>) => v
  * Filter Types
  */
 
-export type ReactionFilters = NonNullable<QueryReactionsRequestWithId['filter']>;
-
-export type QueryReactionsRequestWithId = Parameters<ChatApi['queryReactions']>[0];
+export type ReactionFilters = NonNullable<QueryReactionsRequest['filter']>;
 
 export type ChannelFilters = NonNullable<QueryChannelsRequest['filter_conditions']>;
 
@@ -456,8 +443,6 @@ export type SharedLiveLocationResponse = RequireLiteral<
 
 export type ThreadFilters = NonNullable<QueryThreadsRequest['filter']>;
 
-export type CreateReminderOptions = Parameters<ChatApi['createReminder']>[0];
-
 export type ReminderFilters = NonNullable<QueryRemindersRequest['filter']>;
 
 export type ListUserGroupsOptions = NonNullable<Parameters<ChatApi['listUserGroups']>[0]>;
@@ -492,7 +477,7 @@ export type PartializeAllBut<T, K extends keyof T> = {
   [P in K]-?: T[P];
 } & { [P in Exclude<keyof T, K>]?: T[P] };
 
-export type DeleteMessageOptions = Omit<Parameters<ChatApi['deleteMessage']>[0], 'id'>;
+export type DeleteMessageOptions = NonNullable<Parameters<ChatApi['deleteMessage']>[1]>;
 export type SendMessageAPIResponse = StreamResponse<SendMessageResponse>;
 export type UpdateMessageOptions = Omit<UpdateMessageRequest, 'message'>;
 export type UpdateMessageAPIResponse = StreamResponse<UpdateMessageResponse>;
@@ -526,6 +511,10 @@ export type StreamRequestOptions = {
   signal?: AbortSignal;
   /** Only meaningful for upload (multipart) requests; ignored everywhere else. */
   onUploadProgress?: (event: StreamProgressEvent) => void;
+  /**
+   * Milliseconds before this request is aborted.
+   */
+  timeout?: number;
 };
 
 export * from './gen/models';

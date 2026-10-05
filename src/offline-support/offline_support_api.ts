@@ -1474,7 +1474,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   private handleUpdateMessagePendingTask = async (
     task: Extract<PendingTask, { type: 'update-message' }>,
   ) => {
-    const [{ id, message }] = task.payload;
+    const [{ id }, { message }] = task.payload;
     const pendingTasks = await this.getPendingTasks({ messageId: id });
     const sendTask = pendingTasks.find(this.isPendingSendMessageTask);
 

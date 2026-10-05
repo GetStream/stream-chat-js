@@ -9,7 +9,7 @@
 - The v9 `Logger` and `LogLevel` types (from `stream-chat`) are **removed**. Import their replacements from `stream-chat`'s new logger surface (re-exported from `./logger`): `LogLevel`, `Sink`, `ConfigureLoggersOptions`, `LogLevelEnum`, `ScopedLogger`, `ChatLoggerScope`, `chatLoggerSystem`.
 - Log-level enum expanded from **3** values (`'info' | 'warn' | 'error'`) to **5** (`'trace' | 'debug' | 'info' | 'warn' | 'error'`).
 - Configure logging by calling `chatLoggerSystem.configureLoggers({...})` **before** constructing the client (there is no constructor option for it — `logLevel` / `logOptions` fields do not exist on `StreamChatOptions`).
-- Internal `_log()` methods (notably on `StableWSConnection`) are gone. If you subclassed or spied on them, switch to the scoped loggers.
+- Internal `_log()` methods (notably on `StableWSConnection`) are gone. If you subclassed or spied on them, switch to the scoped loggers. The one survivor is `WSConnectionFallback._log()`, kept with the v9 long-poll; it now writes to the `connection` scope with the `connection_fallback` tag.
 
 ## What ships in v10
 
@@ -40,7 +40,7 @@ Every internal module attaches to one of these scopes via `chatLoggerSystem.getL
 | `channel`          | `src/channel.ts`                                                                                      |
 | `channel-manager`  | `src/channel_manager.ts`                                                                              |
 | `client`           | `src/client.ts` — connection lifecycle, event dispatch                                                |
-| `connection`       | `src/StableWSConnection.ts` — primary WS transport                                                    |
+| `connection`       | `StableWSConnection.ts` (WS) and `WSConnectionFallback.ts` (long-poll, tag `connection_fallback`)     |
 | `message-composer` | `src/messageComposer/messageComposer.ts`                                                              |
 | `offline-db`       | `src/offline-support/*` **and** offline-DB paths in `client.ts` / `channel.ts` / `messageComposer.ts` |
 | `state-store`      | reserved — declared in the scope union, not yet emitted                                               |
@@ -63,6 +63,7 @@ Unknown scope names fall through to `'default'`. The `ChatLoggerScope` union nar
 | `type LogLevel = 'info' \| 'error' \| 'warn'`                                       | **REPLACED** — same name, now `'trace' \| 'debug' \| 'info' \| 'warn' \| 'error'` |
 | `isFunction(inputOptions.logger)` guard in constructor                              | gone                                                                              |
 | `StableWSConnection._log(msg, extra?, level?)`                                      | **REMOVED** — use `chatLoggerSystem.getLogger('connection')`                      |
+| `WSConnectionFallback._log(msg, extra?, level?)`                                    | **KEPT** (internal) — `connection` scope, tagged `connection_fallback`            |
 | `extraData.tags: string[]` convention (`{ tags: ['channel', 'offlineDb'], error }`) | replaced by scope + `.withExtraTags(...)` (see below)                             |
 | Structured extra as second positional arg (`(level, msg, { tags, error, event })`)  | passed as rest args after the message (`.error('msg', { error })`)                |
 

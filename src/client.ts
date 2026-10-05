@@ -44,7 +44,6 @@ import type {
   PartializeAllBut,
   QueryChannelsRequest,
   QueryChannelsResponse,
-  QueryReactionsRequestWithId,
   QueryThreadsRequest,
   ReactionResponse,
   SdkIdentifier,
@@ -97,7 +96,7 @@ import type {
   WSEvent,
 } from './gen/models';
 import { ChatApi } from './gen-imports';
-import type { ConnectedEvent, StreamResponse } from './types';
+import type { StreamResponse } from './types';
 
 function isString(value: unknown): value is string {
   return typeof value === 'string' || value instanceof String;
@@ -188,7 +187,8 @@ export class StreamChat extends ChatApi {
    */
   networkConnection: NetworkConnectionObserver;
   /**
-   * The WebSocket connection id, and the one place it lives.
+   * The connection id — the WebSocket's, or the long-poll's after an `enableWSFallback`
+   * switch — and the one place the rest of the client reads it from.
    *
    * The server keys channel watches and presence subscriptions by it, so a request carrying either
    * waits here for the handshake rather than racing it. See `requiresConnectionId` in
@@ -647,8 +647,12 @@ export class StreamChat extends ChatApi {
    * So when your app goes to background, you can call `client.closeConnection`.
    * And when app comes back to foreground, call `client.openConnection`.
    *
+   * After an `enableWSFallback` switch it closes the long-poll as well, telling the server to
+   * close its connection id.
+   *
    * @param timeout - Max number of milliseconds to wait for the WebSocket close event before forcefully assuming
    *   successful disconnection. See https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent (optional).
+   *   The long-poll's close request uses it as its timeout (2s when omitted).
    */
   closeConnection = async (timeout?: number) => {
     this.channelManager.resetAIStateOnChannels();
@@ -677,7 +681,8 @@ export class StreamChat extends ChatApi {
   };
 
   /**
-   * Creates a new WebSocket connection with the current user.
+   * Creates a new WebSocket connection with the current user. After an `enableWSFallback` switch it
+   * reconnects the long-poll instead: the client never goes back to the WebSocket.
    *
    * @returns The WebSocket connect promise, or an empty resolved promise if a connection is already active.
    */
@@ -787,12 +792,17 @@ export class StreamChat extends ChatApi {
   /**
    * Retrieves application settings.
    *
+   * @param   _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
    * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The application settings response.
    */
-  async getAppSettings(requestOptions?: StreamRequestOptions) {
-    return await (this.appSettingsPromise = this.getApp(requestOptions));
+  async getAppSettings(
+    _request?: Record<string, never>,
+    requestOptions?: StreamRequestOptions,
+  ) {
+    return await (this.appSettingsPromise = this.getApp(undefined, requestOptions));
   }
 
   /**
@@ -815,9 +825,11 @@ export class StreamChat extends ChatApi {
 
     this._rejectPendingWsPromise(teardownReason);
     this.wsPromise = null;
-    this.connectionIdManager.rejectConnectionId(teardownReason);
 
     const closePromise = this.closeConnection(timeout);
+    // After starting the close, which reads the connection id synchronously: after an
+    // `enableWSFallback` switch the long-poll's close request has to carry it.
+    this.connectionIdManager.rejectConnectionId(teardownReason);
 
     // tears every channel down and ensures we no longer return inactive channels
     this.channelManager.clearChannels();
@@ -838,10 +850,11 @@ export class StreamChat extends ChatApi {
     this.unsubscribeClientConfiguration?.();
     this.unsubscribeClientConfiguration = undefined;
 
-    // Since we wipe all user data already, we should reset token manager as well
+    // Deferred so the long-poll close can still authenticate. By the time it settles a
+    // connectUser() / connectAnonymousUser() may have set the next user and their token.
     closePromise
       .finally(() => {
-        this.tokenManager.reset();
+        if (!this.userId) this.tokenManager.reset();
       })
       .catch((err) =>
         logger
@@ -1204,7 +1217,7 @@ export class StreamChat extends ChatApi {
     }
   };
 
-  _handleClientEvent(event: WSEvent | ConnectedEvent) {
+  _handleClientEvent(event: WSEvent) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const client = this;
     const postListenerCallbacks = [];
@@ -1338,10 +1351,11 @@ export class StreamChat extends ChatApi {
    * Requests no longer settle against these: waiting for a connection id is the
    * {@link ConnectionIdManager}'s job, applied centrally in `ApiClient`.
    *
-   * Called by `StableWSConnection._reconnect()`. Recovery itself is owned by
-   * {@link ConnectionRecoveryManager}, which subscribes to the connection lifecycle and so covers
-   * every reconnect path — including `closeConnection()` → `openConnection()` (mobile backgrounding),
-   * which never reaches `_reconnect()` at all.
+   * Called by `StableWSConnection._reconnect()`, and by `WSConnectionFallback.connect(true)`
+   * for the long-poll's own reconnects. Recovery itself is owned by
+   * {@link ConnectionRecoveryManager}, which subscribes to the connection lifecycle and so
+   * covers every reconnect path — including `closeConnection()` → `openConnection()` (mobile
+   * backgrounding), which reaches neither.
    *
    * @internal
    */
@@ -1377,17 +1391,10 @@ export class StreamChat extends ChatApi {
       throw Error('Property clientId is not set');
     }
 
-    try {
-      // `wsConnection` builds and owns the socket; the reconnection logic and the connect timeout
-      // (`config.connectTimeoutMs`) live in there.
-      return await this.wsConnection.connect();
-    } catch (error) {
-      // A failure the socket does not retry leaves nothing else to settle the pending connection id.
-      if (!isWSFailure(error as APIError)) {
-        this.connectionIdManager.rejectConnectionId(error);
-      }
-      throw error;
-    }
+    // `wsConnection` builds and owns the socket — and, with `enableWSFallback`, the long-poll it
+    // switches to; the reconnection logic and the connect timeout (`config.connectTimeoutMs`) live
+    // in there.
+    return await this.wsConnection.connect();
   }
 
   /**
@@ -1405,6 +1412,36 @@ export class StreamChat extends ChatApi {
     this.state.updateUsers(data.users);
 
     return data;
+  }
+
+  /**
+   * Stops watching a channel on this client's connection.
+   *
+   * It carries no `watch` flag, so the request layer does not hold it, but it is connection-scoped
+   * by definition: it tells the server which connection should stop watching. So it waits for this
+   * client's connection id exactly as a watching request does — through a handshake or a reconnect,
+   * until the caller's abort signal fires — and throws when there is no connection and none is being
+   * established.
+   *
+   * @param ...args - `[pathParams, request, requestOptions]`. `pathParams` identifies the channel
+   *   (`{ type, id }`); `request.connection_id` is replaced by this client's connection id.
+   * @returns The server response.
+   */
+  override async stopWatchingChannel(
+    ...args: Parameters<ChatApi['stopWatchingChannel']>
+  ) {
+    const [pathParams, request, requestOptions] = args;
+    const signal = requestOptions?.signal;
+    const connectionId = await this.connectionIdManager.getConnectionId(
+      // Check if signal is still usable - if it is read from offline DB, it has lost `addEventListener`.
+      typeof signal?.addEventListener === 'function' ? signal : undefined,
+    );
+
+    return super.stopWatchingChannel(
+      pathParams,
+      { ...request, connection_id: connectionId },
+      requestOptions,
+    );
   }
 
   /**
@@ -1543,18 +1580,15 @@ export class StreamChat extends ChatApi {
    * Queries reactions for a message and hydrates any cached offline reactions before the network
    * request.
    *
-   * @param request - The query reactions request payload, including the target message ID,
-   *   MongoDB-style filters, sort directions (e.g. `[{ field: 'created_at', direction: -1 }]`),
-   *   and pagination options.
-   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
-   *   into the request (optional).
+   * @param ...args - `[pathParams, request, requestOptions]`. `pathParams.id` is the target message ID;
+   *   `request` carries MongoDB-style filters, sort directions (e.g.
+   *   `[{ field: 'created_at', direction: -1 }]`) and pagination options; `requestOptions` carries
+   *   per-request options such as an abort `signal` and is never serialized into the request.
    * @returns The query reactions response.
    */
-  async queryReactionsAndHydrate(
-    request: QueryReactionsRequestWithId,
-    requestOptions?: StreamRequestOptions,
-  ) {
-    const { filter, next, id: messageId, sort, limit } = request;
+  async queryReactionsAndHydrate(...args: Parameters<ChatApi['queryReactions']>) {
+    const [{ id: messageId }, request] = args;
+    const { filter, next, sort, limit } = request ?? {};
 
     if (this.offlineDb?.getReactions && !next) {
       try {
@@ -1578,7 +1612,7 @@ export class StreamChat extends ChatApi {
       }
     }
 
-    return await this.queryReactions(request, requestOptions);
+    return await this.queryReactions(...args);
   }
 
   hydrateChannels(
@@ -1853,8 +1887,8 @@ export class StreamChat extends ChatApi {
       'Please specify the message id when calling pinMessage',
     );
     return this.updateMessagePartial(
+      { id },
       {
-        id,
         set: {
           pinned: true,
           pin_expires: this._normalizeExpiration(timeoutOrExpirationDate),
@@ -1881,13 +1915,7 @@ export class StreamChat extends ChatApi {
       messageOrMessageId,
       'Please specify the message id when calling unpinMessage',
     );
-    return this.updateMessagePartial(
-      {
-        id,
-        set: { pinned: false },
-      },
-      requestOptions,
-    );
+    return this.updateMessagePartial({ id }, { set: { pinned: false } }, requestOptions);
   }
 
   /**
@@ -1896,17 +1924,18 @@ export class StreamChat extends ChatApi {
    */
   override async updateMessage(
     ...args: [
-      request: Parameters<ChatApi['updateMessage']>[0] & { message: { cid?: string } },
+      pathParams: Parameters<ChatApi['updateMessage']>[0],
+      request: Parameters<ChatApi['updateMessage']>[1] & { message: { cid?: string } },
       requestOptions?: StreamRequestOptions,
     ]
   ) {
-    const [request] = args;
+    const [pathParams, request] = args;
 
     return await queueOrRun({
       client: this,
       task: {
         ...getPendingTaskChannelData(request.message?.cid),
-        messageId: request.id,
+        messageId: pathParams.id,
         payload: args,
         type: 'update-message',
       },
@@ -1914,11 +1943,12 @@ export class StreamChat extends ChatApi {
   }
 
   async _updateMessage(...args: Parameters<ChatApi['updateMessage']>) {
-    const [request, requestOptions] = args;
+    const [pathParams, request, requestOptions] = args;
 
     // Sanitized at the point of sending, which is the only place every path converges: the
     // offline replay of a queued `update-message` task calls this method directly.
     return await super.updateMessage(
+      pathParams,
       { ...request, message: sanitizeOutgoingAttachments(request.message) },
       requestOptions,
     );
@@ -1929,12 +1959,12 @@ export class StreamChat extends ChatApi {
    * is replayed on reconnect.
    */
   override async deleteMessage(...args: Parameters<ChatApi['deleteMessage']>) {
-    const [request] = args;
+    const [pathParams] = args;
 
     return await queueOrRun({
       client: this,
       task: {
-        messageId: request.id,
+        messageId: pathParams.id,
         payload: args,
         type: 'delete-message',
       },
@@ -1942,11 +1972,11 @@ export class StreamChat extends ChatApi {
   }
 
   async _deleteMessage(...args: Parameters<ChatApi['deleteMessage']>) {
-    const [request] = args;
+    const [, request] = args;
     const result = await super.deleteMessage(...args);
 
     // necessary to populate the below values as the server does not return the message in the response as deleted
-    if (request.delete_for_me) {
+    if (request?.delete_for_me) {
       result.message.deleted_for_me = true;
       result.message.type = 'deleted';
     }
@@ -2041,10 +2071,8 @@ export class StreamChat extends ChatApi {
     };
 
     const response = await this.getThread(
-      {
-        message_id: messageId,
-        ...optionsWithDefaults,
-      },
+      { message_id: messageId },
+      optionsWithDefaults,
       requestOptions,
     );
 
@@ -2127,38 +2155,42 @@ export class StreamChat extends ChatApi {
    * @returns The JSON-encoded auth message.
    */
   _buildWSAuthMessage = () =>
-    JSON.stringify({
-      // The server requires a non-empty token even for anonymous connections, but
-      // skips JWT parsing for any string that is not shaped like one. Anonymous users
-      // have no token, so send a placeholder the server accepts and ignores.
-      token: this.tokenManager.getToken() || 'anonymous',
-      // `connect()` rejects before reaching this when `_user` is unset.
-      user_details: this._user as ConnectUserDetailsRequest,
-      products: ['chat'],
-    } satisfies WSAuthMessage);
+    JSON.stringify(this._buildWSAuthPayload(this.tokenManager.getToken()));
+
+  /**
+   * The auth message itself — what {@link _buildWSAuthMessage} encodes for the WebSocket, and what
+   * the long-poll fallback sends as `longPoll()`'s `json` query param.
+   *
+   * @private
+   *
+   * @param token - The token the message carries. The long-poll passes none: it authenticates
+   *   through the request's `Authorization` header instead.
+   */
+  _buildWSAuthPayload = (token?: string): WSAuthMessage => ({
+    // The server requires a non-empty token, but skips JWT parsing for any string that is not
+    // shaped like one. Anonymous users have no token, and the long-poll does not send one, so both
+    // send a placeholder the server accepts and ignores.
+    token: token || 'anonymous',
+    // `connect()` rejects before reaching this when `_user` is unset.
+    user_details: this._user as ConnectUserDetailsRequest,
+    products: ['chat'],
+  });
 
   /**
    * Queries poll answers.
    *
-   * @param request - The query poll answers request payload, including the poll ID, optional vote
-   *   filter conditions, sort directions, and pagination options (`limit`, `offset`).
-   * @param request.poll_id - The poll ID.
-   * @param request.filter - Vote filter conditions.
+   * @param ...args - `[pathParams, request, requestOptions]`. `pathParams.poll_id` is the poll ID;
+   *   `request` carries optional vote filter conditions, sort directions, and pagination options
+   *   (`limit`, `offset`).
    * @returns The poll answers.
    */
-  async queryPollAnswers(
-    { poll_id, filter, ...options }: Parameters<ChatApi['queryPollVotes']>[0],
-    requestOptions?: StreamRequestOptions,
-  ) {
+  async queryPollAnswers(...args: Parameters<ChatApi['queryPollVotes']>) {
+    const [pathParams, request, requestOptions] = args;
+    const { filter, ...options } = request ?? {};
+
     return await this.queryPollVotes(
-      {
-        poll_id,
-        filter: {
-          ...filter,
-          is_answer: true,
-        },
-        ...options,
-      },
+      pathParams,
+      { ...options, filter: { ...filter, is_answer: true } },
       requestOptions,
     );
   }

@@ -155,14 +155,14 @@ If you relied on a custom serializer, file an issue — there is no supported wa
 Six options were dropped in v10. All are silent no-ops if left in place — TypeScript will flag
 them, but a plain-JS call site will not error, so remove them explicitly.
 
-| Option             | Replacement                                                                                                                                             |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `device`           | Call [`client.createDevice({ id, push_provider, push_provider_name? })`](./v9-to-v10-migration-guide-methods.md#clientsetlocaldevice) after connecting. |
-| `disableCache`     | None — the client always caches. See [`disableCache`](#disablecache).                                                                                   |
-| `enableInsights`   | None — the telemetry it enabled was removed. See [`enableInsights`](#enableinsights).                                                                   |
-| `enableWSFallback` | None — see [long-poll fallback removed](./v9-to-v10-migration-guide-other.md#long-poll-fallback-removed).                                               |
-| `warmUp`           | None — see [`warmUp`](#warmup).                                                                                                                         |
-| `wsConnection`     | `WebSocketImpl`, which works in both browser and node. See [`wsConnection`](#wsconnection).                                                             |
+| Option             | Replacement                                                                                                                                                                        |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `device`           | Call [`client.createDevice({ id, push_provider, push_provider_name? })`](./v9-to-v10-migration-guide-methods.md#clientsetlocaldevice) after connecting.                            |
+| `disableCache`     | None — the client always caches. See [`disableCache`](#disablecache).                                                                                                              |
+| `enableInsights`   | None — the telemetry it enabled was removed. See [`enableInsights`](#enableinsights).                                                                                              |
+| `enableWSFallback` | `client.config.set({ client: { wsConnection: { enableWSFallback: true } } })`. See [long-poll fallback](./v9-to-v10-migration-guide-other.md#long-poll-fallback-enablewsfallback). |
+| `warmUp`           | None — see [`warmUp`](#warmup).                                                                                                                                                    |
+| `wsConnection`     | `WebSocketImpl`, which works in both browser and node. See [`wsConnection`](#wsconnection).                                                                                        |
 
 ```diff
   const client = new StreamChat(API_KEY, {
@@ -174,6 +174,7 @@ them, but a plain-JS call site will not error, so remove them explicitly.
 -   wsConnection: myFakeConnection,
   });
 + await client.createDevice({ id: pushToken, push_provider: 'firebase' });
++ client.config.set({ client: { wsConnection: { enableWSFallback: true } } });
 ```
 
 #### `device`

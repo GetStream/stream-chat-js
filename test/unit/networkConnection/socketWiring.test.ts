@@ -31,6 +31,29 @@ const clientWithSocket = () => {
 };
 
 describe('socket ↔ network wiring', () => {
+  describe('usesDefaultWSConnectionNetworkStatusReporter', () => {
+    it('is true under the host default that mirrors the socket', () => {
+      expect(
+        new StreamChat('api-key').networkConnection
+          .usesDefaultWSConnectionNetworkStatusReporter,
+      ).toBe(true);
+    });
+
+    it('is false once another reporter is installed, or the reporter is cleared', () => {
+      const client = new StreamChat('api-key');
+
+      client.networkConnection.setStatusReporter(fakeReporter().reporter);
+      expect(client.networkConnection.usesDefaultWSConnectionNetworkStatusReporter).toBe(
+        false,
+      );
+
+      client.networkConnection.setStatusReporter(null);
+      expect(client.networkConnection.usesDefaultWSConnectionNetworkStatusReporter).toBe(
+        false,
+      );
+    });
+  });
+
   describe('no window listeners', () => {
     it('the socket registers none — the browser reporter is the only place that touches window', () => {
       const addEventListener = vi.fn();

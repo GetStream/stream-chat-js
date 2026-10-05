@@ -10,6 +10,7 @@ import type { WSConnectionConfig } from './types';
  */
 export const DEFAULT_WS_CONNECTION_CONFIG: WSConnectionConfig = deepFreezeConfig({
   connectTimeoutMs: 15 * 1000,
+  enableWSFallback: false,
   pingIntervalMs: 25 * 1000,
   healthCheckGracePeriodMs: 10 * 1000,
   offlineNotificationDisplayDelayMs: 5 * 1000,

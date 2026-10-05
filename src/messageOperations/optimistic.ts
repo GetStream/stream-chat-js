@@ -218,7 +218,10 @@ export const addReactionOptimistically = async ({
   });
 
   try {
-    const response = await channel.sendReaction({ id: messageId, reaction, ...options });
+    const response = await channel.sendReaction(
+      { id: messageId },
+      { reaction, ...options },
+    );
     reconcileHeldMessage(channel, response?.message);
   } catch (error) {
     // Queued for replay is pending, not failed — there is nothing to roll back.
