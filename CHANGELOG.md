@@ -1,3 +1,15 @@
+## [9.54.0](https://github.com/GetStream/stream-chat-js/compare/v9.53.0...v9.54.0) (2026-10-05)
+
+### Bug Fixes
+
+* don't override local message attachments in createLinkPreviewsCo… ([#1885](https://github.com/GetStream/stream-chat-js/issues/1885)) ([2aa5144](https://github.com/GetStream/stream-chat-js/commit/2aa5144eb4e3767dea704bebcee2985e2a2f8955))
+* **types:** add before_message_send_hook_system_messages to app settings response ([#1887](https://github.com/GetStream/stream-chat-js/issues/1887)) ([724b4f7](https://github.com/GetStream/stream-chat-js/commit/724b4f7b13b5b24b9d09f40aa7512be1c4f44d3a))
+
+### Features
+
+* add poll translation i18n fields ([#1878](https://github.com/GetStream/stream-chat-js/issues/1878)) ([9d396e5](https://github.com/GetStream/stream-chat-js/commit/9d396e552d7049b83675805770101fc4a70d64a7)), closes [GetStream/chat#17029](https://github.com/GetStream/chat/issues/17029)
+* poll optimistic updates ([#1895](https://github.com/GetStream/stream-chat-js/issues/1895)) ([e3dac59](https://github.com/GetStream/stream-chat-js/commit/e3dac594bc9c0f61f3654d63a5f010548814a572))
+
 ## [9.53.0](https://github.com/GetStream/stream-chat-js/compare/v9.52.1...v9.53.0) (2026-09-15)
 
 ### Bug Fixes
