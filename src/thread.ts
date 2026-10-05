@@ -25,7 +25,7 @@ import type { MessageOperations } from './messageOperations';
 import { nowNs } from './utils/time';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 import { MessagePaginator } from './pagination';
-import type { MergeNewestPageOptions } from './pagination';
+import type { MergeNewestPageOptions, PaginatorCursor } from './pagination';
 import { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
 import { ConfigController } from './configuration/ConfigController';
 import { deepFreezeConfig } from './configuration/utils/deepFreezeConfig';
@@ -36,6 +36,17 @@ import {
   toDeclarativePaginatorConfig,
 } from './configuration/utils/declarativeSlices';
 import type { PipelineEvent } from './EventHandlerPipeline';
+
+const getCursorFromReplies = (
+  replies: LocalMessage[],
+  reachesTail: boolean,
+): PaginatorCursor => {
+  const oldest = replies.reduce<LocalMessage | undefined>(
+    (acc, reply) => (!acc || reply.created_at < acc.created_at ? reply : acc),
+    undefined,
+  );
+  return { headward: null, tailward: reachesTail ? null : (oldest?.id ?? null) };
+};
 
 export type ThreadState = {
   /**
@@ -249,10 +260,13 @@ export class Thread extends WithSubscriptions {
     // tail only when it already contains every reply. Threads built from a bare parent message
     // carry no replies to seed and fall back to a paginator fetch on first open.
     if (threadData?.latest_replies?.length) {
+      const replies = threadData.latest_replies.map(formatMessage);
+      const isLastPage = replies.length === (threadData.reply_count ?? 0);
       this.messagePaginator.setItems({
-        valueOrFactory: threadData.latest_replies.map(formatMessage),
+        valueOrFactory: replies,
+        cursor: getCursorFromReplies(replies, isLastPage),
         isFirstPage: true,
-        isLastPage: threadData.latest_replies.length === (threadData.reply_count ?? 0),
+        isLastPage,
       });
     }
 
@@ -503,10 +517,12 @@ export class Thread extends WithSubscriptions {
       // anchored head and leaves seeding to the query path), so hydrating through it would drop the
       // replies this request just fetched and leave the panel empty until something else queried
       // them. Seed instead, exactly as the constructor does for a thread response's `latest_replies`.
+      const isLastPage = incomingReplies.length === replyCount;
       this.messagePaginator.setItems({
         valueOrFactory: incomingReplies,
+        cursor: getCursorFromReplies(incomingReplies, isLastPage),
         isFirstPage: true,
-        isLastPage: incomingReplies.length === replyCount,
+        isLastPage,
       });
     } else {
       this.messagePaginator.mergeNewestPage(incomingReplies, options?.reconcile);
