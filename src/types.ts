@@ -3083,9 +3083,12 @@ export type PartialUpdateChannelFields = Partial<ChannelResponse> & {
   config_overrides?: Partial<ChannelConfigFields>;
 };
 
+/** Dot-notation path to a nested custom field, e.g. `channel_detail.topic`. */
+type NestedFieldPath = `${string}.${string}`;
+
 export type PartialUpdateChannel = {
-  set?: PartialUpdateChannelFields;
-  unset?: Array<keyof PartialUpdateChannelFields>;
+  set?: PartialUpdateChannelFields & { [path: NestedFieldPath]: unknown };
+  unset?: Array<keyof PartialUpdateChannelFields | NestedFieldPath>;
 };
 
 export type PartialUpdateMember = {
