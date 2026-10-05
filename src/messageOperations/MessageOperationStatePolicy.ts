@@ -1,9 +1,5 @@
-import type {
-  DeleteMessageOptions,
-  LocalMessage,
-  MessageResponse,
-  StreamAPIError,
-} from '../types';
+import type { DeleteMessageOptions, LocalMessage, MessageResponse } from '../types';
+import { isAlreadyExistsError, parseError } from '../errors';
 import { formatMessage } from '../utils';
 import { nowNs } from '../utils/time';
 import type { QueueableType } from '../offline-support';
@@ -33,14 +29,6 @@ export type OptimisticOutcome = {
   /** The copy that was there beforehand, i.e. what a revert restores. */
   previous?: LocalMessage;
 };
-
-const parseError = (error: unknown): StreamAPIError => {
-  const stringError = JSON.stringify(error);
-  return (stringError ? JSON.parse(stringError) : {}) as StreamAPIError;
-};
-
-const isAlreadyExistsError = (error: unknown, parsed: StreamAPIError) =>
-  parsed.code === 4 && error instanceof Error && error.message.includes('already exists');
 
 const isHardDelete = (options: unknown) =>
   !!(options as DeleteMessageOptions | undefined)?.hard;
