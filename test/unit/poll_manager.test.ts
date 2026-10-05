@@ -12,6 +12,7 @@ import {
   PollManager,
   PollResponse,
   StreamChat,
+  UserResponse,
 } from '../../src';
 
 import { describe, beforeEach, afterEach, it, expect } from 'vitest';
@@ -439,6 +440,56 @@ describe('PollManager', () => {
       pollMessage1 = generatePollMessage(pollId1);
       pollMessage2 = generatePollMessage(pollId2);
       pollManager.hydratePollCache([pollMessage1, pollMessage2]);
+    });
+
+    it('puts an updated user into the votes, answers and creator of every poll, in one update', () => {
+      const poll = pollManager.fromState(pollId1) as Poll;
+      const before = poll.data;
+      const otherVoterVotes = Object.values(before.latest_votes_by_option)
+        .flat()
+        .filter((vote) => vote.user?.id !== 'admin');
+      const published: unknown[] = [];
+      const unsubscribe = poll.state.subscribe((state) => published.push(state));
+      published.length = 0;
+      const renamed = { ...(before.created_by as UserResponse), name: 'Renamed Admin' };
+
+      client.dispatchEvent({ type: 'user.updated', user: renamed });
+      unsubscribe();
+
+      const after = poll.data;
+      const votesOf = (userId: string) =>
+        Object.values(after.latest_votes_by_option)
+          .flat()
+          .filter((vote) => vote.user?.id === userId);
+      expect(published).toHaveLength(1);
+      expect(votesOf('admin').length).toBeGreaterThan(0);
+      expect(votesOf('admin').every((vote) => vote.user === renamed)).toBe(true);
+      expect(after.latest_answers.every((answer) => answer.user === renamed)).toBe(true);
+      expect(
+        Object.values(after.ownVotesByOptionId).every((v) => v.user === renamed),
+      ).toBe(true);
+      expect(after.ownAnswer?.user).toBe(renamed);
+      expect(after.created_by).toBe(renamed);
+      // other voters keep their vote objects
+      expect(otherVoterVotes.length).toBeGreaterThan(0);
+      for (const vote of otherVoterVotes) {
+        expect(Object.values(after.latest_votes_by_option).flat()).toContain(vote);
+      }
+      expect((pollManager.fromState(pollId2) as Poll).data.created_by?.name).toBe(
+        'Renamed Admin',
+      );
+    });
+
+    it('does not publish for a user the poll does not contain', () => {
+      const poll = pollManager.fromState(pollId1) as Poll;
+      const published: unknown[] = [];
+      const unsubscribe = poll.state.subscribe((state) => published.push(state));
+      published.length = 0;
+
+      client.dispatchEvent({ type: 'user.updated', user: { id: 'stranger', name: 'X' } });
+      unsubscribe();
+
+      expect(published).toHaveLength(0);
     });
 
     it('should not register subscription handlers twice', () => {

@@ -14,6 +14,7 @@ import type {
   SortParamRequest,
   UpdatePollOptionRequest,
   UpdatePollRequest,
+  UserResponse,
   VotingVisibility,
 } from './types';
 import type {
@@ -266,6 +267,52 @@ export class Poll {
       maxVotedOptionIds,
     });
     this.upsertOfflineDb();
+  };
+
+  /**
+   * Puts an updated user (new name or image) into the votes, answers and creator this poll keeps,
+   * so voter avatars show it. Each vote is replaced, not edited in place, and everything goes out in
+   * one state update; nothing is published when the poll doesn't contain the user.
+   */
+  public handleUserUpdated = (user: UserResponse) => {
+    const currentState = this.data;
+    let changed = false;
+    const withUser = <V extends PollVoteResponseData>(vote: V): V => {
+      if (vote.user?.id !== user.id || vote.user === user) return vote;
+      changed = true;
+      return { ...vote, user };
+    };
+    const withUserAll = (votes?: PollVoteResponseData[]) => votes?.map(withUser);
+
+    const latestVotesByOption = Object.fromEntries(
+      Object.entries(currentState.latest_votes_by_option ?? {}).map(
+        ([optionId, votes]) => [
+          optionId,
+          withUserAll(votes as PollVoteResponseData[]) ?? [],
+        ],
+      ),
+    );
+    const latestAnswers = withUserAll(
+      currentState.latest_answers as PollVoteResponseData[],
+    );
+    const ownVotesByOptionId = Object.fromEntries(
+      Object.entries(currentState.ownVotesByOptionId).map(([optionId, vote]) => [
+        optionId,
+        withUser(vote),
+      ]),
+    );
+    const ownAnswer = currentState.ownAnswer && withUser(currentState.ownAnswer);
+    const createdByChanged =
+      currentState.created_by?.id === user.id && currentState.created_by !== user;
+
+    if (!changed && !createdByChanged) return;
+    this.state.partialNext({
+      ...(createdByChanged && { created_by: user }),
+      latest_answers: latestAnswers ?? [],
+      latest_votes_by_option: latestVotesByOption,
+      ownAnswer,
+      ownVotesByOptionId,
+    });
   };
 
   query = async (id: string) => {
