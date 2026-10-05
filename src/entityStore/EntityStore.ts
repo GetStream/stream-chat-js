@@ -271,16 +271,26 @@ export class EntityStore<T> {
   /**
    * Moves an entity and its holders from `oldId` to `newId`, for ids assigned after storing. Moved
    * holders get {@link EntityStoreSubscriber.onIdChanged}, then holders of both ids are notified.
-   * Returns `false` without changes when `oldId` is not stored, the ids are equal, or `newId` holds
-   * another entity (merging is the caller's decision).
+   * Returns `false` without changes when `oldId` is not stored or the ids are equal.
+   *
+   * When `newId` holds another entity, nothing changes unless `replace` is set (merging is the
+   * caller's decision). With `replace`, the moved entity takes that entity's place: the holders of
+   * `newId` stay linked and now hold the moved one, and the replaced entity is passed to
+   * `onRelease`. Its holders are not told it was removed, so a list can swap the item in place.
    *
    * @example
    * // a channel created from members is stored under a temporary cid until the server assigns one
    * store.getOrCreate('messaging:!members-ann,bob', () => channel);
    * store.changeId('messaging:!members-ann,bob', 'messaging:e3b0c442'); // after `channel.watch()`
    */
-  changeId(oldId: string, newId: string): boolean {
-    if (oldId === newId || !this.byId.has(oldId) || this.byId.has(newId)) return false;
+  changeId(
+    oldId: string,
+    newId: string,
+    { replace = false }: { replace?: boolean } = {},
+  ): boolean {
+    if (oldId === newId || !this.byId.has(oldId)) return false;
+    const replaced = this.byId.get(newId);
+    if (replaced !== undefined && !replace) return false;
 
     const entity = this.byId.get(oldId) as T;
     this.byId.delete(oldId);
@@ -302,7 +312,24 @@ export class EntityStore<T> {
     // re-keyed before autoFlush, so a holder handling the notification already reads newId
     if (moved) for (const subscriber of moved) subscriber.onIdChanged?.(oldId, newId);
     this.autoFlush();
+    if (replaced !== undefined) this.onRelease?.(replaced);
     return true;
+  }
+
+  /**
+   * Stores `entity` in place of another entity stored under the same id. The holders of that id stay
+   * linked and now hold `entity`; they are notified of a change, not told of a removal, so a list
+   * can swap the item in place. The replaced entity is passed to `onRelease`. Storing an entity
+   * under an id nothing holds yet stores it, as {@link EntityStore.upsert} does.
+   */
+  replace(entity: T): void {
+    const id = this.getEntityId(entity);
+    const replaced = this.byId.get(id);
+    if (replaced === entity) return;
+    this.byId.set(id, entity);
+    this.markDirty(id);
+    this.autoFlush();
+    if (replaced !== undefined) this.onRelease?.(replaced);
   }
 
   /**

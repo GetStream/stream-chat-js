@@ -3396,11 +3396,12 @@ describe('Ensure single channel per cid in the channel store', () => {
 
 		expect(channelVish_copy1).not.to.be.equal(channelVish_copy2);
 
-		expect(clientVish.channelManager.get(channelVish_copy1.cid)).to.not.be.undefined;
-		expect(clientVish.channelManager.get(channelVish_copy2.cid)).to.not.be.undefined;
-		expect(clientVish.channelManager.get(channelVish_copy1.cid)).not.to.contain(
+		// the instance whose query resolved last takes the cid over; the one it replaced is torn down
+		expect(channelVish_copy1.cid).to.be.equal(channelVish_copy2.cid);
+		expect(clientVish.channelManager.get(channelVish_copy2.cid)).to.be.equal(
 			channelVish_copy2,
 		);
+		expect(channelVish_copy1.pendingDisposal).to.be.true;
 	});
 });
 

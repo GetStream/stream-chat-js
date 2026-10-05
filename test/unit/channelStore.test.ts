@@ -5,6 +5,7 @@ import { generateMsg } from './test-utils/generateMessage';
 import { formatMessage } from '../../src/utils';
 import { ChannelPaginator, ChannelWatchStatus, MessageComposer } from '../../src';
 import type {
+  Channel,
   ChannelStateResponseFields,
   QueryChannelsResponse,
   StreamChat,
@@ -67,6 +68,62 @@ describe('ChannelManager channel store', () => {
         data: { members: ['bob', 'ann'] },
       }),
     ).toBe(channel);
+  });
+
+  it('replaces another instance that holds the real cid by the channel created from members', async () => {
+    // stored while the created channel's query was in flight, e.g. by an event
+    const stored = client.channelManager.ensure({
+      type: 'messaging',
+      id: '!members-xyz',
+    });
+    const paginator = new ChannelPaginator({ client, filters: { type: 'messaging' } });
+    paginator.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: [stored] });
+    client.channelManager.setPaginators([paginator]);
+    const created = client.channelManager.ensure({
+      type: 'messaging',
+      data: { members: ['ann', 'bob'] },
+    });
+    vi.spyOn(client, 'getOrCreateDistinctChannel').mockResolvedValue({
+      ...generateChannel({ channel: { id: '!members-xyz', type: 'messaging' } }),
+      members: [member('ann'), member('bob')],
+    } as unknown as ChannelStateResponseFields & { duration: string });
+
+    await created.query({});
+
+    expect(client.channelManager.get('messaging:!members-xyz')).toBe(created);
+    expect(client.channelManager.get('messaging:!members-ann,bob')).toBeUndefined();
+    expect(stored.pendingDisposal).toBe(true);
+    expect(paginator.items).toEqual([created]);
+    expect(client.channelManager.values()).toEqual([created]);
+  });
+
+  it('swaps the replaced instance in each list with one update, never dropping the conversation', async () => {
+    const stored = client.channelManager.ensure({
+      type: 'messaging',
+      id: '!members-xyz',
+    });
+    const paginator = new ChannelPaginator({ client, filters: { type: 'messaging' } });
+    paginator.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: [stored] });
+    client.channelManager.setPaginators([paginator]);
+    const created = client.channelManager.ensure({
+      type: 'messaging',
+      data: { members: ['ann', 'bob'] },
+    });
+    vi.spyOn(client, 'getOrCreateDistinctChannel').mockResolvedValue({
+      ...generateChannel({ channel: { id: '!members-xyz', type: 'messaging' } }),
+      members: [member('ann'), member('bob')],
+    } as unknown as ChannelStateResponseFields & { duration: string });
+    const published: (Channel[] | undefined)[] = [];
+    const unsubscribe = paginator.state.subscribeWithSelector(
+      ({ items }) => ({ items }),
+      ({ items }) => published.push(items),
+    );
+    published.length = 0; // the subscription reports the current value first
+
+    await created.query({});
+    unsubscribe();
+
+    expect(published).toEqual([[created]]);
   });
 
   it('replaces a torn-down channel with a fresh instance', () => {

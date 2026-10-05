@@ -678,6 +678,55 @@ describe('EntityStore', () => {
     });
   });
 
+  describe('replacing an entity', () => {
+    it('moves an entity onto an id another entity holds only with replace, releasing that one', () => {
+      const onRelease = vi.fn();
+      const replacing = new EntityStore<LocalMessage>({
+        getEntityId: (m) => m.id,
+        onRelease,
+        releaseOnLastUnlink: false,
+      });
+      const old = msg({ id: 'm1' });
+      const next = msg({ id: 'm1' });
+      const list = { ...spySubscriber(), onEntityRemoved: vi.fn() };
+      replacing.upsert(old);
+      replacing.link('m1', list);
+      replacing.getOrCreate('temp', () => next);
+
+      expect(replacing.changeId('temp', 'm1')).toBe(false);
+      expect(replacing.changeId('temp', 'm1', { replace: true })).toBe(true);
+
+      expect(replacing.get('m1')).toBe(next);
+      expect(replacing.get('temp')).toBeUndefined();
+      expect(replacing.isHeldBy('m1', list)).toBe(true);
+      expect(list.onEntityRemoved).not.toHaveBeenCalled();
+      expect(onRelease).toHaveBeenCalledWith(old);
+      expect(onRelease).not.toHaveBeenCalledWith(next);
+    });
+
+    it('stores an entity in place of the one under its id, keeping its holders', () => {
+      const onRelease = vi.fn();
+      const replacing = new EntityStore<LocalMessage>({
+        getEntityId: (m) => m.id,
+        onRelease,
+      });
+      const old = msg({ id: 'm1' });
+      const next = msg({ id: 'm1' });
+      const list = { ...spySubscriber(), onEntityRemoved: vi.fn() };
+      replacing.upsert(old);
+      replacing.link('m1', list);
+
+      replacing.replace(next);
+      replacing.replace(next);
+
+      expect(replacing.get('m1')).toBe(next);
+      expect(replacing.isHeldBy('m1', list)).toBe(true);
+      expect(list.onEntityRemoved).not.toHaveBeenCalled();
+      expect(onRelease).toHaveBeenCalledTimes(1);
+      expect(onRelease).toHaveBeenCalledWith(old);
+    });
+  });
+
   describe('addClaim', () => {
     it('holds the entities its heldBy lists, until it is removed', () => {
       const m1 = msg({ id: 'm1' });

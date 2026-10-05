@@ -490,7 +490,9 @@ export class ChannelManager extends WithSubscriptions {
    *
    * Leave out `id` and pass `data.members` for a distinct channel between those members. It is stored
    * under a temporary cid built from the member IDs until `watch()`, `query()` or `create()` returns
-   * the real one; a stored distinct channel with the same members is returned instead.
+   * the real one; a stored distinct channel with the same members is returned instead. If another
+   * instance holds the real cid by then (its members weren't loaded, or an event stored it meanwhile),
+   * the returned one replaces it, and the replaced one is torn down.
    *
    * Getting a channel this way doesn't keep it: one that is neither watched nor used is released by
    * the next {@link ChannelManager.releaseUnusedChannels}.
@@ -605,6 +607,24 @@ export class ChannelManager extends WithSubscriptions {
    */
   changeChannelId(oldCid: string, newCid: string): boolean {
     return this.channelStore.changeId(oldCid, newCid);
+  }
+
+  /**
+   * Puts `channel` in place of the other instance stored under its cid, which is torn down.
+   * `storedUnderCid` is the key `channel` is stored under until now (its temporary cid), if any. The
+   * lists showing the replaced instance keep their entry and show `channel` in it, each with one
+   * update, so no list publishes a state without the conversation; `channel` is also routed to the
+   * lists it matches.
+   *
+   * @internal
+   */
+  replaceChannel(channel: Channel, storedUnderCid?: string) {
+    if (storedUnderCid && this.get(storedUnderCid) === channel) {
+      this.channelStore.changeId(storedUnderCid, channel.cid, { replace: true });
+    } else {
+      this.channelStore.replace(channel);
+    }
+    this.ingestChannel(channel);
   }
 
   /**

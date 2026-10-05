@@ -1924,6 +1924,10 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const channel = state.channel!;
 
+    // Set when another instance already holds the real cid; this one takes its place once its own
+    // data is set below, under the key it is stored under until then.
+    let replaceStoredInstance: { storedUnderCid?: string } | undefined;
+
     // update the channel id if it was missing
     if (!this.id) {
       this.id = channel.id;
@@ -1936,14 +1940,22 @@ export class Channel extends WithMessageOperations(ChannelApi) {
       );
 
       // `client.channelManager.ensure({ type, data: { members } })` stored this channel under the
-      // temporary cid; the same instance moves to the real one. If another instance already holds the
-      // real cid, both stay. A channel built with neither id nor members is stored only now.
+      // temporary cid; the same instance moves to the real one. Another instance can already hold
+      // the real cid: `ensure()` missed it because its members weren't loaded, or it was stored by an
+      // event or a list query while this one was in flight. This instance replaces it, because its
+      // caller is using it right now. A channel built with neither id nor members is stored only now.
       const { channelManager } = this.getClient();
-      const moved =
-        !!tempChannelCid &&
-        channelManager.get(tempChannelCid) === this &&
-        channelManager.changeChannelId(tempChannelCid, this.cid);
-      if (!moved && !channelManager.get(this.cid)) {
+      const storedUnderTempCid =
+        !!tempChannelCid && channelManager.get(tempChannelCid) === this;
+      const stored = channelManager.get(this.cid);
+      if (stored && stored !== this) {
+        replaceStoredInstance = {
+          storedUnderCid: storedUnderTempCid ? tempChannelCid : undefined,
+        };
+      } else if (
+        !storedUnderTempCid ||
+        !channelManager.changeChannelId(tempChannelCid, this.cid)
+      ) {
         channelManager.getOrCreateChannel(this.cid, () => this);
       }
     }
@@ -2010,6 +2022,15 @@ export class Channel extends WithMessageOperations(ChannelApi) {
         .join();
     this.data = channel;
     this.offlineMode = false;
+
+    // Swapped in only now that this instance's data is set, in one step, so each list showing the
+    // replaced instance publishes once, with this one in its place.
+    if (replaceStoredInstance) {
+      this.getClient().channelManager.replaceChannel(
+        this,
+        replaceStoredInstance.storedUnderCid,
+      );
+    }
 
     if (areCapabilitiesChanged) {
       this.getClient().dispatchEvent({
