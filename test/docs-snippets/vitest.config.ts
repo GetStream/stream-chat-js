@@ -1,8 +1,19 @@
+import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 // Runs the docs snippet tests against a real Stream app (credentials in ./.env).
 // Separate from the unit test config so `yarn test` never hits the network.
 export default defineConfig({
+  resolve: {
+    // Docs snippets import the package by name (`from 'stream-chat'`): run them against src,
+    // not this package's own (possibly stale) dist build. Keep in sync with tsconfig `paths`.
+    alias: [
+      {
+        find: /^stream-chat$/,
+        replacement: path.resolve(__dirname, '../../src/index.ts'),
+      },
+    ],
+  },
   test: {
     root: __dirname,
     include: ['./client/**/*.test.ts', './server/**/*.test.ts'],

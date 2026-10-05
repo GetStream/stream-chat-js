@@ -7,6 +7,7 @@ import {
 } from './utils';
 import type {
   AscDesc,
+  ChannelData,
   EventTypes,
   LocalMessage,
   MessagePaginationOptions,
@@ -127,10 +128,12 @@ export class Thread extends WithSubscriptions {
   }) {
     super();
 
+    // `name` is custom channel data: these assertions compile whether or not the app
+    // augments `CustomChannelData` with it.
+    const { name } = threadData.channel as { name?: string };
     const channel = client.channel(threadData.channel.type, threadData.channel.id, {
-      // @ts-expect-error name is a "custom" property
-      name: threadData.channel.name,
-    });
+      name,
+    } as ChannelData);
     channel._hydrateMembers({
       members: threadData.channel.members ?? [],
       overrideCurrentState: false,
