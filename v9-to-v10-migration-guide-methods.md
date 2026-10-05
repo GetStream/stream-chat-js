@@ -1433,6 +1433,11 @@ thread (with its `parent_id`) before the reply goes out, as a channel send alrea
 channel. It follows the thread composer's `publishTypingEvents` setting. Before, a reply left the
 thread's typing indicator running until it timed out.
 
+**No per-call request override.** `messageOperations.send` / `retry` / `update` / `delete` take only
+their params object; the optional second `requestFn` argument is gone. It won over whatever the host
+SDK registered, the same hazard that removed the per-call `*RequestFn` fields after `10.0.0-rc.12`.
+Register a `requestHandlers` entry instead.
+
 **A request handler can delegate to the default.** Each `requestHandlers` entry now receives the
 default request — the HTTP call through the offline queue — as a second argument. A handler that
 called `channel.sendMessage` inside to get queueing should call it instead:

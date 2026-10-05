@@ -123,9 +123,8 @@ export type MessageOperationsContext = {
   }>;
 
   /**
-   * The HTTP requests, through the offline queue — used when nothing overrides them. Each operation
-   * resolves its request as: a per-call `requestFn`, else the integrator's {@link handlers}, else
-   * these. A replaced request still reaches them through its `defaultRequest`.
+   * The HTTP requests, through the offline queue — used when no integrator {@link handlers} entry
+   * replaces them. A replaced request still reaches them through its `defaultRequest`.
    */
   defaults: {
     delete: (id: string, o?: DeleteMessageOptions) => Promise<OperationResponse>;

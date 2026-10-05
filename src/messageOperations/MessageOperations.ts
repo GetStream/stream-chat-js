@@ -214,25 +214,20 @@ export class MessageOperations {
   }
 
   /*
-   * Each operation resolves its request as `requestFn ?? handlers.<kind> ?? defaults.<kind>`, and a
-   * replacing one is handed the default as `defaultRequest`.
-   *
-   * `handlers` is the integrator seam (`ChannelConfig.requestHandlers`). `requestFn` is a direct
-   * injection point for tests; it is not exposed on the public methods because it wins over
-   * `handlers`, so a caller reaching for it would bypass whatever the host SDK registered.
+   * Each operation sends through the integrator's handler for its kind
+   * (`ChannelConfig.requestHandlers`) when one is registered, and through `defaults.<kind>`
+   * otherwise. A handler is handed the default as `defaultRequest`, so it can still send that way.
+   * There is deliberately no per-call override: one would win over whatever the host SDK registered.
    */
 
   private resolveRequest<K extends OperationKind>(
-    replacement: OperationRequestFn<K> | undefined,
+    handler: OperationRequestFn<K> | undefined,
     defaultRequest: DefaultOperationRequest<K>,
   ): DefaultOperationRequest<K> {
-    return replacement ? (p) => replacement(p, defaultRequest) : defaultRequest;
+    return handler ? (p) => handler(p, defaultRequest) : defaultRequest;
   }
 
-  async send(
-    params: OperationParams<'send'>,
-    requestFn?: OperationRequestFn<'send'>,
-  ): Promise<void> {
+  async send(params: OperationParams<'send'>): Promise<void> {
     this.ctx.beforeSend?.();
     const handlers = this.ctx.handlers();
     await this.sendWithFailedSendCache(
@@ -243,15 +238,12 @@ export class MessageOperations {
           params.message ?? localMessageToNewMessagePayload(params.localMessage),
         ),
       },
-      requestFn ?? handlers.send,
+      handlers.send,
     );
   }
 
   /** A send with a cached payload: resends what failed, unless the caller passes a new one. */
-  async retry(
-    params: OperationParams<'retry'>,
-    requestFn?: OperationRequestFn<'retry'>,
-  ): Promise<void> {
+  async retry(params: OperationParams<'retry'>): Promise<void> {
     const handlers = this.ctx.handlers();
     // A failed message can carry an `error` type; what is resent is a regular message.
     const localMessage = { ...params.localMessage, type: 'regular' as const };
@@ -268,7 +260,7 @@ export class MessageOperations {
         ),
         options: params.options ?? cachedPayload?.options,
       },
-      requestFn ?? handlers.retry ?? handlers.send,
+      handlers.retry ?? handlers.send,
     );
   }
 
@@ -276,7 +268,7 @@ export class MessageOperations {
   private async sendWithFailedSendCache(
     kind: 'send' | 'retry',
     params: OperationParams<'send'> & { message: MessageRequest },
-    requestFn: OperationRequestFn<'send'> | OperationRequestFn<'retry'> | undefined,
+    handler: OperationRequestFn<'send'> | OperationRequestFn<'retry'> | undefined,
   ): Promise<void> {
     const { localMessage, message, options } = params;
     const defaultRequest: DefaultOperationRequest<'send' | 'retry'> = async (p) =>
@@ -286,7 +278,7 @@ export class MessageOperations {
       await this.run(
         kind,
         params,
-        requestFn ? (p) => requestFn(p, defaultRequest) : defaultRequest,
+        handler ? (p) => handler(p, defaultRequest) : defaultRequest,
       );
       this.failedSendCache.clear(localMessage.id);
     } catch (error) {
@@ -295,10 +287,7 @@ export class MessageOperations {
     }
   }
 
-  async update(
-    params: OperationParams<'update'>,
-    requestFn?: OperationRequestFn<'update'>,
-  ): Promise<void> {
+  async update(params: OperationParams<'update'>): Promise<void> {
     this.failedSendCache.rewriteWithEdit(params.localMessage);
 
     const handlers = this.ctx.handlers();
@@ -315,23 +304,20 @@ export class MessageOperations {
       'update',
       params,
       this.resolveRequest(
-        requestFn ?? handlers.update,
+        handlers.update,
         async (p) => await this.ctx.defaults.update(p.localMessage, updateOptions),
       ),
     );
   }
 
-  async delete(
-    params: OperationParams<'delete'>,
-    requestFn?: OperationRequestFn<'delete'>,
-  ): Promise<void> {
+  async delete(params: OperationParams<'delete'>): Promise<void> {
     const handlers = this.ctx.handlers();
 
     return await this.run<'delete'>(
       'delete',
       params,
       this.resolveRequest(
-        requestFn ?? handlers.delete,
+        handlers.delete,
         async (p) => await this.ctx.defaults.delete(p.localMessage.id, p.options),
       ),
     );
