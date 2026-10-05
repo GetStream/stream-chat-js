@@ -23,7 +23,7 @@ export const createMessageOperations = (collection: Channel | Thread) => {
   const paginator = collection.messagePaginator;
   const { channel, parentMessageId } = paginator;
 
-  const queued = <T extends QueueableType>(
+  const queueOrRunTask = <T extends QueueableType>(
     task: PendingTaskOf<T>,
     { queue = true }: { queue?: boolean } = {},
   ) => queueOrRun({ channel, client: channel.getClient(), queue, task });
@@ -144,7 +144,7 @@ export const createMessageOperations = (collection: Channel | Thread) => {
     // The HTTP requests, through the offline queue so they replay on reconnect.
     defaults: {
       delete: async (id, o) => {
-        const { message } = await queued({
+        const { message } = await queueOrRunTask({
           messageId: id,
           payload: [{ id, ...o }],
           type: 'delete-message',
@@ -152,7 +152,7 @@ export const createMessageOperations = (collection: Channel | Thread) => {
         return { message };
       },
       send: async (m, o) => {
-        const { message } = await queued(
+        const { message } = await queueOrRunTask(
           {
             ...channelTaskData(),
             messageId: m.id,
@@ -166,7 +166,7 @@ export const createMessageOperations = (collection: Channel | Thread) => {
       },
       update: async (m, o) => {
         const request = { id: m.id, message: toUpdatedMessagePayload(m), ...o };
-        const { message } = await queued({
+        const { message } = await queueOrRunTask({
           ...getPendingTaskChannelData(m.cid),
           messageId: m.id,
           payload: [request],
@@ -175,14 +175,14 @@ export const createMessageOperations = (collection: Channel | Thread) => {
         return { message };
       },
       sendReaction: (...args) =>
-        queued({
+        queueOrRunTask({
           ...channelTaskData(),
           messageId: args[0].id,
           payload: args,
           type: 'send-reaction',
         }),
       deleteReaction: (...args) =>
-        queued({
+        queueOrRunTask({
           ...channelTaskData(),
           messageId: args[0].id,
           payload: args,
