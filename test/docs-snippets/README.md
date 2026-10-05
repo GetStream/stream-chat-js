@@ -21,6 +21,9 @@ These tests hit the network and are not part of `yarn test`.
 client/<docs section>/<docs page>.test.ts   # client-side: user connected with a user token (tab label "JavaScript")
 server/<docs section>/<docs page>.test.ts   # server-side: client with API secret (tab label "Node.js")
 helpers/                                    # clients, unique ids, cleanup registry
+docs-snippets-todo.md                       # pages to cover, their status, blockers and known docs bugs
+docs-snippets-agent-prompt.md               # prompt for an agent that covers one page
+learnings.md                                # lessons from earlier agent runs, read before working on a page
 ```
 
 The path mirrors the docs path, e.g. `_default/04-messages/01-send_message.md` maps to
