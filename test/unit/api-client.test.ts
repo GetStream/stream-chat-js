@@ -172,6 +172,86 @@ describe('ApiClient rate limit metadata', () => {
   });
 });
 
+describe('ApiClient response shape', () => {
+  let client: StreamChat;
+
+  beforeEach(() => {
+    client = getClientWithUser();
+    vi.spyOn(client.axiosInstance, 'request').mockResolvedValue({
+      data: { duration: '1ms', channels: [] },
+      status: 200,
+      headers: {},
+    });
+  });
+
+  it('resolves to the response body with the metadata merged in', async () => {
+    const response = await client.api.sendRequest('GET', '/api/v2/chat/channels');
+
+    expect(response).toEqual({
+      duration: '1ms',
+      channels: [],
+      metadata: expect.objectContaining({ response_code: 200 }),
+    });
+    expect(response).not.toHaveProperty('body');
+  });
+
+  it('rejects rather than throws when the request cannot be built', async () => {
+    // The generated methods return this promise without awaiting it, so a synchronous throw would
+    // escape a caller's `.catch()`. A lone surrogate makes `encodeURIComponent` throw on the path.
+    let request: Promise<unknown> | undefined;
+    expect(() => {
+      request = client.api.sendRequest('GET', '/api/v2/chat/channels/{id}', {
+        id: '\uD800',
+      });
+    }).not.toThrow();
+
+    await expect(request).rejects.toThrow(URIError);
+  });
+});
+
+describe('ApiClient path params', () => {
+  let client: StreamChat;
+  let requestSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    client = getClientWithUser();
+    requestSpy = vi
+      .spyOn(client.axiosInstance, 'request')
+      .mockResolvedValue({ data: {}, status: 200, headers: {} });
+  });
+
+  it('fills each placeholder from pathParams', async () => {
+    await client.api.sendRequest('GET', '/api/v2/chat/messages/{id}', { id: 'a b' });
+
+    const { url } = requestSpy.mock.calls[0][0] as AxiosRequestConfig;
+    expect(url).toBe(`${client.baseURL}/api/v2/chat/messages/a%20b`);
+  });
+
+  it('rejects a pathParams key the path has no placeholder for', async () => {
+    // The shape a call site written for the old single-argument signature produces: the body field
+    // rides along in pathParams, where nothing would ever send it.
+    await expect(
+      client.api.sendRequest('POST', '/api/v2/chat/messages/{id}/reaction', {
+        id: 'message-id',
+        reaction: 'love',
+      } as Record<string, string>),
+    ).rejects.toThrow(
+      '"reaction" is not a path parameter of /api/v2/chat/messages/{id}/reaction',
+    );
+    expect(requestSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects a stale merged call through a generated method', async () => {
+    await expect(
+      client.sendReaction(
+        // @ts-expect-error - the pre-split shape, as a JavaScript caller would still pass it
+        { id: 'message-id', reaction: { type: 'love' } },
+      ),
+    ).rejects.toThrow('"reaction" is not a path parameter');
+    expect(requestSpy).not.toHaveBeenCalled();
+  });
+});
+
 describe('ApiClient header precedence', () => {
   let client: StreamChat;
   let requestSpy: ReturnType<typeof vi.spyOn>;
@@ -642,7 +722,7 @@ describe('ApiClient connection id gate', () => {
   it('gates queryThreads, getThread and sync, which had no gate before', async () => {
     const gated = [
       () => client.queryThreads({ watch: true }),
-      () => client.getThread({ message_id: 'mid', watch: true }),
+      () => client.getThread({ message_id: 'mid' }, { watch: true }),
       () =>
         client.sync({
           channel_cids: ['messaging:a'],

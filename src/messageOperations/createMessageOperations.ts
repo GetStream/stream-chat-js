@@ -146,7 +146,7 @@ export const createMessageOperations = (collection: Channel | Thread) => {
       delete: async (id, o) => {
         const { message } = await queueOrRunTask({
           messageId: id,
-          payload: [{ id, ...o }],
+          payload: [{ id }, o],
           type: 'delete-message',
         });
         return { message };
@@ -165,11 +165,10 @@ export const createMessageOperations = (collection: Channel | Thread) => {
         return { message };
       },
       update: async (m, o) => {
-        const request = { id: m.id, message: toUpdatedMessagePayload(m), ...o };
         const { message } = await queueOrRunTask({
           ...getPendingTaskChannelData(m.cid),
           messageId: m.id,
-          payload: [request],
+          payload: [{ id: m.id }, { message: toUpdatedMessagePayload(m), ...o }],
           type: 'update-message',
         });
         return { message };

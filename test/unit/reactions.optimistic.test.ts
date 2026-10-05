@@ -126,10 +126,10 @@ describe('optimistic reactions', () => {
       });
 
       expect(ownReactionTypes(channel.messagePaginator, message.id)).toContain('love');
-      expect(sendReaction).toHaveBeenCalledWith({
-        id: message.id,
-        reaction: { type: 'love' },
-      });
+      expect(sendReaction).toHaveBeenCalledWith(
+        { id: message.id },
+        { reaction: { type: 'love' } },
+      );
 
       await pending;
 
@@ -435,10 +435,10 @@ describe('optimistic reactions', () => {
         reaction: { type: 'love' },
       });
 
-      expect(sendReaction).toHaveBeenCalledWith({
-        id: reply.id,
-        reaction: { type: 'love' },
-      });
+      expect(sendReaction).toHaveBeenCalledWith(
+        { id: reply.id },
+        { reaction: { type: 'love' } },
+      );
       // The queued task is keyed by the parent channel, which is what a replay runs against.
       expect(queueTask.mock.calls[0][0].task).toMatchObject({
         channelId: channel.id,

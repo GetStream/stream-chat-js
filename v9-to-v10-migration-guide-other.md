@@ -41,7 +41,7 @@
 - **`connection.changed` is removed.** Connectivity is published as two reactive stores, `client.wsConnection.state` for this client's socket (or its long-poll, once `enableWSFallback` has switched to it) and `client.networkConnection.state` for the device's network. A handler for the event simply stops firing, with no compile error in plain JavaScript, and a "connection lost" banner has to hold a drop itself where the event used to. The socket's own `isHealthy` is unchanged; what moved is where you read it. See below.
 - **Watching waits instead of degrading.** A request that watches a channel or subscribes to presence is held until the WebSocket handshake produces the connection id the server keys that subscription by, rather than being sent without one and silently registering nothing. It throws only when no socket is open and none is being opened. An explicit `watch: false` is never held. See below.
 - **The WebSocket connect endpoint moved to `/api/v2/connect`.** The hello event is now `connection.ok` rather than `health.check`. The long-poll fallback works as in v9, against `/api/v2/longpoll`, with `enableWSFallback` moved into the `wsConnection` configuration and `client.defaultWSTimeoutWithFallback` gone.
-- `Event` (type name) is kept, but its shape widened: `Event = WSEvent | ConnectedEvent | LocalEvent | keyof CustomEventTypes`. `EventPayload<'<type>'>` narrows to a specific event.
+- `Event` (type name) is kept, but its shape widened: `Event = (WSEvent & { received_at?: TimestampNS }) | LocalEvent | keyof CustomEventTypes`. `EventPayload<'<type>'>` narrows to a specific event.
 - `EventTypes` (plural) renamed to `EventType` (singular). `CustomEventTypes` interface is unchanged — augment it to add custom event-type keys, same as v9.
 - Filter payloads now carry **per-endpoint operator constraints** (inline `Filters<{ … }>` on each request type) — previously-permissive filter objects may stop type-checking. Only one operator per field is allowed, and `null` is no longer a valid `$in` element. `QueryPollsFilters`, `QueryVotesFilters`, and `ReminderFilters` were the last hand-written holdouts and now derive from their request types too.
 - `ChannelState.membership` initializes to `undefined` (was `{}`); `ChannelState.typing` values are now `EventPayload<'typing.start' | 'typing.stop'>` (were `Event`); read receipts merged with the generated `ReadStateResponse`.
@@ -224,17 +224,12 @@ type LocalEvent = (
     })
 ) & { received_at?: number };
 
-// The hello event of the v2 connect endpoint (see "WebSocket transport" below).
-type ConnectedEvent = {
-  type: 'connection.ok';
-  connection_id: string;
-  created_at: number;
-  me: OwnUserResponse;
-  received_at?: number;
-};
-
-// Public alias — same name as in v9, wider shape.
-export type Event = WSEvent | ConnectedEvent | LocalEvent | keyof CustomEventTypes;
+// Public alias — same name as in v9, wider shape. `WSEvent` includes the hello event of the v2
+// connect endpoint, `connection.ok` (`ConnectedEvent`; see "WebSocket transport" below).
+export type Event =
+  | (WSEvent & { received_at?: number })
+  | LocalEvent
+  | keyof CustomEventTypes;
 export type EventType = Event['type'] | 'all';
 export type EventHandler<T = string> = (event: Extract<Event, { type: T }>) => void;
 
@@ -1279,11 +1274,11 @@ channel.messagePaginator.config.pageSize; // 50
 // v9
 await reminderManager.upsertReminder({ messageId, remind_at, ... });
 
-// v10
-await reminderManager.upsertReminder({ message_id, remind_at, ... });
+// v10 — the message id is a path parameter, so it is its own argument
+await reminderManager.upsertReminder({ message_id }, { remind_at, ... });
 ```
 
-Same shift applies to `deleteReminder`, `updateReminder`, `createReminder`, `queryReminders`, and the internal state lookup helpers. Rewriting the property is mechanical, but easy to miss on TypeScript projects that had `messageId` inferred from a variable of that name.
+`createReminder` and `updateReminder` take the same `({ message_id }, request?)` pair, where `request` is `{ remind_at?, expires_at? }` (`remind_at` is a `Date`); `deleteReminder(messageId)` still takes the id alone. The `messageId` → `message_id` rename also applies to `queryReminders` filters and the internal state lookup helpers. Rewriting the property is mechanical, but easy to miss on TypeScript projects that had `messageId` inferred from a variable of that name — and a `remind_at` left in the first argument is not a compile error when it arrives through a spread (see [path parameters](./v9-to-v10-migration-guide-methods.md#global-renames-applied-everywhere)).
 
 `ReminderManager.ReminderEvent` is now `EventPayload<`reminder.${string}` | 'notification.reminder_due'>`; the v9 hand-rolled shape (`{ cid, created_at, message_id, reminder, type, user_id }`) is not exported anymore.
 
@@ -1411,3 +1406,4 @@ For each source file that touches the SDK:
 21. **Replace `client.setLocalDevice(device)` / the `device` client option** with an explicit `await client.createDevice({ id, push_provider, push_provider_name? })` after connecting.
 22. **Polyfill `atob`** if your React Native / Hermes target lacks it (`typeof atob === 'undefined'`); `UserFromToken` depends on it during `connectUser`.
 23. **Call `liveLocationManager.dispose()`** when you are finished with a manager you constructed, alongside whatever `unregisterSubscriptions()` you already call. Nothing will fail to compile: `dispose()` is the _configuration_ teardown, and until it runs the client's configuration registry holds a handle to the manager — a long-lived client and many short-lived managers will accumulate them. `unregisterSubscriptions()` is unchanged and stays ref-counted, so it deliberately no longer releases configuration; it never should have, since with two callers sharing a manager the first to leave stopped a still-live instance from tracking `client.config`. `SearchController` already worked this way.
+24. **Put `undefined` in the request slot before `requestOptions` on methods with no request.** `client.getAppSettings({ signal })` becomes `client.getAppSettings(undefined, { signal })`, `client.getMessage({ id }, opts)` becomes `client.getMessage({ id }, undefined, opts)`, and `channel.pin(opts)` / `archive` / `deleteReaction` / `removeVote` follow the same pattern. `tsc` flags every call site that still has the old form. Calls without `requestOptions` are unchanged. See [`requestOptions`](./v9-to-v10-migration-guide-methods.md#global-renames-applied-everywhere).

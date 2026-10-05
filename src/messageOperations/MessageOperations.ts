@@ -355,11 +355,10 @@ export class MessageOperations {
     });
 
     try {
-      const response = await this.ctx.defaults.sendReaction({
-        id: messageId,
-        reaction,
-        ...options,
-      });
+      const response = await this.ctx.defaults.sendReaction(
+        { id: messageId },
+        { reaction, ...options },
+      );
       this.reconcileHeldMessage(response?.message);
     } catch (error) {
       await this.rollbackUnlessQueued(messageId, ['send-reaction'], undo);

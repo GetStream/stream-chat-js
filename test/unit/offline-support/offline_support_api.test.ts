@@ -2765,14 +2765,32 @@ describe('OfflineSupportApi', () => {
           const task = generatePendingTask('send-reaction') as PendingTask;
           const taskWithOptions = {
             ...task,
-            payload: [task.payload[0], { signal: controller.signal }],
+            payload: [task.payload[0], task.payload[1], { signal: controller.signal }],
           } as PendingTask;
 
           await offlineDb['executeTask']({ task: taskWithOptions });
 
-          expect(sendReactionSpy).toHaveBeenCalledWith(task.payload[0], {
+          expect(sendReactionSpy).toHaveBeenCalledWith(task.payload[0], task.payload[1], {
             signal: controller.signal,
           });
+        });
+
+        // An omitted middle argument - a soft delete has no `request` - comes back from JSON as `null`,
+        // and only `undefined` stands in for an optional parameter.
+        it('replays a persisted null argument as undefined', async () => {
+          const task = generatePendingTask('delete-message') as PendingTask;
+          const persisted = JSON.parse(
+            JSON.stringify({ ...task, payload: [task.payload[0], undefined, undefined] }),
+          ) as PendingTask;
+          expect(persisted.payload).toEqual([task.payload[0], null, null]);
+
+          await offlineDb['executeTask']({ task: persisted });
+
+          expect(deleteMessageSpy).toHaveBeenCalledWith(
+            task.payload[0],
+            undefined,
+            undefined,
+          );
         });
 
         // A task that reached the pending-tasks table was serialized, so its signal revives as
@@ -2782,15 +2800,21 @@ describe('OfflineSupportApi', () => {
           const persisted = JSON.parse(
             JSON.stringify({
               ...task,
-              payload: [task.payload[0], { signal: new AbortController().signal }],
+              payload: [
+                task.payload[0],
+                task.payload[1],
+                { signal: new AbortController().signal },
+              ],
             }),
           ) as PendingTask;
 
           await offlineDb['executeTask']({ task: persisted });
 
-          expect(sendReactionSpy).toHaveBeenCalledWith(persisted.payload[0], {
-            signal: {},
-          });
+          expect(sendReactionSpy).toHaveBeenCalledWith(
+            persisted.payload[0],
+            persisted.payload[1],
+            { signal: {} },
+          );
         });
 
         // Cancelling is not a way to shed a task: an aborted request is a definitive rejection, so
@@ -2828,6 +2852,26 @@ describe('OfflineSupportApi', () => {
           await offlineDb['executeTask']({ task });
 
           expect(deleteReactionSpy).toHaveBeenCalledWith(...task.payload);
+        });
+
+        // `deleteReaction` has no request of its own, so its `requestOptions` sits behind an unused
+        // `_request` slot. That slot persists as `null` and has to come back as `undefined`, with
+        // the options still in third position.
+        it('replays a persisted delete-reaction with requestOptions behind the empty request slot', async () => {
+          const task = generatePendingTask('delete-reaction') as PendingTask;
+          const persisted = JSON.parse(
+            JSON.stringify({
+              ...task,
+              payload: [task.payload[0], undefined, { timeout: 5000 }],
+            }),
+          ) as PendingTask;
+          expect(persisted.payload).toEqual([task.payload[0], null, { timeout: 5000 }]);
+
+          await offlineDb['executeTask']({ task: persisted });
+
+          expect(deleteReactionSpy).toHaveBeenCalledWith(task.payload[0], undefined, {
+            timeout: 5000,
+          });
         });
 
         it('should call _createDraft for create-reaction task', async () => {

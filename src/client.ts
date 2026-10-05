@@ -46,7 +46,6 @@ import type {
   PartializeAllBut,
   QueryChannelsRequest,
   QueryChannelsResponse,
-  QueryReactionsRequestWithId,
   QueryThreadsRequest,
   ReactionResponse,
   SdkIdentifier,
@@ -97,7 +96,7 @@ import type {
   WSEvent,
 } from './gen/models';
 import { ChatApi } from './gen-imports';
-import type { ConnectedEvent, StreamResponse } from './types';
+import type { StreamResponse } from './types';
 
 function isString(value: unknown): value is string {
   return typeof value === 'string' || value instanceof String;
@@ -790,12 +789,17 @@ export class StreamChat extends ChatApi {
   /**
    * Retrieves application settings.
    *
+   * @param   _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
    * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The application settings response.
    */
-  async getAppSettings(requestOptions?: StreamRequestOptions) {
-    return await (this.appSettingsPromise = this.getApp(requestOptions));
+  async getAppSettings(
+    _request?: Record<string, never>,
+    requestOptions?: StreamRequestOptions,
+  ) {
+    return await (this.appSettingsPromise = this.getApp(undefined, requestOptions));
   }
 
   /**
@@ -1203,7 +1207,7 @@ export class StreamChat extends ChatApi {
     }
   };
 
-  _handleClientEvent(event: WSEvent | ConnectedEvent) {
+  _handleClientEvent(event: WSEvent) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const client = this;
     const postListenerCallbacks = [];
@@ -1455,14 +1459,14 @@ export class StreamChat extends ChatApi {
    * until the caller's abort signal fires — and throws when there is no connection and none is being
    * established.
    *
-   * @param ...args - `[request, requestOptions]`. `request.connection_id` is replaced by this
-   *   client's connection id.
+   * @param ...args - `[pathParams, request, requestOptions]`. `pathParams` identifies the channel
+   *   (`{ type, id }`); `request.connection_id` is replaced by this client's connection id.
    * @returns The server response.
    */
   override async stopWatchingChannel(
     ...args: Parameters<ChatApi['stopWatchingChannel']>
   ) {
-    const [request, requestOptions] = args;
+    const [pathParams, request, requestOptions] = args;
     const signal = requestOptions?.signal;
     const connectionId = await this.connectionIdManager.getConnectionId(
       // Check if signal is still usable - if it is read from offline DB, it has lost `addEventListener`.
@@ -1470,6 +1474,7 @@ export class StreamChat extends ChatApi {
     );
 
     return super.stopWatchingChannel(
+      pathParams,
       { ...request, connection_id: connectionId },
       requestOptions,
     );
@@ -1610,18 +1615,15 @@ export class StreamChat extends ChatApi {
    * Queries reactions for a message and hydrates any cached offline reactions before the network
    * request.
    *
-   * @param request - The query reactions request payload, including the target message ID,
-   *   MongoDB-style filters, sort directions (e.g. `[{ field: 'created_at', direction: -1 }]`),
-   *   and pagination options.
-   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
-   *   into the request (optional).
+   * @param ...args - `[pathParams, request, requestOptions]`. `pathParams.id` is the target message ID;
+   *   `request` carries MongoDB-style filters, sort directions (e.g.
+   *   `[{ field: 'created_at', direction: -1 }]`) and pagination options; `requestOptions` carries
+   *   per-request options such as an abort `signal` and is never serialized into the request.
    * @returns The query reactions response.
    */
-  async queryReactionsAndHydrate(
-    request: QueryReactionsRequestWithId,
-    requestOptions?: StreamRequestOptions,
-  ) {
-    const { filter, next, id: messageId, sort, limit } = request;
+  async queryReactionsAndHydrate(...args: Parameters<ChatApi['queryReactions']>) {
+    const [{ id: messageId }, request] = args;
+    const { filter, next, sort, limit } = request ?? {};
 
     if (this.offlineDb?.getReactions && !next) {
       try {
@@ -1645,7 +1647,7 @@ export class StreamChat extends ChatApi {
       }
     }
 
-    return await this.queryReactions(request, requestOptions);
+    return await this.queryReactions(...args);
   }
 
   hydrateActiveChannels(
@@ -2085,8 +2087,8 @@ export class StreamChat extends ChatApi {
       'Please specify the message id when calling pinMessage',
     );
     return this.updateMessagePartial(
+      { id },
       {
-        id,
         set: {
           pinned: true,
           pin_expires: this._normalizeExpiration(timeoutOrExpirationDate),
@@ -2113,13 +2115,7 @@ export class StreamChat extends ChatApi {
       messageOrMessageId,
       'Please specify the message id when calling unpinMessage',
     );
-    return this.updateMessagePartial(
-      {
-        id,
-        set: { pinned: false },
-      },
-      requestOptions,
-    );
+    return this.updateMessagePartial({ id }, { set: { pinned: false } }, requestOptions);
   }
 
   /**
@@ -2127,10 +2123,11 @@ export class StreamChat extends ChatApi {
    * state. `messageOperations.update` on a channel or thread is the full edit.
    */
   override async updateMessage(...args: Parameters<ChatApi['updateMessage']>) {
-    const [request, requestOptions] = args;
+    const [pathParams, request, requestOptions] = args;
 
     // Sanitized at the wire, which every path reaches: the full edit and an offline replay alike.
     return await super.updateMessage(
+      pathParams,
       { ...request, message: sanitizeOutgoingAttachments(request.message) },
       requestOptions,
     );
@@ -2141,11 +2138,11 @@ export class StreamChat extends ChatApi {
    * `messageOperations.delete` on a channel or thread is the full delete.
    */
   override async deleteMessage(...args: Parameters<ChatApi['deleteMessage']>) {
-    const [request] = args;
+    const [, request] = args;
     const result = await super.deleteMessage(...args);
 
     // necessary to populate the below values as the server does not return the message in the response as deleted
-    if (request.delete_for_me) {
+    if (request?.delete_for_me) {
       result.message.deleted_for_me = true;
       result.message.type = 'deleted';
     }
@@ -2240,10 +2237,8 @@ export class StreamChat extends ChatApi {
     };
 
     const response = await this.getThread(
-      {
-        message_id: messageId,
-        ...optionsWithDefaults,
-      },
+      { message_id: messageId },
+      optionsWithDefaults,
       requestOptions,
     );
 
@@ -2350,25 +2345,18 @@ export class StreamChat extends ChatApi {
   /**
    * Queries poll answers.
    *
-   * @param request - The query poll answers request payload, including the poll ID, optional vote
-   *   filter conditions, sort directions, and pagination options (`limit`, `offset`).
-   * @param request.poll_id - The poll ID.
-   * @param request.filter - Vote filter conditions.
+   * @param ...args - `[pathParams, request, requestOptions]`. `pathParams.poll_id` is the poll ID;
+   *   `request` carries optional vote filter conditions, sort directions, and pagination options
+   *   (`limit`, `offset`).
    * @returns The poll answers.
    */
-  async queryPollAnswers(
-    { poll_id, filter, ...options }: Parameters<ChatApi['queryPollVotes']>[0],
-    requestOptions?: StreamRequestOptions,
-  ) {
+  async queryPollAnswers(...args: Parameters<ChatApi['queryPollVotes']>) {
+    const [pathParams, request, requestOptions] = args;
+    const { filter, ...options } = request ?? {};
+
     return await this.queryPollVotes(
-      {
-        poll_id,
-        filter: {
-          ...filter,
-          is_answer: true,
-        },
-        ...options,
-      },
+      pathParams,
+      { ...options, filter: { ...filter, is_answer: true } },
       requestOptions,
     );
   }

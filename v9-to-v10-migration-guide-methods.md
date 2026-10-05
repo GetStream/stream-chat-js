@@ -31,7 +31,34 @@ await channel.queryMembers({ payload: { limit: 10 } }, { signal: controller.sign
 controller.abort();
 ```
 
+**`requestOptions` is never the first argument of a method that has no request.** A method whose endpoint takes no query or body fields still has a request slot in front of `requestOptions`, typed `_request?: Record<string, never>` and never read — pass `undefined` there:
+
+```ts
+await client.getAppSettings(undefined, { signal: controller.signal });
+await client.getMessage({ id: messageId }, undefined, { signal: controller.signal });
+await client.deleteReaction({ id: messageId, type: 'love' }, undefined, {
+  timeout: 5_000,
+});
+await channel.pin(undefined, { signal: controller.signal });
+```
+
+The slot keeps `requestOptions` in the same position when the endpoint later gains a query parameter. Without it, `getApp(requestOptions)` would become `getApp(request, requestOptions)`, and options passed by existing callers would quietly go out as query parameters. The generated methods affected today are `getApp`, `unreadCounts`, `listDevices`, `getBlockedUsers`, `getUserLiveLocations`, `getMessage`, `deleteReaction`, `deletePoll`, `getPoll`, `deletePollOption`, `getPollOption`, `deletePollVote` and `deleteReminder` on `client`, and `listQueues`, `getQueue`, `getAppeal` and `deleteActionConfig` on `client.moderation`. The wrappers around them take the same shape (`client.getAppSettings`, `channel.removeVote`). So do the hand-written `Channel` conveniences that send a fixed request: `archive`, `unarchive`, `pin`, `unpin`, `disableSlowMode`, `clearAIIndicator` and `stopAIResponse`. A call that omits `requestOptions` is unaffected (`client.getAppSettings()`, `channel.pin()`). A call that passes it in the first free position is a compile error, because no `StreamRequestOptions` value is assignable to `Record<string, never>`.
+
 This replaces v9's `client.createAbortControllerForNextRequest()` — see [below](#clientcreateabortcontrollerfornextrequest). The upload methods are **not** an exception: they take the same `requestOptions`, which carries `onUploadProgress` alongside `signal`. v9's `axiosRequestConfig` parameter is gone everywhere.
+
+**Path parameters are their own argument.** A generated method whose endpoint has URL path parameters takes them as a separate first argument: `method(pathParams, request?, requestOptions?)`. `request` carries the query and body fields; a method whose arguments are all path parameters keeps an unused `_request` slot so `requestOptions` stays third ([see above](#global-renames-applied-everywhere)). The hand-written methods that wrap one of these take the same shape (`channel.vote`, `client.queryReactionsAndHydrate`, `client.queryPollAnswers`, `client.reminders.upsertReminder` / `createReminder` / `updateReminder`).
+
+```ts
+await client.sendReaction({ id: messageId }, { reaction: { type: 'love' } });
+await client.deleteMessage({ id: messageId }, { hard: true });
+await client.getThread({ message_id: parentId }, { reply_limit: 10 });
+await client.getMessage({ id: messageId }); // path parameters only - the request slot is an unused placeholder
+```
+
+Two things to know when rewriting call sites:
+
+- **TypeScript does not catch every stale call.** An object literal with a stray field is an error, but a field that arrives through a spread (`{ id, ...options }`) or a pre-built variable is not checked. It lands in `pathParams`, which only fills the URL, so the client **throws** at runtime (`"<key>" is not a path parameter of <path>`) instead of sending the request without it.
+- **`request` is sent as given.** The generated methods no longer copy the known fields one by one, so every top-level key you pass reaches the server. Pass only the request's own fields.
 
 ---
 
@@ -91,8 +118,8 @@ Sort now uses `Gen_SortParamRequest[]` (`{ field, direction }`), not the v9 reco
 client.queryReactions(messageID, filter, sort?, options?);
 
 // v10 — inherited from ChatApi
-client.queryReactions(request: QueryReactionsRequest);                     // raw response
-client.queryReactionsAndHydrate(request: QueryReactionsRequest);           // wraps offline-db merge
+client.queryReactions(pathParams: { id }, request?: QueryReactionsRequest);            // raw response
+client.queryReactionsAndHydrate(pathParams: { id }, request?: QueryReactionsRequest);  // wraps offline-db merge
 ```
 
 Use `queryReactionsAndHydrate` where v9 code depended on the offline-db reaction reconciliation; otherwise use inherited `queryReactions`.
@@ -129,7 +156,7 @@ client.getThread(messageId, options?);            // returned hydrated Thread
 // v10
 client.queryThreads(request?);                    // inherited, raw QueryThreadsResponse
 client.queryThreadsAndHydrate(options?);          // v9 behavior
-client.getThread(request: { message_id });        // inherited, raw
+client.getThread(pathParams: { message_id }, request?);  // inherited, raw; request: { reply_limit?, participant_limit?, member_limit?, watch? }
 client.getThreadAndHydrate(messageId, options?);  // v9 behavior
 ```
 
@@ -143,9 +170,9 @@ client.updateMessage(message, userId?, options?);
 client.deleteMessage(messageID, hardDelete?);
 
 // v10 — inherited/overridden from ChatApi
-client.updateMessage(request: Parameters<ChatApi['updateMessage']>[0]);
-// request: { id, message, skip_enrich_url? }
-client.deleteMessage(request: { id: string; hard?: boolean; delete_for_me?: boolean });
+client.updateMessage(pathParams: { id: string }, request: UpdateMessageRequest);
+// request: { message, skip_enrich_url?, skip_push? }
+client.deleteMessage(pathParams: { id: string }, request?: { hard?: boolean; delete_for_me?: boolean });
 ```
 
 Note: `hardDelete` boolean is now `hard` on the request. `user_id` override is gone. Both are now the
@@ -161,7 +188,7 @@ client.ephemeralUpdateMessage(messageID, updates, userId?, options?);
 client.undeleteMessage(messageID, userID);
 
 // v10
-client.updateMessagePartial(request: UpdateMessagePartialRequest);   // inherited; no user_id override
+client.updateMessagePartial(pathParams: { id }, request?: UpdateMessagePartialRequest);   // inherited; no user_id override
 // ephemeralUpdateMessage: REMOVED — call updateMessagePartial with the ephemeral payload directly.
 // undeleteMessage: REMOVED — no client-side replacement (was server-side).
 ```
@@ -173,7 +200,7 @@ client.updateMessagePartial(request: UpdateMessagePartialRequest);   // inherite
 client.getMessage(messageID, options?);
 
 // v10 — inherited
-client.getMessage(request: { id: string });
+client.getMessage(pathParams: { id: string }, _request?: Record<string, never>);
 ```
 
 Options like `show_deleted_message` are no longer accepted here (server-side only).
@@ -495,7 +522,7 @@ client.revokeTokens(before?: Date | null);       // string form dropped
 
 #### `client.getAppSettings`
 
-Still present but the return type changed (`Gen_GetApplicationResponse` wrapped as `StreamResponse<...>`); no signature change.
+Still present but the return type changed (`Gen_GetApplicationResponse` wrapped as `StreamResponse<...>`). It takes no arguments of its own; to pass `requestOptions`, put `undefined` in the unused `_request` slot first: `client.getAppSettings(undefined, { signal })` (see [`requestOptions`](#global-renames-applied-everywhere)).
 
 #### `client.partialUpdateThread`
 
@@ -635,8 +662,8 @@ client.deleteBlockList(name, data?: { team? });
 client.createBlockList(request);
 client.listBlockLists(request?);
 // getBlockList: no replacement.
-client.updateBlockList(request);
-client.deleteBlockList(request);
+client.updateBlockList(pathParams: { name }, request?: { words?; team?; ... });
+client.deleteBlockList(pathParams: { name }, request?: { team? });
 ```
 
 #### Webhook / SNS / SQS helpers — removed outright
@@ -765,10 +792,8 @@ channel.sendReaction(messageID, reaction: Reaction, options?);
 channel.deleteReaction(messageID, reactionType, user_id?);
 
 // v10 — the HTTP request
-client.sendReaction(request: Parameters<ChatApi['sendReaction']>[0]);
-// { id: messageId, reaction, enforce_unique?, skip_push? }
-client.deleteReaction(request: Parameters<ChatApi['deleteReaction']>[0]);
-// { id: messageId, type: reactionType }
+client.sendReaction(pathParams: { id: messageId }, request: { reaction, enforce_unique?, skip_push? });
+client.deleteReaction(pathParams: { id: messageId, type: reactionType }, _request?: Record<string, never>);
 
 // v10 — the full operation (optimistic state + offline queue)
 channel.messageOperations.addReaction({ messageId, reaction, options? });
@@ -783,9 +808,8 @@ channel.messageOperations.deleteReaction({ messageId, type });
 // v9
 channel.getReactions(message_id, options: { limit?; offset? });
 
-// v10
-channel.getReactions(request: Parameters<ChatApi['getReactions']>[0]);
-// { id: messageId, limit?, offset? }
+// v10 — REMOVED after rc.4 (see below); use the inherited client method
+client.getReactions(pathParams: { id: messageId }, request?: { limit?, offset? });
 ```
 
 #### `channel.getReplies`
@@ -794,9 +818,9 @@ channel.getReactions(request: Parameters<ChatApi['getReactions']>[0]);
 // v9
 channel.getReplies(parent_id, options?, sort?);
 
-// v10
-channel.getReplies(request: GetRepliesRequest);
-// { parent_id, id_gt?, id_lt?, id_gte?, id_lte?, limit?, offset?, sort?, ... }
+// v10 — REMOVED after rc.4 (see below); use the inherited client method
+client.getReplies(pathParams: { parent_id }, request?);
+// request: { id_gt?, id_lt?, id_gte?, id_lte?, id_around?, limit?, sort?, ... }
 ```
 
 `sort` inside the request uses `Gen_SortParamRequest[]` (`{ field, direction }`). See `v9-to-v10-migration-guide-sort.md`.
@@ -881,7 +905,7 @@ channel.pin();
 channel.unpin();
 ```
 
-These now delegate to `channel.updateMemberPartial({ set: { archived: true } })` (etc.) internally.
+These now delegate to `channel.updateMemberPartial({ set: { archived: true } })` (etc.) internally. The first parameter is an unused `_request` placeholder, so `requestOptions` goes second: `channel.pin(undefined, { signal })`. The same applies to `channel.disableSlowMode`, `channel.clearAIIndicator` and `channel.stopAIResponse`.
 
 #### `channel.muteStatus` / `channel.sendAction` / `channel.keystroke` / `channel.stopTyping`
 
@@ -1004,10 +1028,8 @@ channel.vote(messageId, pollId, vote: PollVoteData);
 channel.removeVote(messageId, pollId, voteId);
 
 // v10
-channel.vote(request: Parameters<ChatApi['castPollVote']>[0]);
-// { message_id, poll_id, vote: { option_id?, answer_text? } }
-channel.removeVote(request: Parameters<ChatApi['deletePollVote']>[0]);
-// { message_id, poll_id, vote_id }
+channel.vote(pathParams: { message_id, poll_id }, request?: { vote: { option_id?, answer_text? } });
+channel.removeVote(pathParams: { message_id, poll_id, vote_id }, _request?: Record<string, never>);
 ```
 
 #### `channel.createDraft` / `channel._createDraft` / `channel.deleteDraft` / `channel._deleteDraft` / `channel.getDraft`
@@ -1372,13 +1394,19 @@ logger.info(msg, extra);
 
 Skip this section if you are upgrading from v9; everything here is already covered above. It exists for integrations pinned to the `rc` dist-tag, because `10.0.0-rc.1` / `rc.2` still exported five aliases that v10 final deletes outright. **No back-compat alias remains for any of them.**
 
-| Removed after `rc.2`    | Replacement                     | Detail                                                                                                                     |
-| ----------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `EventAPIResponse`      | one generated type per endpoint | [shape-change note](./v9-to-v10-migration-guide-type-renames.md#eventapiresponse--one-type-per-endpoint)                   |
-| `APIErrorResponse`      | `APIError`                      | [shape-change note](./v9-to-v10-migration-guide-type-renames.md#apierrorresponse--apierror) — `StatusCode` → `status_code` |
-| `DraftMessagePayload`   | `MessageRequest`                | [shape-change note](./v9-to-v10-migration-guide-type-renames.md#draftmessagepayload--messagerequest)                       |
-| `PartializeKeys`        | none                            | type utility; inline the built-in equivalent — see `v9-to-v10-migration-guide-other.md`                                    |
-| `QueryRemindersOptions` | `QueryRemindersRequest`         | see `v9-to-v10-migration-guide-other.md`                                                                                   |
+| Removed after `rc.2`                          | Replacement                     | Detail                                                                                                                                     |
+| --------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `EventAPIResponse`                            | one generated type per endpoint | [shape-change note](./v9-to-v10-migration-guide-type-renames.md#eventapiresponse--one-type-per-endpoint)                                   |
+| `APIErrorResponse`                            | `APIError`                      | [shape-change note](./v9-to-v10-migration-guide-type-renames.md#apierrorresponse--apierror) — `StatusCode` → `status_code`                 |
+| `DraftMessagePayload`                         | `MessageRequest`                | [shape-change note](./v9-to-v10-migration-guide-type-renames.md#draftmessagepayload--messagerequest)                                       |
+| `PartializeKeys`                              | none                            | type utility; inline the built-in equivalent — see `v9-to-v10-migration-guide-other.md`                                                    |
+| `QueryRemindersOptions`                       | `QueryRemindersRequest`         | see `v9-to-v10-migration-guide-other.md`                                                                                                   |
+| `QueryReactionsRequestWithId` (after `rc.16`) | none — the call is split        | `queryReactions` / `queryReactionsAndHydrate` take `({ id }, request?: QueryReactionsRequest)`; there is no single type for both           |
+| `CreateReminderOptions` (after `rc.16`)       | none — the call is split        | the reminder methods take `({ message_id }, request?: CreateReminderRequest)`; derive from `Parameters<ReminderManager['upsertReminder']>` |
+
+`QueryReactionsRequestWithId` and `CreateReminderOptions` went later than the rest, after `rc.16`, when [path parameters became their own argument](#global-renames-applied-everywhere): they named the merged `{ id, ...request }` / `{ message_id, ...request }` objects, which no longer exist.
+
+**Queued offline tasks written by `rc.16` or earlier do not replay.** A pending task persists the call's argument tuple, and the `update-message`, `delete-message`, `send-reaction` and `delete-reaction` tuples changed shape with the split: `[{ id, message }]` is now `[{ id }, { message }]`, and so on. Replaying an old tuple throws (`"<key>" is not a path parameter of <path>`). If you maintain your own `AbstractOfflineDB` and ran an earlier rc, clear the pending-task table on upgrade (or bump your schema version). `stream-chat-react-native`'s offline database already recreates its tables on the v10 schema bump.
 
 `QueryRemindersOptions` is the one that moved twice: it was the full `Pager & { filter?, sort? }` shape in `rc.1`, a back-compat alias to `QueryRemindersRequest` in `rc.2`, and deleted in final. `ReminderPaginator`'s second generic parameter moved with it — `PaginatorOptions<ReminderResponseData, QueryRemindersOptions>` becomes `PaginatorOptions<ReminderResponseData, QueryRemindersRequest>`.
 
@@ -1463,19 +1491,22 @@ Skip this section if you are upgrading from v9 only in the sense that these meth
 
 - **`client.queryBannedUsers(...)` — REMOVED.** Its whole body was `return await super.queryBannedUsers(...args)`; it was not even marked `override`. The inherited `ChatApi.queryBannedUsers` is unchanged, so **no call-site change is needed** — you were already reaching this implementation.
 
-- **`client.partialUpdateThread(messageId, partialThreadObject, requestOptions?)` — REMOVED.** Use the inherited `client.updateThreadPartial({ message_id, set, unset }, requestOptions?)`.
+- **`client.partialUpdateThread(messageId, partialThreadObject, requestOptions?)` — REMOVED.** Use the inherited `client.updateThreadPartial({ message_id }, { set, unset }, requestOptions?)`.
 
   ```ts
   // before
   await client.partialUpdateThread(messageId, { set: { custom_field: 1 } });
 
   // after
-  await client.updateThreadPartial({ message_id: messageId, set: { custom_field: 1 } });
+  await client.updateThreadPartial(
+    { message_id: messageId },
+    { set: { custom_field: 1 } },
+  );
   ```
 
   Two behaviour changes come with it:
   1. **The reserved-field guard is gone.** It threw synchronously for keys in a hardcoded list, and that list had drifted from `ThreadResponse` in both directions: it rejected `id`, `type`, `user` and `participants` (none of which are fields on `ThreadResponse`, so legitimate custom fields with those names were blocked) while letting through `parent_message_id`, `channel_cid`, `created_by_user_id`, `thread_participants`, `reply_count`, `participant_count`, `active_participant_count` and `deleted_at`, all of which _are_ server-owned. The server rejects what it owns; the client no longer guesses. **A rejected write now surfaces as a rejected promise rather than a synchronous `throw`** — adjust any `try`/`catch` that wrapped the call expecting the latter.
-  2. **The empty-`messageId` check is gone.** `message_id` is a required field on `UpdateThreadPartialRequest`, so this is a compile error instead.
+  2. **The empty-`messageId` check is gone.** `message_id` is a required path parameter of `updateThreadPartial`, so this is a compile error instead.
 
   The `PartialThreadUpdate` type is removed with the method — `UpdateThreadPartialRequest` is its replacement.
 
@@ -1483,9 +1514,9 @@ Skip this section if you are upgrading from v9 only in the sense that these meth
 
 - **`channel.search(...)` — REMOVED.** Use `client.search(...)`. The removed method forwarded straight to `client.search()` **without scoping the query to the channel**, so despite the name it searched every channel the user could see. If you were relying on that behaviour, `client.search()` is the same call. If you assumed it was channel-scoped, add the scope to your filter explicitly — that is a real bug fix in your integration, not a regression.
 
-- **`channel.getReplies(...)` — REMOVED.** Use `client.getReplies(...)`. Pure forward; the removed method's own comment noted it did nothing with the result.
+- **`channel.getReplies(...)` — REMOVED.** Use `client.getReplies({ parent_id }, request?)`. Pure forward; the removed method's own comment noted it did nothing with the result.
 
-- **`channel.getReactions(...)` — REMOVED.** Use `client.getReactions(...)`. Pure forward.
+- **`channel.getReactions(...)` — REMOVED.** Use `client.getReactions({ id }, request?)`. Pure forward.
 
 - **`channel.sendAction(messageId, formData, requestOptions?)` — KEPT**, but its `if (!messageId) throw Error('Message ID is missing')` guard is gone. `runMessageAction` requires `id: string`, so an empty id is a compile error; a runtime empty string reaches the server and is rejected there.
 
