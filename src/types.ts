@@ -3109,8 +3109,8 @@ export type MessageUpdatableFields = Omit<
 >;
 
 export type PartialMessageUpdate = {
-  set?: Partial<MessageUpdatableFields>;
-  unset?: Array<keyof MessageUpdatableFields>;
+  set?: Partial<MessageUpdatableFields> & { [path: NestedFieldPath]: unknown };
+  unset?: Array<keyof MessageUpdatableFields | NestedFieldPath>;
 };
 
 export type PendingMessageResponse = {

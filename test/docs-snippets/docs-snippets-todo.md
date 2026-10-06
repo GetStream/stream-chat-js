@@ -51,11 +51,11 @@ App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy of
 
 | Status | Page                                                | JS  | Unlabelled | Client test | Blockers                     |
 | ------ | --------------------------------------------------- | --- | ---------- | ----------- | ---------------------------- |
-| [ ]    | `chat/_default/04-messages/01-send_message.md`      | 9   | 0          | yes         |                              |
-| [ ]    | `chat/_default/04-messages/02-file_uploads.md`      | 4   | 0          | yes         |                              |
-| [ ]    | `chat/_default/04-messages/03-threads.md`           | 11  | 2          | yes         |                              |
-| [ ]    | `chat/_default/04-messages/04-send_reaction.md`     | 5   | 0          | yes         |                              |
-| [ ]    | `chat/_default/04-messages/05-pinned_messages.md`   | 3   | 0          | yes         |                              |
+| [x]    | `chat/_default/04-messages/01-send_message.md`      | 9   | 0          | yes         |                              |
+| [x]    | `chat/_default/04-messages/02-file_uploads.md`      | 4   | 0          | yes         |                              |
+| [x]    | `chat/_default/04-messages/03-threads.md`           | 11  | 2          | yes         |                              |
+| [x]    | `chat/_default/04-messages/04-send_reaction.md`     | 5   | 0          | yes         |                              |
+| [x]    | `chat/_default/04-messages/05-pinned_messages.md`   | 3   | 0          | yes         |                              |
 | [ ]    | `chat/_default/04-messages/06-search.md`            | 2   | 0          | yes         |                              |
 | [ ]    | `chat/_default/04-messages/07-silent_messages.md`   | 2   | 0          | yes         |                              |
 | [ ]    | `chat/_default/04-messages/09-message_reminders.md` | 7   | 0          | yes         | ◐ 🔗 `reminder_due` delivery |

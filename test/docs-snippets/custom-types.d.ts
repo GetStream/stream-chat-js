@@ -19,4 +19,21 @@ declare module 'stream-chat' {
     key2?: string;
     key3?: string;
   }
+
+  interface CustomMessageData {
+    // _default/04-messages/01-send_message.md
+    priority?: string;
+    color?: string;
+    details?: { status?: string };
+  }
+
+  interface CustomAttachmentData {
+    // _default/04-messages/01-send_message.md
+    myCustomField?: number;
+  }
+
+  interface CustomReactionData {
+    // _default/04-messages/04-send_reaction.md
+    customField?: string;
+  }
 }
