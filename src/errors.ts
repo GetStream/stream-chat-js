@@ -1,6 +1,6 @@
 import type { AxiosResponse } from 'axios';
 import { isCancel } from 'axios';
-import type { APIError as Gen_APIError } from './types';
+import type { APIError as Gen_APIError, StreamAPIError } from './types';
 
 export const APIErrorCodes: Record<string, { name: string; retryable: boolean }> = {
   '-1': { name: 'InternalSystemError', retryable: true },
@@ -104,3 +104,13 @@ export function isErrorResponse(
 ): res is AxiosResponse<Gen_APIError> {
   return !res.status || res.status < 200 || 300 <= res.status;
 }
+
+/** Turns whatever a request threw into a plain error object, so it can be stored on a message. */
+export const parseError = (error: unknown): StreamAPIError => {
+  const stringError = JSON.stringify(error);
+  return (stringError ? JSON.parse(stringError) : {}) as StreamAPIError;
+};
+
+/** Whether the server rejected a send because a message with that id already exists. */
+export const isAlreadyExistsError = (error: unknown, parsed: StreamAPIError) =>
+  parsed.code === 4 && error instanceof Error && error.message.includes('already exists');

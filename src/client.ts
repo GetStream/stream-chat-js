@@ -61,7 +61,6 @@ import type {
 import { isWSFailure } from './errors';
 import type { APIError } from './errors';
 import { chatLoggerSystem } from './logger';
-import { queueOrRun } from './offline-support/queueableOperations';
 import { Thread } from './thread';
 import { Moderation } from './moderation';
 import { ThreadManager } from './thread_manager';
@@ -79,7 +78,6 @@ import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
 import { ReminderManager } from './reminders';
 import type { AbstractOfflineDB } from './offline-support';
-import { getPendingTaskChannelData } from './offline-support/util';
 import { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';
 import { isEqual } from './utils/mergeWith/mergeWithCore';
 import type { MessageComposer } from './messageComposer';
@@ -2121,34 +2119,13 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Updates the given message. When an `offlineDb` is registered the call is queued
-   * so it is replayed on reconnect.
+   * Updates the given message — the HTTP request and nothing else: no offline queueing and no local
+   * state. `messageOperations.update` on a channel or thread is the full edit.
    */
-  override async updateMessage(
-    ...args: [
-      pathParams: Parameters<ChatApi['updateMessage']>[0],
-      request: Parameters<ChatApi['updateMessage']>[1] & { message: { cid?: string } },
-      requestOptions?: StreamRequestOptions,
-    ]
-  ) {
-    const [pathParams, request] = args;
-
-    return await queueOrRun({
-      client: this,
-      task: {
-        ...getPendingTaskChannelData(request.message?.cid),
-        messageId: pathParams.id,
-        payload: args,
-        type: 'update-message',
-      },
-    });
-  }
-
-  async _updateMessage(...args: Parameters<ChatApi['updateMessage']>) {
+  override async updateMessage(...args: Parameters<ChatApi['updateMessage']>) {
     const [pathParams, request, requestOptions] = args;
 
-    // Sanitized at the point of sending, which is the only place every path converges: the
-    // offline replay of a queued `update-message` task calls this method directly.
+    // Sanitized at the wire, which every path reaches: the full edit and an offline replay alike.
     return await super.updateMessage(
       pathParams,
       { ...request, message: sanitizeOutgoingAttachments(request.message) },
@@ -2157,23 +2134,10 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Deletes a message. When an `offlineDb` is registered the call is queued so it
-   * is replayed on reconnect.
+   * Deletes a message — the HTTP request and nothing else: no offline queueing and no local state.
+   * `messageOperations.delete` on a channel or thread is the full delete.
    */
   override async deleteMessage(...args: Parameters<ChatApi['deleteMessage']>) {
-    const [pathParams] = args;
-
-    return await queueOrRun({
-      client: this,
-      task: {
-        messageId: pathParams.id,
-        payload: args,
-        type: 'delete-message',
-      },
-    });
-  }
-
-  async _deleteMessage(...args: Parameters<ChatApi['deleteMessage']>) {
     const [, request] = args;
     const result = await super.deleteMessage(...args);
 

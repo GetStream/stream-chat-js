@@ -2648,15 +2648,14 @@ describe('OfflineSupportApi', () => {
           });
         });
 
-        // The same fold, driven through the production chain rather than a hand-built payload:
-        // `Channel`'s default update handler normalizes the message with
-        // `localMessageToNewMessagePayload` before `client.updateMessage` turns it into a task.
-        it('folds an edit made through client.updateMessage into the queued send-message task', async () => {
+        // The same fold, driven through the production chain rather than a hand-built payload: the
+        // full edit's default request queues the task, and `client.updateMessage` is only the wire.
+        it('folds an edit made through messageOperations.update into the queued send-message task', async () => {
           client.setOfflineDBApi(offlineDb);
           client.wsConnection = { isHealthy: false } as StableWSConnection;
-          // The fallback direct call `queueOrRun` makes once queueing has thrown - stubbed so the
-          // test does not reach the network.
-          vi.spyOn(client, '_updateMessage').mockRejectedValue(new Error('offline'));
+          // The wire call, stubbed so neither the queued attempt nor the direct fallback reaches the
+          // network.
+          vi.spyOn(client, 'updateMessage').mockRejectedValue(new Error('offline'));
           const editedMessage = {
             id: 'msg-123',
             cid: 'messaging:channel123',
@@ -2679,9 +2678,8 @@ describe('OfflineSupportApi', () => {
           const updatePendingTaskSpy = vi.spyOn(offlineDb, 'updatePendingTask');
 
           await client
-            .updateMessage({ id: editedMessage.id }, {
-              message: utils.localMessageToNewMessagePayload(editedMessage),
-            } as Parameters<StreamChat['updateMessage']>[1])
+            .channel('messaging', 'channel123')
+            .messageOperations.update({ localMessage: editedMessage })
             .catch(() => undefined);
 
           expect(addPendingTaskSpy).not.toHaveBeenCalled();
@@ -2700,27 +2698,31 @@ describe('OfflineSupportApi', () => {
 
       describe('executeTask', () => {
         let mockChannel: Channel;
-        let _updateMessageSpy: MockInstance;
-        let _deleteMessageSpy: MockInstance;
+        let updateMessageSpy: MockInstance;
+        let deleteMessageSpy: MockInstance;
+        let sendReactionSpy: MockInstance;
+        let deleteReactionSpy: MockInstance;
         let clientChannelSpy: MockInstance;
 
         beforeEach(() => {
           mockChannel = {
             initialized: true,
             watch: vi.fn(),
-            _sendMessage: vi.fn(),
-            _sendReaction: vi.fn(),
-            _deleteReaction: vi.fn(),
+            sendMessage: vi.fn(),
             _createDraft: vi.fn(),
             _deleteDraft: vi.fn(),
             messagePaginator: { trackLastMessage: vi.fn() },
           } as unknown as Channel;
 
-          _updateMessageSpy = vi
-            .spyOn(client, '_updateMessage')
+          updateMessageSpy = vi
+            .spyOn(client, 'updateMessage')
             .mockImplementation(vi.fn());
-          _deleteMessageSpy = vi
-            .spyOn(client, '_deleteMessage')
+          deleteMessageSpy = vi
+            .spyOn(client, 'deleteMessage')
+            .mockImplementation(vi.fn());
+          sendReactionSpy = vi.spyOn(client, 'sendReaction').mockImplementation(vi.fn());
+          deleteReactionSpy = vi
+            .spyOn(client, 'deleteReaction')
             .mockImplementation(vi.fn());
           clientChannelSpy = vi.spyOn(client, 'channel').mockReturnValue(mockChannel);
         });
@@ -2729,30 +2731,31 @@ describe('OfflineSupportApi', () => {
           vi.resetAllMocks();
         });
 
-        it('should call _updateMessage for update-message task', async () => {
+        it('should call updateMessage for update-message task', async () => {
           const task = generatePendingTask('update-message') as PendingTask;
 
           await offlineDb['executeTask']({ task });
 
-          expect(_updateMessageSpy).toHaveBeenCalledWith(...task.payload);
+          expect(updateMessageSpy).toHaveBeenCalledWith(...task.payload);
           expect(clientChannelSpy).not.toHaveBeenCalled();
         });
 
-        it('should call _deleteMessage for delete-message task', async () => {
+        it('should call deleteMessage for delete-message task', async () => {
           const task = generatePendingTask('delete-message') as PendingTask;
 
           await offlineDb['executeTask']({ task });
 
-          expect(_deleteMessageSpy).toHaveBeenCalledWith(...task.payload);
+          expect(deleteMessageSpy).toHaveBeenCalledWith(...task.payload);
         });
 
-        it('should call _sendReaction for send-reaction task', async () => {
+        it('should call client.sendReaction for send-reaction task', async () => {
           const task = generatePendingTask('send-reaction') as PendingTask;
 
           await offlineDb['executeTask']({ task });
 
-          expect(clientChannelSpy).toHaveBeenCalledWith(task.channelType, task.channelId);
-          expect(mockChannel._sendReaction).toHaveBeenCalledWith(...task.payload);
+          // A reaction is message-scoped, so its replay needs no channel instance.
+          expect(clientChannelSpy).not.toHaveBeenCalled();
+          expect(sendReactionSpy).toHaveBeenCalledWith(...task.payload);
         });
 
         // A task payload is the replayed method's argument list, so it carries that method's
@@ -2767,11 +2770,9 @@ describe('OfflineSupportApi', () => {
 
           await offlineDb['executeTask']({ task: taskWithOptions });
 
-          expect(mockChannel._sendReaction).toHaveBeenCalledWith(
-            task.payload[0],
-            task.payload[1],
-            { signal: controller.signal },
-          );
+          expect(sendReactionSpy).toHaveBeenCalledWith(task.payload[0], task.payload[1], {
+            signal: controller.signal,
+          });
         });
 
         // An omitted middle argument - a soft delete has no `request` - comes back from JSON as `null`,
@@ -2785,7 +2786,7 @@ describe('OfflineSupportApi', () => {
 
           await offlineDb['executeTask']({ task: persisted });
 
-          expect(_deleteMessageSpy).toHaveBeenCalledWith(
+          expect(deleteMessageSpy).toHaveBeenCalledWith(
             task.payload[0],
             undefined,
             undefined,
@@ -2809,7 +2810,7 @@ describe('OfflineSupportApi', () => {
 
           await offlineDb['executeTask']({ task: persisted });
 
-          expect(mockChannel._sendReaction).toHaveBeenCalledWith(
+          expect(sendReactionSpy).toHaveBeenCalledWith(
             persisted.payload[0],
             persisted.payload[1],
             { signal: {} },
@@ -2823,9 +2824,7 @@ describe('OfflineSupportApi', () => {
             .spyOn(offlineDb as any, 'handleAddPendingTask')
             .mockResolvedValue(undefined);
           (client as any).wsConnection = { isHealthy: true };
-          (mockChannel._sendReaction as unknown as MockInstance).mockRejectedValue(
-            new CanceledError('canceled'),
-          );
+          sendReactionSpy.mockRejectedValue(new CanceledError('canceled'));
           const task = generatePendingTask('send-reaction') as PendingTask;
 
           await expect(offlineDb.queueTask({ task })).rejects.toThrow(CanceledError);
@@ -2839,9 +2838,7 @@ describe('OfflineSupportApi', () => {
             .spyOn(offlineDb as any, 'handleAddPendingTask')
             .mockResolvedValue(undefined);
           (client as any).wsConnection = { isHealthy: true };
-          (mockChannel._sendReaction as unknown as MockInstance).mockRejectedValue(
-            new Error('network down'),
-          );
+          sendReactionSpy.mockRejectedValue(new Error('network down'));
           const task = generatePendingTask('send-reaction') as PendingTask;
 
           await expect(offlineDb.queueTask({ task })).rejects.toThrow('network down');
@@ -2849,12 +2846,12 @@ describe('OfflineSupportApi', () => {
           expect(handleAddPendingTaskSpy).toHaveBeenCalledTimes(1);
         });
 
-        it('should call _deleteReaction for delete-reaction task', async () => {
+        it('should call client.deleteReaction for delete-reaction task', async () => {
           const task = generatePendingTask('delete-reaction') as PendingTask;
 
           await offlineDb['executeTask']({ task });
 
-          expect(mockChannel._deleteReaction).toHaveBeenCalledWith(...task.payload);
+          expect(deleteReactionSpy).toHaveBeenCalledWith(...task.payload);
         });
 
         // `deleteReaction` has no request of its own, so its `requestOptions` sits behind an unused
@@ -2872,11 +2869,9 @@ describe('OfflineSupportApi', () => {
 
           await offlineDb['executeTask']({ task: persisted });
 
-          expect(mockChannel._deleteReaction).toHaveBeenCalledWith(
-            task.payload[0],
-            undefined,
-            { timeout: 5000 },
-          );
+          expect(deleteReactionSpy).toHaveBeenCalledWith(task.payload[0], undefined, {
+            timeout: 5000,
+          });
         });
 
         it('should call _createDraft for create-reaction task', async () => {
@@ -2895,17 +2890,17 @@ describe('OfflineSupportApi', () => {
           expect(mockChannel._deleteDraft).toHaveBeenCalledWith(...task.payload);
         });
 
-        it('should call _sendMessage and track the latest message if isPendingTask is true', async () => {
+        it('should call sendMessage and track the latest message if isPendingTask is true', async () => {
           const task = generatePendingTask('send-message') as PendingTask;
 
           const messageResponse = { message: { id: 'msg1', text: 'hello' } };
           // no idea why this complains, the test works just fine
           // @ts-ignore
-          mockChannel._sendMessage.mockResolvedValue(messageResponse);
+          mockChannel.sendMessage.mockResolvedValue(messageResponse);
 
           await offlineDb['executeTask']({ task }, true);
 
-          expect(mockChannel._sendMessage).toHaveBeenCalledWith(...task.payload);
+          expect(mockChannel.sendMessage).toHaveBeenCalledWith(...task.payload);
           expect(mockChannel.messagePaginator.trackLastMessage).toHaveBeenCalledWith(
             expect.objectContaining({ id: 'msg1' }),
           );
