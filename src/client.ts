@@ -3096,7 +3096,7 @@ export class StreamChat {
    */
   async flagMessage(
     targetMessageID: string,
-    options: { reason?: string; user_id?: string } = {},
+    options: { custom?: Record<string, unknown>; reason?: string; user_id?: string } = {},
   ) {
     return await this.post<FlagMessageResponse>(this.baseURL + '/moderation/flag', {
       target_message_id: targetMessageID,
@@ -3330,10 +3330,10 @@ export class StreamChat {
    * @param {string} messageId
    * @param {string} language
    *
-   * @return {MessageResponse} Response that includes the message
+   * @return {APIResponse & { message: MessageResponse }} Response that includes the translated message
    */
   async translateMessage(messageId: string, language: string) {
-    return await this.post<APIResponse & MessageResponse>(
+    return await this.post<APIResponse & { message: MessageResponse }>(
       this.baseURL + `/messages/${encodeURIComponent(messageId)}/translate`,
       { language },
     );

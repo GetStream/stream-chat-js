@@ -15,7 +15,7 @@ Pages under `getstream.io/content/docs/` that contain JavaScript snippets. Give 
 
 Status: `[ ]` todo, `[x]` done, `[~]` done with open questions.
 
-App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy off (can be toggled), campaigns on, no webhook/SQS/SNS. Enabled since (not probed yet): private messaging (restricted visibility) and message history (`queryMessageHistory`). Probed and **working**: pending messages, delivery receipts, translation, review queue, guest users, dynamic partitioning config, multi-tenancy toggle.
+App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy off (can be toggled), campaigns on, no webhook/SQS/SNS. Enabled since (not probed yet): message history (`queryMessageHistory`). Probed and **working**: private messaging (restricted visibility, 2026-10-06), pending messages, delivery receipts, translation, review queue, guest users, dynamic partitioning config, multi-tenancy toggle.
 
 ## chat/\_default/02-init_and_users
 
@@ -71,23 +71,23 @@ App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy of
 | [x]    | `chat/_default/05-features/05-presence_format.md`                      | 3   | 0          | yes         |                             |
 | [x]    | `chat/_default/05-features/07-polls_api.md`                            | 17  | 0          | yes         |                             |
 | [~]    | `chat/_default/05-features/08-location_sharing.md`                     | 7   | 0          | yes         | ◐ ⛔ location sharing off   |
-| [ ]    | `chat/_default/05-features/09-translation.md`                          | 4   | 0          | yes         |                             |
-| [ ]    | `chat/_default/05-features/10-advanced/11-slow_mode_and_throttling.md` | 2   | 0          | yes         |                             |
-| [ ]    | `chat/_default/05-features/10-advanced/12-drafts.md`                   | 6   | 0          | yes         |                             |
-| [ ]    | `chat/_default/05-features/10-advanced/13-private_messaging.md`        | 1   | 0          | yes         |                             |
-| [ ]    | `chat/_default/05-features/10-advanced/15-pending_messages.md`         | 1   | 0          | yes         | ◐ 🔗 pending callback hook  |
+| [x]    | `chat/_default/05-features/09-translation.md`                          | 4   | 0          | yes         |                             |
+| [x]    | `chat/_default/05-features/10-advanced/11-slow_mode_and_throttling.md` | 2   | 0          | yes         |                             |
+| [x]    | `chat/_default/05-features/10-advanced/12-drafts.md`                   | 6   | 0          | yes         |                             |
+| [x]    | `chat/_default/05-features/10-advanced/13-private_messaging.md`        | 1   | 0          | yes         |                             |
+| [x]    | `chat/_default/05-features/10-advanced/15-pending_messages.md`         | 1   | 0          | yes         | ◐ 🔗 pending callback hook  |
 
 ## chat/\_default/12-best_practices
 
 | Status | Page                                               | JS  | Unlabelled | Client test | Blockers |
 | ------ | -------------------------------------------------- | --- | ---------- | ----------- | -------- |
-| [ ]    | `chat/_default/12-best_practices/02-moderation.md` | 16  | 1          | yes         |          |
+| [~]    | `chat/_default/12-best_practices/02-moderation.md` | 16  | 1          | yes         | ◐ ⛔     |
 
 ## chat/javascript
 
 | Status | Page                                                             | JS  | Unlabelled | Client test | Blockers |
 | ------ | ---------------------------------------------------------------- | --- | ---------- | ----------- | -------- |
-| [ ]    | `chat/javascript/01-quick_start/01-plain_js_introduction.md`     | 4   | 0          | yes         |          |
+| [x]    | `chat/javascript/01-quick_start/01-plain_js_introduction.md`     | 4   | 0          | yes         |          |
 | —      | ~~`chat/javascript/11-debugging_and_cli/10-upgrading_to_v9.md`~~ | 0   | 8          | yes         | Excluded |
 
 ## Blockers detail
@@ -109,6 +109,12 @@ App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy of
 - **Affected**: static location, live location (start/update/stop, `client.updateLocation`) and `LiveLocationManager` snippets. Events snippet runs.
 - **Evidence**: `SendMessage` with `shared_location`, `UpdateLiveLocation`, `GetUserLiveLocations` fail with 403 code 17 "location sharing is not enabled for this app, please contact support to enable it", server-side too, with `shared_locations: true` on a channel type or in `config_overrides`.
 - **To unblock**: Ask support to enable location sharing on the app, then un-skip the tests (assertions are already written).
+
+### `chat/_default/12-best_practices/02-moderation.md` (◐ ⛔ Blocked)
+
+- **Affected**: "List available blocklists" (`client.listBlockLists()`). The rest of the page runs.
+- **Evidence**: Client-side it fails with code 4 "ListBlockLists failed with error: Multi-tenant blocklist is not enabled for this app", for roles `user` and `admin`, with or without `team` and multi-tenancy. Server-side it works. The app has a `moderation_multitenant_blocklist_enabled` flag (not probed).
+- **To unblock**: Check whether toggling `moderation_multitenant_blocklist_enabled` fixes it, or ask support; otherwise remove the fence.
 
 ### `chat/_default/05-features/02-events.md` (◐ 🔗 Requires webhook to test)
 
@@ -159,7 +165,6 @@ Found while scanning the pages; agents should confirm and fix them (minimal chan
 - **04-messages/09-message_reminders**: Positional `createReminder("message-id","user-id",date)` / `updateReminder(...)`: the SDK takes an object (`createReminder({ messageId, ... })`); `offsetMs` undefined.
 - **05-features/02-events**: `myClientEventListener` / `myChannelEventListener` only defined in comments (L556).
 - **05-features/07-polls_api**: Syntax errors around L305, L516-517, L800.
-- **05-features/10-advanced/13-private_messaging**: `client.Channel` typo (L19).
 - **12-best_practices/02-moderation**: `const flag` declared twice (L887); `console.log(next)` undefined (L1059); `ctx.createUsers` / `ctx.serverClient()` test-harness code (L1205).
 
 ## Possible SDK issues (check when migrating the snippets to v10)

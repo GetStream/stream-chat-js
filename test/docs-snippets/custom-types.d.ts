@@ -27,6 +27,8 @@ declare module 'stream-chat' {
     details?: { status?: string };
     // _default/04-messages/06-search.md
     my_custom_field?: number;
+    // javascript/01-quick_start/01-plain_js_introduction.md
+    customField?: string;
   }
 
   interface CustomAttachmentData {

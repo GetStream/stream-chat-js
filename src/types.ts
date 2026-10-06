@@ -523,8 +523,10 @@ export type FlagMessageResponse = APIResponse & {
     user: UserResponse;
     approved_at?: string;
     channel_cid?: string;
+    custom?: Record<string, unknown>;
     details?: object; // Any JSON
     message_user_id?: string;
+    reason?: string;
     rejected_at?: string;
     reviewed_at?: string;
     reviewed_by?: string;
@@ -3883,6 +3885,7 @@ export type ReviewQueueItem = {
   id: string;
   moderation_payload: ModerationPayload;
   moderation_payload_hash: string;
+  message?: MessageResponse;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   options: any;
   recommended_action: string;
