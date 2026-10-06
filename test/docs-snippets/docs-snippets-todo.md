@@ -43,11 +43,11 @@ App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy of
 | [x]    | `chat/_default/03-channels/07-channel_management/10-muting.md`          | 3   | 0    | 0          | yes         | yes         |                   |
 | [x]    | `chat/_default/03-channels/07-channel_management/11-hiding.md`          | 1   | 0    | 0          | yes         | yes         |                   |
 | [x]    | `chat/_default/03-channels/07-channel_management/12-disabling.md`       | 1   | 0    | 1          | yes         | yes         |                   |
-| [ ]    | `chat/_default/03-channels/07-channel_management/13-deleting.md`        | 2   | 1    | 0          | yes         | yes         |                   |
-| [ ]    | `chat/_default/03-channels/07-channel_management/14-freezing.md`        | 2   | 1    | 0          | yes         | yes         |                   |
-| [ ]    | `chat/_default/03-channels/07-channel_management/15-truncating.md`      | 2   | 0    | 0          | yes         | yes         |                   |
-| [ ]    | `chat/_default/03-channels/07-channel_management/16-channel_invites.md` | 6   | 0    | 0          | yes         | yes         |                   |
-| [ ]    | `chat/_default/03-channels/07-channel_management/17-batch-updates.md`   | 3   | 0    | 0          | yes         | yes         | ◐ 🔗 batch events |
+| [x]    | `chat/_default/03-channels/07-channel_management/13-deleting.md`        | 2   | 1    | 0          | yes         | yes         |                   |
+| [x]    | `chat/_default/03-channels/07-channel_management/14-freezing.md`        | 2   | 1    | 0          | yes         | yes         |                   |
+| [x]    | `chat/_default/03-channels/07-channel_management/15-truncating.md`      | 2   | 0    | 0          | yes         | yes         |                   |
+| [x]    | `chat/_default/03-channels/07-channel_management/16-channel_invites.md` | 6   | 0    | 0          | yes         | yes         |                   |
+| [~]    | `chat/_default/03-channels/07-channel_management/17-batch-updates.md`   | 3   | 0    | 0          | -           | yes         | ◐ 🔗 batch events |
 | [ ]    | `chat/_default/03-channels/08-get_channel.md`                           | 1   | 0    | 0          | -           | yes         |                   |
 
 ## chat/\_default/04-messages

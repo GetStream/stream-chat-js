@@ -1,8 +1,10 @@
 import type { StreamChat } from '../../../src';
+import { hardDeleteUsers } from './users';
 import {
   CHANNEL_TYPE_PROPAGATION_MS,
   isChannelTypeMissing,
   retry,
+  retryOnRateLimit,
   waitForTask,
 } from './wait';
 
@@ -51,14 +53,7 @@ export class Cleanup {
       await attempt(() => this.deleteChannelType(type));
     }
     if (this.users.length) {
-      await attempt(async () => {
-        const { task_id } = await this.serverClient.deleteUsers(this.users, {
-          user: 'hard',
-          messages: 'hard',
-          conversations: 'hard',
-        });
-        await waitForTask(this.serverClient, task_id);
-      });
+      await attempt(() => hardDeleteUsers(this.serverClient, this.users));
     }
 
     if (errors.length) {
@@ -90,9 +85,9 @@ export class Cleanup {
   private async deleteChannels() {
     // Server-side hard delete runs as a background task: wait for it so the channel
     // types can be deleted afterwards.
-    const response = await this.serverClient.deleteChannels(this.channels, {
-      hard_delete: true,
-    });
+    const response = await retryOnRateLimit(() =>
+      this.serverClient.deleteChannels(this.channels, { hard_delete: true }),
+    );
     if (response.task_id) await waitForTask(this.serverClient, response.task_id);
   }
 }

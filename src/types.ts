@@ -1455,7 +1455,7 @@ export type UpdateChannelOptions = Partial<{
   data: Omit<ChannelResponse, 'id' | 'cid'>;
   demote_moderators: string[];
   invites: string[];
-  message: MessageResponse;
+  message: Message;
   reject_invite: boolean;
   remove_members: string[];
   user: UserResponse;
@@ -1992,6 +1992,7 @@ export type ChannelFilters = QueryFilters<
     app_banned?: 'only' | 'excluded';
     has_unread?: boolean;
     archived?: boolean;
+    invite?: { $eq?: Exclude<InviteStatus, 'member'> } | Exclude<InviteStatus, 'member'>;
     'member.user.name'?:
       | RequireOnlyOne<{
           $autocomplete?: string;
@@ -3495,6 +3496,7 @@ export type TaskStatus = {
 
 export type TruncateOptions = {
   hard_delete?: boolean;
+  member_ids?: string[];
   message?: Message;
   skip_push?: boolean;
   truncated_at?: Date;

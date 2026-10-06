@@ -1,6 +1,7 @@
 import type { PushProviderConfig, StreamChat } from '../../../src';
 import { DOCS_TEST_PREFIX } from './ids';
-import { retry, waitForTask } from './wait';
+import { hardDeleteUsers } from './users';
+import { retry, retryOnRateLimit, waitForTask } from './wait';
 
 /** Something a docs test created and didn't remove. */
 export type Leftover = {
@@ -9,6 +10,11 @@ export type Leftover = {
   /** Used by the sweep to skip resources of runs that may still be in progress. */
   createdAt?: string;
   remove: () => Promise<unknown>;
+  /**
+   * Removes many leftovers of this kind in one call (e.g. users in one `deleteUsers`).
+   * `removeLeftovers` prefers it over `remove`, to stay under the rate limits.
+   */
+  removeMany?: (ids: string[]) => Promise<unknown>;
 };
 
 /**
@@ -52,14 +58,8 @@ const scanUsers = async (
         kind: 'user',
         id: user.id,
         createdAt: user.created_at,
-        remove: async () => {
-          const { task_id } = await client.deleteUsers([user.id], {
-            user: 'hard',
-            messages: 'hard',
-            conversations: 'hard',
-          });
-          await waitForTask(client, task_id);
-        },
+        remove: () => hardDeleteUsers(client, [user.id]),
+        removeMany: (ids) => hardDeleteUsers(client, ids),
       });
     }
     if (users.length < 100) return found;
@@ -344,14 +344,28 @@ export const removeLeftovers = async (leftovers: Leftover[]) => {
   const rank = (kind: string) =>
     order.includes(kind) ? order.indexOf(kind) : order.length;
   const failed: Array<{ leftover: Leftover; error: string }> = [];
-  for (const leftover of [...leftovers].sort((a, b) => rank(a.kind) - rank(b.kind))) {
-    try {
-      await leftover.remove();
-    } catch (error) {
-      failed.push({
-        leftover,
-        error: error instanceof Error ? error.message : String(error),
-      });
+  const describe = (error: unknown) =>
+    error instanceof Error ? error.message : String(error);
+  // Leftovers that can be removed together are batched per kind (one call for all
+  // users instead of one each), the rest one by one. Both retry on 429.
+  const sorted = [...leftovers].sort((a, b) => rank(a.kind) - rank(b.kind));
+  for (const kind of [...new Set(sorted.map((leftover) => leftover.kind))]) {
+    const ofKind = sorted.filter((leftover) => leftover.kind === kind);
+    const removeMany = ofKind.find((leftover) => leftover.removeMany)?.removeMany;
+    if (removeMany) {
+      try {
+        await removeMany(ofKind.map((leftover) => leftover.id));
+      } catch (error) {
+        failed.push(...ofKind.map((leftover) => ({ leftover, error: describe(error) })));
+      }
+      continue;
+    }
+    for (const leftover of ofKind) {
+      try {
+        await retryOnRateLimit(() => leftover.remove());
+      } catch (error) {
+        failed.push({ leftover, error: describe(error) });
+      }
     }
   }
   return failed;

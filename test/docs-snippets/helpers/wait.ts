@@ -29,6 +29,20 @@ export const retry = async <T>(
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
+/** 429 "Too many requests" (code 9): the app's rate limit for that endpoint was hit. */
+export const isRateLimited = (error: unknown) =>
+  typeof error === 'object' &&
+  error !== null &&
+  'status' in error &&
+  error.status === 429;
+
+/**
+ * Retries `fn` while it is rate limited. Rate limits are per minute, so this keeps
+ * trying for up to 90s (inside the 180s hook timeout).
+ */
+export const retryOnRateLimit = <T>(fn: () => Promise<T>) =>
+  retry(fn, { timeout: 90000, interval: 5000, retryIf: isRateLimited });
+
 /** "<type>: channel type does not exist" - returned until a new channel type has propagated. */
 export const isChannelTypeMissing = (error: unknown) =>
   errorMessage(error).includes('channel type does not exist');

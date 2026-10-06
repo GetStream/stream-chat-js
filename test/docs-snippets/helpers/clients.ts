@@ -9,7 +9,10 @@ const apiSecret = () => process.env.STREAM_API_SECRET as string;
  * (`serverClient` in the docs) and for setup / cleanup in client-side tests.
  */
 export const getServerClient = () =>
-  new StreamChat(apiKey(), apiSecret(), { allowServerSideConnect: true });
+  new StreamChat(apiKey(), apiSecret(), {
+    allowServerSideConnect: true,
+    disableCache: true,
+  });
 
 /**
  * Client-side client connected as `user` with a user token, the way an app would.
