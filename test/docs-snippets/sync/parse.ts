@@ -47,6 +47,7 @@ export const fenceId = (key: FenceKey) =>
   `${key.docs} > "${key.heading}" > ${key.tab} #${key.index}`;
 
 const JS_LANGS = new Set(['js', 'javascript', 'ts', 'typescript']);
+const NODE_TAB = 'Node.js';
 
 const dedent = (lines: string[]) => {
   const indents = lines
@@ -59,7 +60,10 @@ const dedent = (lines: string[]) => {
     .trim();
 };
 
-/** All JavaScript fences of a docs page, keyed the same way as the test markers. */
+/**
+ * All JavaScript fences of a docs page, keyed the same way as the test markers.
+ * `Node.js` fences are out of scope (only client-side snippets are tested) and skipped.
+ */
 export const parseDocsFences = (docs: string, markdown: string): DocsFence[] => {
   const lines = markdown.split('\n');
   const fences: DocsFence[] = [];
@@ -76,8 +80,8 @@ export const parseDocsFences = (docs: string, markdown: string): DocsFence[] => 
     let end = i + 1;
     while (end < lines.length && !new RegExp(`^\\s*${ticks}\\s*$`).test(lines[end]))
       end++;
-    if (JS_LANGS.has(lang.toLowerCase())) {
-      const tab = /label="([^"]*)"/.exec(rest)?.[1] ?? 'unlabelled';
+    const tab = /label="([^"]*)"/.exec(rest)?.[1] ?? 'unlabelled';
+    if (JS_LANGS.has(lang.toLowerCase()) && tab !== NODE_TAB) {
       const countKey = `${heading}\u0000${tab}`;
       const index = (counts.get(countKey) ?? 0) + 1;
       counts.set(countKey, index);
@@ -247,7 +251,7 @@ export const readDocsPage = (docs: string) => {
   return { file, markdown: fs.readFileSync(file, 'utf8') };
 };
 
-/** Every *.test.ts under client/ and server/. */
+/** Every *.test.ts under client/. */
 export const findTestFiles = (root = path.join(__dirname, '..')) => {
   const files: string[] = [];
   const walk = (dir: string) => {
@@ -257,8 +261,6 @@ export const findTestFiles = (root = path.join(__dirname, '..')) => {
       else if (entry.name.endsWith('.test.ts')) files.push(full);
     }
   };
-  for (const dir of ['client', 'server']) {
-    if (fs.existsSync(path.join(root, dir))) walk(path.join(root, dir));
-  }
+  if (fs.existsSync(path.join(root, 'client'))) walk(path.join(root, 'client'));
   return files.sort();
 };

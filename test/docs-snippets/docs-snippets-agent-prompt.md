@@ -4,7 +4,7 @@ Replace `{{PAGE}}` with a path from `/Users/zitaszupera/Stream/stream-chat-js/te
 
 ---
 
-You are verifying the JavaScript code snippets of one Stream Chat docs page by writing typed tests that run them against a real Stream app. You will also add server-side (`Node.js`) snippets to the page.
+You are verifying the client-side JavaScript code snippets of one Stream Chat docs page by writing typed tests that run them against a real Stream app with a user token. Only fences labelled `JavaScript` and unlabelled `js` fences are in scope. `Node.js` fences are out of scope: don't test, add or change them.
 
 **Page:** `/Users/zitaszupera/Stream/getstream.io/content/docs/{{PAGE}}`
 
@@ -26,32 +26,23 @@ You are verifying the JavaScript code snippets of one Stream Chat docs page by w
 ## Read first
 
 1. `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/learnings.md`: issues that earlier agents ran into. Follow it.
-2. `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/README.md`: layout, helpers, isolation, cleanup and snippet-marker conventions. Look at `client/dummy.test.ts` and `server/dummy.test.ts` as examples.
-3. The page itself, and its row in `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/docs-snippets-todo.md`. The row says whether a client test and/or a server test is needed:
-   - client test: the page is in `_sidebars/[chat][javascript].json`
-   - server test: the page is in `_sidebars/[chat][node].json`
-
-   Also read the page's entries in the TODO's **Blockers detail**, **Setup notes** and **Known docs bugs** sections.
+2. `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/README.md`: layout, helpers, isolation, cleanup and snippet-marker conventions. Look at `client/dummy.test.ts` as an example.
+3. The page itself, and its row in `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/docs-snippets-todo.md`. Also read the page's entries in the TODO's **Blockers detail**, **Setup notes** and **Known docs bugs** sections.
 
 4. When the page doesn't make clear whether an endpoint is client-side or server-side only, check the OpenAPI specs: https://github.com/GetStream/protocol/tree/main/openapi/v2. An endpoint missing from the client spec is server-only. Also check the SDK source in `stream-chat-js/src/` for the method's signature and types.
 
 ## What to build
 
-For each JavaScript snippet on the page (fences labelled `JavaScript`, `Node.js`, or unlabelled `js`):
-
-- **Client test** (`test/docs-snippets/client/<section path>/<page>.test.ts`): run each `JavaScript` snippet that works with a user token, using `getClientSideClient(user)`.
-  - If a `JavaScript` snippet only works server-side (needs the secret, `user_id` on behalf of others, app settings, ...), it doesn't belong in a client tab: remove the `JavaScript` fence from the page (see below), cover the code in the server test as a `Node.js` snippet, and list it in the report.
-- **Server test** (`test/docs-snippets/server/<section path>/<page>.test.ts`): run each existing `Node.js` snippet, plus a server-side version of every `JavaScript` snippet that makes sense on the server, using `getServerClient()`.
-  - Skip things that only make sense with a connected user: WS events, typing, presence, `connectUser`, local state.
-  - Server-side calls usually need the acting user passed explicitly (`user_id`, `created_by_id`, `user: { id }`), and some return different shapes.
-  - Name the client `serverClient`, unless the page's existing `Node.js` tabs already use another name. Keep it consistent within the page.
-- **Mirror paths.** The test paths mirror the docs path without the `chat/_default/` prefix. Pages under `chat/javascript/` go under `client/javascript/...` and pages under `chat/node/` under `server/node/...`.
+- **Client test** (`test/docs-snippets/client/<section path>/<page>.test.ts`): run each `JavaScript` / unlabelled `js` snippet with a user token, using `getClientSideClient(user)`. Use `getServerClient()` only for setup, cleanup and assertions a client can't do.
+  - If a snippet (or part of it) only works server-side (needs the secret, `user_id` on behalf of others, app settings, ...), it doesn't belong in a client tab: remove it from the page (see "Server-side code in JavaScript snippets") and list it in the report. Don't add a `Node.js` tab for it.
+  - If every `JavaScript` fence of the page turns out to be server-only, don't write a test file.
+- **Mirror paths.** The test paths mirror the docs path without the `chat/_default/` prefix. Pages under `chat/javascript/` go under `client/javascript/...`.
 - **Test structure:**
   - `describe` per page.
   - `beforeAll` creates the shared users and channels with `uniqueId(...)` ids and registers them on a `Cleanup`.
   - `afterAll` disconnects the clients and runs `cleanup.run()`.
   - One `it` per snippet, or per tab group when the snippets in it depend on each other.
-- **Snippet markers.** Every JS fence on the page (`JavaScript`, `Node.js`, unlabelled `js`) needs exactly one marker in a test. `yarn test-docs-sync` checks the format and the coverage.
+- **Snippet markers.** Every `JavaScript` and unlabelled `js` fence on the page needs exactly one marker in a test (`Node.js` fences are ignored). `yarn test-docs-sync` checks the format and the coverage.
   - Wrap the docs code like this:
     ```ts
     // #region snippet docs="_default/04-messages/01-send_message.md" heading="Sending a Message" tab="JavaScript" index=1
@@ -78,25 +69,21 @@ For each JavaScript snippet on the page (fences labelled `JavaScript`, `Node.js`
 - **Blockers** (the page's Blockers cell in the TODO):
   - ⛔ snippets go in `it.skip('BLOCKED: <reason>', ...)` so they are still typechecked.
   - 🔗 "requires webhook to test": run and assert the stream-chat-js calls (e.g. set the hook URL, read it back, restore it). Don't try to verify delivery.
-  - 🔑 push: wrap the push tests in `describePush(...)` from `helpers/push.ts`, and take credentials from `firebaseCredentialsJson()`. Without `FIREBASE_CONFIG` the tests are skipped (typecheck only). Push is never verified end-to-end; never log the credentials.
   - If you find a new blocker, use `it.skip('BLOCKED: <reason>')`, mark the page `[~]` and report it, with the exact API error.
 - **Guest users** get their id rewritten to `guest-<uuid>-<requested id>`. Register `client.userID` for cleanup, not the id you passed.
 - **Partial snippets** (fragments like `filters = {...}` or `...` placeholders): wrap them in the minimal code needed to compile and run. The region still holds exactly the docs text.
 
-## Adding Node.js snippets to the docs page
+## Server-side code in JavaScript snippets
 
-- For every server test snippet that isn't already on the page, add an **empty** fence (a ` ```js label="Node.js" ` line followed by a closing fence) inside the same `<Tabs>` block as the snippet it mirrors.
-  - Then fill it from the test with `DOCS_SYNC_WRITE=<page path, e.g. _default/04-messages/01-send_message.md> yarn test-docs-sync`. This writes every region of that page into its fence, applying the COPY values and the docs prettier style (double quotes). Don't paste snippets by hand.
-  - Don't worry about tab position: `node scripts/tab-lint.mjs <file>` reorders tabs into the canonical order. Tab order doesn't affect the marker keys.
-- **Pages that are only in the Node sidebar** (todo row: client test "-", server test "yes"):
-  - Their `JavaScript` tabs are only shown to server developers.
-  - If such a snippet is server code that works as-is, relabel its fence to `Node.js` instead of adding a duplicate.
-  - If it's client-style code, fix it into server form and relabel it.
-  - List every relabel in the report.
-- If a `JavaScript` snippet on a page that is in both sidebars is actually server-only (it fails with a user token, e.g. 403 code 17 or "only allowed when using server side auth"), **remove the `JavaScript` fence** and keep only the `Node.js` tab (add one if missing). Record the exact client-side error in the report. If only part of the snippet is server-only (e.g. one field like `channel_role`), remove just that part from the `JavaScript` fence and keep the rest. Probe each part client-side before deciding. Don't remove a `JavaScript` fence just because it is a fragment or untestable for other reasons.
+- If a `JavaScript` snippet is server-only (it fails with a user token, e.g. 403 code 17 or "only allowed when using server side auth"), **remove the `JavaScript` fence**. Don't add or change a `Node.js` tab. Record the exact client-side error in the report.
+- If only part of the snippet is server-only (e.g. one field like `channel_role`, or a line naming the acting user), remove just that part from the `JavaScript` fence and keep the rest. Probe each part client-side before deciding.
+- Don't remove a `JavaScript` fence just because it is a fragment or untestable for other reasons.
+
+## Editing the docs page
+
+- Write fixes from the test with `DOCS_SYNC_WRITE=<page path, e.g. _default/04-messages/01-send_message.md> yarn test-docs-sync`. This writes every region of that page into its fence, applying the COPY values and the docs prettier style (double quotes). Don't paste snippets by hand.
 - Follow `/Users/zitaszupera/Stream/getstream.io/content/docs/AGENTS.md`. In particular, no em-dashes in prose or comments.
 - Then run, from `/Users/zitaszupera/Stream/getstream.io/content/docs`:
-  - `node scripts/tab-lint.mjs <page path>`
   - `npx prettier --write <page path>`
   - `npx markdownlint-cli2 --config .markdownlint-cli2.cjs <page path>`
 
@@ -131,11 +118,9 @@ Finally, update the page's row in `/Users/zitaszupera/Stream/stream-chat-js/test
 ## Final report (your last message)
 
 1. **Files created/changed**: test files, plus the docs page with a one-line summary.
-2. **Node.js snippets added**: list per tab group (heading near it).
-3. **Relabelled tabs**: `JavaScript` changed to `Node.js`, with the reason.
-4. **Docs snippet corrections**: for each one, a before/after diff, the reason, and the evidence. These need human review.
-5. **Skipped / untestable snippets**: for each one, the snippet and why.
-6. **Removed server-only JavaScript tabs**: each removed fence, with the client-side error that proved it server-only.
-7. **stream-chat-js type fixes**: every `src/` change as a diff, with the snippet that needed it.
-8. **Possible SDK issues**: runtime problems that look like stream-chat-js bugs rather than docs bugs (not fixed).
-9. **Proposed learnings** for `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/learnings.md`: a numbered list of short, reusable lessons that would have saved you time (e.g. "server-side `queryChannels` needs `user_id` in options to return membership fields"). Skip page-specific trivia. The user will approve or reject each one.
+2. **Docs snippet corrections**: for each one, a before/after diff, the reason, and the evidence. These need human review.
+3. **Skipped / untestable snippets**: for each one, the snippet and why.
+4. **Removed server-side code**: each removed fence or part of a fence, with the client-side error (or the reason) that shows it is server-only.
+5. **stream-chat-js type fixes**: every `src/` change as a diff, with the snippet that needed it.
+6. **Possible SDK issues**: runtime problems that look like stream-chat-js bugs rather than docs bugs (not fixed).
+7. **Proposed learnings** for `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/learnings.md`: a numbered list of short, reusable lessons that would have saved you time (e.g. "`channel.muteStatus()` needs a watched channel"). Skip page-specific trivia. The user will approve or reject each one.

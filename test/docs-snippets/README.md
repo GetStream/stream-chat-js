@@ -1,12 +1,14 @@
 # Docs snippet tests
 
-Typed tests that run the JavaScript snippets of the chat docs
-(`getstream.io/content/docs/chat/_default`, `chat/javascript` and `chat/node`) against a real Stream app.
+Typed tests that run the client-side JavaScript snippets of the chat docs
+(`getstream.io/content/docs/chat/_default` and `chat/javascript`) against a real Stream app.
+Only fences labelled `JavaScript` (and unlabelled `js` fences) are in scope: they are fixed when they are
+wrong or contain server-side code. `Node.js` fences are out of scope and are neither tested nor changed.
 
 ```sh
 cp test/docs-snippets/.env.example test/docs-snippets/.env   # fill in STREAM_API_KEY / STREAM_API_SECRET
 yarn test-docs                                                # all docs tests
-yarn test-docs server/04-messages/01-send_message.test.ts     # one file
+yarn test-docs client/04-messages/01-send_message.test.ts     # one file
 yarn types-docs                                               # typecheck the docs tests
 yarn test-docs-sync                                           # test regions == docs fences (no network)
 yarn test-docs-sweep                                          # remove docs-test leftovers older than 30 min (DOCS_SWEEP_DRY_RUN=1 to list only, DOCS_SWEEP_MIN_AGE=0 for all)
@@ -18,8 +20,7 @@ These tests hit the network and are not part of `yarn test`.
 ## Layout
 
 ```
-client/<docs section>/<docs page>.test.ts   # client-side: user connected with a user token (tab label "JavaScript")
-server/<docs section>/<docs page>.test.ts   # server-side: client with API secret (tab label "Node.js")
+client/<docs section>/<docs page>.test.ts   # user connected with a user token (tab label "JavaScript")
 helpers/                                    # clients, unique ids, cleanup registry
 docs-snippets-todo.md                       # pages to cover, their status, blockers and known docs bugs
 docs-snippets-agent-prompt.md               # prompt for an agent that covers one page
@@ -27,8 +28,7 @@ learnings.md                                # lessons from earlier agent runs, r
 ```
 
 The path mirrors the docs path, e.g. `_default/04-messages/01-send_message.md` maps to
-`client/04-messages/01-send_message.test.ts` and `server/04-messages/01-send_message.test.ts`.
-Pages under `chat/javascript/` go under `client/javascript/...` and pages under `chat/node/` under `server/node/...`.
+`client/04-messages/01-send_message.test.ts`. Pages under `chat/javascript/` go under `client/javascript/...`.
 
 ## Conventions
 
@@ -43,11 +43,9 @@ Pages under `chat/javascript/` go under `client/javascript/...` and pages under 
 - Anything created under a non-`uniqueId` name can't be found by the leak check or the sweep. Don't do that.
 - **Eventual consistency**: channel type changes (`createChannelType` / `updateChannelType`) take ~30s to reach every API node. A `create()` can succeed and the next call still fail with `<type>: channel type does not exist`. Call `await waitForChannelTypePropagation()` (from `helpers/wait.ts`) right after creating or updating a channel type. Timeouts are 90s per test and 180s per hook to leave room for this. Use `retry(fn, { retryIf })` for other eventually-consistent reads (e.g. search).
 - **App settings**: pages are run one at a time, so tests may change app settings and built-in channel types, but must restore them (`cleanup.add`). The check after each file fails with `DRIFT` otherwise.
-- **Push**: put `FIREBASE_CONFIG='{...service account JSON...}'` in `.env` to run push tests. Wrap push tests in `describePush` (`helpers/push.ts`), which skips them when the variable is missing. Push is not verified end-to-end; the credentials only exist because the API validates them.
 - **Guest users** get their id rewritten to `guest-<uuid>-<requested id>`: register `client.userID` for cleanup.
 - One `it` per docs snippet (or per closely related group of snippets in the same tab group).
-- Client-side tests: `getClientSideClient(user)` returns a connected client. Disconnect it with `disconnectClients` in `afterAll`. Use `getServerClient()` only for setup/cleanup that a client can't do.
-- Server-side tests: `getServerClient()` is the `serverClient` from the docs. Server calls need `user_id` / `created_by_id` where a client call would infer the user.
+- `getClientSideClient(user)` returns a connected client. Disconnect it with `disconnectClients` in `afterAll`. Use `getServerClient()` only for setup, cleanup and assertions that a client can't do (server calls need `user_id` / `created_by_id` where a client call would infer the user).
 - Add basic `expect`s after each snippet to prove it did what the docs claim.
 
 ## Snippet markers and docs sync
@@ -55,14 +53,14 @@ Pages under `chat/javascript/` go under `client/javascript/...` and pages under 
 Each docs fence has exactly one marked region in a test. `yarn test-docs-sync` (no network) compares them, so later edits on either side fail until they agree again:
 
 ```ts
-// #region snippet docs="_default/04-messages/01-send_message.md" heading="Sending a Message" tab="Node.js" index=1
-// COPY: channelId="general", userId="john"
-const message = await serverClient
+// #region snippet docs="_default/04-messages/01-send_message.md" heading="Sending a Message" tab="JavaScript" index=1
+// COPY: channelId="general"
+const message = await client
   .channel('messaging', channelId)
-  .sendMessage({ text: 'Hello, world!', user_id: userId });
+  .sendMessage({ text: 'Hello, world!' });
 // #endregion snippet
 
-// #docs-ignore docs="_default/07-push/07-legacy_push_system.md" heading="..." tab="JavaScript" index=1 reason="JSON template, not code"
+// #docs-ignore docs="_default/05-features/02-events.md" heading="..." tab="JavaScript" index=1 reason="JSON payload, not code"
 ```
 
 - **Fence key**:
@@ -72,7 +70,7 @@ const message = await serverClient
   - `index` is 1-based among fences with the same heading text and tab (default 1).
 - **COPY**: `name="literal"` pairs, applied to the region before comparing (identifier `name` becomes the docs literal). Don't use COPY variables as object keys or shorthand properties.
 - **Comparison**: both sides are formatted with the same prettier options, so quote style and line wrapping don't matter, but any code or comment change does.
-- **Coverage**: every JS fence (`js`/`javascript`/`ts`) of a page that has at least one marker must have a region or a `#docs-ignore`.
-- **`DOCS_SYNC_WRITE=<page path> yarn test-docs-sync`** writes the regions of that page into the docs fences (docs prettier style). Use it to fill a new, empty `js label="Node.js"` fence or to apply a fix. `DOCS_SYNC_WRITE=1` writes all pages.
+- **Coverage**: every JS fence (`js`/`javascript`/`ts`) of a page that has at least one marker must have a region or a `#docs-ignore`. `Node.js` fences are ignored.
+- **`DOCS_SYNC_WRITE=<page path> yarn test-docs-sync`** writes the regions of that page into the docs fences (docs prettier style). Use it to apply a fix to the docs. `DOCS_SYNC_WRITE=1` writes all pages.
 - **`DOCS_CHAT_DIR`** points at another docs checkout (default: `../getstream.io/content/docs/chat` next to this repo). The check is skipped if the directory doesn't exist.
-- Use the same variable names as the docs (`client`, `serverClient`, `channel`, ...).
+- Use the same variable names as the docs (`client`, `channel`, ...).

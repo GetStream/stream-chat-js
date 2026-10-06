@@ -4624,14 +4624,10 @@ export class StreamChat {
    *
    * @param {string[]} cids Channel CIDs
    * @param {boolean} [options.hard_delete] Defines if the channel is hard deleted or not
-   * @param {boolean} [options.skip_truncate] Preserves the message history of distinct channels (server-side only)
    *
    * @return {DeleteChannelsResponse} Result of the soft deletion, if server-side, it holds the task ID as well
    */
-  async deleteChannels(
-    cids: string[],
-    options: { hard_delete?: boolean; skip_truncate?: boolean } = {},
-  ) {
+  async deleteChannels(cids: string[], options: { hard_delete?: boolean } = {}) {
     return await this.post<APIResponse & DeleteChannelsResponse>(
       this.baseURL + `/channels/delete`,
       {

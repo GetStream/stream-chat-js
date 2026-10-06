@@ -16,7 +16,8 @@ import type { DocsFence, TestRegion } from './parse';
 
 // `yarn test-docs-sync`: checks that every marked test region matches its docs fence
 // (after applying COPY values and formatting both sides the same way), and that every
-// JS fence of a page that has tests is covered by a region or a #docs-ignore.
+// JS fence of a page that has tests is covered by a region or a #docs-ignore
+// (`Node.js` fences are out of scope and ignored).
 //   DOCS_SYNC_WRITE=<page>  overwrite that page's fences with the test code instead of
 //                           comparing (page path as in the markers, e.g.
 //                           _default/04-messages/01-send_message.md; `1` = all pages)
@@ -61,7 +62,7 @@ describe.skipIf(!fs.existsSync(DOCS_CHAT_DIR) || !pages.length)(
         const unknown = pageRegions.filter((region) => !fenceFor(region));
         expect(
           unknown.map((region) => `${fenceId(region)} (${region.file}:${region.line})`),
-          `no such fence. Fences on this page:\n${fences.map((fence) => `  ${fenceId(fence)}`).join('\n')}\nFor a new Node.js snippet, add an empty js label="Node.js" fence to the Tabs block and run with DOCS_SYNC_WRITE=<page>.\n`,
+          `no such fence. Fences on this page:\n${fences.map((fence) => `  ${fenceId(fence)}`).join('\n')}\n`,
         ).toEqual([]);
       });
 
