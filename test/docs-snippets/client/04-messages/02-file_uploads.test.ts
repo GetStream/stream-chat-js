@@ -11,6 +11,7 @@ import {
 import type { Channel, FileLike, FileReference, StreamChat } from '../../../../src';
 import { disconnectClients, getServerClient } from '../../helpers/clients';
 import { Cleanup } from '../../helpers/cleanup';
+import { grantMessagingMembers } from '../../helpers/grants';
 import { uniqueId } from '../../helpers/ids';
 import { waitForChannelTypePropagation } from '../../helpers/wait';
 
@@ -50,7 +51,7 @@ describe('_default/04-messages/02-file_uploads.md', () => {
   const serverClient = getServerClient();
   const cleanup = new Cleanup(serverClient);
   const userId = uniqueId('user');
-  const channelType = uniqueId('type');
+  const channelType = 'messaging';
   const channelId = uniqueId('general');
   let client: StreamChat;
   let channel: Channel;
@@ -58,15 +59,7 @@ describe('_default/04-messages/02-file_uploads.md', () => {
   beforeAll(async () => {
     cleanup.users.push(userId);
     // `messaging` doesn't grant channel members `CreateAttachment` in the test app.
-    const { grants = {} } = await serverClient.getChannelType('messaging');
-    await serverClient.createChannelType({
-      name: channelType,
-      grants: {
-        ...grants,
-        channel_member: [...(grants.channel_member ?? []), 'create-attachment'],
-      },
-    });
-    cleanup.channelTypes.push(channelType);
+    await grantMessagingMembers(serverClient, cleanup, ['create-attachment']);
     await waitForChannelTypePropagation();
 
     client = await getBrowserLikeClientSideClient(userId);

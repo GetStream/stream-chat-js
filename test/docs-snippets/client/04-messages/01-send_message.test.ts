@@ -6,11 +6,12 @@ import {
   getServerClient,
 } from '../../helpers/clients';
 import { Cleanup } from '../../helpers/cleanup';
+import { grantMessagingMembers } from '../../helpers/grants';
 import { uniqueId } from '../../helpers/ids';
 import { waitForChannelTypePropagation } from '../../helpers/wait';
 
 // `messaging` doesn't grant channel members `CreateAttachment`, `CreateMention` or the
-// `Notify*` mention permissions in the test app, so the page runs on its own channel type.
+// `Notify*` mention permissions in the test app: add them for this file and restore them.
 const EXTRA_MEMBER_GRANTS = [
   'create-attachment',
   'create-mention',
@@ -25,7 +26,7 @@ describe('_default/04-messages/01-send_message.md', () => {
   const cleanup = new Cleanup(serverClient);
   const userId = uniqueId('user');
   const joshId = uniqueId('josh');
-  const channelType = uniqueId('type');
+  const channelType = 'messaging';
   const channelId = uniqueId('general');
   let client: StreamChat;
   let channel: Channel;
@@ -40,15 +41,7 @@ describe('_default/04-messages/01-send_message.md', () => {
   beforeAll(async () => {
     cleanup.users.push(userId, joshId);
     await serverClient.upsertUsers([{ id: joshId, name: 'Josh' }]);
-    const { grants = {} } = await serverClient.getChannelType('messaging');
-    await serverClient.createChannelType({
-      name: channelType,
-      grants: {
-        ...grants,
-        channel_member: [...(grants.channel_member ?? []), ...EXTRA_MEMBER_GRANTS],
-      },
-    });
-    cleanup.channelTypes.push(channelType);
+    await grantMessagingMembers(serverClient, cleanup, EXTRA_MEMBER_GRANTS);
     await waitForChannelTypePropagation();
 
     client = await getClientSideClient({ id: userId });

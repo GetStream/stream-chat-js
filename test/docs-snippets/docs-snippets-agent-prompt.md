@@ -16,6 +16,7 @@ You are verifying the client-side JavaScript code snippets of one Stream Chat do
   - the test files for this page under `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/`
   - the docs page itself
   - this page's status row in `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/docs-snippets-todo.md`
+  - `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/custom-types.d.ts`, to add custom data fields the snippets use (augment the matching `Custom*Data` interface; never remove or change existing fields)
   - type definitions in `stream-chat-js/src/` (types only, see below)
 - Do not edit the helpers, the configs, or other pages. If a helper is missing something, write a local helper in your test file and propose the shared helper in your report.
 - **`src/` may only be edited to fix TypeScript types** (e.g. a wrong or missing field in `src/types.ts`, a too-narrow parameter type), when a correct docs snippet fails to typecheck. No runtime / behavior changes. After such an edit, `yarn types` and `yarn test` must still pass. List every change in the report.
