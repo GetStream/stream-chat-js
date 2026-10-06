@@ -1,3 +1,13 @@
+## [10.0.0-rc.19](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.18...v10.0.0-rc.19) (2026-10-06)
+
+### Features
+
+* poll optimistic votes v10 port ([#1904](https://github.com/GetStream/stream-chat-js/issues/1904)) ([143446b](https://github.com/GetStream/stream-chat-js/commit/143446bf57b66bdda85d3b1ef68a01bac6348c6e))
+
+### Refactors
+
+* simplify optimistic updates ([#1897](https://github.com/GetStream/stream-chat-js/issues/1897)) ([8b84f02](https://github.com/GetStream/stream-chat-js/commit/8b84f026bcaf271c632b2ff3974e1809ae7718b7)), closes [#1882](https://github.com/GetStream/stream-chat-js/issues/1882)
+
 ## [10.0.0-rc.18](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.17...v10.0.0-rc.18) (2026-10-05)
 
 ### ⚠ BREAKING CHANGES
