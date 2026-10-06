@@ -78,6 +78,7 @@ You are verifying the client-side JavaScript code snippets of one Stream Chat do
 
 - If a `JavaScript` snippet is server-only (it fails with a user token, e.g. 403 code 17 or "only allowed when using server side auth"), **remove the `JavaScript` fence**. Don't add or change a `Node.js` tab. Record the exact client-side error in the report.
 - If only part of the snippet is server-only (e.g. one field like `channel_role`, or a line naming the acting user), remove just that part from the `JavaScript` fence and keep the rest. Probe each part client-side before deciding.
+- Acting-user fields (`user_id`, `user`, `created_by_id`, a `userId` option naming who performs the action): remove one only if the client-side OpenAPI spec (`chat-clientside-api.json`, see "Read first") doesn't have it on that endpoint's request schema. If it does, keep it and test it. Cite the operation id and schema in the report either way.
 - Don't remove a `JavaScript` fence just because it is a fragment or untestable for other reasons.
 
 ## Editing the docs page

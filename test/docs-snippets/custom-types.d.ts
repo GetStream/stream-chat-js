@@ -25,11 +25,23 @@ declare module 'stream-chat' {
     priority?: string;
     color?: string;
     details?: { status?: string };
+    // _default/04-messages/06-search.md
+    my_custom_field?: number;
   }
 
   interface CustomAttachmentData {
     // _default/04-messages/01-send_message.md
     myCustomField?: number;
+  }
+
+  interface CustomEventData {
+    // _default/05-features/02-events.md
+    text?: string;
+  }
+
+  interface CustomEventTypes {
+    // _default/05-features/02-events.md
+    friendship_request: true;
   }
 
   interface CustomReactionData {

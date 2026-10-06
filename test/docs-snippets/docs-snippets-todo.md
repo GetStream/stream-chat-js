@@ -49,23 +49,23 @@ App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy of
 
 ## chat/\_default/04-messages
 
-| Status | Page                                                | JS  | Unlabelled | Client test | Blockers                     |
-| ------ | --------------------------------------------------- | --- | ---------- | ----------- | ---------------------------- |
-| [x]    | `chat/_default/04-messages/01-send_message.md`      | 9   | 0          | yes         |                              |
-| [x]    | `chat/_default/04-messages/02-file_uploads.md`      | 4   | 0          | yes         |                              |
-| [x]    | `chat/_default/04-messages/03-threads.md`           | 11  | 2          | yes         |                              |
-| [x]    | `chat/_default/04-messages/04-send_reaction.md`     | 5   | 0          | yes         |                              |
-| [x]    | `chat/_default/04-messages/05-pinned_messages.md`   | 3   | 0          | yes         |                              |
-| [ ]    | `chat/_default/04-messages/06-search.md`            | 2   | 0          | yes         |                              |
-| [ ]    | `chat/_default/04-messages/07-silent_messages.md`   | 2   | 0          | yes         |                              |
-| [ ]    | `chat/_default/04-messages/09-message_reminders.md` | 7   | 0          | yes         | ◐ 🔗 `reminder_due` delivery |
-| [ ]    | `chat/_default/04-messages/10-message_receipts.md`  | 1   | 0          | yes         |                              |
+| Status | Page                                                | JS  | Unlabelled | Client test | Blockers              |
+| ------ | --------------------------------------------------- | --- | ---------- | ----------- | --------------------- |
+| [x]    | `chat/_default/04-messages/01-send_message.md`      | 9   | 0          | yes         |                       |
+| [x]    | `chat/_default/04-messages/02-file_uploads.md`      | 4   | 0          | yes         |                       |
+| [x]    | `chat/_default/04-messages/03-threads.md`           | 11  | 2          | yes         |                       |
+| [x]    | `chat/_default/04-messages/04-send_reaction.md`     | 5   | 0          | yes         |                       |
+| [x]    | `chat/_default/04-messages/05-pinned_messages.md`   | 3   | 0          | yes         |                       |
+| [x]    | `chat/_default/04-messages/06-search.md`            | 2   | 0          | yes         |                       |
+| [x]    | `chat/_default/04-messages/07-silent_messages.md`   | 2   | 0          | yes         |                       |
+| [x]    | `chat/_default/04-messages/09-message_reminders.md` | 7   | 0          | yes         | ◐ 🔗 webhook delivery |
+| [x]    | `chat/_default/04-messages/10-message_receipts.md`  | 1   | 0          | yes         |                       |
 
 ## chat/\_default/05-features
 
 | Status | Page                                                                   | JS  | Unlabelled | Client test | Blockers                    |
 | ------ | ---------------------------------------------------------------------- | --- | ---------- | ----------- | --------------------------- |
-| [ ]    | `chat/_default/05-features/02-events.md`                               | 7   | 0          | yes         | ◐ 🔗 webhook copy of events |
+| [x]    | `chat/_default/05-features/02-events.md`                               | 7   | 0          | yes         | ◐ 🔗 webhook copy of events |
 | [ ]    | `chat/_default/05-features/03-unread.md`                               | 11  | 0          | yes         |                             |
 | [ ]    | `chat/_default/05-features/04-typing_indicators.md`                    | 2   | 0          | yes         |                             |
 | [ ]    | `chat/_default/05-features/05-presence_format.md`                      | 3   | 0          | yes         |                             |
@@ -100,7 +100,7 @@ App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy of
 
 ### `chat/_default/04-messages/09-message_reminders.md` (◐ 🔗 Requires webhook to test)
 
-- **Affected**: `notification.reminder_due` / webhook section (L1361, L1438-1447): needs waiting until the due time plus webhook/push delivery. Reminder CRUD runs (push v3 is on).
+- **Affected**: webhook/push delivery of `notification.reminder_due`. The WS event itself is verified (it arrives ~62s after `remind_at = now + 61s`). Reminder CRUD runs.
 - **Evidence**: Delivery is only observable via webhook or push.
 - **To unblock**: Not needed: verify the SDK calls only.
 
@@ -155,6 +155,16 @@ Found while scanning the pages; agents should confirm and fix them (minimal chan
 - **05-features/07-polls_api**: Syntax errors around L305, L516-517, L800.
 - **05-features/10-advanced/13-private_messaging**: `client.Channel` typo (L19).
 - **12-best_practices/02-moderation**: `const flag` declared twice (L887); `console.log(next)` undefined (L1059); `ctx.createUsers` / `ctx.serverClient()` test-harness code (L1205).
+
+## Possible SDK issues (check when migrating the snippets to v10)
+
+Found while testing the v9 snippets. Not fixed: leave v9 as is.
+
+- **`ThreadManager.loadNextPage()`** (`04-messages/03-threads`): a silent no-op until the first page is loaded (`nextCursor` starts `null`); the first page needs `reload()`. Should it load the first page when not `ready`?
+- **`BasePaginator`** (`04-messages/09-message_reminders`, `src/pagination/BasePaginator.ts`): `hasPrev` starts `true` and is only updated in cursor mode, so `queryPrevious…` on a first page without cursors re-fetches and appends it (duplicates, e.g. 4 reminders become 8). `getStateAfterQuery` always appends, also for the `prev` direction, so an earlier page in cursor mode is added at the end.
+- **`ReminderManager`** (`04-messages/09-message_reminders`): paginator results only reach `client.reminders.state` after `client.reminders.registerSubscriptions()`, which the docs never call; `client.reminders.reminders` stays empty. By design?
+- **Search `previous` cursor** (`04-messages/06-search`, backend): `next: page2.previous` returns page 1's messages in reverse order (the cursor flips every sort direction, results aren't flipped back). Backend bug, or document it.
+- **Reminder pagination** (`04-messages/09-message_reminders`, backend): with the default sort and a page boundary on a `remind_at: null` reminder, the `next` cursor returned an empty page although more reminders existed.
 
 ## Notes
 
