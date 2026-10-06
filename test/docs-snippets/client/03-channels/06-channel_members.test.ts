@@ -177,20 +177,13 @@ describe('_default/03-channels/06-channel_members.md', () => {
 
     // #region snippet docs="_default/03-channels/06-channel_members.md" heading="System Message Parameter" tab="JavaScript" index=1
     // COPY: tommaso="tommaso"
-    // Using client-side client
     await channel.addMembers([tommaso], { text: 'Tommaso joined the channel.' });
-
-    // Using server-side client, you need to specify the sender user_id
-    await channel.addMembers([tommaso], {
-      text: 'Tommaso joined the channel.',
-      user_id: tommaso,
-    });
     // #endregion snippet
 
     const { messages } = await serverClient
       .channel(channel.type, channel.id)
       .query({ messages: { limit: 10 } });
-    // Only the first call adds tommaso, so only it posts a system message (sent by the connected user).
+    // The system message is sent by the connected user.
     expect(messages.map((m) => [m.text, m.type, m.user?.id])).toEqual([
       ['Tommaso joined the channel.', 'system', owner],
     ]);
@@ -224,41 +217,30 @@ describe('_default/03-channels/06-channel_members.md', () => {
 
   it('partially updates the connected member', async () => {
     const channel = await createOwnedChannel();
-    // The docs' `jane` is the connected user: client-side, `userId` may only be your own id.
-    await channel.updateMemberPartial({ set: { key3: 'value 3' } }, { userId: owner });
+    await channel.updateMemberPartial({ set: { key3: 'value 3' } });
 
     // #region snippet docs="_default/03-channels/06-channel_members.md" heading="Updating Member Data" tab="JavaScript" index=1
-    // COPY: owner="jane"
     // Set some fields
-    await channel.updateMemberPartial(
-      {
-        set: {
-          key1: 'new value 1',
-          key2: 'new value 2',
-        },
+    await channel.updateMemberPartial({
+      set: {
+        key1: 'new value 1',
+        key2: 'new value 2',
       },
-      { userId: owner },
-    );
+    });
 
     // Unset some fields
-    await channel.updateMemberPartial(
-      {
-        unset: ['key1', 'key2'],
-      },
-      { userId: owner },
-    );
+    await channel.updateMemberPartial({
+      unset: ['key1', 'key2'],
+    });
 
     // Set and unset in the same call
-    await channel.updateMemberPartial(
-      {
-        set: {
-          key1: 'new value 1',
-          key2: 'new value 2',
-        },
-        unset: ['key3'],
+    await channel.updateMemberPartial({
+      set: {
+        key1: 'new value 1',
+        key2: 'new value 2',
       },
-      { userId: owner },
-    );
+      unset: ['key3'],
+    });
     // #endregion snippet
 
     const member = (await membersOf(channel))[owner];
@@ -266,10 +248,7 @@ describe('_default/03-channels/06-channel_members.md', () => {
     expect(member?.key3).toBeUndefined();
     // Channel roles can only be changed server-side.
     await expect(
-      channel.updateMemberPartial(
-        { set: { channel_role: 'channel_moderator' } },
-        { userId: owner },
-      ),
+      channel.updateMemberPartial({ set: { channel_role: 'channel_moderator' } }),
     ).rejects.toThrow(/this channel role can only be updated server side/);
   });
 });

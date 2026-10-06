@@ -10,7 +10,6 @@ const apiKey = process.env.STREAM_API_KEY as string;
 // COPY: apiKey="{{ api_key }}"
 import { StreamChat } from 'stream-chat';
 
-// client-side you initialize the Chat client with your API key
 const chatClient = StreamChat.getInstance(apiKey, {
   timeout: 6000,
 });

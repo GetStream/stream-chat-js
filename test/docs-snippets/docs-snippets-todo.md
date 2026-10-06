@@ -38,11 +38,11 @@ App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy of
 | [x]    | `chat/_default/03-channels/04-query_members.md`                         | 2   | 0    | 0          | yes         | yes         |                   |
 | [x]    | `chat/_default/03-channels/05-channel_pagination.md`                    | 2   | 0    | 0          | yes         | yes         |                   |
 | [x]    | `chat/_default/03-channels/06-channel_members.md`                       | 11  | 0    | 0          | yes         | yes         |                   |
-| [ ]    | `chat/_default/03-channels/07-channel_management/08-archiving.md`       | 1   | 0    | 0          | yes         | yes         |                   |
-| [ ]    | `chat/_default/03-channels/07-channel_management/09-pinning.md`         | 1   | 0    | 0          | yes         | yes         |                   |
-| [ ]    | `chat/_default/03-channels/07-channel_management/10-muting.md`          | 3   | 0    | 0          | yes         | yes         |                   |
-| [ ]    | `chat/_default/03-channels/07-channel_management/11-hiding.md`          | 1   | 0    | 0          | yes         | yes         |                   |
-| [ ]    | `chat/_default/03-channels/07-channel_management/12-disabling.md`       | 1   | 0    | 1          | yes         | yes         |                   |
+| [x]    | `chat/_default/03-channels/07-channel_management/08-archiving.md`       | 1   | 0    | 0          | yes         | yes         |                   |
+| [x]    | `chat/_default/03-channels/07-channel_management/09-pinning.md`         | 1   | 0    | 0          | yes         | yes         |                   |
+| [x]    | `chat/_default/03-channels/07-channel_management/10-muting.md`          | 3   | 0    | 0          | yes         | yes         |                   |
+| [x]    | `chat/_default/03-channels/07-channel_management/11-hiding.md`          | 1   | 0    | 0          | yes         | yes         |                   |
+| [x]    | `chat/_default/03-channels/07-channel_management/12-disabling.md`       | 1   | 0    | 1          | yes         | yes         |                   |
 | [ ]    | `chat/_default/03-channels/07-channel_management/13-deleting.md`        | 2   | 1    | 0          | yes         | yes         |                   |
 | [ ]    | `chat/_default/03-channels/07-channel_management/14-freezing.md`        | 2   | 1    | 0          | yes         | yes         |                   |
 | [ ]    | `chat/_default/03-channels/07-channel_management/15-truncating.md`      | 2   | 0    | 0          | yes         | yes         |                   |
