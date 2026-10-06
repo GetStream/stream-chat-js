@@ -1,7 +1,7 @@
 import sinon from 'sinon';
 import { Poll, StreamChat } from '../../src';
 
-import { describe, it, afterEach, expect, vi } from 'vitest';
+import { describe, it, afterEach, beforeEach, expect, vi } from 'vitest';
 import { convertDateToTimestamp } from './test-utils/time';
 
 const pollId = 'WD4SBRJvLoGwB4oAoCQGM';
@@ -772,5 +772,951 @@ describe('Poll', () => {
 			{ vote: { option_id } },
 		);
 		expect(addInfoNotificationSpy).not.toHaveBeenCalled();
+	});
+});
+
+describe('Poll optimistic updates', () => {
+	const optionA = '85610252-7d50-429c-8183-51a7eba46246'; // 2 votes, own vote
+	const optionC = 'ba933470-c0da-4b6f-a4d2-d2176ac0d4a8'; // 0 votes
+	const optionD = 'dc22dcd6-4fc8-4c92-92c2-bfd63245724c'; // 1 vote, own vote
+	const messageId = 'message-id';
+
+	const deferred = () => {
+		let resolve;
+		let reject;
+		const promise = new Promise((res, rej) => {
+			resolve = res;
+			reject = rej;
+		});
+		return { promise, reject, resolve };
+	};
+
+	const createPoll = (overrides = {}) => {
+		client.user = user1;
+		return new Poll({
+			client,
+			poll: { ...pollResponse, max_votes_allowed: 3, ...overrides },
+		});
+	};
+
+	const serverVote = (optionId, id = 'server-vote-id') => ({
+		poll_id: pollId,
+		id,
+		option_id: optionId,
+		user_id: user1.id,
+		user: user1,
+		created_at: convertDateToTimestamp('2024-10-24T10:00:00.000000Z'),
+		updated_at: convertDateToTimestamp('2024-10-24T10:00:00.000000Z'),
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('updates the max-voted options optimistically', () => {
+		const poll = createPoll();
+		const optionB = '7312e983-b042-4596-b5ce-f9e82deb363f';
+		vi.spyOn(client, 'castPollVote').mockReturnValue(new Promise(() => {}));
+		vi.spyOn(client, 'deletePollVote').mockReturnValue(new Promise(() => {}));
+		expect(poll.data.maxVotedOptionIds).toEqual([optionA]);
+
+		// B ties with A
+		poll.castVote(optionB, messageId);
+		expect([...poll.data.maxVotedOptionIds].sort()).toEqual([optionA, optionB].sort());
+
+		// A drops behind B
+		poll.removeVote(poll.data.ownVotesByOptionId[optionA].id, messageId);
+		expect(poll.data.maxVotedOptionIds).toEqual([optionB]);
+	});
+
+	describe('castVote', () => {
+		it('applies the vote before the request resolves', async () => {
+			const poll = createPoll();
+			const request = deferred();
+			vi.spyOn(client, 'castPollVote').mockReturnValue(request.promise);
+			const before = poll.data;
+
+			const castPromise = poll.castVote(optionC, messageId);
+
+			const localVote = poll.data.ownVotesByOptionId[optionC];
+			expect(localVote.id).toMatch(/^local-/);
+			expect(localVote.user_id).toBe(user1.id);
+			expect(poll.data.vote_count).toBe(before.vote_count + 1);
+			expect(poll.data.vote_counts_by_option[optionC]).toBe(1);
+			expect(poll.data.latest_votes_by_option[optionC]).toEqual([localVote]);
+			expect(poll.data.maxVotedOptionIds).toEqual([optionA]);
+			// previous state objects are not mutated
+			expect(before.ownVotesByOptionId[optionC]).toBeUndefined();
+			expect(before.vote_counts_by_option[optionC]).toBeUndefined();
+
+			request.resolve({ vote: serverVote(optionC) });
+			await castPromise;
+			// a successful response does not touch the state
+			expect(poll.data.ownVotesByOptionId[optionC]).toBe(localVote);
+		});
+
+		it('changes the existing vote in polls with unique votes', () => {
+			const poll = createPoll({
+				enforce_unique_vote: true,
+				max_votes_allowed: undefined,
+				own_votes: [user1Votes[0]],
+			});
+			vi.spyOn(client, 'castPollVote').mockReturnValue(new Promise(() => {}));
+			const before = poll.data;
+
+			poll.castVote(optionC, messageId);
+
+			expect(Object.keys(poll.data.ownVotesByOptionId)).toEqual([optionC]);
+			expect(poll.data.vote_count).toBe(before.vote_count);
+			expect(poll.data.vote_counts_by_option[optionA]).toBe(
+				before.vote_counts_by_option[optionA] - 1,
+			);
+			expect(poll.data.vote_counts_by_option[optionC]).toBe(1);
+			expect(
+				poll.data.latest_votes_by_option[optionA].map((vote) => vote.id),
+			).not.toContain(user1Votes[0].id);
+		});
+
+		it('does not touch latest votes in anonymous polls', () => {
+			const poll = createPoll({
+				latest_votes_by_option: null,
+				voting_visibility: 'anonymous',
+			});
+			vi.spyOn(client, 'castPollVote').mockReturnValue(new Promise(() => {}));
+
+			poll.castVote(optionC, messageId);
+
+			expect(poll.data.latest_votes_by_option).toBeNull();
+			expect(poll.data.vote_counts_by_option[optionC]).toBe(1);
+		});
+
+		it('does not apply anything optimistically when the option already has an own vote', async () => {
+			const poll = createPoll();
+			vi.spyOn(client, 'castPollVote').mockResolvedValue({ vote: serverVote(optionA) });
+			const before = poll.data;
+
+			await poll.castVote(optionA, messageId);
+
+			expect(poll.data).toBe(before);
+		});
+
+		it('reverts the vote when the request fails', async () => {
+			const poll = createPoll({
+				enforce_unique_vote: true,
+				max_votes_allowed: undefined,
+				own_votes: [user1Votes[0]],
+			});
+			const error = new Error('failed');
+			vi.spyOn(client, 'castPollVote').mockRejectedValue(error);
+			const before = poll.data;
+
+			await expect(poll.castVote(optionC, messageId)).rejects.toBe(error);
+
+			expect(poll.data.ownVotesByOptionId).toEqual(before.ownVotesByOptionId);
+			expect(poll.data.vote_count).toBe(before.vote_count);
+			expect(poll.data.vote_counts_by_option).toEqual(before.vote_counts_by_option);
+			expect(poll.data.maxVotedOptionIds).toEqual(before.maxVotedOptionIds);
+			expect(poll.data.latest_votes_by_option).toEqual(before.latest_votes_by_option);
+		});
+
+		it('lets the WS event replace the local vote', async () => {
+			const poll = createPoll();
+			const request = deferred();
+			vi.spyOn(client, 'castPollVote').mockReturnValue(request.promise);
+			const castPromise = poll.castVote(optionC, messageId);
+			const vote = serverVote(optionC);
+			const vote_counts_by_option = {
+				...pollResponse.vote_counts_by_option,
+				[optionC]: 5,
+			};
+
+			poll.handleVoteCasted({
+				type: 'poll.vote_casted',
+				created_at: convertDateToTimestamp('2024-10-24T10:00:00.000000Z'),
+				poll: { ...pollResponse, vote_count: 9, vote_counts_by_option },
+				poll_vote: vote,
+			});
+
+			expect(poll.data.ownVotesByOptionId[optionC]).toBe(vote);
+			expect(poll.data.vote_count).toBe(9);
+			expect(poll.data.vote_counts_by_option).toEqual(vote_counts_by_option);
+
+			// a late failure does not revert server-confirmed state
+			request.reject(new Error('failed'));
+			await expect(castPromise).rejects.toThrow('failed');
+			expect(poll.data.ownVotesByOptionId[optionC]).toBe(vote);
+			expect(poll.data.vote_count).toBe(9);
+		});
+	});
+
+	describe('removeVote', () => {
+		it('removes the vote before the request resolves', async () => {
+			const poll = createPoll();
+			const request = deferred();
+			const deletePollVoteSpy = vi
+				.spyOn(client, 'deletePollVote')
+				.mockReturnValue(request.promise);
+			const before = poll.data;
+			const vote = before.ownVotesByOptionId[optionD];
+
+			const removePromise = poll.removeVote(vote.id, messageId);
+
+			expect(poll.data.ownVotesByOptionId[optionD]).toBeUndefined();
+			expect(poll.data.vote_count).toBe(before.vote_count - 1);
+			expect(poll.data.vote_counts_by_option[optionD]).toBeUndefined();
+			expect(poll.data.latest_votes_by_option[optionD]).toEqual([]);
+			expect(poll.data.maxVotedOptionIds).toEqual([optionA]);
+
+			request.resolve({ vote });
+			await removePromise;
+			expect(deletePollVoteSpy).toHaveBeenCalledWith({
+				message_id: messageId,
+				poll_id: pollId,
+				vote_id: vote.id,
+			});
+		});
+
+		it('restores the vote when the request fails', async () => {
+			const poll = createPoll();
+			const error = new Error('failed');
+			vi.spyOn(client, 'deletePollVote').mockRejectedValue(error);
+			const before = poll.data;
+			const vote = before.ownVotesByOptionId[optionD];
+
+			await expect(poll.removeVote(vote.id, messageId)).rejects.toBe(error);
+
+			expect(poll.data.ownVotesByOptionId).toEqual(before.ownVotesByOptionId);
+			expect(poll.data.vote_count).toBe(before.vote_count);
+			expect(poll.data.vote_counts_by_option).toEqual(before.vote_counts_by_option);
+			expect(poll.data.maxVotedOptionIds).toEqual(before.maxVotedOptionIds);
+		});
+
+		it('waits for an in-flight cast and removes the vote by its real id', async () => {
+			const poll = createPoll();
+			const castRequest = deferred();
+			vi.spyOn(client, 'castPollVote').mockReturnValue(castRequest.promise);
+			const deletePollVoteSpy = vi
+				.spyOn(client, 'deletePollVote')
+				.mockResolvedValue({ vote: serverVote(optionC) });
+			const before = poll.data;
+
+			const castPromise = poll.castVote(optionC, messageId);
+			const localVote = poll.data.ownVotesByOptionId[optionC];
+			const removePromise = poll.removeVote(localVote.id, messageId);
+
+			expect(poll.data.ownVotesByOptionId[optionC]).toBeUndefined();
+			expect(poll.data.vote_count).toBe(before.vote_count);
+			expect(deletePollVoteSpy).not.toHaveBeenCalled();
+
+			castRequest.resolve({ vote: serverVote(optionC, 'real-id') });
+			await Promise.all([castPromise, removePromise]);
+
+			expect(deletePollVoteSpy).toHaveBeenCalledWith({
+				message_id: messageId,
+				poll_id: pollId,
+				vote_id: 'real-id',
+			});
+		});
+
+		it('does not send a request when the in-flight cast fails', async () => {
+			const poll = createPoll();
+			const castRequest = deferred();
+			vi.spyOn(client, 'castPollVote').mockReturnValue(castRequest.promise);
+			const deletePollVoteSpy = vi.spyOn(client, 'deletePollVote');
+			const before = poll.data;
+
+			const castPromise = poll.castVote(optionC, messageId);
+			const localVote = poll.data.ownVotesByOptionId[optionC];
+			const removePromise = poll.removeVote(localVote.id, messageId);
+
+			castRequest.reject(new Error('failed'));
+			await expect(castPromise).rejects.toThrow('failed');
+			await expect(removePromise).resolves.toBeUndefined();
+
+			expect(deletePollVoteSpy).not.toHaveBeenCalled();
+			expect(poll.data.ownVotesByOptionId).toEqual(before.ownVotesByOptionId);
+			expect(poll.data.vote_count).toBe(before.vote_count);
+		});
+	});
+
+	describe('close', () => {
+		it('closes the poll before the request resolves', async () => {
+			const poll = createPoll();
+			const request = deferred();
+			vi.spyOn(client, 'updatePollPartial').mockReturnValue(request.promise);
+
+			const closePromise = poll.close();
+
+			expect(poll.data.is_closed).toBe(true);
+			request.resolve({ poll: { ...pollResponse, is_closed: true } });
+			await closePromise;
+			expect(poll.data.is_closed).toBe(true);
+		});
+
+		it('reopens the poll when the request fails', async () => {
+			const poll = createPoll();
+			const error = new Error('failed');
+			vi.spyOn(client, 'updatePollPartial').mockRejectedValue(error);
+
+			await expect(poll.close()).rejects.toBe(error);
+
+			expect(poll.data.is_closed).toBeFalsy();
+		});
+
+		it('does not send a request when the poll is already closed', async () => {
+			const poll = createPoll({ is_closed: true });
+			const updatePollPartialSpy = vi.spyOn(client, 'updatePollPartial');
+			const before = poll.data;
+
+			await expect(poll.close()).resolves.toBeUndefined();
+
+			expect(updatePollPartialSpy).not.toHaveBeenCalled();
+			expect(poll.data).toBe(before);
+		});
+
+		it('keeps the poll closed when the close was confirmed by a WS event', async () => {
+			const poll = createPoll();
+			const request = deferred();
+			vi.spyOn(client, 'updatePollPartial').mockReturnValue(request.promise);
+
+			const closePromise = poll.close();
+			poll.handlePollClosed({
+				type: 'poll.closed',
+				created_at: convertDateToTimestamp('2024-10-24T10:00:00.000000Z'),
+				poll: { ...pollResponse, is_closed: true },
+			});
+			request.reject(new Error('failed'));
+
+			await expect(closePromise).rejects.toThrow('failed');
+			expect(poll.data.is_closed).toBe(true);
+		});
+	});
+
+	it('handleVoteCasted produces a new ownVotesByOptionId object', () => {
+		const poll = createPoll();
+		const before = poll.data.ownVotesByOptionId;
+
+		poll.handleVoteCasted({
+			type: 'poll.vote_casted',
+			created_at: convertDateToTimestamp('2024-10-24T10:00:00.000000Z'),
+			poll: pollResponse,
+			poll_vote: serverVote(optionC),
+		});
+
+		expect(poll.data.ownVotesByOptionId).not.toBe(before);
+		expect(before[optionC]).toBeUndefined();
+	});
+
+	describe('pending vote changes', () => {
+		const createUniquePoll = () =>
+			createPoll({
+				enforce_unique_vote: true,
+				latest_votes_by_option: {},
+				max_votes_allowed: undefined,
+				own_votes: [],
+				vote_count: 0,
+				vote_counts_by_option: {},
+			});
+
+		const voteEvent = (type, vote, voteCountsByOption, pollOverrides = {}) => ({
+			type,
+			created_at: convertDateToTimestamp('2024-10-24T10:00:00.000000Z'),
+			poll: {
+				...pollResponse,
+				latest_votes_by_option: {},
+				vote_count: Object.values(voteCountsByOption).reduce(
+					(sum, count) => sum + count,
+					0,
+				),
+				vote_counts_by_option: voteCountsByOption,
+				...pollOverrides,
+			},
+			poll_vote: vote,
+		});
+
+		const ownOptionIds = (poll) => Object.keys(poll.data.ownVotesByOptionId);
+
+		describe('while other users vote', () => {
+			const optionB = '7312e983-b042-4596-b5ce-f9e82deb363f';
+			const otherVote = (optionId, id = 'user2-vote') => ({
+				...user2Votes[0],
+				id,
+				option_id: optionId,
+			});
+			const sorted = (ids) => [...ids].sort();
+
+			it('counts their vote on the option the own vote is pending on', () => {
+				const poll = createPoll();
+				vi.spyOn(client, 'castPollVote').mockReturnValue(new Promise(() => {}));
+				const base = pollResponse.vote_counts_by_option;
+
+				poll.castVote(optionC, messageId);
+				poll.handleVoteCasted(
+					voteEvent('poll.vote_casted', otherVote(optionC), { ...base, [optionC]: 1 }),
+				);
+
+				// held back until the own vote is confirmed
+				expect(poll.data.ownVotesByOptionId[optionC].id).toMatch(/^local-/);
+				expect(poll.data.vote_counts_by_option[optionC]).toBe(1);
+
+				const vote = serverVote(optionC);
+				poll.handleVoteCasted(
+					voteEvent('poll.vote_casted', vote, { ...base, [optionC]: 2 }),
+				);
+
+				expect(poll.data.ownVotesByOptionId[optionC]).toBe(vote);
+				expect(poll.data.vote_counts_by_option).toEqual({ ...base, [optionC]: 2 });
+				expect(poll.data.vote_count).toBe(pollResponse.vote_count + 2);
+				expect(sorted(poll.data.maxVotedOptionIds)).toEqual(sorted([optionA, optionC]));
+			});
+
+			it('applies their removal on another option once the own vote is confirmed', () => {
+				const poll = createPoll();
+				vi.spyOn(client, 'castPollVote').mockReturnValue(new Promise(() => {}));
+				const base = pollResponse.vote_counts_by_option;
+				const before = poll.data;
+
+				poll.castVote(optionC, messageId);
+				poll.handleVoteRemoved(
+					voteEvent('poll.vote_removed', user2Votes[1], { ...base, [optionA]: 1 }),
+				);
+				expect(poll.data.vote_counts_by_option[optionA]).toBe(2);
+
+				poll.handleVoteCasted(
+					voteEvent('poll.vote_casted', serverVote(optionC), {
+						...base,
+						[optionA]: 1,
+						[optionC]: 1,
+					}),
+				);
+
+				expect(sorted(ownOptionIds(poll))).toEqual(
+					sorted([...Object.keys(before.ownVotesByOptionId), optionC]),
+				);
+				expect(poll.data.vote_counts_by_option).toEqual({
+					...base,
+					[optionA]: 1,
+					[optionC]: 1,
+				});
+				expect(poll.data.vote_count).toBe(pollResponse.vote_count);
+			});
+
+			it('applies their vote changes in polls with unique votes', () => {
+				const poll = createUniquePoll();
+				vi.spyOn(client, 'castPollVote').mockReturnValue(new Promise(() => {}));
+				const unique = { enforce_unique_vote: true };
+
+				poll.castVote(optionA, messageId);
+				poll.handleVoteCasted(
+					voteEvent('poll.vote_casted', otherVote(optionC), { [optionC]: 1 }, unique),
+				);
+				poll.handleVoteChanged(
+					voteEvent('poll.vote_changed', otherVote(optionA), { [optionA]: 1 }, unique),
+				);
+				expect(ownOptionIds(poll)).toEqual([optionA]);
+				expect(poll.data.vote_counts_by_option).toEqual({ [optionA]: 1 });
+
+				const vote = serverVote(optionA);
+				poll.handleVoteCasted(
+					voteEvent('poll.vote_casted', vote, { [optionA]: 2 }, unique),
+				);
+				expect(poll.data.ownVotesByOptionId).toEqual({ [optionA]: vote });
+				expect(poll.data.vote_counts_by_option).toEqual({ [optionA]: 2 });
+
+				// nothing pending anymore, so their next change is shown right away
+				poll.handleVoteChanged(
+					voteEvent(
+						'poll.vote_changed',
+						otherVote(optionC),
+						{ [optionA]: 1, [optionC]: 1 },
+						unique,
+					),
+				);
+				expect(poll.data.ownVotesByOptionId).toEqual({ [optionA]: vote });
+				expect(poll.data.vote_counts_by_option).toEqual({ [optionA]: 1, [optionC]: 1 });
+				expect(poll.data.vote_count).toBe(2);
+			});
+
+			it('keeps their vote on the option of a pending own removal', () => {
+				const poll = createPoll();
+				const ownVote = poll.data.ownVotesByOptionId[optionD];
+				vi.spyOn(client, 'deletePollVote').mockReturnValue(new Promise(() => {}));
+				const base = pollResponse.vote_counts_by_option;
+
+				poll.removeVote(ownVote.id, messageId);
+				poll.handleVoteCasted(
+					voteEvent('poll.vote_casted', otherVote(optionD), { ...base, [optionD]: 2 }),
+				);
+				expect(poll.data.ownVotesByOptionId[optionD]).toBeUndefined();
+				expect(poll.data.vote_counts_by_option[optionD]).toBeUndefined();
+
+				poll.handleVoteRemoved(
+					voteEvent('poll.vote_removed', ownVote, { ...base, [optionD]: 1 }),
+				);
+
+				expect(poll.data.ownVotesByOptionId[optionD]).toBeUndefined();
+				expect(poll.data.vote_counts_by_option).toEqual({ ...base, [optionD]: 1 });
+				expect(poll.data.vote_count).toBe(pollResponse.vote_count);
+				expect(poll.data.latest_votes_by_option).toEqual({});
+			});
+
+			it('shows their votes right away when no own vote change is pending', () => {
+				const poll = createPoll();
+				const before = poll.data;
+
+				poll.handleVoteCasted(
+					voteEvent('poll.vote_casted', otherVote(optionB, 'new-vote'), {
+						...pollResponse.vote_counts_by_option,
+						[optionB]: 2,
+					}),
+				);
+
+				expect(poll.data.ownVotesByOptionId).toEqual(before.ownVotesByOptionId);
+				expect(poll.data.vote_counts_by_option[optionB]).toBe(2);
+			});
+		});
+
+		it('keeps showing the latest vote while WS events of earlier votes arrive in unique polls', () => {
+			const poll = createUniquePoll();
+			vi.spyOn(client, 'castPollVote').mockReturnValue(new Promise(() => {}));
+			const unique = { enforce_unique_vote: true };
+
+			poll.castVote(optionA, messageId);
+			poll.castVote(optionC, messageId);
+			expect(ownOptionIds(poll)).toEqual([optionC]);
+
+			poll.handleVoteCasted(
+				voteEvent('poll.vote_casted', serverVote(optionA), { [optionA]: 1 }, unique),
+			);
+			expect(ownOptionIds(poll)).toEqual([optionC]);
+			expect(poll.data.vote_counts_by_option).toEqual({ [optionC]: 1 });
+
+			poll.castVote(optionD, messageId);
+			poll.handleVoteChanged(
+				voteEvent('poll.vote_changed', serverVote(optionC), { [optionC]: 1 }, unique),
+			);
+			expect(ownOptionIds(poll)).toEqual([optionD]);
+			expect(poll.data.vote_counts_by_option).toEqual({ [optionD]: 1 });
+
+			const finalVote = serverVote(optionD);
+			poll.handleVoteChanged(
+				voteEvent('poll.vote_changed', finalVote, { [optionD]: 1 }, unique),
+			);
+			expect(poll.data.ownVotesByOptionId).toEqual({ [optionD]: finalVote });
+			expect(poll.data.vote_count).toBe(1);
+			expect(poll.data.maxVotedOptionIds).toEqual([optionD]);
+		});
+
+		it('never shows two own votes in unique polls when the first vote is confirmed after the second is cast', () => {
+			const poll = createUniquePoll();
+			vi.spyOn(client, 'castPollVote').mockReturnValue(new Promise(() => {}));
+
+			poll.castVote(optionA, messageId);
+			poll.castVote(optionC, messageId);
+			poll.handleVoteCasted(
+				voteEvent('poll.vote_casted', serverVote(optionA), { [optionA]: 1 }),
+			);
+
+			expect(ownOptionIds(poll)).toEqual([optionC]);
+			expect(poll.data.vote_count).toBe(1);
+		});
+
+		it('keeps an undone vote removed while the WS events of the cast and the removal arrive', async () => {
+			const poll = createPoll();
+			const castRequest = deferred();
+			vi.spyOn(client, 'castPollVote').mockReturnValue(castRequest.promise);
+			const deletePollVoteSpy = vi
+				.spyOn(client, 'deletePollVote')
+				.mockResolvedValue({ vote: serverVote(optionC, 'real-id') });
+			const before = poll.data;
+
+			const castPromise = poll.castVote(optionC, messageId);
+			const removePromise = poll.removeVote(
+				poll.data.ownVotesByOptionId[optionC].id,
+				messageId,
+			);
+
+			poll.handleVoteCasted(
+				voteEvent('poll.vote_casted', serverVote(optionC, 'real-id'), {
+					...pollResponse.vote_counts_by_option,
+					[optionC]: 1,
+				}),
+			);
+			expect(poll.data.ownVotesByOptionId[optionC]).toBeUndefined();
+			expect(poll.data.vote_count).toBe(before.vote_count);
+
+			castRequest.resolve({ vote: serverVote(optionC, 'real-id') });
+			await Promise.all([castPromise, removePromise]);
+			expect(deletePollVoteSpy).toHaveBeenCalledWith({
+				message_id: messageId,
+				poll_id: pollId,
+				vote_id: 'real-id',
+			});
+
+			poll.handleVoteRemoved(
+				voteEvent(
+					'poll.vote_removed',
+					serverVote(optionC, 'real-id'),
+					pollResponse.vote_counts_by_option,
+				),
+			);
+			expect(poll.data.ownVotesByOptionId).toEqual(before.ownVotesByOptionId);
+			expect(poll.data.vote_counts_by_option).toEqual(before.vote_counts_by_option);
+		});
+
+		it('shows the server votes once the last pending vote change settles, even if it failed', async () => {
+			const poll = createUniquePoll();
+			const requests = [deferred(), deferred(), deferred()];
+			vi.spyOn(client, 'castPollVote')
+				.mockReturnValueOnce(requests[0].promise)
+				.mockReturnValueOnce(requests[1].promise)
+				.mockReturnValueOnce(requests[2].promise);
+
+			const castA = poll.castVote(optionA, messageId);
+			const castC = poll.castVote(optionC, messageId);
+			const castD = poll.castVote(optionD, messageId);
+
+			const voteA = serverVote(optionA);
+			requests[0].resolve({ vote: voteA });
+			await castA;
+			requests[1].reject(new Error('failed'));
+			await expect(castC).rejects.toThrow('failed');
+			expect(ownOptionIds(poll)).toEqual([optionD]);
+
+			// the cast of A is still pending, so the failed vote stays shown until it is confirmed
+			requests[2].reject(new Error('failed'));
+			await expect(castD).rejects.toThrow('failed');
+			expect(ownOptionIds(poll)).toEqual([optionD]);
+
+			poll.handleVoteCasted(voteEvent('poll.vote_casted', voteA, { [optionA]: 1 }));
+			expect(poll.data.ownVotesByOptionId).toEqual({ [optionA]: voteA });
+			expect(poll.data.vote_counts_by_option).toEqual({ [optionA]: 1 });
+		});
+
+		it("shows other users' votes once the pending own votes are confirmed", () => {
+			const poll = createPoll();
+			vi.spyOn(client, 'castPollVote').mockReturnValue(new Promise(() => {}));
+			const optionB = '7312e983-b042-4596-b5ce-f9e82deb363f';
+
+			poll.castVote(optionC, messageId);
+			poll.handleVoteCasted(
+				voteEvent(
+					'poll.vote_casted',
+					{ ...user2Votes[0], id: 'user2-new-vote', option_id: optionB },
+					{ ...pollResponse.vote_counts_by_option, [optionB]: 2 },
+				),
+			);
+
+			// the event does not contain the pending own vote yet, so it is not shown
+			expect(poll.data.ownVotesByOptionId[optionC].id).toMatch(/^local-/);
+			expect(poll.data.vote_counts_by_option[optionB]).toBe(1);
+			expect(poll.data.vote_counts_by_option[optionC]).toBe(1);
+
+			poll.handleVoteCasted(
+				voteEvent('poll.vote_casted', serverVote(optionC), {
+					...pollResponse.vote_counts_by_option,
+					[optionB]: 2,
+					[optionC]: 1,
+				}),
+			);
+			expect(poll.data.ownVotesByOptionId[optionC].id).toBe('server-vote-id');
+			expect(poll.data.vote_counts_by_option[optionB]).toBe(2);
+			expect(poll.data.vote_counts_by_option[optionC]).toBe(1);
+			expect(poll.data.vote_count).toBe(pollResponse.vote_count + 2);
+		});
+
+		it('does not count a vote twice when a refetch already contains it', async () => {
+			const poll = createPoll();
+			const vote = serverVote(optionC, 'real-id');
+			vi.spyOn(client, 'castPollVote').mockResolvedValue({ vote });
+
+			await poll.castVote(optionC, messageId);
+			poll.reinitializeState({
+				...pollResponse,
+				own_votes: [...user1Votes, vote],
+				vote_count: pollResponse.vote_count + 1,
+				vote_counts_by_option: { ...pollResponse.vote_counts_by_option, [optionC]: 1 },
+			});
+
+			expect(poll.data.ownVotesByOptionId[optionC]).toEqual(vote);
+			expect(poll.data.vote_counts_by_option[optionC]).toBe(1);
+			expect(poll.data.vote_count).toBe(pollResponse.vote_count + 1);
+		});
+
+		it('shows the refetched state and stops tracking pending vote changes', () => {
+			const poll = createPoll();
+			vi.spyOn(client, 'castPollVote').mockReturnValue(new Promise(() => {}));
+			const before = poll.data;
+
+			poll.castVote(optionC, messageId);
+			poll.reinitializeState(pollResponse);
+			expect(poll.data.ownVotesByOptionId).toEqual(before.ownVotesByOptionId);
+
+			// with nothing pending, the next event is shown right away
+			const vote = serverVote(optionC);
+			poll.handleVoteCasted(
+				voteEvent('poll.vote_casted', vote, {
+					...pollResponse.vote_counts_by_option,
+					[optionC]: 1,
+				}),
+			);
+			expect(poll.data.ownVotesByOptionId[optionC]).toBe(vote);
+		});
+
+		describe('sends vote requests in the order they were made', () => {
+			it('removes each vote by its own id when the same option is tapped repeatedly', async () => {
+				const poll = createPoll();
+				const calls = [];
+				vi.spyOn(client, 'castPollVote').mockImplementation(async () => {
+					const vote = serverVote(optionC, `vote-${calls.length}`);
+					calls.push(`cast ${vote.id}`);
+					return { vote };
+				});
+				vi.spyOn(client, 'deletePollVote').mockImplementation(
+					async ({ vote_id: voteId }) => {
+						calls.push(`remove ${voteId}`);
+						return { vote: serverVote(optionC, voteId) };
+					},
+				);
+				const toggle = () => {
+					const vote = poll.data.ownVotesByOptionId[optionC];
+					return vote
+						? poll.removeVote(vote.id, messageId)
+						: poll.castVote(optionC, messageId);
+				};
+
+				await Promise.all([toggle(), toggle(), toggle(), toggle()]);
+
+				expect(calls).toEqual([
+					'cast vote-0',
+					'remove vote-0',
+					'cast vote-2',
+					'remove vote-2',
+				]);
+			});
+
+			it('sends a vote only after the previous one finished in polls with unique votes', async () => {
+				const poll = createUniquePoll();
+				const castA = deferred();
+				const castPollVoteSpy = vi
+					.spyOn(client, 'castPollVote')
+					.mockReturnValueOnce(castA.promise)
+					.mockResolvedValueOnce({ vote: serverVote(optionC) });
+
+				poll.castVote(optionA, messageId);
+				const castC = poll.castVote(optionC, messageId);
+				await vi.waitFor(() => expect(castPollVoteSpy).toHaveBeenCalledTimes(1));
+				expect(castPollVoteSpy).toHaveBeenLastCalledWith(
+					{ message_id: messageId, poll_id: pollId },
+					{ vote: { option_id: optionA } },
+				);
+
+				castA.resolve({ vote: serverVote(optionA) });
+				await castC;
+				expect(castPollVoteSpy).toHaveBeenCalledTimes(2);
+				expect(castPollVoteSpy).toHaveBeenLastCalledWith(
+					{ message_id: messageId, poll_id: pollId },
+					{ vote: { option_id: optionC } },
+				);
+			});
+
+			it('does not remove a vote again when undoing a vote whose cast failed', async () => {
+				const poll = createPoll();
+				const voteC = serverVote(optionC, 'vote-c');
+				vi.spyOn(client, 'castPollVote')
+					.mockResolvedValueOnce({ vote: voteC })
+					.mockRejectedValueOnce(new Error('failed'));
+				const deletePollVoteSpy = vi
+					.spyOn(client, 'deletePollVote')
+					.mockResolvedValue({ vote: voteC });
+				const toggle = () => {
+					const vote = poll.data.ownVotesByOptionId[optionC];
+					return (
+						vote ? poll.removeVote(vote.id, messageId) : poll.castVote(optionC, messageId)
+					).catch(() => undefined);
+				};
+
+				// cast, undo, cast (fails), undo
+				await Promise.all([toggle(), toggle(), toggle(), toggle()]);
+
+				expect(deletePollVoteSpy).toHaveBeenCalledTimes(1);
+				expect(deletePollVoteSpy).toHaveBeenCalledWith({
+					message_id: messageId,
+					poll_id: pollId,
+					vote_id: 'vote-c',
+				});
+			});
+
+			it('does not wait for the vote requests of another poll instance with the same id', async () => {
+				const otherClient = new StreamChat('apiKey');
+				otherClient.user = user2;
+				const otherPoll = new Poll({
+					client: otherClient,
+					poll: { ...pollResponse, max_votes_allowed: 3 },
+				});
+				const otherCastPollVoteSpy = vi
+					.spyOn(otherClient, 'castPollVote')
+					.mockReturnValue(new Promise(() => {}));
+				const poll = createPoll();
+				const castPollVoteSpy = vi
+					.spyOn(client, 'castPollVote')
+					.mockResolvedValue({ vote: serverVote(optionC) });
+
+				// the other instance's request never finishes
+				otherPoll.castVote(optionC, messageId);
+				await vi.waitFor(() => expect(otherCastPollVoteSpy).toHaveBeenCalledTimes(1));
+				await poll.castVote(optionC, messageId);
+
+				expect(castPollVoteSpy).toHaveBeenCalledTimes(1);
+			});
+
+			it('keeps sending votes after a failed one', async () => {
+				const poll = createPoll();
+				vi.spyOn(client, 'castPollVote')
+					.mockRejectedValueOnce(new Error('failed'))
+					.mockResolvedValueOnce({ vote: serverVote(optionC) });
+
+				const failed = poll.castVote(optionC, messageId);
+				await expect(failed).rejects.toThrow('failed');
+				await expect(poll.castVote(optionC, messageId)).resolves.toEqual({
+					vote: serverVote(optionC),
+				});
+			});
+		});
+
+		describe('when a WS event never arrives', () => {
+			const optionB = '7312e983-b042-4596-b5ce-f9e82deb363f';
+			const otherUserVote = {
+				...user2Votes[0],
+				id: 'user2-new-vote',
+				option_id: optionB,
+			};
+
+			beforeEach(() => {
+				vi.useFakeTimers();
+			});
+
+			afterEach(() => {
+				vi.useRealTimers();
+			});
+
+			it('rebuilds the own votes from the succeeded requests after the timeout and shows events again', async () => {
+				const poll = createUniquePoll();
+				const voteA = serverVote(optionA, 'vote-a');
+				const voteC = serverVote(optionC, 'vote-c');
+				vi.spyOn(client, 'castPollVote')
+					.mockResolvedValueOnce({ vote: voteA })
+					.mockResolvedValueOnce({ vote: voteC });
+
+				await poll.castVote(optionA, messageId);
+				poll.handleVoteCasted(voteEvent('poll.vote_casted', voteA, { [optionA]: 1 }));
+				await poll.castVote(optionC, messageId);
+				// the vote_changed event for C is lost
+
+				poll.handleVoteCasted(
+					voteEvent('poll.vote_casted', otherUserVote, { [optionB]: 1, [optionC]: 1 }),
+				);
+				expect(poll.data.vote_counts_by_option).toEqual({ [optionC]: 1 });
+
+				vi.advanceTimersByTime(3000);
+				poll.handleVoteCasted(
+					voteEvent('poll.vote_casted', otherUserVote, { [optionB]: 2, [optionC]: 1 }),
+				);
+
+				// the own vote is the server vote of C, not the stale A or the placeholder
+				expect(poll.data.ownVotesByOptionId).toEqual({ [optionC]: voteC });
+				expect(poll.data.vote_counts_by_option).toEqual({ [optionB]: 2, [optionC]: 1 });
+			});
+
+			it('waits for vote requests still in flight before rebuilding the own votes', async () => {
+				const poll = createPoll();
+				const slowRequest = deferred();
+				vi.spyOn(client, 'castPollVote').mockReturnValueOnce(slowRequest.promise);
+				const removed = poll.data.ownVotesByOptionId[optionD];
+				vi.spyOn(client, 'deletePollVote').mockResolvedValue({ vote: removed });
+
+				// the removal succeeds and starts the timeout, the cast that follows is slow
+				const removal = poll.removeVote(removed.id, messageId);
+				poll.castVote(optionC, messageId);
+				await removal;
+				vi.advanceTimersByTime(3000);
+
+				// the cast of C may still fail, so events are still held back
+				poll.handleVoteCasted(
+					voteEvent(
+						'poll.vote_casted',
+						otherUserVote,
+						pollResponse.vote_counts_by_option,
+					),
+				);
+				expect(poll.data.ownVotesByOptionId[optionC].id).toMatch(/^local-/);
+				expect(poll.data.ownVotesByOptionId[optionD]).toBeUndefined();
+
+				// the removal's event is lost too, so the failed vote stays shown until the timeout
+				slowRequest.reject(new Error('failed'));
+				await vi.advanceTimersByTimeAsync(0);
+				expect(poll.data.ownVotesByOptionId[optionC].id).toMatch(/^local-/);
+
+				// only the removal succeeded, so the failed vote is dropped and the removal kept
+				vi.advanceTimersByTime(3000);
+				const { [optionD]: _, ...expectedOwnVotes } = pollResponse.own_votes
+					.filter((vote) => !vote.answer_text)
+					.reduce((acc, vote) => ({ ...acc, [vote.option_id]: vote }), {});
+				expect(poll.data.ownVotesByOptionId).toEqual(expectedOwnVotes);
+			});
+
+			it('removes a rebuilt vote by its real id', async () => {
+				const poll = createPoll();
+				const voteC = serverVote(optionC, 'real-id');
+				vi.spyOn(client, 'castPollVote').mockResolvedValue({ vote: voteC });
+				const deletePollVoteSpy = vi
+					.spyOn(client, 'deletePollVote')
+					.mockResolvedValue({ vote: voteC });
+
+				await poll.castVote(optionC, messageId);
+				vi.advanceTimersByTime(3000);
+				await poll.removeVote(poll.data.ownVotesByOptionId[optionC].id, messageId);
+
+				expect(deletePollVoteSpy).toHaveBeenCalledWith({
+					message_id: messageId,
+					poll_id: pollId,
+					vote_id: 'real-id',
+				});
+			});
+
+			it('does not rebuild the own votes after a request that failed', async () => {
+				const poll = createPoll();
+				vi.spyOn(client, 'castPollVote').mockRejectedValue(new Error('failed'));
+				const before = poll.data;
+
+				await expect(poll.castVote(optionC, messageId)).rejects.toThrow('failed');
+				const afterFailure = poll.data;
+				expect(afterFailure.ownVotesByOptionId).toEqual(before.ownVotesByOptionId);
+				expect(afterFailure.vote_counts_by_option).toEqual(before.vote_counts_by_option);
+
+				vi.advanceTimersByTime(3000);
+				expect(poll.data).toBe(afterFailure);
+				expect(vi.getTimerCount()).toBe(0);
+			});
+
+			it('does nothing when the WS events arrive in time', async () => {
+				const poll = createPoll();
+				const voteC = serverVote(optionC);
+				vi.spyOn(client, 'castPollVote').mockResolvedValue({ vote: voteC });
+
+				await poll.castVote(optionC, messageId);
+				poll.handleVoteCasted(
+					voteEvent('poll.vote_casted', voteC, {
+						...pollResponse.vote_counts_by_option,
+						[optionC]: 1,
+					}),
+				);
+				const shown = poll.data;
+				vi.advanceTimersByTime(3000);
+
+				expect(poll.data).toBe(shown);
+				expect(vi.getTimerCount()).toBe(0);
+			});
+		});
 	});
 });
