@@ -2,7 +2,7 @@
 
 Typed tests that run the client-side JavaScript snippets of the chat docs
 (`getstream.io/content/docs/chat/_default` and `chat/javascript`) against a real Stream app.
-Only fences labelled `JavaScript` (and unlabelled `js` fences) are in scope: they are fixed when they are
+Only fences labelled `JavaScript` are in scope (docs fences must always have a label): they are fixed when they are
 wrong or contain server-side code. `Node.js` fences are out of scope and are neither tested nor changed.
 
 ```sh

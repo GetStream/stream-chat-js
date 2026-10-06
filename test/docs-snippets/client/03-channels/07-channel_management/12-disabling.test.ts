@@ -36,7 +36,7 @@ describe('_default/03-channels/07-channel_management/12-disabling.md', () => {
   it('filters out disabled channels', async () => {
     const spy = vi.spyOn(client, 'queryChannels');
 
-    // #region snippet docs="_default/03-channels/07-channel_management/12-disabling.md" heading="" tab="unlabelled" index=1
+    // #region snippet docs="_default/03-channels/07-channel_management/12-disabling.md" heading="" tab="JavaScript" index=1
     await client.queryChannels({ disabled: false });
     // #endregion snippet
 

@@ -2,7 +2,7 @@
 
 Pages under `getstream.io/content/docs/` that contain JavaScript snippets. Give each page to an agent with `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/docs-snippets-agent-prompt.md`. **Run pages one at a time**: tests may change app settings (they must restore them).
 
-- Only client-side snippets are in scope: fences labelled `JavaScript` and unlabelled `js` fences of pages in the JavaScript sidebar. `Node.js` fences and pages only in the Node sidebar are out of scope.
+- Only client-side snippets are in scope: fences labelled `JavaScript` of pages in the JavaScript sidebar. Unlabelled `js` fences get a label (`JavaScript` or `Node.js`). `Node.js` fences and pages only in the Node sidebar are out of scope.
 - **JS / unlabelled**: number of `js` fences labelled `JavaScript` / with no label (before the docs were changed).
 - **Client test**: `yes` when the page gets a test under `test/docs-snippets/client/...`; `-` when nothing on it can be tested client-side.
 

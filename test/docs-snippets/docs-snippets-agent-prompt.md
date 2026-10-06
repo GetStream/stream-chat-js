@@ -4,7 +4,7 @@ Replace `{{PAGE}}` with a path from `/Users/zitaszupera/Stream/stream-chat-js/te
 
 ---
 
-You are verifying the client-side JavaScript code snippets of one Stream Chat docs page by writing typed tests that run them against a real Stream app with a user token. Only fences labelled `JavaScript` and unlabelled `js` fences are in scope. `Node.js` fences are out of scope: don't test, add or change them.
+You are verifying the client-side JavaScript code snippets of one Stream Chat docs page by writing typed tests that run them against a real Stream app with a user token. Only fences labelled `JavaScript` are in scope. Docs fences must always have a label: if you find an unlabelled `js` fence, label it (`JavaScript` for client code, `Node.js` for `@stream-io/node-sdk` code) and report it. `Node.js` fences are out of scope: don't test, add or change them.
 
 **Page:** `/Users/zitaszupera/Stream/getstream.io/content/docs/{{PAGE}}`
 
@@ -33,7 +33,7 @@ You are verifying the client-side JavaScript code snippets of one Stream Chat do
 
 ## What to build
 
-- **Client test** (`test/docs-snippets/client/<section path>/<page>.test.ts`): run each `JavaScript` / unlabelled `js` snippet with a user token, using `getClientSideClient(user)`. Use `getServerClient()` only for setup, cleanup and assertions a client can't do.
+- **Client test** (`test/docs-snippets/client/<section path>/<page>.test.ts`): run each `JavaScript` snippet with a user token, using `getClientSideClient(user)`. Use `getServerClient()` only for setup, cleanup and assertions a client can't do.
   - If a snippet (or part of it) only works server-side (needs the secret, `user_id` on behalf of others, app settings, ...), it doesn't belong in a client tab: remove it from the page (see "Server-side code in JavaScript snippets") and list it in the report. Don't add a `Node.js` tab for it.
   - If every `JavaScript` fence of the page turns out to be server-only, don't write a test file.
 - **Mirror paths.** The test paths mirror the docs path without the `chat/_default/` prefix. Pages under `chat/javascript/` go under `client/javascript/...`.
@@ -42,7 +42,7 @@ You are verifying the client-side JavaScript code snippets of one Stream Chat do
   - `beforeAll` creates the shared users and channels with `uniqueId(...)` ids and registers them on a `Cleanup`.
   - `afterAll` disconnects the clients and runs `cleanup.run()`.
   - One `it` per snippet, or per tab group when the snippets in it depend on each other.
-- **Snippet markers.** Every `JavaScript` and unlabelled `js` fence on the page needs exactly one marker in a test (`Node.js` fences are ignored). `yarn test-docs-sync` checks the format and the coverage.
+- **Snippet markers.** Every `JavaScript` fence on the page needs exactly one marker in a test (`Node.js` fences are ignored). `yarn test-docs-sync` checks the format and the coverage.
   - Wrap the docs code like this:
     ```ts
     // #region snippet docs="_default/04-messages/01-send_message.md" heading="Sending a Message" tab="JavaScript" index=1
