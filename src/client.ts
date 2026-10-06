@@ -26,6 +26,7 @@ import { normalizeUploadFile } from './upload-utils';
 import type {
   APIResponse,
   AppIdentifier,
+  ChannelInput,
   ChannelMute,
   ChannelOptions,
   ChannelResponse,
@@ -1695,6 +1696,39 @@ export class StreamChat extends ChatApi {
     }
     this.syncDeliveredCandidates(channels);
     return channels;
+  }
+
+  /**
+   * Returns the channel with the given type, ID and custom data: a shorthand for
+   * {@link ChannelManager.ensure} (`client.channelManager.ensure({ type, id, data })`), so it returns
+   * the stored instance for the cid, or creates and stores it.
+   *
+   * To get a distinct channel between two or more users, leave out the ID and pass the members:
+   * `client.channel('messaging', { members: [{ user_id: 'tommaso' }, { user_id: 'thierry' }] })`.
+   * It has no ID until `channel.watch()`, `query()` or `create()` returns one.
+   *
+   * @param channelType - The channel type.
+   * @param channelIdOrCustom - The channel ID; leave it out for a distinct channel created from
+   *   members (optional).
+   * @param custom - Data for a new channel, e.g. `members` or `custom` (optional, defaults to `{}`).
+   * @returns The channel; initialize it with `channel.watch()`.
+   */
+  channel(channelType: string, channelId?: string | null, custom?: ChannelInput): Channel;
+  channel(channelType: string, custom?: ChannelInput): Channel;
+  channel(
+    channelType: string,
+    channelIdOrCustom?: string | ChannelInput | null,
+    custom: ChannelInput = {},
+  ): Channel {
+    // channel('messaging', { members }): the data takes the ID's place
+    if (channelIdOrCustom && typeof channelIdOrCustom === 'object') {
+      return this.channelManager.ensure({ data: channelIdOrCustom, type: channelType });
+    }
+    return this.channelManager.ensure({
+      data: custom,
+      id: channelIdOrCustom || undefined,
+      type: channelType,
+    });
   }
 
   /**

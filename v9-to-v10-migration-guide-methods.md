@@ -375,33 +375,59 @@ client.userMuteStatus(targetID);
 client.userMuteStatus(targetId);
 ```
 
-#### `client.channel()` → `client.channelManager.ensure()`
+#### `client.channel()`, `client.channelManager.ensure()`
 
-`client.channel()`, `client.getChannelById()` and `client.getChannelByMembers()` are removed. Get a
-channel with `client.channelManager.ensure()`, which takes one object. It returns the stored channel for
-the cid or creates it, as `client.channel()` did. Getting a channel this way doesn't keep it: one
-that is neither watched nor used is torn down when the lists reload or the connection recovers (see
-the [other changes guide](./v9-to-v10-migration-guide-other.md)). Watch it, or call
+`client.channel()` takes the same arguments in the same forms as in v9, `(type, id?, data?)` and
+`(type, data)`, and is now a shorthand for `client.channelManager.ensure()`, which takes one object.
+Only the type of `data` changed (below). Both return the stored channel for the cid or create and
+store it, as `client.channel()` did. Getting a channel either way doesn't keep it: one that is neither
+watched nor used is torn down when the lists reload or the connection recovers (see the
+[other changes guide](./v9-to-v10-migration-guide-other.md)). Watch it, or call
 `channel.activate()`, to keep it.
+
+The channel data is typed `ChannelInput`, which replaced `ChannelData` (see the
+[type renames guide](./v9-to-v10-migration-guide-type-renames.md)): custom fields go under `custom`
+instead of at the top level, and members are `{ user_id }` objects.
 
 ```ts
 // v9
 client.channel(type, id);
-client.channel(type, id, { custom: { name } });
+client.channel(type, id, { name });
 client.channel(type, { members: ['ann', 'bob'] });
 client.channel(type, undefined, { members: ['ann', 'bob'] });
+
+// v10
+client.channel(type, id);
+client.channel(type, id, { custom: { name } });
+client.channel(type, { members: [{ user_id: 'ann' }, { user_id: 'bob' }] });
+client.channel(type, undefined, { members: [{ user_id: 'ann' }, { user_id: 'bob' }] });
+
+// v10, the same channels through ensure()
+client.channelManager.ensure({ type, id });
+client.channelManager.ensure({ type, id, data: { custom: { name } } });
+client.channelManager.ensure({
+  type,
+  data: { members: [{ user_id: 'ann' }, { user_id: 'bob' }] },
+});
+client.channelManager.ensure({
+  type,
+  data: { members: [{ user_id: 'ann' }, { user_id: 'bob' }] },
+});
+```
+
+`client.getChannelById()` and `client.getChannelByMembers()` are removed; use either form above.
+
+```ts
+// v9
 client.getChannelById(type, id, custom);
 
 // v10
-client.channelManager.ensure({ type, id });
-client.channelManager.ensure({ type, id, data: { custom: { name } } });
-client.channelManager.ensure({ type, data: { members: ['ann', 'bob'] } });
-client.channelManager.ensure({ type, data: { members: ['ann', 'bob'] } });
-client.channelManager.ensure({ type, id, data: custom });
+client.channel(type, id, custom);
 ```
 
-Mocks and spies move with it: `vi.spyOn(client, 'channel')` becomes
-`vi.spyOn(client.channelManager, 'ensure')`, called with `{ type, id, data }`.
+The SDK itself gets channels through `client.channelManager.ensure()`, so a spy on `client.channel`
+sees only your own calls; spy on `client.channelManager.ensure` (called with `{ type, id, data }`) to
+see every channel the client gets.
 
 #### `client.setAnonymousUser` alias
 

@@ -499,7 +499,10 @@ export class ChannelManager extends WithSubscriptions {
    *
    * ```ts
    * const general = client.channelManager.ensure({ type: 'messaging', id: 'general' });
-   * const dm = client.channelManager.ensure({ type: 'messaging', data: { members: ['ann', 'bob'] } });
+   * const dm = client.channelManager.ensure({
+   *   type: 'messaging',
+   *   data: { members: [{ user_id: 'ann' }, { user_id: 'bob' }] },
+   * });
    * await dm.watch();
    * ```
    *

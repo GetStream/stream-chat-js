@@ -585,3 +585,47 @@ describe('store removals reach the lists', () => {
     expect(channel.messagePaginator.getItem('m1')).toBeUndefined();
   });
 });
+
+describe('client.channel()', () => {
+  let client: StreamChat;
+
+  beforeEach(() => {
+    client = getClientWithUser({ id: 'ann' });
+  });
+
+  it('returns the instance channelManager.ensure() returns for a type and id', () => {
+    const channel = client.channel('messaging', 'general', {
+      custom: { name: 'General' },
+    });
+
+    expect(client.channelManager.ensure({ type: 'messaging', id: 'general' })).toBe(
+      channel,
+    );
+    expect(client.channel('messaging', 'general')).toBe(channel);
+    expect(channel.data?.custom?.name).toBe('General');
+  });
+
+  it('builds a distinct channel from members passed in place of the id', () => {
+    const channel = client.channel('messaging', { members: ['ann', 'bob'] });
+
+    expect(channel.id).toBeUndefined();
+    expect(client.channelManager.get('messaging:!members-ann,bob')).toBe(channel);
+    expect(client.channel('messaging', undefined, { members: ['bob', 'ann'] })).toBe(
+      channel,
+    );
+  });
+
+  it('builds an unstored channel for no id and no members, as ensure() does', () => {
+    const channel = client.channel('messaging', null, { custom: { name: 'Draft' } });
+
+    expect(channel.id).toBeUndefined();
+    expect(client.channelManager.values()).not.toContain(channel);
+    expect(client.channel('messaging', '', {})).not.toBe(channel);
+  });
+
+  it('validates its input like ensure()', () => {
+    expect(() => client.channel('messa:ging', 'general')).toThrow(
+      "Invalid channel group messa:ging, can't contain the : character",
+    );
+  });
+});

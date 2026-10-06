@@ -64,7 +64,9 @@
   list, not opened with `activate()`, not a thread's or a cached composer's) is torn down and dropped
   when the lists reload or the connection recovers, where v9 kept every channel until logout.
   `client.hydrateActiveChannels()` is renamed to `client.hydrateChannels()`. `client.channel()` is
-  replaced by `client.channelManager.ensure({ type, id, data })`. See below.
+  still available, as a shorthand for `client.channelManager.ensure({ type, id, data })`; its `data`
+  is now typed `ChannelInput`, so custom fields go under `custom` and members are `{ user_id }`
+  objects. See below.
 - `Role` type renamed to `RoleName`.
 - Assorted small tightenings: `TokenManager.setTokenOrProvider` user param narrowed, `revokeTokens(before)` no longer accepts `string`.
 
@@ -981,7 +983,7 @@ was deleted, when the user was removed from it, or on `disconnectUser()`. Every 
 stayed in memory with its subscriptions and message lists.
 
 `client.channelManager` now owns a channel store with one `Channel` instance per cid.
-`client.channelManager.ensure()`, which replaces `client.channel()`, and every query and event go
+`client.channelManager.ensure()` (and `client.channel()`, its shorthand) and every query and event go
 through it, so they all return the same instance:
 
 ```ts
@@ -1485,4 +1487,4 @@ For each source file that touches the SDK:
 22. **Polyfill `atob`** if your React Native / Hermes target lacks it (`typeof atob === 'undefined'`); `UserFromToken` depends on it during `connectUser`.
 23. **Call `liveLocationManager.dispose()`** when you are finished with a manager you constructed, alongside whatever `unregisterSubscriptions()` you already call. Nothing will fail to compile: `dispose()` is the _configuration_ teardown, and until it runs the client's configuration registry holds a handle to the manager — a long-lived client and many short-lived managers will accumulate them. `unregisterSubscriptions()` is unchanged and stays ref-counted, so it deliberately no longer releases configuration; it never should have, since with two callers sharing a manager the first to leave stopped a still-live instance from tracking `client.config`. `SearchController` already worked this way.
 24. **Put `undefined` in the request slot before `requestOptions` on methods with no request.** `client.getAppSettings({ signal })` becomes `client.getAppSettings(undefined, { signal })`, `client.getMessage({ id }, opts)` becomes `client.getMessage({ id }, undefined, opts)`, and `channel.pin(opts)` / `archive` / `deleteReaction` / `removeVote` follow the same pattern. `tsc` flags every call site that still has the old form. Calls without `requestOptions` are unchanged. See [`requestOptions`](./v9-to-v10-migration-guide-methods.md#global-renames-applied-everywhere).
-25. **Replace `client.activeChannels`** with `client.channelManager.get(cid)` / `client.channelManager.values()`, `client.hydrateActiveChannels()` with `client.hydrateChannels()`, and `client.channel(type, id, data)` with `client.channelManager.ensure({ type, id, data })`. Call `activate()` on any channel your code keeps a reference to without watching or opening it: a channel that is neither watched nor used is torn down when the lists reload or the connection recovers. Watch a channel search result when it is opened: search no longer watches its results.
+25. **Replace `client.activeChannels`** with `client.channelManager.get(cid)` / `client.channelManager.values()`, `client.hydrateActiveChannels()` with `client.hydrateChannels()`, and `client.getChannelById()` / `client.getChannelByMembers()` with `client.channel()` or `client.channelManager.ensure({ type, id, data })`. Call `activate()` on any channel your code keeps a reference to without watching or opening it: a channel that is neither watched nor used is torn down when the lists reload or the connection recovers. Watch a channel search result when it is opened: search no longer watches its results.
