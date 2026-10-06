@@ -48,4 +48,16 @@ declare module 'stream-chat' {
     // _default/04-messages/04-send_reaction.md
     customField?: string;
   }
+
+  interface CustomPollData {
+    // _default/05-features/07-polls_api.md
+    foo?: string;
+    custom_property?: string;
+  }
+
+  interface CustomPollOptionData {
+    // _default/05-features/07-polls_api.md
+    foo?: string;
+    my_custom_property?: string;
+  }
 }

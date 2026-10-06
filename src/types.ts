@@ -1061,6 +1061,7 @@ export type UserResponse = CustomUserData & {
   deactivated_at?: string;
   deleted_at?: string;
   image?: string;
+  invisible?: boolean;
   language?: TranslationLanguages | '';
   last_active?: string;
   name?: string;

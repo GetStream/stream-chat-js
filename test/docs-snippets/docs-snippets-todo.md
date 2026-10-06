@@ -66,11 +66,11 @@ App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy of
 | Status | Page                                                                   | JS  | Unlabelled | Client test | Blockers                    |
 | ------ | ---------------------------------------------------------------------- | --- | ---------- | ----------- | --------------------------- |
 | [x]    | `chat/_default/05-features/02-events.md`                               | 7   | 0          | yes         | ◐ 🔗 webhook copy of events |
-| [ ]    | `chat/_default/05-features/03-unread.md`                               | 11  | 0          | yes         |                             |
-| [ ]    | `chat/_default/05-features/04-typing_indicators.md`                    | 2   | 0          | yes         |                             |
-| [ ]    | `chat/_default/05-features/05-presence_format.md`                      | 3   | 0          | yes         |                             |
-| [ ]    | `chat/_default/05-features/07-polls_api.md`                            | 17  | 0          | yes         |                             |
-| [ ]    | `chat/_default/05-features/08-location_sharing.md`                     | 7   | 0          | yes         |                             |
+| [x]    | `chat/_default/05-features/03-unread.md`                               | 11  | 0          | yes         |                             |
+| [x]    | `chat/_default/05-features/04-typing_indicators.md`                    | 2   | 0          | yes         |                             |
+| [x]    | `chat/_default/05-features/05-presence_format.md`                      | 3   | 0          | yes         |                             |
+| [x]    | `chat/_default/05-features/07-polls_api.md`                            | 17  | 0          | yes         |                             |
+| [~]    | `chat/_default/05-features/08-location_sharing.md`                     | 7   | 0          | yes         | ◐ ⛔ location sharing off   |
 | [ ]    | `chat/_default/05-features/09-translation.md`                          | 4   | 0          | yes         |                             |
 | [ ]    | `chat/_default/05-features/10-advanced/11-slow_mode_and_throttling.md` | 2   | 0          | yes         |                             |
 | [ ]    | `chat/_default/05-features/10-advanced/12-drafts.md`                   | 6   | 0          | yes         |                             |
@@ -104,6 +104,12 @@ App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy of
 - **Evidence**: Delivery is only observable via webhook or push.
 - **To unblock**: Not needed: verify the SDK calls only.
 
+### `chat/_default/05-features/08-location_sharing.md` (◐ ⛔ Blocked)
+
+- **Affected**: static location, live location (start/update/stop, `client.updateLocation`) and `LiveLocationManager` snippets. Events snippet runs.
+- **Evidence**: `SendMessage` with `shared_location`, `UpdateLiveLocation`, `GetUserLiveLocations` fail with 403 code 17 "location sharing is not enabled for this app, please contact support to enable it", server-side too, with `shared_locations: true` on a channel type or in `config_overrides`.
+- **To unblock**: Ask support to enable location sharing on the app, then un-skip the tests (assertions are already written).
+
 ### `chat/_default/05-features/02-events.md` (◐ 🔗 Requires webhook to test)
 
 - **Affected**: The webhook copy of server-sent events (L858). The events themselves are verified over WebSocket.
@@ -117,6 +123,7 @@ App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy of
 ## Unblock checklist
 
 - Webhook-dependent parts (🔗) are intentionally not verified by this project.
+- [ ] Location sharing enabled on the app (`05-features/08-location_sharing`).
 
 ## Setup notes (not blockers)
 
@@ -131,7 +138,6 @@ App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy of
 - **04-messages/10-message_receipts**: Delivery receipts work on this app (probe: `last_delivered_at` set after `markChannelsDelivered`), despite the "contact support" note.
 - **05-features/09-translation**: `translateMessage` works (probe). `auto_translation_enabled` app setting: toggle and restore.
 - **05-features/10-advanced/11-slow_mode_and_throttling**: Slow mode cooldown is 30s in the snippet: use a short cooldown in assertions.
-- **05-features/08-location_sharing**: Enabling `shared_locations` on `messaging`: toggle and restore, or use a test channel type. The LiveLocationManager snippet needs stubbed device functions.
 - **12-best_practices/02-moderation**: Review queue works (probe OK). Many snippets change `messaging` grants or the upload config: restore them.
 - **All pages that create/update channel types**: Wait 30s (`waitForChannelTypePropagation()`) after `createChannelType` / `updateChannelType` before using the type.
 
@@ -165,6 +171,7 @@ Found while testing the v9 snippets. Not fixed: leave v9 as is.
 - **`ReminderManager`** (`04-messages/09-message_reminders`): paginator results only reach `client.reminders.state` after `client.reminders.registerSubscriptions()`, which the docs never call; `client.reminders.reminders` stays empty. By design?
 - **Search `previous` cursor** (`04-messages/06-search`, backend): `next: page2.previous` returns page 1's messages in reverse order (the cursor flips every sort direction, results aren't flipped back). Backend bug, or document it.
 - **Reminder pagination** (`04-messages/09-message_reminders`, backend): with the default sort and a page boundary on a `remind_at: null` reminder, the `next` cursor returned an empty page although more reminders existed.
+- **`PollOptionResponse` custom data** (`05-features/07-polls_api`, `src/types.ts`): extends `CustomPollData` instead of `CustomPollOptionData`, so custom option fields aren't typed on option responses (or in `PartialPollOptionUpdate.set`). Fixing it is a breaking type change for apps that put option fields on `CustomPollData`: do it in v10.
 
 ## Notes
 
