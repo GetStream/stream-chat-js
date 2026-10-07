@@ -594,7 +594,9 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     if (!this.client.offlineDb) return;
 
     this.cacheCidsForQuery({
-      cids: (this.items ?? []).map((channel) => channel.cid),
+      cids: (this.items ?? [])
+        .filter((channel) => !channel.isProvisional)
+        .map((channel) => channel.cid),
       request: this.loadedQueryRequest,
     });
   }

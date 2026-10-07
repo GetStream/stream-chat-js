@@ -552,6 +552,33 @@ describe('EntityStore', () => {
     });
   });
 
+  describe('detach', () => {
+    it('removes the entry and tells its holders, without releasing the entity', () => {
+      const onRelease = vi.fn();
+      store = new EntityStore<LocalMessage>({ getEntityId, onRelease });
+      const a = spySubscriber();
+      const onEntityRemoved = vi.fn();
+      const m = msg({ id: 'm1' });
+      store.upsert(m);
+      store.link('m1', { ...a, onEntityRemoved });
+
+      store.detach('m1');
+
+      expect(store.has('m1')).toBe(false);
+      expect(onEntityRemoved).toHaveBeenCalledWith('m1', m);
+      expect(onRelease).not.toHaveBeenCalled();
+    });
+
+    it('does nothing for an ID that is not stored', () => {
+      const onRelease = vi.fn();
+      store = new EntityStore<LocalMessage>({ getEntityId, onRelease });
+
+      store.detach('ghost');
+
+      expect(onRelease).not.toHaveBeenCalled();
+    });
+  });
+
   describe('onEntityRemoved', () => {
     const removalSubscriber = (
       onEntityRemoved: (id: string, entity: unknown) => void,

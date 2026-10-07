@@ -16,6 +16,7 @@ import {
   channelHasReadEvents,
   formatMessage,
   generateChannelTempCid,
+  getMemberUserId,
   invokeEventListener,
   logChatPromiseExecution,
   sanitizeOutgoingAttachments,
@@ -295,7 +296,11 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     this._client = client;
     // this._data is used for the requests...
     this._data = { ...data };
-    this.cid = `${type}:${id}`;
+    // A channel created from members has no id until the server answers; until then its cid is the
+    // temporary one built from the members, the key it is stored under (`ensure({ members })`).
+    this.cid =
+      (!id && generateChannelTempCid(type, (data.members ?? []).map(getMemberUserId))) ||
+      `${type}:${id}`;
     this.listeners = new Map();
     // perhaps the state variable should be private
     this.state = new ChannelState(this);
@@ -684,6 +689,7 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     request?: { payload?: Partial<QueryMembersPayload> },
     requestOptions?: StreamRequestOptions,
   ) {
+    this._checkHasId();
     const payload = {
       type: this.type,
       // TODO: these should be probably optional in the OAPI spec
@@ -881,6 +887,7 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     payload: UpdateLiveLocationRequest,
     requestOptions?: StreamRequestOptions,
   ) {
+    this._checkHasId();
     // Picked rather than spread: callers hand over a whole shared location (`created_by_device_id`,
     // `channel_cid`, timestamps, …), and the request is sent as given.
     const { latitude, longitude, message_id } = payload;
@@ -1202,12 +1209,13 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     this.state.partialNext({ muteStatus: next });
   }
 
-  sendAction(
+  async sendAction(
     messageId: string,
     formData: Record<string, string>,
     requestOptions?: StreamRequestOptions,
   ) {
-    return this.getClient().runMessageAction(
+    this._checkHasId();
+    return await this.getClient().runMessageAction(
       { id: messageId },
       { form_data: formData },
       requestOptions,
@@ -1372,6 +1380,8 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   }
 
   _isTypingIndicatorsEnabled(): boolean {
+    // nobody to tell about a channel the server hasn't assigned an id yet
+    if (this.isProvisional) return false;
     // The resolved value, not the raw server flag: it already ANDs the channel type's `typing_events`
     // with what the integrator registered, so a client-side `typingEvents.enabled: false` is honoured
     // too. The other two axes are runtime facts no configuration can express.
@@ -1417,8 +1427,8 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   }
 
   /**
-   * A vague indication of whether the channel exists on the chat backend — `true` once
-   * `create()`/`query()`/`watch()` has run. Store-backed and reactive: subscribe via
+   * Whether a live server response was applied to this instance since it was created — see
+   * {@link ChannelLifecycleState.initialized}. Store-backed and reactive: subscribe via
    * `useStateStore(channel.state, (s) => ({ initialized: s.initialized }))`.
    */
   get initialized() {
@@ -1427,6 +1437,27 @@ export class Channel extends WithMessageOperations(ChannelApi) {
 
   set initialized(initialized: boolean) {
     this.state.partialNext({ initialized });
+  }
+
+  /**
+   * Whether the channel has no id yet: it was built from members, and the server assigns its id when
+   * its query is answered. Until then no request but that query can be sent for it, and its cid is
+   * the temporary one built from the members. A channel with an id is never provisional, whether or
+   * not the server has it: requests for it go to the server, which answers for it.
+   *
+   * Not reactive, as `id` is not kept in `channel.state`. To react to it, subscribe to
+   * {@link Channel.initialized}: the response that sets `id` sets `initialized` to `true` too.
+   */
+  get isProvisional() {
+    return !this.id;
+  }
+
+  /**
+   * The stored instance that replaced this one, if any — see
+   * {@link ChannelLifecycleState.supersededBy}. Store-backed and reactive.
+   */
+  get supersededBy() {
+    return this.state.getLatestValue().supersededBy;
   }
 
   /**
@@ -1544,7 +1575,9 @@ export class Channel extends WithMessageOperations(ChannelApi) {
    * hydration does not re-seed its message list (its own `channel.reload()` owns that window).
    *
    * An active channel also stays in the channel store. Once the last consumer releases it, it is
-   * kept only while something else uses it (a watch, a channel list, a claim).
+   * kept only while something else uses it (a watch, a channel list, a claim). A superseded channel
+   * (see {@link ChannelLifecycleState.supersededBy}) is disconnected ({@link Channel._disconnect})
+   * when its last consumer releases it.
    */
   activate = (): (() => void) => {
     this._activeRefCount += 1;
@@ -1559,6 +1592,9 @@ export class Channel extends WithMessageOperations(ChannelApi) {
       this._activeRefCount -= 1;
       if (this._activeRefCount === 0) {
         this.state.partialNext({ active: false });
+        if (this.supersededBy) {
+          this._client.channelManager.releaseSupersededChannel(this);
+        }
       }
     };
   };
@@ -1663,7 +1699,6 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     // `watchStatus = Watching` is truthful by construction — while a call asking for neither goes out
     // with no socket at all.
     const state = await this.query(combined, 'latest', requestOptions);
-    this.initialized = true;
     this.data = state.channel;
 
     // The message paginator is seeded synchronously inside query() (before read-state hydration),
@@ -1865,6 +1900,49 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   };
 
   /**
+   * Stores this channel, created without an id, under the cid the server gave it. It is stored under
+   * `this.cid` until then: the temporary cid built from its members ({@link generateChannelTempCid}),
+   * or nowhere for a channel with neither id nor members. The entry moves to the server's cid. When
+   * another instance already holds that cid (stored by an event or a list while this one was in
+   * flight), that instance stays the one stored, since something may be using it, and takes over
+   * from this one ({@link ChannelManager.supersedeChannel}), which also drops this one's entry.
+   */
+  private storeUnderServerCid(
+    response: ChannelStateResponseFields,
+    { watch }: { watch?: boolean },
+  ) {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const serverCid = response.channel!.cid;
+    const { channelManager } = this.getClient();
+    const storedUnder = this.cid;
+    this.cid = serverCid;
+    const isStoredUnderOldCid =
+      storedUnder !== serverCid && channelManager.get(storedUnder) === this;
+    const stored = channelManager.get(serverCid);
+
+    if (!stored) {
+      if (
+        !isStoredUnderOldCid ||
+        !channelManager.changeChannelId(storedUnder, serverCid)
+      ) {
+        channelManager.getOrCreateChannel(serverCid, () => this);
+      }
+      return;
+    }
+
+    if (stored === this) return;
+    logger
+      .withExtraTags('query', serverCid)
+      .warn(
+        'Another instance of this channel is stored and takes over from this one (see channel.supersededBy).',
+      );
+    channelManager.supersedeChannel(this, stored, response, {
+      storedUnder: isStoredUnderOldCid ? storedUnder : undefined,
+      watch,
+    });
+  }
+
+  /**
    * Queries the API to load messages, members, or other channel fields.
    *
    * @param options - The query options (optional, defaults to `{}`).
@@ -1948,40 +2026,10 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const channel = state.channel!;
 
-    // Set when another instance already holds the real cid; this one takes its place once its own
-    // data is set below, under the key it is stored under until then.
-    let replaceStoredInstance: { storedUnderCid?: string } | undefined;
-
     // update the channel id if it was missing
     if (!this.id) {
       this.id = channel.id;
-      this.cid = channel.cid;
-      // set the channel as active...
-
-      const tempChannelCid = generateChannelTempCid(
-        this.type,
-        state.members.map((member) => member.user_id || member.user?.id || ''),
-      );
-
-      // `client.channelManager.ensure({ type, data: { members } })` stored this channel under the
-      // temporary cid; the same instance moves to the real one. Another instance can already hold
-      // the real cid: `ensure()` missed it because its members weren't loaded, or it was stored by an
-      // event or a list query while this one was in flight. This instance replaces it, because its
-      // caller is using it right now. A channel built with neither id nor members is stored only now.
-      const { channelManager } = this.getClient();
-      const storedUnderTempCid =
-        !!tempChannelCid && channelManager.get(tempChannelCid) === this;
-      const stored = channelManager.get(this.cid);
-      if (stored && stored !== this) {
-        replaceStoredInstance = {
-          storedUnderCid: storedUnderTempCid ? tempChannelCid : undefined,
-        };
-      } else if (
-        !storedUnderTempCid ||
-        !channelManager.changeChannelId(tempChannelCid, this.cid)
-      ) {
-        channelManager.getOrCreateChannel(this.cid, () => this);
-      }
+      this.storeUnderServerCid(state, { watch: queryPayload.watch });
     }
 
     this.getClient()._addChannelConfig(channel);
@@ -2045,16 +2093,9 @@ export class Channel extends WithMessageOperations(ChannelApi) {
         .sort()
         .join();
     this.data = channel;
-    this.offlineMode = false;
-
-    // Swapped in only now that this instance's data is set, in one step, so each list showing the
-    // replaced instance publishes once, with this one in its place.
-    if (replaceStoredInstance) {
-      this.getClient().channelManager.replaceChannel(
-        this,
-        replaceStoredInstance.storedUnderCid,
-      );
-    }
+    // A live response is applied, in one update before the events below, which the offline database
+    // handles by reading it.
+    this.state.partialNext({ initialized: true, offlineMode: false });
 
     if (areCapabilitiesChanged) {
       this.getClient().dispatchEvent({
@@ -2153,10 +2194,12 @@ export class Channel extends WithMessageOperations(ChannelApi) {
    * @returns The poll vote response.
    */
   async vote(...args: Parameters<ChatApi['castPollVote']>) {
+    this._checkHasId();
     return await this.getClient().castPollVote(...args);
   }
 
   async removeVote(...args: Parameters<ChatApi['deletePollVote']>) {
+    this._checkHasId();
     return await this.getClient().deletePollVote(...args);
   }
 

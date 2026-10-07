@@ -1,6 +1,6 @@
 import { EventHandlerPipeline } from './EventHandlerPipeline';
 import { WithSubscriptions } from './utils/WithSubscriptions';
-import type { ChannelInput, EventType } from './types';
+import type { ChannelInput, ChannelStateResponseFields, EventType } from './types';
 import type { ChannelPaginator } from './pagination';
 import type { StreamChat } from './client';
 import type { Unsubscribe } from '@stream-io/state-store';
@@ -16,7 +16,7 @@ import { filterConstrainsField } from './pagination/filterCompiler';
 import { getChannel } from './pagination/utility.queryChannel';
 import { Channel } from './channel';
 import { ChannelWatchStatus } from './channel_state';
-import { generateChannelTempCid, runDetached } from './utils';
+import { generateChannelTempId, getMemberUserId, runDetached } from './utils';
 import { EntityStore } from './entityStore/EntityStore';
 
 export type ChannelManagerEventHandlerContext = {
@@ -413,6 +413,12 @@ export class ChannelManager extends WithSubscriptions {
   >();
   protected ownershipResolver?: PaginatorOwnershipResolver;
   /**
+   * Instances replaced by a stored one ({@link ChannelManager.supersedeChannel}). Not in the store, so
+   * nothing else disconnects them ({@link Channel._disconnect}): each is disconnected and dropped from
+   * here when its last activation ends, or with the rest on {@link ChannelManager.clearChannels}.
+   */
+  private readonly supersededChannels = new Set<Channel>();
+  /**
    * The `filterQueryResults` each registered paginator had before this manager wrapped it.
    *
    * A server query bypasses the manager — the paginator fetches and ingests a page on its own, and
@@ -485,14 +491,19 @@ export class ChannelManager extends WithSubscriptions {
 
   /**
    * Returns the channel for `type` and `id`, creating it if it isn't stored yet. Use this to get a
-   * channel instead of calling `new Channel()`; there is one instance per cid. A channel that was
-   * torn down is replaced by a fresh one.
+   * channel instead of calling `new Channel()`; there is one instance per cid. A stored channel
+   * already disconnected (`pendingDisposal`) is replaced by a fresh one.
    *
-   * Leave out `id` and pass `data.members` for a distinct channel between those members. It is stored
-   * under a temporary cid built from the member IDs until `watch()`, `query()` or `create()` returns
-   * the real one; a stored distinct channel with the same members is returned instead. If another
-   * instance holds the real cid by then (its members weren't loaded, or an event stored it meanwhile),
-   * the returned one replaces it, and the replaced one is torn down.
+   * Leave out `id` and pass `data.members` for a distinct channel between those members (one channel
+   * per set of members). It is stored under a temporary cid built from the member IDs until
+   * `watch()`, `query()` or `create()` returns the real one; a stored distinct channel with the same
+   * loaded members is returned instead. If another instance holds the real cid by then (its members
+   * weren't loaded, or an event stored it meanwhile), that instance stays stored and this one is
+   * left unstored. A group with the same members as another needs its own `id` instead.
+   *
+   * A channel created from members is {@link Channel.isProvisional} until its query is answered: it
+   * has no id yet, so nothing but that query can be sent for it. A channel with an id is not, even one
+   * whose id the app generated and the server doesn't have yet: requests for it go to the server.
    *
    * Getting a channel this way doesn't keep it: one that is neither watched nor used is released by
    * the next {@link ChannelManager.releaseUnusedChannels}.
@@ -556,20 +567,16 @@ export class ChannelManager extends WithSubscriptions {
   }
 
   private ensureByMembers(type: string, data: ChannelInput): Channel {
-    // `Channel.query` recomputes this temporary cid to move the channel to its real cid once the
-    // server assigns one, so both must build it the same way. A member is a user ID, `{ user_id }`
-    // or `{ user: { id } }`.
-    const memberIds = (data.members ?? []).map((member) =>
-      typeof member === 'string' ? member : member.user_id || member.user?.id || '',
-    );
-    const membersStr = [...memberIds].sort().join(',');
-    const tempCid = generateChannelTempCid(type, memberIds);
-    if (!tempCid) {
+    // the id `Channel` gives itself until the server answers, from the same members
+    const tempId = generateChannelTempId((data.members ?? []).map(getMemberUserId));
+    if (!tempId) {
       throw Error('Please specify atleast one member when creating unique conversation');
     }
+    const tempCid = `${type}:${tempId}`;
 
     // Stored under the temporary cid until the server returns the real one, then under the real
-    // cid, whose id for a distinct channel starts with `!members-`.
+    // cid, whose id for a distinct channel starts with `!members-`. A loaded one with the same
+    // members is that conversation.
     if (this.get(tempCid)?.pendingDisposal) this.removeChannel(tempCid);
     if (!this.get(tempCid)) {
       const existing = this.values().find(
@@ -577,7 +584,7 @@ export class ChannelManager extends WithSubscriptions {
           !channel.pendingDisposal &&
           channel.type === type &&
           channel.id?.startsWith('!members-') &&
-          Object.keys(channel.state.members).sort().join(',') === membersStr,
+          generateChannelTempId(Object.keys(channel.state.members)) === tempId,
       );
       if (existing) return existing;
     }
@@ -603,8 +610,8 @@ export class ChannelManager extends WithSubscriptions {
   }
 
   /**
-   * Moves a channel from its temporary cid to the one the server assigned. Returns `false` when
-   * `oldCid` isn't stored or `newCid` already holds another channel.
+   * Moves a channel from its temporary cid to the one the server assigned (see `Channel.query`).
+   * Returns `false` when `oldCid` isn't stored or `newCid` already holds another channel.
    *
    * @internal
    */
@@ -613,21 +620,62 @@ export class ChannelManager extends WithSubscriptions {
   }
 
   /**
-   * Puts `channel` in place of the other instance stored under its cid, which is torn down.
-   * `storedUnderCid` is the key `channel` is stored under until now (its temporary cid), if any. The
-   * lists showing the replaced instance keep their entry and show `channel` in it, each with one
-   * update, so no list publishes a state without the conversation; `channel` is also routed to the
-   * lists it matches.
+   * `previous`, created without an id, was answered with a cid `successor` already holds (stored by an
+   * event or a channel list while `previous` waited). `successor` stays the one instance for the cid
+   * and takes over, without losing anything of its own:
+   *
+   * - the server's response, as a `queryChannels` result for a stored channel is applied: its data
+   *   and members, and its messages merged into the loaded ones (a local message, such as a failed
+   *   one, is never removed; an open channel's or a scrolled-back one's window isn't re-seeded);
+   * - `previous`'s local messages (sending or failed), added by id; a message `successor` already has
+   *   keeps `successor`'s copy;
+   * - `previous`'s composer, when `previous` is open and `successor` isn't: the user is typing in
+   *   `previous`, and nobody in `successor`. When both are open, neither composer is overwritten.
+   *
+   * `previous`'s own entry (`storedUnder`, its temporary cid) is dropped first, without disconnecting
+   * it: its query is still being applied to it and it may be on screen. It is marked superseded
+   * (`state.supersededBy`) so its holders switch over, and tracked here until it is disconnected
+   * ({@link ChannelManager.releaseSupersededChannel}), so the SDK never loses track of it.
    *
    * @internal
    */
-  replaceChannel(channel: Channel, storedUnderCid?: string) {
-    if (storedUnderCid && this.get(storedUnderCid) === channel) {
-      this.channelStore.changeId(storedUnderCid, channel.cid, { replace: true });
-    } else {
-      this.channelStore.replace(channel);
+  supersedeChannel(
+    previous: Channel,
+    successor: Channel,
+    response: ChannelStateResponseFields,
+    { storedUnder, watch }: { storedUnder?: string; watch?: boolean } = {},
+  ) {
+    if (storedUnder && this.get(storedUnder) === previous) {
+      this.channelStore.detach(storedUnder);
     }
-    this.ingestChannel(channel);
+    this.client.hydrateChannels([response], {}, { watch });
+    successor.messagePaginator.batch(
+      () => {
+        for (const message of previous.messagePaginator.items ?? []) {
+          if (message.status === 'received') continue;
+          if (successor.messagePaginator.getItem(message.id)) continue;
+          // composed in `previous`, it carries `previous`'s temporary cid
+          successor.messagePaginator.ingestItem({ ...message, cid: successor.cid });
+        }
+      },
+      { coalesce: true },
+    );
+    if (previous.active && !successor.active) {
+      previous.messageComposer.transferTo(successor.messageComposer);
+    }
+    previous.state.partialNext({ supersededBy: successor });
+    this.supersededChannels.add(previous);
+  }
+
+  /**
+   * Disconnects a superseded instance ({@link Channel._disconnect}) and stops tracking it, once its
+   * last activation ended.
+   *
+   * @internal
+   */
+  releaseSupersededChannel(channel: Channel) {
+    if (!this.supersededChannels.delete(channel)) return;
+    channel._disconnect();
   }
 
   /**
@@ -676,12 +724,15 @@ export class ChannelManager extends WithSubscriptions {
   }
 
   /**
-   * Removes and tears down every stored channel.
+   * Removes and disconnects ({@link Channel._disconnect}) every stored channel, and every superseded
+   * one.
    *
    * @internal
    */
   clearChannels() {
     this.channelStore.clear();
+    this.supersededChannels.forEach((channel) => channel._disconnect());
+    this.supersededChannels.clear();
   }
 
   /**

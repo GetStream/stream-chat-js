@@ -338,6 +338,19 @@ export class EntityStore<T> {
    * that `id` changed (it now resolves to `undefined`). Removing an ID that isn't stored does nothing.
    */
   remove(id: string): void {
+    this.dropEntry(id, { release: true });
+  }
+
+  /**
+   * Like {@link EntityStore.remove}, except the entity is not passed to `onRelease`: it left this
+   * entry but is still in use elsewhere, so whoever detaches it decides when it is released.
+   * Detaching an ID that isn't stored does nothing.
+   */
+  detach(id: string): void {
+    this.dropEntry(id, { release: false });
+  }
+
+  private dropEntry(id: string, { release }: { release: boolean }) {
     if (!this.byId.has(id)) return;
     const entity = this.byId.get(id) as T;
     const holders = this.subscribers.get(id);
@@ -346,7 +359,7 @@ export class EntityStore<T> {
     this.pendingFlushIds?.delete(id);
     if (holders) for (const holder of holders) holder.onEntityRemoved?.(id, entity);
     this.byId.delete(id);
-    this.onRelease?.(entity);
+    if (release) this.onRelease?.(entity);
     this.autoFlush();
   }
 

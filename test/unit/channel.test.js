@@ -3132,276 +3132,107 @@ describe('Ensure single channel per cid in the channel store', () => {
 		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
 	});
 
-	it('channel created using member list - case 1', async () => {
-		clientVish.channelManager.clearChannels();
-
-		// Mock channel.watch call.
-		const userVish = generateUser();
-		const userAmin = generateUser();
-		const memberVish = generateMember({ user: userVish });
-		const memberAmin = generateMember({ user: userAmin });
+	/** Mocks `watch()` answering with the channel the server creates for these members. */
+	const mockDistinctChannel = (users) => {
 		const mockedChannelResponse = generateChannel({
-			members: [memberVish, memberAmin],
+			members: users.map((user) => generateMember({ user })),
 		});
 		clientVish.api.sendRequest = () =>
 			Promise.resolve({
 				...getOrCreateChannelApi(mockedChannelResponse).response.data,
 				metadata: {},
 			});
+	};
+	const tempCidOf = (users) =>
+		`${channelType}:!members-${users
+			.map((user) => user.id)
+			.sort()
+			.join(',')}`;
 
-		// Lets start testing
+	it('channel created using member list moves to its real cid once watched', async () => {
+		clientVish.channelManager.clearChannels();
+		const userVish = generateUser();
+		const userAmin = generateUser();
+		mockDistinctChannel([userVish, userAmin]);
+		const tmpCid = tempCidOf([userVish, userAmin]);
+
 		const channelVish_copy1 = clientVish.channelManager.ensure({
 			type: 'messaging',
-			data: {
-				members: [userAmin.id, userVish.id],
-			},
+			data: { members: [userAmin.id, userVish.id] },
 		});
-
-		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
-
-		// the channel store should have tmpCid now.
-		expect(clientVish.channelManager.get(tmpCid)).to.not.be.undefined;
-		expect(clientVish.channelManager.get(tmpCid)).to.contain(channelVish_copy1);
+		expect(clientVish.channelManager.get(tmpCid)).to.equal(channelVish_copy1);
 
 		await channelVish_copy1.watch();
 
-		// tempCid should be replaced with actual cid at this point.
+		// the temporary cid is replaced by the real one
 		expect(clientVish.channelManager.get(tmpCid)).to.be.undefined;
-		expect(clientVish.channelManager.get(channelVish_copy1.cid)).to.not.be.undefined;
-		expect(clientVish.channelManager.get(channelVish_copy1.cid)).to.contain(
+		expect(clientVish.channelManager.get(channelVish_copy1.cid)).to.equal(
 			channelVish_copy1,
 		);
 
+		// found by its loaded members, so the temporary cid isn't stored again
 		const channelVish_copy2 = clientVish.channelManager.ensure({
 			type: 'messaging',
-			data: {
-				members: [userVish.id, userAmin.id],
-			},
+			data: { members: [userVish.id, userAmin.id] },
 		});
-
-		// Should not populate tmpCid again.
 		expect(clientVish.channelManager.get(tmpCid)).to.be.undefined;
-
 		await channelVish_copy2.watch();
-		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
+		expect(channelVish_copy2).to.equal(channelVish_copy1);
 	});
 
-	it('channel created using member list - case 2', async () => {
+	it('channel created using member list is one instance for the same members before it exists', async () => {
 		clientVish.channelManager.clearChannels();
-
 		const userVish = generateUser();
 		const userAmin = generateUser();
+		mockDistinctChannel([userVish, userAmin]);
 
-		const memberVish = generateMember({ user: userVish });
-		const memberAmin = generateMember({ user: userAmin });
-
-		// Case 1 =======================>
-		const mockedChannelResponse = generateChannel({
-			members: [memberVish, memberAmin],
-		});
-
-		// to mock the channel.watch call
-		clientVish.api.sendRequest = () =>
-			Promise.resolve({
-				...getOrCreateChannelApi(mockedChannelResponse).response.data,
-				metadata: {},
-			});
-
-		// Case 1 =======================>
 		const channelVish_copy1 = clientVish.channelManager.ensure({
 			type: 'messaging',
-			data: {
-				members: [userAmin.id, userVish.id],
-			},
+			data: { members: [userAmin.id, userVish.id] },
 		});
-
-		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
-
-		// the channel store should have tmpCid now.
-		expect(clientVish.channelManager.get(tmpCid)).to.not.be.undefined;
-		expect(clientVish.channelManager.get(tmpCid)).to.contain(channelVish_copy1);
-
 		const channelVish_copy2 = clientVish.channelManager.ensure({
 			type: 'messaging',
-			data: {
-				members: [userVish.id, userAmin.id],
-			},
+			data: { members: [userVish.id, userAmin.id] },
 		});
-
-		// the channel store still should have tmpCid now.
-		expect(clientVish.channelManager.get(tmpCid)).to.not.be.undefined;
-		expect(clientVish.channelManager.get(tmpCid)).to.contain(channelVish_copy2);
+		expect(channelVish_copy2).to.equal(channelVish_copy1);
 
 		await channelVish_copy1.watch();
 		await channelVish_copy2.watch();
 
-		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
-	});
-
-	it('channel created using member list - case 3', async () => {
-		clientVish.channelManager.clearChannels();
-
-		// Mock channel.watch call.
-		const userVish = generateUser();
-		const userAmin = generateUser();
-		const memberVish = generateMember({ user: userVish });
-		const memberAmin = generateMember({ user: userAmin });
-		const mockedChannelResponse = generateChannel({
-			members: [memberVish, memberAmin],
-		});
-		clientVish.api.sendRequest = () =>
-			Promise.resolve({
-				...getOrCreateChannelApi(mockedChannelResponse).response.data,
-				metadata: {},
-			});
-
-		// Lets start testing
-		const channelVish_copy1 = clientVish.channelManager.ensure({
-			type: 'messaging',
-			data: {
-				members: [userAmin.id, userVish.id],
-			},
-		});
-
-		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
-
-		// the channel store should have tmpCid now.
-		expect(clientVish.channelManager.get(tmpCid)).to.not.be.undefined;
-		expect(clientVish.channelManager.get(tmpCid)).to.contain(channelVish_copy1);
-
-		await channelVish_copy1.watch();
-
-		// tempCid should be replaced with actual cid at this point.
-		expect(clientVish.channelManager.get(tmpCid)).to.be.undefined;
-		expect(clientVish.channelManager.get(channelVish_copy1.cid)).to.not.be.undefined;
-		expect(clientVish.channelManager.get(channelVish_copy1.cid)).to.contain(
-			channelVish_copy1,
-		);
-
-		const channelVish_copy2 = clientVish.channelManager.ensure({
-			type: 'messaging',
-			data: {
-				members: [userVish.id, userAmin.id],
-			},
-		});
-
-		// Should not populate tmpCid again.
-		expect(clientVish.channelManager.get(tmpCid)).to.be.undefined;
-
-		await channelVish_copy2.watch();
-		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
-	});
-
-	it('channel created using member list - case 4', async () => {
-		clientVish.channelManager.clearChannels();
-
-		const userVish = generateUser();
-		const userAmin = generateUser();
-
-		const memberVish = generateMember({ user: userVish });
-		const memberAmin = generateMember({ user: userAmin });
-
-		// Case 1 =======================>
-		const mockedChannelResponse = generateChannel({
-			members: [memberVish, memberAmin],
-		});
-
-		// to mock the channel.watch call
-		clientVish.api.sendRequest = () =>
-			Promise.resolve({
-				...getOrCreateChannelApi(mockedChannelResponse).response.data,
-				metadata: {},
-			});
-
-		// Case 1 =======================>
-		const channelVish_copy1 = clientVish.channelManager.ensure({
-			type: 'messaging',
-			data: {
-				members: [userAmin.id, userVish.id],
-			},
-		});
-
-		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
-
-		// the channel store should have tmpCid now.
-		expect(clientVish.channelManager.get(tmpCid)).to.not.be.undefined;
-		expect(clientVish.channelManager.get(tmpCid)).to.contain(channelVish_copy1);
-
-		const channelVish_copy2 = clientVish.channelManager.ensure({
-			type: 'messaging',
-			data: {
-				members: [userVish.id, userAmin.id],
-			},
-		});
-
-		// the channel store still should have tmpCid now.
-		expect(clientVish.channelManager.get(tmpCid)).to.not.be.undefined;
-		expect(clientVish.channelManager.get(tmpCid)).to.contain(channelVish_copy2);
-
-		await channelVish_copy1.watch();
-		await channelVish_copy2.watch();
-
-		expect(channelVish_copy1).to.be.equal(channelVish_copy2);
+		expect(clientVish.channelManager.values()).to.deep.equal([channelVish_copy1]);
 	});
 
 	it('channel created using type only', async () => {
 		clientVish.channelManager.clearChannels();
-
-		const userVish = generateUser();
-		const userAmin = generateUser();
-
-		const memberVish = generateMember({ user: userVish });
-		const memberAmin = generateMember({ user: userAmin });
-
-		// Case 1 =======================>
-		const mockedChannelResponse = generateChannel({
-			members: [memberVish, memberAmin],
-		});
-
-		// to mock the channel.watch call
+		const mockedChannelResponse = generateChannel();
 		clientVish.api.sendRequest = () =>
 			Promise.resolve({
 				...getOrCreateChannelApi(mockedChannelResponse).response.data,
 				metadata: {},
 			});
 
-		// Case 1 =======================>
 		const channelVish_copy1 = clientVish.channelManager.ensure({
 			type: 'messaging',
-			data: {
-				custom: 'X',
-			},
+			data: { custom: 'X' },
 		});
-
-		const tmpCid = `${channelType}:!members-${[userVish.id, userAmin.id].sort().join(',')}`;
-
-		// the channel store should have tmpCid now.
-		expect(clientVish.channelManager.get(tmpCid)).to.be.undefined;
-
 		const channelVish_copy2 = clientVish.channelManager.ensure({
 			type: 'messaging',
-			data: {
-				custom: 'X',
-			},
+			data: { custom: 'X' },
 		});
-
-		// the channel store still should have tmpCid now.
-		expect(clientVish.channelManager.get(tmpCid)).to.be.undefined;
-
-		expect(clientVish.channelManager.get(channelVish_copy1.cid)).to.be.undefined;
-		expect(clientVish.channelManager.get(channelVish_copy2.cid)).to.be.undefined;
+		// neither an id nor members: stored only once the server answers
+		expect(channelVish_copy1).not.to.equal(channelVish_copy2);
+		expect(clientVish.channelManager.values()).to.deep.equal([]);
 
 		await channelVish_copy1.watch();
 		await channelVish_copy2.watch();
 
-		expect(channelVish_copy1).not.to.be.equal(channelVish_copy2);
-
-		// the instance whose query resolved last takes the cid over; the one it replaced is torn down
-		expect(channelVish_copy1.cid).to.be.equal(channelVish_copy2.cid);
-		expect(clientVish.channelManager.get(channelVish_copy2.cid)).to.be.equal(
-			channelVish_copy2,
+		// the first to get the cid keeps it; the second is left unstored, not torn down
+		expect(channelVish_copy1.cid).to.equal(channelVish_copy2.cid);
+		expect(clientVish.channelManager.get(channelVish_copy1.cid)).to.equal(
+			channelVish_copy1,
 		);
-		expect(channelVish_copy1.pendingDisposal).to.be.true;
+		expect(channelVish_copy1.pendingDisposal).to.be.false;
+		expect(channelVish_copy2.pendingDisposal).to.be.false;
 	});
 });
 
@@ -4790,5 +4621,137 @@ describe('Channel _disconnect called more than once', () => {
 
 		expect(listener).not.toHaveBeenCalled();
 		unsubscribe();
+	});
+});
+
+/** Thrown by the generated endpoints and `Channel._checkHasId` alike. */
+const NO_ID = /isn't yet created/;
+
+/**
+ * A provisional channel was created from members and has no id yet: the server assigns it when the
+ * channel's query is answered, and until then nothing but that query can be sent for it.
+ */
+describe('Channel provisional (created from members, without an id)', () => {
+	let client;
+	let sendRequest;
+
+	beforeEach(() => {
+		client = getClientWithUser({ id: 'ann' });
+		sendRequest = vi
+			.spyOn(client.api, 'sendRequest')
+			.mockRejectedValue(new Error('unexpected request'));
+	});
+
+	const fromMembers = () =>
+		client.channelManager.ensure({
+			data: { members: ['ann', 'bob'] },
+			type: 'messaging',
+		});
+
+	const answerQuery = () =>
+		vi.spyOn(client, 'getOrCreateDistinctChannel').mockResolvedValue({
+			...generateChannel({ channel: { id: '!members-xyz', type: 'messaging' } }),
+			duration: '',
+		});
+
+	it('is a channel built from members, without an id', () => {
+		expect(fromMembers().isProvisional).toBe(true);
+	});
+
+	it('is never a channel with an id, whether or not the server has it', () => {
+		const generated = client.channelManager.ensure({
+			data: { members: ['ann', 'bob'] },
+			id: 'app-generated-id',
+			type: 'messaging',
+		});
+
+		expect(generated.isProvisional).toBe(false);
+	});
+
+	describe('until its query is answered', () => {
+		it('sends no typing events and saves no drafts', async () => {
+			const channel = fromMembers();
+			channel.messageComposer.textComposer.setText('hello');
+
+			await channel.keystroke();
+			await channel.stopTyping();
+			await channel.messageComposer.createDraft();
+
+			expect(sendRequest).not.toHaveBeenCalled();
+		});
+
+		it('refuses any other request before it is sent', async () => {
+			const channel = fromMembers();
+
+			await expect(channel.sendEvent({ event: { type: 'custom' } })).rejects.toThrow(
+				NO_ID,
+			);
+			// a generated endpoint: it throws as it is called
+			expect(() => channel.truncate()).toThrow(NO_ID);
+			await expect(channel.queryMembers()).rejects.toThrow(NO_ID);
+			await expect(
+				channel.sendMessage({ message: { id: 'm1', text: 'hi' } }),
+			).rejects.toThrow(NO_ID);
+			expect(sendRequest).not.toHaveBeenCalled();
+		});
+
+		it('queues nothing for replay', async () => {
+			const db = new MockOfflineDB({ client });
+			client.setOfflineDBApi(db);
+			const queueTask = vi.spyOn(db, 'queueTask');
+			const channel = fromMembers();
+
+			await expect(
+				channel.sendMessage({ message: { id: 'm1', text: 'hi' } }),
+			).rejects.toThrow(NO_ID);
+
+			expect(queueTask).not.toHaveBeenCalled();
+		});
+
+		it('sends its query', async () => {
+			const channel = fromMembers();
+			const getOrCreate = answerQuery();
+
+			await channel.watch();
+
+			expect(getOrCreate).toHaveBeenCalledOnce();
+		});
+	});
+
+	describe('once its query is answered', () => {
+		it('has the id the server assigned, and is initialized', async () => {
+			const channel = fromMembers();
+			answerQuery();
+
+			await channel.query({});
+
+			expect(channel.id).toBe('!members-xyz');
+			expect(channel.isProvisional).toBe(false);
+			expect(channel.initialized).toBe(true);
+		});
+
+		it('sends its requests as usual', async () => {
+			const channel = fromMembers();
+			answerQuery();
+			await channel.query({});
+			const sendEvent = vi.spyOn(client, 'sendEvent').mockResolvedValue({});
+
+			await channel.sendEvent({ event: { type: 'custom' } });
+
+			expect(sendEvent).toHaveBeenCalledOnce();
+		});
+	});
+
+	it('does not stop requests for a channel with an id, loaded or not', async () => {
+		const generated = client.channelManager.ensure({
+			id: 'app-generated-id',
+			type: 'messaging',
+		});
+		const sendEvent = vi.spyOn(client, 'sendEvent').mockResolvedValue({});
+
+		await generated.sendEvent({ event: { type: 'custom' } });
+
+		expect(generated.initialized).toBe(false);
+		expect(sendEvent).toHaveBeenCalledOnce();
 	});
 });

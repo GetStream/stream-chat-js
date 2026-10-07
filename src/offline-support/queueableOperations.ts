@@ -173,6 +173,14 @@ export const queueOrRun = async <T extends QueueableType>({
   task: PendingTaskOf<T>;
 }): Promise<QueueableResult<T>> => {
   const { offlineDb } = client;
+  // A channel without an id has nothing a replayed request could address either, so its operations
+  // are never queued. The channel is the one passed, or the one the task names.
+  const taskChannel =
+    channel ??
+    (task.channelType && task.channelId
+      ? client.channelManager?.get(`${task.channelType}:${task.channelId}`)
+      : undefined);
+  taskChannel?._checkHasId();
 
   if (offlineDb && queue) {
     try {

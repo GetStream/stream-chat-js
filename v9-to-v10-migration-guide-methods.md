@@ -415,6 +415,26 @@ client.channelManager.ensure({
 });
 ```
 
+A channel created without an id (from members, as above) is **provisional** (`channel.isProvisional`)
+until its query is answered: it has no id yet, so no request but that query can be sent for it. Typing
+events and drafts are skipped; any other request throws before it is sent, and nothing is queued for
+offline replay. The query's response gives it the id the server assigned. A channel with an id is never
+provisional, even one whose id your app generated and the server doesn't have yet: its requests go to
+the server as in v9, loaded or not, and the server answers for them.
+
+A channel created from members is stored under a temporary cid built from the sorted member ids
+(`type:!members-ann,bob`), which is also its `channel.cid` until the server answers; it then moves to
+the real cid. If another instance was stored under the real cid meanwhile (by an event or a channel
+list), that instance stays the one for the cid and takes over: it gets the server's response, the new
+instance's local messages (its own local messages, such as failed ones, are kept), and, when the new
+instance is open and it isn't, the composer, including uploads still running. The new instance is
+marked `channel.supersededBy` (reactive) and is disposed of (`pendingDisposal` becomes `true`; see
+the [other changes guide](./v9-to-v10-migration-guide-other.md)) when its last `activate()` is
+released, or on `disconnectUser()`. stream-chat-react moves a ChatView slot to the replacing instance on its own;
+other UIs holding the new instance should switch to `channel.supersededBy`.
+
+`channel.initialized` is now set by any query, so `query()` and `create()` set it as `watch()` does.
+
 `client.getChannelById()` and `client.getChannelByMembers()` are removed; use either form above.
 
 ```ts

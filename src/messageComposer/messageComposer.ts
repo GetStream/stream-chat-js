@@ -1176,7 +1176,9 @@ export class MessageComposer extends WithSubscriptions {
   createDraft = async () => {
     // server-side drafts are not stored on message level but on thread and channel level
     // therefore we don't need to create a draft if the message is edited
-    if (this.editedMessage || !this.config.drafts.enabled) return;
+    // nor for a channel without an id yet: there is nothing to save it for (see `isProvisional`)
+    if (this.editedMessage || !this.config.drafts.enabled || this.channel.isProvisional)
+      return;
     const composition = await this.composeDraft();
     if (!composition) return;
     const { draft } = composition;
@@ -1202,7 +1204,13 @@ export class MessageComposer extends WithSubscriptions {
   };
 
   deleteDraft = async () => {
-    if (this.editedMessage || !this.config.drafts.enabled || !this.draftId) return;
+    if (
+      this.editedMessage ||
+      !this.config.drafts.enabled ||
+      !this.draftId ||
+      this.channel.isProvisional
+    )
+      return;
     this.state.partialNext({ draftId: null }); // todo: should we clear the whole state?
     const parentId = this.threadId ?? undefined;
     if (this.client.offlineDb) {

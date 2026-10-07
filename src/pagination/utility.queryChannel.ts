@@ -1,7 +1,6 @@
 import type { ChannelGetOrCreateRequest, ChannelStateResponse } from '../types';
 import type { StreamChat } from '../client';
 import type { Channel } from '../channel';
-import { generateChannelTempCid } from '../utils';
 
 /**
  * prevent from duplicate invocation of channel.watch()
@@ -58,12 +57,8 @@ export const getChannel = async ({
       },
     });
 
-  // need to keep as with call to channel.watch the id can be changed from undefined to an actual ID generated server-side
-  const originalCid = theChannel?.id
-    ? theChannel.cid
-    : members && members.length
-      ? generateChannelTempCid(theChannel.type, members)
-      : undefined;
+  // A channel created from members has its real cid before it has an id (see `Channel`).
+  const originalCid = theChannel?.id || members?.length ? theChannel.cid : undefined;
 
   if (!originalCid) {
     throw new Error(

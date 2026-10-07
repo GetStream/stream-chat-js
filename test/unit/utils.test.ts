@@ -13,6 +13,7 @@ import {
   channelTracksReadLocally,
   formatMessage,
   generateChannelTempCid,
+  generateChannelTempId,
   localMessageToNewMessagePayload,
   toUpdatedMessagePayload,
   uniqBy,
@@ -255,15 +256,27 @@ describe('findIndexInSortedArray', () => {
   });
 });
 
+describe('generateChannelTempId', () => {
+  it('joins the sorted member ids after !members-', () => {
+    expect(generateChannelTempId(['zack', 'alice', 'charlie'])).to.equal(
+      '!members-alice,charlie,zack',
+    );
+  });
+
+  it('skips empty ids', () => {
+    expect(generateChannelTempId(['bob', '', 'alice'])).to.equal('!members-alice,bob');
+  });
+
+  it('returns undefined when there are no members', () => {
+    expect(generateChannelTempId([])).to.be.undefined;
+    expect(generateChannelTempId([''])).to.be.undefined;
+  });
+});
+
 describe('generateChannelTempCid', () => {
   it('should return a valid temp cid for valid input', () => {
     const result = generateChannelTempCid('messaging', ['alice', 'bob']);
     expect(result).to.equal('messaging:!members-alice,bob');
-  });
-
-  it('should return undefined if members is null', () => {
-    const result = generateChannelTempCid('messaging', null as unknown as string[]);
-    expect(result).to.be.undefined;
   });
 
   it('should return undefined if members is an empty array', () => {
@@ -274,6 +287,13 @@ describe('generateChannelTempCid', () => {
   it('should correctly format cid for multiple members', () => {
     const result = generateChannelTempCid('team', ['zack', 'alice', 'charlie']);
     expect(result).to.equal('team:!members-alice,charlie,zack');
+  });
+
+  it('leaves out empty member ids', () => {
+    expect(generateChannelTempCid('messaging', ['bob', '', 'alice'])).to.equal(
+      'messaging:!members-alice,bob',
+    );
+    expect(generateChannelTempCid('messaging', [''])).to.be.undefined;
   });
 });
 

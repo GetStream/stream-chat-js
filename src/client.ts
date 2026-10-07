@@ -1634,8 +1634,12 @@ export class StreamChat extends ChatApi {
         id: channelState.channel.id,
       });
       c.data = channelState.channel;
-      c.offlineMode = offlineMode;
-      c.initialized = !offlineMode;
+      // A live result initializes the channel; one restored from the offline database doesn't.
+      c.state.partialNext(
+        offlineMode
+          ? { initialized: false, offlineMode: true }
+          : { initialized: true, offlineMode: false },
+      );
       // Same precedence `queryChannels` applies to the request: an explicit caller choice wins,
       // otherwise we watch only if there is a connection to watch on: `hydrateChannels` is
       // public, so a direct caller has no gated request behind it to imply a watch. Offline

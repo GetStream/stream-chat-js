@@ -43,87 +43,270 @@ describe('ChannelManager channel store', () => {
     expect(client.channelManager.values()).toEqual([channel]);
   });
 
-  it('keeps the instance of a channel created from members when it gets its real cid', async () => {
-    const channel = client.channelManager.ensure({
-      type: 'messaging',
-      data: { members: ['ann', 'bob'] },
-    });
-    expect(client.channelManager.get('messaging:!members-ann,bob')).toBe(channel);
+  describe('a channel created from members', () => {
+    const TEMP_CID = 'messaging:!members-ann,bob';
+    const respondWith = (id: string, memberIds = ['ann', 'bob']) =>
+      vi.spyOn(client, 'getOrCreateDistinctChannel').mockResolvedValue({
+        ...generateChannel({ channel: { id, type: 'messaging' } }),
+        members: memberIds.map(member),
+      } as unknown as ChannelStateResponseFields & { duration: string });
 
-    vi.spyOn(client, 'getOrCreateDistinctChannel').mockResolvedValue({
-      ...generateChannel({ channel: { id: '!members-xyz', type: 'messaging' } }),
-      members: [member('ann'), member('bob')],
-    } as unknown as ChannelStateResponseFields & { duration: string });
-    await channel.query({});
-
-    expect(channel.cid).toBe('messaging:!members-xyz');
-    expect(client.channelManager.get('messaging:!members-xyz')).toBe(channel);
-    expect(client.channelManager.get('messaging:!members-ann,bob')).toBeUndefined();
-    expect(client.channelManager.ensure({ type: 'messaging', id: '!members-xyz' })).toBe(
-      channel,
-    );
-    expect(
-      client.channelManager.ensure({
+    it('is stored under a temporary cid built from its members until the server answers', () => {
+      const channel = client.channelManager.ensure({
         type: 'messaging',
         data: { members: ['bob', 'ann'] },
-      }),
-    ).toBe(channel);
+      });
+
+      expect(channel.id).toBeUndefined();
+      expect(channel.cid).toBe(TEMP_CID);
+      expect(client.channelManager.get(TEMP_CID)).toBe(channel);
+      expect(
+        client.channelManager.ensure({
+          type: 'messaging',
+          data: { members: ['ann', 'bob'] },
+        }),
+      ).toBe(channel);
+    });
+
+    it('moves the same instance to the cid the server gives it', async () => {
+      const channel = client.channelManager.ensure({
+        type: 'messaging',
+        data: { members: ['ann', 'bob'] },
+      });
+      respondWith('!members-xyz');
+
+      await channel.query({});
+
+      expect(channel.cid).toBe('messaging:!members-xyz');
+      expect(client.channelManager.get('messaging:!members-xyz')).toBe(channel);
+      expect(client.channelManager.get(TEMP_CID)).toBeUndefined();
+      expect(client.channelManager.values()).toEqual([channel]);
+    });
+
+    it('moves from the key it is stored under even when the server lists other members', async () => {
+      // e.g. the distinct channel exists and carl was added to it since
+      const channel = client.channelManager.ensure({
+        type: 'messaging',
+        data: { members: ['ann', 'bob'] },
+      });
+      respondWith('!members-xyz', ['ann', 'bob', 'carl']);
+
+      await channel.query({});
+
+      expect(client.channelManager.get(TEMP_CID)).toBeUndefined();
+      expect(client.channelManager.values()).toEqual([channel]);
+    });
+
+    it('resolves to a stored distinct channel with the same loaded members', () => {
+      const stored = client.channelManager.ensure({
+        type: 'messaging',
+        id: '!members-xyz',
+      });
+      stored.state.members = { ann: member('ann'), bob: member('bob') } as never;
+
+      expect(
+        client.channelManager.ensure({
+          type: 'messaging',
+          data: { members: ['ann', 'bob'] },
+        }),
+      ).toBe(stored);
+    });
+
+    it('leaves another instance holding the cid the server answers in place, and is not stored', async () => {
+      // stored while the created channel's query was in flight, e.g. by an event
+      const stored = client.channelManager.ensure({
+        type: 'messaging',
+        id: '!members-xyz',
+      });
+      const paginator = new ChannelPaginator({ client, filters: { type: 'messaging' } });
+      paginator.setItems({
+        isFirstPage: true,
+        isLastPage: true,
+        valueOrFactory: [stored],
+      });
+      client.channelManager.setPaginators([paginator]);
+      const created = client.channelManager.ensure({
+        type: 'messaging',
+        data: { members: ['ann', 'bob'] },
+      });
+      respondWith('!members-xyz');
+
+      await created.query({});
+
+      expect(client.channelManager.get('messaging:!members-xyz')).toBe(stored);
+      expect(client.channelManager.get(TEMP_CID)).toBeUndefined();
+      expect(stored.pendingDisposal).toBe(false);
+      expect(paginator.items).toEqual([stored]);
+      expect(client.channelManager.values()).toEqual([stored]);
+      // not disconnected: its caller can keep using it
+      expect(created.pendingDisposal).toBe(false);
+    });
   });
 
-  it('replaces another instance that holds the real cid by the channel created from members', async () => {
-    // stored while the created channel's query was in flight, e.g. by an event
-    const stored = client.channelManager.ensure({
-      type: 'messaging',
-      id: '!members-xyz',
+  describe('when the server answers with a cid another instance holds', () => {
+    const REAL_CID = 'messaging:!members-xyz';
+    /** B: stored under the real cid meanwhile (e.g. by an event); A: created from members. */
+    const setup = () => {
+      const stored = client.channelManager.ensure({
+        type: 'messaging',
+        id: '!members-xyz',
+      });
+      const created = client.channelManager.ensure({
+        type: 'messaging',
+        data: { members: ['ann', 'bob'] },
+      });
+      return { created, stored };
+    };
+    const message = (id: string, overrides: Record<string, unknown> = {}) =>
+      formatMessage(
+        generateMsg({ cid: REAL_CID, id, ...overrides }) as Parameters<
+          typeof formatMessage
+        >[0],
+      );
+    const respond = (messages: ReturnType<typeof generateMsg>[] = []) =>
+      vi.spyOn(client, 'getOrCreateDistinctChannel').mockResolvedValue({
+        ...generateChannel({
+          channel: { custom: { name: 'Fresh' }, id: '!members-xyz', type: 'messaging' },
+          members: [member('ann'), member('bob')],
+          messages,
+        } as never),
+      } as unknown as ChannelStateResponseFields & { duration: string });
+
+    it('keeps the stored instance, which takes the server data, and marks the other superseded', async () => {
+      const { created, stored } = setup();
+      respond([generateMsg({ cid: REAL_CID, id: 'from-server' })]);
+
+      await created.query({}, 'latest');
+
+      expect(client.channelManager.values()).toEqual([stored]);
+      expect(stored.data?.custom?.name).toBe('Fresh');
+      expect(stored.messagePaginator.getItem('from-server')).toBeDefined();
+      expect(created.supersededBy).toBe(stored);
+      expect(created.pendingDisposal).toBe(false);
     });
-    const paginator = new ChannelPaginator({ client, filters: { type: 'messaging' } });
-    paginator.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: [stored] });
-    client.channelManager.setPaginators([paginator]);
-    const created = client.channelManager.ensure({
-      type: 'messaging',
-      data: { members: ['ann', 'bob'] },
+
+    it("keeps the stored instance's local messages", async () => {
+      const { created, stored } = setup();
+      stored.messagePaginator.ingestItem(message('failed', { status: 'failed' }));
+      respond([generateMsg({ cid: REAL_CID, id: 'from-server' })]);
+
+      await created.query({}, 'latest');
+
+      expect(stored.messagePaginator.getItem('failed')?.status).toBe('failed');
     });
-    vi.spyOn(client, 'getOrCreateDistinctChannel').mockResolvedValue({
-      ...generateChannel({ channel: { id: '!members-xyz', type: 'messaging' } }),
-      members: [member('ann'), member('bob')],
-    } as unknown as ChannelStateResponseFields & { duration: string });
 
-    await created.query({});
+    it("adds the other instance's local messages, keeping the stored copy of one both have", async () => {
+      const { created, stored } = setup();
+      // composed in A, under A's temporary cid
+      created.messagePaginator.ingestItem(
+        message('sending', { cid: created.cid, status: 'sending' }),
+      );
+      created.messagePaginator.ingestItem(
+        message('both', { cid: created.cid, status: 'failed', text: 'theirs' }),
+      );
+      stored.messagePaginator.ingestItem(
+        message('both', { status: 'failed', text: 'mine' }),
+      );
+      respond();
 
-    expect(client.channelManager.get('messaging:!members-xyz')).toBe(created);
-    expect(client.channelManager.get('messaging:!members-ann,bob')).toBeUndefined();
-    expect(stored.pendingDisposal).toBe(true);
-    expect(paginator.items).toEqual([created]);
-    expect(client.channelManager.values()).toEqual([created]);
-  });
+      await created.query({}, 'latest');
 
-  it('swaps the replaced instance in each list with one update, never dropping the conversation', async () => {
-    const stored = client.channelManager.ensure({
-      type: 'messaging',
-      id: '!members-xyz',
+      expect(stored.messagePaginator.getItem('sending')?.status).toBe('sending');
+      expect(stored.messagePaginator.getItem('both')?.text).toBe('mine');
     });
-    const paginator = new ChannelPaginator({ client, filters: { type: 'messaging' } });
-    paginator.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: [stored] });
-    client.channelManager.setPaginators([paginator]);
-    const created = client.channelManager.ensure({
-      type: 'messaging',
-      data: { members: ['ann', 'bob'] },
+
+    it('moves the composer from the open instance to the stored one that is not open', async () => {
+      const { created, stored } = setup();
+      created.activate();
+      created.messageComposer.textComposer.setText('hello');
+      respond();
+
+      await created.query({}, 'latest');
+
+      expect(stored.messageComposer.textComposer.text).toBe('hello');
+      expect(created.messageComposer.textComposer.text).toBe('');
     });
-    vi.spyOn(client, 'getOrCreateDistinctChannel').mockResolvedValue({
-      ...generateChannel({ channel: { id: '!members-xyz', type: 'messaging' } }),
-      members: [member('ann'), member('bob')],
-    } as unknown as ChannelStateResponseFields & { duration: string });
-    const published: (Channel[] | undefined)[] = [];
-    const unsubscribe = paginator.state.subscribeWithSelector(
-      ({ items }) => ({ items }),
-      ({ items }) => published.push(items),
-    );
-    published.length = 0; // the subscription reports the current value first
 
-    await created.query({});
-    unsubscribe();
+    it('hands an upload the other one started to the stored instance, still running', async () => {
+      const { created, stored } = setup();
+      created.activate();
+      let signal: AbortSignal | undefined;
+      let finish: (result: { file: string }) => void = () => undefined;
+      created.messageComposer.attachmentManager.setCustomUploadFn((_file, options) => {
+        signal = options?.abortSignal;
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      });
+      vi.spyOn(
+        created.messageComposer.attachmentManager,
+        'getUploadConfigCheck',
+      ).mockResolvedValue({ uploadBlocked: false });
+      const uploaded = created.messageComposer.attachmentManager.uploadFile(
+        new File(['x'], 'x.png', { type: 'image/png' }),
+      );
+      await vi.waitFor(() => expect(signal).toBeDefined());
+      respond();
 
-    expect(published).toEqual([[created]]);
+      await created.query({}, 'latest');
+
+      expect(signal?.aborted).toBe(false);
+      expect(created.messageComposer.attachmentManager.attachments).toEqual([]);
+      expect(stored.messageComposer.attachmentManager.attachments).toEqual([
+        expect.objectContaining({
+          localMetadata: expect.objectContaining({ uploadState: 'uploading' }),
+        }),
+      ]);
+
+      finish({ file: 'https://cdn/x.png' });
+      await uploaded;
+
+      await vi.waitFor(() =>
+        expect(stored.messageComposer.attachmentManager.attachments).toEqual([
+          expect.objectContaining({
+            image_url: 'https://cdn/x.png',
+            localMetadata: expect.objectContaining({ uploadState: 'finished' }),
+          }),
+        ]),
+      );
+      expect(created.messageComposer.attachmentManager.attachments).toEqual([]);
+    });
+
+    it('overwrites neither composer when both instances are open', async () => {
+      const { created, stored } = setup();
+      created.activate();
+      stored.activate();
+      created.messageComposer.textComposer.setText('theirs');
+      stored.messageComposer.textComposer.setText('mine');
+      respond();
+
+      await created.query({}, 'latest');
+
+      expect(stored.messageComposer.textComposer.text).toBe('mine');
+      expect(created.messageComposer.textComposer.text).toBe('theirs');
+    });
+
+    it('disconnects the superseded instance when its last consumer releases it', async () => {
+      const { created } = setup();
+      const release = created.activate();
+      respond();
+      await created.query({}, 'latest');
+      expect(created.pendingDisposal).toBe(false);
+
+      release();
+
+      expect(created.pendingDisposal).toBe(true);
+    });
+
+    it('disconnects a superseded instance nobody released on disconnectUser', async () => {
+      const { created } = setup();
+      respond();
+      await created.query({}, 'latest');
+
+      await client.disconnectUser();
+
+      expect(created.pendingDisposal).toBe(true);
+    });
   });
 
   it('replaces a torn-down channel with a fresh instance', () => {

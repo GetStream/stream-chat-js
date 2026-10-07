@@ -134,9 +134,11 @@ export type MuteStatusState = {
  */
 export type ChannelLifecycleState = {
   /**
-   * A vague indication of whether the channel exists on the chat backend. `true` once the channel
-   * has been initialized by `channel.create()` / `channel.query()` / `channel.watch()`. `false`
-   * means the channel may or may not exist — only those calls confirm it.
+   * Whether a live server response was applied to this instance since it was created: a query
+   * (`channel.query()`, and `watch()` and `create()`, which use it) or a `queryChannels` result.
+   * Its data was current when it arrived; `watchStatus` tells whether it is kept current since.
+   * `false` means nothing confirmed it yet: the channel may or may not exist on the server.
+   * Data restored from the offline database doesn't count (see `offlineMode`). Never reset.
    */
   initialized: boolean;
   /**
@@ -151,6 +153,14 @@ export type ChannelLifecycleState = {
    * {@link Channel.pendingDisposal}: the instance is never revived.
    */
   pendingDisposal: boolean;
+  /**
+   * The stored instance that replaced this one: this instance was created without an id, and when
+   * the server answered with the real cid, another instance was already stored under it (put there by
+   * an event or a channel list meanwhile). The stored instance took this one's server data, local
+   * messages and, when this one was open and it wasn't, its composer. Anything still holding this
+   * instance should switch to it. Set once.
+   */
+  supersededBy: Channel | undefined;
 };
 
 /**
@@ -227,6 +237,7 @@ export class ChannelState extends StateStore<ChannelStateData> {
       initialized: false,
       offlineMode: false,
       pendingDisposal: false,
+      supersededBy: undefined,
       active: false,
       aiState: AIStates.Idle,
     });
