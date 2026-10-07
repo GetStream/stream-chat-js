@@ -43,20 +43,26 @@ describe(DOCS, () => {
   });
 
   it('paginates messages by id', async () => {
-    // The docs' placeholders: the current (latest) page and a message to jump to.
-    const { messages } = await channel.query({ messages: { limit: 20 } });
-    const messageId = messageIds[10];
+    // The message the docs jump to (an app would get it from a search result or a link).
+    const targetMessageId = messageIds[10];
 
     // #region snippet docs="_default/03-channels/05-channel_pagination.md" heading="Pagination Parameters" tab="JavaScript" index=1
+    // COPY: targetMessageId="message-id"
+    // Fetch the first page (the latest 20 messages)
+    const { messages } = await channel.query({
+      messages: { limit: 20 },
+    });
+
     // Get the ID of the oldest message on the current page
     const lastMessageId = messages[0].id;
 
-    // Fetch older messages
+    // Fetch the next page (older messages)
     const result = await channel.query({
       messages: { limit: 20, id_lt: lastMessageId },
     });
 
-    // Fetch messages around a specific message
+    // Fetch messages around a specific message, e.g. one opened from a search result or a link
+    const messageId = targetMessageId;
     const aroundResult = await channel.query({
       messages: { limit: 20, id_around: messageId },
     });
