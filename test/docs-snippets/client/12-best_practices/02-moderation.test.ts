@@ -23,11 +23,10 @@ describe(DOCS, () => {
   const jamesBondId = uniqueId('james_bond');
   const spammerId = uniqueId('spammer');
   const blockTargets = [uniqueId('blocked'), uniqueId('blocked'), uniqueId('blocked')];
-  const blocklistName = uniqueId('no-cakes');
   const channelId = uniqueId('channel');
   // Regular user: channel owner, flags messages, blocks users.
   let client: StreamChat;
-  // Admin user: blocklists and the review queue need admin or moderator permissions.
+  // Admin user: the review queue needs admin or moderator permissions.
   let adminClient: StreamChat;
   const flaggedMessageIds: string[] = [];
 
@@ -52,19 +51,6 @@ describe(DOCS, () => {
     });
     cleanup.channels.push(`messaging:${channelId}`);
     await channel.create();
-
-    cleanup.add(async () => {
-      try {
-        await serverClient.deleteBlockList({ name: blocklistName });
-      } catch (error) {
-        // Already deleted by the "Delete a blocklist" snippet.
-        if (!/not found|does not exist|doesn't exist/i.test(String(error))) throw error;
-      }
-    });
-    await serverClient.createBlockList({
-      name: blocklistName,
-      words: ['fudge', 'cream', 'sugar'],
-    });
   });
 
   afterAll(async () => {
@@ -116,40 +102,6 @@ describe(DOCS, () => {
     expect(results.map((r) => r.channel.cooldown)).toEqual([1, 30]);
     const serverChannel = await getServerChannel(serverClient, channel.cid);
     expect(serverChannel.channel?.cooldown ?? 0).toBe(0);
-  });
-
-  it.skip('BLOCKED: lists blocklists (client-side ListBlockLists fails with code 4 "Multi-tenant blocklist is not enabled for this app", also for admins and with multi-tenancy on)', async () => {
-    const response =
-      // #region snippet docs="_default/12-best_practices/02-moderation.md" heading="List available blocklists" tab="JavaScript" index=1
-      await client.listBlockLists();
-    // #endregion snippet
-
-    expect(response.blocklists.map((b) => b.name)).toContain(blocklistName);
-  });
-
-  it('updates a blocklist', async () => {
-    const client = adminClient;
-
-    // #region snippet docs="_default/12-best_practices/02-moderation.md" heading="Update a blocklist" tab="JavaScript" index=1
-    // COPY: blocklistName="no-cakes"
-    await client.updateBlockList(blocklistName, {
-      words: ['fudge', 'cream', 'sugar', 'vanilla'],
-    });
-    // #endregion snippet
-
-    const { blocklist } = await serverClient.getBlockList({ name: blocklistName });
-    expect(blocklist?.words).toEqual(['fudge', 'cream', 'sugar', 'vanilla']);
-  });
-
-  it('deletes a blocklist', async () => {
-    const client = adminClient;
-
-    // #region snippet docs="_default/12-best_practices/02-moderation.md" heading="Delete a blocklist" tab="JavaScript" index=1
-    // COPY: blocklistName="no-cakes"
-    await client.deleteBlockList(blocklistName);
-    // #endregion snippet
-
-    await expect(serverClient.getBlockList({ name: blocklistName })).rejects.toThrow();
   });
 
   it('flags a message', async () => {

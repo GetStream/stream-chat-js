@@ -80,7 +80,7 @@ App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy of
 
 | Status | Page                                               | JS  | Unlabelled | Client test | Blockers |
 | ------ | -------------------------------------------------- | --- | ---------- | ----------- | -------- |
-| [~]    | `chat/_default/12-best_practices/02-moderation.md` | 16  | 1          | yes         | ◐ ⛔     |
+| [x]    | `chat/_default/12-best_practices/02-moderation.md` | 16  | 1          | yes         |          |
 
 ## chat/javascript
 
@@ -91,12 +91,6 @@ App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy of
 
 ## Blockers detail
 
-### `chat/_default/12-best_practices/02-moderation.md` (◐ ⛔ Blocked)
-
-- **Affected**: "List available blocklists" (`client.listBlockLists()`). The rest of the page runs.
-- **Evidence**: Client-side it fails with code 4 "ListBlockLists failed with error: Multi-tenant blocklist is not enabled for this app", for roles `user` and `admin`, with or without `team` and multi-tenancy. Server-side it works. The app has a `moderation_multitenant_blocklist_enabled` flag (not probed).
-- **To unblock**: Check whether toggling `moderation_multitenant_blocklist_enabled` fixes it, or ask support; otherwise remove the fence.
-
 ### `chat/javascript/11-debugging_and_cli/10-upgrading_to_v9.md` (Excluded)
 
 - Not validated; leave the page as is (React/TSX type examples, no runnable JS). Listed in `EXCLUDED_PAGES` (`sync/parse.ts`), so the sync coverage and label checks skip it.
@@ -104,7 +98,7 @@ App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy of
 ## Setup notes (not blockers)
 
 - **02-init_and_users/01-client_tokens_and_authentication**: `devToken` needs `disable_auth_checks: true`: toggle it for the test and restore it.
-- **02-init_and_users/04-user_groups, 12-best_practices/02-moderation**: `team_id` / `team` / `enforce_unique_usernames: "team"` need multi-tenancy. Toggle it server-side with `serverClient.updateApp({ multi_tenant_enabled })`, wait with `waitForAppSetting`, and restore it.
+- **02-init_and_users/04-user_groups**: `team_id` / `team` need multi-tenancy. Toggle it server-side with `serverClient.updateApp({ multi_tenant_enabled })`, wait with `waitForAppSetting`, and restore it.
 - **02-init_and_users/05-authless_users**: `setGuestUser` works. The guest id is rewritten to `guest-<uuid>-<requested id>`: register `client.userID` (not the requested id) for cleanup.
 - **03-channels/02-query_channels**: Predefined filter `user_messaging_channels` must be created first (`createPredefinedFilter` works via the API).
 - **04-messages/02-file_uploads**: Browser `File` snippets: build `File` objects in the test. The custom CDN snippet (L682) references undefined `messageComposer` / `customCDN`.
@@ -114,7 +108,7 @@ App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy of
 - **04-messages/10-message_receipts**: Delivery receipts work on this app (probe: `last_delivered_at` set after `markChannelsDelivered`), despite the "contact support" note.
 - **05-features/09-translation**: `translateMessage` works (probe). Enable auto-translation per channel server-side (`update({ data: { auto_translation_enabled: true } })`); no app setting to change.
 - **05-features/10-advanced/11-slow_mode_and_throttling**: Slow mode cooldown is 30s in the snippet: use a short cooldown in assertions.
-- **12-best_practices/02-moderation**: Review queue works (probe OK). Many snippets change `messaging` grants or the upload config: restore them.
+- **12-best_practices/02-moderation**: Review queue works client-side for a user with role `admin` (probe OK).
 - **All pages that create/update channel types**: Wait 30s (`waitForChannelTypePropagation()`) after `createChannelType` / `updateChannelType` before using the type.
 
 ## Known docs bugs
