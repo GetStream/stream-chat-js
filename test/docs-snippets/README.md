@@ -1,7 +1,7 @@
 # Docs snippet tests
 
-Typed tests that run the client-side JavaScript snippets of the chat docs
-(`getstream.io/content/docs/chat/_default` and `chat/javascript`) against a real Stream app.
+Typed tests that run the client-side JavaScript snippets of the chat docs (the pages of the
+JavaScript sidebar, `getstream.io/content/docs/_sidebars/[chat][javascript].json`) against a real Stream app.
 Only fences labelled `JavaScript` are in scope (docs fences must always have a label): they are fixed when they are
 wrong or contain server-side code. `Node.js` fences are out of scope and are neither tested nor changed.
 
@@ -21,8 +21,13 @@ These tests hit the network and are not part of `yarn test`.
 
 ```
 client/<docs section>/<docs page>.test.ts   # user connected with a user token (tab label "JavaScript")
-helpers/                                    # clients, unique ids, cleanup registry
-docs-snippets-todo.md                       # pages to cover, their status, blockers and known docs bugs
+helpers/                                    # clients (stream-chat-js user clients, node-sdk server client), unique ids,
+                                            # cleanup registry, server-side helpers, waits, leak check, app snapshot
+setup.ts                                    # .env loading, per-file leak check and app-settings drift check
+custom-types.d.ts                           # Custom*Data augmentations for the custom fields the docs use
+sync/                                       # `yarn test-docs-sync` (docs fence <-> test region check)
+maintenance/                                # `yarn test-docs-sweep`
+docs-snippets-todo.md                       # pages to cover, their status, blockers and setup notes
 docs-snippets-agent-prompt.md               # prompt for an agent that covers one page
 learnings.md                                # lessons from earlier agent runs, read before working on a page
 ```

@@ -69,7 +69,6 @@ You are verifying the client-side JavaScript code snippets of one Stream Chat do
   - Push the name to `cleanup.channelTypes` straight after `createChannelType`. `Cleanup` deletes it after the channels are gone. Never delete channel types in your own cleanup code.
 - **Blockers** (the page's Blockers cell in the TODO):
   - ⛔ snippets go in `it.skip('BLOCKED: <reason>', ...)` so they are still typechecked.
-  - 🔗 "requires webhook to test": run and assert the stream-chat-js calls (e.g. set the hook URL, read it back, restore it). Don't try to verify delivery.
   - If you find a new blocker, use `it.skip('BLOCKED: <reason>')`, mark the page `[~]` and report it, with the exact API error.
 - **Guest users** get their id rewritten to `guest-<uuid>-<requested id>`. Register `client.userID` for cleanup, not the id you passed.
 - **Partial snippets** (fragments like `filters = {...}` or `...` placeholders): wrap them in the minimal code needed to compile and run. The region still holds exactly the docs text.
@@ -110,7 +109,7 @@ yarn test-docs <your test files>     # green, with no `LEAK` or `DRIFT` error
 yarn types-docs                      # no type errors (strict TS, no `any` escapes, no `!` non-null assertions)
 yarn eslint test/docs-snippets         # zero warnings (same rules as src/: `import type`, sorted import members, no `!`, no unused vars)
 npx prettier --check test/docs-snippets
-yarn test-docs-sync                  # every fence of the page covered, every region identical to its docs fence
+yarn test-docs-sync                  # every JavaScript fence in the JS sidebar covered, every JS fence labelled JavaScript/Node.js, every region identical to its docs fence
 ```
 
 Don't use `@ts-ignore`/`@ts-expect-error` to silence a docs snippet. A type error in a snippet is either a docs bug (fix it as above) or an SDK typing bug (fix the type in `src/`, types only, and report it).

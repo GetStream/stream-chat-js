@@ -9,7 +9,6 @@ Pages under `getstream.io/content/docs/` that contain JavaScript snippets. Give 
 **Blockers** (details below; empty = fully runnable, maybe with setup notes):
 
 - ⛔ **Blocked**: the app doesn't have the feature. The snippet goes in `it.skip('BLOCKED: ...')` (still typechecked).
-- 🔗 **Requires webhook to test**: the result is only observable through a webhook/SQS endpoint. The test verifies the stream-chat-js calls only, not delivery.
 - ◐ **Partial**: only some snippets of the page are affected.
 - **Excluded**: not validated, leave as is.
 
@@ -49,33 +48,33 @@ App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy of
 
 ## chat/\_default/04-messages
 
-| Status | Page                                                | JS  | Unlabelled | Client test | Blockers              |
-| ------ | --------------------------------------------------- | --- | ---------- | ----------- | --------------------- |
-| [x]    | `chat/_default/04-messages/01-send_message.md`      | 9   | 0          | yes         |                       |
-| [x]    | `chat/_default/04-messages/02-file_uploads.md`      | 4   | 0          | yes         |                       |
-| [x]    | `chat/_default/04-messages/03-threads.md`           | 11  | 2          | yes         |                       |
-| [x]    | `chat/_default/04-messages/04-send_reaction.md`     | 5   | 0          | yes         |                       |
-| [x]    | `chat/_default/04-messages/05-pinned_messages.md`   | 3   | 0          | yes         |                       |
-| [x]    | `chat/_default/04-messages/06-search.md`            | 2   | 0          | yes         |                       |
-| [x]    | `chat/_default/04-messages/07-silent_messages.md`   | 2   | 0          | yes         |                       |
-| [x]    | `chat/_default/04-messages/09-message_reminders.md` | 7   | 0          | yes         | ◐ 🔗 webhook delivery |
-| [x]    | `chat/_default/04-messages/10-message_receipts.md`  | 1   | 0          | yes         |                       |
+| Status | Page                                                | JS  | Unlabelled | Client test | Blockers |
+| ------ | --------------------------------------------------- | --- | ---------- | ----------- | -------- |
+| [x]    | `chat/_default/04-messages/01-send_message.md`      | 9   | 0          | yes         |          |
+| [x]    | `chat/_default/04-messages/02-file_uploads.md`      | 4   | 0          | yes         |          |
+| [x]    | `chat/_default/04-messages/03-threads.md`           | 11  | 2          | yes         |          |
+| [x]    | `chat/_default/04-messages/04-send_reaction.md`     | 5   | 0          | yes         |          |
+| [x]    | `chat/_default/04-messages/05-pinned_messages.md`   | 3   | 0          | yes         |          |
+| [x]    | `chat/_default/04-messages/06-search.md`            | 2   | 0          | yes         |          |
+| [x]    | `chat/_default/04-messages/07-silent_messages.md`   | 2   | 0          | yes         |          |
+| [x]    | `chat/_default/04-messages/09-message_reminders.md` | 7   | 0          | yes         |          |
+| [x]    | `chat/_default/04-messages/10-message_receipts.md`  | 1   | 0          | yes         |          |
 
 ## chat/\_default/05-features
 
-| Status | Page                                                                   | JS  | Unlabelled | Client test | Blockers                    |
-| ------ | ---------------------------------------------------------------------- | --- | ---------- | ----------- | --------------------------- |
-| [x]    | `chat/_default/05-features/02-events.md`                               | 7   | 0          | yes         | ◐ 🔗 webhook copy of events |
-| [x]    | `chat/_default/05-features/03-unread.md`                               | 11  | 0          | yes         |                             |
-| [x]    | `chat/_default/05-features/04-typing_indicators.md`                    | 2   | 0          | yes         |                             |
-| [x]    | `chat/_default/05-features/05-presence_format.md`                      | 3   | 0          | yes         |                             |
-| [x]    | `chat/_default/05-features/07-polls_api.md`                            | 17  | 0          | yes         |                             |
-| [x]    | `chat/_default/05-features/08-location_sharing.md`                     | 7   | 0          | yes         |                             |
-| [x]    | `chat/_default/05-features/09-translation.md`                          | 4   | 0          | yes         |                             |
-| [x]    | `chat/_default/05-features/10-advanced/11-slow_mode_and_throttling.md` | 2   | 0          | yes         |                             |
-| [x]    | `chat/_default/05-features/10-advanced/12-drafts.md`                   | 6   | 0          | yes         |                             |
-| [x]    | `chat/_default/05-features/10-advanced/13-private_messaging.md`        | 1   | 0          | yes         |                             |
-| [x]    | `chat/_default/05-features/10-advanced/15-pending_messages.md`         | 1   | 0          | yes         | ◐ 🔗 pending callback hook  |
+| Status | Page                                                                   | JS  | Unlabelled | Client test | Blockers |
+| ------ | ---------------------------------------------------------------------- | --- | ---------- | ----------- | -------- |
+| [x]    | `chat/_default/05-features/02-events.md`                               | 7   | 0          | yes         |          |
+| [x]    | `chat/_default/05-features/03-unread.md`                               | 11  | 0          | yes         |          |
+| [x]    | `chat/_default/05-features/04-typing_indicators.md`                    | 2   | 0          | yes         |          |
+| [x]    | `chat/_default/05-features/05-presence_format.md`                      | 3   | 0          | yes         |          |
+| [x]    | `chat/_default/05-features/07-polls_api.md`                            | 17  | 0          | yes         |          |
+| [x]    | `chat/_default/05-features/08-location_sharing.md`                     | 7   | 0          | yes         |          |
+| [x]    | `chat/_default/05-features/09-translation.md`                          | 4   | 0          | yes         |          |
+| [x]    | `chat/_default/05-features/10-advanced/11-slow_mode_and_throttling.md` | 2   | 0          | yes         |          |
+| [x]    | `chat/_default/05-features/10-advanced/12-drafts.md`                   | 6   | 0          | yes         |          |
+| [x]    | `chat/_default/05-features/10-advanced/13-private_messaging.md`        | 1   | 0          | yes         |          |
+| [x]    | `chat/_default/05-features/10-advanced/15-pending_messages.md`         | 1   | 0          | yes         |          |
 
 ## chat/\_default/12-best_practices
 
@@ -88,21 +87,9 @@ App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy of
 | Status | Page                                                             | JS  | Unlabelled | Client test | Blockers |
 | ------ | ---------------------------------------------------------------- | --- | ---------- | ----------- | -------- |
 | [x]    | `chat/javascript/01-quick_start/01-plain_js_introduction.md`     | 4   | 0          | yes         |          |
-| —      | ~~`chat/javascript/11-debugging_and_cli/10-upgrading_to_v9.md`~~ | 0   | 8          | yes         | Excluded |
+| —      | ~~`chat/javascript/11-debugging_and_cli/10-upgrading_to_v9.md`~~ | 0   | 8          | -           | Excluded |
 
 ## Blockers detail
-
-### `chat/_default/05-features/10-advanced/15-pending_messages.md` (◐ 🔗 Requires webhook to test)
-
-- **Affected**: `updateAppSettings({ event_hooks: [...] })` pending-message callback (L173-196): the callback delivery isn't verified. Pending send / get / commit work (probe OK on a test channel type with `mark_messages_pending: true`).
-- **Evidence**: Needs a reachable HTTP endpoint. Caution: `event_hooks` replaces all existing hooks (L174), so save and restore it.
-- **To unblock**: Not needed: verify the SDK calls only.
-
-### `chat/_default/04-messages/09-message_reminders.md` (◐ 🔗 Requires webhook to test)
-
-- **Affected**: webhook/push delivery of `notification.reminder_due`. The WS event itself is verified (it arrives ~62s after `remind_at = now + 61s`). Reminder CRUD runs.
-- **Evidence**: Delivery is only observable via webhook or push.
-- **To unblock**: Not needed: verify the SDK calls only.
 
 ### `chat/_default/12-best_practices/02-moderation.md` (◐ ⛔ Blocked)
 
@@ -110,24 +97,14 @@ App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy of
 - **Evidence**: Client-side it fails with code 4 "ListBlockLists failed with error: Multi-tenant blocklist is not enabled for this app", for roles `user` and `admin`, with or without `team` and multi-tenancy. Server-side it works. The app has a `moderation_multitenant_blocklist_enabled` flag (not probed).
 - **To unblock**: Check whether toggling `moderation_multitenant_blocklist_enabled` fixes it, or ask support; otherwise remove the fence.
 
-### `chat/_default/05-features/02-events.md` (◐ 🔗 Requires webhook to test)
-
-- **Affected**: The webhook copy of server-sent events (L858). The events themselves are verified over WebSocket.
-- **Evidence**: Optional webhook delivery.
-- **To unblock**: Not needed.
-
 ### `chat/javascript/11-debugging_and_cli/10-upgrading_to_v9.md` (Excluded)
 
-- Not validated; leave the page as is (React/TSX type examples, no runnable JS).
-
-## Unblock checklist
-
-- Webhook-dependent parts (🔗) are intentionally not verified by this project.
+- Not validated; leave the page as is (React/TSX type examples, no runnable JS). Listed in `EXCLUDED_PAGES` (`sync/parse.ts`), so the sync coverage and label checks skip it.
 
 ## Setup notes (not blockers)
 
 - **02-init_and_users/01-client_tokens_and_authentication**: `devToken` needs `disable_auth_checks: true`: toggle it for the test and restore it.
-- **02-init_and_users/04-user_groups, 12-best_practices/02-moderation**: `team_id` / `team` / `enforce_unique_usernames: "team"` need multi-tenancy. The probe showed `updateAppSettings({ multi_tenant_enabled: true })` works and can be restored to `false`.
+- **02-init_and_users/04-user_groups, 12-best_practices/02-moderation**: `team_id` / `team` / `enforce_unique_usernames: "team"` need multi-tenancy. Toggle it server-side with `serverClient.updateApp({ multi_tenant_enabled })`, wait with `waitForAppSetting`, and restore it.
 - **02-init_and_users/05-authless_users**: `setGuestUser` works. The guest id is rewritten to `guest-<uuid>-<requested id>`: register `client.userID` (not the requested id) for cleanup.
 - **03-channels/02-query_channels**: Predefined filter `user_messaging_channels` must be created first (`createPredefinedFilter` works via the API).
 - **04-messages/02-file_uploads**: Browser `File` snippets: build `File` objects in the test. The custom CDN snippet (L682) references undefined `messageComposer` / `customCDN`.
@@ -135,7 +112,7 @@ App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy of
 - **04-messages/05-pinned_messages**: `pinMessage(message, 120)` expires after 120s: don't assert after that.
 - **04-messages/06-search**: Search indexing is eventually consistent: poll with `retry`.
 - **04-messages/10-message_receipts**: Delivery receipts work on this app (probe: `last_delivered_at` set after `markChannelsDelivered`), despite the "contact support" note.
-- **05-features/09-translation**: `translateMessage` works (probe). `auto_translation_enabled` app setting: toggle and restore.
+- **05-features/09-translation**: `translateMessage` works (probe). Enable auto-translation per channel server-side (`update({ data: { auto_translation_enabled: true } })`); no app setting to change.
 - **05-features/10-advanced/11-slow_mode_and_throttling**: Slow mode cooldown is 30s in the snippet: use a short cooldown in assertions.
 - **12-best_practices/02-moderation**: Review queue works (probe OK). Many snippets change `messaging` grants or the upload config: restore them.
 - **All pages that create/update channel types**: Wait 30s (`waitForChannelTypePropagation()`) after `createChannelType` / `updateChannelType` before using the type.
