@@ -258,7 +258,7 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   public readonly cooldownTimer: CooldownTimer;
   /**
    * Teardown for this channel's configuration subscription, released by {@link _disconnect}. Left
-   * subscribed, a torn-down channel would stay in the configuration store's handler set for good.
+   * subscribed, a disconnected channel would stay in the configuration store's handler set for good.
    */
   private unsubscribeConfiguration?: Unsubscribe;
   /** Teardown for the server-config re-derivation subscription, released by {@link _disconnect}. */
@@ -1515,8 +1515,8 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   }
 
   /**
-   * Whether the channel has been torn down and is awaiting disposal (deleted, the current user
-   * removed, or the client disconnected). Store-backed and reactive.
+   * Whether {@link Channel._disconnect} has run: the channel was deleted, the current user removed
+   * from it, the client disconnected, or nothing used it any more. Store-backed and reactive.
    *
    * One-way and terminal — there is no counterpart that revives the instance. Its resources are
    * already released ({@link Channel._disconnect} disposes the paginators and unregisters the
@@ -3080,13 +3080,25 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     }
   }
 
+  /**
+   * Stops the instance for good, once it is done with: it unsubscribes from the client's
+   * configuration and the server config, stops the receipts tracker and the cooldown timer, disposes
+   * the message and pinned-message paginators (which unlinks them from the shared message store), and
+   * then sets `pendingDisposal: true` and `watchStatus: NotWatching`. It sends no request.
+   *
+   * It doesn't free memory itself. Afterwards the SDK holds no reference to the instance (the channel
+   * store or the superseded set dropped it), so it is garbage collected once the app holds none
+   * either. One that the app still holds stays in memory, inert.
+   *
+   * @internal
+   */
   _disconnect() {
-    // tear down once: a second run would drop subscription counts other consumers hold
+    // once only: a second run would drop subscription counts other consumers hold
     if (this.pendingDisposal) return;
     logger.withExtraTags('_disconnect', this.cid).info('Disconnecting the channel.');
 
-    // Tear down the channel.state subscriptions BEFORE flipping `pendingDisposal` — that publishes to
-    // the store, so no subscriber handler runs against a half-torn-down channel.
+    // Release the channel.state subscriptions BEFORE flipping `pendingDisposal` — that publishes to
+    // the store, so no subscriber handler runs against a half-disconnected channel.
 
     // Runs the `'channel'` setup function's teardown and removes this channel from the configuration
     // store's subscribers. Cleared so a repeated `_disconnect` cannot double-run it.

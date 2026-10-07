@@ -832,7 +832,7 @@ export class StreamChat extends ChatApi {
     // `enableWSFallback` switch the long-poll's close request has to carry it.
     this.connectionIdManager.rejectConnectionId(teardownReason);
 
-    // tears every channel down and ensures we no longer return inactive channels
+    // disconnects every channel (`_disconnect()`) and ensures we no longer return inactive channels
     this.channelManager.clearChannels();
     // reset client state
     this.state = new ClientState({ client: this });

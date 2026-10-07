@@ -279,9 +279,11 @@ export class EntityStore<T> {
    * `onRelease`. Its holders are not told it was removed, so a list can swap the item in place.
    *
    * @example
-   * // a channel created from members is stored under a temporary cid until the server assigns one
+   * // A channel created from members has no id until the server creates it, so it is stored under a
+   * // temporary cid built from its member ids.
    * store.getOrCreate('messaging:!members-ann,bob', () => channel);
-   * store.changeId('messaging:!members-ann,bob', 'messaging:e3b0c442'); // after `channel.watch()`
+   * // `channel.watch()` returns the cid the server assigned; the entry moves there, holders included.
+   * store.changeId('messaging:!members-ann,bob', 'messaging:!members-kL9pQ2vX7wZ');
    */
   changeId(
     oldId: string,

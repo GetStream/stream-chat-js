@@ -395,8 +395,8 @@ export class ChannelManager extends WithSubscriptions {
    * Every `Channel` instance, one per cid. A channel created from members, before the server assigns
    * its id, is stored under its temporary cid until {@link ChannelManager.changeChannelId} moves it.
    * A channel stays until a known end or logout removes it, or
-   * {@link ChannelManager.releaseUnusedChannels} finds it neither watched nor held; either tears it
-   * down with `_disconnect()`. A channel list holds the channels it shows by linking them, which also
+   * {@link ChannelManager.releaseUnusedChannels} finds it neither watched nor held; either removes it
+   * and runs its {@link Channel._disconnect}. A channel list holds the channels it shows by linking them, which also
    * tells it about removals and cid changes; other users hold theirs through claims.
    *
    * @internal
@@ -679,7 +679,8 @@ export class ChannelManager extends WithSubscriptions {
   }
 
   /**
-   * Tears down every stored channel that is neither watched nor held. A watched channel (`watching`,
+   * Removes, and disconnects ({@link Channel._disconnect}), every stored channel that is neither
+   * watched nor held. A watched channel (`watching`,
    * or `wasWatching` until its watch is restored) stays, because its events keep it current; so does
    * an active one ({@link Channel.activate}), one being loaded (`watch()`, `query()` or `create()` in flight), and
    * one a holder holds in {@link ChannelManager.channelStore}: a channel list links each of its
@@ -714,7 +715,8 @@ export class ChannelManager extends WithSubscriptions {
   }
 
   /**
-   * Removes the channel stored under `cid` whatever uses it, tearing it down with `_disconnect()`.
+   * Removes the channel stored under `cid` whatever uses it, and disconnects it
+   * ({@link Channel._disconnect}).
    * Every list showing it drops it too, as the store's removal reaches each list's index.
    *
    * @internal
@@ -761,8 +763,8 @@ export class ChannelManager extends WithSubscriptions {
    * ID, so losing the socket ends every watch this client held — a reconnect issues a NEW id and the
    * channels have to be re-queried to watch again. `WasWatching` is what records that they should be.
    *
-   * Only `Watching` is demoted: a channel the consumer stopped on purpose, or one that was torn
-   * down, stays `NotWatching` and must not be resurrected by a reconnect.
+   * Only `Watching` is demoted: a channel the consumer stopped on purpose, or one already
+   * disconnected (`_disconnect()`), stays `NotWatching` and must not be resurrected by a reconnect.
    *
    * Invoked from two places on the WebSocket, because neither covers the other:
    * `StableWSConnection._setHealth(false)` for an abnormal close/error, and `closeConnection()` for a

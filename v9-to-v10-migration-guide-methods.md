@@ -381,7 +381,7 @@ client.userMuteStatus(targetId);
 `(type, data)`, and is now a shorthand for `client.channelManager.ensure()`, which takes one object.
 Only the type of `data` changed (below). Both return the stored channel for the cid or create and
 store it, as `client.channel()` did. Getting a channel either way doesn't keep it: one that is neither
-watched nor used is torn down when the lists reload or the connection recovers (see the
+watched nor used is disposed of when the lists reload or the connection recovers (see the
 [other changes guide](./v9-to-v10-migration-guide-other.md)). Watch it, or call
 `channel.activate()`, to keep it.
 
