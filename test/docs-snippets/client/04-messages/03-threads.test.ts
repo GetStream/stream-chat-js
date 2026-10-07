@@ -2,12 +2,14 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { StreamChat } from '../../../../src';
 import type { Channel } from '../../../../src';
 import {
+  createUserToken,
   disconnectClients,
   getClientSideClient,
   getServerClient,
 } from '../../helpers/clients';
 import { Cleanup } from '../../helpers/cleanup';
 import { uniqueId } from '../../helpers/ids';
+import { sendServerMessage } from '../../helpers/server';
 import { retry } from '../../helpers/wait';
 
 describe('_default/04-messages/03-threads.md', () => {
@@ -16,6 +18,7 @@ describe('_default/04-messages/03-threads.md', () => {
   const userId = uniqueId('user');
   const otherId = uniqueId('other');
   const channelId = uniqueId('general');
+  const cid = `messaging:${channelId}`;
   let client: StreamChat;
   let channel: Channel;
   let parentMessageId: string;
@@ -29,13 +32,6 @@ describe('_default/04-messages/03-threads.md', () => {
    * `otherId`) isn't one of them.
    */
   const ownThreadIds: string[] = [];
-
-  const sendServerMessage = async (text: string, user_id: string, parent_id?: string) => {
-    const { message } = await serverClient
-      .channel('messaging', channelId)
-      .sendMessage({ text, user_id, parent_id });
-    return message;
-  };
 
   const threadUnreadCount = async (id: string) => {
     const { threads } = await client.getUnreadCount();
@@ -55,14 +51,25 @@ describe('_default/04-messages/03-threads.md', () => {
     threadIds.push(parentMessageId);
 
     for (let i = 1; i <= 5; i++) {
-      const reply = await sendServerMessage(`Reply ${i}`, otherId, parentMessageId);
+      const reply = await sendServerMessage(serverClient, cid, {
+        text: `Reply ${i}`,
+        user_id: otherId,
+        parent_id: parentMessageId,
+      });
       replyIds.push(reply.id);
     }
 
     // More threads started by `userId`, so thread queries have a second page.
     for (let i = 1; i <= 11; i++) {
-      const parent = await sendServerMessage(`Parent ${i}`, userId);
-      await sendServerMessage(`Thread reply ${i}`, userId, parent.id);
+      const parent = await sendServerMessage(serverClient, cid, {
+        text: `Parent ${i}`,
+        user_id: userId,
+      });
+      await sendServerMessage(serverClient, cid, {
+        text: `Thread reply ${i}`,
+        user_id: userId,
+        parent_id: parent.id,
+      });
       threadIds.push(parent.id);
       ownThreadIds.push(parent.id);
     }
@@ -225,9 +232,13 @@ describe('_default/04-messages/03-threads.md', () => {
 
   it('reads the total unread thread count after connecting', async () => {
     // `otherId` takes part in the `parentMessageId` thread; a new reply makes it unread for them.
-    await sendServerMessage('Unread for other', userId, parentMessageId);
+    await sendServerMessage(serverClient, cid, {
+      text: 'Unread for other',
+      user_id: userId,
+      parent_id: parentMessageId,
+    });
     const readerId = otherId;
-    const token = serverClient.createToken(readerId);
+    const token = createUserToken(readerId);
     const client = new StreamChat(process.env.STREAM_API_KEY as string, {
       allowServerSideConnect: true,
     });
@@ -252,7 +263,11 @@ describe('_default/04-messages/03-threads.md', () => {
   });
 
   it('marks a thread as read and unread', async () => {
-    await sendServerMessage('Another reply', otherId, parentMessageId);
+    await sendServerMessage(serverClient, cid, {
+      text: 'Another reply',
+      user_id: otherId,
+      parent_id: parentMessageId,
+    });
     await retry(async () =>
       expect(await threadUnreadCount(parentMessageId)).toBeGreaterThan(0),
     );
@@ -342,7 +357,11 @@ describe('_default/04-messages/03-threads.md', () => {
     // #endregion snippet
 
     try {
-      const reply = await sendServerMessage('Live reply', otherId, thread.id);
+      const reply = await sendServerMessage(serverClient, cid, {
+        text: 'Live reply',
+        user_id: otherId,
+        parent_id: thread.id,
+      });
       await retry(() => {
         expect(thread.state.getLatestValue().replies.map((r) => r.id)).toContain(
           reply.id,
@@ -372,7 +391,11 @@ describe('_default/04-messages/03-threads.md', () => {
 
       expect(threads.map((thread) => thread.id)).toContain(parentMessageId);
       const thread = threadManager.threadsById[parentMessageId];
-      const reply = await sendServerMessage('Managed reply', otherId, parentMessageId);
+      const reply = await sendServerMessage(serverClient, cid, {
+        text: 'Managed reply',
+        user_id: otherId,
+        parent_id: parentMessageId,
+      });
       await retry(() => {
         expect(thread?.state.getLatestValue().replies.map((r) => r.id)).toContain(
           reply.id,

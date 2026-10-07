@@ -7,6 +7,7 @@ import {
 } from '../../helpers/clients';
 import { Cleanup } from '../../helpers/cleanup';
 import { uniqueId } from '../../helpers/ids';
+import { sendServerMessage } from '../../helpers/server';
 
 describe('_default/03-channels/01-creating_channels.md', () => {
   const serverClient = getServerClient();
@@ -17,7 +18,7 @@ describe('_default/03-channels/01-creating_channels.md', () => {
 
   beforeAll(async () => {
     cleanup.users.push(thierry, tommaso);
-    await serverClient.upsertUser({ id: tommaso });
+    await serverClient.upsertUsers([{ id: tommaso }]);
     client = await getClientSideClient({ id: thierry });
   });
 
@@ -40,11 +41,11 @@ describe('_default/03-channels/01-creating_channels.md', () => {
     // #endregion snippet
 
     expect(channel.id).toBe(travel);
-    const { channel: created } = await serverClient
+    const { channel: created } = await serverClient.chat
       .channel('messaging', travel)
-      .query({});
-    expect(created).toMatchObject({ name: 'Awesome channel about traveling' });
-    expect(created.created_by?.id).toBe(thierry);
+      .getOrCreate();
+    expect(created?.custom).toMatchObject({ name: 'Awesome channel about traveling' });
+    expect(created?.created_by?.id).toBe(thierry);
   });
 
   it('creates a distinct channel', async () => {
@@ -88,9 +89,10 @@ describe('_default/03-channels/01-creating_channels.md', () => {
         resolve(event.message?.text);
       });
     });
-    await serverClient
-      .channel('messaging', travelChannel)
-      .sendMessage({ text: 'Hello watchers', user_id: thierry });
+    await sendServerMessage(serverClient, `messaging:${travelChannel}`, {
+      text: 'Hello watchers',
+      user_id: thierry,
+    });
     await expect(received).resolves.toBe('Hello watchers');
     expect(channel.initialized).toBe(true);
   });

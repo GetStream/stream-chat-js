@@ -8,6 +8,7 @@ import {
 import { Cleanup } from '../../helpers/cleanup';
 import { grantMessagingMembers } from '../../helpers/grants';
 import { uniqueId } from '../../helpers/ids';
+import { sendServerMessage } from '../../helpers/server';
 import { waitForChannelTypePropagation } from '../../helpers/wait';
 
 // `messaging` doesn't grant channel members `CreateAttachment`, `CreateMention` or the
@@ -28,15 +29,9 @@ describe('_default/04-messages/01-send_message.md', () => {
   const joshId = uniqueId('josh');
   const channelType = 'messaging';
   const channelId = uniqueId('general');
+  const cid = `${channelType}:${channelId}`;
   let client: StreamChat;
   let channel: Channel;
-
-  const sendServerMessage = async (text: string) => {
-    const { message } = await serverClient
-      .channel(channelType, channelId)
-      .sendMessage({ text, user_id: userId });
-    return message;
-  };
 
   beforeAll(async () => {
     cleanup.users.push(userId, joshId);
@@ -68,7 +63,7 @@ describe('_default/04-messages/01-send_message.md', () => {
 
   it('sends messages with mentions', async () => {
     const designTeamId = uniqueId('design-team');
-    cleanup.add(() => serverClient.deleteUserGroup(designTeamId));
+    cleanup.add(() => serverClient.deleteUserGroup({ id: designTeamId }));
     await serverClient.createUserGroup({
       id: designTeamId,
       name: designTeamId,
@@ -152,7 +147,9 @@ describe('_default/04-messages/01-send_message.md', () => {
   });
 
   it('retrieves a message', async () => {
-    const messageID = (await sendServerMessage('to retrieve')).id;
+    const messageID = (
+      await sendServerMessage(serverClient, cid, { text: 'to retrieve', user_id: userId })
+    ).id;
 
     // #region snippet docs="_default/04-messages/01-send_message.md" heading="Retrieving a Message" tab="JavaScript" index=1
     const message = await client.getMessage(messageID);
@@ -163,7 +160,12 @@ describe('_default/04-messages/01-send_message.md', () => {
   });
 
   it('updates a message', async () => {
-    const messageId = (await sendServerMessage('original text')).id;
+    const messageId = (
+      await sendServerMessage(serverClient, cid, {
+        text: 'original text',
+        user_id: userId,
+      })
+    ).id;
 
     // #region snippet docs="_default/04-messages/01-send_message.md" heading="Updating a Message" tab="JavaScript" index=1
     const message = { id: messageId, text: 'Updated message text' };
@@ -204,8 +206,15 @@ describe('_default/04-messages/01-send_message.md', () => {
   });
 
   it('deletes a message', async () => {
-    const messageID = (await sendServerMessage('to delete')).id;
-    const anotherMessageID = (await sendServerMessage('to delete for me')).id;
+    const messageID = (
+      await sendServerMessage(serverClient, cid, { text: 'to delete', user_id: userId })
+    ).id;
+    const anotherMessageID = (
+      await sendServerMessage(serverClient, cid, {
+        text: 'to delete for me',
+        user_id: userId,
+      })
+    ).id;
 
     // #region snippet docs="_default/04-messages/01-send_message.md" heading="Deleting a Message" tab="JavaScript" index=1
     // Soft delete
@@ -218,9 +227,13 @@ describe('_default/04-messages/01-send_message.md', () => {
     await client.deleteMessage(anotherMessageID, { deleteForMe: true });
     // #endregion snippet
 
-    await expect(serverClient.getMessage(messageID)).rejects.toMatchObject({ code: 16 });
+    await expect(serverClient.chat.getMessage({ id: messageID })).rejects.toMatchObject({
+      code: 16,
+    });
     // Deleted only for the connected user: other users still see it.
-    const { message: forOthers } = await serverClient.getMessage(anotherMessageID);
+    const { message: forOthers } = await serverClient.chat.getMessage({
+      id: anotherMessageID,
+    });
     expect(forOthers.type).not.toBe('deleted');
     const { message: forMe } = await client.getMessage(anotherMessageID);
     expect(forMe.deleted_for_me).toBe(true);

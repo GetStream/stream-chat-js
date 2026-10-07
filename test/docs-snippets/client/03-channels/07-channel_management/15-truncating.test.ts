@@ -7,6 +7,7 @@ import {
 } from '../../../helpers/clients';
 import { Cleanup } from '../../../helpers/cleanup';
 import { uniqueId } from '../../../helpers/ids';
+import { getServerChannel } from '../../../helpers/server';
 
 describe('_default/03-channels/07-channel_management/15-truncating.md', () => {
   const serverClient = getServerClient();
@@ -95,11 +96,11 @@ describe('_default/03-channels/07-channel_management/15-truncating.md', () => {
     // so she sees the history again; the owner (not listed) keeps the full view
     expect(await messageTexts(client, channel)).toEqual(['history']);
     expect(await messageTexts(janeClient, channel)).toEqual(['history']);
-    const [johnView] = await serverClient.queryChannels(
-      { cid: channel.cid },
-      {},
-      { user_id: johnId, message_limit: 10, watch: false, state: true },
-    );
-    expect(johnView.state.messages).toEqual([]);
+    const johnView = await getServerChannel(serverClient, channel.cid, {
+      user_id: johnId,
+      message_limit: 10,
+      state: true,
+    });
+    expect(johnView.messages).toEqual([]);
   });
 });

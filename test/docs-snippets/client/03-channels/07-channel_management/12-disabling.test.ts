@@ -23,9 +23,9 @@ describe('_default/03-channels/07-channel_management/12-disabling.md', () => {
       cleanup.channels.push(`messaging:${id}`);
       await client.channel('messaging', id, { members: [userId] }).create();
     }
-    await serverClient
+    await serverClient.chat
       .channel('messaging', disabledId)
-      .updatePartial({ set: { disabled: true } });
+      .updateChannelPartial({ set: { disabled: true } });
   });
 
   afterAll(async () => {

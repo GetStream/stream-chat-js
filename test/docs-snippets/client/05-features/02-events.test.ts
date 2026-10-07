@@ -7,6 +7,7 @@ import {
 } from '../../helpers/clients';
 import { Cleanup } from '../../helpers/cleanup';
 import { uniqueId } from '../../helpers/ids';
+import { sendServerMessage } from '../../helpers/server';
 import { retry } from '../../helpers/wait';
 
 describe('_default/05-features/02-events.md', () => {
@@ -33,13 +34,11 @@ describe('_default/05-features/02-events.md', () => {
   };
 
   const sendAsOther = (channel: Channel, text: string) =>
-    serverClient
-      .channel(channel.type, channel.id)
-      .sendMessage({ text, user_id: otherId });
+    sendServerMessage(serverClient, channel.cid, { text, user_id: otherId });
 
   beforeAll(async () => {
     cleanup.users.push(userId, otherId);
-    await serverClient.upsertUser({ id: otherId, name: 'Jack' });
+    await serverClient.upsertUsers([{ id: otherId, name: 'Jack' }]);
     client = await getClientSideClient({ id: userId, name: 'John' });
   });
 
@@ -62,8 +61,8 @@ describe('_default/05-features/02-events.md', () => {
       });
       // #endregion snippet
 
-      const { message } = await sendAsOther(channel, 'Hello from Jack');
-      await serverClient.deleteMessage(message.id);
+      const message = await sendAsOther(channel, 'Hello from Jack');
+      await serverClient.chat.deleteMessage({ id: message.id });
 
       await retry(() => {
         expect(logSpy).toHaveBeenCalledWith('received a new message', 'Hello from Jack');
@@ -87,7 +86,7 @@ describe('_default/05-features/02-events.md', () => {
       });
       // #endregion snippet
 
-      const { message } = await sendAsOther(channel, 'Any event');
+      const message = await sendAsOther(channel, 'Any event');
 
       await retry(() => {
         const events = logSpy.mock.calls

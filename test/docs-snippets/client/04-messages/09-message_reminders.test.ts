@@ -41,9 +41,9 @@ describe('_default/04-messages/09-message_reminders.md', () => {
     cleanup.channels.push(`messaging:${channelId}`);
     await channel.watch();
     // Reminders are off for `messaging` in the test app: enable them for this channel only.
-    await serverClient
-      .channel('messaging', channelId)
-      .updatePartial({ set: { config_overrides: { user_message_reminders: true } } });
+    await serverClient.chat.channel('messaging', channelId).updateChannelPartial({
+      set: { config_overrides: { user_message_reminders: true } },
+    });
     const names = [
       'create',
       'createOther',

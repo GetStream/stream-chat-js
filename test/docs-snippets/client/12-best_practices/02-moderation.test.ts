@@ -7,6 +7,11 @@ import {
 } from '../../helpers/clients';
 import { Cleanup } from '../../helpers/cleanup';
 import { uniqueId } from '../../helpers/ids';
+import {
+  getServerChannel,
+  getServerMember,
+  sendServerMessage,
+} from '../../helpers/server';
 
 const DOCS = '_default/12-best_practices/02-moderation.md';
 
@@ -27,9 +32,10 @@ describe(DOCS, () => {
   const flaggedMessageIds: string[] = [];
 
   const sendSpamMessage = async (text: string) => {
-    const { message } = await serverClient
-      .channel('messaging', channelId)
-      .sendMessage({ text, user_id: spammerId });
+    const message = await sendServerMessage(serverClient, `messaging:${channelId}`, {
+      text,
+      user_id: spammerId,
+    });
     return message.id;
   };
 
@@ -49,7 +55,7 @@ describe(DOCS, () => {
 
     cleanup.add(async () => {
       try {
-        await serverClient.deleteBlockList(blocklistName);
+        await serverClient.deleteBlockList({ name: blocklistName });
       } catch (error) {
         // Already deleted by the "Delete a blocklist" snippet.
         if (!/not found|does not exist|doesn't exist/i.test(String(error))) throw error;
@@ -80,10 +86,8 @@ describe(DOCS, () => {
     ]);
     // #endregion snippet
 
-    const { members } = await serverClient
-      .channel('messaging', id)
-      .queryMembers({ user_id: jamesBondId });
-    expect(members[0]?.channel_role).toBe('channel_moderator');
+    const member = await getServerMember(serverClient, `messaging:${id}`, jamesBondId);
+    expect(member.channel_role).toBe('channel_moderator');
   });
 
   it('enables and disables slow mode', async () => {
@@ -92,7 +96,9 @@ describe(DOCS, () => {
     cleanup.channels.push(`messaging:${id}`);
     await channel.create();
     // Changing the cooldown needs UpdateChannelCooldown (a channel creator gets 403 code 17).
-    await serverClient.channel('messaging', id).addModerators([ownerId]);
+    await serverClient.chat
+      .channel('messaging', id)
+      .update({ add_moderators: [ownerId] });
     const enableSpy = vi.spyOn(channel, 'enableSlowMode');
 
     // #region snippet docs="_default/12-best_practices/02-moderation.md" heading="Slow mode" tab="JavaScript" index=1
@@ -108,8 +114,8 @@ describe(DOCS, () => {
 
     const results = await Promise.all(enableSpy.mock.results.map((r) => r.value));
     expect(results.map((r) => r.channel.cooldown)).toEqual([1, 30]);
-    const [queried] = await serverClient.queryChannels({ cid: channel.cid });
-    expect(queried.data?.cooldown ?? 0).toBe(0);
+    const serverChannel = await getServerChannel(serverClient, channel.cid);
+    expect(serverChannel.channel?.cooldown ?? 0).toBe(0);
   });
 
   it.skip('BLOCKED: lists blocklists (client-side ListBlockLists fails with code 4 "Multi-tenant blocklist is not enabled for this app", also for admins and with multi-tenancy on)', async () => {
@@ -131,8 +137,8 @@ describe(DOCS, () => {
     });
     // #endregion snippet
 
-    const { blocklist } = await serverClient.getBlockList(blocklistName);
-    expect(blocklist.words).toEqual(['fudge', 'cream', 'sugar', 'vanilla']);
+    const { blocklist } = await serverClient.getBlockList({ name: blocklistName });
+    expect(blocklist?.words).toEqual(['fudge', 'cream', 'sugar', 'vanilla']);
   });
 
   it('deletes a blocklist', async () => {
@@ -143,7 +149,7 @@ describe(DOCS, () => {
     await client.deleteBlockList(blocklistName);
     // #endregion snippet
 
-    await expect(serverClient.getBlockList(blocklistName)).rejects.toThrow();
+    await expect(serverClient.getBlockList({ name: blocklistName })).rejects.toThrow();
   });
 
   it('flags a message', async () => {
@@ -255,7 +261,7 @@ describe(DOCS, () => {
     await client.blockUser(userToBlock);
     // #endregion snippet
 
-    const { blocks } = await serverClient.getBlockedUsers(ownerId);
+    const { blocks } = await serverClient.getBlockedUsers({ user_id: ownerId });
     expect(blocks.map((b) => b.blocked_user_id)).toContain(userToBlock);
   });
 
@@ -268,7 +274,7 @@ describe(DOCS, () => {
     await client.blockUser(userToBlock);
     // #endregion snippet
 
-    const before = await serverClient.getBlockedUsers(ownerId);
+    const before = await serverClient.getBlockedUsers({ user_id: ownerId });
     expect(before.blocks.map((b) => b.blocked_user_id)).toContain(blockedUser);
 
     // #region snippet docs="_default/12-best_practices/02-moderation.md" heading="Unblock user" tab="JavaScript" index=1
@@ -299,7 +305,7 @@ describe(DOCS, () => {
       }
       // #endregion snippet
 
-      const blocked = await serverClient.getBlockedUsers(ownerId);
+      const blocked = await serverClient.getBlockedUsers({ user_id: ownerId });
       expect(blocked.blocks.map((b) => b.blocked_user_id)).toContain(userId);
 
       // #region snippet docs="_default/12-best_practices/02-moderation.md" heading="Server Side" tab="JavaScript" index=2

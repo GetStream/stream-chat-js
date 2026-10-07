@@ -1,4 +1,5 @@
-import type { StreamChat } from '../../../src';
+import type { StreamClient } from '@stream-io/node-sdk';
+import { updateChannelType } from './channel-types';
 import type { Cleanup } from './cleanup';
 import { waitForChannelTypePropagation } from './wait';
 
@@ -8,20 +9,20 @@ import { waitForChannelTypePropagation } from './wait';
  * `waitForChannelTypePropagation()` after it, before using the new grants.
  */
 export const grantMessagingMembers = async (
-  serverClient: StreamChat,
+  serverClient: StreamClient,
   cleanup: Cleanup,
   permissions: string[],
 ) => {
-  const { grants = {} } = await serverClient.getChannelType('messaging');
+  const { grants = {} } = await serverClient.chat.getChannelType({ name: 'messaging' });
   const original = grants.channel_member ?? [];
   cleanup.add(async () => {
-    await serverClient.updateChannelType('messaging', {
+    await updateChannelType(serverClient, 'messaging', {
       grants: { channel_member: original },
     });
     // Let the restore reach every API node before the DRIFT check reads it.
     await waitForChannelTypePropagation();
   });
-  await serverClient.updateChannelType('messaging', {
+  await updateChannelType(serverClient, 'messaging', {
     grants: { channel_member: [...new Set([...original, ...permissions])] },
   });
 };

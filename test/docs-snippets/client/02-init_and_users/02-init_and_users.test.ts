@@ -1,7 +1,8 @@
 import { afterAll, describe, expect, it } from 'vitest';
-import { getServerClient } from '../../helpers/clients';
+import { createUserToken, getServerClient } from '../../helpers/clients';
 import { Cleanup } from '../../helpers/cleanup';
 import { uniqueId } from '../../helpers/ids';
+import { getServerUser } from '../../helpers/server';
 
 const apiKey = process.env.STREAM_API_KEY as string;
 
@@ -38,7 +39,7 @@ describe('_default/02-init_and_users/02-init_and_users.md', () => {
 
   it('connects and disconnects a user', async () => {
     // The docs leave `tokenProvider` to the app: here it returns a token signed by the server.
-    const tokenProvider = () => Promise.resolve(serverClient.createToken(userId));
+    const tokenProvider = () => Promise.resolve(createUserToken(userId));
 
     // #region snippet docs="_default/02-init_and_users/02-init_and_users.md" heading="Connecting Users" tab="JavaScript" index=1
     // COPY: userId="john"
@@ -54,9 +55,9 @@ describe('_default/02-init_and_users/02-init_and_users.md', () => {
 
     expect(chatClient.userID).toBe(userId);
     expect(chatClient.wsConnection?.isHealthy).toBe(true);
-    const { users } = await serverClient.queryUsers({ id: userId });
-    expect(users[0]?.name).toBe('John Doe');
-    expect(users[0]?.image).toBe('https://getstream.io/random_svg/?name=John');
+    const user = await getServerUser(serverClient, userId);
+    expect(user.name).toBe('John Doe');
+    expect(user.image).toBe('https://getstream.io/random_svg/?name=John');
 
     // #region snippet docs="_default/02-init_and_users/02-init_and_users.md" heading="Disconnecting Users" tab="JavaScript" index=1
     await chatClient.disconnectUser();
@@ -67,7 +68,7 @@ describe('_default/02-init_and_users/02-init_and_users.md', () => {
   });
 
   it('connects a user with privacy settings', async () => {
-    const userToken = serverClient.createToken(privacyUserId);
+    const userToken = createUserToken(privacyUserId);
 
     // #region snippet docs="_default/02-init_and_users/02-init_and_users.md" heading="Privacy Settings" tab="JavaScript" index=1
     // COPY: privacyUserId="john", userToken="{{ chat_user_token }}"
@@ -94,8 +95,8 @@ describe('_default/02-init_and_users/02-init_and_users.md', () => {
       typing_indicators: { enabled: false },
       read_receipts: { enabled: false },
     });
-    const { users } = await serverClient.queryUsers({ id: privacyUserId });
-    expect(users[0]?.privacy_settings).toEqual({
+    const privacyUser = await getServerUser(serverClient, privacyUserId);
+    expect(privacyUser.privacy_settings).toEqual({
       typing_indicators: { enabled: false },
       read_receipts: { enabled: false },
     });
@@ -117,10 +118,7 @@ describe('_default/02-init_and_users/02-init_and_users.md', () => {
     expect(chatClient).not.toBe(previousClient);
     expect(chatClient.options.enableWSFallback).toBe(true);
 
-    await chatClient.connectUser(
-      { id: fallbackUserId },
-      serverClient.createToken(fallbackUserId),
-    );
+    await chatClient.connectUser({ id: fallbackUserId }, createUserToken(fallbackUserId));
     expect(chatClient.userID).toBe(fallbackUserId);
   });
 });

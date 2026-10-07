@@ -1,4 +1,4 @@
-import type { StreamChat } from '../../../src';
+import type { StreamClient } from '@stream-io/node-sdk';
 import { DOCS_TEST_PREFIX } from './ids';
 
 /**
@@ -18,6 +18,8 @@ const normalize = (value: unknown): unknown => {
       .map(normalize)
       .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
   }
+  // node-sdk decodes timestamps to Dates; compare them by value.
+  if (value instanceof Date) return value.toISOString();
   if (value && typeof value === 'object') {
     return Object.fromEntries(
       Object.entries(value)
@@ -29,21 +31,23 @@ const normalize = (value: unknown): unknown => {
   return value;
 };
 
-export const takeAppSnapshot = async (client: StreamChat): Promise<AppSnapshot> => {
+export const takeAppSnapshot = async (client: StreamClient): Promise<AppSnapshot> => {
   const snapshot: AppSnapshot = {};
-  const { app } = await client.getAppSettings();
+  const { app } = await client.getApp();
   for (const [key, value] of Object.entries(app ?? {})) {
     // Also lists docs-test channel types; channel types are compared separately below.
     if (key === 'channel_configs') continue;
     snapshot[`app.${key}`] = normalize(value);
   }
-  const { channel_types } = await client.listChannelTypes();
+  const { channel_types } = await client.chat.listChannelTypes();
   for (const [name, type] of Object.entries(channel_types)) {
     if (!name.startsWith(DOCS_TEST_PREFIX))
       snapshot[`channel_type.${name}`] = normalize(type);
   }
   try {
-    snapshot.retention_policies = normalize((await client.getRetentionPolicy()).policies);
+    snapshot.retention_policies = normalize(
+      (await client.chat.getRetentionPolicy()).policies,
+    );
   } catch {
     // Not available on every plan.
   }

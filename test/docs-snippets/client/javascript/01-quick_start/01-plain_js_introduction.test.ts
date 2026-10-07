@@ -1,8 +1,9 @@
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { StreamChat } from '../../../../../src';
-import { getServerClient } from '../../../helpers/clients';
+import { createUserToken, getServerClient } from '../../../helpers/clients';
 import { Cleanup } from '../../../helpers/cleanup';
 import { uniqueId } from '../../../helpers/ids';
+import { getServerUser, sendServerMessage } from '../../../helpers/server';
 import { retry } from '../../../helpers/wait';
 
 const PAGE = 'javascript/01-quick_start/01-plain_js_introduction.md';
@@ -25,7 +26,7 @@ describe(PAGE, () => {
   it('initializes the client and connects the user', async () => {
     // Start from a fresh singleton.
     Reflect.set(StreamChat, '_instance', undefined);
-    const userToken = serverClient.createToken(userId);
+    const userToken = createUserToken(userId);
 
     // #region snippet docs="javascript/01-quick_start/01-plain_js_introduction.md" heading="Chat client" tab="JavaScript" index=1
     // COPY: apiKey="{{ api_key }}", userId="jlahey", userToken="{{ chat_user_token }}"
@@ -44,9 +45,9 @@ describe(PAGE, () => {
 
     expect(client.userID).toBe(userId);
     expect(client.wsConnection?.isHealthy).toBe(true);
-    const { users } = await serverClient.queryUsers({ id: userId });
-    expect(users[0]?.name).toBe('Jim Lahey');
-    expect(users[0]?.image).toBe('https://i.imgur.com/fR9Jz14.png');
+    const user = await getServerUser(serverClient, userId);
+    expect(user.name).toBe('Jim Lahey');
+    expect(user.image).toBe('https://i.imgur.com/fR9Jz14.png');
   });
 
   it('watches a channel, sends a message and listens to events', async () => {
@@ -77,8 +78,8 @@ describe(PAGE, () => {
 
     expect(response.message.text).toBe(text);
     expect(response.message.customField).toBe('123');
-    const { message } = await serverClient.getMessage(response.message.id);
-    expect(message.customField).toBe('123');
+    const { message } = await serverClient.chat.getMessage({ id: response.message.id });
+    expect(message.custom.customField).toBe('123');
 
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     try {
@@ -89,9 +90,10 @@ describe(PAGE, () => {
       });
       // #endregion snippet
 
-      await serverClient
-        .channel('messaging', channelId)
-        .sendMessage({ text: 'from the server', user_id: userId });
+      await sendServerMessage(serverClient, `messaging:${channelId}`, {
+        text: 'from the server',
+        user_id: userId,
+      });
 
       await retry(() => {
         expect(logSpy).toHaveBeenCalledWith('received a new message', 'from the server');

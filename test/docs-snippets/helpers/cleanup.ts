@@ -1,4 +1,4 @@
-import type { StreamChat } from '../../../src';
+import type { StreamClient } from '@stream-io/node-sdk';
 import { hardDeleteUsers } from './users';
 import {
   CHANNEL_TYPE_PROPAGATION_MS,
@@ -14,7 +14,7 @@ import {
  * ```ts
  * const cleanup = new Cleanup(getServerClient());
  * cleanup.users.push(userId);
- * cleanup.add(() => serverClient.updateAppSettings(originalSettings));
+ * cleanup.add(() => serverClient.updateApp(originalSettings));
  * afterAll(() => cleanup.run());
  * ```
  *
@@ -29,7 +29,7 @@ export class Cleanup {
   channelTypes: string[] = [];
   private custom: Array<() => Promise<unknown>> = [];
 
-  constructor(private serverClient: StreamChat) {}
+  constructor(private serverClient: StreamClient) {}
 
   /** Extra cleanup steps (restore app settings, delete blocklists, ...). Run first, in reverse order. */
   add(fn: () => Promise<unknown>) {
@@ -68,7 +68,7 @@ export class Cleanup {
     // treat it as gone after that.
     const startedAt = Date.now();
     try {
-      await retry(() => this.serverClient.deleteChannelType(type), {
+      await retry(() => this.serverClient.chat.deleteChannelType({ name: type }), {
         timeout: 60000,
         interval: 2000,
         retryIf: (error) =>
@@ -86,7 +86,7 @@ export class Cleanup {
     // Server-side hard delete runs as a background task: wait for it so the channel
     // types can be deleted afterwards.
     const response = await retryOnRateLimit(() =>
-      this.serverClient.deleteChannels(this.channels, { hard_delete: true }),
+      this.serverClient.chat.deleteChannels({ cids: this.channels, hard_delete: true }),
     );
     if (response.task_id) await waitForTask(this.serverClient, response.task_id);
   }

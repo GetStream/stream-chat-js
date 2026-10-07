@@ -7,6 +7,7 @@ import {
 } from '../../../helpers/clients';
 import { Cleanup } from '../../../helpers/cleanup';
 import { uniqueId } from '../../../helpers/ids';
+import { getServerChannel, sendServerMessage } from '../../../helpers/server';
 import { retry } from '../../../helpers/wait';
 
 describe('_default/03-channels/07-channel_management/11-hiding.md', () => {
@@ -23,9 +24,10 @@ describe('_default/03-channels/07-channel_management/11-hiding.md', () => {
     client = await getClientSideClient({ id: userId });
     cleanup.channels.push(`messaging:${channelId}`);
     await client.channel('messaging', channelId, { members: [userId, otherId] }).create();
-    await serverClient
-      .channel('messaging', channelId)
-      .sendMessage({ text: 'before hiding', user_id: otherId });
+    await sendServerMessage(serverClient, `messaging:${channelId}`, {
+      text: 'before hiding',
+      user_id: otherId,
+    });
   });
 
   afterAll(async () => {
@@ -69,12 +71,10 @@ describe('_default/03-channels/07-channel_management/11-hiding.md', () => {
     expect(shown?.cid).toBe(`messaging:${channelId}`);
     // and the history was cleared for this user (read server-side: the client's local
     // state keeps the messages it already had, since no second hidden event arrived)
-    const [fresh] = await serverClient.queryChannels(
-      { cid: `messaging:${channelId}` },
-      {},
-      { user_id: userId },
-    );
-    expect(fresh?.state.messages).toEqual([]);
+    const fresh = await getServerChannel(serverClient, `messaging:${channelId}`, {
+      user_id: userId,
+    });
+    expect(fresh.messages).toEqual([]);
   });
 
   it('hidden channels are excluded from queries until a new message arrives', async () => {
@@ -86,16 +86,17 @@ describe('_default/03-channels/07-channel_management/11-hiding.md', () => {
     const hidden = await client.queryChannels({ ...filter, hidden: true });
     expect(hidden.map((c) => c.cid)).toEqual([`messaging:${channelId}`]);
 
-    await serverClient
-      .channel('messaging', channelId)
-      .sendMessage({ text: 'after hiding', user_id: otherId });
+    await sendServerMessage(serverClient, `messaging:${channelId}`, {
+      text: 'after hiding',
+      user_id: otherId,
+    });
     // unhiding on a new message is asynchronous
     await retry(async () => {
       const [found] = await client.queryChannels(filter);
       expect(found?.cid).toBe(`messaging:${channelId}`);
     });
     // after the cleared history, only the new message is visible to the user
-    const [fresh] = await serverClient.queryChannels(filter, {}, { user_id: userId });
-    expect(fresh?.state.messages.map((m) => m.text)).toEqual(['after hiding']);
+    const fresh = await getServerChannel(serverClient, filter.cid, { user_id: userId });
+    expect(fresh.messages.map((m) => m.text)).toEqual(['after hiding']);
   });
 });

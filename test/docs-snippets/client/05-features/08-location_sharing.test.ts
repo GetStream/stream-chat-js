@@ -24,14 +24,14 @@ describe('_default/05-features/08-location_sharing.md', () => {
     cleanup.users.push(userId, otherId);
     await grantMessagingMembers(serverClient, cleanup, ['share-location']);
     await waitForChannelTypePropagation();
-    await serverClient.upsertUser({ id: otherId });
+    await serverClient.upsertUsers([{ id: otherId }]);
     client = await getClientSideClient({ id: userId });
     cleanup.channels.push(`${channelType}:${channelId}`);
     await client.channel(channelType, channelId, { members: [userId, otherId] }).create();
     // config_overrides can only be set server-side
-    await serverClient
+    await serverClient.chat
       .channel(channelType, channelId)
-      .updatePartial({ set: { config_overrides: { shared_locations: true } } });
+      .updateChannelPartial({ set: { config_overrides: { shared_locations: true } } });
   });
 
   afterAll(async () => {

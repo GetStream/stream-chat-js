@@ -28,14 +28,16 @@ describe('_default/04-messages/04-send_reaction.md', () => {
     types: string[],
     user_id: string,
   ) => {
-    const serverChannel = serverClient.channel('messaging', channelId);
     for (const type of types) {
-      await serverChannel.sendReaction(messageId, { type, user_id });
+      await serverClient.chat.sendReaction({
+        id: messageId,
+        reaction: { type, user_id },
+      });
     }
   };
 
   const getServerMessage = async (messageId: string) =>
-    (await serverClient.getMessage(messageId)).message;
+    (await serverClient.chat.getMessage({ id: messageId })).message;
 
   beforeAll(async () => {
     cleanup.users.push(userId, otherId);

@@ -2,12 +2,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Channel, Event } from '../../../../src';
 import { StreamChat } from '../../../../src';
 import {
+  createUserToken,
   disconnectClients,
   getClientSideClient,
   getServerClient,
 } from '../../helpers/clients';
 import { Cleanup } from '../../helpers/cleanup';
 import { uniqueId } from '../../helpers/ids';
+import { getServerUser } from '../../helpers/server';
 import { retry } from '../../helpers/wait';
 
 const apiKey = process.env.STREAM_API_KEY as string;
@@ -61,7 +63,7 @@ describe('_default/04-messages/10-message_receipts.md', () => {
 
   it('disables delivery receipts on connect', async () => {
     const chatClient = newChatClient();
-    const userToken = serverClient.createToken(deliveryUserId);
+    const userToken = createUserToken(deliveryUserId);
 
     // #region snippet docs="_default/04-messages/10-message_receipts.md" heading="User Privacy Settings" tab="JavaScript" index=1
     // COPY: deliveryUserId="john", userToken="{{ chat_user_token }}"
@@ -79,8 +81,8 @@ describe('_default/04-messages/10-message_receipts.md', () => {
     );
     // #endregion snippet
 
-    const { users } = await serverClient.queryUsers({ id: deliveryUserId });
-    expect(users[0]?.privacy_settings?.delivery_receipts?.enabled).toBe(false);
+    const user = await getServerUser(serverClient, deliveryUserId);
+    expect(user.privacy_settings?.delivery_receipts?.enabled).toBe(false);
 
     // The user confirms delivery, then the control user does: only the control's
     // `message.delivered` reaches the other members.
@@ -97,7 +99,7 @@ describe('_default/04-messages/10-message_receipts.md', () => {
 
   it('disables read receipts on connect', async () => {
     const chatClient = newChatClient();
-    const userToken = serverClient.createToken(readUserId);
+    const userToken = createUserToken(readUserId);
 
     // #region snippet docs="_default/04-messages/10-message_receipts.md" heading="User Privacy Settings" tab="JavaScript" index=2
     // COPY: readUserId="john", userToken="{{ chat_user_token }}"
@@ -115,8 +117,8 @@ describe('_default/04-messages/10-message_receipts.md', () => {
     );
     // #endregion snippet
 
-    const { users } = await serverClient.queryUsers({ id: readUserId });
-    expect(users[0]?.privacy_settings?.read_receipts?.enabled).toBe(false);
+    const user = await getServerUser(serverClient, readUserId);
+    expect(user.privacy_settings?.read_receipts?.enabled).toBe(false);
 
     // The user reads the channel, then the control user does: only the control's
     // `message.read` reaches the other members.

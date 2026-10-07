@@ -7,6 +7,7 @@ import {
 } from '../../helpers/clients';
 import { Cleanup } from '../../helpers/cleanup';
 import { uniqueId } from '../../helpers/ids';
+import { sendServerMessage } from '../../helpers/server';
 import { retry } from '../../helpers/wait';
 
 describe('_default/04-messages/06-search.md', () => {
@@ -26,7 +27,7 @@ describe('_default/04-messages/06-search.md', () => {
 
   beforeAll(async () => {
     cleanup.users.push(userId, otherUserId);
-    await serverClient.upsertUser({ id: otherUserId });
+    await serverClient.upsertUsers([{ id: otherUserId }]);
     client = await getClientSideClient({ id: userId });
 
     const channel = client.channel('messaging', searchChannelId, { members: [userId] });
@@ -38,27 +39,30 @@ describe('_default/04-messages/06-search.md', () => {
     ids.plain = (await channel.sendMessage({ text: 'superb, no attachment' })).message.id;
     // Sent server-side: client-side attachments need the `create-attachment` grant.
     ids.attachment = (
-      await serverClient.channel('messaging', searchChannelId).sendMessage({
+      await sendServerMessage(serverClient, `messaging:${searchChannelId}`, {
         text: 'super picture',
         user_id: userId,
-        attachments: [{ type: 'image', image_url: 'https://getstream.io/random.png' }],
+        attachments: [
+          { type: 'image', image_url: 'https://getstream.io/random.png', custom: {} },
+        ],
       })
-    ).message.id;
+    ).id;
 
     // A channel the user isn't a member of: its messages must not show up.
-    const otherChannel = serverClient.channel('messaging', otherChannelId, {
-      members: [otherUserId],
-      created_by_id: otherUserId,
-    });
+    const otherChannel = serverClient.chat.channel('messaging', otherChannelId);
     cleanup.channels.push(`messaging:${otherChannelId}`);
-    await otherChannel.create();
+    await otherChannel.getOrCreate({
+      data: { members: [{ user_id: otherUserId }], created_by_id: otherUserId },
+    });
     ids.other = (
-      await otherChannel.sendMessage({
+      await sendServerMessage(serverClient, `messaging:${otherChannelId}`, {
         text: 'supercalifragilisticexpialidocious',
         user_id: otherUserId,
-        attachments: [{ type: 'image', image_url: 'https://getstream.io/random.png' }],
+        attachments: [
+          { type: 'image', image_url: 'https://getstream.io/random.png', custom: {} },
+        ],
       })
-    ).message.id;
+    ).id;
 
     const pagingChannel = client.channel('messaging', pagingChannelId, {
       members: [userId],

@@ -91,7 +91,7 @@ describe('_default/04-messages/05-pinned_messages.md', () => {
     );
     unpinSpy.mockRestore();
     expect(unpinned.message.pinned).toBe(false);
-    const { message: stored } = await serverClient.getMessage(message.id);
+    const { message: stored } = await serverClient.chat.getMessage({ id: message.id });
     expect(stored.pinned).toBe(false);
   });
 

@@ -1,8 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { StreamChat } from '../../../../src';
-import { disconnectClients, getServerClient } from '../../helpers/clients';
+import {
+  createUserToken,
+  disconnectClients,
+  getServerClient,
+} from '../../helpers/clients';
 import { Cleanup } from '../../helpers/cleanup';
 import { uniqueId } from '../../helpers/ids';
+import { sendServerMessage } from '../../helpers/server';
 import { retry } from '../../helpers/wait';
 
 describe('_default/05-features/03-unread.md', () => {
@@ -11,7 +16,7 @@ describe('_default/05-features/03-unread.md', () => {
   const userId = uniqueId('myid');
   const otherId = uniqueId('other');
   const channelId = uniqueId('channel');
-  const token = serverClient.createToken(userId);
+  const token = createUserToken(userId);
   // Not connected yet: the first snippet connects it.
   const client = new StreamChat(process.env.STREAM_API_KEY as string, {
     allowServerSideConnect: true,
@@ -19,27 +24,27 @@ describe('_default/05-features/03-unread.md', () => {
   let firstMessageId = '';
 
   const sendAsOther = (text: string, mentionMe = false) =>
-    serverClient.channel('messaging', channelId).sendMessage({
+    sendServerMessage(serverClient, `messaging:${channelId}`, {
       text,
       user_id: otherId,
       ...(mentionMe ? { mentioned_users: [userId] } : {}),
     });
 
   const serverUnread = async () =>
-    (await serverClient.getUnreadCount(userId)).total_unread_count;
+    (await serverClient.chat.unreadCounts({ user_id: userId })).total_unread_count;
 
   beforeAll(async () => {
     cleanup.users.push(userId, otherId);
     await serverClient.upsertUsers([{ id: userId }, { id: otherId }]);
     cleanup.channels.push(`messaging:${channelId}`);
-    await serverClient
-      .channel('messaging', channelId, {
+    await serverClient.chat.channel('messaging', channelId).getOrCreate({
+      data: {
         created_by_id: otherId,
-        members: [userId, otherId],
-      })
-      .create();
+        members: [{ user_id: userId }, { user_id: otherId }],
+      },
+    });
     // unread before connecting, so the connect response has counts to show
-    const { message } = await sendAsOther('first');
+    const message = await sendAsOther('first');
     firstMessageId = message.id;
   });
 

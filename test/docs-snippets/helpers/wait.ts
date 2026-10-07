@@ -1,4 +1,4 @@
-import type { StreamChat } from '../../../src';
+import type { StreamClient } from '@stream-io/node-sdk';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -29,12 +29,18 @@ export const retry = async <T>(
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
-/** 429 "Too many requests" (code 9): the app's rate limit for that endpoint was hit. */
+/**
+ * 429 "Too many requests" (code 9): the app's rate limit for that endpoint was hit.
+ * node-sdk errors carry the HTTP status in `metadata.responseCode`.
+ */
 export const isRateLimited = (error: unknown) =>
   typeof error === 'object' &&
   error !== null &&
-  'status' in error &&
-  error.status === 429;
+  'metadata' in error &&
+  typeof error.metadata === 'object' &&
+  error.metadata !== null &&
+  'responseCode' in error.metadata &&
+  error.metadata.responseCode === 429;
 
 /**
  * Retries `fn` while it is rate limited. Rate limits are per minute, so this keeps
@@ -68,13 +74,13 @@ export const retryWhileChannelTypePropagates = <T>(fn: () => Promise<T>) =>
 
 /** Polls a background task (e.g. from server-side `deleteChannels`) until it finishes. */
 export const waitForTask = async (
-  client: StreamChat,
+  client: StreamClient,
   taskId: string,
   timeout = 60000,
 ) => {
   const task = await retry(
     async () => {
-      const response = await client.getTask(taskId);
+      const response = await client.getTask({ id: taskId });
       if (response.status !== 'completed' && response.status !== 'failed') {
         throw new Error(`task ${taskId} is still ${response.status}`);
       }

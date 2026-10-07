@@ -8,6 +8,7 @@ import {
 import { Cleanup } from '../../../helpers/cleanup';
 import { grantMessagingMembers } from '../../../helpers/grants';
 import { uniqueId } from '../../../helpers/ids';
+import { getServerChannel } from '../../../helpers/server';
 import { waitForChannelTypePropagation } from '../../../helpers/wait';
 
 // `messaging` doesn't grant channel members `CreateSystemMessage` or
@@ -27,12 +28,11 @@ describe('_default/05-features/10-advanced/13-private_messaging.md', () => {
   let client: StreamChat;
 
   const messagesSeenBy = async (memberId: string) => {
-    const [channel] = await serverClient.queryChannels(
-      { cid: `messaging:${channelId}` },
-      {},
-      { user_id: memberId, message_limit: 10 },
-    );
-    return channel.state.messages.map((m) => m.id);
+    const result = await getServerChannel(serverClient, `messaging:${channelId}`, {
+      user_id: memberId,
+      message_limit: 10,
+    });
+    return result.messages.map((m) => m.id);
   };
 
   beforeAll(async () => {

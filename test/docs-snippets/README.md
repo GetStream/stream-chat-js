@@ -46,6 +46,7 @@ The path mirrors the docs path, e.g. `_default/04-messages/01-send_message.md` m
 - **Guest users** get their id rewritten to `guest-<uuid>-<requested id>`: register `client.userID` for cleanup.
 - One `it` per docs snippet (or per closely related group of snippets in the same tab group).
 - `getClientSideClient(user)` returns a connected client. Disconnect it with `disconnectClients` in `afterAll`. Use `getServerClient()` only for setup, cleanup and assertions that a client can't do (server calls need `user_id` / `created_by_id` where a client call would infer the user).
+- The server client is `@stream-io/node-sdk` (`StreamClient`), not stream-chat-js: request objects (`chat.getMessage({ id })`), chat endpoints on `serverClient.chat`, custom data under `custom`, timestamps as `Date` objects. `upsertUsers(serverClient, users)` takes stream-chat-js-shaped users, `createUserToken(userId)` signs tokens, and `updateChannelType(serverClient, name, patch)` (`helpers/channel-types.ts`) fills in the fields node-sdk requires. `helpers/server.ts` has the repeated server-side steps: `sendServerMessage`, `getServerUser` / `getServerMember` / `getServerChannel` (throw unless exactly one result matches), `deletePollsCreatedBy` and `waitForAppSetting`.
 - Add basic `expect`s after each snippet to prove it did what the docs claim.
 
 ## Snippet markers and docs sync

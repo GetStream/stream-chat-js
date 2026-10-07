@@ -7,6 +7,7 @@ import {
 } from '../../../helpers/clients';
 import { Cleanup } from '../../../helpers/cleanup';
 import { uniqueId } from '../../../helpers/ids';
+import { sendServerMessage } from '../../../helpers/server';
 
 describe('_default/05-features/10-advanced/15-pending_messages.md', () => {
   const serverClient = getServerClient();
@@ -19,15 +20,16 @@ describe('_default/05-features/10-advanced/15-pending_messages.md', () => {
 
   beforeAll(async () => {
     cleanup.users.push(userId, otherId);
-    await serverClient.upsertUser({ id: otherId });
+    await serverClient.upsertUsers([{ id: otherId }]);
     client = await getClientSideClient({ id: userId });
     cleanup.channels.push(`messaging:${channelId}`);
     await client.channel('messaging', channelId, { members: [userId, otherId] }).create();
 
     // Pending messages can only be sent server-side.
-    const serverChannel = serverClient.channel('messaging', channelId);
     for (const text of ['pending 1', 'pending 2']) {
-      const { message } = await serverChannel.sendMessage(
+      const message = await sendServerMessage(
+        serverClient,
+        `messaging:${channelId}`,
         { text, user_id: userId },
         { pending: true, pending_message_metadata: { my: 'metadata' } },
       );

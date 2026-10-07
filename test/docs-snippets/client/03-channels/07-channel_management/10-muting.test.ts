@@ -1,6 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { StreamChat } from '../../../../../src';
-import { disconnectClients, getServerClient } from '../../../helpers/clients';
+import {
+  createUserToken,
+  disconnectClients,
+  getServerClient,
+} from '../../../helpers/clients';
 import { Cleanup } from '../../../helpers/cleanup';
 import { uniqueId } from '../../../helpers/ids';
 import { retry } from '../../../helpers/wait';
@@ -13,26 +17,29 @@ describe('_default/03-channels/07-channel_management/10-muting.md', () => {
   const otherChannelId = uniqueId('other');
   const premutedChannelId = uniqueId('premuted');
   const user = { id: userId };
-  const token = serverClient.createToken(userId);
+  const token = createUserToken(userId);
   const client = new StreamChat(process.env.STREAM_API_KEY as string, {
     allowServerSideConnect: true,
   });
 
   beforeAll(async () => {
     cleanup.users.push(userId);
-    await serverClient.upsertUser(user);
+    await serverClient.upsertUsers([user]);
     cleanup.channels.push(
       `messaging:${channelId}`,
       `messaging:${otherChannelId}`,
       `messaging:${premutedChannelId}`,
     );
     for (const id of [channelId, otherChannelId, premutedChannelId]) {
-      await serverClient
-        .channel('messaging', id, { created_by_id: userId, members: [userId] })
-        .create();
+      await serverClient.chat
+        .channel('messaging', id)
+        .getOrCreate({ data: { created_by_id: userId, members: [{ user_id: userId }] } });
     }
     // muted before connecting, so the connect response lists it in channel_mutes
-    await serverClient.channel('messaging', premutedChannelId).mute({ user_id: userId });
+    await serverClient.chat.muteChannel({
+      channel_cids: [`messaging:${premutedChannelId}`],
+      user_id: userId,
+    });
   });
 
   afterAll(async () => {

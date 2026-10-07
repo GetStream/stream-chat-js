@@ -7,6 +7,7 @@ import {
 } from '../../helpers/clients';
 import { Cleanup } from '../../helpers/cleanup';
 import { uniqueId } from '../../helpers/ids';
+import { getServerChannel } from '../../helpers/server';
 import { retry } from '../../helpers/wait';
 
 const DOCS = '_default/03-channels/02-query_channels.md';
@@ -30,16 +31,18 @@ describe(DOCS, () => {
 
   beforeAll(async () => {
     cleanup.users.push(thierry, other);
-    await serverClient.upsertUser({ id: other });
+    await serverClient.upsertUsers([{ id: other }]);
     chatClient = await getClientSideClient({ id: thierry });
     for (const id of channelIds) {
       cleanup.channels.push(`messaging:${id}`);
-      const channel = serverClient.channel('messaging', id, {
-        members: [thierry, other],
-        created_by_id: other,
+      const channel = serverClient.chat.channel('messaging', id);
+      await channel.getOrCreate({
+        data: {
+          members: [{ user_id: thierry }, { user_id: other }],
+          created_by_id: other,
+        },
       });
-      await channel.create();
-      await channel.sendMessage({ text: `hello ${id}`, user_id: other });
+      await channel.sendMessage({ message: { text: `hello ${id}`, user_id: other } });
     }
   });
 
@@ -99,17 +102,11 @@ describe(DOCS, () => {
     channel.watch();
     // #endregion snippet
 
-    const [created] = await retry(
-      async () => {
-        const result = await serverClient.queryChannels({
-          cid: `messaging:${channelId}`,
-        });
-        if (!result.length) throw new Error('channel not created yet');
-        return result;
-      },
+    const created = await retry(
+      () => getServerChannel(serverClient, `messaging:${channelId}`),
       { timeout: 10000, interval: 500 },
     );
-    expect(created.data?.created_by?.id).toBe(thierry);
+    expect(created.channel?.created_by?.id).toBe(thierry);
   });
 
   it('filters by cid, by type and members, or by type alone', async () => {
@@ -184,8 +181,10 @@ describe(DOCS, () => {
     const userMessagingChannels = uniqueId('user_messaging_channels');
 
     beforeAll(async () => {
-      cleanup.add(() => serverClient.deletePredefinedFilter(userMessagingChannels));
-      await serverClient.createPredefinedFilter({
+      cleanup.add(() =>
+        serverClient.chat.deletePredefinedFilter({ name: userMessagingChannels }),
+      );
+      await serverClient.chat.createPredefinedFilter({
         name: userMessagingChannels,
         operation: 'QueryChannels',
         filter: { type: 'messaging', members: { $in: ['{{user_id}}'] } },

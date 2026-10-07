@@ -7,6 +7,7 @@ import {
 } from '../../../helpers/clients';
 import { Cleanup } from '../../../helpers/cleanup';
 import { uniqueId } from '../../../helpers/ids';
+import { getServerMember } from '../../../helpers/server';
 
 describe('_default/03-channels/07-channel_management/08-archiving.md', () => {
   const serverClient = getServerClient();
@@ -51,9 +52,7 @@ describe('_default/03-channels/07-channel_management/08-archiving.md', () => {
     expect(archived?.archived_at).toBeTruthy();
     expect(resp.map((c) => c.cid)).not.toContain(`messaging:${channelId}`);
 
-    const { members } = await serverClient
-      .channel('messaging', channelId)
-      .queryMembers({ id: userId });
-    expect(members[0]?.archived_at).toBeFalsy();
+    const member = await getServerMember(serverClient, `messaging:${channelId}`, userId);
+    expect(member.archived_at).toBeFalsy();
   });
 });

@@ -9,10 +9,15 @@ import {
   vi,
 } from 'vitest';
 import type { Channel, FileLike, FileReference, StreamChat } from '../../../../src';
-import { disconnectClients, getServerClient } from '../../helpers/clients';
+import {
+  createUserToken,
+  disconnectClients,
+  getServerClient,
+} from '../../helpers/clients';
 import { Cleanup } from '../../helpers/cleanup';
 import { grantMessagingMembers } from '../../helpers/grants';
 import { uniqueId } from '../../helpers/ids';
+import { getServerUser } from '../../helpers/server';
 import { waitForChannelTypePropagation } from '../../helpers/wait';
 
 // The snippets upload browser `File`s. Under Node the SDK builds the multipart body with the
@@ -27,13 +32,13 @@ vi.mock('form-data', () => ({ default: globalThis.FormData }));
  */
 const getBrowserLikeClientSideClient = async (userId: string): Promise<StreamChat> => {
   const serverClient = getServerClient();
-  await serverClient.upsertUser({ id: userId });
+  await serverClient.upsertUsers([{ id: userId }]);
   vi.resetModules();
   const { StreamChat: FreshStreamChat } = await import('../../../../src');
   const client = new FreshStreamChat(process.env.STREAM_API_KEY as string, {
     allowServerSideConnect: true,
   });
-  await client.connectUser({ id: userId }, serverClient.createToken(userId));
+  await client.connectUser({ id: userId }, createUserToken(userId));
   return client;
 };
 
@@ -179,8 +184,7 @@ describe('_default/04-messages/02-file_uploads.md', () => {
     expect(imageUrl).toMatch(/^https:\/\//);
     expect(logs.some((line) => /^Image: \d+%$/.test(line))).toBe(true);
 
-    const { users } = await serverClient.queryUsers({ id: userId });
-    const image = users[0].image;
+    const { image } = await getServerUser(serverClient, userId);
     expect(typeof image).toBe('string');
     // The stored URL is re-signed on read, so compare without the query string.
     expect(String(image).split('?')[0]).toBe(imageUrl.split('?')[0]);

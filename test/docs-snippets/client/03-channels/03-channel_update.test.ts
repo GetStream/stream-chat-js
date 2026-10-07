@@ -52,10 +52,10 @@ describe('_default/03-channels/03-channel_update.md', () => {
     await channel.updatePartial({ unset: ['channel_detail.rating'] });
     // #endregion snippet
 
-    const { channel: updated } = await serverClient.channel(type, id).query({});
-    expect(updated.source).toBe('system');
-    expect(updated.source_detail).toBeUndefined();
-    expect(updated.channel_detail).toEqual({ topic: 'Nature' });
+    const { channel: updated } = await serverClient.chat.channel(type, id).getOrCreate();
+    expect(updated?.custom.source).toBe('system');
+    expect(updated?.custom.source_detail).toBeUndefined();
+    expect(updated?.custom.channel_detail).toEqual({ topic: 'Nature' });
   });
 
   it('fully updates a channel', async () => {

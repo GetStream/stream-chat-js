@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import type { StreamClient } from '@stream-io/node-sdk';
 import type { StreamChat } from '../../../../src';
 import {
   disconnectClients,
@@ -7,45 +8,19 @@ import {
 } from '../../helpers/clients';
 import { Cleanup } from '../../helpers/cleanup';
 import { DOCS_TEST_PREFIX, uniqueId } from '../../helpers/ids';
-import { retry } from '../../helpers/wait';
+import { waitForAppSetting } from '../../helpers/server';
 
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
-/**
- * `multi_tenant_enabled` takes a moment to reach every API node. Until then a request
- * with `team_id` can still fail with "team_id is not supported when multi-tenancy is not
- * enabled" (or the opposite). Poll until 20 consecutive requests (a few seconds) agree.
- */
-const waitForMultiTenancy = async (serverClient: StreamChat, enabled: boolean) => {
-  const isEnabled = async () => {
-    try {
-      await serverClient.queryUserGroups({ limit: 1, team_id: DOCS_TEST_PREFIX });
-      return true;
-    } catch (error) {
-      if (/team_id is not supported/.test(errorMessage(error))) return false;
-      throw error;
-    }
-  };
-  await retry(
-    async () => {
-      for (let i = 0; i < 20; i++) {
-        if ((await isEnabled()) !== enabled) throw new Error('not propagated yet');
-        await new Promise((resolve) => setTimeout(resolve, 300));
-      }
-    },
-    { timeout: 60000, interval: 1000 },
-  );
-};
-
 /** Deletes a user group, treating "not found" (e.g. already deleted by a snippet) as done. */
 const deleteGroupIfExists = async (
-  serverClient: StreamChat,
+  serverClient: StreamClient,
   id: string,
   teamId?: string,
 ) => {
   try {
-    await serverClient.deleteUserGroup(id, teamId ? { team_id: teamId } : {});
+    await serverClient.deleteUserGroup({ id, team_id: teamId });
   } catch (error) {
     if (!/not found/.test(errorMessage(error))) throw error;
   }
@@ -82,13 +57,13 @@ describe('_default/02-init_and_users/04-user_groups.md', () => {
     cleanup.add(() =>
       Promise.all(groupIds.map((id) => deleteGroupIfExists(serverClient, id))),
     );
-    const { app } = await serverClient.getAppSettings();
-    const originalMultiTenancy = app?.multi_tenant_enabled ?? false;
+    const { app } = await serverClient.getApp();
+    const originalMultiTenancy = app.multi_tenant_enabled;
     cleanup.add(async () => {
-      await serverClient.updateAppSettings({
+      await serverClient.updateApp({
         multi_tenant_enabled: originalMultiTenancy,
       });
-      await waitForMultiTenancy(serverClient, originalMultiTenancy);
+      await waitForAppSetting(serverClient, 'multi_tenant_enabled', originalMultiTenancy);
     });
     cleanup.add(() =>
       Promise.all(
@@ -201,8 +176,8 @@ describe('_default/02-init_and_users/04-user_groups.md', () => {
   // These snippets pass `team_id`, which the API only accepts with multi-tenancy enabled.
   describe('with multi-tenancy', () => {
     beforeAll(async () => {
-      await serverClient.updateAppSettings({ multi_tenant_enabled: true });
-      await waitForMultiTenancy(serverClient, true);
+      await serverClient.updateApp({ multi_tenant_enabled: true });
+      await waitForAppSetting(serverClient, 'multi_tenant_enabled', true);
       await client.createUserGroup({
         id: teamGroupId,
         name: teamGroupName,

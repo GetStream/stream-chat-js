@@ -2,12 +2,18 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { StreamChat } from '../../../../src';
 import type { Channel, MessageResponse } from '../../../../src';
 import {
+  createUserToken,
   disconnectClients,
   getClientSideClient,
   getServerClient,
 } from '../../helpers/clients';
 import { Cleanup } from '../../helpers/cleanup';
 import { uniqueId } from '../../helpers/ids';
+import {
+  deletePollsCreatedBy,
+  getServerChannel,
+  getServerUser,
+} from '../../helpers/server';
 import { waitForChannelTypePropagation } from '../../helpers/wait';
 
 const DOCS = '_default/05-features/09-translation.md';
@@ -32,16 +38,16 @@ describe(DOCS, () => {
 
   /** Sends a poll from the English user in an auto-translated channel with a Spanish member. */
   const sendPollMessage = async () => {
-    await serverClient
-      .channel(pollChannelType, pollChannelId, {
+    await serverClient.chat.channel(pollChannelType, pollChannelId).getOrCreate({
+      data: {
         created_by_id: userId,
-        members: [userId, spanishUserId],
-      })
-      .create();
+        members: [{ user_id: userId }, { user_id: spanishUserId }],
+      },
+    });
     cleanup.channels.push(`${pollChannelType}:${pollChannelId}`);
-    await serverClient
+    await serverClient.chat
       .channel(pollChannelType, pollChannelId)
-      .update({ auto_translation_enabled: true });
+      .update({ data: { auto_translation_enabled: true } });
     const { poll: createdPoll } = await client.createPoll({
       name: "What's for lunch?",
       options: [{ text: 'Pizza' }, { text: 'Fish' }],
@@ -54,17 +60,14 @@ describe(DOCS, () => {
 
   beforeAll(async () => {
     cleanup.users.push(userId, spanishUserId, languageUserId);
-    // Polls survive their creator's deletion: delete every poll the user created.
-    cleanup.add(async () => {
-      const { polls } = await serverClient.queryPolls(
-        { created_by_id: userId },
-        [],
-        { limit: 100 },
-        userId,
-      );
-      for (const poll of polls) await serverClient.deletePoll(poll.id, userId);
+    cleanup.add(() => deletePollsCreatedBy(serverClient, userId));
+    await serverClient.chat.createChannelType({
+      name: pollChannelType,
+      automod: 'disabled',
+      automod_behavior: 'flag',
+      max_message_length: 5000,
+      polls: true,
     });
-    await serverClient.createChannelType({ name: pollChannelType, polls: true });
     cleanup.channelTypes.push(pollChannelType);
     await waitForChannelTypePropagation();
     client = await getClientSideClient({ id: userId, language: 'en' });
@@ -101,7 +104,7 @@ describe(DOCS, () => {
       expect(response.message.i18n?.language).toBe('en');
       expect(response.message.i18n?.fr_text).toMatch(/produit/);
       expect(log).toHaveBeenCalledWith(response.message.i18n?.fr_text);
-      const { message } = await serverClient.getMessage(messageID);
+      const { message } = await serverClient.chat.getMessage({ id: messageID });
       expect(message.i18n?.fr_text).toBe(response.message.i18n?.fr_text);
     } finally {
       log.mockRestore();
@@ -109,8 +112,8 @@ describe(DOCS, () => {
   });
 
   it('sets the user language', async () => {
-    await serverClient.upsertUser({ id: languageUserId });
-    const userToken = serverClient.createToken(languageUserId);
+    await serverClient.upsertUsers([{ id: languageUserId }]);
+    const userToken = createUserToken(languageUserId);
     cleanup.channels.push(`messaging:${meltingPotId}`);
     const client = languageClient;
 
@@ -123,15 +126,13 @@ describe(DOCS, () => {
     await client.channel('messaging', meltingPotId).watch();
     // #endregion snippet
 
-    const { users } = await serverClient.queryUsers({ id: languageUserId });
-    expect(users[0]?.language).toBe('en');
+    const languageUser = await getServerUser(serverClient, languageUserId);
+    expect(languageUser.language).toBe('en');
     expect(languageClient.activeChannels[`messaging:${meltingPotId}`]?.initialized).toBe(
       true,
     );
-    const channels = await serverClient.queryChannels({
-      cid: `messaging:${meltingPotId}`,
-    });
-    expect(channels[0]?.data?.created_by?.id).toBe(languageUserId);
+    const meltingPot = await getServerChannel(serverClient, `messaging:${meltingPotId}`);
+    expect(meltingPot.channel?.created_by?.id).toBe(languageUserId);
   });
 
   it('reads poll translations', async () => {

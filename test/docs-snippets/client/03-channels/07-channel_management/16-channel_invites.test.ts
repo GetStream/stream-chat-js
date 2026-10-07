@@ -7,6 +7,7 @@ import {
 } from '../../../helpers/clients';
 import { Cleanup } from '../../../helpers/cleanup';
 import { uniqueId } from '../../../helpers/ids';
+import { getServerMember } from '../../../helpers/server';
 
 describe('_default/03-channels/07-channel_management/16-channel_invites.md', () => {
   const serverClient = getServerClient();
@@ -21,20 +22,12 @@ describe('_default/03-channels/07-channel_management/16-channel_invites.md', () 
   const createInviteChannel = async (prefix: string) => {
     const id = uniqueId(prefix);
     cleanup.channels.push(`messaging:${id}`);
-    const channel = serverClient.channel('messaging', id, {
-      created_by_id: ownerId,
-      members: [ownerId],
+    const channel = serverClient.chat.channel('messaging', id);
+    await channel.getOrCreate({
+      data: { created_by_id: ownerId, members: [{ user_id: ownerId }] },
     });
-    await channel.create();
-    await channel.inviteMembers([nickId]);
+    await channel.update({ invites: [{ user_id: nickId }] });
     return channel;
-  };
-
-  const memberOf = async (channelId: string, userId: string) => {
-    const { members } = await serverClient
-      .channel('messaging', channelId)
-      .queryMembers({ user_id: userId });
-    return members[0];
   };
 
   let acceptedId: string;
@@ -47,10 +40,10 @@ describe('_default/03-channels/07-channel_management/16-channel_invites.md', () 
     client = await getClientSideClient({ id: nickId });
 
     const accepted = await createInviteChannel('accepted');
-    await accepted.acceptInvite({ user_id: nickId });
+    await accepted.update({ accept_invite: true, user_id: nickId });
     acceptedId = accepted.id as string;
     const rejected = await createInviteChannel('rejected');
-    await rejected.rejectInvite({ user_id: nickId });
+    await rejected.update({ reject_invite: true, user_id: nickId });
     rejectedId = rejected.id as string;
     pendingId = (await createInviteChannel('pending')).id as string;
   });
@@ -71,9 +64,9 @@ describe('_default/03-channels/07-channel_management/16-channel_invites.md', () 
     await channel.inviteMembers([nickId]);
     // #endregion snippet
 
-    const member = await memberOf(id, nickId);
-    expect(member?.invited).toBe(true);
-    expect(member?.status).toBe('pending');
+    const member = await getServerMember(serverClient, `messaging:${id}`, nickId);
+    expect(member.invited).toBe(true);
+    expect(member.status).toBe('pending');
   });
 
   it('accepts an invite', async () => {
@@ -90,12 +83,12 @@ describe('_default/03-channels/07-channel_management/16-channel_invites.md', () 
     });
     // #endregion snippet
 
-    const member = await memberOf(channelId, nickId);
-    expect(member?.invite_accepted_at).toBeTruthy();
-    expect(member?.status).toBe('member');
-    const { messages } = await serverClient
+    const member = await getServerMember(serverClient, `messaging:${channelId}`, nickId);
+    expect(member.invite_accepted_at).toBeTruthy();
+    expect(member.status).toBe('member');
+    const { messages } = await serverClient.chat
       .channel('messaging', channelId)
-      .query({ messages: { limit: 10 } });
+      .getOrCreate({ state: true, messages: { limit: 10 } });
     expect(messages.map((m) => m.text)).toContain('Nick joined this channel!');
   });
 
@@ -107,9 +100,9 @@ describe('_default/03-channels/07-channel_management/16-channel_invites.md', () 
     await channel.rejectInvite();
     // #endregion snippet
 
-    const member = await memberOf(channelId, nickId);
-    expect(member?.invite_rejected_at).toBeTruthy();
-    expect(member?.status).toBe('rejected');
+    const member = await getServerMember(serverClient, `messaging:${channelId}`, nickId);
+    expect(member.invite_rejected_at).toBeTruthy();
+    expect(member.status).toBe('rejected');
   });
 
   it('queries accepted invites', async () => {

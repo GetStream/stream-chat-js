@@ -7,6 +7,7 @@ import {
 } from '../../../helpers/clients';
 import { Cleanup } from '../../../helpers/cleanup';
 import { uniqueId } from '../../../helpers/ids';
+import { getServerChannel } from '../../../helpers/server';
 import { retry } from '../../../helpers/wait';
 
 describe('_default/05-features/10-advanced/11-slow_mode_and_throttling.md', () => {
@@ -34,7 +35,9 @@ describe('_default/05-features/10-advanced/11-slow_mode_and_throttling.md', () =
     cleanup.channels.push(`messaging:${channelId}`);
     await channel.create();
     // Only admins and moderators can change the cooldown (a channel creator gets 403 code 17).
-    await serverClient.channel('messaging', channelId).addModerators([userId]);
+    await serverClient.chat
+      .channel('messaging', channelId)
+      .update({ add_moderators: [userId] });
     const enableSpy = vi.spyOn(channel, 'enableSlowMode');
 
     // #region snippet docs="_default/05-features/10-advanced/11-slow_mode_and_throttling.md" heading="Channel Slow Mode" tab="JavaScript" index=1
@@ -51,19 +54,21 @@ describe('_default/05-features/10-advanced/11-slow_mode_and_throttling.md', () =
     const results = await Promise.all(enableSpy.mock.results.map((r) => r.value));
     expect(results.map((r) => r.channel.cooldown)).toEqual([1, 30]);
     expect(channel.data?.cooldown ?? 0).toBe(0);
-    const [queried] = await serverClient.queryChannels({ cid: channel.cid });
-    expect(queried.data?.cooldown ?? 0).toBe(0);
+    const serverChannel = await getServerChannel(serverClient, channel.cid);
+    expect(serverChannel.channel?.cooldown ?? 0).toBe(0);
   });
 
   it('locks the send message UI during the cooldown', async () => {
     const channelId = uniqueId('channel');
-    const serverChannel = serverClient.channel('messaging', channelId, {
-      members: [userId, memberId],
-      created_by_id: userId,
-    });
+    const serverChannel = serverClient.chat.channel('messaging', channelId);
     cleanup.channels.push(`messaging:${channelId}`);
-    await serverChannel.create();
-    await serverChannel.enableSlowMode(2);
+    await serverChannel.getOrCreate({
+      data: {
+        created_by_id: userId,
+        members: [{ user_id: userId }, { user_id: memberId }],
+      },
+    });
+    await serverChannel.update({ cooldown: 2 });
 
     // A regular member, so the cooldown applies.
     const channel = memberClient.channel('messaging', channelId);

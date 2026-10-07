@@ -25,7 +25,7 @@ describe('_default/04-messages/07-silent_messages.md', () => {
   let channel: Channel;
 
   const unreadCountOfOther = async () => {
-    const { channels } = await serverClient.getUnreadCount(otherId);
+    const { channels } = await serverClient.chat.unreadCounts({ user_id: otherId });
     return (
       channels.find((c) => c.channel_id === `${channelType}:${channelId}`)
         ?.unread_count ?? 0

@@ -2,12 +2,14 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { StreamChat } from '../../../../src';
 import type { Event } from '../../../../src';
 import {
+  createUserToken,
   disconnectClients,
   getClientSideClient,
   getServerClient,
 } from '../../helpers/clients';
 import { Cleanup } from '../../helpers/cleanup';
 import { uniqueId } from '../../helpers/ids';
+import { getServerUser } from '../../helpers/server';
 import { retry } from '../../helpers/wait';
 
 describe('_default/05-features/05-presence_format.md', () => {
@@ -37,7 +39,7 @@ describe('_default/05-features/05-presence_format.md', () => {
 
   beforeAll(async () => {
     cleanup.users.push(johnId, jackId);
-    await serverClient.upsertUser({ id: jackId });
+    await serverClient.upsertUsers([{ id: jackId }]);
     client = await getClientSideClient({ id: johnId });
   });
 
@@ -97,11 +99,6 @@ describe('_default/05-features/05-presence_format.md', () => {
       .watch({ presence: true });
     const { events, unsubscribe } = recordPresence(userId);
 
-    const fetchUser = async () => {
-      const { users } = await serverClient.queryUsers({ id: userId });
-      return users[0];
-    };
-
     try {
       const original = userClient.partialUpdateUser.bind(userClient);
       const responses: Awaited<ReturnType<typeof original>>[] = [];
@@ -110,7 +107,9 @@ describe('_default/05-features/05-presence_format.md', () => {
         responses.push(response);
         if (responses.length === 1) {
           // after "become invisible": the user is invisible and appears offline
-          expect(await fetchUser()).toMatchObject({ invisible: true });
+          expect(await getServerUser(serverClient, userId)).toMatchObject({
+            invisible: true,
+          });
           await retry(() => {
             expect(events.map((e) => e.user?.online)).toContain(false);
             return Promise.resolve();
@@ -139,7 +138,9 @@ describe('_default/05-features/05-presence_format.md', () => {
         { invisible: true },
         { invisible: false },
       ]);
-      expect(await fetchUser()).toMatchObject({ invisible: false });
+      expect(await getServerUser(serverClient, userId)).toMatchObject({
+        invisible: false,
+      });
       await retry(() => {
         expect(events.at(-1)?.user?.online).toBe(true);
         return Promise.resolve();
@@ -152,8 +153,8 @@ describe('_default/05-features/05-presence_format.md', () => {
   it('connects as invisible', async () => {
     const userId = uniqueId('invisible');
     cleanup.users.push(userId);
-    await serverClient.upsertUser({ id: userId });
-    const token = serverClient.createToken(userId);
+    await serverClient.upsertUsers([{ id: userId }]);
+    const token = createUserToken(userId);
     const client = new StreamChat(process.env.STREAM_API_KEY as string, {
       allowServerSideConnect: true,
     });
@@ -178,19 +179,21 @@ describe('_default/05-features/05-presence_format.md', () => {
     // #endregion snippet
 
     expect(connectSpy.reply?.me?.invisible).toBe(true);
-    const { users } = await serverClient.queryUsers({ id: userId });
-    expect(users[0]).toMatchObject({ invisible: true, online: false });
+    expect(await getServerUser(serverClient, userId)).toMatchObject({
+      invisible: true,
+      online: false,
+    });
   });
 
   it('reads the presence fields of a user', async () => {
     const presenceChannelId = uniqueId('channel');
     cleanup.channels.push(`messaging:${presenceChannelId}`);
-    await serverClient
-      .channel('messaging', presenceChannelId, {
-        members: [johnId, jackId],
+    await serverClient.chat.channel('messaging', presenceChannelId).getOrCreate({
+      data: {
+        members: [{ user_id: johnId }, { user_id: jackId }],
         created_by_id: johnId,
-      })
-      .create();
+      },
+    });
     // jack is online while john reads the channel
     extraClients.push(await getClientSideClient({ id: jackId }));
 

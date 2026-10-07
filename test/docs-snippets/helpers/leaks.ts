@@ -1,4 +1,4 @@
-import type { PushProviderConfig, StreamChat } from '../../../src';
+import type { StreamClient } from '@stream-io/node-sdk';
 import { DOCS_TEST_PREFIX } from './ids';
 import { hardDeleteUsers } from './users';
 import { retry, retryOnRateLimit, waitForTask } from './wait';
@@ -8,7 +8,7 @@ export type Leftover = {
   kind: string;
   id: string;
   /** Used by the sweep to skip resources of runs that may still be in progress. */
-  createdAt?: string;
+  createdAt?: Date | string;
   remove: () => Promise<unknown>;
   /**
    * Removes many leftovers of this kind in one call (e.g. users in one `deleteUsers`).
@@ -26,6 +26,12 @@ export type LeftoverFilter = {
   channelIds?: string[];
 };
 
+/** Hard deletes channels and waits for the background delete task. */
+const hardDeleteChannels = async (client: StreamClient, cids: string[]) => {
+  const { task_id } = await client.chat.deleteChannels({ cids, hard_delete: true });
+  if (task_id) await waitForTask(client, task_id);
+};
+
 /**
  * Polls can only be queried server-side "as" a user, and they survive their
  * creator's deletion, so a permanent helper user (outside the docs-test prefix) is
@@ -33,7 +39,7 @@ export type LeftoverFilter = {
  */
 const POLL_QUERY_USER_ID = 'docs-snippets-leak-checker';
 
-type Scanner = (client: StreamChat, filter: LeftoverFilter) => Promise<Leftover[]>;
+type Scanner = (client: StreamClient, filter: LeftoverFilter) => Promise<Leftover[]>;
 
 const chunk = <T>(items: T[], size: number) =>
   Array.from({ length: Math.ceil(items.length / size) }, (_, i) =>
@@ -41,17 +47,20 @@ const chunk = <T>(items: T[], size: number) =>
   );
 
 const scanUsers = async (
-  client: StreamChat,
+  client: StreamClient,
   prefix: string,
   matches: LeftoverFilter['matches'],
 ) => {
   const found: Leftover[] = [];
   for (let offset = 0; ; offset += 100) {
-    const { users } = await client.queryUsers(
-      { id: { $autocomplete: prefix } },
-      { id: 1 },
-      { limit: 100, offset },
-    );
+    const { users } = await client.queryUsers({
+      payload: {
+        filter_conditions: { id: { $autocomplete: prefix } },
+        sort: [{ field: 'id', direction: 1 }],
+        limit: 100,
+        offset,
+      },
+    });
     for (const user of users) {
       if (!matches(user.id)) continue;
       found.push({
@@ -80,22 +89,18 @@ const scanners: Record<string, Scanner> = {
   async channels(client, { channelIds = [] }) {
     const found: Leftover[] = [];
     for (const ids of chunk(channelIds, 100)) {
-      const channels = await client.queryChannels(
-        { id: { $in: ids } },
-        {},
-        { limit: 100, state: false, watch: false },
-      );
-      for (const channel of channels) {
+      const { channels } = await client.chat.queryChannels({
+        filter_conditions: { id: { $in: ids } },
+        limit: 100,
+        state: false,
+      });
+      for (const { channel } of channels) {
+        if (!channel) continue;
         found.push({
           kind: 'channel',
           id: channel.cid,
-          createdAt: channel.data?.created_at as string | undefined,
-          remove: async () => {
-            const { task_id } = await client.deleteChannels([channel.cid], {
-              hard_delete: true,
-            });
-            if (task_id) await waitForTask(client, task_id);
-          },
+          createdAt: channel.created_at,
+          remove: () => hardDeleteChannels(client, [channel.cid]),
         });
       }
     }
@@ -103,7 +108,7 @@ const scanners: Record<string, Scanner> = {
   },
 
   async channelTypes(client, { matches }) {
-    const { channel_types } = await client.listChannelTypes();
+    const { channel_types } = await client.chat.listChannelTypes();
     return Object.entries(channel_types)
       .filter(([name]) => matches(name))
       .map(([name, type]) => ({
@@ -112,15 +117,14 @@ const scanners: Record<string, Scanner> = {
         createdAt: type.created_at,
         remove: async () => {
           // Its channels must be gone first; they are only findable by type.
-          const channels = await client.queryChannels({ type: name }, {}, { limit: 100 });
-          if (channels.length) {
-            const { task_id } = await client.deleteChannels(
-              channels.map((channel) => channel.cid),
-              { hard_delete: true },
-            );
-            if (task_id) await waitForTask(client, task_id);
-          }
-          await retry(() => client.deleteChannelType(name), {
+          const { channels } = await client.chat.queryChannels({
+            filter_conditions: { type: name },
+            limit: 100,
+            state: false,
+          });
+          const cids = channels.flatMap(({ channel }) => (channel ? [channel.cid] : []));
+          if (cids.length) await hardDeleteChannels(client, cids);
+          await retry(() => client.chat.deleteChannelType({ name }), {
             interval: 2000,
             retryIf: (error) =>
               error instanceof Error && /channels of that type exist/.test(error.message),
@@ -130,14 +134,14 @@ const scanners: Record<string, Scanner> = {
   },
 
   async commands(client, { matches }) {
-    const { commands = [] } = await client.listCommands();
+    const { commands } = await client.chat.listCommands();
     return commands
-      .filter((command) => command.name && matches(command.name))
+      .filter((command) => matches(command.name))
       .map((command) => ({
         kind: 'command',
-        id: command.name as string,
+        id: command.name,
         createdAt: command.created_at,
-        remove: () => client.deleteCommand(command.name as string),
+        remove: () => client.chat.deleteCommand({ name: command.name }),
       }));
   },
 
@@ -149,20 +153,18 @@ const scanners: Record<string, Scanner> = {
         kind: 'role',
         id: role.name,
         createdAt: role.created_at,
-        remove: () => client.deleteRole(role.name),
+        remove: () => client.deleteRole({ name: role.name }),
       }));
   },
 
   async permissions(client, { matches }) {
-    const { permissions = [] } = await client.listPermissions();
+    const { permissions } = await client.listPermissions();
     return permissions
-      .filter(
-        (permission) => permission.custom && permission.id && matches(permission.id),
-      )
+      .filter((permission) => permission.custom && matches(permission.id))
       .map((permission) => ({
         kind: 'custom permission',
-        id: permission.id as string,
-        remove: () => client.deletePermission(permission.id as string),
+        id: permission.id,
+        remove: () => client.deletePermission({ id: permission.id }),
       }));
   },
 
@@ -174,7 +176,7 @@ const scanners: Record<string, Scanner> = {
         kind: 'blocklist',
         id: blocklist.name,
         createdAt: blocklist.created_at,
-        remove: () => client.deleteBlockList(blocklist.name),
+        remove: () => client.deleteBlockList({ name: blocklist.name }),
       }));
   },
 
@@ -182,14 +184,14 @@ const scanners: Record<string, Scanner> = {
     const found: Leftover[] = [];
     let next: string | undefined;
     do {
-      const response = await client.querySegments({}, [], { limit: 100, next });
+      const response = await client.chat.querySegments({ filter: {}, limit: 100, next });
       for (const segment of response.segments) {
         if (!matches(segment.id) && !matches(segment.name ?? '')) continue;
         found.push({
           kind: 'segment',
           id: segment.id,
           createdAt: segment.created_at,
-          remove: () => client.deleteSegment(segment.id),
+          remove: () => client.chat.deleteSegment({ id: segment.id }),
         });
       }
       next = response.next;
@@ -201,14 +203,14 @@ const scanners: Record<string, Scanner> = {
     const found: Leftover[] = [];
     let next: string | undefined;
     do {
-      const response = await client.queryCampaigns({}, undefined, { limit: 100, next });
+      const response = await client.chat.queryCampaigns({ limit: 100, next });
       for (const campaign of response.campaigns) {
-        if (!matches(campaign.id) && !matches(campaign.name ?? '')) continue;
+        if (!matches(campaign.id) && !matches(campaign.name)) continue;
         found.push({
           kind: 'campaign',
           id: `${campaign.id} (${campaign.name})`,
           createdAt: campaign.created_at,
-          remove: () => client.deleteCampaign(campaign.id),
+          remove: () => client.chat.deleteCampaign({ id: campaign.id }),
         });
       }
       next = response.next;
@@ -220,14 +222,14 @@ const scanners: Record<string, Scanner> = {
     const found: Leftover[] = [];
     let idGt: string | undefined;
     for (;;) {
-      const { user_groups } = await client.queryUserGroups({ limit: 100, id_gt: idGt });
+      const { user_groups } = await client.listUserGroups({ limit: 100, id_gt: idGt });
       for (const group of user_groups) {
-        if (!matches(group.id) && !matches(group.name ?? '')) continue;
+        if (!matches(group.id) && !matches(group.name)) continue;
         found.push({
           kind: 'user group',
           id: group.id,
           createdAt: group.created_at,
-          remove: () => client.deleteUserGroup(group.id),
+          remove: () => client.deleteUserGroup({ id: group.id }),
         });
       }
       if (user_groups.length < 100) return found;
@@ -236,37 +238,32 @@ const scanners: Record<string, Scanner> = {
   },
 
   async moderationConfigs(client, { matches }) {
-    const { configs } = await client.moderation.queryConfigs({}, [], { limit: 100 });
+    const { configs } = await client.moderation.queryModerationConfigs({ limit: 100 });
     return configs
       .filter((config) => matches(config.key))
       .map((config) => ({
         kind: 'moderation config',
         id: config.key,
         createdAt: config.created_at,
-        remove: () => client.moderation.deleteConfig(config.key),
+        remove: () => client.moderation.deleteConfig({ key: config.key }),
       }));
   },
 
   async predefinedFilters(client, { matches }) {
-    // No list method in the SDK yet; call the endpoint directly.
-    const { predefined_filters = [] } = await client.get<{
-      predefined_filters?: Array<{ name: string; created_at?: string }>;
-    }>(`${client.baseURL}/predefined_filters`);
+    const { predefined_filters } = await client.chat.getPredefinedFilters();
     return predefined_filters
       .filter((filter) => matches(filter.name))
       .map((filter) => ({
         kind: 'predefined filter',
         id: filter.name,
         createdAt: filter.created_at,
-        remove: () => client.deletePredefinedFilter(filter.name),
+        remove: () => client.chat.deletePredefinedFilter({ name: filter.name }),
       }));
   },
 
   async pushProviders(client, { matches }) {
-    const response = await client.listPushProviders();
-    // SDK typing bug: `push_providers` is typed as the provider *type* union instead of configs.
-    const providers = response.push_providers as unknown as PushProviderConfig[];
-    return providers
+    const { push_providers } = await client.listPushProviders();
+    return push_providers
       .filter((provider) => matches(provider.name))
       .map((provider) => ({
         kind: 'push provider',
@@ -278,26 +275,25 @@ const scanners: Record<string, Scanner> = {
   },
 
   async polls(client, { matches }) {
-    await client.upsertUser({
-      id: POLL_QUERY_USER_ID,
-      name: 'Docs snippets leak checker',
-    });
+    await client.upsertUsers([
+      { id: POLL_QUERY_USER_ID, name: 'Docs snippets leak checker' },
+    ]);
     const found: Leftover[] = [];
     let next: string | undefined;
     do {
-      const response = await client.queryPolls(
-        {},
-        [],
-        { limit: 100, next },
-        POLL_QUERY_USER_ID,
-      );
+      const response = await client.queryPolls({
+        user_id: POLL_QUERY_USER_ID,
+        limit: 100,
+        next,
+      });
       for (const poll of response.polls) {
-        if (!matches(poll.created_by_id ?? '') && !matches(poll.name)) continue;
+        if (!matches(poll.created_by_id) && !matches(poll.name)) continue;
         found.push({
           kind: 'poll',
           id: `${poll.id} (by ${poll.created_by_id})`,
           createdAt: poll.created_at,
-          remove: () => client.deletePoll(poll.id, POLL_QUERY_USER_ID),
+          remove: () =>
+            client.deletePoll({ poll_id: poll.id, user_id: POLL_QUERY_USER_ID }),
         });
       }
       next = response.next;
@@ -314,7 +310,7 @@ export const SCANNED_KINDS = Object.keys(scanners);
  * Scanner failures (e.g. a feature not enabled on the app) are returned as `errors`
  * instead of failing the whole scan.
  */
-export const findLeftovers = async (client: StreamChat, filter: LeftoverFilter) => {
+export const findLeftovers = async (client: StreamClient, filter: LeftoverFilter) => {
   const leftovers: Leftover[] = [];
   const errors: string[] = [];
   for (const [kind, scan] of Object.entries(scanners)) {

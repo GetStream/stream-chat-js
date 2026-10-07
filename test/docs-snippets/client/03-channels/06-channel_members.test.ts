@@ -7,6 +7,7 @@ import {
 } from '../../helpers/clients';
 import { Cleanup } from '../../helpers/cleanup';
 import { uniqueId } from '../../helpers/ids';
+import { getServerChannel } from '../../helpers/server';
 
 describe('_default/03-channels/06-channel_members.md', () => {
   const serverClient = getServerClient();
@@ -34,20 +35,19 @@ describe('_default/03-channels/06-channel_members.md', () => {
 
   /** The channel's members, keyed by user id (read server-side). */
   const membersOf = async (channel: Channel) => {
-    const { members } = await serverClient
+    const { members } = await serverClient.chat
       .channel(channel.type, channel.id)
-      .queryMembers({});
+      .queryMembers({ payload: { filter_conditions: {} } });
     return Object.fromEntries(members.map((m) => [m.user_id, m]));
   };
 
   /** Texts of the messages `userId` can see in the channel (read server-side on their behalf). */
   const messagesSeenBy = async (channel: Channel, userId: string) => {
-    const [result] = await serverClient.queryChannels(
-      { cid: channel.cid },
-      {},
-      { user_id: userId, message_limit: 10 },
-    );
-    return result?.state.messages.map((m) => m.text) ?? [];
+    const result = await getServerChannel(serverClient, channel.cid, {
+      user_id: userId,
+      message_limit: 10,
+    });
+    return result.messages.map((m) => m.text);
   };
 
   beforeAll(async () => {
@@ -90,7 +90,7 @@ describe('_default/03-channels/06-channel_members.md', () => {
       [owner, thierry, josh, jamesBond, alecTrevelyan].sort(),
     );
     expect(members[jamesBond]?.channel_role).toBe('channel_moderator');
-    expect(members[alecTrevelyan]?.code_name).toBe('006');
+    expect(members[alecTrevelyan]?.custom.code_name).toBe('006');
   });
 
   it('adds members when creating a channel', async () => {
@@ -109,8 +109,8 @@ describe('_default/03-channels/06-channel_members.md', () => {
     // #endregion snippet
 
     const members = await membersOf(channel);
-    expect(members[jamesBond]?.code_name).toBe('007');
-    expect(members[alecTrevelyan]?.code_name).toBe('006');
+    expect(members[jamesBond]?.custom.code_name).toBe('007');
+    expect(members[alecTrevelyan]?.custom.code_name).toBe('006');
   });
 
   it('removes members', async () => {
@@ -127,9 +127,12 @@ describe('_default/03-channels/06-channel_members.md', () => {
   it('leaves a channel', async () => {
     // A channel created by someone else, where the connected user is a plain member.
     const id = uniqueId('channel');
-    await serverClient
-      .channel('messaging', id, { created_by_id: thierry, members: [thierry, owner] })
-      .create();
+    await serverClient.chat.channel('messaging', id).getOrCreate({
+      data: {
+        created_by_id: thierry,
+        members: [{ user_id: thierry }, { user_id: owner }],
+      },
+    });
     cleanup.channels.push(`messaging:${id}`);
     const channel = client.channel('messaging', id);
 
@@ -180,9 +183,9 @@ describe('_default/03-channels/06-channel_members.md', () => {
     await channel.addMembers([tommaso], { text: 'Tommaso joined the channel.' });
     // #endregion snippet
 
-    const { messages } = await serverClient
+    const { messages } = await serverClient.chat
       .channel(channel.type, channel.id)
-      .query({ messages: { limit: 10 } });
+      .getOrCreate({ state: true, messages: { limit: 10 } });
     // The system message is sent by the connected user.
     expect(messages.map((m) => [m.text, m.type, m.user?.id])).toEqual([
       ['Tommaso joined the channel.', 'system', owner],
@@ -210,9 +213,9 @@ describe('_default/03-channels/06-channel_members.md', () => {
     // #endregion snippet
 
     const members = await membersOf(channel);
-    expect(members[userid1]?.key1).toBe('value1');
-    expect(members[userid2]?.key1).toBe('value1');
-    expect(members[userid3]?.key2).toBe('value2');
+    expect(members[userid1]?.custom.key1).toBe('value1');
+    expect(members[userid2]?.custom.key1).toBe('value1');
+    expect(members[userid3]?.custom.key2).toBe('value2');
   });
 
   it('partially updates the connected member', async () => {
@@ -244,8 +247,8 @@ describe('_default/03-channels/06-channel_members.md', () => {
     // #endregion snippet
 
     const member = (await membersOf(channel))[owner];
-    expect(member).toMatchObject({ key1: 'new value 1', key2: 'new value 2' });
-    expect(member?.key3).toBeUndefined();
+    expect(member?.custom).toMatchObject({ key1: 'new value 1', key2: 'new value 2' });
+    expect(member?.custom.key3).toBeUndefined();
     // Channel roles can only be changed server-side.
     await expect(
       channel.updateMemberPartial({ set: { channel_role: 'channel_moderator' } }),

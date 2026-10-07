@@ -7,6 +7,7 @@ import {
 } from '../../helpers/clients';
 import { Cleanup } from '../../helpers/cleanup';
 import { uniqueId } from '../../helpers/ids';
+import { deletePollsCreatedBy } from '../../helpers/server';
 import { waitForChannelTypePropagation } from '../../helpers/wait';
 
 const DOCS = '_default/05-features/07-polls_api.md';
@@ -38,21 +39,18 @@ describe(DOCS, () => {
   };
 
   const getServerPoll = async (pollId: string) =>
-    (await serverClient.getPoll(pollId, userId)).poll;
+    (await serverClient.getPoll({ poll_id: pollId, user_id: userId })).poll;
 
   beforeAll(async () => {
     cleanup.users.push(userId);
-    // Polls survive their creator's deletion: delete every poll the user created.
-    cleanup.add(async () => {
-      const { polls } = await serverClient.queryPolls(
-        { created_by_id: userId },
-        [],
-        { limit: 100 },
-        userId,
-      );
-      for (const poll of polls) await serverClient.deletePoll(poll.id, userId);
+    cleanup.add(() => deletePollsCreatedBy(serverClient, userId));
+    await serverClient.chat.createChannelType({
+      name: channelType,
+      automod: 'disabled',
+      automod_behavior: 'flag',
+      max_message_length: 5000,
+      polls: true,
     });
-    await serverClient.createChannelType({ name: channelType, polls: true });
     cleanup.channelTypes.push(channelType);
     await waitForChannelTypePropagation();
     client = await getClientSideClient({ id: userId });

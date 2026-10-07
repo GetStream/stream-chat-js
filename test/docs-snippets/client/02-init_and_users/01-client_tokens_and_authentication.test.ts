@@ -3,6 +3,7 @@ import { StreamChat } from '../../../../src';
 import { getServerClient } from '../../helpers/clients';
 import { Cleanup } from '../../helpers/cleanup';
 import { uniqueId } from '../../helpers/ids';
+import { getServerUser, waitForAppSetting } from '../../helpers/server';
 
 describe('_default/02-init_and_users/01-client_tokens_and_authentication.md', () => {
   const serverClient = getServerClient();
@@ -14,19 +15,6 @@ describe('_default/02-init_and_users/01-client_tokens_and_authentication.md', ()
     allowServerSideConnect: true,
   });
   let originalDisableAuthChecks = false;
-
-  // App settings are eventually consistent across API nodes: wait until enough
-  // consecutive reads agree on the new value.
-  const waitForDisableAuthChecks = async (expected: boolean) => {
-    let agreeing = 0;
-    for (let attempt = 0; attempt < 120 && agreeing < 20; attempt++) {
-      const { app } = await serverClient.getAppSettings();
-      agreeing = (app?.disable_auth_checks ?? false) === expected ? agreeing + 1 : 0;
-      if (agreeing === 0) await new Promise((resolve) => setTimeout(resolve, 500));
-    }
-    if (agreeing < 20)
-      throw new Error(`disable_auth_checks never settled on ${expected}`);
-  };
 
   // The WS edge picks up `disable_auth_checks` later than the REST API: probe with a
   // throwaway dev-token connection until it's accepted.
@@ -49,8 +37,8 @@ describe('_default/02-init_and_users/01-client_tokens_and_authentication.md', ()
   };
 
   beforeAll(async () => {
-    const { app } = await serverClient.getAppSettings();
-    originalDisableAuthChecks = app?.disable_auth_checks ?? false;
+    const { app } = await serverClient.getApp();
+    originalDisableAuthChecks = app.disable_auth_checks;
   });
 
   afterAll(async () => {
@@ -75,13 +63,17 @@ describe('_default/02-init_and_users/01-client_tokens_and_authentication.md', ()
   it('connects a user with a developer token', async () => {
     // Developer tokens need "Disable Authentication Checks" (development apps only).
     cleanup.add(async () => {
-      await serverClient.updateAppSettings({
+      await serverClient.updateApp({
         disable_auth_checks: originalDisableAuthChecks,
       });
-      await waitForDisableAuthChecks(originalDisableAuthChecks);
+      await waitForAppSetting(
+        serverClient,
+        'disable_auth_checks',
+        originalDisableAuthChecks,
+      );
     });
-    await serverClient.updateAppSettings({ disable_auth_checks: true });
-    await waitForDisableAuthChecks(true);
+    await serverClient.updateApp({ disable_auth_checks: true });
+    await waitForAppSetting(serverClient, 'disable_auth_checks', true);
     await waitForDevTokensAccepted();
 
     // #region snippet docs="_default/02-init_and_users/01-client_tokens_and_authentication.md" heading="Developer Tokens" tab="JavaScript" index=1
@@ -98,7 +90,7 @@ describe('_default/02-init_and_users/01-client_tokens_and_authentication.md', ()
 
     expect(client.userID).toBe(userId);
     expect(client.wsConnection?.isHealthy).toBe(true);
-    const { users } = await serverClient.queryUsers({ id: userId });
-    expect(users[0]?.name).toBe('John Doe');
+    const user = await getServerUser(serverClient, userId);
+    expect(user.name).toBe('John Doe');
   });
 });

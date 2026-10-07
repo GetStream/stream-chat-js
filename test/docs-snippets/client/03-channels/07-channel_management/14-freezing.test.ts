@@ -7,6 +7,7 @@ import {
 } from '../../../helpers/clients';
 import { Cleanup } from '../../../helpers/cleanup';
 import { uniqueId } from '../../../helpers/ids';
+import { sendServerMessage } from '../../../helpers/server';
 
 describe('_default/03-channels/07-channel_management/14-freezing.md', () => {
   const serverClient = getServerClient();
@@ -26,7 +27,7 @@ describe('_default/03-channels/07-channel_management/14-freezing.md', () => {
     cleanup.channels.push(`messaging:${id}`);
     channel = client.channel('messaging', id, { members: [userId, otherId] });
     await channel.create();
-    await serverClient.channel('messaging', id).addModerators([userId]);
+    await serverClient.chat.channel('messaging', id).update({ add_moderators: [userId] });
   });
 
   afterAll(async () => {
@@ -35,9 +36,10 @@ describe('_default/03-channels/07-channel_management/14-freezing.md', () => {
   });
 
   it('freezes a channel', async () => {
-    const { message: otherMessage } = await serverClient
-      .channel('messaging', channel.id as string)
-      .sendMessage({ text: 'before freezing', user_id: otherId });
+    const otherMessage = await sendServerMessage(serverClient, channel.cid, {
+      text: 'before freezing',
+      user_id: otherId,
+    });
 
     // #region snippet docs="_default/03-channels/07-channel_management/14-freezing.md" heading="Freeze a Channel" tab="JavaScript" index=1
     const update = await channel.update(

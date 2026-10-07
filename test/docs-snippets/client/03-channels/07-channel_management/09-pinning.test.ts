@@ -7,6 +7,7 @@ import {
 } from '../../../helpers/clients';
 import { Cleanup } from '../../../helpers/cleanup';
 import { uniqueId } from '../../../helpers/ids';
+import { getServerMember } from '../../../helpers/server';
 
 describe('_default/03-channels/07-channel_management/09-pinning.md', () => {
   const serverClient = getServerClient();
@@ -65,9 +66,7 @@ describe('_default/03-channels/07-channel_management/09-pinning.md', () => {
       `messaging:${otherChannelId}`,
     ]);
 
-    const { members } = await serverClient
-      .channel('messaging', channelId)
-      .queryMembers({ id: userId });
-    expect(members[0]?.pinned_at).toBeFalsy();
+    const member = await getServerMember(serverClient, `messaging:${channelId}`, userId);
+    expect(member.pinned_at).toBeFalsy();
   });
 });
