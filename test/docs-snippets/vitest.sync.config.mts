@@ -4,7 +4,7 @@ import { defineConfig } from 'vitest/config';
 // No network and no credentials needed.
 export default defineConfig({
   test: {
-    root: __dirname,
+    root: import.meta.dirname,
     include: ['./sync/**/*.test.ts'],
     reporters: ['verbose'],
   },

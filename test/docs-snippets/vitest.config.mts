@@ -10,12 +10,12 @@ export default defineConfig({
     alias: [
       {
         find: /^stream-chat$/,
-        replacement: path.resolve(__dirname, '../../src/index.ts'),
+        replacement: path.resolve(import.meta.dirname, '../../src/index.ts'),
       },
     ],
   },
   test: {
-    root: __dirname,
+    root: import.meta.dirname,
     include: ['./client/**/*.test.ts'],
     setupFiles: ['./setup.ts'],
     // Shows console output (leak / drift warnings) for passing tests too.

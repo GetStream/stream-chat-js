@@ -6,7 +6,7 @@ import { getServerUser } from '../../helpers/server';
 
 const apiKey = process.env.STREAM_API_KEY as string;
 
-// `stream-chat` resolves to src (alias in vitest.config.ts and tsconfig.json).
+// `stream-chat` resolves to src (alias in vitest.config.mts and tsconfig.json).
 // #region snippet docs="_default/02-init_and_users/02-init_and_users.md" heading="" tab="JavaScript" index=1
 // COPY: apiKey="{{ api_key }}"
 import { StreamChat } from 'stream-chat';

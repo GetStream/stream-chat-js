@@ -38,7 +38,7 @@ The path mirrors the docs path, e.g. `_default/04-messages/01-send_message.md` m
 ## Conventions
 
 - Import the SDK from `../../../src` (relative depth varies) and test helpers from `helpers/`. Use `import type` for types.
-- `stream-chat` is aliased to `src/index.ts` (`resolve.alias` in `vitest.config.ts`, `paths` in `tsconfig.json`), so a docs fence that starts with `import ... from "stream-chat"` can be a region at module level: declare the values it uses (e.g. `apiKey`) above it. Both import paths load the same module, so `StreamChat.getInstance` returns the same singleton.
+- `stream-chat` is aliased to `src/index.ts` (`resolve.alias` in `vitest.config.mts`, `paths` in `tsconfig.json`), so a docs fence that starts with `import ... from "stream-chat"` can be a region at module level: declare the values it uses (e.g. `apiKey`) above it. Both import paths load the same module, so `StreamChat.getInstance` returns the same singleton.
 - Custom data the docs use (e.g. channel `name`) is declared once in `custom-types.d.ts` by augmenting the `Custom*Data` interfaces of `stream-chat`, the way the docs tell apps to. Add fields there rather than casting in tests.
 - **Isolation**: the id or name of everything a test creates comes from `uniqueId('name')`: users, channels, channel types, roles, commands, blocklists, segments, campaigns (name), user groups, moderation config keys, predefined filters, push providers. Polls are matched by their creator, so create them as a `uniqueId` user. Never use fixed ids like `"john"` or `"general"`.
 - **Cleanup**: register everything you create on a `Cleanup` instance and call `cleanup.run()` in `afterAll`. App-level settings changed by a test must be restored with `cleanup.add(...)`.

@@ -11,7 +11,7 @@ export default tseslint.config(
   {
     name: 'default',
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
-    files: ['src/**/*.{js,ts}', 'test/docs-snippets/**/*.ts'],
+    files: ['src/**/*.{js,ts}', 'test/docs-snippets/**/*.{ts,mts}'],
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,
@@ -87,7 +87,7 @@ export default tseslint.config(
   },
   {
     name: 'docs-snippets',
-    files: ['test/docs-snippets/**/*.ts'],
+    files: ['test/docs-snippets/**/*.{ts,mts}'],
     languageOptions: {
       globals: globals.node,
     },
