@@ -83,7 +83,7 @@ describe('_default/04-messages/09-message_reminders.md', () => {
       remind_at: new Date(new Date().getTime() + offsetMs).toISOString(),
     });
 
-    // Create a reminder with a specific due date (client state optimistic update (no server-side use))
+    // Create a reminder with a specific due date (client state optimistic update)
     await client.reminders.upsertReminder({
       messageId: messageID,
       remind_at: new Date(new Date().getTime() + offsetMs).toISOString(),
@@ -94,7 +94,7 @@ describe('_default/04-messages/09-message_reminders.md', () => {
       messageId: anotherMessageID,
     });
 
-    // Create a "Save for later" reminder without a specific time (client state optimistic update (no server-side use))
+    // Create a "Save for later" reminder without a specific time (client state optimistic update)
     await client.reminders.upsertReminder({
       messageId: messageID,
     });
@@ -130,7 +130,7 @@ describe('_default/04-messages/09-message_reminders.md', () => {
       remind_at: new Date(new Date().getTime() + newOffsetMs).toISOString(),
     });
 
-    // Update a reminder with a new due date (client state optimistic update (no server-side use))
+    // Update a reminder with a new due date (client state optimistic update)
     await client.reminders.upsertReminder({
       messageId: messageID,
       // Remind in newOffsetMs
@@ -143,7 +143,7 @@ describe('_default/04-messages/09-message_reminders.md', () => {
       remind_at: null,
     });
 
-    // Convert a timed reminder to "Save for later" (client state optimistic update (no server-side use))
+    // Convert a timed reminder to "Save for later" (client state optimistic update)
     await client.reminders.upsertReminder({
       messageId: messageID,
       remind_at: null,
@@ -170,7 +170,7 @@ describe('_default/04-messages/09-message_reminders.md', () => {
     // Delete a reminder for a message with id 'message-id' (direct API call)
     await client.deleteReminder(messageID);
 
-    // Delete a reminder for a message with id 'another-message-id' (client state optimistic update (no server-side use))
+    // Delete a reminder for a message with id 'another-message-id' (client state optimistic update)
     await client.reminders.deleteReminder(anotherMessageID);
     // #endregion snippet
 
@@ -190,7 +190,7 @@ describe('_default/04-messages/09-message_reminders.md', () => {
 
     // For the client-side pagination there are two methods representing two directions of pagination
 
-    // Query the first page (client state optimistic update (no server-side use))
+    // Query the first page (client state optimistic update)
     await client.reminders.queryNextReminders();
     // #endregion snippet
 
