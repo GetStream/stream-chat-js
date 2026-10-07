@@ -8,10 +8,6 @@ import {
 import { Cleanup } from '../../../helpers/cleanup';
 import { uniqueId } from '../../../helpers/ids';
 
-// #docs-ignore docs="_default/05-features/10-advanced/15-pending_messages.md" heading="Sending Pending Messages" tab="JavaScript" index=1 reason="comment-only placeholder: mark_messages_pending (updateChannelType) is server-side"
-// #docs-ignore docs="_default/05-features/10-advanced/15-pending_messages.md" heading="Using Server-Side SDKs" tab="JavaScript" index=1 reason="comment-only placeholder: pending message hooks (updateAppSettings event_hooks) are server-side"
-// #docs-ignore docs="_default/05-features/10-advanced/15-pending_messages.md" heading="Committing pending messages" tab="JavaScript" index=1 reason="comment-only placeholder: commitMessage is server-side"
-
 describe('_default/05-features/10-advanced/15-pending_messages.md', () => {
   const serverClient = getServerClient();
   const cleanup = new Cleanup(serverClient);

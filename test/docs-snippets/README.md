@@ -59,8 +59,6 @@ const message = await client
   .channel('messaging', channelId)
   .sendMessage({ text: 'Hello, world!' });
 // #endregion snippet
-
-// #docs-ignore docs="_default/05-features/02-events.md" heading="..." tab="JavaScript" index=1 reason="JSON payload, not code"
 ```
 
 - **Fence key**:
@@ -70,7 +68,7 @@ const message = await client
   - `index` is 1-based among fences with the same heading text and tab (default 1).
 - **COPY**: `name="literal"` pairs, applied to the region before comparing (identifier `name` becomes the docs literal). Don't use COPY variables as object keys or shorthand properties.
 - **Comparison**: both sides are formatted with the same prettier options, so quote style and line wrapping don't matter, but any code or comment change does.
-- **Coverage**: every JS fence (`js`/`javascript`/`ts`) of a page that has at least one marker must have a region or a `#docs-ignore`. `Node.js` fences are ignored.
+- **Coverage**: every JS fence (`js`/`javascript`/`ts`) of a page that has at least one marker must have a region (inside `it.skip` if it can't run). `Node.js` fences and comment-only fences (e.g. the "server-side only" placeholders) are ignored.
 - **`DOCS_SYNC_WRITE=<page path> yarn test-docs-sync`** writes the regions of that page into the docs fences (docs prettier style). Use it to apply a fix to the docs. `DOCS_SYNC_WRITE=1` writes all pages.
 - **`DOCS_CHAT_DIR`** points at another docs checkout (default: `../getstream.io/content/docs/chat` next to this repo). The check is skipped if the directory doesn't exist.
 - Use the same variable names as the docs (`client`, `channel`, ...).

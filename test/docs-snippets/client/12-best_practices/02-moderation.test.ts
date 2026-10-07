@@ -10,13 +10,6 @@ import { uniqueId } from '../../helpers/ids';
 
 const DOCS = '_default/12-best_practices/02-moderation.md';
 
-// #docs-ignore docs="_default/12-best_practices/02-moderation.md" heading="Disabling the permission to post links or add attachments" tab="JavaScript" index=1 reason="comment-only placeholder: updating channel type grants is server-side"
-// #docs-ignore docs="_default/12-best_practices/02-moderation.md" heading="Image & Video file types" tab="JavaScript" index=1 reason="comment-only placeholder: app upload config is server-side"
-// #docs-ignore docs="_default/12-best_practices/02-moderation.md" heading="Enforce unique usernames" tab="JavaScript" index=1 reason="comment-only placeholder: app settings are server-side"
-// #docs-ignore docs="_default/12-best_practices/02-moderation.md" heading="Slash commands for banning" tab="JavaScript" index=1 reason="comment-only placeholder: channel type commands are server-side"
-// #docs-ignore docs="_default/12-best_practices/02-moderation.md" heading="Setup example" tab="JavaScript" index=1 reason="comment-only placeholder: blocklist setup on a channel type is server-side"
-// #docs-ignore docs="_default/12-best_practices/02-moderation.md" heading="Create new blocklist" tab="JavaScript" index=1 reason="comment-only placeholder: creating blocklists is documented as server-side"
-
 describe(DOCS, () => {
   const serverClient = getServerClient();
   const cleanup = new Cleanup(serverClient);

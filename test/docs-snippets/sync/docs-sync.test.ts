@@ -16,8 +16,9 @@ import type { DocsFence, TestRegion } from './parse';
 
 // `yarn test-docs-sync`: checks that every marked test region matches its docs fence
 // (after applying COPY values and formatting both sides the same way), and that every
-// JS fence of a page that has tests is covered by a region or a #docs-ignore
-// (`Node.js` fences are out of scope and ignored).
+// JS fence of a page that has tests is covered by a region
+// (`Node.js` fences and comment-only fences, like the "server-side only" placeholders,
+// are ignored).
 //   DOCS_SYNC_WRITE=<page>  overwrite that page's fences with the test code instead of
 //                           comparing (page path as in the markers, e.g.
 //                           _default/04-messages/01-send_message.md; `1` = all pages)
@@ -34,9 +35,7 @@ const pages = [...new Set(regions.map((region) => region.docs))].sort();
 
 it('collects the test regions', () => {
   // Marker syntax errors already throw while the regions are parsed above.
-  console.log(
-    `${regions.length} snippet region(s) / #docs-ignore marker(s) on ${pages.length} page(s)`,
-  );
+  console.log(`${regions.length} snippet region(s) on ${pages.length} page(s)`);
 });
 
 describe.skipIf(!fs.existsSync(DOCS_CHAT_DIR) || !pages.length)(
@@ -49,12 +48,14 @@ describe.skipIf(!fs.existsSync(DOCS_CHAT_DIR) || !pages.length)(
       const fenceFor = (region: TestRegion) =>
         fences.find((fence) => fenceId(fence) === fenceId(region));
 
-      it('every JS fence is covered by a test region or #docs-ignore', () => {
+      it('every JS fence is covered by a test region', () => {
         const covered = new Set(pageRegions.map(fenceId));
-        const missing = fences.filter((fence) => !covered.has(fenceId(fence)));
+        const missing = fences.filter(
+          (fence) => !fence.commentOnly && !covered.has(fenceId(fence)),
+        );
         expect(
           missing.map((fence) => `${fenceId(fence)} (${docsFile}:${fence.line})`),
-          'fences without a test region; add one or a // #docs-ignore with a reason',
+          'fences without a test region; add one (in it.skip if it cannot run)',
         ).toEqual([]);
       });
 
@@ -66,8 +67,7 @@ describe.skipIf(!fs.existsSync(DOCS_CHAT_DIR) || !pages.length)(
         ).toEqual([]);
       });
 
-      const snippets = pageRegions.filter((region) => region.kind === 'snippet');
-      it.each(snippets.map((region) => [fenceId(region), region] as const))(
+      it.each(pageRegions.map((region) => [fenceId(region), region] as const))(
         '%s',
         async (_, region) => {
           const fence = fenceFor(region);

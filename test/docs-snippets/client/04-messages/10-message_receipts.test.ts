@@ -10,9 +10,6 @@ import { Cleanup } from '../../helpers/cleanup';
 import { uniqueId } from '../../helpers/ids';
 import { retry } from '../../helpers/wait';
 
-// #docs-ignore docs="_default/04-messages/10-message_receipts.md" heading="Channel Type Configuration" tab="JavaScript" index=1 reason="comment-only placeholder: channel type configuration is server-side"
-// #docs-ignore docs="_default/04-messages/10-message_receipts.md" heading="Channel Type Configuration" tab="JavaScript" index=2 reason="comment-only placeholder: channel type configuration is server-side"
-
 const apiKey = process.env.STREAM_API_KEY as string;
 
 describe('_default/04-messages/10-message_receipts.md', () => {

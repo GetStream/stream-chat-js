@@ -30,15 +30,15 @@ export type DocsFence = FenceKey & {
   bodyStart: number;
   bodyEnd: number;
   indent: string;
+  /** The body is only comments (e.g. a "server-side only" placeholder): nothing to test. */
+  commentOnly: boolean;
 };
 
 export type TestRegion = FenceKey & {
-  kind: 'snippet' | 'ignore';
   /** Code between the markers, de-indented, without marker / COPY lines. */
   code: string;
   /** Values the test uses in place of the docs literals: identifier -> JS literal. */
   copy: Record<string, string>;
-  reason?: string;
   file: string;
   line: number;
 };
@@ -59,6 +59,14 @@ const dedent = (lines: string[]) => {
     .join('\n')
     .trim();
 };
+
+/** True when the code has comments only (line and block comments), no statements. */
+export const isCommentOnly = (code: string) =>
+  code.trim() !== '' &&
+  code
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .every((line) => !line.trim() || line.trim().startsWith('//'));
 
 /**
  * All JavaScript fences of a docs page, keyed the same way as the test markers.
@@ -85,12 +93,14 @@ export const parseDocsFences = (docs: string, markdown: string): DocsFence[] => 
       const countKey = `${heading}\u0000${tab}`;
       const index = (counts.get(countKey) ?? 0) + 1;
       counts.set(countKey, index);
+      const code = dedent(lines.slice(i + 1, end));
       fences.push({
         docs,
         heading,
         tab,
         index,
-        code: dedent(lines.slice(i + 1, end)),
+        code,
+        commentOnly: isCommentOnly(code),
         line: i + 1,
         bodyStart: i + 1,
         bodyEnd: end,
@@ -136,15 +146,13 @@ const keyFromAttrs = (attrs: Record<string, string>, where: string): FenceKey =>
 };
 
 /**
- * Snippet regions and ignore markers of a test file:
+ * Snippet regions of a test file:
  *
  * ```ts
  * // #region snippet docs="_default/04-messages/01-send_message.md" heading="Sending a Message" tab="JavaScript" index=1
  * // COPY: channelId="general", userId="john"
  * ...docs code...
  * // #endregion snippet
- *
- * // #docs-ignore docs="..." heading="..." tab="unlabelled" index=2 reason="JSON payload, not code"
  * ```
  */
 export const parseTestRegions = (file: string, source: string): TestRegion[] => {
@@ -152,21 +160,6 @@ export const parseTestRegions = (file: string, source: string): TestRegion[] => 
   const regions: TestRegion[] = [];
   for (let i = 0; i < lines.length; i++) {
     const where = `${file}:${i + 1}`;
-    const ignore = /^\s*\/\/ #docs-ignore\s+(.*)$/.exec(lines[i]);
-    if (ignore) {
-      const attrs = parseAttrs(ignore[1]);
-      if (!attrs.reason) throw new Error(`${where}: #docs-ignore needs reason="..."`);
-      regions.push({
-        ...keyFromAttrs(attrs, where),
-        kind: 'ignore',
-        code: '',
-        copy: {},
-        reason: attrs.reason,
-        file,
-        line: i + 1,
-      });
-      continue;
-    }
     const start = /^\s*\/\/ #region snippet\s+(.*)$/.exec(lines[i]);
     if (!start) continue;
     const key = keyFromAttrs(parseAttrs(start[1]), where);
@@ -183,7 +176,6 @@ export const parseTestRegions = (file: string, source: string): TestRegion[] => 
     }
     regions.push({
       ...key,
-      kind: 'snippet',
       code: dedent(body),
       copy,
       file,

@@ -16,8 +16,6 @@ import { Cleanup } from '../../helpers/cleanup';
 import { uniqueId } from '../../helpers/ids';
 import { retry } from '../../helpers/wait';
 
-// #docs-ignore docs="_default/04-messages/09-message_reminders.md" heading="Enabling Reminders" tab="JavaScript" index=1 reason="comment-only placeholder: enabling reminders is server-side"
-
 const oneHour = 3600000;
 
 describe('_default/04-messages/09-message_reminders.md', () => {

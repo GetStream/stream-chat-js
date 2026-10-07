@@ -6,7 +6,7 @@ Entries are added only after the user approves them (agents propose them in thei
 ## Setup and tooling
 
 - To probe API behavior quickly, write a throwaway vitest file under `test/docs-snippets/client/` that logs each call's result or error. It still runs the leak check, so register what it creates, and delete the file before finishing.
-- Fences containing `import ... from "stream-chat"` can be regions: `stream-chat` is aliased to `src` (vitest `resolve.alias` + tsconfig `paths`). Put the region at module level, below the other imports, with the values it uses (e.g. `const apiKey`) declared above it, since a `const` after it would be in the TDZ. Example: `client/02-init_and_users/02-init_and_users.test.ts`. Don't `#docs-ignore` these fences.
+- Fences containing `import ... from "stream-chat"` can be regions: `stream-chat` is aliased to `src` (vitest `resolve.alias` + tsconfig `paths`). Put the region at module level, below the other imports, with the values it uses (e.g. `const apiKey`) declared above it, since a `const` after it would be in the TDZ. Example: `client/02-init_and_users/02-init_and_users.test.ts`.
 - `StreamChat.getInstance` is a singleton for the whole test file. To run another `getInstance` snippet with different options, reset it outside the region: `Reflect.set(StreamChat, '_instance', undefined)`.
 - Strict `types-docs` flags optional response fields: e.g. `getAppSettings()` types `app` as optional, so read `app?.field` (TS18048 otherwise).
 - If a snippet calls SDK methods without awaiting or keeping the result (e.g. `channel.queryMembers({...});`), `vi.spyOn(obj, 'method')` before the region, await `spy.mock.results.map((r) => r.value)` after it to assert on the responses, then `spy.mockRestore()` (a second `spyOn` on the same method returns the old spy with its call history).
@@ -90,7 +90,7 @@ Entries are added only after the user approves them (agents propose them in thei
 - Undefined app-supplied placeholders (e.g. `tokenProvider`) aren't docs bugs: define them in the test just before the region (e.g. `const tokenProvider = () => Promise.resolve(serverClient.createToken(userId))`, which also satisfies `require-await`), and don't change the docs.
 - A fence that declares the same `const` twice (e.g. two `const result = ...` or `const filter = ...` showing alternatives) is a real SyntaxError and TS2451. Fix the docs by renaming only the later declarations with descriptive names (`aroundResult`, `membersFilter`); don't split the fence.
 - A fence showing alternative operations on one placeholder id (e.g. soft delete, hard delete, delete for me on `messageID`) can fail when run in sequence (delete-for-me after a hard delete: 404 code 16). Fix the docs by giving the conflicting later call its own id (`anotherMessageID`); don't split the fence.
-- Comment-only `JavaScript` fences ("This is a server-side only feature, choose any of our server-side SDKs...") stay in the docs: mark them `#docs-ignore` with `reason="comment-only placeholder: ... is server-side"`.
+- Comment-only `JavaScript` fences ("This is a server-side only feature, choose any of our server-side SDKs...") stay in the docs. The sync check skips them, so they need no marker.
 - When the docs use an identifier (not a string literal) like `randomID`, name the test variable the same and don't put it in COPY. A quoted COPY value (`randomID="randomID"`) turns it into a string literal, and `DOCS_SYNC_WRITE` then silently writes the quoted string into the docs.
 
 ## Isolation and cleanup
