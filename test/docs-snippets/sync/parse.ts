@@ -22,6 +22,8 @@ export type FenceKey = {
 };
 
 export type DocsFence = FenceKey & {
+  /** The fence language as written (`js`, `javascript`, `ts`, `typescript`). */
+  lang: string;
   /** Fence body, de-indented. */
   code: string;
   /** 1-based line of the opening ``` line. */
@@ -47,7 +49,24 @@ export const fenceId = (key: FenceKey) =>
   `${key.docs} > "${key.heading}" > ${key.tab} #${key.index}`;
 
 const JS_LANGS = new Set(['js', 'javascript', 'ts', 'typescript']);
-const NODE_TAB = 'Node.js';
+/** The tested tab. */
+export const JS_TAB = 'JavaScript';
+/** Out of scope (server-side `@stream-io/node-sdk` code). */
+export const NODE_TAB = 'Node.js';
+/** Every JS fence must carry one of these labels. */
+export const ALLOWED_JS_LABELS = [JS_TAB, NODE_TAB];
+
+/** JavaScript sidebar of the chat docs: the pages whose `JavaScript` fences are tested. */
+const SIDEBAR_FILE = '[chat][javascript].json';
+
+/**
+ * Pages in the JavaScript sidebar that are deliberately not validated (page path
+ * relative to `content/docs/chat`, reason).
+ */
+export const EXCLUDED_PAGES: Record<string, string> = {
+  'javascript/11-debugging_and_cli/10-upgrading_to_v9.md':
+    'React/TSX type examples, no runnable JS',
+};
 
 const dedent = (lines: string[]) => {
   const indents = lines
@@ -69,8 +88,9 @@ export const isCommentOnly = (code: string) =>
     .every((line) => !line.trim() || line.trim().startsWith('//'));
 
 /**
- * All JavaScript fences of a docs page, keyed the same way as the test markers.
- * `Node.js` fences are out of scope (only client-side snippets are tested) and skipped.
+ * All JS fences (`js`/`javascript`/`ts`/`typescript`) of a docs page, keyed the same way
+ * as the test markers. Includes `Node.js` and unlabelled fences (for the label check);
+ * only `JavaScript` fences are tested.
  */
 export const parseDocsFences = (docs: string, markdown: string): DocsFence[] => {
   const lines = markdown.split('\n');
@@ -89,7 +109,7 @@ export const parseDocsFences = (docs: string, markdown: string): DocsFence[] => 
     while (end < lines.length && !new RegExp(`^\\s*${ticks}\\s*$`).test(lines[end]))
       end++;
     const tab = /label="([^"]*)"/.exec(rest)?.[1] ?? 'unlabelled';
-    if (JS_LANGS.has(lang.toLowerCase()) && tab !== NODE_TAB) {
+    if (JS_LANGS.has(lang.toLowerCase())) {
       const countKey = `${heading}\u0000${tab}`;
       const index = (counts.get(countKey) ?? 0) + 1;
       counts.set(countKey, index);
@@ -99,6 +119,7 @@ export const parseDocsFences = (docs: string, markdown: string): DocsFence[] => 
         heading,
         tab,
         index,
+        lang,
         code,
         commentOnly: isCommentOnly(code),
         line: i + 1,
@@ -236,6 +257,27 @@ export const formatForDocs = async (code: string, markdownFile: string) => {
   } catch {
     return code;
   }
+};
+
+type SidebarItem = { markdown?: string; children?: SidebarItem[] };
+
+/**
+ * Pages of the chat JavaScript sidebar (paths relative to `content/docs/chat`), minus
+ * `EXCLUDED_PAGES`.
+ */
+export const findSidebarPages = () => {
+  const file = path.join(DOCS_CHAT_DIR, '..', '_sidebars', SIDEBAR_FILE);
+  const { items } = JSON.parse(fs.readFileSync(file, 'utf8')) as { items: SidebarItem[] };
+  const pages = new Set<string>();
+  const walk = (entries: SidebarItem[] = []) => {
+    for (const entry of entries) {
+      if (entry.markdown?.startsWith('chat/'))
+        pages.add(entry.markdown.slice('chat/'.length));
+      walk(entry.children);
+    }
+  };
+  walk(items);
+  return [...pages].filter((page) => !(page in EXCLUDED_PAGES)).sort();
 };
 
 export const readDocsPage = (docs: string) => {

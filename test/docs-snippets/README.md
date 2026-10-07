@@ -69,7 +69,9 @@ const message = await client
   - `index` is 1-based among fences with the same heading text and tab (default 1).
 - **COPY**: `name="literal"` pairs, applied to the region before comparing (identifier `name` becomes the docs literal). Don't use COPY variables as object keys or shorthand properties.
 - **Comparison**: both sides are formatted with the same prettier options, so quote style and line wrapping don't matter, but any code or comment change does.
-- **Coverage**: every JS fence (`js`/`javascript`/`ts`) of a page that has at least one marker must have a region (inside `it.skip` if it can't run). `Node.js` fences and comment-only fences (e.g. the "server-side only" placeholders) are ignored.
+- **Coverage** (checked first): every JS fence (`js`/`javascript`/`ts`/`typescript`) on the pages of the chat JavaScript sidebar (`content/docs/_sidebars/[chat][javascript].json`), whether or not the page has tests yet, must have a region (inside `it.skip` if it can't run). `Node.js` fences and comment-only fences (e.g. the "server-side only" placeholders) are ignored.
+- **Labels**: every JS fence on those pages must be labelled `JavaScript` or `Node.js`; unlabelled or otherwise labelled JS fences fail.
+- **Excluded pages**: `EXCLUDED_PAGES` in `sync/parse.ts` lists sidebar pages that are deliberately not validated, with a reason (e.g. the v9 upgrade guide's TSX type examples). Both checks skip them.
 - **`DOCS_SYNC_WRITE=<page path> yarn test-docs-sync`** writes the regions of that page into the docs fences (docs prettier style). Use it to apply a fix to the docs. `DOCS_SYNC_WRITE=1` writes all pages.
 - **`DOCS_CHAT_DIR`** points at another docs checkout (default: `../getstream.io/content/docs/chat` next to this repo). The check is skipped if the directory doesn't exist.
 - Use the same variable names as the docs (`client`, `channel`, ...).
