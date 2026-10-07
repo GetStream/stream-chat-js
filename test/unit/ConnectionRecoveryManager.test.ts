@@ -73,8 +73,7 @@ describe('ConnectionRecoveryManager', () => {
   const activeThread = (id: string) => {
     const built = buildThread(id);
     addToList(built.thread);
-    built.thread.activate();
-    return built;
+    return { ...built, release: built.thread.activate() };
   };
 
   beforeEach(() => {
@@ -137,9 +136,9 @@ describe('ConnectionRecoveryManager', () => {
     });
 
     it('leaves a thread nobody is displaying alone', async () => {
-      const { thread, reload } = activeThread('closed-thread');
-      // Closing the thread screen deactivates it; recovery must then skip it entirely.
-      thread.deactivate();
+      const { release, reload } = activeThread('closed-thread');
+      // Closing the thread screen ends its activation; recovery must then skip it entirely.
+      release();
       const { reload: channelReload } = activeChannel('still-open');
       vi.spyOn(client.channelManager, 'recover').mockResolvedValue([]);
 
@@ -164,8 +163,8 @@ describe('ConnectionRecoveryManager', () => {
 
     it('marks an opened thread nobody is displaying stale, without fetching it', async () => {
       const { thread, reload } = buildThread('opened-then-closed');
-      thread.activate();
-      thread.deactivate();
+      const release = thread.activate();
+      release();
       const open = activeThread('still-open');
       vi.spyOn(client.channelManager, 'recover').mockResolvedValue([]);
 

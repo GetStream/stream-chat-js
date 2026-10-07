@@ -944,8 +944,9 @@ connection recovery and an edit composer's submit target all missed it. The work
 the open thread to `state.threads` yourself, which put it on the thread list screen too.
 
 `ThreadManager` now keeps a registry holding the list's threads plus every **opened** one.
-`thread.activate()` registers a thread and subscribes it for the rest of the session. `deactivate()`
-does not release it, so reopening the thread reuses the loaded instance with no fetch. It is dropped
+`thread.activate()` registers a thread and subscribes it for the rest of the session, and returns the
+function that ends that activation, as `channel.activate()` does. `thread.deactivate()` is removed:
+call the returned function instead. Ending the activation does not release the thread, so reopening the thread reuses the loaded instance with no fetch. It is dropped
 when its channel is deleted or the user is removed from it, and on `disconnectUser()`. A reconnect
 marks every registered thread nobody is displaying stale, and it reloads the next time it is activated.
 
@@ -957,7 +958,7 @@ client.threads.state.next((s) => ({ ...s, threads: [thread, ...s.threads] })); /
 
 // v10
 const thread = client.threads.ensure({ channel, parentMessage });
-thread.activate(); // on mount; thread.deactivate() on unmount
+const release = thread.activate(); // on mount; release() on unmount
 ```
 
 `ensure()` returns the stored instance, or builds a new one, and registers it either way, so a list

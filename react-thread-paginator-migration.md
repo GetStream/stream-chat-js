@@ -115,8 +115,8 @@ A guideline for `release-v15`. The LLC side is `feat/thread-paginator`, and the 
   thread events, so it has to stay mounted for as long as threads are shown.
 - Nothing in React calls `thread.registerSubscriptions()` directly or handles `user.watching.*` for threads, so the
   routing and `watchStatus` changes need no code changes.
-- `useActiveThread` / `useCloseThread`: `thread.activate()` / `deactivate()`. `deactivate()` only flips `active`; the
-  thread stays registered.
+- `useActiveThread`: `thread.activate()` returns the release (there is no `thread.deactivate()`). Releasing only
+  flips `active`; the thread stays registered. `useCloseThread` doesn't touch the activation.
 - `ChatViewThreadsSelectorButton`: `unreadThreadCount` is still on `client.threads.state`.
 - Thread reads: React doesn't call `markRead` on thread open, and the LLC auto-reads the active thread. Don't add an
   explicit one, because that sends two reads (SCRN's F8).

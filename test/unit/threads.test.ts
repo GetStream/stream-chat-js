@@ -2955,12 +2955,28 @@ describe('Threads 2.0', () => {
           const thread = createThreadWithId();
           const unregisterSpy = sinon.spy(thread, 'unregisterSubscriptions');
 
-          thread.activate();
-          thread.deactivate();
+          const release = thread.activate();
+
+          release();
 
           expect(client.threads.get(thread.id)).to.equal(thread);
           expect(unregisterSpy.called).to.be.false;
           client.threads.unregisterSubscriptions();
+        });
+
+        it('stays active until every activation is released, each release ending only its own', () => {
+          const thread = createThreadWithId();
+
+          const releaseFirst = thread.activate();
+          const releaseSecond = thread.activate();
+          releaseFirst();
+          releaseFirst();
+
+          expect(thread.state.getLatestValue().active).to.be.true;
+
+          releaseSecond();
+
+          expect(thread.state.getLatestValue().active).to.be.false;
         });
 
         it('keeps an opened thread registered when the list evicts it', async () => {
@@ -2968,8 +2984,8 @@ describe('Threads 2.0', () => {
           const thread = createThreadWithId();
           const unregisterSpy = sinon.spy(thread, 'unregisterSubscriptions');
           setList(client.threads, [thread]);
-          thread.activate();
-          thread.deactivate();
+          const release = thread.activate();
+          release();
 
           await replaceList(client.threads, []);
 
@@ -3008,8 +3024,9 @@ describe('Threads 2.0', () => {
           const thread = createThreadWithId();
           setList(client.threads, [thread]);
 
-          thread.activate();
-          thread.deactivate();
+          const release = thread.activate();
+
+          release();
 
           expect(client.threads.get(thread.id)).to.equal(thread);
         });
@@ -3045,10 +3062,10 @@ describe('Threads 2.0', () => {
             .stub(client, 'getThreadAndHydrate')
             .resolves(createThreadWithId(thread.id));
 
-          thread.activate();
-          thread.deactivate();
-          thread.activate();
-          thread.deactivate();
+          const releaseFirst = thread.activate();
+          releaseFirst();
+          const releaseSecond = thread.activate();
+          releaseSecond();
 
           expect(getThread.called).to.be.false;
 
