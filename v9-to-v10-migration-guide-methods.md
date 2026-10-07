@@ -1045,7 +1045,9 @@ nothing still uses it (a channel list, `activate()`, a thread, a cached composer
 #### `channel.activate` (new)
 
 `channel.activate()` is new in v10: it sets `channel.active` and returns the function that ends the
-activation; each call gets its own, and calling it twice does nothing.
+activation; each call gets its own, and calling it twice does nothing. On a disposed channel it logs a warning,
+leaves `channel.active` unchanged and returns a release that does nothing; get a live instance with
+`client.channelManager.ensure()`.
 
 ```ts
 const release = channel.activate();

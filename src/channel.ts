@@ -1578,8 +1578,16 @@ export class Channel extends WithMessageOperations(ChannelApi) {
    * kept only while something else uses it (a watch, a channel list, a claim). A superseded channel
    * (see {@link ChannelLifecycleState.supersededBy}) is disconnected ({@link Channel._disconnect})
    * when its last consumer releases it.
+   *
+   * A disposed channel (`pendingDisposal`) isn't activated: it is not stored, gets no events and
+   * recovery skips it. A warning points at `client.channelManager.ensure()` for a live instance, and
+   * the returned release does nothing, so the caller's cleanup still runs.
    */
   activate = (): (() => void) => {
+    if (this.pendingDisposal) {
+      logger.withExtraTags('activate', this.cid).warn(this.disposedError().message);
+      return () => undefined;
+    }
     this._activeRefCount += 1;
     if (this._activeRefCount === 1) {
       this.state.partialNext({ active: true });

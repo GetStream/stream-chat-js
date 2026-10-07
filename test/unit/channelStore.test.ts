@@ -393,13 +393,15 @@ describe('keeping channels', () => {
     expect(client.channelManager.get('messaging:general')).toBeUndefined();
   });
 
-  it('can be activated after it was torn down, without storing it again', () => {
+  it('does not activate a disposed channel, and hands back a release that does nothing', () => {
     const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     client.channelManager.removeChannel(channel.cid);
 
     const release = channel.activate();
-    release();
 
+    expect(channel.active).toBe(false);
+    expect(() => release()).not.toThrow();
+    expect(channel.active).toBe(false);
     expect(client.channelManager.get(channel.cid)).toBeUndefined();
   });
 
