@@ -16,6 +16,15 @@ const spySubscriber = (): EntityStoreSubscriber & {
   onEntitiesChanged: vi.fn(),
 });
 
+const throwingHolder = (error: Error): EntityStoreSubscriber => ({
+  onEntitiesChanged: vi.fn(),
+  onEntityRemoved: () => {
+    throw error;
+  },
+});
+
+const removedSpy = () => ({ onEntitiesChanged: vi.fn(), onEntityRemoved: vi.fn() });
+
 describe('EntityStore', () => {
   let store: EntityStore<LocalMessage>;
 
@@ -550,6 +559,23 @@ describe('EntityStore', () => {
 
       expect(onRelease).toHaveBeenCalledTimes(1);
     });
+
+    it('finishes the removal when a holder throws, then rethrows its error', () => {
+      const onRelease = vi.fn();
+      store = new EntityStore<LocalMessage>({ getEntityId, onRelease });
+      const m = msg({ id: 'm1' });
+      const error = new Error('holder failed');
+      const other = removedSpy();
+      store.upsert(m);
+      store.link('m1', throwingHolder(error));
+      store.link('m1', other);
+
+      expect(() => store.remove('m1')).toThrow(error);
+
+      expect(other.onEntityRemoved).toHaveBeenCalledWith('m1', m);
+      expect(store.has('m1')).toBe(false);
+      expect(onRelease).toHaveBeenCalledWith(m);
+    });
   });
 
   describe('detach', () => {
@@ -834,6 +860,26 @@ describe('EntityStore', () => {
       store.clear();
       store.clear();
       expect(onRelease).toHaveBeenCalledTimes(1);
+    });
+
+    it('finishes the clear when a holder throws, then rethrows its error', () => {
+      const onRelease = vi.fn();
+      store = new EntityStore<LocalMessage>({ getEntityId, onRelease });
+      const m1 = msg({ id: 'm1' });
+      const m2 = msg({ id: 'm2' });
+      const error = new Error('holder failed');
+      const other = removedSpy();
+      store.upsert(m1);
+      store.upsert(m2);
+      store.link('m1', throwingHolder(error));
+      store.link('m2', other);
+
+      expect(() => store.clear()).toThrow(error);
+
+      expect(other.onEntityRemoved).toHaveBeenCalledWith('m2', m2);
+      expect(store.has('m1')).toBe(false);
+      expect(store.has('m2')).toBe(false);
+      expect(onRelease).toHaveBeenCalledTimes(2);
     });
 
     it('releases after the store is emptied', () => {

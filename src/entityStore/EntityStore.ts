@@ -117,6 +117,26 @@ export type EntityStoreOptions<T> = {
  *
  * @template T The domain entity type held by the store.
  */
+/**
+ * Runs callbacks so one that throws doesn't stop the ones after it, and rethrows the first error once
+ * they all ran.
+ */
+class RunnerWithErrorCollector {
+  private first: { error: unknown } | undefined;
+
+  run(callback: () => void) {
+    try {
+      callback();
+    } catch (error) {
+      this.first ??= { error };
+    }
+  }
+
+  rethrowFirst() {
+    if (this.first) throw this.first.error;
+  }
+}
+
 export class EntityStore<T> {
   private byId = new Map<string, T>();
   private subscribers = new Map<string, Set<EntityStoreSubscriber>>();
@@ -338,6 +358,9 @@ export class EntityStore<T> {
    * Removes the entry stored under `id` whatever holds it, drops its holders and calls `onRelease`
    * with the entity. Each holder gets {@link EntityStoreSubscriber.onEntityRemoved}, and is notified
    * that `id` changed (it now resolves to `undefined`). Removing an ID that isn't stored does nothing.
+   *
+   * A holder or `onRelease` that throws doesn't stop the removal: every holder is told, the entry is
+   * deleted and released, and then the first error is rethrown.
    */
   remove(id: string): void {
     this.dropEntry(id, { release: true });
@@ -359,32 +382,44 @@ export class EntityStore<T> {
     this.markDirty(id);
     this.subscribers.delete(id);
     this.pendingFlushIds?.delete(id);
-    if (holders) for (const holder of holders) holder.onEntityRemoved?.(id, entity);
+    const runner = new RunnerWithErrorCollector();
+    if (holders) {
+      for (const holder of holders)
+        runner.run(() => holder.onEntityRemoved?.(id, entity));
+    }
     this.byId.delete(id);
-    if (release) this.onRelease?.(entity);
+    if (release) runner.run(() => this.onRelease?.(entity));
     this.autoFlush();
+    runner.rethrowFirst();
   }
 
   /**
    * Removes every entry and holder. Each holder gets {@link EntityStoreSubscriber.onEntityRemoved}
    * for every entity it held, then `onRelease` is called for each removed entity. Calling it on an
    * empty store does nothing.
+   *
+   * A holder or `onRelease` that throws doesn't stop the clear: every holder is told, the store is
+   * emptied and every entity released, and then the first error is rethrown.
    */
   clear(): void {
     const holdersById = this.subscribers;
     this.subscribers = new Map();
     this.pendingChanged.clear();
     this.pendingFlushIds = undefined;
+    const runner = new RunnerWithErrorCollector();
     // holders are dropped first, so a list removing the item on its side unlinks nothing
     for (const [id, holders] of holdersById) {
       const entity = this.byId.get(id);
-      if (entity !== undefined)
-        for (const holder of holders) holder.onEntityRemoved?.(id, entity);
+      if (entity === undefined) continue;
+      for (const holder of holders)
+        runner.run(() => holder.onEntityRemoved?.(id, entity));
     }
     const released = [...this.byId.values()];
     this.byId = new Map();
     // released after the store is emptied, so an onRelease reading the store sees the final state
-    if (this.onRelease) for (const entity of released) this.onRelease(entity);
+    const { onRelease } = this;
+    if (onRelease) for (const entity of released) runner.run(() => onRelease(entity));
+    runner.rethrowFirst();
   }
 
   // ---- subscription registry / refcount ----
