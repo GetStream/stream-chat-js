@@ -15,7 +15,7 @@ Pages under `getstream.io/content/docs/` that contain JavaScript snippets. Give 
 
 Status: `[ ]` todo, `[x]` done, `[~]` done with open questions.
 
-App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy off (can be toggled), campaigns on, no webhook/SQS/SNS. Enabled since (not probed yet): message history (`queryMessageHistory`). Probed and **working**: private messaging (restricted visibility, 2026-10-06), pending messages, delivery receipts, translation, review queue, guest users, dynamic partitioning config, multi-tenancy toggle.
+App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy off (can be toggled), campaigns on, no webhook/SQS/SNS. Enabled since (not probed yet): message history (`queryMessageHistory`). Probed and **working**: location sharing (enabled by support 2026-10-06), private messaging (restricted visibility, 2026-10-06), pending messages, delivery receipts, translation, review queue, guest users, dynamic partitioning config, multi-tenancy toggle.
 
 ## chat/\_default/02-init_and_users
 
@@ -70,7 +70,7 @@ App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy of
 | [x]    | `chat/_default/05-features/04-typing_indicators.md`                    | 2   | 0          | yes         |                             |
 | [x]    | `chat/_default/05-features/05-presence_format.md`                      | 3   | 0          | yes         |                             |
 | [x]    | `chat/_default/05-features/07-polls_api.md`                            | 17  | 0          | yes         |                             |
-| [~]    | `chat/_default/05-features/08-location_sharing.md`                     | 7   | 0          | yes         | ◐ ⛔ location sharing off   |
+| [x]    | `chat/_default/05-features/08-location_sharing.md`                     | 7   | 0          | yes         |                             |
 | [x]    | `chat/_default/05-features/09-translation.md`                          | 4   | 0          | yes         |                             |
 | [x]    | `chat/_default/05-features/10-advanced/11-slow_mode_and_throttling.md` | 2   | 0          | yes         |                             |
 | [x]    | `chat/_default/05-features/10-advanced/12-drafts.md`                   | 6   | 0          | yes         |                             |
@@ -104,12 +104,6 @@ App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy of
 - **Evidence**: Delivery is only observable via webhook or push.
 - **To unblock**: Not needed: verify the SDK calls only.
 
-### `chat/_default/05-features/08-location_sharing.md` (◐ ⛔ Blocked)
-
-- **Affected**: static location, live location (start/update/stop, `client.updateLocation`) and `LiveLocationManager` snippets. Events snippet runs.
-- **Evidence**: `SendMessage` with `shared_location`, `UpdateLiveLocation`, `GetUserLiveLocations` fail with 403 code 17 "location sharing is not enabled for this app, please contact support to enable it", server-side too, with `shared_locations: true` on a channel type or in `config_overrides`.
-- **To unblock**: Ask support to enable location sharing on the app, then un-skip the tests (assertions are already written).
-
 ### `chat/_default/12-best_practices/02-moderation.md` (◐ ⛔ Blocked)
 
 - **Affected**: "List available blocklists" (`client.listBlockLists()`). The rest of the page runs.
@@ -129,7 +123,6 @@ App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy of
 ## Unblock checklist
 
 - Webhook-dependent parts (🔗) are intentionally not verified by this project.
-- [ ] Location sharing enabled on the app (`05-features/08-location_sharing`).
 
 ## Setup notes (not blockers)
 

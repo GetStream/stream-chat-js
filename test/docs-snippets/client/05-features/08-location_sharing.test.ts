@@ -8,15 +8,8 @@ import {
 } from '../../helpers/clients';
 import { Cleanup } from '../../helpers/cleanup';
 import { uniqueId } from '../../helpers/ids';
-import { retry } from '../../helpers/wait';
-
-// Location sharing is an app-level feature flag that this test app doesn't have:
-// every location call (sendMessage with shared_location, PUT/GET /users/live_locations)
-// fails with 403 code 17 "location sharing is not enabled for this app, please contact
-// support to enable it", server-side too, even with `shared_locations: true` on the
-// channel type or in `config_overrides`.
-const BLOCKED =
-  'BLOCKED: location sharing is not enabled for this app (code 17), needs Stream support';
+import { grantMessagingMembers } from '../../helpers/grants';
+import { retry, waitForChannelTypePropagation } from '../../helpers/wait';
 
 describe('_default/05-features/08-location_sharing.md', () => {
   const serverClient = getServerClient();
@@ -29,10 +22,16 @@ describe('_default/05-features/08-location_sharing.md', () => {
 
   beforeAll(async () => {
     cleanup.users.push(userId, otherId);
+    await grantMessagingMembers(serverClient, cleanup, ['share-location']);
+    await waitForChannelTypePropagation();
     await serverClient.upsertUser({ id: otherId });
     client = await getClientSideClient({ id: userId });
     cleanup.channels.push(`${channelType}:${channelId}`);
     await client.channel(channelType, channelId, { members: [userId, otherId] }).create();
+    // config_overrides can only be set server-side
+    await serverClient
+      .channel(channelType, channelId)
+      .updatePartial({ set: { config_overrides: { shared_locations: true } } });
   });
 
   afterAll(async () => {
@@ -40,7 +39,7 @@ describe('_default/05-features/08-location_sharing.md', () => {
     await cleanup.run();
   });
 
-  it.skip(`${BLOCKED} (static location)`, async () => {
+  it('sends a static location', async () => {
     const messageId = uniqueId('message');
 
     // #region snippet docs="_default/05-features/08-location_sharing.md" heading="Sending static location" tab="JavaScript" index=1
@@ -48,7 +47,7 @@ describe('_default/05-features/08-location_sharing.md', () => {
     const channel = client.channel(channelType, channelId);
 
     // Send a message with a static location.
-    channel.sendSharedLocation({
+    await channel.sendSharedLocation({
       created_by_device_id: 'device-id',
       latitude: 10,
       longitude: 10,
@@ -56,12 +55,12 @@ describe('_default/05-features/08-location_sharing.md', () => {
     });
     // #endregion snippet
 
-    const message = await retry(async () => (await client.getMessage(messageId)).message);
+    const { message } = await client.getMessage(messageId);
     expect(message.shared_location).toMatchObject({ latitude: 10, longitude: 10 });
     expect(message.shared_location?.end_at).toBeUndefined();
   });
 
-  it.skip(`${BLOCKED} (live location: start, update, stop)`, async () => {
+  it('starts, updates and stops live location sharing', async () => {
     const messageId = uniqueId('message');
 
     {
@@ -71,7 +70,7 @@ describe('_default/05-features/08-location_sharing.md', () => {
 
       // Send a message with a live location.
       // Live location differs from the static location by the termination timestamp end_at.
-      channel.sendSharedLocation({
+      await channel.sendSharedLocation({
         created_by_device_id: 'device-id',
         end_at: '2225-07-22T09:30:12.507Z',
         latitude: 10,
@@ -81,7 +80,7 @@ describe('_default/05-features/08-location_sharing.md', () => {
       // #endregion snippet
     }
 
-    const started = await retry(async () => (await client.getMessage(messageId)).message);
+    const { message: started } = await client.getMessage(messageId);
     expect(started.shared_location?.end_at).toMatch(/^2225-07-22T09:30:12/);
 
     // #region snippet docs="_default/05-features/08-location_sharing.md" heading="Updating live location" tab="JavaScript" index=1
@@ -105,7 +104,7 @@ describe('_default/05-features/08-location_sharing.md', () => {
       const channel = client.channel(channelType, channelId);
 
       // to stop location sharing at least message id has to be provided
-      channel.stopLiveLocationSharing({
+      await channel.stopLiveLocationSharing({
         message_id: messageId,
       });
       // #endregion snippet
@@ -117,7 +116,7 @@ describe('_default/05-features/08-location_sharing.md', () => {
     });
   });
 
-  it.skip(`${BLOCKED} (LiveLocationManager)`, async () => {
+  it('reports live locations with LiveLocationManager', async () => {
     const coords: Coords = { latitude: 1, longitude: 2 };
     // App-specific placeholders the docs leave undefined.
     const getCurrentPosition = (callback: (position: { coords: Coords }) => void) =>
@@ -148,16 +147,15 @@ describe('_default/05-features/08-location_sharing.md', () => {
     });
 
     // to start watching and reporting the manager subscriptions have to be initiated
-    manager.init();
+    await manager.init();
 
     // to stop watching and reporting the manager subscriptions have cleaned up
     manager.unregisterSubscriptions();
     // #endregion snippet
 
-    await retry(() => {
-      expect(manager.stateIsReady).toBe(true);
-      return Promise.resolve();
-    });
+    expect(manager.stateIsReady).toBe(true);
+    // the stop step removed the subscriptions that init() registered
+    expect(manager.hasSubscriptions).toBe(false);
   });
 
   it('listens for location messages', async () => {
@@ -186,20 +184,26 @@ describe('_default/05-features/08-location_sharing.md', () => {
         'message.updated',
       ]);
 
-      // Location messages can't be sent in this app (see BLOCKED), so check that the
-      // handlers run on a plain message and its update.
-      const seen: string[] = [];
+      // Check that the handlers' condition holds for a live location message and its update.
+      const seen: Array<[string, boolean]> = [];
       channel.on((event) => {
-        seen.push(event.type);
+        if (event.type === 'message.new' || event.type === 'message.updated') {
+          seen.push([event.type, Boolean(event.message?.shared_location)]);
+        }
       });
-      const { message } = await serverClient
-        .channel(channelType, channelId)
-        .sendMessage({ text: 'hi', user_id: otherId });
-      await serverClient.updateMessage({ id: message.id, text: 'edited' }, otherId);
+      const messageId = uniqueId('message');
+      await channel.sendSharedLocation({
+        created_by_device_id: 'device-id',
+        end_at: '2225-07-22T09:30:12.507Z',
+        latitude: 10,
+        longitude: 10,
+        message_id: messageId,
+      });
+      await client.updateLocation({ latitude: 1, longitude: 2, message_id: messageId });
 
       await retry(() => {
-        expect(seen).toContain('message.new');
-        expect(seen).toContain('message.updated');
+        expect(seen).toContainEqual(['message.new', true]);
+        expect(seen).toContainEqual(['message.updated', true]);
         return Promise.resolve();
       });
     } finally {
