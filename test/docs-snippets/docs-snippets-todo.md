@@ -4,7 +4,7 @@ Pages under `getstream.io/content/docs/` that contain JavaScript snippets. Give 
 
 - Only client-side snippets are in scope: fences labelled `JavaScript` of pages in the JavaScript sidebar. Unlabelled `js` fences get a label (`JavaScript` or `Node.js`). `Node.js` fences and pages only in the Node sidebar are out of scope.
 - **JS / unlabelled**: number of `js` fences labelled `JavaScript` / with no label (before the docs were changed).
-- **Client test**: `yes` when the page gets a test under `test/docs-snippets/client/...`; `-` when nothing on it can be tested client-side.
+- **Client test**: `yes` when the page gets a test under `test/docs-snippets/pages/...`; `-` when nothing on it can be tested client-side.
 
 **Blockers** (details below; empty = fully runnable, maybe with setup notes):
 

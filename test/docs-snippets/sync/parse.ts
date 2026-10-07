@@ -285,7 +285,7 @@ export const readDocsPage = (docs: string) => {
   return { file, markdown: fs.readFileSync(file, 'utf8') };
 };
 
-/** Every *.test.ts under client/. */
+/** Every *.test.ts under pages/. */
 export const findTestFiles = (root = path.join(__dirname, '..')) => {
   const files: string[] = [];
   const walk = (dir: string) => {
@@ -295,6 +295,6 @@ export const findTestFiles = (root = path.join(__dirname, '..')) => {
       else if (entry.name.endsWith('.test.ts')) files.push(full);
     }
   };
-  if (fs.existsSync(path.join(root, 'client'))) walk(path.join(root, 'client'));
+  if (fs.existsSync(path.join(root, 'pages'))) walk(path.join(root, 'pages'));
   return files.sort();
 };

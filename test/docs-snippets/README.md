@@ -8,7 +8,7 @@ wrong or contain server-side code. `Node.js` fences are out of scope and are nei
 ```sh
 cp test/docs-snippets/.env.example test/docs-snippets/.env   # fill in STREAM_API_KEY / STREAM_API_SECRET
 yarn test-docs                                                # all docs tests
-yarn test-docs client/04-messages/01-send_message.test.ts     # one file
+yarn test-docs pages/04-messages/01-send_message.test.ts      # one file
 yarn types-docs                                               # typecheck the docs tests
 yarn test-docs-sync                                           # test regions == docs fences (no network)
 yarn test-docs-sweep                                          # remove docs-test leftovers older than 30 min (DOCS_SWEEP_DRY_RUN=1 to list only, DOCS_SWEEP_MIN_AGE=0 for all)
@@ -20,7 +20,7 @@ These tests hit the network and are not part of `yarn test`.
 ## Layout
 
 ```
-client/<docs section>/<docs page>.test.ts   # user connected with a user token (tab label "JavaScript")
+pages/<docs section>/<docs page>.test.ts    # user connected with a user token (tab label "JavaScript")
 helpers/                                    # clients (stream-chat-js user clients, node-sdk server client), unique ids,
                                             # cleanup registry, server-side helpers, waits, leak check, app snapshot
 setup.ts                                    # .env loading, per-file leak check and app-settings drift check
@@ -33,7 +33,7 @@ learnings.md                                # lessons from earlier agent runs, r
 ```
 
 The path mirrors the docs path, e.g. `_default/04-messages/01-send_message.md` maps to
-`client/04-messages/01-send_message.test.ts`. Pages under `chat/javascript/` go under `client/javascript/...`.
+`pages/04-messages/01-send_message.test.ts`. Pages under `chat/javascript/` go under `pages/javascript/...`.
 
 ## Conventions
 

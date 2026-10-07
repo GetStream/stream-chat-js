@@ -16,7 +16,7 @@ export default defineConfig({
   },
   test: {
     root: import.meta.dirname,
-    include: ['./client/**/*.test.ts'],
+    include: ['./pages/**/*.test.ts'],
     setupFiles: ['./setup.ts'],
     // Shows console output (leak / drift warnings) for passing tests too.
     reporters: ['verbose'],
