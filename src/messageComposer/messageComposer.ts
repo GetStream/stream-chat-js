@@ -786,6 +786,26 @@ export class MessageComposer extends WithSubscriptions {
     this.textComposer.restoreSnapshot(snapshot.textComposer);
   };
 
+  /**
+   * Moves this composition into `target`, replacing what `target` held, and clears this composer
+   * locally: the text, attachments, poll, location, link previews, custom data, quoted message and
+   * reply-in-channel choice. An upload still running keeps running and its result lands in `target`
+   * (see {@link AttachmentManager.takeOver}). Nothing is sent.
+   *
+   * @internal
+   */
+  transferTo = (target: MessageComposer) => {
+    target.textComposer.takeOver(this.textComposer);
+    target.attachmentManager.takeOver(this.attachmentManager);
+    target.linkPreviewsManager.takeOver(this.linkPreviewsManager);
+    target.locationComposer.takeOver(this.locationComposer);
+    target.pollComposer.takeOver(this.pollComposer);
+    target.customDataManager.takeOver(this.customDataManager);
+    const { pollId, quotedMessage, showReplyInChannel } = this.state.getLatestValue();
+    target.state.partialNext({ pollId, quotedMessage, showReplyInChannel });
+    this.clear();
+  };
+
   captureSnapshot = (snapshot = this.getSnapshot()) => {
     if (this.snapshots.length) return;
     this.snapshots.push(snapshot);

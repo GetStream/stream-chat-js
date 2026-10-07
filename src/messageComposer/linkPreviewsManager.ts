@@ -189,6 +189,15 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
     this.state.next(initState({ message: this.enabled ? message : undefined }));
   };
 
+  /**
+   * Takes over `source`'s link previews.
+   *
+   * @internal
+   */
+  takeOver = (source: LinkPreviewsManager) => {
+    this.state.next({ previews: new Map(source.state.getLatestValue().previews) });
+  };
+
   getSnapshot = (): LinkPreviewsManagerSnapshot => this.state.getLatestValue();
 
   restoreSnapshot = (snapshot: LinkPreviewsManagerSnapshot) => {
