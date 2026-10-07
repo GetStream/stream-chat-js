@@ -327,6 +327,29 @@ describe('ChannelManager channel store', () => {
     expect(channel.pendingDisposal).toBe(true);
     expect(client.channelManager.values()).toEqual([]);
   });
+
+  it('empties each list in one update on disconnectUser, writing nothing to the offline DB', async () => {
+    const channels = ['a', 'b', 'c'].map((id) =>
+      client.channelManager.ensure({ type: 'messaging', id }),
+    );
+    const paginator = new ChannelPaginator({ client, filters: { type: 'messaging' } });
+    paginator.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: channels });
+    client.channelManager.setPaginators([paginator]);
+    const cacheCids = vi.spyOn(
+      paginator as unknown as { cacheCidsForQuery: () => void },
+      'cacheCidsForQuery',
+    );
+    const published: unknown[] = [];
+    const unsubscribe = paginator.state.subscribe((state) => published.push(state.items));
+    published.length = 0; // subscribe reports the current state first
+
+    await client.disconnectUser();
+    unsubscribe();
+
+    expect(published).toEqual([undefined]);
+    expect(cacheCids).not.toHaveBeenCalled();
+    expect(channels.every((channel) => channel.pendingDisposal)).toBe(true);
+  });
 });
 
 describe('keeping channels', () => {

@@ -591,7 +591,9 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
    * running; skipping those would leave the cached order stale until the next full re-query.
    */
   protected persistLoadedCids() {
-    if (!this.client.offlineDb) return;
+    // Without a connected user the list is being emptied by `disconnectUser()`: what stays in the
+    // offline DB is the app's call (`resetDB()`), so nothing is written.
+    if (!this.client.offlineDb || !this.client.userID) return;
 
     this.cacheCidsForQuery({
       cids: (this.items ?? [])

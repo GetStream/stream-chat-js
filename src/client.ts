@@ -832,16 +832,17 @@ export class StreamChat extends ChatApi {
     // `enableWSFallback` switch the long-poll's close request has to carry it.
     this.connectionIdManager.rejectConnectionId(teardownReason);
 
+    // Drop the channels loaded into the channel lists, which belong to the user being disconnected.
+    // The lists stay registered: which lists exist is the application's configuration, not user data.
+    // Reset first, so each list empties in one update and no longer holds its channels; clearing the
+    // store then has no list to remove them from one by one.
+    this.channelManager.resetPaginatorStates();
     // disconnects every channel (`_disconnect()`) and ensures we no longer return inactive channels
     this.channelManager.clearChannels();
     // reset client state
     this.state = new ClientState({ client: this });
     // reset thread manager
     this.threads.resetState();
-    // drop the channels loaded into the channel lists — they belong to the user being disconnected
-    // and have just been disconnected themselves. The lists stay registered: which lists exist is
-    // the application's configuration, not user data.
-    this.channelManager.resetPaginatorStates();
     // channel mutes are per-user; leaving them would let `muted` filters resolve against the
     // previous user until the next health check replaces them
     this.mutedChannels = [];
