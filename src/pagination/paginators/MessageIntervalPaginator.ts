@@ -582,7 +582,15 @@ export class MessageIntervalPaginator extends BasePaginator<
     };
     const isJump = this.isJumpQueryShape(queryShape);
 
-    if (options?.reconcile && !isJump && typeof this.items !== 'undefined') {
+    // A re-seed reconciles against the loaded windows. A list loaded empty has none (no interval,
+    // not even live messages in a logical head), so the page seeds it as a first open would; the
+    // merge would find nothing to merge into and drop the page.
+    if (
+      options?.reconcile &&
+      !isJump &&
+      typeof this.items !== 'undefined' &&
+      this.itemIntervals.length > 0
+    ) {
       // The page came back, so whatever the last query failure was, it is no longer the truth. The
       // branch below inherits this from `postQueryReconcile`, which this one deliberately skips —
       // without it a failed "load older" would keep a UI's error surface latched through an

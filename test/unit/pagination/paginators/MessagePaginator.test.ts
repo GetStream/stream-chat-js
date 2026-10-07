@@ -1611,6 +1611,26 @@ describe('MessagePaginator', () => {
       expect(paginator.hasMoreTail).toBe(false);
     });
 
+    it('seeds a page into a list loaded empty, rather than dropping it', () => {
+      (channel as unknown as { getClient: () => unknown }).getClient = () => ({
+        user: undefined,
+        getReplies: channel.getReplies,
+      });
+      const paginator = new MessagePaginator({ channel, itemIndex });
+      // a channel opened while it had no messages: loaded, with nothing in it
+      paginator.seedFirstPageSync([], 100);
+      expect(paginator.items).toEqual([]);
+
+      // a later query of the same channel (a re-query, or `watch()` of a channel created from members)
+      paginator.seedFirstPageSync([msg('m8', '08'), msg('m9', '09')], 100, undefined, {
+        candidateIds: new Set(),
+        reconcile: true,
+      });
+
+      expect(paginator.items?.map((m) => m.id)).toEqual(['m8', 'm9']);
+      expect(paginator.headmostItem?.id).toBe('m9');
+    });
+
     it('seeds an around/jump open as a middle window, not the head', () => {
       (channel as unknown as { getClient: () => unknown }).getClient = () => ({
         user: undefined,
