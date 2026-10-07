@@ -1025,7 +1025,8 @@ releases its loaded messages, and sets `pendingDisposal` to `true` and `watchSta
 instance, so it is garbage collected once your code doesn't either.
 
 So when your app calls `releaseUnusedChannels()`, a channel your code keeps a reference to, without
-watching or opening it, is disposed of too. A disposed channel throws from `getClient()`;
+watching or opening it, is disposed of too. A disposed channel throws from `getClient()`, and its
+`query()` and `watch()` reject before the request is sent;
 `client.channelManager.ensure({ type, id })` returns a fresh instance. Call `activate()` on a channel
 you keep, as a UI does when it opens one.
 

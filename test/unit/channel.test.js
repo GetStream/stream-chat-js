@@ -4755,3 +4755,25 @@ describe('Channel provisional (created from members, without an id)', () => {
 		expect(sendEvent).toHaveBeenCalledOnce();
 	});
 });
+
+describe('Channel query on a disposed instance', () => {
+	let client;
+	let channel;
+	let sendRequest;
+
+	beforeEach(() => {
+		client = getClientWithUser({ id: 'ann' });
+		channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
+		sendRequest = vi
+			.spyOn(client.api, 'sendRequest')
+			.mockRejectedValue(new Error('unexpected request'));
+	});
+
+	it('is refused before the request goes out, for query() and watch()', async () => {
+		channel._disconnect();
+
+		await expect(channel.query({})).rejects.toThrow(/pending disposal/);
+		await expect(channel.watch()).rejects.toThrow(/pending disposal/);
+		expect(sendRequest).not.toHaveBeenCalled();
+	});
+});

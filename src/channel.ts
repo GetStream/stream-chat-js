@@ -495,12 +495,15 @@ export class Channel extends WithMessageOperations(ChannelApi) {
    * @returns The chat client.
    */
   getClient(): StreamChat {
-    if (this.pendingDisposal) {
-      throw Error(
-        `Channel ${this.cid} is pending disposal and cannot be used. Get a fresh instance via client.channelManager.ensure().`,
-      );
-    }
+    if (this.pendingDisposal) throw this.disposedError();
     return this._client;
+  }
+
+  /** What a call on a disposed instance fails with: it is done for good, and how to get a live one. */
+  private disposedError() {
+    return new Error(
+      `Channel ${this.cid} is pending disposal and cannot be used. Get a fresh instance via client.channelManager.ensure().`,
+    );
   }
 
   /**
@@ -1956,6 +1959,9 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     messageSetToAddToIfDoesNotExist: MessageSetType = 'current',
     requestOptions?: StreamRequestOptions,
   ) {
+    // A disposed instance is done for good: its query would load it again and, for a watch, register
+    // a watch whose events go to the instance now stored for the cid. Refused before it is sent.
+    if (this.pendingDisposal) throw this.disposedError();
     // counted until the response is applied, watch status included, so the channel store keeps a
     // channel that is being loaded
     this._channelQueriesInFlight += 1;
