@@ -27,7 +27,7 @@ You are verifying the client-side JavaScript code snippets of one Stream Chat do
 ## Read first
 
 1. `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/learnings.md`: issues that earlier agents ran into. Follow it.
-2. `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/README.md`: layout, helpers, isolation, cleanup and snippet-marker conventions. Look at `client/dummy.test.ts` as an example.
+2. `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/README.md`: layout, helpers, isolation, cleanup and snippet-marker conventions. Look at `client/04-messages/01-send_message.test.ts` as an example.
 3. The page itself, and its row in `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/docs-snippets-todo.md`. Also read the page's entries in the TODO's **Blockers detail**, **Setup notes** and **Known docs bugs** sections.
 
 4. When the page doesn't make clear whether an endpoint is client-side or server-side only, check the OpenAPI specs: https://github.com/GetStream/protocol/tree/main/openapi/v2. An endpoint missing from the client spec is server-only. Also check the SDK source in `stream-chat-js/src/` for the method's signature and types.
