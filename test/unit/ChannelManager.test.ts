@@ -1167,7 +1167,7 @@ describe('ChannelManager', () => {
       const ch = makeChannel('messaging:disposing');
       ch.watchStatus = ChannelWatchStatus.WasWatching;
       const { ingestItem } = routeEventFor(ch);
-      ch.pendingDisposal = true;
+      ch._disconnect();
 
       client.dispatchEvent({ type: 'message.new', cid: ch.cid });
 

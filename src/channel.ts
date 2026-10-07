@@ -1518,7 +1518,8 @@ export class Channel extends WithMessageOperations(ChannelApi) {
    * Whether {@link Channel._disconnect} has run: the channel was deleted, the current user removed
    * from it, the client disconnected, or nothing used it any more. Store-backed and reactive.
    *
-   * One-way and terminal — there is no counterpart that revives the instance. Its resources are
+   * One-way and terminal — read-only, set only by {@link Channel._disconnect}, and nothing revives
+   * the instance. Its resources are
    * already released ({@link Channel._disconnect} disposes the paginators and unregisters the
    * subscriptions) and the channel store drops it, so nothing should touch it:
    * `client.channelManager.ensure(…)` mints a fresh instance for its cid, never re-watched on recovery,
@@ -1527,10 +1528,6 @@ export class Channel extends WithMessageOperations(ChannelApi) {
    */
   get pendingDisposal() {
     return this.state.getLatestValue().pendingDisposal;
-  }
-
-  set pendingDisposal(pendingDisposal: boolean) {
-    this.state.partialNext({ pendingDisposal });
   }
 
   /**

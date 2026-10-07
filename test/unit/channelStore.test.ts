@@ -548,17 +548,24 @@ describe('keeping channels', () => {
     });
   });
 
-  it('releases unused channels when the lists reload and when the connection recovers', async () => {
-    const reloaded = client.channelManager.ensure({ type: 'messaging', id: 'reloaded' });
-    await client.channelManager.reload();
-    expect(reloaded.pendingDisposal).toBe(true);
+  it('leaves unused channels stored when the lists reload and when the connection recovers', async () => {
+    // nothing keeps it, but the app may: only the app releases it
+    const unused = client.channelManager.ensure({ type: 'messaging', id: 'unused' });
 
-    const recovered = client.channelManager.ensure({
-      type: 'messaging',
-      id: 'recovered',
-    });
+    await client.channelManager.reload();
     await client.channelManager.recover();
-    expect(recovered.pendingDisposal).toBe(true);
+
+    expect(unused.pendingDisposal).toBe(false);
+    expect(client.channelManager.get('messaging:unused')).toBe(unused);
+  });
+
+  it('releases an unused channel when the app asks for it', () => {
+    const unused = client.channelManager.ensure({ type: 'messaging', id: 'unused' });
+
+    client.channelManager.releaseUnusedChannels();
+
+    expect(unused.pendingDisposal).toBe(true);
+    expect(client.channelManager.get('messaging:unused')).toBeUndefined();
   });
 });
 

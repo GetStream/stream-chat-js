@@ -2437,7 +2437,7 @@ describe('Threads 2.0', () => {
           client.threads.registerSubscriptions();
           const alive = threadOn('alive');
           const dead = threadOn('dead');
-          dead.channel.pendingDisposal = true;
+          dead.channel._disconnect();
 
           await loadList(client.threads, [alive, dead]);
 
@@ -2457,7 +2457,7 @@ describe('Threads 2.0', () => {
           opened.activate();
           expect(unsubscribes).to.have.lengthOf(1);
 
-          listed.channel.pendingDisposal = true;
+          listed.channel._disconnect();
 
           expect(unsubscribes[0]).toHaveBeenCalledOnce();
           expect(listOf(client.threads)).to.deep.equal([other]);
@@ -2468,7 +2468,7 @@ describe('Threads 2.0', () => {
 
         it('releases a thread activated after its channel was disposed, leaving no listener', () => {
           const thread = threadOn('dead');
-          thread.channel.pendingDisposal = true;
+          thread.channel._disconnect();
           const unsubscribes = trackDisposalListeners(thread.channel);
 
           thread.activate();
@@ -2496,7 +2496,7 @@ describe('Threads 2.0', () => {
         it('tracks a re-created channel as a new instance', () => {
           const old = threadOn('recreated');
           old.activate();
-          old.channel.pendingDisposal = true;
+          old.channel._disconnect();
           expect(client.threads.get(old.id)).to.be.undefined;
 
           const fresh = threadOn('recreated');
@@ -2504,7 +2504,7 @@ describe('Threads 2.0', () => {
           fresh.activate();
 
           expect(client.threads.get(fresh.id)).to.equal(fresh);
-          fresh.channel.pendingDisposal = true;
+          fresh.channel._disconnect();
           expect(client.threads.get(fresh.id)).to.be.undefined;
         });
       });
@@ -2848,7 +2848,7 @@ describe('Threads 2.0', () => {
           expect(disposalListeners).to.have.lengthOf(1);
           expect(sink).not.toHaveBeenCalled();
           // Still a single hold: one release on disposal removes it and unsubscribes the thread.
-          channel.pendingDisposal = true;
+          channel._disconnect();
           expect(client.threads.get(thread.id)).to.be.undefined;
           expect(thread.hasSubscriptions).to.be.false;
           client.threads.unregisterSubscriptions();

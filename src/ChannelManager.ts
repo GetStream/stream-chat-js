@@ -371,7 +371,8 @@ export type ChannelManagerOptions = {
 
 /**
  * A stored channel, the key it is stored under, and what keeps it: its own state (`'watched'`,
- * `'active'`, `'querying-channel'`) and the names of its holders. None: the next releaseUnusedChannels() removes it.
+ * `'active'`, `'querying-channel'`) and the names of its holders. None: a call to
+ * `releaseUnusedChannels()` would remove it.
  */
 export type ChannelUsage = {
   channel: Channel;
@@ -394,9 +395,9 @@ export class ChannelManager extends WithSubscriptions {
   /**
    * Every `Channel` instance, one per cid. A channel created from members, before the server assigns
    * its id, is stored under its temporary cid until {@link ChannelManager.changeChannelId} moves it.
-   * A channel stays until a known end or logout removes it, or
-   * {@link ChannelManager.releaseUnusedChannels} finds it neither watched nor held; either removes it
-   * and runs its {@link Channel._disconnect}. A channel list holds the channels it shows by linking them, which also
+   * A channel stays until a known end (deleted, or the current user removed from it) or logout removes
+   * it, or the app calls {@link ChannelManager.releaseUnusedChannels} while it is neither watched nor
+   * held; each removes it and runs its {@link Channel._disconnect}. A channel list holds the channels it shows by linking them, which also
    * tells it about removals and cid changes; other users hold theirs through claims.
    *
    * @internal
@@ -505,8 +506,9 @@ export class ChannelManager extends WithSubscriptions {
    * has no id yet, so nothing but that query can be sent for it. A channel with an id is not, even one
    * whose id the app generated and the server doesn't have yet: requests for it go to the server.
    *
-   * Getting a channel this way doesn't keep it: one that is neither watched nor used is released by
-   * the next {@link ChannelManager.releaseUnusedChannels}.
+   * A channel got this way stays stored until it is deleted, the current user is removed from it, or
+   * the user logs out. The SDK never releases it on its own; an app freeing memory calls
+   * {@link ChannelManager.releaseUnusedChannels}, which releases it only while nothing uses it.
    *
    * ```ts
    * const general = client.channelManager.ensure({ type: 'messaging', id: 'general' });
@@ -688,10 +690,13 @@ export class ChannelManager extends WithSubscriptions {
    * claims ({@link EntityStore.addClaim}).
    *
    * What remains is an unwatched snapshot nothing shows, which saves no request: using it again
-   * needs a query, which stores it again. Runs when {@link ChannelManager.reload} and
-   * {@link ChannelManager.recover} finish.
+   * needs a query, which stores it again.
    *
-   * @internal
+   * The SDK never calls this: it can't see the channels an app keeps in its own state, such as a
+   * stopped watch kept for re-entry or search results held after the search ended. Call it when the
+   * app is done with what it held, for example after closing a search screen
+   * (`searchController.dispose()`, then this). A channel your code still uses but that none of the
+   * above keeps would be released, so keep it with {@link Channel.activate} first.
    */
   releaseUnusedChannels() {
     for (const [key, channel] of this.channelStore.unheldEntries()) {
@@ -701,8 +706,8 @@ export class ChannelManager extends WithSubscriptions {
 
   /**
    * Every stored channel with what keeps it, by the same rule as
-   * {@link ChannelManager.releaseUnusedChannels}: a channel kept by nothing is released by its next
-   * call. For debugging tools.
+   * {@link ChannelManager.releaseUnusedChannels}: a channel kept by nothing would be released by a
+   * call to it. For debugging tools.
    *
    * @internal
    */
@@ -1132,7 +1137,6 @@ export class ChannelManager extends WithSubscriptions {
         await paginator.reload();
       }),
     );
-    this.releaseUnusedChannels();
     return results;
   };
 
@@ -1166,7 +1170,6 @@ export class ChannelManager extends WithSubscriptions {
           await paginator.toTail({ keepPreviousItems: true, reset: 'yes' });
         }),
     );
-    this.releaseUnusedChannels();
     return results;
   };
 }

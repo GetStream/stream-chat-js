@@ -380,10 +380,11 @@ client.userMuteStatus(targetId);
 `client.channel()` takes the same arguments in the same forms as in v9, `(type, id?, data?)` and
 `(type, data)`, and is now a shorthand for `client.channelManager.ensure()`, which takes one object.
 Only the type of `data` changed (below). Both return the stored channel for the cid or create and
-store it, as `client.channel()` did. Getting a channel either way doesn't keep it: one that is neither
-watched nor used is disposed of when the lists reload or the connection recovers (see the
-[other changes guide](./v9-to-v10-migration-guide-other.md)). Watch it, or call
-`channel.activate()`, to keep it.
+store it, as `client.channel()` did. The channel stays stored, as in v9, until it is deleted, the
+user is removed from it, or the user logs out. An app that wants to free memory calls
+`client.channelManager.releaseUnusedChannels()`, which releases only channels nothing uses (see the
+[other changes guide](./v9-to-v10-migration-guide-other.md)); call `channel.activate()` on a channel
+you keep, so that call leaves it alone.
 
 The channel data is typed `ChannelInput`, which replaced `ChannelData` (see the
 [type renames guide](./v9-to-v10-migration-guide-type-renames.md)): custom fields go under `custom`
@@ -1037,9 +1038,9 @@ channel.stopWatching();
 channel.stopWatching(request?: Gen_ChannelStopWatchingRequest);
 ```
 
-A channel that is no longer watched leaves the channel store when the lists reload or the
-connection recovers, unless something still uses it (a channel list, `activate()`, a thread, a
-cached composer). In v9 it stayed in `client.activeChannels` until logout.
+A channel that is no longer watched stays in the channel store, as it stayed in
+`client.activeChannels` in v9. `client.channelManager.releaseUnusedChannels()` releases it if
+nothing still uses it (a channel list, `activate()`, a thread, a cached composer).
 
 #### `channel.activate` (new)
 
