@@ -5,6 +5,7 @@ import type {
   LocalMessage,
   Message,
   MessageResponse,
+  SendMessageAPIResponse,
 } from '../types';
 
 import type {
@@ -25,6 +26,7 @@ import {
   runDetached,
 } from '../utils';
 import { isMessageUpdateReplayable } from './util';
+import { isMessageAlreadyExistsError } from '../errors';
 
 /**
  * Abstract base class for an offline database implementation used with StreamChat.
@@ -1303,7 +1305,34 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       }
 
       if (task.type === 'send-message') {
-        const newMessageResponse = await channel._sendMessage(...task.payload);
+        let newMessageResponse: SendMessageAPIResponse;
+        try {
+          newMessageResponse = await channel._sendMessage(...task.payload);
+        } catch (error) {
+          if (!isPendingTask || !isMessageAlreadyExistsError(error)) throw error;
+          // An earlier attempt stored the message, but its response was lost. The pending task
+          // proves the message is ours, as replay can run before the channel is loaded into state.
+          const recovered = await channel._recoverAlreadyStoredMessage(task.payload[0], {
+            localCopyRequired: false,
+          });
+          if (!recovered) throw error;
+          newMessageResponse = recovered.response;
+          if (recovered.fetched) {
+            // no message.new will follow, so the failed row in the DB would never be replaced
+            try {
+              await this.upsertMessages({ messages: [newMessageResponse.message] });
+            } catch (dbError) {
+              this.client.logger(
+                'error',
+                'offlineDb:send-message - upsert of stored message failed',
+                {
+                  error: dbError,
+                  tags: ['offlineDb'],
+                },
+              );
+            }
+          }
+        }
         const newMessage = newMessageResponse?.message;
         if (isPendingTask && newMessage) {
           if (newMessage?.parent_id) {
