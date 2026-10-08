@@ -2300,6 +2300,24 @@ describe('ChannelPaginator', () => {
     });
   });
 
+  it('matches type, id and cid of a channel never queried, whose data lacks them', () => {
+    const unqueried = client.channelManager.ensure({
+      type: 'messaging',
+      id: 'unqueried',
+      data: { custom: {} } as never,
+    });
+    const matches = (filters: object) =>
+      new ChannelPaginator({ client, filters: filters as never }).matchesFilter(
+        unqueried,
+      );
+
+    expect(unqueried.data?.type).toBeUndefined();
+    expect(matches({ type: 'messaging' })).toBeTruthy();
+    expect(matches({ id: 'unqueried' })).toBeTruthy();
+    expect(matches({ cid: { $in: ['messaging:unqueried'] } })).toBeTruthy();
+    expect(matches({ type: 'livestream' })).toBeFalsy();
+  });
+
   it('matches members: { $in: [me] } through the membership when I am not among the loaded members', () => {
     const paginator = new ChannelPaginator({
       client,

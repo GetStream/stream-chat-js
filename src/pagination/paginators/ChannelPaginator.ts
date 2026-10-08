@@ -228,8 +228,13 @@ const createMutedFilterResolver = (client: StreamChat): FieldToDataResolver<Chan
  * A channel field by path: from `channel.data`, or, for a field it doesn't have, from
  * `channel.data.custom`, where a channel response keeps `name` and the app's custom fields. So
  * `{ name: … }` and `{ color: … }` match what `{ 'custom.name': … }` and `{ 'custom.color': … }` do.
+ *
+ * `type`, `id` and `cid` come from the instance, which has them from construction, while
+ * `channel.data` has them only after a query: a stored channel an event reaches before its first
+ * query (such as one a thread created) must still match `{ type: … }`.
  */
 const resolveChannelDataValue = (channel: Channel, path: string) => {
+  if (path === 'type' || path === 'id' || path === 'cid') return channel[path];
   const value = resolveDotPathValue(channel.data, path);
   return value !== undefined ? value : resolveDotPathValue(channel.data?.custom, path);
 };

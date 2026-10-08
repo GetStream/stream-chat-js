@@ -696,6 +696,29 @@ describe('channel lists as users', () => {
     expect(channel.pendingDisposal).toBe(true);
   });
 
+  it('lists a stored channel that a message reaches before any channel query', async () => {
+    // as a thread builds its channel: stored, but `data` carries no `type`
+    const channel = client.channelManager.ensure({
+      type: 'messaging',
+      id: 'from-thread',
+      data: { custom: {} } as never,
+    });
+    const paginator = list();
+    paginator.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: [] });
+    client.channelManager.setPaginators([paginator]);
+    client.channelManager.registerSubscriptions();
+
+    client.dispatchEvent({
+      type: 'message.new',
+      cid: channel.cid,
+      channel_type: channel.type,
+      channel_id: channel.id,
+      message: generateMsg({ cid: channel.cid }),
+    } as never);
+
+    await vi.waitFor(() => expect(paginator.items).toEqual([channel]));
+  });
+
   it('keeps the instance when a channel moves from one list to another', () => {
     const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     channel.data = { ...channel.data, team: 'a' };
