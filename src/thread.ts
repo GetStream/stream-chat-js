@@ -8,6 +8,7 @@ import {
 import type {
   AscDesc,
   ChannelData,
+  ChannelResponse,
   EventTypes,
   LocalMessage,
   MessagePaginationOptions,
@@ -128,12 +129,15 @@ export class Thread extends WithSubscriptions {
   }) {
     super();
 
-    // `name` is custom channel data: these assertions compile whether or not the app
-    // augments `CustomChannelData` with it.
-    const { name } = threadData.channel as { name?: string };
-    const channel = client.channel(threadData.channel.type, threadData.channel.id, {
-      name,
-    } as ChannelData);
+    // `name` is custom channel data: widening the types (instead of asserting) compiles
+    // whether or not the app augments `CustomChannelData` with it.
+    const channelResponse: ChannelResponse & { name?: string } = threadData.channel;
+    const channelData: ChannelData & { name?: string } = { name: channelResponse.name };
+    const channel = client.channel(
+      threadData.channel.type,
+      threadData.channel.id,
+      channelData,
+    );
     channel._hydrateMembers({
       members: threadData.channel.members ?? [],
       overrideCurrentState: false,
