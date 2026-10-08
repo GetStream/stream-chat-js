@@ -129,7 +129,7 @@ export class Thread extends WithSubscriptions {
   }) {
     super();
 
-    // `name` is custom channel data: widening the types (instead of asserting) compiles
+    // `name` is custom channel data: widening the types compiles
     // whether or not the app augments `CustomChannelData` with it.
     const channelResponse: ChannelResponse & { name?: string } = threadData.channel;
     const channelData: ChannelData & { name?: string } = { name: channelResponse.name };
