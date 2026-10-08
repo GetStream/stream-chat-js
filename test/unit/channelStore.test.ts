@@ -759,6 +759,25 @@ describe('known ends and logout', () => {
     },
   );
 
+  it('still writes the offline DB when a holder throws as the ended channel is removed', () => {
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
+    client.channelManager.channelStore.link(channel.cid, {
+      onEntityRemoved: () => {
+        throw new Error('holder failed');
+      },
+    });
+    const executeQuerySafely = vi.fn();
+    client.offlineDb = { executeQuerySafely } as never;
+    const event = { type: 'channel.deleted', cid: channel.cid } as never;
+
+    expect(() => client.dispatchEvent(event)).not.toThrow();
+
+    expect(client.channelManager.get(channel.cid)).toBeUndefined();
+    expect(executeQuerySafely).toHaveBeenCalledWith(expect.any(Function), {
+      method: 'handleEvent;channel.deleted',
+    });
+  });
+
   it('removes every channel from the store and every list on logout', async () => {
     const { channel, paginator } = heldChannel();
 

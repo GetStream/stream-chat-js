@@ -1042,7 +1042,18 @@ export class StreamChat extends ChatApi {
       channel._callChannelListeners(event as WSEvent);
     }
 
-    postListenerCallbacks.forEach((c) => c());
+    // A failing in-memory cleanup (such as a holder throwing while a removed channel is unlinked)
+    // must not skip the other callbacks or the offline DB write below, or the offline DB would keep
+    // what the event ended.
+    for (const callback of postListenerCallbacks) {
+      try {
+        callback();
+      } catch (error) {
+        logger
+          .withExtraTags('dispatchEvent', event.type)
+          .error('A post-listener callback failed.', { error });
+      }
+    }
 
     this.offlineDb?.executeQuerySafely((db) => db.handleEvent({ event }), {
       method: `handleEvent;${event.type}`,
@@ -1050,15 +1061,11 @@ export class StreamChat extends ChatApi {
   };
 
   /**
-   * Updates the members, watchers and read references of the loaded channels that contain this user.
-   * Each channel gets new objects in one state update, so its subscribers re-render.
+   * Puts `user`'s new object into the members, watchers and (with `readEntries`) read entries of the
+   * channels that list them. Each channel gets new objects in one state update, so its subscribers
+   * re-render.
    *
    * @param user - The updated user.
-   */
-  /**
-   * Puts `user`'s new object into the members, watchers and (with `readEntries`) read entries of the
-   * channels that list them.
-   *
    * @param options.readEntries - Also replace the user in read entries, refreshing the read receipts
    *   (defaults to `true`). Off for a presence change: receipts show a user's name and image, never
    *   their online status, so they would rebuild for nothing.
