@@ -465,16 +465,19 @@ describe('MessageSearchSource', () => {
       searchSource.activate();
       await searchSource.executeQuery('any');
 
-      searchSource.dispose();
-      client.channelManager.releaseUnusedChannels();
-      expect(client.channelManager.values()).toEqual([]);
+      // checked through the usage, not a release, which would disconnect the channels for good
+      const keptBySearch = () =>
+        client.channelManager
+          .getChannelUsage()
+          .filter(({ keptBy }) => keptBy.includes('message-search'))
+          .map(({ channel }) => channel);
+      expect(keptBySearch()).toEqual(channels);
 
-      channels.forEach((channel) =>
-        client.channelManager.getOrCreateChannel(channel.cid, () => channel),
-      );
+      searchSource.dispose();
+      expect(keptBySearch()).toEqual([]);
+
       searchSource.registerSubscriptions();
-      client.channelManager.releaseUnusedChannels();
-      expect(client.channelManager.values()).toEqual(channels);
+      expect(keptBySearch()).toEqual(channels);
     });
 
     it('is disposed and registered again through its search controller', async () => {

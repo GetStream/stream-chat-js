@@ -643,6 +643,43 @@ describe('channel lists as users', () => {
     expect(client.channelManager.get(channel.cid)).toBeUndefined();
   });
 
+  it('keeps a disconnected channel stored and listed until the app releases unused channels', () => {
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
+    const paginator = list();
+    paginator.setItems({
+      isFirstPage: true,
+      isLastPage: true,
+      valueOrFactory: [channel],
+    });
+
+    channel.disconnect();
+
+    expect(channel.pendingDisposal).toBe(true);
+    expect(client.channelManager.get(channel.cid)).toBe(channel);
+    expect(paginator.items).toEqual([channel]);
+  });
+
+  it('releases a disconnected channel whatever still holds or uses it', () => {
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
+    const paginator = list();
+    paginator.setItems({
+      isFirstPage: true,
+      isLastPage: true,
+      valueOrFactory: [channel],
+    });
+    channel.activate();
+    client.channelManager.channelStore.addClaim({ heldBy: () => [channel] });
+    channel.disconnect();
+
+    release();
+
+    expect(client.channelManager.get(channel.cid)).toBeUndefined();
+    expect(paginator.items).toEqual([]);
+    expect(client.channelManager.ensure({ type: 'messaging', id: 'general' })).not.toBe(
+      channel,
+    );
+  });
+
   it('keeps a listed channel that is also watched or opened', () => {
     const watched = client.channelManager.ensure({ type: 'messaging', id: 'watched' });
     const opened = client.channelManager.ensure({ type: 'messaging', id: 'opened' });

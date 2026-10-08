@@ -3154,8 +3154,10 @@ export class Channel extends WithMessageOperations(ChannelApi) {
    * The SDK calls it when a channel ends: deleted, the current user removed from it, the user
    * logged out, or released as unused. Call it yourself to finish an instance you are done with.
    *
-   * It doesn't remove the channel from the channel store. A stored instance stays there, finished,
-   * until the SDK removes it; meanwhile `client.channelManager.ensure(…)` gives a fresh instance
+   * It doesn't remove the channel from the channel store, as parts of the app may still use the
+   * instance: a stored instance stays there, and in the lists showing it, finished, until the next
+   * `client.channelManager.releaseUnusedChannels()` removes it (or an end the SDK handles: deleted,
+   * removed from it, logout). Meanwhile `client.channelManager.ensure(…)` gives a fresh instance
    * for its cid.
    *
    * It doesn't free memory itself: the instance is garbage collected once nothing refers to it.

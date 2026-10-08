@@ -362,9 +362,10 @@ export class ChannelManager extends WithSubscriptions {
    * Every `Channel` instance, one per cid. A channel created from members, before the server assigns
    * its id, is stored under its temporary cid until {@link ChannelManager.changeChannelId} moves it.
    * A channel stays until a known end (deleted, or the current user removed from it) or logout removes
-   * it, or the app calls {@link ChannelManager.releaseUnusedChannels} while it is neither watched nor
-   * held; each removes it and runs its {@link Channel.disconnect}. A channel list holds the channels it shows by linking them, which also
-   * tells it about removals and cid changes; other users hold theirs through claims.
+   * it, or the app calls {@link ChannelManager.releaseUnusedChannels} while it is disconnected, or
+   * neither watched nor held; each removes it and runs its {@link Channel.disconnect}. A channel
+   * list holds the channels it shows by linking them, which also tells it about removals and cid
+   * changes; other users hold theirs through claims.
    *
    * @internal
    */
@@ -646,8 +647,14 @@ export class ChannelManager extends WithSubscriptions {
   }
 
   /**
-   * Removes, and disconnects ({@link Channel.disconnect}), every stored channel that is neither
-   * watched nor held. A watched channel (`watching`,
+   * Removes every stored channel the app disconnected ({@link Channel.disconnect}, so
+   * `pendingDisposal`), whatever still holds or uses it: disconnecting says the app is done with
+   * it.
+   * Every list showing it drops it, as the store's removal reaches each list's index. Objects that
+   * still refer to the instance keep it, finished.
+   *
+   * Then removes, and disconnects, every stored channel that is neither watched nor held. A watched
+   * channel (`watching`,
    * or `wasWatching` until its watch is restored) stays, because its events keep it current; so does
    * an active one ({@link Channel.activate}), one being loaded (`watch()`, `query()` or `create()` in flight), and
    * one a holder holds in {@link ChannelManager.channelStore}: a channel list links each of its
@@ -664,6 +671,9 @@ export class ChannelManager extends WithSubscriptions {
    * above keeps would be released, so keep it with {@link Channel.activate} first.
    */
   releaseUnusedChannels() {
+    for (const [key, channel] of this.channelStore.entries()) {
+      if (channel.pendingDisposal) this.removeChannel(key);
+    }
     for (const [key, channel] of this.channelStore.unheldEntries()) {
       if (!keptByOwnState(channel).length) this.removeChannel(key);
     }
