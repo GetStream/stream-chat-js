@@ -2034,6 +2034,28 @@ describe('user.updated propagates to channel members, watchers and read states',
 		);
 	});
 
+	it('leaves the read receipts alone on a presence change', () => {
+		channel.state.partialNext({
+			read: { bob: { user: bob, last_read: 3000, unread_messages: 0 } },
+		});
+		channel.messageReceiptsTracker.ingestInitial([{ user: bob, last_read: 3000 }]);
+		const { revision } = channel.messageReceiptsTracker.snapshotStore.getLatestValue();
+		const readBefore = channel.state.getLatestValue().read.bob;
+
+		client._handleClientEvent({
+			type: 'user.presence.changed',
+			user: { ...bob, online: true },
+		});
+
+		const after = channel.state.getLatestValue();
+		expect(after.members.bob.user.online).toBe(true);
+		expect(after.watchers.bob.online).toBe(true);
+		expect(after.read.bob).toBe(readBefore);
+		expect(channel.messageReceiptsTracker.snapshotStore.getLatestValue().revision).toBe(
+			revision,
+		);
+	});
+
 	it('re-renders a subscriber of channel.state.members', () => {
 		const names = [];
 		const unsubscribe = channel.state.subscribeWithSelector(

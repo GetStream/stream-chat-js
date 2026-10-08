@@ -1055,14 +1055,25 @@ export class StreamChat extends ChatApi {
    *
    * @param user - The updated user.
    */
-  _updateMemberWatcherReferences = (user: UserResponse) => {
+  /**
+   * Puts `user`'s new object into the members, watchers and (with `readEntries`) read entries of the
+   * channels that list them.
+   *
+   * @param options.readEntries - Also replace the user in read entries, refreshing the read receipts
+   *   (defaults to `true`). Off for a presence change: receipts show a user's name and image, never
+   *   their online status, so they would rebuild for nothing.
+   */
+  _updateMemberWatcherReferences = (
+    user: UserResponse,
+    { readEntries = true }: { readEntries?: boolean } = {},
+  ) => {
     const refMap = this.state.userChannelReferences[user.id] || {};
     for (const channelId in refMap) {
       const channel = this.channelManager.get(channelId);
       if (!channel?.state) continue;
       const { members, watchers, read } = channel.state.getLatestValue();
       const member = members[user.id];
-      const readState = read[user.id];
+      const readState = readEntries ? read[user.id] : undefined;
       const hasWatcher = !!watchers[user.id];
       if (!member && !hasWatcher && !readState) continue;
       // The receipts tracker applies a read-state change only with metadata naming the changed
@@ -1199,7 +1210,9 @@ export class StreamChat extends ChatApi {
       }
 
       this.state.updateUser(event.user);
-      this._updateMemberWatcherReferences(event.user);
+      this._updateMemberWatcherReferences(event.user, {
+        readEntries: event.type === 'user.updated',
+      });
     }
 
     if (event.type === 'user.updated') {
