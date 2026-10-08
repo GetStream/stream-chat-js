@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MockInstance } from 'vitest';
 import { getClientWithUser } from './test-utils/getClient';
 import {
-  type Channel,
+  Channel,
   ChannelPaginator,
   ChannelResponse,
   ChannelWatchStatus,
@@ -13,22 +14,28 @@ import {
   type ChannelManagerOptions,
   createPriorityOwnershipResolver,
 } from '../../src/ChannelManager';
-vi.mock('../../src/pagination/utility.queryChannel', async () => {
-  return {
-    getChannel: vi.fn(async ({ client, id, type }) => {
-      return client.channelManager.ensure({ type: type, id: id });
-    }),
-  };
-});
-import { getChannel as mockGetChannel } from '../../src/pagination/utility.queryChannel';
 import { convertDateToTimestamp } from './test-utils/time';
 
 describe('ChannelManager', () => {
   let client: StreamChat;
 
+  // the channel manager watches the channels events bring in through `ensureWatched()`; its request
+  // is not under test here
+  let ensureWatched: MockInstance<Channel['ensureWatched']>;
+  const ensureWatchedOn = () => ensureWatched.mock.contexts.map((channel) => channel.cid);
+
   beforeEach(() => {
     client = getClientWithUser();
     vi.clearAllMocks();
+    ensureWatched = vi
+      .spyOn(Channel.prototype, 'ensureWatched')
+      .mockImplementation(function (this: Channel) {
+        return Promise.resolve(this);
+      });
+  });
+
+  afterEach(() => {
+    ensureWatched.mockRestore();
   });
 
   // The client's own manager, configured for the test: it owns the channel store that
@@ -1143,11 +1150,7 @@ describe('ChannelManager', () => {
 
       client.dispatchEvent({ type: 'message.new', cid: ch.cid });
 
-      await vi.waitFor(() =>
-        expect(mockGetChannel).toHaveBeenCalledWith(
-          expect.objectContaining({ channel: ch }),
-        ),
-      );
+      await vi.waitFor(() => expect(ensureWatched.mock.contexts).toContain(ch));
     });
 
     it('leaves a channel that was never watched, or deliberately unwatched, alone', async () => {
@@ -1160,7 +1163,7 @@ describe('ChannelManager', () => {
       client.dispatchEvent({ type: 'message.new', cid: ch.cid });
 
       await vi.waitFor(() => expect(ingestItem).toHaveBeenCalledWith(ch));
-      expect(mockGetChannel).not.toHaveBeenCalled();
+      expect(ensureWatched).not.toHaveBeenCalled();
     });
 
     it('never re-watches a channel pending disposal', async () => {
@@ -1172,7 +1175,7 @@ describe('ChannelManager', () => {
       client.dispatchEvent({ type: 'message.new', cid: ch.cid });
 
       await vi.waitFor(() => expect(ingestItem).toHaveBeenCalledWith(ch));
-      expect(mockGetChannel).not.toHaveBeenCalled();
+      expect(ensureWatched).not.toHaveBeenCalled();
     });
 
     it('does not re-watch a channel that is being hidden', async () => {
@@ -1190,7 +1193,7 @@ describe('ChannelManager', () => {
       await vi.waitFor(() =>
         expect(removeItem).toHaveBeenCalledWith(expect.objectContaining({ item: ch })),
       );
-      expect(mockGetChannel).not.toHaveBeenCalled();
+      expect(ensureWatched).not.toHaveBeenCalled();
     });
 
     it('places the channel in the list without waiting for the watch to resolve', async () => {
@@ -1199,8 +1202,8 @@ describe('ChannelManager', () => {
       const ch = makeChannel('messaging:ordering');
       ch.watchStatus = ChannelWatchStatus.WasWatching;
       let resolveWatch: () => void = () => {};
-      (mockGetChannel as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(
-        () => new Promise<void>((resolve) => (resolveWatch = resolve)),
+      ensureWatched.mockImplementationOnce(
+        () => new Promise<Channel>((resolve) => (resolveWatch = () => resolve(ch))),
       );
       client.channelManager.getOrCreateChannel(ch.cid, () => ch);
       const paginator = new ChannelPaginator({ client });
@@ -1411,9 +1414,7 @@ describe('ChannelManager', () => {
       });
 
       await vi.waitFor(() => {
-        expect(mockGetChannel).toHaveBeenCalledWith(
-          expect.objectContaining({ id: 'added-1', type: 'messaging' }),
-        );
+        expect(ensureWatchedOn()).toContain('messaging:added-1');
         expect(paginator.items?.map((c) => c.cid)).toEqual([cid]);
       });
     });
@@ -1426,7 +1427,7 @@ describe('ChannelManager', () => {
       client.dispatchEvent({ type: 'notification.added_to_channel' } as never);
 
       await vi.waitFor(() => {
-        expect(mockGetChannel).not.toHaveBeenCalled();
+        expect(ensureWatched).not.toHaveBeenCalled();
         expect(paginator.items).toBeUndefined();
       });
     });
@@ -1531,7 +1532,7 @@ describe('ChannelManager', () => {
         client.dispatchEvent({ type: eventType, cid: 'messaging:unknown' });
         await new Promise((resolve) => setTimeout(resolve, 0));
 
-        expect(mockGetChannel).not.toHaveBeenCalled();
+        expect(ensureWatched).not.toHaveBeenCalled();
         expect(ingestItemSpy).not.toHaveBeenCalled();
       });
     },
@@ -1626,11 +1627,7 @@ describe('ChannelManager', () => {
       });
 
       await vi.waitFor(() => {
-        expect(mockGetChannel).toHaveBeenCalledWith({
-          client,
-          id: '6',
-          type: 'messaging',
-        });
+        expect(ensureWatchedOn()).toContain('messaging:6');
         const ch = makeChannel('messaging:6');
         expect(ingestItemSpy).toHaveBeenCalledWith(ch);
         expect(removeItemSpy).not.toHaveBeenCalled();
@@ -2284,7 +2281,7 @@ describe('ChannelManager', () => {
       });
 
       await vi.waitFor(() => {
-        expect(mockGetChannel).not.toHaveBeenCalled();
+        expect(ensureWatched).not.toHaveBeenCalled();
         expect(paginator.items).toHaveLength(1);
       });
     });

@@ -652,6 +652,101 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 	});
 });
 
+describe('Channel.ensureWatched', () => {
+	let client;
+	let channel;
+	// each `watch()` call gets its own pending result, settled by the test
+	let pending;
+
+	beforeEach(() => {
+		client = getClientWithUser({ id: 'ann' });
+		channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
+		pending = [];
+		vi.spyOn(channel, 'watch').mockImplementation(
+			() =>
+				new Promise((resolve, reject) => {
+					pending.push({
+						reject,
+						resolve: () => {
+							channel.watchStatus = ChannelWatchStatus.Watching;
+							resolve({});
+						},
+					});
+				}),
+		);
+	});
+
+	it('sends one request for calls made while its watch is in flight', async () => {
+		const first = channel.ensureWatched();
+		const second = channel.ensureWatched();
+
+		expect(channel.watch).toHaveBeenCalledTimes(1);
+		pending[0].resolve();
+		await Promise.all([first, second]);
+		expect(channel.watchStatus).to.equal(ChannelWatchStatus.Watching);
+	});
+
+	it('sends nothing for a channel already watched', async () => {
+		channel.watchStatus = ChannelWatchStatus.Watching;
+
+		await channel.ensureWatched();
+
+		expect(channel.watch).not.toHaveBeenCalled();
+	});
+
+	it('resolves with the channel, whether it watched, joined a watch or sent nothing', async () => {
+		const watching = channel.ensureWatched();
+		const joining = channel.ensureWatched();
+		pending[0].resolve();
+
+		expect(await watching).toBe(channel);
+		expect(await joining).toBe(channel);
+		expect(await channel.ensureWatched()).toBe(channel);
+	});
+
+	it('joins a watch with the same options in another key order', () => {
+		void channel.ensureWatched({
+			messages: { id_around: 'm1', limit: 20 },
+			presence: true,
+		});
+		void channel.ensureWatched({
+			presence: true,
+			messages: { limit: 20, id_around: 'm1' },
+		});
+
+		expect(channel.watch).toHaveBeenCalledTimes(1);
+	});
+
+	it('does not join a watch with other options', () => {
+		void channel.ensureWatched();
+		void channel.ensureWatched({ messages: { id_around: 'm1' } });
+
+		expect(channel.watch).toHaveBeenCalledTimes(2);
+		expect(channel.watch).toHaveBeenLastCalledWith({ messages: { id_around: 'm1' } });
+	});
+
+	it('leaves watch() as it is: a watch() call still sends its own request', () => {
+		void channel.ensureWatched();
+		void channel.watch();
+
+		expect(channel.watch).toHaveBeenCalledTimes(2);
+	});
+
+	it('rejects every caller waiting for a failed watch, and the next call sends a new request', async () => {
+		const first = channel.ensureWatched();
+		const second = channel.ensureWatched();
+		pending[0].reject(new Error('watch failed'));
+
+		await expect(first).rejects.toThrow('watch failed');
+		await expect(second).rejects.toThrow('watch failed');
+
+		const retry = channel.ensureWatched();
+		expect(channel.watch).toHaveBeenCalledTimes(2);
+		pending[1].resolve();
+		await retry;
+	});
+});
+
 describe('Channel AI indicator state (channel.state.aiState)', function () {
 	const setupChannel = () => {
 		const client = new StreamChat('apiKey');

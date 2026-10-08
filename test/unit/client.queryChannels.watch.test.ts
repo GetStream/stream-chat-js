@@ -178,11 +178,10 @@ describe('client.queryChannels and the WebSocket', () => {
   });
 
   describe('composition with what already exists', () => {
-    it('two concurrent getChannel calls for one cid still make one request', async () => {
-      // `getChannel` keys in-flight watches by cid so concurrent callers share one request. With the
-      // wait added, N concurrent openers of the same channel become one wait and one watched
-      // request — the "no duplicate requests" property now actually held rather than approximated.
-      const { getChannel } = await import('../../src/pagination/utility.queryChannel');
+    it('two concurrent ensureWatched() calls for one channel still make one request', async () => {
+      // `ensureWatched()` joins a watch it already has in flight, so concurrent callers share one
+      // request. With the wait for a socket, N concurrent openers of the same channel become one wait
+      // and one watched request.
       const channel = client.channelManager.ensure({ type: 'messaging', id: 'shared' });
       client.wsConnection._setStatus({ isHealthy: false });
       client.wsConnection.connection = new StableWSConnection({
@@ -190,10 +189,7 @@ describe('client.queryChannels and the WebSocket', () => {
       });
       vi.spyOn(channel, 'watch').mockResolvedValue(undefined as never);
 
-      const both = Promise.all([
-        getChannel({ client, channel }),
-        getChannel({ client, channel }),
-      ]);
+      const both = Promise.all([channel.ensureWatched(), channel.ensureWatched()]);
       client.wsConnection._setStatus({ isHealthy: true, connectionId: 'shared-id' });
       await both;
 

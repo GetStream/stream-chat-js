@@ -13,7 +13,6 @@ import type {
   PipelineEvent,
 } from './EventHandlerPipeline';
 import { filterConstrainsField } from './pagination/filterCompiler';
-import { getChannel } from './pagination/utility.queryChannel';
 import { Channel } from './channel';
 import { ChannelWatchStatus } from './channel_state';
 import { generateChannelTempId, getMemberUserId, runDetached } from './utils';
@@ -130,17 +129,16 @@ export const ignoreEventsForUnknownChannels: EventHandlerPipelineHandler<
  * sit frozen until the channel was opened. Re-watching it the moment an event proves it relevant is
  * what closes that gap, without ever eagerly re-watching the whole cache.
  *
- * The request is idempotent, so a successful watch flips the status to `Watching`, and `getChannel`
- * dedupes concurrent watches for the same cid, so a burst of events cannot produce a burst of requests.
+ * The request is idempotent, so a successful watch flips the status to `Watching`, and
+ * `ensureWatched()` joins a watch it already has in flight, so a burst of events cannot produce a
+ * burst of requests.
  */
-const restoreInterruptedWatch = (channel: Channel, client: StreamChat) => {
+const restoreInterruptedWatch = (channel: Channel) => {
+  // a disposed channel refuses requests, and its `ensureWatched()` would reject
   if (channel.pendingDisposal) return;
   if (channel.watchStatus !== ChannelWatchStatus.WasWatching) return;
 
-  // Takes the client as an argument rather than calling `channel.getClient()`, which THROWS for a
-  // channel pending disposal — the guard above makes that unreachable today, but a throw here would
-  // reject the whole event handler, so it is not a hazard worth leaving one edit away.
-  runDetached(getChannel({ channel, client }), {
+  runDetached(channel.ensureWatched(), {
     context: `restoreInterruptedWatch(${channel.cid})`,
   });
 };
@@ -155,11 +153,7 @@ const updateLists: EventHandlerPipelineHandler<EventHandlerContext> = async ({
     const [type, id] = getCidFromEvent(event)?.split(':') ?? [];
     if (!type) return;
 
-    channel = await getChannel({
-      client: channelManager.client,
-      id,
-      type,
-    });
+    channel = await channelManager.ensure({ id, type }).ensureWatched();
   }
 
   if (!channel) return;
@@ -170,7 +164,7 @@ const updateLists: EventHandlerPipelineHandler<EventHandlerContext> = async ({
   // the state it hydrates) lands whenever it lands. `channel.hidden` is excluded — a channel being
   // hidden is the one routed event that must not resurrect a watch.
   if (event.type !== 'channel.hidden') {
-    restoreInterruptedWatch(channel, channelManager.client);
+    restoreInterruptedWatch(channel);
   }
 };
 

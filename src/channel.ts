@@ -1,4 +1,5 @@
 import { ChannelState, ChannelWatchStatus } from './channel_state';
+import { isEqual } from './utils/mergeWith/mergeWithCore';
 import { CooldownTimer } from './CooldownTimer';
 import { queueOrRun } from './offline-support/queueableOperations';
 import { MessageComposer } from './messageComposer';
@@ -240,6 +241,15 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   /** Refcount backing the reactive `active` flag (a shared Channel instance can have several consumers). */
   private _activeRefCount = 0;
   private _channelQueriesInFlight = 0;
+  /**
+   * The watch {@link Channel.ensureWatched} started and is still waiting for the response, with its
+   * options. Later `ensureWatched()` calls with the same options wait for it instead of sending
+   * another request; `watch()` calls are not recorded here.
+   */
+  private _ensureWatchedInFlight?: {
+    options: ChannelGetOrCreateRequest;
+    promise: Promise<unknown>;
+  };
   push_preferences?: Gen_ChannelPushPreferencesResponse;
   /**
    * The shared configuration machinery. Owned rather than inherited — `Channel` already extends
@@ -1679,6 +1689,45 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     if (!client.wsConnection?.isHealthy) {
       this.state.resetAIState();
     }
+  }
+
+  /**
+   * Watches the channel unless it is watched already, without duplicating a request: a call made
+   * while an earlier `ensureWatched()` with the same options is still in flight waits for that one
+   * instead of sending another. For callers that may ask for the same channel at the same time, such
+   * as several events naming it, or a click while an event already restores its watch.
+   *
+   * {@link Channel.watch} and {@link Channel.query} are not affected: they always send their request,
+   * and are not joined by this method. A channel already watched sends nothing, so `options` such as
+   * a message window apply only when the call watches it; use the message paginator to load a window.
+   *
+   * Rejects as the watch does, and every caller waiting for that watch gets its rejection. The next
+   * call sends a new request.
+   *
+   * @param options - Options for the watch request (optional). Calls join only a watch with the same
+   *   options.
+   * @returns This channel, so it can follow `client.channelManager.ensure(...)` in one expression.
+   */
+  async ensureWatched(options?: ChannelGetOrCreateRequest): Promise<Channel> {
+    if (this.watchStatus === ChannelWatchStatus.Watching) return this;
+    const requested = options ?? {};
+    // deep equality, as for query shapes: key order doesn't matter
+    if (
+      this._ensureWatchedInFlight &&
+      isEqual(this._ensureWatchedInFlight.options, requested)
+    ) {
+      await this._ensureWatchedInFlight.promise;
+      return this;
+    }
+    const promise = this.watch(options);
+    this._ensureWatchedInFlight = { options: requested, promise };
+    try {
+      await promise;
+    } finally {
+      if (this._ensureWatchedInFlight?.promise === promise)
+        this._ensureWatchedInFlight = undefined;
+    }
+    return this;
   }
 
   /**
