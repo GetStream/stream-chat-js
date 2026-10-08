@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "emitDeclarationOnly": false,
+    "rootDir": "../..",
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
+    // Docs snippets import the package by name: point it at src, not the dist build.
+    "paths": { "stream-chat": ["../../src/index.ts"] }
+  },
+  "include": ["./**/*.ts", "./*.mts", "../../src/**/*"]
+}

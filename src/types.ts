@@ -523,8 +523,10 @@ export type FlagMessageResponse = APIResponse & {
     user: UserResponse;
     approved_at?: string;
     channel_cid?: string;
+    custom?: Record<string, unknown>;
     details?: object; // Any JSON
     message_user_id?: string;
+    reason?: string;
     rejected_at?: string;
     reviewed_at?: string;
     reviewed_by?: string;
@@ -1061,6 +1063,7 @@ export type UserResponse = CustomUserData & {
   deactivated_at?: string;
   deleted_at?: string;
   image?: string;
+  invisible?: boolean;
   language?: TranslationLanguages | '';
   last_active?: string;
   name?: string;
@@ -1455,7 +1458,7 @@ export type UpdateChannelOptions = Partial<{
   data: Omit<ChannelResponse, 'id' | 'cid'>;
   demote_moderators: string[];
   invites: string[];
-  message: MessageResponse;
+  message: Message;
   reject_invite: boolean;
   remove_members: string[];
   user: UserResponse;
@@ -1992,6 +1995,7 @@ export type ChannelFilters = QueryFilters<
     app_banned?: 'only' | 'excluded';
     has_unread?: boolean;
     archived?: boolean;
+    invite?: { $eq?: Exclude<InviteStatus, 'member'> } | Exclude<InviteStatus, 'member'>;
     'member.user.name'?:
       | RequireOnlyOne<{
           $autocomplete?: string;
@@ -3083,9 +3087,12 @@ export type PartialUpdateChannelFields = Partial<ChannelResponse> & {
   config_overrides?: Partial<ChannelConfigFields>;
 };
 
+/** Dot-notation path to a nested custom field, e.g. `channel_detail.topic`. */
+type NestedFieldPath = `${string}.${string}`;
+
 export type PartialUpdateChannel = {
-  set?: PartialUpdateChannelFields;
-  unset?: Array<keyof PartialUpdateChannelFields>;
+  set?: PartialUpdateChannelFields & { [path: NestedFieldPath]: unknown };
+  unset?: Array<keyof PartialUpdateChannelFields | NestedFieldPath>;
 };
 
 export type PartialUpdateMember = {
@@ -3105,8 +3112,8 @@ export type MessageUpdatableFields = Omit<
 >;
 
 export type PartialMessageUpdate = {
-  set?: Partial<MessageUpdatableFields>;
-  unset?: Array<keyof MessageUpdatableFields>;
+  set?: Partial<MessageUpdatableFields> & { [path: NestedFieldPath]: unknown };
+  unset?: Array<keyof MessageUpdatableFields | NestedFieldPath>;
 };
 
 export type PendingMessageResponse = {
@@ -3492,6 +3499,7 @@ export type TaskStatus = {
 
 export type TruncateOptions = {
   hard_delete?: boolean;
+  member_ids?: string[];
   message?: Message;
   skip_push?: boolean;
   truncated_at?: Date;
@@ -3877,6 +3885,7 @@ export type ReviewQueueItem = {
   id: string;
   moderation_payload: ModerationPayload;
   moderation_payload_hash: string;
+  message?: MessageResponse;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   options: any;
   recommended_action: string;
