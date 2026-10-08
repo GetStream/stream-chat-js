@@ -121,10 +121,16 @@ const archivedFilterResolver: FieldToDataResolver<Channel> = {
   resolve: (channel) => channel.state.membership.archived_at != null,
 };
 
-const appBannedFilterResolver: FieldToDataResolver<Channel> = {
+// The resolvers that need the current user or the client's mute list read them from the list's own
+// client, not through `channel.getClient()`: that throws once the channel is disposed (to stop requests
+// for it), and a disposed channel must still sort and filter, so that a list can locate it to drop it.
+
+const createAppBannedFilterResolver = (
+  client: StreamChat,
+): FieldToDataResolver<Channel> => ({
   matchesField: (field) => field === 'app_banned',
   resolve: (channel) => {
-    const ownUserId = channel.getClient().user?.id;
+    const ownUserId = client.userId;
     const otherMembers = Object.values(channel.state.members).filter(
       ({ user }) => user?.id !== ownUserId,
     );
@@ -133,19 +139,21 @@ const appBannedFilterResolver: FieldToDataResolver<Channel> = {
     const otherMember = otherMembers[0];
     return otherMember.user?.banned ? 'only' : 'excluded';
   },
-};
+});
 
-const hasUnreadFilterResolver: FieldToDataResolver<Channel> = {
+const createHasUnreadFilterResolver = (
+  client: StreamChat,
+): FieldToDataResolver<Channel> => ({
   matchesField: (field) => field === 'has_unread',
   resolve: (channel) => {
-    const ownUserId = channel.getClient().user?.id;
+    const ownUserId = client.userId;
     return (
       ownUserId &&
       channel.state.read[ownUserId] &&
       channel.state.read[ownUserId].unread_messages > 0
     );
   },
-};
+});
 
 const hiddenFilterResolver: FieldToDataResolver<Channel> = {
   matchesField: (field) => field === 'hidden',
@@ -200,14 +208,14 @@ const pinnedFilterResolver: FieldToDataResolver<Channel> = {
   resolve: (channel) => channel.state.membership.pinned_at != null,
 };
 
-const mutedFilterResolver: FieldToDataResolver<Channel> = {
+const createMutedFilterResolver = (client: StreamChat): FieldToDataResolver<Channel> => ({
   matchesField: (field) => field === 'muted',
   // UserMuteResponse state lives on the client (client.mutedChannels), not on channel.data — resolve it via
   // the client so `{ muted: true/false }` matches client-side, rather than letting the generic
   // data resolver read a non-existent `channel.data.muted` (which would resolve to undefined and
   // never equal a boolean filter value).
-  resolve: (channel) => channel.getClient()._muteStatus(channel.cid).muted,
-};
+  resolve: (channel) => client._muteStatus(channel.cid).muted,
+});
 
 const dataFieldFilterResolver: FieldToDataResolver<Channel> = {
   matchesField: () => true,
@@ -215,25 +223,29 @@ const dataFieldFilterResolver: FieldToDataResolver<Channel> = {
 };
 
 // very, very unfortunately channel data is dispersed btw Channel.data and Channel.state
-const channelSortPathResolver: PathResolver<Channel> = (channel, path) => {
-  switch (path) {
-    case 'last_message_at':
-      return channel.messagePaginator.lastMessageAt;
-    case 'has_unread': {
-      return hasUnreadFilterResolver.resolve(channel, path);
+const createChannelSortPathResolver = (client: StreamChat): PathResolver<Channel> => {
+  const hasUnreadResolver = createHasUnreadFilterResolver(client);
+  return (channel, path) => {
+    switch (path) {
+      case 'last_message_at':
+        return channel.messagePaginator.lastMessageAt;
+      case 'has_unread': {
+        return hasUnreadResolver.resolve(channel, path);
+      }
+      case 'last_updated': {
+        return lastUpdatedFilterResolver.resolve(channel, path) ?? 0;
+      }
+      case 'pinned_at':
+        return channel.state.membership.pinned_at;
+      case 'unread_count': {
+        const userId = client.userId;
+        // a channel without a read entry for the user has nothing unread
+        return userId ? (channel.state.read[userId]?.unread_messages ?? 0) : 0;
+      }
+      default:
+        return resolveDotPathValue(channel.data, path);
     }
-    case 'last_updated': {
-      return lastUpdatedFilterResolver.resolve(channel, path) ?? 0;
-    }
-    case 'pinned_at':
-      return channel.state.membership.pinned_at;
-    case 'unread_count': {
-      const userId = channel.getClient().user?.id;
-      return userId ? channel.state.read[userId].unread_messages : 0;
-    }
-    default:
-      return resolveDotPathValue(channel.data, path);
-  }
+  };
 };
 
 /**
@@ -320,12 +332,12 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     this.sortComparator = this.buildSortComparator(definedSort);
     this.setFilterResolvers([
       archivedFilterResolver,
-      appBannedFilterResolver,
-      hasUnreadFilterResolver,
+      createAppBannedFilterResolver(client),
+      createHasUnreadFilterResolver(client),
       hiddenFilterResolver,
       lastUpdatedFilterResolver,
       pinnedFilterResolver,
-      mutedFilterResolver,
+      createMutedFilterResolver(client),
       membersFilterResolver,
       memberUserNameFilterResolver,
       dataFieldFilterResolver,
@@ -346,7 +358,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   protected buildSortComparator(sort: SortParamRequest[]) {
     const defaultComparator = makeComparator<Channel>({
       sort,
-      resolvePathValue: channelSortPathResolver,
+      resolvePathValue: createChannelSortPathResolver(this.client),
       tiebreaker: (l, r) => {
         const leftId = this.getItemId(l);
         const rightId = this.getItemId(r);
@@ -593,7 +605,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   protected persistLoadedCids() {
     // Without a connected user the list is being emptied by `disconnectUser()`: what stays in the
     // offline DB is the app's call (`resetDB()`), so nothing is written.
-    if (!this.client.offlineDb || !this.client.userID) return;
+    if (!this.client.offlineDb || !this.client.userId) return;
 
     this.cacheCidsForQuery({
       cids: (this.items ?? [])

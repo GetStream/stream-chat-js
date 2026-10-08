@@ -844,3 +844,82 @@ describe('client.channel()', () => {
     );
   });
 });
+
+describe('a channel list removing a channel', () => {
+  let client: StreamChat;
+
+  beforeEach(() => {
+    client = getClientWithUser({ id: 'ann' });
+  });
+
+  const unread = (channel: ReturnType<typeof listed>[number], count: number) => {
+    channel.state.read = {
+      ...channel.state.read,
+      ann: { last_read: 0, unread_messages: count, user: { id: 'ann' } } as never,
+    };
+  };
+
+  const listed = (field: string, ids = ['a', 'b', 'c']) => {
+    const channels = ids.map((id) =>
+      client.channelManager.ensure({ type: 'messaging', id }),
+    );
+    const paginator = new ChannelPaginator({
+      client,
+      filters: { type: 'messaging' },
+      sort: [{ direction: -1, field }],
+    });
+    paginator.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: channels });
+    client.channelManager.setPaginators([paginator]);
+    return Object.assign(channels, { paginator });
+  };
+
+  it.each([['has_unread'], ['unread_count']])(
+    'drops a deleted channel from a list sorted by %s',
+    (field) => {
+      const channels = listed(field);
+      channels.forEach((channel, index) => unread(channel, index));
+
+      expect(() =>
+        client.dispatchEvent({
+          channel: { cid: 'messaging:b', id: 'b', type: 'messaging' },
+          channel_id: 'b',
+          channel_type: 'messaging',
+          cid: 'messaging:b',
+          type: 'channel.deleted',
+        } as never),
+      ).not.toThrow();
+
+      expect(channels.paginator.items?.map((channel) => channel.cid)).not.toContain(
+        'messaging:b',
+      );
+      expect(client.channelManager.get('messaging:b')).toBeUndefined();
+    },
+  );
+
+  it('sorts by unread_count a channel without a read entry for the user', () => {
+    const channels = listed('unread_count');
+
+    expect(channels.paginator.items).toHaveLength(3);
+  });
+
+  it('removes a channel whose sort value changed since it was placed', () => {
+    const channels = listed('unread_count', ['a', 'b', 'c', 'd', 'e']);
+    channels.forEach((channel, index) => unread(channel, index));
+    channels.paginator.setItems({
+      isFirstPage: true,
+      isLastPage: true,
+      valueOrFactory: [...channels].reverse(),
+    });
+    // a now sorts first, but the list hasn't re-sorted it: a search by order looks in the wrong place
+    unread(channels[0], 10);
+
+    channels.paginator.removeItem({ id: 'messaging:a', item: channels[0] });
+
+    expect(channels.paginator.items?.map((channel) => channel.cid)).toEqual([
+      'messaging:e',
+      'messaging:d',
+      'messaging:c',
+      'messaging:b',
+    ]);
+  });
+});

@@ -235,7 +235,7 @@ const messageNewHandler: LabeledEventHandler<EventHandlerContext> = {
 };
 
 /**
- * Sort fields `channelSortPathResolver` resolves from read state. `SortParamRequest.field` is an open
+ * Sort fields the channel list's sort resolver resolves from read state. `SortParamRequest.field` is an open
  * string, so there is no type enumerating them.
  */
 const READ_STATE_SORT_FIELDS: string[] = ['has_unread', 'unread_count'];
