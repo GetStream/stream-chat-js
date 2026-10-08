@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getClientWithUser } from './test-utils/getClient';
 import { generateChannel } from './test-utils/generateChannel';
 import { generateMsg } from './test-utils/generateMessage';
@@ -921,5 +921,52 @@ describe('a channel list removing a channel', () => {
       'messaging:c',
       'messaging:b',
     ]);
+  });
+});
+
+describe('the channel clean loop', () => {
+  let client: StreamChat;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    client = getClientWithUser({ id: 'ann' });
+  });
+
+  afterEach(() => {
+    clearInterval(client.cleaningIntervalRef);
+    client.cleaningIntervalRef = undefined;
+    vi.useRealTimers();
+  });
+
+  const stored = (ids: string[]) =>
+    ids.map((id) => {
+      const channel = client.channelManager.ensure({ type: 'messaging', id });
+      return { channel, clean: vi.spyOn(channel, 'clean') };
+    });
+
+  it('cleans the channels after a disposed one still stored', () => {
+    const [a, b, c] = stored(['a', 'b', 'c']);
+    // disposed, but not yet removed from the store
+    b.channel._disconnect();
+
+    client._startCleaning();
+    vi.advanceTimersByTime(500);
+
+    expect(a.clean).toHaveBeenCalledTimes(1);
+    expect(b.clean).not.toHaveBeenCalled();
+    expect(c.clean).toHaveBeenCalledTimes(1);
+  });
+
+  it('cleans the channels after one whose clean throws', () => {
+    const [a, b, c] = stored(['a', 'b', 'c']);
+    b.clean.mockImplementation(() => {
+      throw new Error('clean failed');
+    });
+
+    client._startCleaning();
+
+    expect(() => vi.advanceTimersByTime(500)).not.toThrow();
+    expect(a.clean).toHaveBeenCalledTimes(1);
+    expect(c.clean).toHaveBeenCalledTimes(1);
   });
 });

@@ -2170,15 +2170,22 @@ export class StreamChat extends ChatApi {
   }
 
   _startCleaning() {
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const that = this;
     if (this.cleaningIntervalRef != null) {
       return;
     }
     this.cleaningIntervalRef = setInterval(() => {
       // call clean on the channel, used for calling the stop.typing event etc.
-      for (const channel of that.channelManager.values()) {
-        channel.clean();
+      for (const channel of this.channelManager.values()) {
+        // a disposed channel has nothing to clean, and `clean()` would throw on it
+        if (channel.pendingDisposal) continue;
+        // one channel failing to clean must not stop the others (typing indicators would stick)
+        try {
+          channel.clean();
+        } catch (error) {
+          logger
+            .withExtraTags('clean', channel.cid)
+            .error('Cleaning the channel failed.', { error });
+        }
       }
     }, 500);
   }
