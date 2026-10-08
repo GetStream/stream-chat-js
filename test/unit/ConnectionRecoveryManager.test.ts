@@ -50,6 +50,8 @@ describe('ConnectionRecoveryManager', () => {
       id: `channel-for-${id}`,
     });
     channel.initialized = true;
+    // a thread is opened from a loaded channel, which is watched
+    channel.watchStatus = ChannelWatchStatus.Watching;
     const thread = new Thread({
       client,
       channel,

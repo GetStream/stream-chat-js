@@ -203,6 +203,7 @@ export class Thread extends WithMessageOperations(WithSubscriptions) {
 
       const formattedParentMessage = formatMessage(parentMessage);
       const createdAt = timestampOr(parentMessage.created_at, nowNs());
+      const replyCount = parentMessage.reply_count ?? 0;
 
       this.state = new StateStore<ThreadState>({
         active: false,
@@ -211,11 +212,17 @@ export class Thread extends WithMessageOperations(WithSubscriptions) {
         custom: {},
         deletedAt: formattedParentMessage.deleted_at ?? null,
         isLoading: false,
-        isStateStale: false,
+        // Only the parent message is known, so the thread loads its data once when opened if it may
+        // have any: when the parent has replies, and when its channel isn't watched, as the parent's
+        // `reply_count` then misses the replies sent since the channel was loaded. A parent without
+        // replies in a watched channel has nothing on the server yet (`getThread` would answer 404):
+        // its first reply arrives as an event.
+        isStateStale:
+          replyCount > 0 || channel.watchStatus !== ChannelWatchStatus.Watching,
         parentMessage: formattedParentMessage,
         participants: [],
         read: formatReadState(getPlaceholderReadResponse(client.userId)),
-        replyCount: parentMessage.reply_count ?? 0,
+        replyCount,
         title: '',
         updatedAt: parentMessage.updated_at ?? null,
       });

@@ -2786,8 +2786,9 @@ describe('Threads 2.0', () => {
           client.threads.unregisterSubscriptions();
         });
 
-        it('ensure builds a thread with no replies up to date, so opening it sends no request', () => {
+        it('ensure builds a thread with no replies in a watched channel up to date, so opening it sends no request', () => {
           client.threads.registerSubscriptions();
+          channel.watchStatus = ChannelWatchStatus.Watching;
           const parentMessage = {
             ...parentMessageResponse,
             id: uuidv4(),
@@ -2802,6 +2803,40 @@ describe('Threads 2.0', () => {
           expect(thread.hasStaleState).to.be.false;
           expect(reload).not.toHaveBeenCalled();
           client.threads.unregisterSubscriptions();
+        });
+
+        it('ensure builds a thread in a channel that is not watched stale, as its reply count may miss replies', () => {
+          client.threads.registerSubscriptions();
+          channel.watchStatus = ChannelWatchStatus.NotWatching;
+          const parentMessage = {
+            ...parentMessageResponse,
+            id: uuidv4(),
+            reply_count: 0,
+          };
+
+          const thread = client.threads.ensure({ channel, parentMessage });
+          const reload = vi.spyOn(thread, 'reload').mockResolvedValue(undefined);
+          thread.activate();
+
+          expect(thread.hasStaleState).to.be.true;
+          expect(reload).toHaveBeenCalledTimes(1);
+          client.threads.unregisterSubscriptions();
+        });
+
+        it('new Thread() follows the same rule as ensure', () => {
+          const build = (watchStatus: string, reply_count: number) => {
+            channel.watchStatus = watchStatus as never;
+            return new Thread({
+              channel,
+              client,
+              parentMessage: { ...parentMessageResponse, id: uuidv4(), reply_count },
+            });
+          };
+
+          expect(build(ChannelWatchStatus.Watching, 0).hasStaleState).to.be.false;
+          expect(build(ChannelWatchStatus.Watching, 2).hasStaleState).to.be.true;
+          expect(build(ChannelWatchStatus.NotWatching, 0).hasStaleState).to.be.true;
+          expect(build(ChannelWatchStatus.WasWatching, 0).hasStaleState).to.be.true;
         });
 
         it('ensure leaves a stored thread as it is, so opening a listed one does not reload', async () => {
