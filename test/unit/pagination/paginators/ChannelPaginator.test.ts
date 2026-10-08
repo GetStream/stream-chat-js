@@ -2260,4 +2260,54 @@ describe('ChannelPaginator', () => {
       ]);
     });
   });
+  describe('fields kept under data.custom', () => {
+    beforeEach(() => {
+      // @ts-expect-error using undeclared custom properties
+      channel1.data!.custom = { color: 'red', name: 'general' };
+    });
+
+    it('matches name and custom fields as a channel response keeps them', () => {
+      const matches = (filters: object) =>
+        new ChannelPaginator({ client, filters: filters as never }).matchesFilter(
+          channel1,
+        );
+
+      expect(matches({ name: { $autocomplete: 'gen' } })).toBeTruthy();
+      expect(matches({ color: 'red' })).toBeTruthy();
+      expect(matches({ 'custom.color': 'red' })).toBeTruthy();
+      expect(matches({ color: 'blue' })).toBeFalsy();
+    });
+
+    it('applies a negative operator to the custom value, not to a missing one', () => {
+      const matches = (filters: object) =>
+        new ChannelPaginator({ client, filters: filters as never }).matchesFilter(
+          channel1,
+        );
+
+      expect(matches({ name: { $ne: 'general' } })).toBeFalsy();
+      expect(matches({ name: { $ne: 'random' } })).toBeTruthy();
+    });
+
+    it('sorts by a custom field', () => {
+      // @ts-expect-error using undeclared custom properties
+      channel2.data!.custom = { color: 'blue', name: 'random' };
+      const paginator = new ChannelPaginator({
+        client,
+        sort: [{ direction: 1, field: 'color' }],
+      });
+
+      expect(paginator.sortComparator(channel1, channel2)).toBeGreaterThan(0);
+    });
+  });
+
+  it('matches members: { $in: [me] } through the membership when I am not among the loaded members', () => {
+    const paginator = new ChannelPaginator({
+      client,
+      filters: { members: { $in: [user.id] } },
+    });
+    channel1.state.members = { other: { user: { id: 'other' } } };
+    channel1.state.membership = { user };
+
+    expect(paginator.matchesFilter(channel1)).toBeTruthy();
+  });
 });

@@ -179,15 +179,22 @@ const lastUpdatedFilterResolver: FieldToDataResolver<Channel> = {
 
 const membersFilterResolver: FieldToDataResolver<Channel> = {
   matchesField: (field) => field === 'members',
-  resolve: (channel) =>
-    channel.state.members
+  resolve: (channel) => {
+    const ids = channel.state.members
       ? Object.values(channel.state.members).reduce<string[]>((ids, member) => {
           if (member.user?.id) {
             ids.push(member.user?.id);
           }
           return ids;
         }, [])
-      : [],
+      : [];
+    // Only a page of a large channel's members may be loaded, but the current user's membership is
+    // always there, so `members: { $in: [ownId] }` holds even when they aren't in that page.
+    const { membership } = channel.state;
+    const ownId = membership?.user?.id ?? membership?.user_id;
+    if (ownId && !ids.includes(ownId)) ids.push(ownId);
+    return ids;
+  },
 };
 
 const memberUserNameFilterResolver: FieldToDataResolver<Channel> = {
@@ -217,9 +224,19 @@ const createMutedFilterResolver = (client: StreamChat): FieldToDataResolver<Chan
   resolve: (channel) => client._muteStatus(channel.cid).muted,
 });
 
+/**
+ * A channel field by path: from `channel.data`, or, for a field it doesn't have, from
+ * `channel.data.custom`, where a channel response keeps `name` and the app's custom fields. So
+ * `{ name: … }` and `{ color: … }` match what `{ 'custom.name': … }` and `{ 'custom.color': … }` do.
+ */
+const resolveChannelDataValue = (channel: Channel, path: string) => {
+  const value = resolveDotPathValue(channel.data, path);
+  return value !== undefined ? value : resolveDotPathValue(channel.data?.custom, path);
+};
+
 const dataFieldFilterResolver: FieldToDataResolver<Channel> = {
   matchesField: () => true,
-  resolve: (channel, path) => resolveDotPathValue(channel.data, path),
+  resolve: resolveChannelDataValue,
 };
 
 // very, very unfortunately channel data is dispersed btw Channel.data and Channel.state
@@ -243,7 +260,7 @@ const createChannelSortPathResolver = (client: StreamChat): PathResolver<Channel
         return userId ? (channel.state.read[userId]?.unread_messages ?? 0) : 0;
       }
       default:
-        return resolveDotPathValue(channel.data, path);
+        return resolveChannelDataValue(channel, path);
     }
   };
 };
