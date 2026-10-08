@@ -659,6 +659,28 @@ describe('channel lists as users', () => {
     expect(paginator.items).toEqual([channel]);
   });
 
+  it('passes events for a stored, disconnected channel to listeners without handling them', () => {
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
+    channel.disconnect();
+    const clientListener = vi.fn();
+    const channelListener = vi.fn();
+    client.on('message.new', clientListener);
+    channel.on('message.new', channelListener);
+    const stateBefore = channel.state.getLatestValue();
+
+    expect(() =>
+      client.dispatchEvent({
+        cid: channel.cid,
+        message: generateMsg({ cid: channel.cid }),
+        type: 'message.new',
+      } as never),
+    ).not.toThrow();
+
+    expect(clientListener).toHaveBeenCalledTimes(1);
+    expect(channelListener).toHaveBeenCalledTimes(1);
+    expect(channel.state.getLatestValue()).toBe(stateBefore);
+  });
+
   it('releases a disconnected channel whatever still holds or uses it', () => {
     const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     const paginator = list();

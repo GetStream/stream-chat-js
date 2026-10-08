@@ -1032,7 +1032,10 @@ export class StreamChat extends ChatApi {
     // channel event handlers
     const cid = (event as Extract<Event, { cid?: any }>).cid;
     const channel = cid ? this.channelManager.get(cid) : undefined;
-    if (channel) {
+    // A disconnected channel (`pendingDisposal`) may stay stored until `releaseUnusedChannels()`.
+    // Its state is not updated any more, and its handlers would throw at `getClient()`, so the
+    // event skips them; the channel's own listeners below still hear it.
+    if (channel && !channel.pendingDisposal) {
       channel._handleChannelEvent(event as WSEvent);
     }
 
