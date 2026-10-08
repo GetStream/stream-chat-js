@@ -15,7 +15,7 @@ import {
   UserResponse,
 } from '../../src';
 
-import { describe, beforeEach, afterEach, it, expect } from 'vitest';
+import { describe, beforeEach, afterEach, it, expect, vi } from 'vitest';
 import { convertDateToTimestamp } from './test-utils/time';
 
 const TEST_USER_ID = 'observer';
@@ -478,6 +478,41 @@ describe('PollManager', () => {
       expect((pollManager.fromState(pollId2) as Poll).data.created_by?.name).toBe(
         'Renamed Admin',
       );
+    });
+
+    it('keeps the vote array of an option the updated user has not voted for', () => {
+      const poll = pollManager.fromState(pollId1) as Poll;
+      const before = poll.data.latest_votes_by_option;
+      const untouched = Object.entries(before).filter(([, votes]) =>
+        votes.every((vote) => vote.user?.id !== 'admin'),
+      );
+      const renamed = {
+        ...(poll.data.created_by as UserResponse),
+        name: 'Renamed Admin',
+      };
+
+      client.dispatchEvent({ type: 'user.updated', user: renamed });
+
+      expect(untouched.length).toBeGreaterThan(0);
+      for (const [optionId, votes] of untouched) {
+        expect(poll.data.latest_votes_by_option[optionId]).toBe(votes);
+      }
+    });
+
+    it('writes the poll with the updated user to the offline DB', () => {
+      const poll = pollManager.fromState(pollId1) as Poll;
+      const upsertOfflineDb = vi.spyOn(
+        poll as unknown as { upsertOfflineDb: () => void },
+        'upsertOfflineDb',
+      );
+      const renamed = {
+        ...(poll.data.created_by as UserResponse),
+        name: 'Renamed Admin',
+      };
+
+      client.dispatchEvent({ type: 'user.updated', user: renamed });
+
+      expect(upsertOfflineDb).toHaveBeenCalledTimes(1);
     });
 
     it('does not publish for a user the poll does not contain', () => {

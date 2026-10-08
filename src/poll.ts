@@ -272,7 +272,9 @@ export class Poll {
   /**
    * Puts an updated user (new name or image) into the votes, answers and creator this poll keeps,
    * so voter avatars show it. Each vote is replaced, not edited in place, and everything goes out in
-   * one state update; nothing is published when the poll doesn't contain the user.
+   * one state update; nothing is published when the poll doesn't contain the user. An option whose
+   * votes don't contain the user keeps its array, so what renders it doesn't re-render. The offline
+   * DB gets the updated poll, as with the other poll events.
    */
   public handleUserUpdated = (user: UserResponse) => {
     const currentState = this.data;
@@ -282,7 +284,12 @@ export class Poll {
       changed = true;
       return { ...vote, user };
     };
-    const withUserAll = (votes?: PollVoteResponseData[]) => votes?.map(withUser);
+    // the same array when none of its votes is the user's
+    const withUserAll = (votes?: PollVoteResponseData[]) => {
+      if (!votes) return votes;
+      const next = votes.map(withUser);
+      return next.some((vote, index) => vote !== votes[index]) ? next : votes;
+    };
 
     const latestVotesByOption = Object.fromEntries(
       Object.entries(currentState.latest_votes_by_option ?? {}).map(
@@ -313,6 +320,7 @@ export class Poll {
       ownAnswer,
       ownVotesByOptionId,
     });
+    this.upsertOfflineDb();
   };
 
   query = async (id: string) => {
