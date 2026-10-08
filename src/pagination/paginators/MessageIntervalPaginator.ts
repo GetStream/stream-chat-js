@@ -26,6 +26,7 @@ import type {
   UserResponse,
 } from '../../types';
 import type { Channel } from '../../channel';
+import { ChannelWatchStatus } from '../../channel_state';
 import { CORE_NOTIFICATION_TYPE } from '../../notifications';
 import { StateStore } from '@stream-io/state-store';
 import { formatMessage, generateUUIDv4, toDeletedMessage } from '../../utils';
@@ -73,6 +74,14 @@ export type JumpToMessageOptions = {
    * If true, suppresses focus signal emission after a successful jump.
    */
   suppressFocusSignal?: boolean;
+  /**
+   * Also watch the channel, so it receives its events, when it isn't watched yet: the request that
+   * loads the window around the message asks to watch too, so it takes one request. A message
+   * already loaded is then loaded again with that request. Ignored for a thread's reply list, which
+   * loads replies through a request that can't watch, and when the paginator's `doRequest` loads
+   * the messages.
+   */
+  watchChannel?: boolean;
 };
 
 export type MessagePaginatorSort = SortParamRequest[];
@@ -505,8 +514,13 @@ export class MessageIntervalPaginator extends BasePaginator<
     };
   };
 
+  /**
+   * Reads `requestOptions.watch`: `true` also watches the channel with the request. Ignored for a
+   * thread's reply list and with `doRequest`.
+   */
   query = async ({
     direction,
+    requestOptions,
   }: PaginationQueryParams<MessageQueryShape>): Promise<
     PaginationQueryReturnValue<LocalMessage>
   > => {
@@ -541,6 +555,7 @@ export class MessageIntervalPaginator extends BasePaginator<
             )
         : await this.channel.query({
             messages: options as MessagePaginationParams,
+            ...(requestOptions?.watch === true && { watch: true }),
             // todo: why do we query for watchers?
             // watchers: { limit: this.pageSize },
           });
@@ -633,8 +648,14 @@ export class MessageIntervalPaginator extends BasePaginator<
       focusSignalTtlMs,
       pageSize,
       suppressFocusSignal,
+      watchChannel,
     }: JumpToMessageOptions = {},
   ): Promise<boolean> => {
+    const watch =
+      !!watchChannel &&
+      !this.parentMessageId &&
+      !this.config.doRequest &&
+      this.channel.watchStatus !== ChannelWatchStatus.Watching;
     let localMessage = this.getItem(messageId);
     let interval: AnyInterval | undefined;
     let state: Partial<PaginatorState<LocalMessage>> | undefined;
@@ -657,16 +678,18 @@ export class MessageIntervalPaginator extends BasePaginator<
       }
     }
 
-    if (localMessage && interval && !isLogicalInterval(interval)) {
+    // a loaded message needs no request, unless the jump is also to watch the channel
+    if (!watch && localMessage && interval && !isLogicalInterval(interval)) {
       state = {
         hasMoreHead: interval.hasMoreHead,
         hasMoreTail: interval.hasMoreTail,
         cursor: this.getCursorFromInterval(interval),
         items: this.intervalToItems(interval),
       };
-    } else if (!localMessage || !interval || isLogicalInterval(interval)) {
+    } else {
       const result = await this.executeQuery({
         queryShape: { id_around: messageId, limit: pageSize },
+        ...(watch && { requestOptions: { watch: true } }),
         updateState: false,
       });
       localMessage = this.getItem(messageId);
