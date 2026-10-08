@@ -199,6 +199,63 @@ describe('CHA-5603: re-sending an already stored message id', () => {
       expect(response.message.id).toBe(messageId);
     });
 
+    describe('cleanup of the send task queued by the timed out attempt', () => {
+      const pendingTask = (id: number, type: 'send-message' | 'send-reaction') =>
+        ({
+          id,
+          type,
+          channelType: channel.type,
+          channelId: channel.id as string,
+          messageId,
+          payload:
+            type === 'send-message'
+              ? [{ id: messageId, text: 'hello' }, {}]
+              : [messageId, { type: 'like' }],
+        }) as PendingTask;
+
+      beforeEach(() => {
+        channel.state.addMessageSorted(localCopyOf(messageId, 'sending', localCreatedAt));
+        postSpy
+          .mockRejectedValueOnce(axiosTimeoutError())
+          .mockRejectedValueOnce(axiosHttpError(400, 4, DUPLICATE_ID_TEXT(messageId)));
+      });
+
+      it('deletes the queued send-message task but keeps other tasks of the message', async () => {
+        offlineDb.getPendingTasks.mockResolvedValue([
+          pendingTask(1, 'send-message'),
+          pendingTask(2, 'send-reaction'),
+        ]);
+
+        await channel.sendMessage({ id: messageId, text: 'hello' });
+
+        // the timed out attempt queued the task
+        expect(offlineDb.addPendingTask).toHaveBeenCalledWith(
+          expect.objectContaining({ type: 'send-message', messageId }),
+        );
+        expect(offlineDb.getPendingTasks).toHaveBeenCalledWith({ messageId });
+        expect(offlineDb.deletePendingTask).toHaveBeenCalledTimes(1);
+        expect(offlineDb.deletePendingTask).toHaveBeenCalledWith({ id: 1 });
+      });
+
+      it('still resolves when the cleanup fails', async () => {
+        offlineDb.getPendingTasks.mockRejectedValue(new Error('db closed'));
+
+        const response = await channel.sendMessage({ id: messageId, text: 'hello' });
+
+        expect(response.message.id).toBe(messageId);
+        expect(offlineDb.deletePendingTask).not.toHaveBeenCalled();
+      });
+
+      it('does not touch the queue when the send cannot be recovered', async () => {
+        channel.state.clearMessages();
+
+        await expect(
+          channel.sendMessage({ id: messageId, text: 'hello' }),
+        ).rejects.toThrow(/code 4/);
+        expect(offlineDb.getPendingTasks).not.toHaveBeenCalled();
+      });
+    });
+
     it('replaying a queued send that gets the duplicate-id error leaves the message as received', async () => {
       // local copy shown as failed after the original attempt timed out
       channel.state.addMessageSorted(localCopyOf(messageId, 'failed', localCreatedAt));

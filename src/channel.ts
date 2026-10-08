@@ -239,7 +239,36 @@ export class Channel {
         localCopyRequired: true,
       });
       if (!recovered) throw error;
+      await this._deletePendingSendMessageTasks(message.id);
       return recovered.response;
+    }
+  }
+
+  /**
+   * @private
+   * Removes queued send-message tasks of a message that turned out to be already stored,
+   * e.g. the task queued by a timed out attempt. Other tasks of the message (reactions,
+   * edits) are kept.
+   */
+  private async _deletePendingSendMessageTasks(messageId: string) {
+    const offlineDb = this.getClient().offlineDb;
+    if (!offlineDb) return;
+    try {
+      const pendingTasks = await offlineDb.getPendingTasks({ messageId });
+      for (const task of pendingTasks) {
+        if (task.type === 'send-message' && task.id) {
+          await offlineDb.deletePendingTask({ id: task.id });
+        }
+      }
+    } catch (error) {
+      this._client.logger(
+        'error',
+        'offlineDb:send-message - pending task cleanup failed',
+        {
+          error,
+          tags: ['channel', 'offlineDb'],
+        },
+      );
     }
   }
 
