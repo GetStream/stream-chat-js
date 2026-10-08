@@ -1061,9 +1061,9 @@ export class StreamChat extends ChatApi {
   };
 
   /**
-   * Puts `user`'s new object into the members, watchers and (with `readEntries`) read entries of the
-   * channels that list them. Each channel gets new objects in one state update, so its subscribers
-   * re-render.
+   * Puts `user`'s new object into the members, watchers, own membership and (with `readEntries`)
+   * read entries of the channels that list them. Each channel gets new objects in one state update,
+   * so its subscribers re-render.
    *
    * @param user - The updated user.
    * @param options.readEntries - Also replace the user in read entries, refreshing the read receipts
@@ -1078,11 +1078,12 @@ export class StreamChat extends ChatApi {
     for (const channelId in refMap) {
       const channel = this.channelManager.get(channelId);
       if (!channel?.state) continue;
-      const { members, watchers, read } = channel.state.getLatestValue();
+      const { members, membership, watchers, read } = channel.state.getLatestValue();
       const member = members[user.id];
       const readState = readEntries ? read[user.id] : undefined;
       const hasWatcher = !!watchers[user.id];
-      if (!member && !hasWatcher && !readState) continue;
+      const isOwnMembership = membership?.user?.id === user.id;
+      if (!member && !hasWatcher && !readState && !isOwnMembership) continue;
       // The receipts tracker applies a read-state change only with metadata naming the changed
       // users; without it, its readers would keep the user's old object.
       if (readState) {
@@ -1093,6 +1094,7 @@ export class StreamChat extends ChatApi {
       channel.state.partialNext({
         ...(member && { members: { ...members, [user.id]: { ...member, user } } }),
         ...(hasWatcher && { watchers: { ...watchers, [user.id]: user } }),
+        ...(isOwnMembership && { membership: { ...membership, user } }),
         ...(readState && { read: { ...read, [user.id]: { ...readState, user } } }),
       });
       // consumed by the tracker's read subscription; cleared in case it isn't subscribed

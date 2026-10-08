@@ -313,34 +313,6 @@ const notificationChannelMutesUpdatedHandler: LabeledEventHandler<EventHandlerCo
   id: 'ChannelManager:default-handler:notification.channel_mutes_updated',
 };
 
-// fixme: updates users for member object in all the channels which are loaded with that member - normalization would be beneficial
-const userPresenceChangedHandler: LabeledEventHandler<EventHandlerContext> = {
-  handle: ({ event, ctx: { channelManager } }) => {
-    const eventUser = event.user;
-    if (!eventUser?.id) return;
-    channelManager.paginators.forEach((paginator) => {
-      const paginatorItems = paginator.items;
-      if (!paginatorItems) return;
-      let updated = false;
-      paginatorItems.forEach((channel) => {
-        if (channel.state.members[eventUser.id]) {
-          channel.state.members[eventUser.id].user = event.user;
-          updated = true;
-        }
-        if (channel.state.membership.user?.id === eventUser.id) {
-          channel.state.membership.user = eventUser;
-          updated = true;
-        }
-      });
-      if (updated) {
-        // fixme: user is not reactive and so the whole list has to be re-rendered
-        paginator.state.partialNext({ items: [...paginatorItems] });
-      }
-    });
-  },
-  id: 'ChannelManager:default-handler:user.presence.changed',
-};
-
 export type ChannelManagerState = {
   paginators: ChannelPaginator[];
 };
@@ -452,7 +424,6 @@ export class ChannelManager extends WithSubscriptions {
     'notification.mark_unread': [readStateChangedHandler],
     'notification.message_new': [notificationMessageNewHandler],
     'notification.removed_from_channel': [notificationRemovedFromChannelHandler],
-    'user.presence.changed': [userPresenceChangedHandler],
   };
 
   constructor({

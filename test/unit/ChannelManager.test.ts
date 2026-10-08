@@ -1983,7 +1983,7 @@ describe('ChannelManager', () => {
   });
 
   describe('user.presence.changed', () => {
-    it('updates user on channels where the user is a member and re-emits lists', async () => {
+    it('updates the user in each channel that lists them without re-emitting the lists', () => {
       const channelManager = useClientManager();
 
       const ch1 = makeChannel('messaging:13');
@@ -1995,14 +1995,12 @@ describe('ChannelManager', () => {
 
       const ch2 = makeChannel('messaging:14');
       ch2.state.members = {
-        u1: { user: { id: 'u1', name: 'Old' } },
         u2: { user: { id: 'u2', name: 'Old2' } },
-        u3: { user: { id: 'u3', name: 'Old3' } },
       };
-      ch2.state.membership = { user: { id: 'u1', name: 'Old' } };
 
       client.channelManager.getOrCreateChannel(ch1.cid, () => ch1);
       client.channelManager.getOrCreateChannel(ch2.cid, () => ch2);
+      client.state.updateUserReference({ id: 'u1' }, ch1.cid);
 
       const p = new ChannelPaginator({ client });
       p.state.partialNext({ items: [ch1, ch2] });
@@ -2011,29 +2009,16 @@ describe('ChannelManager', () => {
       channelManager.insertPaginator({ paginator: p });
       channelManager.registerSubscriptions();
 
-      // user u1 presence changed
       client.dispatchEvent({
         type: 'user.presence.changed',
-        user: { id: 'u1', name: 'NewName' },
+        user: { id: 'u1', name: 'Old', online: true },
       });
 
-      await vi.waitFor(() => {
-        expect(ch1.state.members['u1'].user?.name).toBe('NewName');
-        expect(ch1.state.members['u3'].user?.name).toBe('Old3');
-
-        expect(ch2.state.members['u1'].user?.name).toBe('NewName');
-        expect(ch2.state.members['u2'].user?.name).toBe('Old2');
-        expect(ch2.state.members['u3'].user?.name).toBe('Old3');
-
-        expect(ch1.state.membership.user?.name).toBe('NewName');
-        expect(ch2.state.membership.user?.name).toBe('NewName');
-        expect(partialNextSpy).toHaveBeenCalledTimes(1);
-        expect(partialNextSpy).toHaveBeenCalledWith({ items: [ch1, ch2] });
-      });
-
-      // Now user without id → ignored
-      partialNextSpy.mockClear();
-      client.dispatchEvent({ type: 'user.presence.changed', user: {} as any });
+      expect(ch1.state.members['u1'].user?.online).toBe(true);
+      expect(ch1.state.members['u3'].user?.name).toBe('Old3');
+      expect(ch1.state.membership.user?.online).toBe(true);
+      expect(ch2.state.members['u2'].user?.name).toBe('Old2');
+      // each channel publishes its own change, so the list doesn't re-render as a whole
       expect(partialNextSpy).not.toHaveBeenCalled();
     });
   });

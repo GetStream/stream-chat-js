@@ -2126,6 +2126,21 @@ describe('user.updated reaches users who entered a channel after its query', () 
 		expect(channel.state.getLatestValue().watchers.bob.name).toBe('Robert');
 	});
 
+	it('reaches the own membership, also when the members page leaves the user out', async () => {
+		const me = client.user;
+		channel._initializeState({
+			members: [],
+			membership: { user: { id: me.id, name: me.name }, user_id: me.id },
+		});
+
+		client.dispatchEvent({
+			type: 'user.presence.changed',
+			user: { ...me, online: true },
+		});
+
+		expect(channel.state.getLatestValue().membership.user.online).toBe(true);
+	});
+
 	it('reaches a joined member on a presence change', () => {
 		client.dispatchEvent({
 			type: 'member.added',

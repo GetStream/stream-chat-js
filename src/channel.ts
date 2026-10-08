@@ -2960,6 +2960,10 @@ export class Channel extends WithMessageOperations(ChannelApi) {
 
     if (state.membership) {
       this.state.membership = state.membership;
+      // the members page of a large channel may leave out the current user, so register them here
+      if (state.membership.user) {
+        clientState.updateUserReference(state.membership.user, this.cid);
+      }
     }
 
     // Seed the message paginator's `lastMessageAt` aggregate from the server's authoritative
