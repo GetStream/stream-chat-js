@@ -311,7 +311,7 @@ describe('ChannelManager channel store', () => {
 
   it('replaces a torn-down channel with a fresh instance', () => {
     const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
-    channel._disconnect();
+    channel.disconnect();
 
     const fresh = client.channelManager.ensure({ type: 'messaging', id: 'general' });
 
@@ -1009,7 +1009,7 @@ describe('the channel clean loop', () => {
   it('cleans the channels after a disposed one still stored', () => {
     const [a, b, c] = stored(['a', 'b', 'c']);
     // disposed, but not yet removed from the store
-    b.channel._disconnect();
+    b.channel.disconnect();
 
     client._startCleaning();
     vi.advanceTimersByTime(500);

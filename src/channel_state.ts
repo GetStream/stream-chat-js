@@ -60,7 +60,7 @@ export type ChannelWatchState = {
    * See {@link ChannelWatchStatus}. Goes to `Watching` when a query carrying `watch: true` succeeds
    * (`channel.watch()`, `channel.query({ watch: true })`, `client.queryChannels()`); to
    * `WasWatching` when the WS connection is lost (only from `Watching` — a deliberate stop is never
-   * resurrected); and to `NotWatching` on `channel.stopWatching()` or `channel._disconnect()`.
+   * resurrected); and to `NotWatching` on `channel.stopWatching()` or `channel.disconnect()`.
    *
    * It is truthful by construction: `channel.watch()` and `client.queryChannels()` wait for a live
    * socket rather than degrading, so a query carrying `watch: true` can only succeed against a
@@ -148,7 +148,7 @@ export type ChannelLifecycleState = {
    */
   offlineMode: boolean;
   /**
-   * Whether `channel._disconnect()` has run: the channel was deleted, the current user removed from
+   * Whether `channel.disconnect()` has run: the channel was deleted, the current user removed from
    * it, the client disconnected, or nothing used it any more. One-way and terminal — see
    * {@link Channel.pendingDisposal}: the instance is never revived.
    */

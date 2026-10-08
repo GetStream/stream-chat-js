@@ -407,7 +407,7 @@ describe('Client active channels cache', () => {
 			this.state.unreadCount = next;
 		},
 		// the channel store tears a channel down when it is cleared
-		_disconnect() {},
+		disconnect() {},
 	});
 
 	beforeEach(() => {
@@ -2640,7 +2640,7 @@ describe('channel store eviction when the current user is removed (#2599)', () =
 			type: 'messaging',
 			id: 'ch-other-member',
 		});
-		const disconnectSpy = vi.spyOn(channel, '_disconnect');
+		const disconnectSpy = vi.spyOn(channel, 'disconnect');
 
 		client.dispatchEvent({
 			type: 'member.removed',

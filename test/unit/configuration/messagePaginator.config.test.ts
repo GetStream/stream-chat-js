@@ -348,7 +348,7 @@ describe("the shared 'messagePaginator' configuration key", () => {
   describe('teardown', () => {
     it('stops reaching a disconnected channel', () => {
       const channel = openChannel();
-      channel._disconnect();
+      channel.disconnect();
 
       client.config.set({ messagePaginator: { retryCount: 5 } });
 

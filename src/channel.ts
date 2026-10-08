@@ -267,11 +267,11 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   public readonly pinnedMessagesPaginator: PinnedMessagePaginator;
   public readonly cooldownTimer: CooldownTimer;
   /**
-   * Teardown for this channel's configuration subscription, released by {@link _disconnect}. Left
+   * Teardown for this channel's configuration subscription, released by {@link disconnect}. Left
    * subscribed, a disconnected channel would stay in the configuration store's handler set for good.
    */
   private unsubscribeConfiguration?: Unsubscribe;
-  /** Teardown for the server-config re-derivation subscription, released by {@link _disconnect}. */
+  /** Teardown for the server-config re-derivation subscription, released by {@link disconnect}. */
   private unsubscribeServerConfig?: Unsubscribe;
   /** The declarative slice last derived from, so a late server answer can re-derive from the same one. */
   private declarativeConfig?: Partial<ChannelConfig>;
@@ -1528,12 +1528,12 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   }
 
   /**
-   * Whether {@link Channel._disconnect} has run: the channel was deleted, the current user removed
+   * Whether {@link Channel.disconnect} has run: the channel was deleted, the current user removed
    * from it, the client disconnected, or nothing used it any more. Store-backed and reactive.
    *
-   * One-way and terminal — read-only, set only by {@link Channel._disconnect}, and nothing revives
+   * One-way and terminal — read-only, set only by {@link Channel.disconnect}, and nothing revives
    * the instance. Its resources are
-   * already released ({@link Channel._disconnect} disposes the paginators and unregisters the
+   * already released ({@link Channel.disconnect} disposes the paginators and unregisters the
    * subscriptions) and the channel store drops it, so nothing should touch it:
    * `client.channelManager.ensure(…)` mints a fresh instance for its cid, never re-watched on recovery,
    * refused as a source of `channel.data` by the offline DB, and `getClient()` throws on it so a reference held across a `disconnectUser()`
@@ -1586,7 +1586,7 @@ export class Channel extends WithMessageOperations(ChannelApi) {
    *
    * An active channel also stays in the channel store. Once the last consumer releases it, it is
    * kept only while something else uses it (a watch, a channel list, a claim). A superseded channel
-   * (see {@link ChannelLifecycleState.supersededBy}) is disconnected ({@link Channel._disconnect})
+   * (see {@link ChannelLifecycleState.supersededBy}) is disconnected ({@link Channel.disconnect})
    * when its last consumer releases it.
    *
    * A disposed channel (`pendingDisposal`) isn't activated: it is not stored, gets no events and
@@ -3144,27 +3144,32 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   }
 
   /**
-   * Stops the instance for good, once it is done with: it unsubscribes from the client's
+   * Stops the instance for good and marks it for disposal: it unsubscribes from the client's
    * configuration and the server config, stops the receipts tracker and the cooldown timer, disposes
    * the message and pinned-message paginators (which unlinks them from the shared message store), and
-   * then sets `pendingDisposal: true` and `watchStatus: NotWatching`. It sends no request.
+   * then sets `pendingDisposal: true` and `watchStatus: NotWatching`. It sends no request, so the
+   * server keeps a watch this connection held until the connection ends. Calling it again does
+   * nothing, and nothing revives the instance.
    *
-   * It doesn't free memory itself. Afterwards the SDK holds no reference to the instance (the channel
-   * store or the superseded set dropped it), so it is garbage collected once the app holds none
-   * either. One that the app still holds stays in memory, inert.
+   * The SDK calls it when a channel ends: deleted, the current user removed from it, the user
+   * logged out, or released as unused. Call it yourself to finish an instance you are done with.
    *
-   * @internal
+   * It doesn't remove the channel from the channel store. A stored instance stays there, finished,
+   * until the SDK removes it; meanwhile `client.channelManager.ensure(…)` gives a fresh instance
+   * for its cid.
+   *
+   * It doesn't free memory itself: the instance is garbage collected once nothing refers to it.
    */
-  _disconnect() {
+  disconnect() {
     // once only: a second run would drop subscription counts other consumers hold
     if (this.pendingDisposal) return;
-    logger.withExtraTags('_disconnect', this.cid).info('Disconnecting the channel.');
+    logger.withExtraTags('disconnect', this.cid).info('Disconnecting the channel.');
 
     // Release the channel.state subscriptions BEFORE flipping `pendingDisposal` — that publishes to
     // the store, so no subscriber handler runs against a half-disconnected channel.
 
     // Runs the `'channel'` setup function's teardown and removes this channel from the configuration
-    // store's subscribers. Cleared so a repeated `_disconnect` cannot double-run it.
+    // store's subscribers. Cleared so a repeated `disconnect` cannot double-run it.
     this.unsubscribeConfiguration?.();
     this.unsubscribeConfiguration = undefined;
     this.unsubscribeServerConfig?.();

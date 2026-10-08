@@ -244,7 +244,7 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
    * in, which is not what should be re-fetched on a reconnect — only what someone is actually
    * reading. An active thread is always registered, listed or not (`thread.activate()` registers it).
    * Guarded on the owning channel the same way active channels are: a thread whose channel was
-   * disconnected (`_disconnect()`) has nothing to recover into.
+   * disconnected (`disconnect()`) has nothing to recover into.
    */
   private get recoverableActiveThreads(): Thread[] {
     const threads: Thread[] = [];

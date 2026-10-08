@@ -316,10 +316,10 @@ describe('instance configuration — cross-instance', () => {
   });
 
   describe('teardown, per disposal path', () => {
-    it('channel — _disconnect', () => {
+    it('channel — disconnect', () => {
       const teardown = vi.fn();
       client.config.setSetupFunction('channel', () => teardown);
-      openChannel()._disconnect();
+      openChannel().disconnect();
       expect(teardown).toHaveBeenCalledTimes(1);
     });
 

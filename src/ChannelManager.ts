@@ -363,14 +363,14 @@ export class ChannelManager extends WithSubscriptions {
    * its id, is stored under its temporary cid until {@link ChannelManager.changeChannelId} moves it.
    * A channel stays until a known end (deleted, or the current user removed from it) or logout removes
    * it, or the app calls {@link ChannelManager.releaseUnusedChannels} while it is neither watched nor
-   * held; each removes it and runs its {@link Channel._disconnect}. A channel list holds the channels it shows by linking them, which also
+   * held; each removes it and runs its {@link Channel.disconnect}. A channel list holds the channels it shows by linking them, which also
    * tells it about removals and cid changes; other users hold theirs through claims.
    *
    * @internal
    */
   readonly channelStore = new EntityStore<Channel>({
     getEntityId: (channel) => channel.cid,
-    onRelease: (channel) => channel._disconnect(),
+    onRelease: (channel) => channel.disconnect(),
     releaseOnLastUnlink: false,
   });
 
@@ -381,7 +381,7 @@ export class ChannelManager extends WithSubscriptions {
   protected ownershipResolver?: PaginatorOwnershipResolver;
   /**
    * Instances replaced by a stored one ({@link ChannelManager.supersedeChannel}). Not in the store, so
-   * nothing else disconnects them ({@link Channel._disconnect}): each is disconnected and dropped from
+   * nothing else disconnects them ({@link Channel.disconnect}): each is disconnected and dropped from
    * here when its last activation ends, or with the rest on {@link ChannelManager.clearChannels}.
    */
   private readonly supersededChannels = new Set<Channel>();
@@ -635,18 +635,18 @@ export class ChannelManager extends WithSubscriptions {
   }
 
   /**
-   * Disconnects a superseded instance ({@link Channel._disconnect}) and stops tracking it, once its
+   * Disconnects a superseded instance ({@link Channel.disconnect}) and stops tracking it, once its
    * last activation ended.
    *
    * @internal
    */
   releaseSupersededChannel(channel: Channel) {
     if (!this.supersededChannels.delete(channel)) return;
-    channel._disconnect();
+    channel.disconnect();
   }
 
   /**
-   * Removes, and disconnects ({@link Channel._disconnect}), every stored channel that is neither
+   * Removes, and disconnects ({@link Channel.disconnect}), every stored channel that is neither
    * watched nor held. A watched channel (`watching`,
    * or `wasWatching` until its watch is restored) stays, because its events keep it current; so does
    * an active one ({@link Channel.activate}), one being loaded (`watch()`, `query()` or `create()` in flight), and
@@ -686,7 +686,7 @@ export class ChannelManager extends WithSubscriptions {
 
   /**
    * Removes the channel stored under `cid` whatever uses it, and disconnects it
-   * ({@link Channel._disconnect}).
+   * ({@link Channel.disconnect}).
    * Every list showing it drops it too, as the store's removal reaches each list's index.
    *
    * @internal
@@ -696,14 +696,14 @@ export class ChannelManager extends WithSubscriptions {
   }
 
   /**
-   * Removes and disconnects ({@link Channel._disconnect}) every stored channel, and every superseded
+   * Removes and disconnects ({@link Channel.disconnect}) every stored channel, and every superseded
    * one.
    *
    * @internal
    */
   clearChannels() {
     this.channelStore.clear();
-    this.supersededChannels.forEach((channel) => channel._disconnect());
+    this.supersededChannels.forEach((channel) => channel.disconnect());
     this.supersededChannels.clear();
   }
 
@@ -734,7 +734,7 @@ export class ChannelManager extends WithSubscriptions {
    * channels have to be re-queried to watch again. `WasWatching` is what records that they should be.
    *
    * Only `Watching` is demoted: a channel the consumer stopped on purpose, or one already
-   * disconnected (`_disconnect()`), stays `NotWatching` and must not be resurrected by a reconnect.
+   * disconnected (`disconnect()`), stays `NotWatching` and must not be resurrected by a reconnect.
    *
    * Invoked from two places on the WebSocket, because neither covers the other:
    * `StableWSConnection._setHealth(false)` for an abnormal close/error, and `closeConnection()` for a

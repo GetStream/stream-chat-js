@@ -233,7 +233,7 @@ describe('ChannelState unreadCount', () => {
 				user: { id: 'me' },
 			},
 		};
-		channel._disconnect();
+		channel.disconnect();
 
 		expect(() => channel.state.unreadCount).not.to.throw();
 		expect(channel.state.unreadCount).to.equal(4);

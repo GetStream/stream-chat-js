@@ -62,7 +62,7 @@ export class CooldownTimer extends WithSubscriptions {
    * Subscribes the timer to the two stores it derives from — `channel.state` for `cooldown` and
    * `ownCapabilities`, the message paginator's store for the current user's latest message.
    *
-   * `Channel` calls this right after constructing the timer and unregisters it in `_disconnect`, the same
+   * `Channel` calls this right after constructing the timer and unregisters it in `disconnect`, the same
    * way it drives `messageReceiptsTracker`. That replaces four imperative `cooldownTimer.refresh()` calls
    * in `Channel`, and the three WS-event handlers that used to live here — which duplicated those calls
    * and never ran, because nothing registered them. Between them the two arrangements still missed every

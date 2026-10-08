@@ -153,7 +153,7 @@ describe('ConnectionRecoveryManager', () => {
 
     it('skips a thread whose channel is being torn down', async () => {
       const { thread, reload, channel } = activeThread('doomed-thread');
-      channel._disconnect();
+      channel.disconnect();
       const { reload: channelReload } = activeChannel('still-open');
       vi.spyOn(client.channelManager, 'recover').mockResolvedValue([]);
 
@@ -223,7 +223,7 @@ describe('ConnectionRecoveryManager', () => {
 
     it('skips a channel pending disposal', async () => {
       const { channel, reload } = activeChannel('disposing');
-      channel._disconnect();
+      channel.disconnect();
       vi.spyOn(client.channelManager, 'recover').mockResolvedValue([]);
 
       await client.connectionRecovery.recover();

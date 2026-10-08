@@ -837,7 +837,7 @@ export class StreamChat extends ChatApi {
     // Reset first, so each list empties in one update and no longer holds its channels; clearing the
     // store then has no list to remove them from one by one.
     this.channelManager.resetPaginatorStates();
-    // disconnects every channel (`_disconnect()`) and ensures we no longer return inactive channels
+    // disconnects every channel (`disconnect()`) and ensures we no longer return inactive channels
     this.channelManager.clearChannels();
     // reset client state
     this.state = new ClientState({ client: this });
@@ -1302,7 +1302,7 @@ export class StreamChat extends ChatApi {
       const { cid } = event;
       client.state.deleteAllChannelReference(cid);
       const ended = this.channelManager.get(cid);
-      ended?._disconnect();
+      ended?.disconnect();
 
       postListenerCallbacks.push(() => {
         // only the instance disconnected above: a listener that got the channel again keeps its
@@ -1320,7 +1320,7 @@ export class StreamChat extends ChatApi {
     if (event.type === 'notification.removed_from_channel' && event.cid) {
       const { cid } = event;
       const ended = this.channelManager.get(cid);
-      ended?._disconnect();
+      ended?.disconnect();
 
       postListenerCallbacks.push(() => {
         // only the instance disconnected above, as for channel.deleted

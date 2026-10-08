@@ -515,7 +515,7 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 	it('goes to NotWatching on teardown', async () => {
 		await channel.watch();
 
-		channel._disconnect();
+		channel.disconnect();
 
 		expect(channel.state.getLatestValue().watchStatus).to.equal(
 			ChannelWatchStatus.NotWatching,
@@ -643,7 +643,7 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 
 	it('skips channels pending disposal when sweeping', async () => {
 		await channel.watch();
-		channel._disconnect();
+		channel.disconnect();
 
 		expect(() => client.channelManager.markChannelsWatchInterrupted()).not.to.throw();
 		expect(channel.state.getLatestValue().watchStatus).to.equal(
@@ -4641,7 +4641,7 @@ describe('Channel active flag (mark-read stays UI-driven)', () => {
 	});
 });
 
-describe('Channel _disconnect called more than once', () => {
+describe('Channel disconnect called more than once', () => {
 	let client;
 	let channel;
 
@@ -4659,8 +4659,8 @@ describe('Channel _disconnect called more than once', () => {
 		const disposeMessages = vi.spyOn(channel.messagePaginator, 'dispose');
 		const disposePinned = vi.spyOn(channel.pinnedMessagesPaginator, 'dispose');
 
-		channel._disconnect();
-		channel._disconnect();
+		channel.disconnect();
+		channel.disconnect();
 
 		expect(channel.pendingDisposal).to.equal(true);
 		expect(unregisterReceipts).toHaveBeenCalledTimes(1);
@@ -4674,8 +4674,8 @@ describe('Channel _disconnect called more than once', () => {
 		channel.cooldownTimer.registerSubscriptions();
 		channel.messageReceiptsTracker.registerSubscriptions();
 
-		channel._disconnect();
-		channel._disconnect();
+		channel.disconnect();
+		channel.disconnect();
 
 		expect(channel.cooldownTimer.hasSubscriptions).to.equal(true);
 		expect(channel.messageReceiptsTracker.hasSubscriptions).to.equal(true);
@@ -4695,7 +4695,7 @@ describe('Channel _disconnect called more than once', () => {
 			},
 		);
 
-		channel._disconnect();
+		channel.disconnect();
 
 		expect(seen).toEqual([
 			{
@@ -4707,12 +4707,12 @@ describe('Channel _disconnect called more than once', () => {
 	});
 
 	it('does not publish channel state again on the second call', () => {
-		channel._disconnect();
+		channel.disconnect();
 		const listener = vi.fn();
 		const unsubscribe = channel.state.subscribe(listener);
 		listener.mockClear();
 
-		channel._disconnect();
+		channel.disconnect();
 
 		expect(listener).not.toHaveBeenCalled();
 		unsubscribe();
@@ -4865,7 +4865,7 @@ describe('Channel query on a disposed instance', () => {
 	});
 
 	it('is refused before the request goes out, for query() and watch()', async () => {
-		channel._disconnect();
+		channel.disconnect();
 
 		await expect(channel.query({})).rejects.toThrow(/pending disposal/);
 		await expect(channel.watch()).rejects.toThrow(/pending disposal/);
