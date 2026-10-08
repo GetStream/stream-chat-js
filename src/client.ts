@@ -1292,12 +1292,15 @@ export class StreamChat extends ChatApi {
     ) {
       const { cid } = event;
       client.state.deleteAllChannelReference(cid);
-      this.channelManager.get(event.cid)?._disconnect();
+      const ended = this.channelManager.get(cid);
+      ended?._disconnect();
 
       postListenerCallbacks.push(() => {
-        if (!cid) return;
-
-        this.channelManager.removeChannel(cid);
+        // only the instance disconnected above: a listener that got the channel again keeps its
+        // fresh instance (`ensure()` replaces a disposed one)
+        if (ended && this.channelManager.get(cid) === ended) {
+          this.channelManager.removeChannel(cid);
+        }
       });
     }
 
@@ -1307,10 +1310,14 @@ export class StreamChat extends ChatApi {
     // the channel still exists for its remaining members.
     if (event.type === 'notification.removed_from_channel' && event.cid) {
       const { cid } = event;
-      this.channelManager.get(cid)?._disconnect();
+      const ended = this.channelManager.get(cid);
+      ended?._disconnect();
 
       postListenerCallbacks.push(() => {
-        this.channelManager.removeChannel(cid);
+        // only the instance disconnected above, as for channel.deleted
+        if (ended && this.channelManager.get(cid) === ended) {
+          this.channelManager.removeChannel(cid);
+        }
       });
     }
 

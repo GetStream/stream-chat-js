@@ -438,6 +438,26 @@ describe('keeping channels', () => {
     expect(client.channelManager.get('messaging:general')).toBeUndefined();
   });
 
+  it.each([
+    ['channel.deleted'],
+    ['notification.channel_deleted'],
+    ['notification.removed_from_channel'],
+  ])('keeps the fresh instance a %s listener got for the channel', (type) => {
+    const ended = client.channelManager.ensure({ type: 'messaging', id: 'general' });
+    let fresh: ReturnType<typeof client.channelManager.ensure> | undefined;
+    client.on(type as never, () => {
+      fresh = client.channelManager.ensure({ type: 'messaging', id: 'general' });
+    });
+
+    client.dispatchEvent({ type, cid: ended.cid } as never);
+
+    expect(ended.pendingDisposal).toBe(true);
+    expect(fresh).toBeDefined();
+    expect(fresh).not.toBe(ended);
+    expect(fresh?.pendingDisposal).toBe(false);
+    expect(client.channelManager.get('messaging:general')).toBe(fresh);
+  });
+
   it('tears down an opened channel on logout', async () => {
     const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
     channel.activate();
