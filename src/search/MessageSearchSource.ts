@@ -10,6 +10,7 @@ import type {
 import type { StreamChat } from '../client';
 import type { SearchSourceOptions } from './types';
 import { FilterBuilder, type FilterBuilderOptions } from '../pagination';
+import type { Channel } from '../channel';
 
 type CustomContext = Record<string, unknown>;
 
@@ -95,6 +96,8 @@ export class MessageSearchSource<
     MergeContext<BuiltInContexts['channelQuery'], TContexts['channelQueryContext']>
   >;
 
+  private removeClaim?: () => void;
+
   constructor(
     client: StreamChat,
     options?: MessageSearchSourceOptions,
@@ -153,6 +156,49 @@ export class MessageSearchSource<
         ...filterBuilderOptions?.channelQuery?.initialFilterConfig,
       },
     });
+
+    // A subscription to the source's own state, so it lives and goes with the source itself.
+    this.state.subscribeWithSelector(
+      ({ isActive }) => ({ isActive }),
+      () => this.registerSubscriptions(),
+    );
+  }
+
+  /**
+   * While the search is active its results are on screen, so the channels they were found in count
+   * as used in the channel store (see `EntityStore.addClaim`), and stay the instances the results
+   * open. Follows `isActive`; also called by `SearchController.registerSubscriptions()` to take the
+   * registration again after `dispose()`.
+   */
+  registerSubscriptions() {
+    if (!this.isActive) {
+      this.dispose();
+      return;
+    }
+    this.removeClaim ??= this.client.channelManager.channelStore.addClaim({
+      heldBy: () => this.resultChannels(),
+      name: 'message-search',
+    });
+  }
+
+  /**
+   * Removes the registration that keeps the results' channels in the channel store, so a source that
+   * is dropped while active doesn't keep them, or itself, alive. A later activation registers again.
+   */
+  dispose() {
+    this.removeClaim?.();
+    this.removeClaim = undefined;
+  }
+
+  private resultChannels() {
+    const channels = new Set<Channel>();
+    for (const message of this.items ?? []) {
+      const channel = message.cid
+        ? this.client.channelManager.get(message.cid)
+        : undefined;
+      if (channel) channels.add(channel);
+    }
+    return channels;
   }
 
   protected async query(searchQuery: string, queryOptions: SearchQueryOptions = {}) {

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach, MockInstance } from 'vitest';
 import { MessageSearchSource } from '../../../src/search/MessageSearchSource';
+import { SearchController } from '../../../src/search/SearchController';
 import type { StreamChat } from '../../../src/client';
 import type { MessageResponse, SearchAPIResponse } from '../../../src/types';
 import { getClientWithUser } from '../test-utils/getClient';
@@ -434,5 +435,60 @@ describe('MessageSearchSource', () => {
     // @ts-expect-error protected access
     const result = searchSource.filterQueryResults(messages);
     expect(result).toBe(messages);
+  });
+
+  describe('keeping the channels of its results', () => {
+    const storeResultChannels = () => {
+      messages[0].cid = 'messaging:first';
+      messages[1].cid = 'messaging:second';
+      return [
+        client.channelManager.ensure({ type: 'messaging', id: 'first' }),
+        client.channelManager.ensure({ type: 'messaging', id: 'second' }),
+      ];
+    };
+
+    it('keeps them in the channel store while it is active', async () => {
+      const channels = storeResultChannels();
+      searchSource.activate();
+      await searchSource.executeQuery('any');
+
+      client.channelManager.releaseUnusedChannels();
+      expect(client.channelManager.values()).toEqual(channels);
+
+      searchSource.deactivate();
+      client.channelManager.releaseUnusedChannels();
+      expect(client.channelManager.values()).toEqual([]);
+    });
+
+    it('stops keeping them once disposed, and keeps them again when registered', async () => {
+      const channels = storeResultChannels();
+      searchSource.activate();
+      await searchSource.executeQuery('any');
+
+      searchSource.dispose();
+      client.channelManager.releaseUnusedChannels();
+      expect(client.channelManager.values()).toEqual([]);
+
+      channels.forEach((channel) =>
+        client.channelManager.getOrCreateChannel(channel.cid, () => channel),
+      );
+      searchSource.registerSubscriptions();
+      client.channelManager.releaseUnusedChannels();
+      expect(client.channelManager.values()).toEqual(channels);
+    });
+
+    it('is disposed and registered again through its search controller', async () => {
+      const channels = storeResultChannels();
+      const controller = new SearchController({ client, sources: [searchSource] });
+      searchSource.activate();
+      await searchSource.executeQuery('any');
+
+      // the cleanup and second mount a UI's StrictMode runs on the same instance
+      controller.dispose();
+      controller.registerSubscriptions();
+      client.channelManager.releaseUnusedChannels();
+
+      expect(client.channelManager.values()).toEqual(channels);
+    });
   });
 });
