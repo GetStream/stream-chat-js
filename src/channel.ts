@@ -293,9 +293,7 @@ export class Channel {
     const { id, parent_id } = message;
     if (!id) return;
 
-    const localCopy =
-      this.state.findMessage(id, parent_id) ??
-      (parent_id ? this.state.findMessage(id) : undefined);
+    const localCopy = this.state.findMessage(id, parent_id);
     if (localCopyRequired && !localCopy) return;
 
     // already confirmed, e.g. by message.new
