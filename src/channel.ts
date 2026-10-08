@@ -2571,6 +2571,7 @@ export class Channel extends WithMessageOperations(ChannelApi) {
       case 'user.updated':
         if (event.user?.id) {
           channelState.watchers[event.user.id] = event.user;
+          channel.getClient().state.updateUserReference(event.user, channel.cid);
         }
         break;
       case 'user.watching.stop':
@@ -2773,6 +2774,7 @@ export class Channel extends WithMessageOperations(ChannelApi) {
             ...channelState.members,
             [memberCopy.user.id]: memberCopy,
           };
+          channel.getClient().state.updateUserReference(memberCopy.user, channel.cid);
         }
 
         const currentUserId = this.getClient().userId;
@@ -2954,12 +2956,6 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     // add the members and users
     if (state.members) {
       this._hydrateMembers({ members: state.members });
-
-      for (const member of state.members) {
-        if (member.user) {
-          clientState.updateUserReference(member.user, this.cid);
-        }
-      }
     }
 
     if (state.membership) {
@@ -3071,10 +3067,13 @@ export class Channel extends WithMessageOperations(ChannelApi) {
      */
     overrideCurrentState?: boolean;
   }) {
+    const clientState = this.getClient().state;
     const newMembersById = members.reduce<ChannelState['members']>(
       (membersById, member) => {
         if (member.user) {
           membersById[member.user.id] = member;
+          // lets `user.updated` and `user.presence.changed` reach this member
+          clientState.updateUserReference(member.user, this.cid);
         }
         return membersById;
       },

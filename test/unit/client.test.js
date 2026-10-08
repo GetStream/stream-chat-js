@@ -2086,6 +2086,62 @@ describe('user.updated propagates to channel members, watchers and read states',
 	});
 });
 
+describe('user.updated reaches users who entered a channel after its query', () => {
+	let client;
+	let channel;
+	const bob = { id: 'bob', name: 'Bob' };
+	const renameBob = () =>
+		client.dispatchEvent({ type: 'user.updated', user: { ...bob, name: 'Robert' } });
+
+	beforeEach(async () => {
+		client = await getClientWithUser();
+		channel = client.channelManager.ensure({ type: 'messaging', id: 'joined-later' });
+	});
+
+	it.each([['member.added'], ['member.updated']])('reaches a member from %s', (type) => {
+		client.dispatchEvent({
+			type,
+			cid: channel.cid,
+			member: { user: bob, user_id: 'bob' },
+		});
+
+		renameBob();
+
+		expect(channel.state.getLatestValue().members.bob.user.name).toBe('Robert');
+	});
+
+	it('reaches a member hydrated without a query, as a thread hydrates its channel', () => {
+		channel._hydrateMembers({ members: [{ user: bob, user_id: 'bob' }] });
+
+		renameBob();
+
+		expect(channel.state.getLatestValue().members.bob.user.name).toBe('Robert');
+	});
+
+	it('reaches a watcher from user.watching.start', () => {
+		client.dispatchEvent({ type: 'user.watching.start', cid: channel.cid, user: bob });
+
+		renameBob();
+
+		expect(channel.state.getLatestValue().watchers.bob.name).toBe('Robert');
+	});
+
+	it('reaches a joined member on a presence change', () => {
+		client.dispatchEvent({
+			type: 'member.added',
+			cid: channel.cid,
+			member: { user: bob, user_id: 'bob' },
+		});
+
+		client.dispatchEvent({
+			type: 'user.presence.changed',
+			user: { ...bob, online: true },
+		});
+
+		expect(channel.state.getLatestValue().members.bob.user.online).toBe(true);
+	});
+});
+
 describe('user.updated preserves the own-user-only fields on client.user', () => {
 	let client;
 
