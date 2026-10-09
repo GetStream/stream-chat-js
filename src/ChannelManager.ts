@@ -1136,14 +1136,12 @@ export class ChannelManager extends WithSubscriptions {
     return pipe;
   }
 
-  reload = async () => {
-    const results = await Promise.allSettled(
+  reload = async () =>
+    await Promise.allSettled(
       this.paginators.map(async (paginator) => {
         await paginator.reload();
       }),
     );
-    return results;
-  };
 
   /**
    * Re-run every loaded list's own first-page query — the channel-list half of connection recovery,
@@ -1167,14 +1165,12 @@ export class ChannelManager extends WithSubscriptions {
    * Paginators that were never queried are skipped: they run their own first query when they mount,
    * and querying them here would race it.
    */
-  recover = async () => {
-    const results = await Promise.allSettled(
+  recover = async () =>
+    await Promise.allSettled(
       this.paginators
         .filter((paginator) => paginator.isInitialized)
         .map(async (paginator) => {
           await paginator.toTail({ keepPreviousItems: true, reset: 'yes' });
         }),
     );
-    return results;
-  };
 }
