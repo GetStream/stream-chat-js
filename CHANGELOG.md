@@ -1,3 +1,9 @@
+## [10.0.0-rc.21](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.20...v10.0.0-rc.21) (2026-10-09)
+
+### Bug Fixes
+
+* bring back reaction apis to channel ([#1906](https://github.com/GetStream/stream-chat-js/issues/1906)) ([d419fe3](https://github.com/GetStream/stream-chat-js/commit/d419fe38a28819c03e3d42d4c5a24f4bca9b146e)), closes [#1897](https://github.com/GetStream/stream-chat-js/issues/1897) [#1897](https://github.com/GetStream/stream-chat-js/issues/1897)
+
 ## [10.0.0-rc.20](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.19...v10.0.0-rc.20) (2026-10-09)
 
 ### ⚠ BREAKING CHANGES
