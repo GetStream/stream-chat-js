@@ -431,10 +431,11 @@ the real cid. If another instance was stored under the real cid meanwhile (by an
 list), that instance stays the one for the cid and takes over: it gets the server's response, the new
 instance's local messages (its own local messages, such as failed ones, are kept), and, when the new
 instance is open and it isn't, the composer, including uploads still running. The new instance is
-marked `channel.supersededBy` (reactive) and is disposed of (`pendingDisposal` becomes `true`; see
-the [other changes guide](./v9-to-v10-migration-guide-other.md)) when its last `activate()` is
-released, or on `disconnectUser()`. stream-chat-react moves a ChatView slot to the replacing instance on its own;
-other UIs holding the new instance should switch to `channel.supersededBy`.
+marked `channel.supersededBy` (reactive) and receives no events from then on. The SDK doesn't
+dispose of it before `disconnectUser()`, as your app may still hold it; call `channel.disconnect()`
+on it once nothing uses it (see the [other changes guide](./v9-to-v10-migration-guide-other.md)).
+stream-chat-react moves a ChatView slot to the replacing instance on its own; other UIs holding the
+new instance should switch to `channel.supersededBy`.
 
 `channel.initialized` is now set by any query, so `query()` and `create()` set it as `watch()` does.
 

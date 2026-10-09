@@ -385,8 +385,9 @@ export class ChannelManager extends WithSubscriptions {
   protected ownershipResolver?: PaginatorOwnershipResolver;
   /**
    * Instances replaced by a stored one ({@link ChannelManager.supersedeChannel}). Not in the store, so
-   * nothing else disconnects them ({@link Channel.disconnect}): each is disconnected and dropped from
-   * here when its last activation ends, or with the rest on {@link ChannelManager.clearChannels}.
+   * they are tracked here to be disconnected ({@link Channel.disconnect}) at logout
+   * ({@link ChannelManager.clearChannels}). Nothing disconnects them earlier, as the app may still hold
+   * them.
    */
   private readonly supersededChannels = new Set<Channel>();
   /**
@@ -630,8 +631,8 @@ export class ChannelManager extends WithSubscriptions {
    *
    * `previous`'s own entry (`storedUnder`, its temporary cid) is dropped first, without disconnecting
    * it: its query is still being applied to it and it may be on screen. It is marked superseded
-   * (`state.supersededBy`) so its holders switch over, and tracked here until it is disconnected
-   * ({@link ChannelManager.releaseSupersededChannel}), so the SDK never loses track of it.
+   * (`state.supersededBy`) so its holders switch over, and tracked here until logout, so the SDK
+   * never loses track of it.
    *
    * @internal
    */
@@ -661,17 +662,6 @@ export class ChannelManager extends WithSubscriptions {
     }
     previous.state.partialNext({ supersededBy: successor });
     this.supersededChannels.add(previous);
-  }
-
-  /**
-   * Disconnects a superseded instance ({@link Channel.disconnect}) and stops tracking it, once its
-   * last activation ended.
-   *
-   * @internal
-   */
-  releaseSupersededChannel(channel: Channel) {
-    if (!this.supersededChannels.delete(channel)) return;
-    channel.disconnect();
   }
 
   /**

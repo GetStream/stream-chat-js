@@ -400,16 +400,16 @@ describe('ChannelManager channel store', () => {
       expect(created.messageComposer.textComposer.text).toBe('theirs');
     });
 
-    it('disconnects the superseded instance when its last consumer releases it', async () => {
+    it('keeps the superseded instance connected when its last consumer releases it', async () => {
       const { created } = setup();
       const release = created.activate();
       respond();
       await created.query({}, 'latest');
-      expect(created.pendingDisposal).toBe(false);
 
       release();
 
-      expect(created.pendingDisposal).toBe(true);
+      expect(created.state.getLatestValue().active).toBe(false);
+      expect(created.pendingDisposal).toBe(false);
     });
 
     it('disconnects a superseded instance nobody released on disconnectUser', async () => {

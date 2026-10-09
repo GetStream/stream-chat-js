@@ -1369,6 +1369,9 @@ export class Channel extends ChannelApi {
    * A superseded instance receives no events (they go to the stored instance under its cid) and
    * reports `watchStatus: NotWatching`. Use the successor from then on: switch a UI showing this
    * instance to it, as `ChatView` does. `ensureWatched()` resolves with it.
+   *
+   * The SDK never disconnects a superseded instance on its own before logout, as the app may still
+   * hold it. Call {@link Channel.disconnect} on it once nothing uses it.
    */
   get supersededBy() {
     return this.state.getLatestValue().supersededBy;
@@ -1487,8 +1490,8 @@ export class Channel extends ChannelApi {
    *
    * An active channel also stays in the channel store. Once the last consumer releases it, it is
    * kept only while something else uses it (a watch, a channel list, a claim). A superseded channel
-   * (see {@link ChannelLifecycleState.supersededBy}) is disconnected ({@link Channel.disconnect})
-   * when its last consumer releases it.
+   * (see {@link ChannelLifecycleState.supersededBy}) is never disconnected by its release: the app
+   * may still hold it. It ends at logout, or when the app calls {@link Channel.disconnect}.
    *
    * A disposed channel (`pendingDisposal`) isn't activated: it is not stored, gets no events and
    * recovery skips it. A warning points at `client.channelManager.ensure()` for a live instance, and
@@ -1511,9 +1514,6 @@ export class Channel extends ChannelApi {
       this._activeRefCount -= 1;
       if (this._activeRefCount === 0) {
         this.state.partialNext({ active: false });
-        if (this.supersededBy) {
-          this._client.channelManager.releaseSupersededChannel(this);
-        }
       }
     };
   };
