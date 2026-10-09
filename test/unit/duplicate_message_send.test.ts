@@ -81,7 +81,7 @@ describe('re-sending an already stored message id', () => {
 
   describe('Channel.sendMessage without offline support', () => {
     it.each(['sending', 'failed', 'received'] as const)(
-      'resolves with the local copy when it is %s, without fetching',
+      'resolves with the local copy when it is %s',
       async (status) => {
         channel.state.addMessageSorted(localCopyOf(messageId, status, localCreatedAt));
         postSpy.mockRejectedValue(axiosHttpError(400, 4, DUPLICATE_ID_TEXT(messageId)));
@@ -99,13 +99,21 @@ describe('re-sending an already stored message id', () => {
 
     it('drops the error of the earlier failed attempt and is received once added to state', async () => {
       const quoted = localCopyOf('quoted-id', 'received', '2026-10-08T09:00:00.000Z');
+      // the earlier attempt left its error on the local copy
+      const previousError = axiosTimeoutError();
       channel.state.addMessageSorted({
         ...localCopyOf(messageId, 'failed', localCreatedAt),
-        // the earlier attempt left its error on the local copy
-        error: axiosTimeoutError(),
+        error: previousError,
         quoted_message: quoted,
       } as MessageResponse);
       postSpy.mockRejectedValue(axiosHttpError(400, 4, DUPLICATE_ID_TEXT(messageId)));
+
+      const localCopy = channel.state.findMessage(messageId);
+      const localQuotedMessage = localCopy?.quoted_message;
+      const localCopySnapshot = {
+        ...localCopy,
+        quoted_message: { ...localQuotedMessage },
+      };
 
       const response = await channel.sendMessage({ id: messageId, text: 'hello' });
 
@@ -113,6 +121,18 @@ describe('re-sending an already stored message id', () => {
       expect(response.message).not.toHaveProperty('status');
       expect(response.message.quoted_message?.id).toBe('quoted-id');
       expect(response.message.quoted_message).not.toHaveProperty('status');
+
+      // the recovery builds a new object: the local copy in state is left untouched
+      const localCopyAfter = channel.state.findMessage(messageId);
+      expect(response.message).not.toBe(localCopyAfter);
+      expect(response.message.quoted_message).not.toBe(localQuotedMessage);
+      expect(localCopyAfter).toBe(localCopy);
+      expect(localCopyAfter?.quoted_message).toBe(localQuotedMessage);
+      expect(localCopyAfter).toEqual(localCopySnapshot);
+      expect(localCopyAfter?.status).toBe('failed');
+      expect(localCopyAfter?.error).toBe(previousError);
+      expect(localCopyAfter?.created_at).toBeInstanceOf(Date);
+      expect(localCopyAfter?.quoted_message?.status).toBe('received');
 
       // what the UI SDKs do with the response: formatMessage defaults status to received
       channel.state.addMessageSorted(response.message, true);
