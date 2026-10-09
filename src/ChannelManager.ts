@@ -823,13 +823,16 @@ export class ChannelManager extends WithSubscriptions {
    *
    * Use this to surface a channel the app just opened — a search result, a freshly created DM —
    * in the list(s) without a full re-query. `ingestItem` dedupes by cid and inserts in sort
-   * order, so calling this repeatedly is safe.
+   * order, so calling this repeatedly is safe. A channel created from members is ignored until its
+   * first query gives it an id: ingest it once `watch()` (or `ensureWatched()`) resolves.
    *
    * A channel that matches no paginator is not added anywhere. To have such channels still
    * appear, register a catch-all paginator (empty filter) with the lowest ownership priority as
    * a local fallback list.
    */
   ingestChannel(channel: Channel) {
+    // not listed until it has its id (see `ChannelPaginator.ingestItem`)
+    if (channel.isProvisional) return;
     const matchingPaginators = this.paginators.filter((p) => p.matchesFilter(channel));
     const matchingPaginatorIds = new Set(matchingPaginators.map((p) => p.id));
     const ownerIds = this.resolveOwnership(channel, matchingPaginators);

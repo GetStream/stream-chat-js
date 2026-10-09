@@ -97,6 +97,31 @@ describe('ChannelManager channel store', () => {
       expect(client.channelManager.values()).toEqual([channel]);
     });
 
+    it('is listed only once the server gives it an id, under its real cid', async () => {
+      const paginator = new ChannelPaginator({ client, filters: { type: 'messaging' } });
+      paginator.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: [] });
+      client.channelManager.setPaginators([paginator]);
+      const channel = client.channelManager.ensure({
+        type: 'messaging',
+        data: { members: [{ user_id: 'ann' }, { user_id: 'bob' }] },
+      });
+
+      expect(paginator.ingestItem(channel)).toBe(false);
+      client.channelManager.ingestChannel(channel);
+      expect(paginator.items).toEqual([]);
+
+      respondWith('!members-xyz');
+      await channel.query({});
+      client.channelManager.ingestChannel(channel);
+
+      expect(paginator.items).toEqual([channel]);
+      expect(paginator.getItem('messaging:!members-xyz')).toBe(channel);
+      // the list keeps working for it: a later ingestion and removal find it by its real cid
+      expect(() => client.channelManager.ingestChannel(channel)).not.toThrow();
+      paginator.removeItem({ item: channel });
+      expect(paginator.items).toEqual([]);
+    });
+
     it('resolves to a stored distinct channel with the same loaded members', () => {
       const stored = client.channelManager.ensure({
         type: 'messaging',
