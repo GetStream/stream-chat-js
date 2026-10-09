@@ -1,3 +1,22 @@
+## [10.0.0-rc.20](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.19...v10.0.0-rc.20) (2026-10-09)
+
+### ⚠ BREAKING CHANGES
+
+* client.activeChannels is removed; use client.channelManager.get(cid) and client.channelManager.values().
+* client.hydrateActiveChannels() is renamed to client.hydrateChannels().
+* client.getChannelById() and client.getChannelByMembers() are removed; use client.channel() or client.channelManager.ensure({ type, id?, data? }).
+* thread.deactivate() is removed; thread.activate() returns the function that ends the activation.
+* channel._disconnect() is renamed to channel.disconnect().
+* channel.disconnected is removed; read the read-only channel.pendingDisposal instead, which only channel.disconnect() sets.
+* when a channel created from members gets a cid another stored instance already holds, the stored instance stays, as in v9, and the new one is marked channel.supersededBy; if the new one is open and the stored one isn't, its unsent composition moves to the stored one, so UIs holding the new instance should switch to channel.supersededBy.
+* channel.initialized is set by query() and create() too, not only by watch().
+* channel search results are not watched; watch a result when it is opened.
+* MessageSearchSource no longer watches the channels it fetches for its results; watch the channel when a result is opened, e.g. with jumpToMessage(id, { watchChannel: true }).
+
+### Features
+
+* replace StreamChat.activeChannels with entity item index for loaded channels ([#1901](https://github.com/GetStream/stream-chat-js/issues/1901)) ([ec9178a](https://github.com/GetStream/stream-chat-js/commit/ec9178a958418b3cef5bb0aed22bfb73a43318bf))
+
 ## [10.0.0-rc.19](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.18...v10.0.0-rc.19) (2026-10-06)
 
 ### Features
