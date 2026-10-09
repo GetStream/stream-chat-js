@@ -1025,6 +1025,29 @@ describe('known ends and logout', () => {
     });
   });
 
+  it('finishes logging out when a holder throws while the channels are cleared', async () => {
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
+    client.channelManager.channelStore.link(channel.cid, {
+      onEntityRemoved: () => {
+        throw new Error('holder failed');
+      },
+    } as never);
+    client.mutedChannels = [{ channel: { cid: channel.cid } }] as never;
+    const stateBefore = client.state;
+    let disconnected: Promise<void> | undefined;
+
+    expect(() => {
+      disconnected = client.disconnectUser();
+    }).not.toThrow();
+    await disconnected;
+
+    expect(channel.pendingDisposal).toBe(true);
+    expect(client.channelManager.values()).toEqual([]);
+    // the steps after clearing the channels ran
+    expect(client.state).not.toBe(stateBefore);
+    expect(client.mutedChannels).toEqual([]);
+  });
+
   it('removes every channel from the store and every list on logout', async () => {
     const { channel, paginator } = heldChannel();
 

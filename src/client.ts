@@ -837,8 +837,16 @@ export class StreamChat extends ChatApi {
     // Reset first, so each list empties in one update and no longer holds its channels; clearing the
     // store then has no list to remove them from one by one.
     this.channelManager.resetPaginatorStates();
-    // disconnects every channel (`disconnect()`) and ensures we no longer return inactive channels
-    this.channelManager.clearChannels();
+    // disconnects every channel (`disconnect()`) and ensures we no longer return inactive channels.
+    // It always empties the store, then rethrows the first error a holder threw; logged rather than
+    // propagated, so the rest of the logout below still runs.
+    try {
+      this.channelManager.clearChannels();
+    } catch (error) {
+      logger
+        .withExtraTags('disconnectUser')
+        .error('Clearing the channels failed during disconnect.', { error });
+    }
     // reset client state
     this.state = new ClientState({ client: this });
     // reset thread manager
