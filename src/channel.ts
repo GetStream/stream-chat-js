@@ -1468,6 +1468,10 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   /**
    * The stored instance that replaced this one, if any — see
    * {@link ChannelLifecycleState.supersededBy}. Store-backed and reactive.
+   *
+   * A superseded instance receives no events (they go to the stored instance under its cid) and
+   * reports `watchStatus: NotWatching`. Use the successor from then on: switch a UI showing this
+   * instance to it, as `ChatView` does. `ensureWatched()` resolves with it.
    */
   get supersededBy() {
     return this.state.getLatestValue().supersededBy;
@@ -2135,10 +2139,14 @@ export class Channel extends WithMessageOperations(ChannelApi) {
       );
     }
 
-    // The request carrying `watch: true` came back, so the server has registered this connection as
-    // a watcher. Only ever set here because a `watch: false` query does NOT unwatch server-side, so it
-    // must not clear the flag.
-    if (queryPayload.watch) {
+    if (this.supersededBy) {
+      // This response superseded the instance: events for the cid go to the stored instance, which
+      // took over the watch (`supersedeChannel`), so this one receives none.
+      this.watchStatus = ChannelWatchStatus.NotWatching;
+    } else if (queryPayload.watch) {
+      // The request carrying `watch: true` came back, so the server has registered this connection
+      // as a watcher. Only ever set here because a `watch: false` query does NOT unwatch
+      // server-side, so it must not clear the flag.
       this.watchStatus = ChannelWatchStatus.Watching;
     }
 

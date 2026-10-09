@@ -193,6 +193,24 @@ describe('ChannelManager channel store', () => {
       expect(storedWatch).not.toHaveBeenCalled();
     });
 
+    it('is not watched once its watch supersedes it; the stored instance is', async () => {
+      const stored = client.channelManager.ensure({
+        type: 'messaging',
+        id: '!members-xyz',
+      });
+      const created = client.channelManager.ensure({
+        type: 'messaging',
+        data: { members: [{ user_id: 'ann' }, { user_id: 'bob' }] },
+      });
+      respondWith('!members-xyz');
+
+      await created.watch();
+
+      expect(created.supersededBy).toBe(stored);
+      expect(created.watchStatus).toBe(ChannelWatchStatus.NotWatching);
+      expect(stored.watchStatus).toBe(ChannelWatchStatus.Watching);
+    });
+
     it('resolves to a stored distinct channel with the same loaded members', () => {
       const stored = client.channelManager.ensure({
         type: 'messaging',
