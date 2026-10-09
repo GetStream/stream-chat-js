@@ -20,7 +20,10 @@ describe('CustomDataManager', () => {
     mockClient = new StreamChat('apiKey');
     mockClient.user = { id: 'user-id', name: 'Test User' };
 
-    mockChannel = mockClient.channel('channelType', 'channelId');
+    mockChannel = mockClient.channelManager.ensure({
+      type: 'channelType',
+      id: 'channelId',
+    });
     mockComposer = new MessageComposer({
       client: mockClient,
       compositionContext: mockChannel,

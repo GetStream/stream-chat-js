@@ -58,6 +58,7 @@ export class ReminderPaginator extends BasePaginator<
       initialCursor: ZERO_PAGE_CURSOR,
       itemIndex: new StoreBackedItemIndex<ReminderResponseData>({
         getEntityId: getReminderId,
+        holderName: 'reminder-paginator',
       }),
       ...options,
     });

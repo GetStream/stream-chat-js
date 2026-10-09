@@ -127,7 +127,7 @@ export class Thread extends WithSubscriptions {
 
   private client: StreamChat;
   private failedRepliesMap: Map<string, LocalMessage> = new Map();
-  /** How many consumers have called `activate()` without a matching `deactivate()`. */
+  /** How many activations (`activate()` calls) have not been released yet. */
   private _activeRefCount = 0;
 
   constructor({
@@ -151,11 +151,11 @@ export class Thread extends WithSubscriptions {
       if (!threadData.parent_message) {
         throw new Error('Thread parent_message is required when threadData is provided');
       }
-      const threadChannel = client.channel(
-        threadData.channel.type,
-        threadData.channel.id,
-        { custom: threadData.channel.custom },
-      );
+      const threadChannel = client.channelManager.ensure({
+        type: threadData.channel.type,
+        id: threadData.channel.id,
+        data: { custom: threadData.channel.custom },
+      });
       threadChannel._hydrateMembers({
         members: threadData.channel.members ?? [],
         overrideCurrentState: false,
@@ -203,6 +203,7 @@ export class Thread extends WithSubscriptions {
 
       const formattedParentMessage = formatMessage(parentMessage);
       const createdAt = timestampOr(parentMessage.created_at, nowNs());
+      const replyCount = parentMessage.reply_count ?? 0;
 
       this.state = new StateStore<ThreadState>({
         active: false,
@@ -211,11 +212,17 @@ export class Thread extends WithSubscriptions {
         custom: {},
         deletedAt: formattedParentMessage.deleted_at ?? null,
         isLoading: false,
-        isStateStale: false,
+        // Only the parent message is known, so the thread loads its data once when opened if it may
+        // have any: when the parent has replies, and when its channel isn't watched, as the parent's
+        // `reply_count` then misses the replies sent since the channel was loaded. A parent without
+        // replies in a watched channel has nothing on the server yet (`getThread` would answer 404):
+        // its first reply arrives as an event.
+        isStateStale:
+          replyCount > 0 || channel.watchStatus !== ChannelWatchStatus.Watching,
         parentMessage: formattedParentMessage,
         participants: [],
         read: formatReadState(getPlaceholderReadResponse(client.userId)),
-        replyCount: parentMessage.reply_count ?? 0,
+        replyCount,
         title: '',
         updatedAt: parentMessage.updated_at ?? null,
       });
@@ -358,35 +365,34 @@ export class Thread extends WithSubscriptions {
   }
 
   /**
-   * Declares that a consumer is displaying this thread (mirrors `channel.activate()`).
+   * Declares that a consumer is displaying this thread, and returns the function that ends it, as
+   * `channel.activate()` does. Refcounted, as one `Thread` can be held by several consumers at once,
+   * so it stays active until the last one releases. Each call gets its own release, and calling a
+   * release again does nothing, so a consumer can't end another one's activation.
    *
    * `active` is also what {@link ConnectionRecoveryManager} filters on to decide which threads to
-   * reload on reconnect, so an unbalanced `deactivate()` now costs more than a missed auto-read —
-   * hence the refcount, matching `channel.activate()`. A thread held by more than one mount stays
-   * active until the last holder releases it.
+   * reload on reconnect, so an activation that is never released costs more than a missed auto-read.
    *
    * The first activation also keeps the thread in `client.threads` for the rest of the session:
-   * it stays subscribed and resolvable through `client.threads.get(id)` after it is deactivated,
+   * it stays subscribed and resolvable through `client.threads.get(id)` after it is released,
    * whether or not the thread list holds it. Reopening it therefore needs no fetch unless it went stale.
    */
-  public activate = () => {
+  public activate = (): (() => void) => {
     this._activeRefCount += 1;
     if (this._activeRefCount === 1) {
       this.client.threads.register(this);
       this.state.partialNext({ active: true });
     }
-  };
 
-  /**
-   * Declares that a consumer has stopped displaying this thread (mirrors `channel.deactivate()`).
-   * Only flips `active` back to `false` once the last holder deactivates.
-   */
-  public deactivate = () => {
-    if (this._activeRefCount === 0) return;
-    this._activeRefCount -= 1;
-    if (this._activeRefCount === 0) {
-      this.state.partialNext({ active: false });
-    }
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this._activeRefCount -= 1;
+      if (this._activeRefCount === 0) {
+        this.state.partialNext({ active: false });
+      }
+    };
   };
 
   /**

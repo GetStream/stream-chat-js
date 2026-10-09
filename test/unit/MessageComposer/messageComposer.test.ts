@@ -118,7 +118,10 @@ const setup = ({
     mockClient.channelServerConfigs[`${channelType}:${channelId}`] = channelConfig;
   }
   // Create a proper Channel instance with only the necessary attributes mocked
-  const mockChannel = mockClient.channel(channelType, channelId);
+  const mockChannel = mockClient.channelManager.ensure({
+    type: channelType,
+    id: channelId,
+  });
 
   // Mock the getClient method
   vi.spyOn(mockChannel, 'getClient').mockReturnValue(mockClient);
@@ -147,7 +150,10 @@ const offlineModeMessageComposerSetup = ({
   mockClient.setOfflineDBApi(new MockOfflineDB({ client: mockClient }));
   vi.spyOn(mockClient.offlineDb!, 'initializeDB').mockResolvedValue(false);
   // Create a proper Channel instance with only the necessary attributes mocked
-  const mockChannel = mockClient.channel('messaging', 'test-channel-id');
+  const mockChannel = mockClient.channelManager.ensure({
+    type: 'messaging',
+    id: 'test-channel-id',
+  });
 
   // Mock the getClient method
   vi.spyOn(mockChannel, 'getClient').mockReturnValue(mockClient);
@@ -1597,16 +1603,15 @@ describe('MessageComposer', () => {
               sum_scores: 1,
             },
           },
-          reaction_scores: {
-            like: 1,
-          },
-          status: 'received',
           text: 'Test message',
           type: 'regular',
           user_id: 'user-id',
         },
         sendOptions: {},
       });
+      // Client-only fields stay on `localMessage`; sent, the server would store them as custom data.
+      expect(result?.message).not.toHaveProperty('status');
+      expect(result?.message).not.toHaveProperty('reaction_scores');
     });
 
     describe('with pending attachment uploads', () => {
@@ -2490,6 +2495,70 @@ describe('MessageComposer', () => {
           severity: 'error',
         },
       });
+    });
+  });
+
+  describe('transferTo', () => {
+    const transferSetup = () => {
+      const { mockClient, messageComposer: source } = setup();
+      const target = mockClient.channelManager.ensure({
+        id: 'other-channel-id',
+        type: 'messaging',
+      }).messageComposer;
+      return { source, target };
+    };
+
+    it('moves the composition into the target and leaves the source empty', () => {
+      const { source, target } = transferSetup();
+      const quotedMessage = generateMsg({ id: 'quoted' }) as unknown as LocalMessage;
+      source.textComposer.setText('hello');
+      source.textComposer.state.partialNext({
+        suggestions: { query: 'he', searchSource: {} as never, trigger: '@' },
+      });
+      source.linkPreviewsManager.state.next({
+        previews: new Map([['https://a.b', { og_scrape_url: 'https://a.b' } as never]]),
+      });
+      source.locationComposer.state.next({
+        location: {
+          created_by_device_id: 'device',
+          latitude: 1,
+          longitude: 2,
+          message_id: source.id,
+        },
+      });
+      source.pollComposer.state.partialNext({
+        data: { ...source.pollComposer.state.getLatestValue().data, name: 'Lunch?' },
+      });
+      source.customDataManager.setCustomData({ draftNote: 'x' } as never);
+      source.state.partialNext({ quotedMessage, showReplyInChannel: true });
+
+      source.transferTo(target);
+
+      expect(target.textComposer.text).toBe('hello');
+      expect(target.textComposer.suggestions).toBeUndefined();
+      expect([...target.linkPreviewsManager.previews.keys()]).toEqual(['https://a.b']);
+      expect(target.locationComposer.location).toEqual(
+        expect.objectContaining({ latitude: 1, message_id: target.id }),
+      );
+      expect(target.pollComposer.state.getLatestValue().data.name).toBe('Lunch?');
+      expect(target.customDataManager.customComposerData).toEqual({ draftNote: 'x' });
+      expect(target.quotedMessage).toBe(quotedMessage);
+      expect(target.showReplyInChannel).toBe(true);
+      expect(source.compositionIsEmpty).toBe(true);
+      expect(source.quotedMessage).toBeNull();
+    });
+
+    it('replaces what the target held', () => {
+      const { source, target } = transferSetup();
+      target.textComposer.setText('mine');
+      target.state.partialNext({
+        quotedMessage: generateMsg() as unknown as LocalMessage,
+      });
+
+      source.transferTo(target);
+
+      expect(target.textComposer.text).toBe('');
+      expect(target.quotedMessage).toBeNull();
     });
   });
 

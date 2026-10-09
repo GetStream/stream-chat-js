@@ -44,6 +44,7 @@ export class PollManager extends WithSubscriptions {
     this.addUnsubscribeFunction(this.subscribeVoteCasted());
     this.addUnsubscribeFunction(this.subscribeVoteChanged());
     this.addUnsubscribeFunction(this.subscribeVoteRemoved());
+    this.addUnsubscribeFunction(this.subscribeUserUpdated());
   };
 
   public createPoll = async (poll: CreatePollRequest) => {
@@ -158,6 +159,14 @@ export class PollManager extends WithSubscriptions {
       if (event.poll?.id) {
         this.fromState(event.poll.id)?.handleVoteRemoved(event);
       }
+    }).unsubscribe;
+
+  // votes carry a copy of their voter, so a changed name or image reaches the polls only from here
+  private subscribeUserUpdated = () =>
+    this.client.on('user.updated', (event) => {
+      const { user } = event;
+      if (!user?.id) return;
+      for (const poll of this.pollCache.values()) poll.handleUserUpdated(user);
     }).unsubscribe;
 
   private subscribeMessageNew = () =>

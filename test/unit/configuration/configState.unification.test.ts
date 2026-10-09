@@ -33,7 +33,10 @@ describe('resolved configuration is reactive on the classes that were converted 
 
   describe('BasePaginator', () => {
     it('notifies subscribers when declarative configuration is registered afterwards', () => {
-      const channel = client.channel('messaging', channelResponse.id);
+      const channel = client.channelManager.ensure({
+        type: 'messaging',
+        id: channelResponse.id,
+      });
       const listener = vi.fn();
 
       // `subscribe` fires immediately with the current value; ignore that first call.
@@ -48,7 +51,10 @@ describe('resolved configuration is reactive on the classes that were converted 
     });
 
     it('notifies on updateConfig and reflects it through the config getter', () => {
-      const channel = client.channel('messaging', channelResponse.id);
+      const channel = client.channelManager.ensure({
+        type: 'messaging',
+        id: channelResponse.id,
+      });
       const listener = vi.fn();
       channel.messagePaginator.configState.subscribe(listener);
       listener.mockClear();
@@ -60,7 +66,10 @@ describe('resolved configuration is reactive on the classes that were converted 
     });
 
     it('notifies on reset, when the paginator falls back to defaults', () => {
-      const channel = client.channel('messaging', channelResponse.id);
+      const channel = client.channelManager.ensure({
+        type: 'messaging',
+        id: channelResponse.id,
+      });
       client.config.set({ messagePaginator: { pageSize: 7 } });
       expect(channel.messagePaginator.config.pageSize).toBe(7);
 
@@ -79,7 +88,10 @@ describe('resolved configuration is reactive on the classes that were converted 
       // subclasses re-install structural wiring they own (`MessageIntervalPaginator` its `deriveCursor`
       // and `itemOrderComparator`). Both emissions are complete configs, so a subscriber is never shown
       // a half-applied state — asserting an exact count would just pin the subclass count in place.
-      const channel = client.channel('messaging', channelResponse.id);
+      const channel = client.channelManager.ensure({
+        type: 'messaging',
+        id: channelResponse.id,
+      });
       const seen: number[] = [];
       channel.messagePaginator.configState.subscribe((next) => seen.push(next.pageSize));
       seen.length = 0;
@@ -130,7 +142,10 @@ describe('resolved configuration is reactive on the classes that were converted 
   });
 
   it('exposes the same shape on the classes that already had it', () => {
-    const channel = client.channel('messaging', channelResponse.id);
+    const channel = client.channelManager.ensure({
+      type: 'messaging',
+      id: channelResponse.id,
+    });
 
     for (const configurable of [
       channel.messagePaginator,
@@ -163,7 +178,10 @@ describe('resolved configuration is reactive on the classes that were converted 
     // `getConfig()` already meant the channel *type's server* configuration and the two names would
     // have been indistinguishable. Renaming the server side to `serverConfig` removed the collision
     // rather than working around it, so `Channel` no longer has to be the exception.
-    const channel = client.channel('messaging', channelResponse.id);
+    const channel = client.channelManager.ensure({
+      type: 'messaging',
+      id: channelResponse.id,
+    });
 
     expect(channel.configState).toBeDefined();
     expect(channel.config).toBe(channel.configState.getLatestValue());
@@ -189,21 +207,30 @@ describe('resolved configuration is reactive on the classes that were converted 
     };
 
     it('rejects a write into an unconfigured subtree, which is the shared default', () => {
-      const composer = client.channel('messaging', channelResponse.id).messageComposer;
+      const composer = client.channelManager.ensure({
+        type: 'messaging',
+        id: channelResponse.id,
+      }).messageComposer;
 
       expect(composer.config.drafts).toBe(DEFAULT_COMPOSER_CONFIG.drafts);
       expect(write(composer.config.drafts, 'enabled', true)).toThrow(TypeError);
     });
 
     it('leaves the package default untouched, and later composers reading it', () => {
-      const composerA = client.channel('messaging', channelResponse.id).messageComposer;
+      const composerA = client.channelManager.ensure({
+        type: 'messaging',
+        id: channelResponse.id,
+      }).messageComposer;
       const draftsDefault = DEFAULT_COMPOSER_CONFIG.drafts.enabled;
 
       expect(write(composerA.config.drafts, 'enabled', !draftsDefault)).toThrow();
 
       expect(DEFAULT_COMPOSER_CONFIG.drafts.enabled).toBe(draftsDefault);
       const other = getClientWithUser({ id: 'other' });
-      const composerB = other.channel('messaging', channelResponse.id).messageComposer;
+      const composerB = other.channelManager.ensure({
+        type: 'messaging',
+        id: channelResponse.id,
+      }).messageComposer;
       expect(composerB.config.drafts.enabled).toBe(draftsDefault);
     });
 
@@ -224,7 +251,10 @@ describe('resolved configuration is reactive on the classes that were converted 
     });
 
     it('still lets updateConfig change the value, by copying rather than mutating', () => {
-      const composer = client.channel('messaging', channelResponse.id).messageComposer;
+      const composer = client.channelManager.ensure({
+        type: 'messaging',
+        id: channelResponse.id,
+      }).messageComposer;
 
       composer.updateConfig({ drafts: { enabled: true } });
 

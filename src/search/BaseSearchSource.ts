@@ -35,6 +35,12 @@ interface ISearchSource<T = any> {
 
   deactivate(): void;
 
+  /**
+   * Releases what the source holds outside itself. Optional; a source that holds nothing outside
+   * itself leaves it out.
+   */
+  dispose?(): void;
+
   readonly hasNext: boolean;
   readonly hasResults: boolean;
   readonly initialState: SearchSourceState<T>;
@@ -44,6 +50,9 @@ interface ISearchSource<T = any> {
   readonly lastQueryError: Error | undefined;
   readonly next: string | undefined | null;
   readonly offset: number | undefined;
+
+  /** Takes again what {@link ISearchSource.dispose} released. Optional, like `dispose`. */
+  registerSubscriptions?(): void;
 
   resetState(): void;
 

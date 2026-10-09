@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach, MockInstance } from 'vitest';
 import { MessageSearchSource } from '../../../src/search/MessageSearchSource';
+import { SearchController } from '../../../src/search/SearchController';
 import type { StreamChat } from '../../../src/client';
 import type { MessageResponse, SearchAPIResponse } from '../../../src/types';
 import { getClientWithUser } from '../test-utils/getClient';
@@ -361,7 +362,7 @@ describe('MessageSearchSource', () => {
     const m1 = generateMsg({ cid: 'cid1' });
     const m2 = generateMsg({ cid: 'cid2' });
     searchSource.channelQueryFilters = { type: 'abc' };
-    client.activeChannels = { cid1: {} as any };
+    client.channelManager.getOrCreateChannel('cid1', () => ({}) as any);
     searchMock.mockResolvedValueOnce({
       results: [{ message: m1 }, { message: m2 }],
       next: undefined,
@@ -374,15 +375,89 @@ describe('MessageSearchSource', () => {
       {
         filter_conditions: { cid: { $in: ['cid2'] }, type: 'abc' },
         sort: [{ direction: -1, field: 'last_message_at' }],
+        watch: false,
       },
       {},
       withoutSignal,
     );
   });
 
+  it('watches the channels it queries when channelQueryOptions ask for it', async () => {
+    searchSource.channelQueryOptions = { watch: true };
+    searchMock.mockResolvedValueOnce({
+      results: [{ message: generateMsg({ cid: 'cid2' }) }],
+      next: undefined,
+    } as any);
+
+    // @ts-expect-error protected access
+    await searchSource.query('query');
+
+    expect(queryChannelsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ watch: true }),
+      {},
+      withoutSignal,
+    );
+  });
+
+  it("stores a result's channel the follow-up query didn't return, from the result's channel data", async () => {
+    const hidden = generateMsg({ cid: 'messaging:hidden' }) as ReturnType<
+      typeof generateMsg
+    >;
+    searchMock.mockResolvedValueOnce({
+      results: [
+        {
+          message: {
+            ...hidden,
+            channel: {
+              cid: 'messaging:hidden',
+              id: 'hidden',
+              name: 'Hidden',
+              type: 'messaging',
+            },
+          },
+        },
+      ],
+      next: undefined,
+    } as any);
+
+    // @ts-expect-error protected access
+    await searchSource.query('query');
+
+    const channel = client.channelManager.get('messaging:hidden');
+    expect(channel).toBeDefined();
+    expect(channel?.data?.name).toBe('Hidden');
+    expect(channel?.watchStatus).not.toBe('watching');
+  });
+
+  it('keeps a stored result channel as it is', async () => {
+    const stored = client.channelManager.ensure({ id: 'kept', type: 'messaging' });
+    searchMock.mockResolvedValueOnce({
+      results: [
+        {
+          message: {
+            ...generateMsg({ cid: 'messaging:kept' }),
+            channel: {
+              cid: 'messaging:kept',
+              id: 'kept',
+              name: 'From search',
+              type: 'messaging',
+            },
+          },
+        },
+      ],
+      next: undefined,
+    } as any);
+
+    // @ts-expect-error protected access
+    await searchSource.query('query');
+
+    expect(client.channelManager.get('messaging:kept')).toBe(stored);
+    expect(stored.data?.name).not.toBe('From search');
+  });
+
   it('does not call queryChannels if all channels are loaded locally', async () => {
     const m1 = generateMsg({ cid: 'cid1' });
-    client.activeChannels = { cid1: {} as any };
+    client.channelManager.getOrCreateChannel('cid1', () => ({}) as any);
     searchMock.mockResolvedValueOnce({
       results: [{ message: m1 }],
       next: undefined,
@@ -404,7 +479,7 @@ describe('MessageSearchSource', () => {
     });
     const m1 = generateMsg({ cid: 'cid1' });
     const m2 = generateMsg({ cid: 'cid2' });
-    client.activeChannels = { cid1: {} as any };
+    client.channelManager.getOrCreateChannel('cid1', () => ({}) as any);
     searchMock.mockResolvedValueOnce({
       results: [{ message: m1 }, { message: m2 }],
       next: undefined,
@@ -417,6 +492,7 @@ describe('MessageSearchSource', () => {
       {
         filter_conditions: { cid: { $in: ['cid2'] }, type: 'efg' },
         sort: [{ direction: -1, field: 'last_message_at' }],
+        watch: false,
       },
       {},
       withoutSignal,
@@ -434,5 +510,63 @@ describe('MessageSearchSource', () => {
     // @ts-expect-error protected access
     const result = searchSource.filterQueryResults(messages);
     expect(result).toBe(messages);
+  });
+
+  describe('keeping the channels of its results', () => {
+    const storeResultChannels = () => {
+      messages[0].cid = 'messaging:first';
+      messages[1].cid = 'messaging:second';
+      return [
+        client.channelManager.ensure({ type: 'messaging', id: 'first' }),
+        client.channelManager.ensure({ type: 'messaging', id: 'second' }),
+      ];
+    };
+
+    it('keeps them in the channel store while it is active', async () => {
+      const channels = storeResultChannels();
+      searchSource.activate();
+      await searchSource.executeQuery('any');
+
+      client.channelManager.releaseUnusedChannels();
+      expect(client.channelManager.values()).toEqual(channels);
+
+      searchSource.deactivate();
+      client.channelManager.releaseUnusedChannels();
+      expect(client.channelManager.values()).toEqual([]);
+    });
+
+    it('stops keeping them once disposed, and keeps them again when registered', async () => {
+      const channels = storeResultChannels();
+      searchSource.activate();
+      await searchSource.executeQuery('any');
+
+      // checked through the usage, not a release, which would disconnect the channels for good
+      const keptBySearch = () =>
+        client.channelManager
+          .getChannelUsage()
+          .filter(({ keptBy }) => keptBy.includes('message-search'))
+          .map(({ channel }) => channel);
+      expect(keptBySearch()).toEqual(channels);
+
+      searchSource.dispose();
+      expect(keptBySearch()).toEqual([]);
+
+      searchSource.registerSubscriptions();
+      expect(keptBySearch()).toEqual(channels);
+    });
+
+    it('is disposed and registered again through its search controller', async () => {
+      const channels = storeResultChannels();
+      const controller = new SearchController({ client, sources: [searchSource] });
+      searchSource.activate();
+      await searchSource.executeQuery('any');
+
+      // the cleanup and second mount a UI's StrictMode runs on the same instance
+      controller.dispose();
+      controller.registerSubscriptions();
+      client.channelManager.releaseUnusedChannels();
+
+      expect(client.channelManager.values()).toEqual(channels);
+    });
   });
 });

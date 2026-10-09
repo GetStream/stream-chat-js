@@ -26,7 +26,8 @@ describe("the shared 'messagePaginator' configuration key", () => {
     channelResponse = generateChannel().channel;
   });
 
-  const openChannel = () => client.channel('messaging', channelResponse.id);
+  const openChannel = () =>
+    client.channelManager.ensure({ type: 'messaging', id: channelResponse.id });
   const openThread = () => {
     const thread = new Thread({
       client,
@@ -347,7 +348,7 @@ describe("the shared 'messagePaginator' configuration key", () => {
   describe('teardown', () => {
     it('stops reaching a disconnected channel', () => {
       const channel = openChannel();
-      channel._disconnect();
+      channel.disconnect();
 
       client.config.set({ messagePaginator: { retryCount: 5 } });
 

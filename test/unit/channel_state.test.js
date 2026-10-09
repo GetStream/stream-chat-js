@@ -18,7 +18,7 @@ describe('ChannelState clean', () => {
 		client = new StreamChat();
 		client.user = { id: 'observer' };
 		channel = new Channel(client, 'live', 'stream', {});
-		client.activeChannels[channel.cid] = channel;
+		client.channelManager.getOrCreateChannel(channel.cid, () => channel);
 	});
 
 	it('should remove any stale typing events', async () => {
@@ -108,7 +108,6 @@ describe('ChannelState member count bridge', () => {
 		const state = channel.state;
 
 		channel.data = { ...channel.data, member_count: 7 };
-		state.syncStateFromChannelData(channel.data);
 
 		expect(state.member_count).to.equal(7);
 		expect(state.getLatestValue()).to.deep.include({
@@ -123,9 +122,7 @@ describe('ChannelState member count bridge', () => {
 		const channel = new Channel(client, 'type', 'id', { member_count: 4 });
 		const state = channel.state;
 
-		const previousData = channel.data;
 		channel.data = { name: 'renamed' };
-		state.syncStateFromChannelData(channel.data, previousData);
 
 		expect(state.member_count).to.equal(4);
 		expect(state.getLatestValue()).to.deep.include({
@@ -236,7 +233,7 @@ describe('ChannelState unreadCount', () => {
 				user: { id: 'me' },
 			},
 		};
-		channel.pendingDisposal = true;
+		channel.disconnect();
 
 		expect(() => channel.state.unreadCount).not.to.throw();
 		expect(channel.state.unreadCount).to.equal(4);
@@ -326,17 +323,16 @@ describe('ChannelState typing store', () => {
 });
 
 describe('ChannelState own capabilities store', () => {
-	it('does not redefine channel.data as an accessor property', () => {
+	it('reads and writes channel.data through state.data', () => {
 		const client = new StreamChat();
 		const channel = new Channel(client, 'type', 'id', {
 			own_capabilities: ['send-message'],
 		});
-		const descriptor = Object.getOwnPropertyDescriptor(channel, 'data');
+		const descriptor = Object.getOwnPropertyDescriptor(Channel.prototype, 'data');
 
-		expect(descriptor).toBeDefined();
-		expect('value' in descriptor).toBe(true);
-		expect('get' in descriptor).toBe(false);
-		expect('set' in descriptor).toBe(false);
+		expect(typeof descriptor.get).toBe('function');
+		expect(typeof descriptor.set).toBe('function');
+		expect(channel.data).toBe(channel.state.getLatestValue().data);
 	});
 
 	it('initializes ownCapabilitiesStore from channel.data.own_capabilities', () => {
@@ -363,7 +359,6 @@ describe('ChannelState own capabilities store', () => {
 			...channel.data,
 			own_capabilities: ['pin-message'],
 		};
-		state.syncStateFromChannelData(channel.data);
 
 		expect(state.getLatestValue()).to.deep.include({
 			ownCapabilities: ['pin-message'],
@@ -378,9 +373,7 @@ describe('ChannelState own capabilities store', () => {
 		});
 		const state = channel.state;
 
-		const previousData = channel.data;
 		channel.data = { name: 'renamed' };
-		state.syncStateFromChannelData(channel.data, previousData);
 
 		expect(state.getLatestValue()).to.deep.include({
 			ownCapabilities: ['send-message'],
@@ -424,14 +417,12 @@ describe('ChannelState own capabilities store', () => {
 		});
 		const state = channel.state;
 
-		const previousData = channel.data;
 		channel.data = {
 			...channel.data,
 			hidden: true,
 			member_count: 5,
 			own_capabilities: ['pin-message'],
 		};
-		state.syncStateFromChannelData(channel.data, previousData);
 
 		expect(channel.data.hidden).to.equal(true);
 		expect(channel.data.member_count).to.equal(5);
@@ -516,9 +507,7 @@ describe('ChannelState unified store', () => {
 			},
 		);
 
-		const previousData = channel.data;
 		channel.data = { ...channel.data, name: 'renamed' };
-		state.syncStateFromChannelData(channel.data, previousData);
 		unsubscribe();
 
 		expect(names).to.eql(['orig', 'renamed']);
@@ -528,7 +517,7 @@ describe('ChannelState unified store', () => {
 		const client = new StreamChat();
 		client.user = { id: 'me' };
 		const channel = new Channel(client, 'messaging', 'lifecycle', {});
-		client.activeChannels[channel.cid] = channel;
+		client.channelManager.getOrCreateChannel(channel.cid, () => channel);
 
 		expect(channel.initialized).to.equal(false);
 		expect(channel.offlineMode).to.equal(false);
@@ -554,5 +543,58 @@ describe('ChannelState unified store', () => {
 		expect(channel.initialized).to.equal(true);
 		expect(channel.state.getLatestValue().initialized).to.equal(true);
 		expect(seen).to.eql([false, true]);
+	});
+});
+
+describe('Channel.data over state.data', () => {
+	it('publishes data, memberCount and ownCapabilities in one state update per assignment', () => {
+		const client = new StreamChat();
+		const channel = new Channel(client, 'type', 'id', { name: 'orig' });
+		const listener = vi.fn();
+		const unsubscribe = channel.state.subscribe(listener);
+		listener.mockClear();
+
+		channel.data = {
+			name: 'renamed',
+			member_count: 3,
+			own_capabilities: ['send-message'],
+		};
+		unsubscribe();
+
+		expect(listener).toHaveBeenCalledTimes(1);
+		expect(listener.mock.calls[0][0]).to.deep.include({
+			data: { name: 'renamed', member_count: 3, own_capabilities: ['send-message'] },
+			memberCount: 3,
+			ownCapabilities: ['send-message'],
+		});
+	});
+
+	it('carries the last known member_count and own_capabilities onto a copy, leaving the assigned object unchanged', () => {
+		const client = new StreamChat();
+		const channel = new Channel(client, 'type', 'id', {
+			member_count: 4,
+			own_capabilities: ['send-message'],
+		});
+		const update = { name: 'renamed' };
+
+		channel.data = update;
+
+		expect(update).to.eql({ name: 'renamed' });
+		expect(channel.data).not.toBe(update);
+		expect(channel.data).to.eql({
+			name: 'renamed',
+			member_count: 4,
+			own_capabilities: ['send-message'],
+		});
+	});
+
+	it('stores the assigned object as is when nothing needs carrying over', () => {
+		const client = new StreamChat();
+		const channel = new Channel(client, 'type', 'id', {});
+		const update = { name: 'renamed', member_count: 2, own_capabilities: [] };
+
+		channel.data = update;
+
+		expect(channel.data).toBe(update);
 	});
 });

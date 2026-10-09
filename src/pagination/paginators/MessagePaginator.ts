@@ -106,6 +106,9 @@ export type LiveViewState = {
  * the "jump to first unread" navigation built on top of them.
  */
 export class MessagePaginator extends MessageIntervalPaginator {
+  protected get holderName() {
+    return 'message-paginator';
+  }
   private unreadReferencePolicy: 'snapshot' | 'read-state-only';
   /**
    * Independent unread reference state (not tied to `channel.state.read`).
@@ -328,8 +331,8 @@ export class MessagePaginator extends MessageIntervalPaginator {
   seedUnreadSnapshot = () => {
     // A paginator query (BasePaginator.executeQuery) awaits the network before running its
     // synchronous postQueryReconcile, which calls this on the first page. If the channel was
-    // torn down while that request was in flight, reading the client below throws (the channel is
-    // pending disposal), so guard against that.
+    // disconnected (`disconnect()`) while that request was in flight, reading the client below
+    // throws, so guard against that.
     if (this.channel.pendingDisposal) return;
     const ownUserId = this.channel.getClient().user?.id;
     const ownReadState = ownUserId ? this.channel.state.read[ownUserId] : undefined;

@@ -11,7 +11,8 @@ describe("the 'channel' configuration key", () => {
     client = getClientWithUser({ id: 'user' });
   });
 
-  const openChannel = (id = 'channel-id'): Channel => client.channel('messaging', id);
+  const openChannel = (id = 'channel-id'): Channel =>
+    client.channelManager.ensure({ type: 'messaging', id: id });
 
   describe('declarative configuration', () => {
     it('reaches a channel created after registration', () => {
@@ -141,7 +142,7 @@ describe("the 'channel' configuration key", () => {
       expect(openChannel().messagePaginator.config.pageSize).toBe(200);
     });
 
-    it('cannot break client.channel() by throwing', () => {
+    it('cannot break client.channelManager.ensure() by throwing', () => {
       client.config.setSetupFunction('channel', () => {
         throw new Error('boom');
       });
@@ -149,20 +150,20 @@ describe("the 'channel' configuration key", () => {
       expect(() => openChannel()).not.toThrow();
     });
 
-    it('is torn down by _disconnect, exactly once', () => {
+    it('is torn down by disconnect, exactly once', () => {
       const teardown = vi.fn();
       client.config.setSetupFunction('channel', () => teardown);
       const channel = openChannel();
 
-      channel._disconnect();
-      channel._disconnect();
+      channel.disconnect();
+      channel.disconnect();
 
       expect(teardown).toHaveBeenCalledTimes(1);
     });
 
     it('stops reaching a disconnected channel', () => {
       const channel = openChannel();
-      channel._disconnect();
+      channel.disconnect();
       const setup = vi.fn();
 
       client.config.setSetupFunction('channel', setup);

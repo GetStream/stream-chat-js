@@ -196,6 +196,12 @@ export type PaginationQueryParams<Q> = {
   /** Per-call override of the reset behavior. */
   reset?: StateResetPolicy;
   /**
+   * Options for the request the query sends that are not part of its query shape, so they don't
+   * decide whether the query starts a new first page. Each paginator documents the ones it reads;
+   * others are ignored. Retries send them again.
+   */
+  requestOptions?: Record<string, unknown>;
+  /**
    * How many times to **retry** a failed request, i.e. `retryCount + 1` attempts in total. Per-call
    * override of `PaginatorOptions.retryCount`, which defaults to 0 (no retry).
    */
@@ -666,7 +672,10 @@ export abstract class BasePaginator<T, Q> {
     this._itemIndex =
       itemIndex ??
       createItemIndex?.(this) ??
-      new StoreBackedItemIndex({ getEntityId: this.getItemId.bind(this) });
+      new StoreBackedItemIndex({
+        getEntityId: this.getItemId.bind(this),
+        holderName: 'base-paginator',
+      });
   }
 
   // ---------------------------------------------------------------------------
@@ -3123,6 +3132,7 @@ export abstract class BasePaginator<T, Q> {
     direction,
     keepPreviousItems,
     queryShape: forcedQueryShape,
+    requestOptions,
     reset,
     retryCount = this.config.retryCount,
     silent,
@@ -3204,6 +3214,7 @@ export abstract class BasePaginator<T, Q> {
     const results = await this.runQueryRetryable({
       direction,
       queryShape,
+      requestOptions,
       reset,
       retryCount,
     });

@@ -4,7 +4,7 @@
 import type { AxiosInstance } from 'axios';
 import axios from 'axios';
 
-import { Channel } from './channel';
+import type { Channel } from './channel';
 import type { ChannelMuteStatus } from './channel_state';
 import { ChannelWatchStatus } from './channel_state';
 import { ClientState } from './client_state';
@@ -14,7 +14,6 @@ import { ApiClient } from './api-client';
 import {
   axiosParamsSerializer,
   formatMessage,
-  generateChannelTempCid,
   getEnv,
   invokeEventListener,
   isOwnUserBaseProperty,
@@ -147,9 +146,6 @@ export class StreamChat extends ChatApi {
    */
   _user?: ClientUser;
   appSettingsPromise?: Promise<StreamResponse<Gen_GetApplicationResponse>>;
-  activeChannels: {
-    [key: string]: Channel;
-  };
   threads: ThreadManager;
   polls: PollManager;
   /**
@@ -365,7 +361,6 @@ export class StreamChat extends ChatApi {
     this.wsPromise = null;
     this.setUserPromise = null;
     // keeps a reference to all the channels that are in use
-    this.activeChannels = {};
 
     this.persistUserOnConnectionFailure = this.options?.persistUserOnConnectionFailure;
 
@@ -374,14 +369,21 @@ export class StreamChat extends ChatApi {
     this.messageStore = new EntityStore<LocalMessage>({
       getEntityId: (message) => message.id,
     });
+    // before the managers that hold channels in its store
+    this.channelManager = new ChannelManager({ client: this });
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
-    this.channelManager = new ChannelManager({ client: this });
     this.connectionRecovery = new ConnectionRecoveryManager({ client: this });
     this.connectionRecovery.registerSubscriptions();
     this.reminders = new ReminderManager({ client: this });
     this.messageDeliveryReporter = new MessageDeliveryReporter({ client: this });
     this.messageComposerCache = new FixedSizeQueueCache<string, MessageComposer>(64);
+    // a cached composer, such as a message edit's, keeps the channel it was built with
+    this.channelManager.channelStore.addClaim({
+      heldBy: () =>
+        this.messageComposerCache.values().map((composer) => composer.channel),
+      name: 'message-composer-cache',
+    });
 
     // Seed the declarative configuration before wiring, so a tree passed via `options.config` reaches
     // the managers above. `'client'` is the one key that cannot be configured after construction —
@@ -652,8 +654,8 @@ export class StreamChat extends ChatApi {
    *   The long-poll's close request uses it as its timeout (2s when omitted).
    */
   closeConnection = async (timeout?: number) => {
-    this._resetAIStateOnActiveChannels();
-    this._markActiveChannelsWatchInterrupted();
+    this.channelManager.resetAIStateOnChannels();
+    this.channelManager.markChannelsWatchInterrupted();
 
     if (this.cleaningIntervalRef != null) {
       clearInterval(this.cleaningIntervalRef);
@@ -828,19 +830,25 @@ export class StreamChat extends ChatApi {
     // `enableWSFallback` switch the long-poll's close request has to carry it.
     this.connectionIdManager.rejectConnectionId(teardownReason);
 
-    for (const channel of Object.values(this.activeChannels)) {
-      channel._disconnect();
+    // Drop the channels loaded into the channel lists, which belong to the user being disconnected.
+    // The lists stay registered: which lists exist is the application's configuration, not user data.
+    // Reset first, so each list empties in one update and no longer holds its channels; clearing the
+    // store then has no list to remove them from one by one.
+    this.channelManager.resetPaginatorStates();
+    // disconnects every channel (`disconnect()`) and ensures we no longer return inactive channels.
+    // It always empties the store, then rethrows the first error a holder threw; logged rather than
+    // propagated, so the rest of the logout below still runs.
+    try {
+      this.channelManager.clearChannels();
+    } catch (error) {
+      logger
+        .withExtraTags('disconnectUser')
+        .error('Clearing the channels failed during disconnect.', { error });
     }
-    // ensure we no longer return inactive channels
-    this.activeChannels = {};
     // reset client state
     this.state = new ClientState({ client: this });
     // reset thread manager
     this.threads.resetState();
-    // drop the channels loaded into the channel lists — they belong to the user being disconnected
-    // and have just been disconnected themselves. The lists stay registered: which lists exist is
-    // the application's configuration, not user data.
-    this.channelManager.resetPaginatorStates();
     // channel mutes are per-user; leaving them would let `muted` filters resolve against the
     // previous user until the next health check replaces them
     this.mutedChannels = [];
@@ -1029,8 +1037,11 @@ export class StreamChat extends ChatApi {
 
     // channel event handlers
     const cid = (event as Extract<Event, { cid?: any }>).cid;
-    const channel = cid ? this.activeChannels[cid] : undefined;
-    if (channel) {
+    const channel = cid ? this.channelManager.get(cid) : undefined;
+    // A disconnected channel (`pendingDisposal`) may stay stored until `releaseUnusedChannels()`.
+    // Its state is not updated any more, and its handlers would throw at `getClient()`, so the
+    // event skips them; the channel's own listeners below still hear it.
+    if (channel && !channel.pendingDisposal) {
       channel._handleChannelEvent(event as WSEvent);
     }
 
@@ -1040,7 +1051,18 @@ export class StreamChat extends ChatApi {
       channel._callChannelListeners(event as WSEvent);
     }
 
-    postListenerCallbacks.forEach((c) => c());
+    // A failing in-memory cleanup (such as a holder throwing while a removed channel is unlinked)
+    // must not skip the other callbacks or the offline DB write below, or the offline DB would keep
+    // what the event ended.
+    for (const callback of postListenerCallbacks) {
+      try {
+        callback();
+      } catch (error) {
+        logger
+          .withExtraTags('dispatchEvent', event.type)
+          .error('A post-listener callback failed.', { error });
+      }
+    }
 
     this.offlineDb?.executeQuerySafely((db) => db.handleEvent({ event }), {
       method: `handleEvent;${event.type}`,
@@ -1048,25 +1070,44 @@ export class StreamChat extends ChatApi {
   };
 
   /**
-   * Updates the members, watchers and read references of the currently active channels that contain this user.
+   * Puts `user`'s new object into the members, watchers, own membership and (with `readEntries`)
+   * read entries of the channels that list them. Each channel gets new objects in one state update,
+   * so its subscribers re-render.
    *
    * @param user - The updated user.
+   * @param options.readEntries - Also replace the user in read entries, refreshing the read receipts
+   *   (defaults to `true`). Off for a presence change: receipts show a user's name and image, never
+   *   their online status, so they would rebuild for nothing.
    */
-  _updateMemberWatcherReferences = (user: UserResponse) => {
+  _updateMemberWatcherReferences = (
+    user: UserResponse,
+    { readEntries = true }: { readEntries?: boolean } = {},
+  ) => {
     const refMap = this.state.userChannelReferences[user.id] || {};
     for (const channelId in refMap) {
-      const channel = this.activeChannels[channelId];
-      if (channel?.state) {
-        if (channel.state.members[user.id]) {
-          channel.state.members[user.id].user = user;
-        }
-        if (channel.state.watchers[user.id]) {
-          channel.state.watchers[user.id] = user;
-        }
-        if (channel.state.read[user.id]) {
-          channel.state.read[user.id].user = user;
-        }
+      const channel = this.channelManager.get(channelId);
+      if (!channel?.state) continue;
+      const { members, membership, watchers, read } = channel.state.getLatestValue();
+      const member = members[user.id];
+      const readState = readEntries ? read[user.id] : undefined;
+      const hasWatcher = !!watchers[user.id];
+      const isOwnMembership = membership?.user?.id === user.id;
+      if (!member && !hasWatcher && !readState && !isOwnMembership) continue;
+      // The receipts tracker applies a read-state change only with metadata naming the changed
+      // users; without it, its readers would keep the user's old object.
+      if (readState) {
+        channel.messageReceiptsTracker.setPendingReadStoreReconcileMeta({
+          changedUserIds: [user.id],
+        });
       }
+      channel.state.partialNext({
+        ...(member && { members: { ...members, [user.id]: { ...member, user } } }),
+        ...(hasWatcher && { watchers: { ...watchers, [user.id]: user } }),
+        ...(isOwnMembership && { membership: { ...membership, user } }),
+        ...(readState && { read: { ...read, [user.id]: { ...readState, user } } }),
+      });
+      // consumed by the tracker's read subscription; cleared in case it isn't subscribed
+      channel.messageReceiptsTracker.setPendingReadStoreReconcileMeta(undefined);
     }
   };
 
@@ -1077,19 +1118,19 @@ export class StreamChat extends ChatApi {
   _updateUserReferences = this._updateMemberWatcherReferences;
 
   /**
-   * Updates the messages from the currently active channels that contain this user, with the updated user object.
+   * Updates the messages from the loaded channels that contain this user, with the updated user object.
    *
    * @private
    *
    * @param user - The updated user.
    */
   _updateUserMessageReferences = (user: UserResponse) => {
-    // Scan all active channels rather than a user->channel reference map. MessageRequest authors are no
+    // Scan all loaded channels rather than a user->channel reference map. MessageRequest authors are no
     // longer registered as channel references (that registration was removed along with
     // `Channel._trackLatestMessage`); `reflectUserUpdate` filters by author id internally, so it is
     // a no-op on channels without this user's messages.
     // The next step is to have user ItemIndex, where the update would be O(1) complexity
-    for (const channel of Object.values(this.activeChannels)) {
+    for (const channel of this.channelManager.values()) {
       if (!channel) continue;
 
       /** update the messages from this user. */
@@ -1099,7 +1140,7 @@ export class StreamChat extends ChatApi {
   };
 
   /**
-   * Deletes the messages from the currently active channels that contain this user.
+   * Deletes the messages from the loaded channels that contain this user.
    *
    * If `hardDelete` is `true`, all the content of the message will be stripped down.
    * Otherwise, only `message.type` will be set as `'deleted'`.
@@ -1115,9 +1156,9 @@ export class StreamChat extends ChatApi {
     hardDelete = false,
     deletedAt?: LocalMessage['deleted_at'],
   ) => {
-    // Scan all active channels rather than a user->channel reference map (see
+    // Scan all loaded channels rather than a user->channel reference map (see
     // `_updateUserMessageReferences`); `applyMessageDeletionForUser` filters by author id internally.
-    for (const channel of Object.values(this.activeChannels)) {
+    for (const channel of this.channelManager.values()) {
       if (channel) {
         /** deleted the messages from this user. */
         channel.messagePaginator.applyMessageDeletionForUser({
@@ -1187,7 +1228,9 @@ export class StreamChat extends ChatApi {
       }
 
       this.state.updateUser(event.user);
-      this._updateMemberWatcherReferences(event.user);
+      this._updateMemberWatcherReferences(event.user, {
+        readEntries: event.type === 'user.updated',
+      });
     }
 
     if (event.type === 'user.updated') {
@@ -1231,7 +1274,7 @@ export class StreamChat extends ChatApi {
       client.user = event.me;
       client.state.updateUser(event.me);
       client.mutedChannels = event.me.channel_mutes;
-      client._reflectMutedChannelsToActiveChannels();
+      client.channelManager.reflectMutedChannels();
       client.mutedUsers = event.me.mutes;
       client.blockedUsers.partialNext({ userIds: event.me.blocked_user_ids ?? [] });
     }
@@ -1243,7 +1286,7 @@ export class StreamChat extends ChatApi {
 
     if (event.type === 'notification.channel_mutes_updated' && event.me?.channel_mutes) {
       this.mutedChannels = event.me.channel_mutes;
-      this._reflectMutedChannelsToActiveChannels();
+      this.channelManager.reflectMutedChannels();
     }
 
     if (event.type === 'notification.mutes_updated' && event.me?.mutes) {
@@ -1251,7 +1294,7 @@ export class StreamChat extends ChatApi {
     }
 
     if (event.type === 'notification.mark_read' && event.unread_channels === 0) {
-      Object.values(this.activeChannels).forEach((channel) => {
+      this.channelManager.values().forEach((channel) => {
         // resets `read[userId].unread_messages`, which is what the unread badge reads, so it does
         // not stay stale.
         if (!channel._setOwnUnreadCount(0)) return;
@@ -1267,12 +1310,15 @@ export class StreamChat extends ChatApi {
     ) {
       const { cid } = event;
       client.state.deleteAllChannelReference(cid);
-      this.activeChannels[event.cid]?._disconnect();
+      const ended = this.channelManager.get(cid);
+      ended?.disconnect();
 
       postListenerCallbacks.push(() => {
-        if (!cid) return;
-
-        delete this.activeChannels[cid];
+        // only the instance disconnected above: a listener that got the channel again keeps its
+        // fresh instance (`ensure()` replaces a disposed one)
+        if (ended && this.channelManager.get(cid) === ended) {
+          this.channelManager.removeChannel(cid);
+        }
       });
     }
 
@@ -1282,60 +1328,18 @@ export class StreamChat extends ChatApi {
     // the channel still exists for its remaining members.
     if (event.type === 'notification.removed_from_channel' && event.cid) {
       const { cid } = event;
-      this.activeChannels[cid]?._disconnect();
+      const ended = this.channelManager.get(cid);
+      ended?.disconnect();
 
       postListenerCallbacks.push(() => {
-        delete this.activeChannels[cid];
+        // only the instance disconnected above, as for channel.deleted
+        if (ended && this.channelManager.get(cid) === ended) {
+          this.channelManager.removeChannel(cid);
+        }
       });
     }
 
     return postListenerCallbacks;
-  }
-
-  /**
-   * Fans the client-owned `mutedChannels` out to every active channel's reactive `state.muteStatus`.
-   * Each channel republishes only when its own mute status actually changed, so this stays cheap on
-   * the frequent `health.check` path.
-   */
-  _reflectMutedChannelsToActiveChannels() {
-    for (const cid in this.activeChannels) {
-      this.activeChannels[cid]?._syncMuteStatus();
-    }
-  }
-
-  /**
-   * Resets the AI indicator state to `Idle` on every active channel. Invoked from `closeConnection`
-   * as it's a deliberate shutdown and will not natively trigger a WS event.
-   */
-  _resetAIStateOnActiveChannels() {
-    for (const cid in this.activeChannels) {
-      this.activeChannels[cid]?.state.resetAIState();
-    }
-  }
-
-  /**
-   * Demotes every actively-watched channel to `WasWatching`. The server keys watches by connection
-   * ID, so losing the socket ends every watch this client held — a reconnect issues a NEW id and the
-   * channels have to be re-queried to watch again. `WasWatching` is what records that they should be.
-   *
-   * Only `Watching` is demoted: a channel the consumer stopped on purpose, or one that was torn
-   * down, stays `NotWatching` and must not be resurrected by a reconnect.
-   *
-   * Invoked from two places on the WebSocket, because neither covers the other:
-   * `StableWSConnection._setHealth(false)` for an abnormal close/error, and
-   * `closeConnection()` for a deliberate shutdown (e.g. mobile backgrounding), whose
-   * `disconnect()` writes the status through `_applyHealth` and so never reaches
-   * `_setHealth`. After an `enableWSFallback` switch the long-poll calls it too, from
-   * `WSConnectionFallback._setState()` whenever going closed or disconnected takes the
-   * status offline.
-   */
-  _markActiveChannelsWatchInterrupted() {
-    for (const cid in this.activeChannels) {
-      const channel = this.activeChannels[cid];
-      if (channel?.watchStatus === ChannelWatchStatus.Watching) {
-        channel.watchStatus = ChannelWatchStatus.WasWatching;
-      }
-    }
   }
 
   _muteStatus(cid: string): ChannelMuteStatus {
@@ -1572,8 +1576,9 @@ export class StreamChat extends ChatApi {
     // TODO(perf/cleanup): prefer a `memberIds` snapshot over `headItems.map` here too — see the
     // matching TODO in channel.query() for the full rationale.
     const candidateIdsByCid = new Map<string, ReadonlySet<string>>();
-    for (const cid of Object.keys(this.activeChannels)) {
-      const head = this.activeChannels[cid]?.messagePaginator?.headItems;
+    for (const channel of this.channelManager.values()) {
+      const { cid } = channel;
+      const head = channel.messagePaginator?.headItems;
       if (head?.length)
         candidateIdsByCid.set(cid, new Set(head.map((message) => message.id)));
     }
@@ -1594,7 +1599,7 @@ export class StreamChat extends ChatApi {
       });
     }
 
-    const hydratedChannels = this.hydrateActiveChannels(
+    const hydratedChannels = this.hydrateChannels(
       channels,
       stateOptions,
       options,
@@ -1650,7 +1655,7 @@ export class StreamChat extends ChatApi {
     return await this.queryReactions(...args);
   }
 
-  hydrateActiveChannels(
+  hydrateChannels(
     channelsFromApi: ChannelStateResponseFields[] = [],
     stateOptions: ChannelStateOptions = {},
     queryChannelsOptions?: ChannelOptions,
@@ -1663,14 +1668,19 @@ export class StreamChat extends ChatApi {
       if (!channelState.channel) continue;
 
       this._addChannelConfig(channelState.channel);
-      const c = this.channel(channelState.channel.type, channelState.channel.id);
-      const previousData = c.data;
+      const c = this.channelManager.ensure({
+        type: channelState.channel.type,
+        id: channelState.channel.id,
+      });
       c.data = channelState.channel;
-      c.state.syncStateFromChannelData(c.data, previousData);
-      c.offlineMode = offlineMode;
-      c.initialized = !offlineMode;
+      // A live result initializes the channel; one restored from the offline database doesn't.
+      c.state.partialNext(
+        offlineMode
+          ? { initialized: false, offlineMode: true }
+          : { initialized: true, offlineMode: false },
+      );
       // Same precedence `queryChannels` applies to the request: an explicit caller choice wins,
-      // otherwise we watch only if there is a connection to watch on: `hydrateActiveChannels` is
+      // otherwise we watch only if there is a connection to watch on: `hydrateChannels` is
       // public, so a direct caller has no gated request behind it to imply a watch. Offline
       // hydration populates state without a live watch, so it never counts - and a query that did
       // not watch leaves the status untouched (it neither starts nor ends a watch).
@@ -1732,6 +1742,39 @@ export class StreamChat extends ChatApi {
   }
 
   /**
+   * Returns the channel with the given type, ID and custom data: a shorthand for
+   * {@link ChannelManager.ensure} (`client.channelManager.ensure({ type, id, data })`), so it returns
+   * the stored instance for the cid, or creates and stores it.
+   *
+   * To get a distinct channel between two or more users, leave out the ID and pass the members:
+   * `client.channel('messaging', { members: [{ user_id: 'tommaso' }, { user_id: 'thierry' }] })`.
+   * It has no ID until `channel.watch()`, `query()` or `create()` returns one.
+   *
+   * @param channelType - The channel type.
+   * @param channelIdOrCustom - The channel ID; leave it out for a distinct channel created from
+   *   members (optional).
+   * @param custom - Data for a new channel, e.g. `members` or `custom` (optional, defaults to `{}`).
+   * @returns The channel; initialize it with `channel.watch()`.
+   */
+  channel(channelType: string, channelId?: string | null, custom?: ChannelInput): Channel;
+  channel(channelType: string, custom?: ChannelInput): Channel;
+  channel(
+    channelType: string,
+    channelIdOrCustom?: string | ChannelInput | null,
+    custom: ChannelInput = {},
+  ): Channel {
+    // channel('messaging', { members }): the data takes the ID's place
+    if (channelIdOrCustom && typeof channelIdOrCustom === 'object') {
+      return this.channelManager.ensure({ data: channelIdOrCustom, type: channelType });
+    }
+    return this.channelManager.ensure({
+      data: custom,
+      id: channelIdOrCustom || undefined,
+      type: channelType,
+    });
+  }
+
+  /**
    * Queries messages.
    *
    * @param ...args - `[request, requestOptions]`. The optional `request.payload` accepts
@@ -1771,172 +1814,6 @@ export class StreamChat extends ChatApi {
       [cid]: config,
     };
   }
-
-  /**
-   * Returns a new channel with the given type, ID and custom data.
-   *
-   * If you want to create a unique conversation between 2 or more users, you can leave out the ID
-   * parameter and provide the list of members.
-   * Make sure to await `channel.create()` or `channel.watch()` before accessing channel functions,
-   * i.e. `channel = client.channel('messaging', { members: ['tommaso', 'thierry'] })` then
-   * `await channel.create()` to assign an ID to the channel.
-   *
-   * @param channelType - The channel type.
-   * @param channelIdOrCustom - The channel ID; you can leave this out if you want to create a
-   *   conversation channel (optional).
-   * @param custom - Custom data to attach to the channel (optional, defaults to `{}`).
-   * @returns The channel object; initialize it using `channel.watch()`.
-   */
-  channel(channelType: string, channelId?: string | null, custom?: ChannelInput): Channel;
-  channel(channelType: string, custom?: ChannelInput): Channel;
-  channel(
-    channelType: string,
-    channelIdOrCustom?: string | ChannelInput | null,
-    custom: ChannelInput = {},
-  ) {
-    if (!this.userId) {
-      throw Error('Call connectUser or connectAnonymousUser before creating a channel');
-    }
-
-    if (~channelType.indexOf(':')) {
-      throw new Error(
-        `Invalid channel group ${channelType}, can't contain the : character`,
-      );
-    }
-
-    // support channel("messaging", {options})
-    if (channelIdOrCustom && typeof channelIdOrCustom === 'object') {
-      return this.getChannelByMembers(channelType, channelIdOrCustom);
-    }
-
-    // support channel("messaging", undefined, {options})
-    if (!channelIdOrCustom && typeof custom === 'object' && custom.members?.length) {
-      return this.getChannelByMembers(channelType, custom);
-    }
-
-    // support channel("messaging", null, {options})
-    // support channel("messaging", undefined, {options})
-    // support channel("messaging", "", {options})
-    if (!channelIdOrCustom) {
-      return new Channel(this, channelType, undefined, custom);
-    }
-
-    return this.getChannelById(channelType, channelIdOrCustom, custom);
-  }
-
-  /**
-   * It's a helper method for `client.channel()` method, used to create unique conversation or
-   * channel based on member list instead of ID.
-   *
-   * If the channel already exists in `activeChannels` list, then we simply return it, since that
-   * means the same channel was already requested or created.
-   *
-   * Otherwise we create a new instance of Channel class and return it.
-   *
-   * @private
-   *
-   * @param channelType - The channel type.
-   * @param custom - Custom data to attach to the channel.
-   * @returns The channel object; initialize it using `channel.watch()`.
-   */
-  getChannelByMembers = (channelType: string, custom: ChannelInput) => {
-    // Check if the channel already exists.
-    // Only allow 1 channel object per cid
-    // Mirrors the same expression in `channel.ts` (`_initializeState`), which recomputes this
-    // temp cid to evict the stale `activeChannels` entry once the server assigns a real id —
-    // the two must agree exactly. `user_id` became optional in the v2 spec while
-    // `MemberUserRequest.id` is required, so `{ user: { id } }` is now a valid member spec.
-    const memberIds = (custom.members ?? []).map((member) =>
-      typeof member === 'string' ? member : member.user_id || member.user?.id || '',
-    );
-    const membersStr = memberIds.sort().join(',');
-    const tempCid = generateChannelTempCid(channelType, memberIds);
-
-    if (!tempCid) {
-      throw Error('Please specify atleast one member when creating unique conversation');
-    }
-
-    // channel could exist in `activeChannels` list with either one of the following two keys:
-    // 1. cid - Which gets set on channel only after calling channel.query or channel.watch or channel.create
-    // 2. Sorted membersStr - E.g., "messaging:amin,vishal" OR "messaging:amin,jaap,tom"
-    //                        This is set when you create a channel, but haven't queried yet. After query,
-    //                        we will replace it with `cid`
-    for (const key in this.activeChannels) {
-      const channel = this.activeChannels[key];
-      if (channel.pendingDisposal) {
-        continue;
-      }
-
-      if (key === tempCid) {
-        return channel;
-      }
-
-      if (key.indexOf(`${channelType}:!members-`) === 0) {
-        const membersStrInExistingChannel = Object.keys(channel.state.members)
-          .sort()
-          .join(',');
-        if (membersStrInExistingChannel === membersStr) {
-          return channel;
-        }
-      }
-    }
-
-    const channel = new Channel(this, channelType, undefined, custom);
-
-    // For the time being set the key as membersStr, since we don't know the cid yet.
-    // In channel.query, we will replace it with 'cid'.
-    this.activeChannels[tempCid] = channel;
-
-    return channel;
-  };
-
-  /**
-   * It's a helper method for `client.channel()`, used to retrieve a channel given its ID.
-   *
-   * If the channel already exists in `activeChannels` list, then we simply return it, since that
-   * means the same channel was already requested or created.
-   *
-   * Otherwise we create a new instance of `Channel` class and return it.
-   *
-   * @private
-   *
-   * @param channelType - The channel type.
-   * @param channelId - The channel ID.
-   * @param custom - Custom data to attach to the channel.
-   * @returns The channel object; initialize it using `channel.watch()`.
-   */
-  getChannelById = (channelType: string, channelId: string, custom: ChannelInput) => {
-    if (typeof channelId === 'string' && ~channelId.indexOf(':')) {
-      throw Error(`Invalid channel id ${channelId}, can't contain the : character`);
-    }
-
-    // only allow 1 channel object per cid
-    const cid = `${channelType}:${channelId}`;
-    if (
-      cid in this.activeChannels &&
-      this.activeChannels[cid] &&
-      !this.activeChannels[cid].pendingDisposal
-    ) {
-      const channel = this.activeChannels[cid];
-      // Only overwrite the existing channel's custom data when the caller actually provided some.
-      // A caller passing other fields (e.g. `{ members }`, or even `{ members: undefined }`) yields a
-      // non-empty object with no `.custom`; the previous `Object.keys(custom).length > 0` guard let
-      // that through and then set `custom: custom.custom` (undefined), wiping the channel's existing
-      // custom data (e.g. its name). Guarding on `custom.custom` keeps genuine custom updates while
-      // leaving the existing custom intact when the caller omits it.
-      if (custom.custom !== undefined) {
-        const previousData = channel.data;
-        channel.data = { ...channel.data, custom: custom.custom };
-        channel.state.syncStateFromChannelData(channel.data, previousData);
-        channel._data = { ...channel._data, custom: custom.custom };
-      }
-      return channel;
-    }
-    const channel = new Channel(this, channelType, channelId, custom);
-    this.activeChannels[channel.cid] = channel;
-
-    return channel;
-  };
 
   /**
    * Revoke a global ban for a user.
@@ -2297,15 +2174,22 @@ export class StreamChat extends ChatApi {
   }
 
   _startCleaning() {
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const that = this;
     if (this.cleaningIntervalRef != null) {
       return;
     }
     this.cleaningIntervalRef = setInterval(() => {
       // call clean on the channel, used for calling the stop.typing event etc.
-      for (const channel of Object.values(that.activeChannels)) {
-        channel.clean();
+      for (const channel of this.channelManager.values()) {
+        // a disposed channel has nothing to clean, and `clean()` would throw on it
+        if (channel.pendingDisposal) continue;
+        // one channel failing to clean must not stop the others (typing indicators would stick)
+        try {
+          channel.clean();
+        } catch (error) {
+          logger
+            .withExtraTags('clean', channel.cid)
+            .error('Cleaning the channel failed.', { error });
+        }
       }
     }, 500);
   }

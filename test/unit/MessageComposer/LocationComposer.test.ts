@@ -32,7 +32,10 @@ const setup = ({
   const mockClient = new StreamChat('apiKey');
   mockClient.user = user;
 
-  const mockChannel = mockClient.channel('channelType', 'channelId');
+  const mockChannel = mockClient.channelManager.ensure({
+    type: 'channelType',
+    id: 'channelId',
+  });
   mockChannel.getClient = vi.fn().mockReturnValue(mockClient);
   const messageComposer = new MessageComposer({
     client: mockClient,

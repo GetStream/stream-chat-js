@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MockInstance } from 'vitest';
 import { getClientWithUser } from './test-utils/getClient';
 import {
-  type Channel,
+  Channel,
   ChannelPaginator,
   ChannelResponse,
   ChannelWatchStatus,
@@ -10,38 +11,54 @@ import {
 } from '../../src';
 import {
   ChannelManager,
+  type ChannelManagerOptions,
   createPriorityOwnershipResolver,
 } from '../../src/ChannelManager';
-vi.mock('../../src/pagination/utility.queryChannel', async () => {
-  return {
-    getChannel: vi.fn(async ({ client, id, type }) => {
-      return client.channel(type, id);
-    }),
-  };
-});
-import { getChannel as mockGetChannel } from '../../src/pagination/utility.queryChannel';
 import { convertDateToTimestamp } from './test-utils/time';
 
 describe('ChannelManager', () => {
   let client: StreamChat;
 
+  // the channel manager watches the channels events bring in through `ensureWatched()`; its request
+  // is not under test here
+  let ensureWatched: MockInstance<Channel['ensureWatched']>;
+  const ensureWatchedOn = () => ensureWatched.mock.contexts.map((channel) => channel.cid);
+
   beforeEach(() => {
     client = getClientWithUser();
     vi.clearAllMocks();
+    ensureWatched = vi
+      .spyOn(Channel.prototype, 'ensureWatched')
+      .mockImplementation(function (this: Channel) {
+        return Promise.resolve(this);
+      });
   });
+
+  afterEach(() => {
+    ensureWatched.mockRestore();
+  });
+
+  // The client's own manager, configured for the test: it owns the channel store that
+  // `client.channelManager.ensure()` and the channel lists use, and a second manager for one client is unsupported.
+  const useClientManager = ({
+    paginators,
+    ownershipResolver,
+  }: Pick<ChannelManagerOptions, 'paginators' | 'ownershipResolver'> = {}) => {
+    const channelManager = client.channelManager;
+    channelManager.setOwnershipResolver(ownershipResolver);
+    channelManager.setPaginators(paginators ?? []);
+    return channelManager;
+  };
 
   describe('ownershipResolver', () => {
     it('keeps channel in all matching paginators by default', async () => {
       const ch = makeChannel('messaging:100');
-      client.activeChannels[ch.cid] = ch;
+      client.channelManager.getOrCreateChannel(ch.cid, () => ch);
 
       const p1 = new ChannelPaginator({ client, filters: { type: 'messaging' } });
       const p2 = new ChannelPaginator({ client, filters: { type: 'messaging' } });
 
-      const channelManager = new ChannelManager({
-        client,
-        paginators: [p1, p2],
-      });
+      const channelManager = useClientManager({ paginators: [p1, p2] });
       channelManager.registerSubscriptions();
 
       client.dispatchEvent({ type: 'message.new', cid: ch.cid });
@@ -58,14 +75,13 @@ describe('ChannelManager', () => {
     it('keeps channel only in highest-priority matching paginator when resolver provided', async () => {
       const pHigh = new ChannelPaginator({ client, filters: { type: 'messaging' } });
       const pLow = new ChannelPaginator({ client, filters: { type: 'messaging' } });
-      const channelManager = new ChannelManager({
-        client,
+      const channelManager = useClientManager({
         paginators: [pLow, pHigh],
         ownershipResolver: createPriorityOwnershipResolver([pHigh.id, pLow.id]),
       });
 
       const ch = makeChannel('messaging:101');
-      client.activeChannels[ch.cid] = ch;
+      client.channelManager.getOrCreateChannel(ch.cid, () => ch);
 
       channelManager.registerSubscriptions();
       client.dispatchEvent({ type: 'message.new', cid: ch.cid });
@@ -80,14 +96,13 @@ describe('ChannelManager', () => {
     it('keeps item in all priority ownership paginators when resolver returns multiple ids', async () => {
       const pHigh = new ChannelPaginator({ client, filters: { type: 'messaging' } });
       const pLow = new ChannelPaginator({ client, filters: { type: 'messaging' } });
-      const channelManager = new ChannelManager({
-        client,
+      const channelManager = useClientManager({
         paginators: [pLow, pHigh],
         ownershipResolver: () => [pHigh.id, pLow.id],
       });
 
       const ch = makeChannel('messaging:101');
-      client.activeChannels[ch.cid] = ch;
+      client.channelManager.getOrCreateChannel(ch.cid, () => ch);
 
       channelManager.registerSubscriptions();
       client.dispatchEvent({ type: 'message.new', cid: ch.cid });
@@ -103,14 +118,13 @@ describe('ChannelManager', () => {
     it('accepts ownershipResolver as array of ids and applies priority', async () => {
       const pLow = new ChannelPaginator({ client, filters: { type: 'messaging' } });
       const pHigh = new ChannelPaginator({ client, filters: { type: 'messaging' } });
-      const channelManager = new ChannelManager({
-        client,
+      const channelManager = useClientManager({
         paginators: [pLow, pHigh],
         ownershipResolver: [pHigh.id, pLow.id],
       });
 
       const ch = makeChannel('messaging:102');
-      client.activeChannels[ch.cid] = ch;
+      client.channelManager.getOrCreateChannel(ch.cid, () => ch);
 
       channelManager.registerSubscriptions();
       client.dispatchEvent({ type: 'message.new', cid: ch.cid });
@@ -125,14 +139,13 @@ describe('ChannelManager', () => {
     it('keeps items only in owner paginators if some matching paginators are not listed in ownershipResolver array', async () => {
       const pLow = new ChannelPaginator({ client, filters: { type: 'messaging' } });
       const pHigh = new ChannelPaginator({ client, filters: { type: 'messaging' } });
-      const channelManager = new ChannelManager({
-        client,
+      const channelManager = useClientManager({
         paginators: [pLow, pHigh],
         ownershipResolver: [pHigh.id],
       });
 
       const ch = makeChannel('messaging:102');
-      client.activeChannels[ch.cid] = ch;
+      client.channelManager.getOrCreateChannel(ch.cid, () => ch);
 
       channelManager.registerSubscriptions();
       client.dispatchEvent({ type: 'message.new', cid: ch.cid });
@@ -148,14 +161,13 @@ describe('ChannelManager', () => {
       const p1 = new ChannelPaginator({ client, filters: { type: 'messaging' } });
       const p2 = new ChannelPaginator({ client, filters: { type: 'messaging' } });
       const p3 = new ChannelPaginator({ client, filters: { type: 'messagingX' } });
-      const channelManager = new ChannelManager({
-        client,
+      const channelManager = useClientManager({
         paginators: [p1, p2, p3],
         ownershipResolver: [p3.id],
       });
 
       const ch = makeChannel('messaging:102');
-      client.activeChannels[ch.cid] = ch;
+      client.channelManager.getOrCreateChannel(ch.cid, () => ch);
 
       channelManager.registerSubscriptions();
       client.dispatchEvent({ type: 'message.new', cid: ch.cid });
@@ -189,11 +201,7 @@ describe('ChannelManager', () => {
         id: 'p2',
         paginatorOptions: { pageSize: 1 },
       });
-      new ChannelManager({
-        client,
-        paginators: [p1, p2],
-        ownershipResolver: [p2.id],
-      });
+      useClientManager({ paginators: [p1, p2], ownershipResolver: [p2.id] });
 
       await Promise.all([p1, p2].map((p) => p.toTail()));
 
@@ -293,7 +301,7 @@ describe('ChannelManager', () => {
     it('initiates with default options', () => {
       // @ts-expect-error accessing protected property
       const defaultHandlers = ChannelManager.defaultEventHandlers;
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       expect(channelManager.paginators).toHaveLength(0);
 
       expect(channelManager.pipelines.size).toBe(Object.keys(defaultHandlers).length);
@@ -304,10 +312,7 @@ describe('ChannelManager', () => {
       // @ts-expect-error accessing protected property
       const defaultHandlers = ChannelManager.defaultEventHandlers;
 
-      const channelManager = new ChannelManager({
-        client,
-        paginators: [paginator],
-      });
+      const channelManager = useClientManager({ paginators: [paginator] });
 
       expect(channelManager.paginators).toHaveLength(1);
       expect(channelManager.getPaginatorById(paginator.id)).toStrictEqual(paginator);
@@ -317,7 +322,7 @@ describe('ChannelManager', () => {
     it('starts from the default handlers when none are given', () => {
       // @ts-expect-error accessing protected property
       const defaultHandlers = ChannelManager.defaultEventHandlers;
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
 
       for (const [eventType, handlers] of Object.entries(defaultHandlers)) {
         expect(channelManager.pipelines.get(eventType)?.size).toBe(handlers?.length);
@@ -373,7 +378,7 @@ describe('ChannelManager', () => {
 
       // @ts-expect-error accessing protected property
       const defaultHandlers = ChannelManager.defaultEventHandlers;
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
 
       channelManager.addEventHandler({
         eventType: 'channel.visible',
@@ -422,7 +427,7 @@ describe('ChannelManager', () => {
   describe('registerSubscriptions', () => {
     it('subscribes only once', async () => {
       const onSpy = vi.spyOn(client, 'on');
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       channelManager.registerSubscriptions();
       channelManager.registerSubscriptions();
       expect(onSpy).toHaveBeenCalledTimes(1);
@@ -432,7 +437,7 @@ describe('ChannelManager', () => {
       const customChannelDeletedHandler = vi.fn();
       const customEventHandler = vi.fn();
 
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
 
       channelManager.setEventHandlers({
         eventType: 'channel.deleted',
@@ -477,7 +482,7 @@ describe('ChannelManager', () => {
 
   describe('insertPaginator', () => {
     it('appends when no index is provided', () => {
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       const p1 = new ChannelPaginator({ client });
       const p2 = new ChannelPaginator({ client });
 
@@ -488,7 +493,7 @@ describe('ChannelManager', () => {
     });
 
     it('inserts at specific index', () => {
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       const p1 = new ChannelPaginator({ client });
       const p2 = new ChannelPaginator({ client });
       const p3 = new ChannelPaginator({ client });
@@ -501,7 +506,7 @@ describe('ChannelManager', () => {
     });
 
     it('moves existing paginator to new index', () => {
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       const p1 = new ChannelPaginator({ client });
       const p2 = new ChannelPaginator({ client });
       const p3 = new ChannelPaginator({ client });
@@ -516,7 +521,7 @@ describe('ChannelManager', () => {
     });
 
     it('clamps out-of-bounds index', () => {
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       const p1 = new ChannelPaginator({ client });
       const p2 = new ChannelPaginator({ client });
 
@@ -529,7 +534,7 @@ describe('ChannelManager', () => {
 
   describe('setPaginators', () => {
     it('replaces the whole set in a single state update', () => {
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       const p1 = new ChannelPaginator({ client, id: 'channels:1' });
       const p2 = new ChannelPaginator({ client, id: 'channels:2' });
       const p3 = new ChannelPaginator({ client, id: 'channels:3' });
@@ -554,8 +559,7 @@ describe('ChannelManager', () => {
         filters: { type: 'messaging' },
         id: 'channels:dropped',
       });
-      const channelManager = new ChannelManager({
-        client,
+      const channelManager = useClientManager({
         ownershipResolver: [kept.id, dropped.id],
         paginators: [kept, dropped],
       });
@@ -583,8 +587,7 @@ describe('ChannelManager', () => {
         filters: { type: 'messaging' },
         id: 'channels:secondary',
       });
-      const channelManager = new ChannelManager({
-        client,
+      const channelManager = useClientManager({
         ownershipResolver: [primary.id, secondary.id],
       });
 
@@ -598,7 +601,7 @@ describe('ChannelManager', () => {
     it('does not publish a state update when the set is unchanged', () => {
       const p1 = new ChannelPaginator({ client, id: 'channels:1' });
       const p2 = new ChannelPaginator({ client, id: 'channels:2' });
-      const channelManager = new ChannelManager({ client, paginators: [p1, p2] });
+      const channelManager = useClientManager({ paginators: [p1, p2] });
       const nextSpy = vi.spyOn(channelManager.state, 'partialNext');
 
       channelManager.setPaginators([p1, p2]);
@@ -614,7 +617,7 @@ describe('ChannelManager', () => {
     });
 
     it('keeps only the first occurrence of a repeated id', () => {
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       const first = new ChannelPaginator({ client, id: 'channels:dup' });
       const duplicate = new ChannelPaginator({ client, id: 'channels:dup' });
       const other = new ChannelPaginator({ client, id: 'channels:other' });
@@ -626,7 +629,7 @@ describe('ChannelManager', () => {
 
     it('clears all the lists when given an empty array', () => {
       const paginator = new ChannelPaginator({ client });
-      const channelManager = new ChannelManager({ client, paginators: [paginator] });
+      const channelManager = useClientManager({ paginators: [paginator] });
 
       channelManager.setPaginators([]);
 
@@ -637,13 +640,10 @@ describe('ChannelManager', () => {
     it('excludes the detached paginators from event handling', async () => {
       const kept = new ChannelPaginator({ client, filters: { type: 'messaging' } });
       const dropped = new ChannelPaginator({ client, filters: { type: 'messaging' } });
-      const channelManager = new ChannelManager({
-        client,
-        paginators: [kept, dropped],
-      });
+      const channelManager = useClientManager({ paginators: [kept, dropped] });
       channelManager.registerSubscriptions();
       const channel = makeChannel('messaging:602');
-      client.activeChannels[channel.cid] = channel;
+      client.channelManager.getOrCreateChannel(channel.cid, () => channel);
 
       channelManager.setPaginators([kept]);
       client.dispatchEvent({ type: 'message.new', cid: channel.cid });
@@ -667,7 +667,7 @@ describe('ChannelManager', () => {
         filters: { type: 'messaging' },
         id: 'channels:2',
       });
-      const channelManager = new ChannelManager({ client, paginators: [p1, p2] });
+      const channelManager = useClientManager({ paginators: [p1, p2] });
       channelManager.ingestChannel(makeChannel('messaging:800'));
       expect(p1.items).toHaveLength(1);
       expect(p2.items).toHaveLength(1);
@@ -682,7 +682,7 @@ describe('ChannelManager', () => {
 
     it('cancels the queries the lists had scheduled', () => {
       const paginator = new ChannelPaginator({ client });
-      const channelManager = new ChannelManager({ client, paginators: [paginator] });
+      const channelManager = useClientManager({ paginators: [paginator] });
       const cancelSpy = vi.spyOn(paginator, 'cancelScheduledQuery');
 
       channelManager.resetPaginatorStates();
@@ -701,8 +701,7 @@ describe('ChannelManager', () => {
         filters: { type: 'messaging' },
         id: 'channels:secondary',
       });
-      const channelManager = new ChannelManager({
-        client,
+      const channelManager = useClientManager({
         ownershipResolver: [primary.id, secondary.id],
         paginators: [primary, secondary],
       });
@@ -742,8 +741,7 @@ describe('ChannelManager', () => {
         filters: { type: 'messaging' },
         id: 'channels:2',
       });
-      const channelManager = new ChannelManager({
-        client,
+      const channelManager = useClientManager({
         ownershipResolver: [p1.id, p2.id],
         paginators: [p1, p2],
       });
@@ -759,7 +757,7 @@ describe('ChannelManager', () => {
     });
 
     it('does not publish a state update on an empty manager', () => {
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       const nextSpy = vi.spyOn(channelManager.state, 'partialNext');
 
       expect(channelManager.clearPaginators()).toEqual([]);
@@ -771,7 +769,7 @@ describe('ChannelManager', () => {
 
   describe('removePaginator', () => {
     it('removes a paginator by instance and returns it', () => {
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       const p1 = new ChannelPaginator({ client });
       const p2 = new ChannelPaginator({ client });
       channelManager.insertPaginator({ paginator: p1 });
@@ -784,7 +782,7 @@ describe('ChannelManager', () => {
     });
 
     it('removes a paginator by id', () => {
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       const paginator = new ChannelPaginator({ client, id: 'channels:default' });
       channelManager.insertPaginator({ paginator });
 
@@ -793,7 +791,7 @@ describe('ChannelManager', () => {
     });
 
     it('is a no-op for an unknown paginator', () => {
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       const paginator = new ChannelPaginator({ client });
       channelManager.insertPaginator({ paginator });
       const nextSpy = vi.spyOn(channelManager.state, 'partialNext');
@@ -808,7 +806,7 @@ describe('ChannelManager', () => {
     });
 
     it('cancels a query scheduled by the removed paginator', () => {
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       const paginator = new ChannelPaginator({ client });
       const cancelSpy = vi.spyOn(paginator, 'cancelScheduledQuery');
       channelManager.insertPaginator({ paginator });
@@ -829,8 +827,7 @@ describe('ChannelManager', () => {
         filters: { type: 'messaging' },
         id: 'channels:secondary',
       });
-      const channelManager = new ChannelManager({
-        client,
+      const channelManager = useClientManager({
         ownershipResolver: [primary.id, secondary.id],
         paginators: [primary, secondary],
       });
@@ -846,7 +843,7 @@ describe('ChannelManager', () => {
     });
 
     it('leaves the loaded items of the removed paginator untouched', () => {
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       const paginator = new ChannelPaginator({ client, filters: { type: 'messaging' } });
       channelManager.insertPaginator({ paginator });
       const channel = makeChannel('messaging:401');
@@ -859,7 +856,7 @@ describe('ChannelManager', () => {
     });
 
     it('excludes the removed paginator from event handling', async () => {
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       const kept = new ChannelPaginator({ client, filters: { type: 'messaging' } });
       const removed = new ChannelPaginator({ client, filters: { type: 'messaging' } });
       channelManager.insertPaginator({ paginator: kept });
@@ -867,7 +864,7 @@ describe('ChannelManager', () => {
       channelManager.registerSubscriptions();
 
       const channel = makeChannel('messaging:402');
-      client.activeChannels[channel.cid] = channel;
+      client.channelManager.getOrCreateChannel(channel.cid, () => channel);
 
       channelManager.removePaginator(removed);
       client.dispatchEvent({ type: 'message.new', cid: channel.cid });
@@ -879,7 +876,7 @@ describe('ChannelManager', () => {
     });
 
     it('can be re-inserted after removal', () => {
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       const paginator = new ChannelPaginator({ client, filters: { type: 'messaging' } });
       channelManager.insertPaginator({ paginator });
       channelManager.removePaginator(paginator);
@@ -900,10 +897,7 @@ describe('ChannelManager', () => {
         id: 'channels:default',
       });
       const fallback = new ChannelPaginator({ client, filters: {}, id: 'channels:open' });
-      const channelManager = new ChannelManager({
-        client,
-        paginators: [primary, fallback],
-      });
+      const channelManager = useClientManager({ paginators: [primary, fallback] });
 
       channelManager.setOwnershipResolver([primary.id, fallback.id]);
       channelManager.ingestChannel(makeChannel('messaging:404'));
@@ -915,8 +909,7 @@ describe('ChannelManager', () => {
     it('reverts to keeping a channel in every matching paginator when unset', () => {
       const p1 = new ChannelPaginator({ client, filters: { type: 'messaging' } });
       const p2 = new ChannelPaginator({ client, filters: { type: 'messaging' } });
-      const channelManager = new ChannelManager({
-        client,
+      const channelManager = useClientManager({
         ownershipResolver: [p1.id, p2.id],
         paginators: [p1, p2],
       });
@@ -931,7 +924,7 @@ describe('ChannelManager', () => {
 
   describe('addEventHandler', () => {
     it('registers a custom handler and can unsubscribe it', async () => {
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       const channelUpdatedHandler = vi.fn();
       const unsubscribe = channelManager.addEventHandler({
         eventType: 'channel.updated',
@@ -962,7 +955,7 @@ describe('ChannelManager', () => {
 
   describe('setEventHandler', () => {
     it('replaces the existing handlers for a given event type', async () => {
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       const eventType = 'channel.updated';
       const channelUpdatedEvent = { type: eventType, cid: 'x' } as const;
       const channelUpdatedHandler1 = vi.fn();
@@ -1010,7 +1003,7 @@ describe('ChannelManager', () => {
 
   describe('removeEventHandler', () => {
     it('does not create a pipeline for which the event type is removed', async () => {
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       const eventType = 'channel.updatedX';
 
       expect(channelManager.pipelines.get(eventType)).toBeUndefined();
@@ -1022,7 +1015,7 @@ describe('ChannelManager', () => {
     });
 
     it('removes the existing handlers for a given event type', async () => {
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       const eventType = 'channel.updated';
       const channelUpdatedEvent = { type: eventType, cid: 'x' } as const;
       const channelUpdatedHandler1 = vi.fn();
@@ -1069,7 +1062,7 @@ describe('ChannelManager', () => {
 
   describe('ensurePipeline', () => {
     it('returns the same pipeline instance for the same event type', () => {
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       const p1 = channelManager.ensurePipeline('channel.updated');
       const p2 = channelManager.ensurePipeline('channel.updated');
       expect(p1).toBe(p2);
@@ -1086,7 +1079,7 @@ describe('ChannelManager', () => {
       // `isInitialized` means "has queried"; fake that without a network round trip.
       vi.spyOn(paginator, 'isInitialized', 'get').mockReturnValue(true);
       const toTail = vi.spyOn(paginator, 'toTail').mockResolvedValue(undefined);
-      const channelManager = new ChannelManager({ client, paginators: [paginator] });
+      const channelManager = useClientManager({ paginators: [paginator] });
 
       await channelManager.recover();
 
@@ -1101,7 +1094,7 @@ describe('ChannelManager', () => {
       vi.spyOn(paginator, 'isInitialized', 'get').mockReturnValue(true);
       const toTail = vi.spyOn(paginator, 'toTail').mockResolvedValue(undefined);
 
-      await new ChannelManager({ client, paginators: [paginator] }).recover();
+      await useClientManager({ paginators: [paginator] }).recover();
 
       expect(toTail.mock.calls[0][0]).not.to.have.property('silent');
     });
@@ -1111,7 +1104,7 @@ describe('ChannelManager', () => {
       expect(paginator.isInitialized).to.equal(false);
       const toTail = vi.spyOn(paginator, 'toTail').mockResolvedValue(undefined);
 
-      await new ChannelManager({ client, paginators: [paginator] }).recover();
+      await useClientManager({ paginators: [paginator] }).recover();
 
       expect(toTail).not.toHaveBeenCalled();
     });
@@ -1125,7 +1118,7 @@ describe('ChannelManager', () => {
       vi.spyOn(failing, 'toTail').mockRejectedValue(new Error('nope'));
       const healthyToTail = vi.spyOn(healthy, 'toTail').mockResolvedValue(undefined);
 
-      await new ChannelManager({ client, paginators: [failing, healthy] }).recover();
+      await useClientManager({ paginators: [failing, healthy] }).recover();
 
       expect(healthyToTail).toHaveBeenCalledTimes(1);
     });
@@ -1140,9 +1133,9 @@ describe('ChannelManager', () => {
      * on the event that proves relevance is what closes that, with no eager sweep.
      */
     const routeEventFor = (channel: Channel) => {
-      client.activeChannels[channel.cid] = channel;
+      client.channelManager.getOrCreateChannel(channel.cid, () => channel);
       const paginator = new ChannelPaginator({ client });
-      const channelManager = new ChannelManager({ client, paginators: [paginator] });
+      const channelManager = useClientManager({ paginators: [paginator] });
       channelManager.registerSubscriptions();
       // `ingestItem` runs inside the same handler, immediately BEFORE the re-watch would fire. It is
       // therefore the anchor a negative assertion needs: waiting on it proves the handler has reached
@@ -1157,11 +1150,7 @@ describe('ChannelManager', () => {
 
       client.dispatchEvent({ type: 'message.new', cid: ch.cid });
 
-      await vi.waitFor(() =>
-        expect(mockGetChannel).toHaveBeenCalledWith(
-          expect.objectContaining({ channel: ch }),
-        ),
-      );
+      await vi.waitFor(() => expect(ensureWatched.mock.contexts).toContain(ch));
     });
 
     it('leaves a channel that was never watched, or deliberately unwatched, alone', async () => {
@@ -1174,37 +1163,51 @@ describe('ChannelManager', () => {
       client.dispatchEvent({ type: 'message.new', cid: ch.cid });
 
       await vi.waitFor(() => expect(ingestItem).toHaveBeenCalledWith(ch));
-      expect(mockGetChannel).not.toHaveBeenCalled();
+      expect(ensureWatched).not.toHaveBeenCalled();
     });
 
-    it('never re-watches a channel pending disposal', async () => {
+    it('gives an event for a channel the app disconnected a live instance, never the disconnected one', async () => {
       const ch = makeChannel('messaging:disposing');
       ch.watchStatus = ChannelWatchStatus.WasWatching;
       const { ingestItem } = routeEventFor(ch);
-      ch.pendingDisposal = true;
+      ch.disconnect();
 
       client.dispatchEvent({ type: 'message.new', cid: ch.cid });
 
-      await vi.waitFor(() => expect(ingestItem).toHaveBeenCalledWith(ch));
-      expect(mockGetChannel).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(ingestItem).toHaveBeenCalled());
+      const fresh = client.channelManager.get(ch.cid);
+      expect(fresh).not.toBe(ch);
+      expect(fresh?.pendingDisposal).toBe(false);
+      expect(ingestItem).toHaveBeenCalledWith(fresh);
+      expect(ingestItem).not.toHaveBeenCalledWith(ch);
+      expect(ensureWatched.mock.contexts).toEqual([fresh]);
+    });
+
+    it('does not list a channel the app disconnected', () => {
+      const ch = makeChannel('messaging:disconnected');
+      client.channelManager.getOrCreateChannel(ch.cid, () => ch);
+      const paginator = new ChannelPaginator({ client });
+      ch.disconnect();
+
+      expect(paginator.ingestItem(ch)).toBe(false);
     });
 
     it('does not re-watch a channel that is being hidden', async () => {
       const ch = makeChannel('messaging:hidden');
       ch.watchStatus = ChannelWatchStatus.WasWatching;
-      client.activeChannels[ch.cid] = ch;
+      client.channelManager.getOrCreateChannel(ch.cid, () => ch);
       const paginator = new ChannelPaginator({ client });
       // A hidden channel drops OUT of a list that does not filter for hidden, so `removeItem` — not
       // `ingestItem` — is the anchor proving the handler reached the re-watch decision.
       const removeItem = vi.spyOn(paginator, 'removeItem');
-      new ChannelManager({ client, paginators: [paginator] }).registerSubscriptions();
+      useClientManager({ paginators: [paginator] }).registerSubscriptions();
 
       client.dispatchEvent({ type: 'channel.hidden', cid: ch.cid });
 
       await vi.waitFor(() =>
         expect(removeItem).toHaveBeenCalledWith(expect.objectContaining({ item: ch })),
       );
-      expect(mockGetChannel).not.toHaveBeenCalled();
+      expect(ensureWatched).not.toHaveBeenCalled();
     });
 
     it('places the channel in the list without waiting for the watch to resolve', async () => {
@@ -1213,13 +1216,13 @@ describe('ChannelManager', () => {
       const ch = makeChannel('messaging:ordering');
       ch.watchStatus = ChannelWatchStatus.WasWatching;
       let resolveWatch: () => void = () => {};
-      (mockGetChannel as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(
-        () => new Promise<void>((resolve) => (resolveWatch = resolve)),
+      ensureWatched.mockImplementationOnce(
+        () => new Promise<Channel>((resolve) => (resolveWatch = () => resolve(ch))),
       );
-      client.activeChannels[ch.cid] = ch;
+      client.channelManager.getOrCreateChannel(ch.cid, () => ch);
       const paginator = new ChannelPaginator({ client });
       const ingestItem = vi.spyOn(paginator, 'ingestItem');
-      const channelManager = new ChannelManager({ client, paginators: [paginator] });
+      const channelManager = useClientManager({ paginators: [paginator] });
       channelManager.registerSubscriptions();
 
       client.dispatchEvent({ type: 'message.new', cid: ch.cid });
@@ -1235,10 +1238,7 @@ describe('ChannelManager', () => {
       const paginator2 = new ChannelPaginator({ client });
       vi.spyOn(paginator1, 'reload').mockResolvedValue();
       vi.spyOn(paginator2, 'reload').mockResolvedValue();
-      const channelManager = new ChannelManager({
-        client,
-        paginators: [paginator1, paginator2],
-      });
+      const channelManager = useClientManager({ paginators: [paginator1, paginator2] });
       await channelManager.reload();
       expect(paginator1.reload).toHaveBeenCalledTimes(1);
       expect(paginator2.reload).toHaveBeenCalledTimes(1);
@@ -1248,7 +1248,7 @@ describe('ChannelManager', () => {
   // Helper to create a minimal channel with needed state
   function makeChannel(cid: string) {
     const [type, id] = cid.split(':');
-    const channel = client.channel(type, id);
+    const channel = client.channelManager.ensure({ type: type, id: id });
     channel.data!.type = type;
     channel.data!.id = id;
     return channel;
@@ -1267,24 +1267,21 @@ describe('ChannelManager', () => {
       const r1 = vi.spyOn(p1, 'removeItem');
       const r2 = vi.spyOn(p2, 'removeItem');
 
-      const channelManager = new ChannelManager({
-        client,
-        paginators: [p1, p2],
-      });
-      client.activeChannels[cid] = ch;
+      const channelManager = useClientManager({ paginators: [p1, p2] });
+      client.channelManager.getOrCreateChannel(cid, () => ch);
 
       channelManager.registerSubscriptions();
       client.dispatchEvent({ type: eventType, cid } as const);
 
       await vi.waitFor(() => {
-        // client.activeChannels does not contain the deleted channel, therefore the search is performed with id
+        // the channel store does not contain the deleted channel, therefore the search is performed with id
         expect(r1).toHaveBeenCalledWith({ id: ch.cid, item: undefined });
         expect(r2).toHaveBeenCalledWith({ id: ch.cid, item: undefined });
       });
     });
 
     it('is a no-op when cid is missing', async () => {
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       const p = new ChannelPaginator({ client });
       const r = vi.spyOn(p, 'removeItem');
 
@@ -1300,7 +1297,7 @@ describe('ChannelManager', () => {
     // ported from the legacy ChannelManager suite, which removed by `event.cid || event.channel?.cid`
     it('removes the channel when only event.channel carries the cid', async () => {
       const cid = 'messaging:nested-cid';
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       const p = new ChannelPaginator({ client });
       const r = vi.spyOn(p, 'removeItem');
 
@@ -1318,7 +1315,7 @@ describe('ChannelManager', () => {
     });
 
     it('tries to remove non-existent channel from all paginators', async () => {
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       const p = new ChannelPaginator({ client });
       const r = vi.spyOn(p, 'removeItem');
 
@@ -1342,7 +1339,7 @@ describe('ChannelManager', () => {
         user: { id: client.userId as string },
         archived_at: '2025-09-03T12:19:39.101089Z',
       };
-      client.activeChannels[archived.cid] = archived;
+      client.channelManager.getOrCreateChannel(archived.cid, () => archived);
 
       const paginator = new ChannelPaginator({ client });
       // the query reports that the backend applied `{ archived: false }`, which the local filters do not say
@@ -1353,7 +1350,7 @@ describe('ChannelManager', () => {
       });
       await paginator.toTail();
 
-      const channelManager = new ChannelManager({ client, paginators: [paginator] });
+      const channelManager = useClientManager({ paginators: [paginator] });
       channelManager.registerSubscriptions();
 
       client.dispatchEvent({ type: 'message.new', cid: archived.cid });
@@ -1375,17 +1372,14 @@ describe('ChannelManager', () => {
     it('drops the channel from lists that exclude hidden channels, keeping it in a hidden-only list', async () => {
       const cid = 'messaging:hidden-1';
       const channel = makeChannel(cid);
-      client.activeChannels[cid] = channel;
+      client.channelManager.getOrCreateChannel(cid, () => channel);
 
       const regular = new ChannelPaginator({ client });
       const hiddenOnly = new ChannelPaginator({ client, filters: { hidden: true } });
       seed(regular, [channel]);
       seed(hiddenOnly, [channel]);
 
-      const channelManager = new ChannelManager({
-        client,
-        paginators: [regular, hiddenOnly],
-      });
+      const channelManager = useClientManager({ paginators: [regular, hiddenOnly] });
       channelManager.registerSubscriptions();
 
       client.dispatchEvent({ type: 'channel.hidden', cid } as const);
@@ -1401,13 +1395,10 @@ describe('ChannelManager', () => {
     it('re-adds the channel on channel.visible', async () => {
       const cid = 'messaging:hidden-2';
       const channel = makeChannel(cid);
-      client.activeChannels[cid] = channel;
+      client.channelManager.getOrCreateChannel(cid, () => channel);
 
       const regular = new ChannelPaginator({ client });
-      const channelManager = new ChannelManager({
-        client,
-        paginators: [regular],
-      });
+      const channelManager = useClientManager({ paginators: [regular] });
       channelManager.registerSubscriptions();
 
       client.dispatchEvent({ type: 'channel.hidden', cid } as const);
@@ -1426,10 +1417,7 @@ describe('ChannelManager', () => {
     it('falls back to event.channel.cid when the event carries no top-level identifiers', async () => {
       const cid = 'messaging:added-1';
       const paginator = new ChannelPaginator({ client });
-      const channelManager = new ChannelManager({
-        client,
-        paginators: [paginator],
-      });
+      const channelManager = useClientManager({ paginators: [paginator] });
       channelManager.registerSubscriptions();
 
       // notification.added_to_channel has optional cid / channel_type / channel_id — only
@@ -1440,25 +1428,20 @@ describe('ChannelManager', () => {
       });
 
       await vi.waitFor(() => {
-        expect(mockGetChannel).toHaveBeenCalledWith(
-          expect.objectContaining({ id: 'added-1', type: 'messaging' }),
-        );
+        expect(ensureWatchedOn()).toContain('messaging:added-1');
         expect(paginator.items?.map((c) => c.cid)).toEqual([cid]);
       });
     });
 
     it('does not query a channel it cannot identify', async () => {
       const paginator = new ChannelPaginator({ client });
-      const channelManager = new ChannelManager({
-        client,
-        paginators: [paginator],
-      });
+      const channelManager = useClientManager({ paginators: [paginator] });
       channelManager.registerSubscriptions();
 
       client.dispatchEvent({ type: 'notification.added_to_channel' } as never);
 
       await vi.waitFor(() => {
-        expect(mockGetChannel).not.toHaveBeenCalled();
+        expect(ensureWatched).not.toHaveBeenCalled();
         expect(paginator.items).toBeUndefined();
       });
     });
@@ -1476,17 +1459,14 @@ describe('ChannelManager', () => {
         const r1 = vi.spyOn(p1, 'removeItem');
         const r2 = vi.spyOn(p2, 'removeItem');
 
-        const channelManager = new ChannelManager({
-          client,
-          paginators: [p1, p2],
-        });
-        client.activeChannels[cid] = ch;
+        const channelManager = useClientManager({ paginators: [p1, p2] });
+        client.channelManager.getOrCreateChannel(cid, () => ch);
 
         channelManager.registerSubscriptions();
         client.dispatchEvent({ type: eventType, cid } as const);
 
         await vi.waitFor(() => {
-          // The client evicts the channel from activeChannels on
+          // The client evicts the channel from the channel store on
           // notification.removed_from_channel (stream-chat-js #1788), so the
           // channelManager no longer has the instance and removes purely by id.
           expect(r1).toHaveBeenCalledWith({ id: ch.cid, item: undefined });
@@ -1495,7 +1475,7 @@ describe('ChannelManager', () => {
       });
 
       it('is a no-op when cid is missing', async () => {
-        const channelManager = new ChannelManager({ client });
+        const channelManager = useClientManager();
         const p = new ChannelPaginator({ client });
         const r = vi.spyOn(p, 'removeItem');
 
@@ -1509,7 +1489,7 @@ describe('ChannelManager', () => {
       });
 
       it('tries to remove non-existent channel from all paginators', async () => {
-        const channelManager = new ChannelManager({ client });
+        const channelManager = useClientManager();
         const p = new ChannelPaginator({ client });
         const r = vi.spyOn(p, 'removeItem');
 
@@ -1527,37 +1507,82 @@ describe('ChannelManager', () => {
   describe.each(['channel.updated', 'channel.truncated'] as EventTypes[])(
     'event %s',
     (eventType) => {
-      it('re-emits item lists for paginators that already contain the channel', async () => {
-        const channelManager = new ChannelManager({ client });
+      it('re-inserts the channel into matching lists and removes it from the rest', async () => {
+        const channelManager = useClientManager();
         const ch = makeChannel('messaging:3');
-        client.activeChannels[ch.cid] = ch;
+        client.channelManager.getOrCreateChannel(ch.cid, () => ch);
 
-        const p1 = new ChannelPaginator({ client });
-        const p2 = new ChannelPaginator({ client });
-        p1.state.partialNext({ items: [ch] });
-        vi.spyOn(p1, 'locateByItem').mockReturnValue({
-          state: { currentIndex: 0, insertionIndex: 1 },
-        });
-        vi.spyOn(p2, 'locateByItem').mockReturnValue({
-          state: { currentIndex: -1, insertionIndex: 1 },
-        });
-        const partialNextSpy1 = vi.spyOn(p1.state, 'partialNext');
-        const partialNextSpy2 = vi.spyOn(p2.state, 'partialNext');
-
-        channelManager.insertPaginator({ paginator: p1 });
+        const p = new ChannelPaginator({ client });
+        const matchesFilterSpy = vi.spyOn(p, 'matchesFilter').mockReturnValue(true);
+        const ingestItemSpy = vi.spyOn(p, 'ingestItem').mockReturnValue(true);
+        const removeItemSpy = vi
+          .spyOn(p, 'removeItem')
+          .mockReturnValue({ state: { currentIndex: 0, insertionIndex: 1 } });
+        channelManager.insertPaginator({ paginator: p });
         channelManager.registerSubscriptions();
 
         client.dispatchEvent({ type: eventType, cid: ch.cid });
         await vi.waitFor(() => {
-          expect(partialNextSpy2).toHaveBeenCalledTimes(0);
-          expect(partialNextSpy1).toHaveBeenCalledTimes(1);
-          const last = partialNextSpy1.mock.calls.at(-1)![0];
-          expect(last.items!.length).toBe(1);
-          expect(last.items![0]).toStrictEqual(ch);
+          expect(ingestItemSpy).toHaveBeenCalledWith(ch);
+          expect(removeItemSpy).not.toHaveBeenCalled();
         });
+
+        matchesFilterSpy.mockReturnValue(false);
+        client.dispatchEvent({ type: eventType, cid: ch.cid });
+        await vi.waitFor(() => {
+          expect(removeItemSpy).toHaveBeenCalledWith({ item: ch });
+          expect(ingestItemSpy).toHaveBeenCalledTimes(1);
+        });
+      });
+
+      it('ignores a channel that is not loaded', async () => {
+        const channelManager = useClientManager();
+        const p = new ChannelPaginator({ client });
+        vi.spyOn(p, 'matchesFilter').mockReturnValue(true);
+        const ingestItemSpy = vi.spyOn(p, 'ingestItem');
+        channelManager.insertPaginator({ paginator: p });
+        channelManager.registerSubscriptions();
+
+        client.dispatchEvent({ type: eventType, cid: 'messaging:unknown' });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(ensureWatched).not.toHaveBeenCalled();
+        expect(ingestItemSpy).not.toHaveBeenCalled();
       });
     },
   );
+
+  it('moves a channel in a list sorted by name after channel.updated renames it', async () => {
+    const paginator = new ChannelPaginator({
+      client,
+      filters: { type: 'messaging' },
+      sort: [{ direction: 1, field: 'name' }],
+    });
+    const channels = ['a', 'b', 'c'].map((name) => {
+      const channel = makeChannel(`messaging:${name}`);
+      channel.data = { ...channel.data, name };
+      client.channelManager.getOrCreateChannel(channel.cid, () => channel);
+      return channel;
+    });
+    paginator.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: channels });
+    const channelManager = useClientManager({ paginators: [paginator] });
+    channelManager.registerSubscriptions();
+
+    const [renamed] = channels;
+    client.dispatchEvent({
+      type: 'channel.updated',
+      cid: renamed.cid,
+      channel: { ...renamed.data, name: 'd' } as ChannelResponse,
+    });
+
+    await vi.waitFor(() => {
+      expect(paginator.items?.map((channel) => channel.data?.name)).toEqual([
+        'b',
+        'c',
+        'd',
+      ]);
+    });
+  });
 
   describe.each([
     'channel.visible',
@@ -1567,9 +1592,9 @@ describe('ChannelManager', () => {
     'notification.message_new',
   ] as EventTypes[])('event %s', (eventType) => {
     it('ingests when matchesFilter, removes when not', async () => {
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       const ch = makeChannel('messaging:5');
-      client.activeChannels[ch.cid] = ch;
+      client.channelManager.getOrCreateChannel(ch.cid, () => ch);
 
       const p = new ChannelPaginator({ client });
       const matchesFilterSpy = vi.spyOn(p, 'matchesFilter').mockReturnValue(true);
@@ -1597,8 +1622,8 @@ describe('ChannelManager', () => {
       });
     });
 
-    it('loads channel by (type,id) when not in activeChannels', async () => {
-      const channelManager = new ChannelManager({ client });
+    it('loads channel by (type,id) when not in the channel store', async () => {
+      const channelManager = useClientManager();
 
       const p = new ChannelPaginator({ client });
       const removeItemSpy = vi
@@ -1616,11 +1641,7 @@ describe('ChannelManager', () => {
       });
 
       await vi.waitFor(() => {
-        expect(mockGetChannel).toHaveBeenCalledWith({
-          client,
-          id: '6',
-          type: 'messaging',
-        });
+        expect(ensureWatchedOn()).toContain('messaging:6');
         const ch = makeChannel('messaging:6');
         expect(ingestItemSpy).toHaveBeenCalledWith(ch);
         expect(removeItemSpy).not.toHaveBeenCalled();
@@ -1628,9 +1649,9 @@ describe('ChannelManager', () => {
     });
 
     it('uses event.channel if provided', async () => {
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       const ch = makeChannel('messaging:7');
-      client.activeChannels[ch.cid] = ch;
+      client.channelManager.getOrCreateChannel(ch.cid, () => ch);
 
       const p = new ChannelPaginator({ client });
 
@@ -1654,9 +1675,9 @@ describe('ChannelManager', () => {
     });
 
     it('removes channel if does not match the filter anymore', async () => {
-      const channelManager = new ChannelManager({ client });
+      const channelManager = useClientManager();
       const ch = makeChannel('messaging:7');
-      client.activeChannels[ch.cid] = ch;
+      client.channelManager.getOrCreateChannel(ch.cid, () => ch);
 
       const p = new ChannelPaginator({ client });
 
@@ -1699,9 +1720,9 @@ describe('ChannelManager', () => {
     vi.setSystemTime(now);
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(now.getTime());
 
-    const channelManager = new ChannelManager({ client });
+    const channelManager = useClientManager();
     const ch = makeChannel('messaging:5');
-    client.activeChannels[ch.cid] = ch;
+    client.channelManager.getOrCreateChannel(ch.cid, () => ch);
 
     const paginator = new ChannelPaginator({ client });
     const matchesFilterSpy = vi.spyOn(paginator, 'matchesFilter').mockReturnValue(true);
@@ -1737,7 +1758,7 @@ describe('ChannelManager', () => {
         filters: { type: 'messaging' },
         id: 'channels:archived',
       });
-      const channelManager = new ChannelManager({ client, paginators: [paginator] });
+      const channelManager = useClientManager({ paginators: [paginator] });
       vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
         channels: queryResult,
         duration: '0.1ms',
@@ -1818,7 +1839,7 @@ describe('ChannelManager', () => {
         channel.messagePaginator.aggregateState.partialNext({
           seededLastMessageAt: new Date(Date.UTC(2026, 0, PAGE_SIZE - i)),
         });
-        client.activeChannels[channel.cid] = channel;
+        client.channelManager.getOrCreateChannel(channel.cid, () => channel);
         return channel;
       });
       paginator.setItems({
@@ -1827,7 +1848,7 @@ describe('ChannelManager', () => {
         valueOrFactory: channels,
       });
 
-      const channelManager = new ChannelManager({ client, paginators: [paginator] });
+      const channelManager = useClientManager({ paginators: [paginator] });
       channelManager.registerSubscriptions();
       return { channelManager, channels, paginator };
     };
@@ -1914,10 +1935,7 @@ describe('ChannelManager', () => {
         filters: { muted: true, type: 'messaging' },
         id: 'channels:muted',
       });
-      const channelManager = new ChannelManager({
-        client,
-        paginators: [unmuted, muted],
-      });
+      const channelManager = useClientManager({ paginators: [unmuted, muted] });
       channelManager.registerSubscriptions();
       return { channelManager, muted, unmuted };
     };
@@ -1925,7 +1943,7 @@ describe('ChannelManager', () => {
     it('moves a newly muted channel to the list filtering muted channels', async () => {
       const { muted, unmuted } = setupMuteLists();
       const channel = makeChannel('messaging:500');
-      client.activeChannels[channel.cid] = channel;
+      client.channelManager.getOrCreateChannel(channel.cid, () => channel);
       unmuted.setItems({ isLastPage: true, valueOrFactory: [channel] });
       muted.setItems({ isLastPage: true, valueOrFactory: [] });
 
@@ -1940,7 +1958,7 @@ describe('ChannelManager', () => {
     it('moves an unmuted channel back to the list filtering unmuted channels', async () => {
       const { muted, unmuted } = setupMuteLists();
       const channel = makeChannel('messaging:501');
-      client.activeChannels[channel.cid] = channel;
+      client.channelManager.getOrCreateChannel(channel.cid, () => channel);
       client.mutedChannels = [{ channel: { cid: channel.cid } }] as any;
       unmuted.setItems({ isLastPage: true, valueOrFactory: [] });
       muted.setItems({ isLastPage: true, valueOrFactory: [channel] });
@@ -1976,8 +1994,8 @@ describe('ChannelManager', () => {
   });
 
   describe('user.presence.changed', () => {
-    it('updates user on channels where the user is a member and re-emits lists', async () => {
-      const channelManager = new ChannelManager({ client });
+    it('updates the user in each channel that lists them without re-emitting the lists', () => {
+      const channelManager = useClientManager();
 
       const ch1 = makeChannel('messaging:13');
       ch1.state.members = {
@@ -1988,14 +2006,12 @@ describe('ChannelManager', () => {
 
       const ch2 = makeChannel('messaging:14');
       ch2.state.members = {
-        u1: { user: { id: 'u1', name: 'Old' } },
         u2: { user: { id: 'u2', name: 'Old2' } },
-        u3: { user: { id: 'u3', name: 'Old3' } },
       };
-      ch2.state.membership = { user: { id: 'u1', name: 'Old' } };
 
-      client.activeChannels[ch1.cid] = ch1;
-      client.activeChannels[ch2.cid] = ch2;
+      client.channelManager.getOrCreateChannel(ch1.cid, () => ch1);
+      client.channelManager.getOrCreateChannel(ch2.cid, () => ch2);
+      client.state.updateUserReference({ id: 'u1' }, ch1.cid);
 
       const p = new ChannelPaginator({ client });
       p.state.partialNext({ items: [ch1, ch2] });
@@ -2004,29 +2020,16 @@ describe('ChannelManager', () => {
       channelManager.insertPaginator({ paginator: p });
       channelManager.registerSubscriptions();
 
-      // user u1 presence changed
       client.dispatchEvent({
         type: 'user.presence.changed',
-        user: { id: 'u1', name: 'NewName' },
+        user: { id: 'u1', name: 'Old', online: true },
       });
 
-      await vi.waitFor(() => {
-        expect(ch1.state.members['u1'].user?.name).toBe('NewName');
-        expect(ch1.state.members['u3'].user?.name).toBe('Old3');
-
-        expect(ch2.state.members['u1'].user?.name).toBe('NewName');
-        expect(ch2.state.members['u2'].user?.name).toBe('Old2');
-        expect(ch2.state.members['u3'].user?.name).toBe('Old3');
-
-        expect(ch1.state.membership.user?.name).toBe('NewName');
-        expect(ch2.state.membership.user?.name).toBe('NewName');
-        expect(partialNextSpy).toHaveBeenCalledTimes(1);
-        expect(partialNextSpy).toHaveBeenCalledWith({ items: [ch1, ch2] });
-      });
-
-      // Now user without id → ignored
-      partialNextSpy.mockClear();
-      client.dispatchEvent({ type: 'user.presence.changed', user: {} as any });
+      expect(ch1.state.members['u1'].user?.online).toBe(true);
+      expect(ch1.state.members['u3'].user?.name).toBe('Old3');
+      expect(ch1.state.membership.user?.online).toBe(true);
+      expect(ch2.state.members['u2'].user?.name).toBe('Old2');
+      // each channel publishes its own change, so the list doesn't re-render as a whole
       expect(partialNextSpy).not.toHaveBeenCalled();
     });
   });
@@ -2036,10 +2039,7 @@ describe('ChannelManager', () => {
       const ch = makeChannel('messaging:200');
       const p1 = new ChannelPaginator({ client, filters: { type: 'messaging' } });
       const p2 = new ChannelPaginator({ client, filters: { type: 'messaging' } });
-      const channelManager = new ChannelManager({
-        client,
-        paginators: [p1, p2],
-      });
+      const channelManager = useClientManager({ paginators: [p1, p2] });
 
       channelManager.ingestChannel(ch);
 
@@ -2050,8 +2050,7 @@ describe('ChannelManager', () => {
     it('routes a non-matching channel to a catch-all fallback (lowest priority) and keeps matches in the primary', () => {
       const primary = new ChannelPaginator({ client, filters: { type: 'messaging' } });
       const fallback = new ChannelPaginator({ client, filters: {} });
-      const channelManager = new ChannelManager({
-        client,
+      const channelManager = useClientManager({
         paginators: [primary, fallback],
         ownershipResolver: createPriorityOwnershipResolver([primary.id, fallback.id]),
       });
@@ -2079,10 +2078,10 @@ describe('ChannelManager', () => {
     };
 
     const loadedUnreadList = (channel: Channel) => {
-      client.activeChannels[channel.cid] = channel;
+      client.channelManager.getOrCreateChannel(channel.cid, () => channel);
       const paginator = new ChannelPaginator({ client, filters: { has_unread: true } });
       paginator.setItems({ valueOrFactory: [channel], isFirstPage: true });
-      const channelManager = new ChannelManager({ client, paginators: [paginator] });
+      const channelManager = useClientManager({ paginators: [paginator] });
       channelManager.registerSubscriptions();
       return { channelManager, paginator };
     };
@@ -2116,10 +2115,10 @@ describe('ChannelManager', () => {
     it('puts a channel back when it is marked unread again', async () => {
       const channel = makeChannel('messaging:301');
       seedUnread(channel, 0);
-      client.activeChannels[channel.cid] = channel;
+      client.channelManager.getOrCreateChannel(channel.cid, () => channel);
       const paginator = new ChannelPaginator({ client, filters: { has_unread: true } });
       paginator.setItems({ valueOrFactory: [], isFirstPage: true });
-      new ChannelManager({ client, paginators: [paginator] }).registerSubscriptions();
+      useClientManager({ paginators: [paginator] }).registerSubscriptions();
 
       seedUnread(channel, 1);
       client.dispatchEvent(
@@ -2194,8 +2193,8 @@ describe('ChannelManager', () => {
       const other = makeChannel('messaging:311');
       seedUnread(named);
       seedUnread(other);
-      client.activeChannels[named.cid] = named;
-      client.activeChannels[other.cid] = other;
+      client.channelManager.getOrCreateChannel(named.cid, () => named);
+      client.channelManager.getOrCreateChannel(other.cid, () => other);
 
       // the client reconciles the lists it owns, so this one is registered on `client.channelManager`
       const paginator = new ChannelPaginator({ client, filters: { has_unread: true } });
@@ -2215,7 +2214,7 @@ describe('ChannelManager', () => {
     it('drops channels a mark-all-read leaves read, though it names none', async () => {
       const channel = makeChannel('messaging:312');
       seedUnread(channel);
-      client.activeChannels[channel.cid] = channel;
+      client.channelManager.getOrCreateChannel(channel.cid, () => channel);
 
       const paginator = new ChannelPaginator({ client, filters: { has_unread: true } });
       paginator.setItems({ valueOrFactory: [channel], isFirstPage: true });
@@ -2238,11 +2237,11 @@ describe('ChannelManager', () => {
     it('skips lists that neither filter nor sort on read state', async () => {
       const channel = makeChannel('messaging:313');
       seedUnread(channel);
-      client.activeChannels[channel.cid] = channel;
+      client.channelManager.getOrCreateChannel(channel.cid, () => channel);
 
       const plainList = new ChannelPaginator({ client, filters: { type: 'messaging' } });
       plainList.setItems({ valueOrFactory: [channel], isFirstPage: true });
-      new ChannelManager({ client, paginators: [plainList] }).registerSubscriptions();
+      useClientManager({ paginators: [plainList] }).registerSubscriptions();
 
       const ingest = vi.spyOn(plainList, 'ingestItem');
       const remove = vi.spyOn(plainList, 'removeItem');
@@ -2260,7 +2259,7 @@ describe('ChannelManager', () => {
     it('still routes to a list that only sorts on read state', async () => {
       const channel = makeChannel('messaging:314');
       seedUnread(channel);
-      client.activeChannels[channel.cid] = channel;
+      client.channelManager.getOrCreateChannel(channel.cid, () => channel);
 
       const sortedList = new ChannelPaginator({
         client,
@@ -2268,7 +2267,7 @@ describe('ChannelManager', () => {
         sort: [{ direction: -1, field: 'unread_count' }],
       });
       sortedList.setItems({ valueOrFactory: [channel], isFirstPage: true });
-      new ChannelManager({ client, paginators: [sortedList] }).registerSubscriptions();
+      useClientManager({ paginators: [sortedList] }).registerSubscriptions();
 
       const ingest = vi.spyOn(sortedList, 'ingestItem');
 
@@ -2284,7 +2283,7 @@ describe('ChannelManager', () => {
       const channel = makeChannel('messaging:305');
       seedUnread(channel);
       const { paginator } = loadedUnreadList(channel);
-      delete client.activeChannels['messaging:306'];
+      client.channelManager.removeChannel('messaging:306');
 
       client.dispatchEvent({
         channel_id: '306',
@@ -2296,7 +2295,7 @@ describe('ChannelManager', () => {
       });
 
       await vi.waitFor(() => {
-        expect(mockGetChannel).not.toHaveBeenCalled();
+        expect(ensureWatched).not.toHaveBeenCalled();
         expect(paginator.items).toHaveLength(1);
       });
     });

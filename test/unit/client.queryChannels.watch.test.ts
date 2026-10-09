@@ -155,12 +155,12 @@ describe('client.queryChannels and the WebSocket', () => {
     it('records Watching only when the query that set it actually watched', async () => {
       const response = generateChannel({ channel: { id: 'watched' } });
 
-      const [watched] = client.hydrateActiveChannels([response]);
+      const [watched] = client.hydrateChannels([response]);
       expect(watched.watchStatus).toBe(ChannelWatchStatus.Watching);
 
       // Offline hydration populates state without a live watch, so it must never count.
       const offline = generateChannel({ channel: { id: 'from-db' } });
-      const [hydrated] = client.hydrateActiveChannels([offline], { offlineMode: true });
+      const [hydrated] = client.hydrateChannels([offline], { offlineMode: true });
       expect(hydrated.watchStatus).toBe(ChannelWatchStatus.NotWatching);
     });
 
@@ -171,29 +171,25 @@ describe('client.queryChannels and the WebSocket', () => {
       client.wsConnection._setStatus({ isHealthy: false });
       const response = generateChannel({ channel: { id: 'socket-down' } });
 
-      const [hydrated] = client.hydrateActiveChannels([response]);
+      const [hydrated] = client.hydrateChannels([response]);
 
       expect(hydrated.watchStatus).toBe(ChannelWatchStatus.NotWatching);
     });
   });
 
   describe('composition with what already exists', () => {
-    it('two concurrent getChannel calls for one cid still make one request', async () => {
-      // `getChannel` keys in-flight watches by cid so concurrent callers share one request. With the
-      // wait added, N concurrent openers of the same channel become one wait and one watched
-      // request — the "no duplicate requests" property now actually held rather than approximated.
-      const { getChannel } = await import('../../src/pagination/utility.queryChannel');
-      const channel = client.channel('messaging', 'shared');
+    it('two concurrent ensureWatched() calls for one channel still make one request', async () => {
+      // `ensureWatched()` joins a watch it already has in flight, so concurrent callers share one
+      // request. With the wait for a socket, N concurrent openers of the same channel become one wait
+      // and one watched request.
+      const channel = client.channelManager.ensure({ type: 'messaging', id: 'shared' });
       client.wsConnection._setStatus({ isHealthy: false });
       client.wsConnection.connection = new StableWSConnection({
         wsConnection: client.wsConnection,
       });
       vi.spyOn(channel, 'watch').mockResolvedValue(undefined as never);
 
-      const both = Promise.all([
-        getChannel({ client, channel }),
-        getChannel({ client, channel }),
-      ]);
+      const both = Promise.all([channel.ensureWatched(), channel.ensureWatched()]);
       client.wsConnection._setStatus({ isHealthy: true, connectionId: 'shared-id' });
       await both;
 
@@ -204,7 +200,10 @@ describe('client.queryChannels and the WebSocket', () => {
       // Why a throwing `watch()` is an acceptable outcome rather than a dead end:
       // `recoverableActiveChannels` filters on `active`, never on `watchStatus`, precisely so a
       // channel that failed to watch is picked up by the next recovery.
-      const channel = client.channel('messaging', 'failed-watch');
+      const channel = client.channelManager.ensure({
+        type: 'messaging',
+        id: 'failed-watch',
+      });
       channel.initialized = true;
       channel.activate();
       noSocketInFlight();

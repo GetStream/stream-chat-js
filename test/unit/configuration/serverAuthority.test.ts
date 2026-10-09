@@ -27,7 +27,10 @@ describe('the server has the last word, on every route', () => {
   });
 
   const openRegisteredComposer = () => {
-    const composer = client.channel('messaging', channelResponse.id).messageComposer;
+    const composer = client.channelManager.ensure({
+      type: 'messaging',
+      id: channelResponse.id,
+    }).messageComposer;
     // The composer only wires its configuration once subscriptions are registered — before that, the
     // constructor's derivation is the only thing that has run.
     composer.registerSubscriptions();
@@ -68,7 +71,10 @@ describe('the server has the last word, on every route', () => {
     // No `shared_locations` in the channel config at all — the client's own value must stand.
     const other = generateChannel({ channel: { config: {} } }).channel;
     client._addChannelConfig(other);
-    const composer = client.channel('messaging', other.id).messageComposer;
+    const composer = client.channelManager.ensure({
+      type: 'messaging',
+      id: other.id,
+    }).messageComposer;
     composer.registerSubscriptions();
 
     composer.updateConfig({ location: { enabled: true } });
@@ -246,7 +252,10 @@ describe('narrowing and recovery, together', () => {
         ...(channelId ? { id: channelId } : {}),
       },
     });
-    const channel = client.channel('messaging', channelId ?? generated.channel.id);
+    const channel = client.channelManager.ensure({
+      type: 'messaging',
+      id: channelId ?? generated.channel.id,
+    });
 
     vi.spyOn(client.api, 'sendRequest').mockResolvedValue({
       ...mockChannelQueryResponse,
@@ -278,7 +287,10 @@ describe('narrowing and recovery, together', () => {
 
   it('keeps an imperative opt-out through the same query', async () => {
     const client = getClientWithUser({ id: 'imperative-optout' });
-    const channel = client.channel('messaging', 'imperative-channel');
+    const channel = client.channelManager.ensure({
+      type: 'messaging',
+      id: 'imperative-channel',
+    });
     // An imperative request is as much a request as a declarative one, and used to be the more fragile of
     // the two: it lived only in the published configuration, so anything that re-resolved discarded it.
     channel.messageComposer.updateConfig({ location: { enabled: false } });
@@ -290,7 +302,10 @@ describe('narrowing and recovery, together', () => {
 
   it('lets a server that stops restricting the feature restore what was asked for', async () => {
     const client = getClientWithUser({ id: 'recovery' });
-    const channel = client.channel('messaging', 'recovery-channel');
+    const channel = client.channelManager.ensure({
+      type: 'messaging',
+      id: 'recovery-channel',
+    });
 
     vi.spyOn(client.api, 'sendRequest')
       .mockResolvedValueOnce({
@@ -422,7 +437,7 @@ describe('mergeServerRestrictions — upper bounds', () => {
  */
 describe("the channel type's max_message_length caps the composer", () => {
   const composerOn = (client: StreamChat, channelId: string) =>
-    client.channel('messaging', channelId).messageComposer;
+    client.channelManager.ensure({ type: 'messaging', id: channelId }).messageComposer;
 
   it('supplies the limit when the composer asked for none', () => {
     const client = getClientWithUser({ id: 'capped' });
@@ -492,7 +507,10 @@ describe('an absent server config cannot un-learn a known one', () => {
       channel: { config: { max_message_length: 400, shared_locations: false } },
     }).channel;
     client._addChannelConfig(response);
-    const composer = client.channel('messaging', response.id).messageComposer;
+    const composer = client.channelManager.ensure({
+      type: 'messaging',
+      id: response.id,
+    }).messageComposer;
     composer.registerSubscriptions();
     composer.updateConfig({ location: { enabled: true } });
     // the probe can see the bug: the restriction is in force before the empty response arrives

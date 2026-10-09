@@ -124,8 +124,8 @@ describe('client event listener isolation', () => {
 
   it('still runs post-listener callbacks and channel listeners after a throw', () => {
     const client = getClientWithUser();
-    const channel = client.channel('messaging', 'evicted');
-    client.activeChannels[channel.cid] = channel;
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'evicted' });
+    client.channelManager.getOrCreateChannel(channel.cid, () => channel);
 
     const channelListener = vi.fn();
     channel.on('notification.removed_from_channel', channelListener);
@@ -140,7 +140,7 @@ describe('client event listener isolation', () => {
 
     expect(channelListener).toHaveBeenCalledTimes(1);
     // postListenerCallbacks evict the channel; a throwing listener must not skip them
-    expect(client.activeChannels[channel.cid]).toBeUndefined();
+    expect(client.channelManager.get(channel.cid)).toBeUndefined();
   });
 });
 
@@ -158,8 +158,8 @@ describe('channel event listener isolation', () => {
 
   it('keeps calling later channel listeners when one throws', () => {
     const client = getClientWithUser();
-    const channel = client.channel('messaging', 'isolation');
-    client.activeChannels[channel.cid] = channel;
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'isolation' });
+    client.channelManager.getOrCreateChannel(channel.cid, () => channel);
     const second = vi.fn();
 
     channel.on('message.new', () => {
@@ -175,8 +175,11 @@ describe('channel event listener isolation', () => {
 
   it('captures a rejection from an async channel listener', async () => {
     const client = getClientWithUser();
-    const channel = client.channel('messaging', 'isolation-async');
-    client.activeChannels[channel.cid] = channel;
+    const channel = client.channelManager.ensure({
+      type: 'messaging',
+      id: 'isolation-async',
+    });
+    client.channelManager.getOrCreateChannel(channel.cid, () => channel);
     const error = new Error('channel async boom');
     const rejections: unknown[] = [];
     const onUnhandled = (reason: unknown) => rejections.push(reason);

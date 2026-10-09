@@ -635,11 +635,12 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
     let channelData = channelFromEvent;
     if (!channelData && event_.channel_type && event_.channel_id) {
-      const channelFromState = this.client.channel(
-        event_.channel_type,
-        event_.channel_id,
+      // `get`, not `ensure`: only a loaded channel has data to read, and building one here would
+      // store an empty channel nothing uses.
+      const channelFromState = this.client.channelManager.get(
+        `${event_.channel_type}:${event_.channel_id}`,
       );
-      if (channelFromState.initialized && !channelFromState.pendingDisposal) {
+      if (channelFromState?.initialized && !channelFromState.pendingDisposal) {
         channelData = channelFromState.data as unknown as ChannelResponse;
       }
     }
@@ -709,7 +710,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
         });
         if (cid && client.user && client.user.id !== user?.id) {
           const userId = client.user.id;
-          const channel = client.activeChannels[cid];
+          const channel = client.channelManager.get(cid);
           // Persist the current user's read state for channels that track reads server-side. When the
           // client opted into a local unread count, also persist it for read-events-disabled channels
           // (e.g. livestreams) so the client-local count survives a cold start. The server never sends
@@ -906,7 +907,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     execute: boolean;
     messages: MessageResponse[];
   }): Promise<ExecuteBatchDBQueriesType> => {
-    const channel = this.client.activeChannels[cid];
+    const channel = this.client.channelManager.get(cid);
     if (!channel?.initialized || channel.pendingDisposal) {
       logger
         .withExtraTags('upsertMessageWithChannelGuard', cid)
@@ -1153,7 +1154,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       // the client-local count survives a cold start. state.read[userId] may be absent for those, so
       // fall back accordingly.
       const userId = ownUser.id;
-      const activeChannel = this.client.activeChannels[cid];
+      const activeChannel = this.client.channelManager.get(cid);
       const tracksReadLocally = channelTracksReadLocally(activeChannel);
       if (activeChannel && (channelHasReadEvents(activeChannel) || tracksReadLocally)) {
         const ownReads = activeChannel.state.read[userId];
@@ -1324,7 +1325,9 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     // persist it for read-events-disabled channels with the local unread count opted in (the only
     // situation it is ever dispatched), so it can never touch channels that track reads server-side.
     if (type === 'message.read_locally') {
-      const localChannel = event.cid ? this.client.activeChannels[event.cid] : undefined;
+      const localChannel = event.cid
+        ? this.client.channelManager.get(event.cid)
+        : undefined;
       // channelTracksReadLocally returns false when localChannel is undefined, so no extra guard.
       if (channelTracksReadLocally(localChannel)) {
         return this.handleRead({ event, unreadMessages: 0, execute });

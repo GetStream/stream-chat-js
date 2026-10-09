@@ -26,6 +26,7 @@ import type {
   UserResponse,
 } from '../../types';
 import type { Channel } from '../../channel';
+import { ChannelWatchStatus } from '../../channel_state';
 import { CORE_NOTIFICATION_TYPE } from '../../notifications';
 import { StateStore } from '@stream-io/state-store';
 import { formatMessage, generateUUIDv4, toDeletedMessage } from '../../utils';
@@ -73,6 +74,14 @@ export type JumpToMessageOptions = {
    * If true, suppresses focus signal emission after a successful jump.
    */
   suppressFocusSignal?: boolean;
+  /**
+   * Also watch the channel, so it receives its events, when it isn't watched yet: the request that
+   * loads the window around the message asks to watch too, so it takes one request. A message
+   * already loaded is then loaded again with that request. Ignored for a thread's reply list, which
+   * loads replies through a request that can't watch, and when the paginator's `doRequest` loads
+   * the messages.
+   */
+  watchChannel?: boolean;
 };
 
 export type MessagePaginatorSort = SortParamRequest[];
@@ -213,6 +222,14 @@ export class MessageIntervalPaginator extends BasePaginator<
   LocalMessage,
   MessageQueryShape
 > {
+  /**
+   * The name this list's index goes by as a holder in the message store. A prototype getter, so it
+   * is already the subclass's while the base constructor builds the index.
+   */
+  protected get holderName() {
+    return 'message-interval-paginator';
+  }
+
   declare state: StateStore<MessagePaginatorState>;
   private readonly _id: string;
   /** The channel this list belongs to. A thread's reply list holds its parent channel. */
@@ -245,6 +262,14 @@ export class MessageIntervalPaginator extends BasePaginator<
    */
   onEntitiesChanged({ changedIds }: EntityStoreChangeBatch): void {
     this.reconcileChangedIds(changedIds);
+  }
+
+  /**
+   * Entity-store subscriber: the store removed a message this paginator holds, so it drops it from
+   * its windows.
+   */
+  onEntityRemoved(id: string, message: unknown): void {
+    this.removeItem({ id, item: message as LocalMessage });
   }
 
   /**
@@ -333,6 +358,7 @@ export class MessageIntervalPaginator extends BasePaginator<
               store: channel.getClient?.().messageStore,
               owner: owner as MessageIntervalPaginator,
               getEntityId: owner.getItemId.bind(owner),
+              holderName: (owner as MessageIntervalPaginator).holderName,
             })),
       },
       // SDK-supplied, so a declarative registration overrides them. `hasPaginationQueryShapeChanged`
@@ -488,8 +514,13 @@ export class MessageIntervalPaginator extends BasePaginator<
     };
   };
 
+  /**
+   * Reads `requestOptions.watch`: `true` also watches the channel with the request. Ignored for a
+   * thread's reply list and with `doRequest`.
+   */
   query = async ({
     direction,
+    requestOptions,
   }: PaginationQueryParams<MessageQueryShape>): Promise<
     PaginationQueryReturnValue<LocalMessage>
   > => {
@@ -524,6 +555,7 @@ export class MessageIntervalPaginator extends BasePaginator<
             )
         : await this.channel.query({
             messages: options as MessagePaginationParams,
+            ...(requestOptions?.watch === true && { watch: true }),
             // todo: why do we query for watchers?
             // watchers: { limit: this.pageSize },
           });
@@ -538,7 +570,7 @@ export class MessageIntervalPaginator extends BasePaginator<
 
   /**
    * Seed the paginator with the page a channel-open query just fetched (`Channel.query` for
-   * `watch`/`create`, and `client.hydrateActiveChannels`).
+   * `watch`/`create`, and `client.hydrateChannels`).
    *
    * These paths hydrate the channel read state in the SAME synchronous tick they add messages
    * (`Channel._initializeState`), and the read patch drives `MessageReceiptsTracker`, which resolves
@@ -565,7 +597,15 @@ export class MessageIntervalPaginator extends BasePaginator<
     };
     const isJump = this.isJumpQueryShape(queryShape);
 
-    if (options?.reconcile && !isJump && typeof this.items !== 'undefined') {
+    // A re-seed reconciles against the loaded windows. A list loaded empty has none (no interval,
+    // not even live messages in a logical head), so the page seeds it as a first open would; the
+    // merge would find nothing to merge into and drop the page.
+    if (
+      options?.reconcile &&
+      !isJump &&
+      typeof this.items !== 'undefined' &&
+      this.itemIntervals.length > 0
+    ) {
       // The page came back, so whatever the last query failure was, it is no longer the truth. The
       // branch below inherits this from `postQueryReconcile`, which this one deliberately skips —
       // without it a failed "load older" would keep a UI's error surface latched through an
@@ -608,8 +648,14 @@ export class MessageIntervalPaginator extends BasePaginator<
       focusSignalTtlMs,
       pageSize,
       suppressFocusSignal,
+      watchChannel,
     }: JumpToMessageOptions = {},
   ): Promise<boolean> => {
+    const watch =
+      !!watchChannel &&
+      !this.parentMessageId &&
+      !this.config.doRequest &&
+      this.channel.watchStatus !== ChannelWatchStatus.Watching;
     let localMessage = this.getItem(messageId);
     let interval: AnyInterval | undefined;
     let state: Partial<PaginatorState<LocalMessage>> | undefined;
@@ -632,16 +678,18 @@ export class MessageIntervalPaginator extends BasePaginator<
       }
     }
 
-    if (localMessage && interval && !isLogicalInterval(interval)) {
+    // a loaded message needs no request, unless the jump is also to watch the channel
+    if (!watch && localMessage && interval && !isLogicalInterval(interval)) {
       state = {
         hasMoreHead: interval.hasMoreHead,
         hasMoreTail: interval.hasMoreTail,
         cursor: this.getCursorFromInterval(interval),
         items: this.intervalToItems(interval),
       };
-    } else if (!localMessage || !interval || isLogicalInterval(interval)) {
+    } else {
       const result = await this.executeQuery({
         queryShape: { id_around: messageId, limit: pageSize },
+        ...(watch && { requestOptions: { watch: true } }),
         updateState: false,
       });
       localMessage = this.getItem(messageId);

@@ -76,7 +76,7 @@ describe('StreamChat construction', () => {
       expect([...client.listeners.keys()]).to.deep.equal([]);
       expect(client.mutedChannels).to.deep.equal([]);
       expect(client.mutedUsers).to.deep.equal([]);
-      expect(client.activeChannels).to.deep.equal({});
+      expect(client.channelManager.values()).to.deep.equal([]);
       expect(client.channelServerConfigs).to.deep.equal({});
 
       // `wsConnection` is a stable wrapper created with the client, not the transport itself — that
@@ -105,7 +105,7 @@ describe('StreamChat construction', () => {
       expect(a.listeners).to.not.equal(b.listeners);
       expect(a.mutedChannels).to.not.equal(b.mutedChannels);
       expect(a.mutedUsers).to.not.equal(b.mutedUsers);
-      expect(a.activeChannels).to.not.equal(b.activeChannels);
+      expect(a.channelManager.channelStore).to.not.equal(b.channelManager.channelStore);
       expect(a.channelServerConfigs).to.not.equal(b.channelServerConfigs);
       expect(a.blockedUsers).to.not.equal(b.blockedUsers);
       expect(a.options).to.not.equal(b.options);

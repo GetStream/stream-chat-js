@@ -10,6 +10,7 @@ import type {
 import type { StreamChat } from '../client';
 import type { SearchSourceOptions } from './types';
 import { FilterBuilder, type FilterBuilderOptions } from '../pagination';
+import type { Channel } from '../channel';
 
 type CustomContext = Record<string, unknown>;
 
@@ -62,6 +63,11 @@ export type MessageSearchSourceOptions = SearchSourceOptions & {
   /** Static base filters for the follow-up query that hydrates unknown channels. */
   channelQueryFilters?: ChannelFilters;
   channelQuerySort?: SortParamRequest[];
+  /**
+   * Options for the follow-up query that hydrates unknown channels. Those channels are not watched
+   * unless `watch: true` is passed: a result is a preview, and opening one is what watches its
+   * channel.
+   */
   channelQueryOptions?: Omit<ChannelOptions, 'limit' | 'offset'>;
 };
 
@@ -94,6 +100,8 @@ export class MessageSearchSource<
     ChannelFilters,
     MergeContext<BuiltInContexts['channelQuery'], TContexts['channelQueryContext']>
   >;
+
+  private removeClaim?: () => void;
 
   constructor(
     client: StreamChat,
@@ -153,6 +161,49 @@ export class MessageSearchSource<
         ...filterBuilderOptions?.channelQuery?.initialFilterConfig,
       },
     });
+
+    // A subscription to the source's own state, so it lives and goes with the source itself.
+    this.state.subscribeWithSelector(
+      ({ isActive }) => ({ isActive }),
+      () => this.registerSubscriptions(),
+    );
+  }
+
+  /**
+   * While the search is active its results are on screen, so the channels they were found in count
+   * as used in the channel store (see `EntityStore.addClaim`), and stay the instances the results
+   * open. Follows `isActive`; also called by `SearchController.registerSubscriptions()` to take the
+   * registration again after `dispose()`.
+   */
+  registerSubscriptions() {
+    if (!this.isActive) {
+      this.dispose();
+      return;
+    }
+    this.removeClaim ??= this.client.channelManager.channelStore.addClaim({
+      heldBy: () => this.resultChannels(),
+      name: 'message-search',
+    });
+  }
+
+  /**
+   * Removes the registration that keeps the results' channels in the channel store, so a source that
+   * is dropped while active doesn't keep them, or itself, alive. A later activation registers again.
+   */
+  dispose() {
+    this.removeClaim?.();
+    this.removeClaim = undefined;
+  }
+
+  private resultChannels() {
+    const channels = new Set<Channel>();
+    for (const message of this.items ?? []) {
+      const channel = message.cid
+        ? this.client.channelManager.get(message.cid)
+        : undefined;
+      if (channel) channels.add(channel);
+    }
+    return channels;
   }
 
   protected async query(searchQuery: string, queryOptions: SearchQueryOptions = {}) {
@@ -209,7 +260,8 @@ export class MessageSearchSource<
 
     const cids = Array.from(
       items.reduce((acc, message) => {
-        if (message.cid && !this.client.activeChannels[message.cid]) acc.add(message.cid);
+        if (message.cid && !this.client.channelManager.get(message.cid))
+          acc.add(message.cid);
         return acc;
       }, new Set<string>()),
     );
@@ -225,11 +277,28 @@ export class MessageSearchSource<
         {
           filter_conditions: channelQueryFilters,
           sort: [{ direction: -1, field: 'last_message_at' }],
+          watch: false,
           ...this.channelQueryOptions,
         },
         {},
         queryOptions,
       );
+    }
+
+    if (queryOptions.signal?.aborted) return { items, next };
+
+    // The query above doesn't return every result's channel: it leaves out hidden channels by
+    // default, and those its filters exclude. Each result carries its channel's data, so such a
+    // channel is stored from it, unwatched and not loaded, and every result has a channel to show and
+    // to open (opening loads and watches it).
+    for (const message of items) {
+      if (!message.cid) continue;
+      const stored = this.client.channelManager.get(message.cid);
+      if (stored && !stored.pendingDisposal) continue;
+      const [type, id] = message.cid.split(':');
+      if (!type || !id) continue;
+      const channel = this.client.channelManager.ensure({ id, type });
+      if (message.channel) channel.data = message.channel;
     }
 
     return { items, next };

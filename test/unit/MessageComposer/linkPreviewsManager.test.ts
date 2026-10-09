@@ -88,7 +88,10 @@ const setup = ({
   mockClient.user = { id: 'user' };
   mockClient.getOG = vi.fn().mockResolvedValue(enrichURLReturnValue);
 
-  const mockChannel = mockClient.channel('channelType', 'channelId');
+  const mockChannel = mockClient.channelManager.ensure({
+    type: 'channelType',
+    id: 'channelId',
+  });
   const setServerConfig = stubServerConfig(mockChannel, { url_enrichment: true });
   const messageComposer = new MessageComposer({
     client: mockClient,
@@ -429,7 +432,10 @@ describe('LinkPreviewsManager', () => {
       client.channelServerConfigsStore.partialNext({
         configs: { 'channelType:channelId': { url_enrichment } as never },
       });
-      const channel = client.channel('channelType', 'channelId');
+      const channel = client.channelManager.ensure({
+        type: 'channelType',
+        id: 'channelId',
+      });
       const composer = new MessageComposer({
         client,
         compositionContext: channel,

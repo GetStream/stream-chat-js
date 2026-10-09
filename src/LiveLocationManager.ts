@@ -221,7 +221,7 @@ export class LiveLocationManager extends WithSubscriptions {
    * the life of the instance. Releasing it from the ref-counted call meant the first of two callers to
    * leave silently stopped a still-live manager from tracking `client.config` — permanently, since
    * nothing but the constructor registers it. Mirrors `SearchController.dispose` and the configuration
-   * half of `Channel._disconnect`.
+   * half of `Channel.disconnect`.
    *
    * Until this is called, the client's configuration registry holds a handle to this manager, so a
    * long-lived client and many short-lived managers need it to be called.

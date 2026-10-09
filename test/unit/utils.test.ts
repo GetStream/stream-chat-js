@@ -13,6 +13,7 @@ import {
   channelTracksReadLocally,
   formatMessage,
   generateChannelTempCid,
+  generateChannelTempId,
   localMessageToNewMessagePayload,
   toUpdatedMessagePayload,
   uniqBy,
@@ -255,15 +256,27 @@ describe('findIndexInSortedArray', () => {
   });
 });
 
+describe('generateChannelTempId', () => {
+  it('joins the sorted member ids after !members-', () => {
+    expect(generateChannelTempId(['zack', 'alice', 'charlie'])).to.equal(
+      '!members-alice,charlie,zack',
+    );
+  });
+
+  it('skips empty ids', () => {
+    expect(generateChannelTempId(['bob', '', 'alice'])).to.equal('!members-alice,bob');
+  });
+
+  it('returns undefined when there are no members', () => {
+    expect(generateChannelTempId([])).to.be.undefined;
+    expect(generateChannelTempId([''])).to.be.undefined;
+  });
+});
+
 describe('generateChannelTempCid', () => {
   it('should return a valid temp cid for valid input', () => {
     const result = generateChannelTempCid('messaging', ['alice', 'bob']);
     expect(result).to.equal('messaging:!members-alice,bob');
-  });
-
-  it('should return undefined if members is null', () => {
-    const result = generateChannelTempCid('messaging', null as unknown as string[]);
-    expect(result).to.be.undefined;
   });
 
   it('should return undefined if members is an empty array', () => {
@@ -274,6 +287,13 @@ describe('generateChannelTempCid', () => {
   it('should correctly format cid for multiple members', () => {
     const result = generateChannelTempCid('team', ['zack', 'alice', 'charlie']);
     expect(result).to.equal('team:!members-alice,charlie,zack');
+  });
+
+  it('leaves out empty member ids', () => {
+    expect(generateChannelTempCid('messaging', ['bob', '', 'alice'])).to.equal(
+      'messaging:!members-alice,bob',
+    );
+    expect(generateChannelTempCid('messaging', [''])).to.be.undefined;
   });
 });
 
@@ -553,7 +573,7 @@ describe('channelHasReadEvents', () => {
   const makeChannel = (own_capabilities?: ChannelOwnCapability[]) => {
     const client = new StreamChat('apiKey');
     client.user = { id: 'user' };
-    const channel = client.channel('messaging', 'cap-id');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'cap-id' });
     channel.data = { own_capabilities };
     return channel;
   };
@@ -587,7 +607,7 @@ describe('channelTracksReadLocally', () => {
     client.user = { id: 'user' };
     // client-level, so every channel this client builds derives it
     client.config.setConfig('channel', { readEvents: { localUnreadCountEnabled } });
-    const channel = client.channel('messaging', 'cap-id');
+    const channel = client.channelManager.ensure({ type: 'messaging', id: 'cap-id' });
     channel.data = { own_capabilities };
     return { client, channel };
   };
@@ -772,6 +792,20 @@ describe('request-payload date direction', () => {
       expect(payload.shared_location?.end_at).toBeInstanceOf(Date);
       expect(payload.shared_location?.end_at?.getTime()).toBe(nsToMs(NANOS));
       expect(payload.shared_location).not.toHaveProperty('created_at');
+    });
+
+    it('leaves out client-only fields, which the server would store as custom data', () => {
+      const payload = toUpdatedMessagePayload(
+        generateMsg({
+          error: { message: 'x' },
+          reaction_scores: { like: 1 },
+          status: 'received',
+        }),
+      );
+
+      for (const key of ['error', 'reaction_scores', 'status']) {
+        expect(payload).not.toHaveProperty(key);
+      }
     });
 
     it('reads pinned-ness nullishly, so an epoch pin still counts as pinned', () => {

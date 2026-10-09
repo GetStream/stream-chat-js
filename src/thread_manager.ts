@@ -109,6 +109,11 @@ export class ThreadManager extends WithSubscriptions {
     this.client = client;
     this.state = new StateStore<ThreadManagerState>(THREAD_MANAGER_INITIAL_STATE);
     this.paginator = new ThreadPaginator({ client, store: this.threadStore });
+    // a thread keeps its channel, whether listed or opened
+    client.channelManager.channelStore.addClaim({
+      heldBy: () => this.registeredThreads.map((thread) => thread.channel),
+      name: 'threads',
+    });
     // Every thread entering the list gets its channel's disposal listener. Set up here rather than in
     // `registerSubscriptions()`, so it doesn't depend on a UI having mounted.
     this.paginator.state.subscribeWithSelector(
@@ -159,8 +164,12 @@ export class ThreadManager extends WithSubscriptions {
    * The returned thread is registered right away. If the thread list loads it before the UI
    * activates it, the list reuses this instance instead of creating a duplicate.
    *
-   * A thread created here only has its parent message, so it starts stale and it loads its thread data
-   * (participants, read state, replies) once, the first time it's opened.
+   * A thread created here only has its parent message. It starts stale and loads its thread data
+   * (participants, read state, replies) once, the first time it's opened, when it may have any: when
+   * the parent has replies, and when the channel isn't watched, as the parent's `reply_count` then
+   * misses the replies sent since. A parent without replies in a watched channel has nothing to load
+   * yet (`getThread` would answer 404): the thread starts up to date, and its first reply arrives as
+   * an event.
    */
   public ensure = ({
     channel,
@@ -172,7 +181,6 @@ export class ThreadManager extends WithSubscriptions {
     let thread = this.threadStore.get(parentMessage.id);
     if (!thread) {
       thread = new Thread({ channel, client: this.client, parentMessage });
-      thread.state.partialNext({ isStateStale: true });
     }
     this.register(thread);
     return thread;
@@ -228,7 +236,7 @@ export class ThreadManager extends WithSubscriptions {
     const { channel } = thread;
     if (this.disposalListeners.has(channel)) return;
     if (channel.pendingDisposal) {
-      this.releaseChannel(channel);
+      this.releaseThreadsOfChannel(channel);
       return;
     }
     this.disposalListeners.set(
@@ -236,14 +244,14 @@ export class ThreadManager extends WithSubscriptions {
       channel.state.subscribeWithSelector(
         ({ pendingDisposal }) => ({ pendingDisposal }),
         ({ pendingDisposal }) => {
-          if (pendingDisposal) this.releaseChannel(channel);
+          if (pendingDisposal) this.releaseThreadsOfChannel(channel);
         },
       ),
     );
   };
 
   /** The channel was disposed, so its threads are unusable: release every one of them. */
-  private releaseChannel = (channel: Channel) => {
+  private releaseThreadsOfChannel = (channel: Channel) => {
     this.disposalListeners.get(channel)?.();
     this.disposalListeners.delete(channel);
     const onChannel = (thread: Thread) => thread.channel === channel;

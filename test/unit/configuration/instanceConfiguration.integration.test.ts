@@ -29,7 +29,7 @@ describe('instance configuration — cross-instance', () => {
   });
 
   const openChannel = (id = channelResponse.id): Channel =>
-    client.channel('messaging', id);
+    client.channelManager.ensure({ type: 'messaging', id: id });
   const openThread = () =>
     new Thread({
       client,
@@ -316,10 +316,10 @@ describe('instance configuration — cross-instance', () => {
   });
 
   describe('teardown, per disposal path', () => {
-    it('channel — _disconnect', () => {
+    it('channel — disconnect', () => {
       const teardown = vi.fn();
       client.config.setSetupFunction('channel', () => teardown);
-      openChannel()._disconnect();
+      openChannel().disconnect();
       expect(teardown).toHaveBeenCalledTimes(1);
     });
 
@@ -352,7 +352,7 @@ describe('instance configuration — cross-instance', () => {
   /**
    * Keyed by cid, not by channel type. Most of `ChannelConfigWithInfo` reads as a type-level setting, but
    * a channel's own `config_overrides` narrow it for that channel alone — and this SDK can set them:
-   * `client.channel(type, id, { config_overrides })` sends them on `query`/`watch`, and
+   * `client.channelManager.ensure({ type, id, data: { config_overrides } })` sends them on `query`/`watch`, and
    * `channel.update()` / `updatePartial()` reach the same state. `ConfigOverridesRequest` covers
    * `shared_locations`, `uploads`, `typing_events`, `replies`, `max_message_length`, `commands` and more —
    * exactly the fields `Channel.serverRestrictions` and `availableCommands` read.
@@ -363,8 +363,8 @@ describe('instance configuration — cross-instance', () => {
    */
   describe('server channel configuration is cached by cid', () => {
     it('does not serve one channel the config of its sibling', () => {
-      const a = client.channel('messaging', 'a');
-      const b = client.channel('messaging', 'b');
+      const a = client.channelManager.ensure({ type: 'messaging', id: 'a' });
+      const b = client.channelManager.ensure({ type: 'messaging', id: 'b' });
 
       setServerConfig(a, { shared_locations: false });
 
@@ -375,8 +375,8 @@ describe('instance configuration — cross-instance', () => {
     });
 
     it('keeps two channels of one type independent', () => {
-      const a = client.channel('messaging', 'a');
-      const b = client.channel('messaging', 'b');
+      const a = client.channelManager.ensure({ type: 'messaging', id: 'a' });
+      const b = client.channelManager.ensure({ type: 'messaging', id: 'b' });
 
       setServerConfig(a, { shared_locations: false });
       setServerConfig(b, { shared_locations: true });
@@ -387,8 +387,8 @@ describe('instance configuration — cross-instance', () => {
     });
 
     it('does not leak across types', () => {
-      const messaging = client.channel('messaging', 'a');
-      const livestream = client.channel('livestream', 'b');
+      const messaging = client.channelManager.ensure({ type: 'messaging', id: 'a' });
+      const livestream = client.channelManager.ensure({ type: 'livestream', id: 'b' });
 
       setServerConfig(messaging, { shared_locations: false });
 
@@ -396,7 +396,7 @@ describe('instance configuration — cross-instance', () => {
     });
 
     it('reaches a composer built before its own channel config arrived', () => {
-      const channel = client.channel('messaging', 'a');
+      const channel = client.channelManager.ensure({ type: 'messaging', id: 'a' });
       channel.messageComposer.registerSubscriptions();
 
       setServerConfig(channel, { shared_locations: false });
@@ -405,8 +405,8 @@ describe('instance configuration — cross-instance', () => {
     });
 
     it('does not narrow a composer from a sibling channel config', () => {
-      const a = client.channel('messaging', 'a');
-      const b = client.channel('messaging', 'b');
+      const a = client.channelManager.ensure({ type: 'messaging', id: 'a' });
+      const b = client.channelManager.ensure({ type: 'messaging', id: 'b' });
       b.messageComposer.registerSubscriptions();
 
       // `a`'s override must not reach `b`'s composer — the leak this keying exists to prevent.
@@ -418,8 +418,8 @@ describe('instance configuration — cross-instance', () => {
     it('resolves different channel configs for two channels of one type', () => {
       // The assertion that matters to consumers: not the raw cache, but the *resolved* gates they read.
       // `typing_events` and `read_events` are both overridable per channel.
-      const a = client.channel('messaging', 'a');
-      const b = client.channel('messaging', 'b');
+      const a = client.channelManager.ensure({ type: 'messaging', id: 'a' });
+      const b = client.channelManager.ensure({ type: 'messaging', id: 'b' });
 
       setServerConfig(a, { read_events: false, typing_events: false });
       setServerConfig(b, { read_events: true, typing_events: true });
@@ -431,8 +431,8 @@ describe('instance configuration — cross-instance', () => {
     });
 
     it('keeps two live composers of one type on their own server configs', () => {
-      const a = client.channel('messaging', 'a');
-      const b = client.channel('messaging', 'b');
+      const a = client.channelManager.ensure({ type: 'messaging', id: 'a' });
+      const b = client.channelManager.ensure({ type: 'messaging', id: 'b' });
       a.messageComposer.registerSubscriptions();
       b.messageComposer.registerSubscriptions();
 
@@ -448,8 +448,14 @@ describe('instance configuration — cross-instance', () => {
     it('keeps them apart when each is queried over HTTP', async () => {
       // The same disagreement over the real transport, one `channel.query()` each: the cid the config is
       // filed under is the one on the response, and each channel reads back only its own.
-      const restricted = client.channel('messaging', 'http-restricted');
-      const permissive = client.channel('messaging', 'http-permissive');
+      const restricted = client.channelManager.ensure({
+        type: 'messaging',
+        id: 'http-restricted',
+      });
+      const permissive = client.channelManager.ensure({
+        type: 'messaging',
+        id: 'http-permissive',
+      });
 
       const responseFor = (channel: Channel, typing_events: boolean) => ({
         ...mockChannelQueryResponse,
@@ -487,14 +493,16 @@ describe('instance configuration — cross-instance', () => {
         channel: { id: 'permissive', config: { typing_events: true } as never },
       });
 
-      client.hydrateActiveChannels([restricted, permissive]);
+      client.hydrateChannels([restricted, permissive]);
 
-      expect(client.channel('messaging', 'restricted').config.typingEvents.enabled).toBe(
-        false,
-      );
-      expect(client.channel('messaging', 'permissive').config.typingEvents.enabled).toBe(
-        true,
-      );
+      expect(
+        client.channelManager.ensure({ type: 'messaging', id: 'restricted' }).config
+          .typingEvents.enabled,
+      ).toBe(false);
+      expect(
+        client.channelManager.ensure({ type: 'messaging', id: 'permissive' }).config
+          .typingEvents.enabled,
+      ).toBe(true);
     });
   });
 
@@ -519,7 +527,7 @@ describe('instance configuration — cross-instance', () => {
       setServerConfig(channel, { shared_locations: false });
 
       // Previously this stayed `true` forever: the composer read `getConfig()` exactly once, in its
-      // constructor, which for `client.channel()` runs before `watch()` populates it.
+      // constructor, which for `client.channelManager.ensure()` runs before `watch()` populates it.
       expect(channel.messageComposer.config.location.enabled).toBe(false);
     });
 
@@ -659,7 +667,10 @@ describe('instance configuration — cross-instance', () => {
     client.config.set({ channel: { messagePaginator: { pageSize: 41 } } });
 
     expect(other.config.getConfig('channel')).toBeNull();
-    expect(other.channel('messaging', 'x').messagePaginator.config.pageSize).toBe(100);
+    expect(
+      other.channelManager.ensure({ type: 'messaging', id: 'x' }).messagePaginator.config
+        .pageSize,
+    ).toBe(100);
   });
 
   it('seeds the client key through StreamChatOptions.config', () => {

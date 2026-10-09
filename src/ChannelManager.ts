@@ -1,6 +1,6 @@
 import { EventHandlerPipeline } from './EventHandlerPipeline';
 import { WithSubscriptions } from './utils/WithSubscriptions';
-import type { EventType } from './types';
+import type { ChannelInput, ChannelStateResponseFields, EventType } from './types';
 import type { ChannelPaginator } from './pagination';
 import type { StreamChat } from './client';
 import type { Unsubscribe } from '@stream-io/state-store';
@@ -13,10 +13,13 @@ import type {
   PipelineEvent,
 } from './EventHandlerPipeline';
 import { filterConstrainsField } from './pagination/filterCompiler';
-import { getChannel } from './pagination/utility.queryChannel';
-import type { Channel } from './channel';
+import { Channel } from './channel';
 import { ChannelWatchStatus } from './channel_state';
-import { runDetached } from './utils';
+import { generateChannelTempId, getMemberUserId, runDetached } from './utils';
+import { EntityStore } from './entityStore/EntityStore';
+import { chatLoggerSystem } from './logger';
+
+const logger = chatLoggerSystem.getLogger('channel-manager');
 
 export type ChannelManagerEventHandlerContext = {
   channelManager: ChannelManager;
@@ -87,28 +90,15 @@ const getCidFromEvent = (event: PipelineEvent): string | undefined => {
   return event.channel?.cid;
 };
 
+// A channel the app disconnected counts as not stored: it stays in the store only until the next
+// `releaseUnusedChannels()`, and an event that makes its cid relevant again gets a live instance.
 const getCachedChannelFromEvent = (
   event: PipelineEvent,
-  cache: Record<string, Channel>,
+  channelManager: ChannelManager,
 ): Channel | undefined => {
   const cid = getCidFromEvent(event);
-  return cid ? cache[cid] : undefined;
-};
-
-const reEmit: EventHandlerPipelineHandler<EventHandlerContext> = ({
-  event,
-  ctx: { channelManager },
-}) => {
-  if (!event.cid) return;
-  const channel = channelManager.client.activeChannels[event.cid];
-  if (!channel) return;
-  channelManager.paginators.forEach((paginator) => {
-    const items = paginator.items;
-    const { state } = paginator.locateByItem(channel);
-    if ((state?.currentIndex ?? -1) > -1 && items) {
-      paginator.state.partialNext({ items: [...items] });
-    }
-  });
+  const channel = cid ? channelManager.get(cid) : undefined;
+  return channel?.pendingDisposal ? undefined : channel;
 };
 
 const removeItem: EventHandlerPipelineHandler<EventHandlerContext> = ({
@@ -119,7 +109,7 @@ const removeItem: EventHandlerPipelineHandler<EventHandlerContext> = ({
   // `event.channel` only, and the legacy ChannelManager removed by `event.cid || event.channel?.cid`
   const cid = getCidFromEvent(event);
   if (!cid) return;
-  const channel = channelManager.client.activeChannels[cid];
+  const channel = channelManager.get(cid);
   channelManager.paginators.forEach((paginator) => {
     paginator.removeItem({ id: cid, item: channel });
   });
@@ -130,10 +120,7 @@ const removeItem: EventHandlerPipelineHandler<EventHandlerContext> = ({
 export const ignoreEventsForUnknownChannels: EventHandlerPipelineHandler<
   EventHandlerContext
 > = ({ event, ctx: { channelManager } }) => {
-  const channel: Channel | undefined = getCachedChannelFromEvent(
-    event,
-    channelManager.client.activeChannels,
-  );
+  const channel = getCachedChannelFromEvent(event, channelManager);
   if (!channel) return { action: 'stop' };
 };
 
@@ -148,17 +135,16 @@ export const ignoreEventsForUnknownChannels: EventHandlerPipelineHandler<
  * sit frozen until the channel was opened. Re-watching it the moment an event proves it relevant is
  * what closes that gap, without ever eagerly re-watching the whole cache.
  *
- * The request is idempotent, so a successful watch flips the status to `Watching`, and `getChannel`
- * dedupes concurrent watches for the same cid, so a burst of events cannot produce a burst of requests.
+ * The request is idempotent, so a successful watch flips the status to `Watching`, and
+ * `ensureWatched()` joins a watch it already has in flight, so a burst of events cannot produce a
+ * burst of requests.
  */
-const restoreInterruptedWatch = (channel: Channel, client: StreamChat) => {
+const restoreInterruptedWatch = (channel: Channel) => {
+  // a disposed channel refuses requests, and its `ensureWatched()` would reject
   if (channel.pendingDisposal) return;
   if (channel.watchStatus !== ChannelWatchStatus.WasWatching) return;
 
-  // Takes the client as an argument rather than calling `channel.getClient()`, which THROWS for a
-  // channel pending disposal — the guard above makes that unreachable today, but a throw here would
-  // reject the whole event handler, so it is not a hazard worth leaving one edit away.
-  runDetached(getChannel({ channel, client }), {
+  runDetached(channel.ensureWatched(), {
     context: `restoreInterruptedWatch(${channel.cid})`,
   });
 };
@@ -167,77 +153,62 @@ const updateLists: EventHandlerPipelineHandler<EventHandlerContext> = async ({
   event,
   ctx: { channelManager },
 }) => {
-  let channel: Channel | undefined = getCachedChannelFromEvent(
-    event,
-    channelManager.client.activeChannels,
-  );
+  let channel: Channel | undefined = getCachedChannelFromEvent(event, channelManager);
 
   if (!channel) {
     const [type, id] = getCidFromEvent(event)?.split(':') ?? [];
     if (!type) return;
 
-    channel = await getChannel({
-      client: channelManager.client,
-      id,
-      type,
-    });
+    channel = await channelManager.ensure({ id, type }).ensureWatched();
   }
 
   if (!channel) return;
 
-  const matchingPaginators = channelManager.paginators.filter((p) =>
-    p.matchesFilter(channel),
-  );
-  const matchingIds = new Set(matchingPaginators.map((p) => p.id));
-
-  const ownerIds = channelManager.resolveOwnership(channel, matchingPaginators);
-
-  channelManager.paginators.forEach((paginator) => {
-    if (!matchingIds.has(paginator.id)) {
-      // remove if it does not match the filter anymore
-      paginator.removeItem({ item: channel });
-      return;
-    }
-
-    // Only if owners are specified, the items is removed from the non-owner matching paginators
-    if (ownerIds.size > 0 && !ownerIds.has(paginator.id)) {
-      // matched, but not selected to own - remove to enforce exclusivity
-      paginator.removeItem({ item: channel });
-      return;
-    }
-
-    // Selected owner: ingest. The manager never boosts by default on any event — the sort is the
-    // single source of truth for order, so a channel that just became relevant (new message, added,
-    // unhidden) relocates via its updated sort key. Boosting remains a public per-paginator primitive
-    // (`paginator.boost`) for integrators to opt into for specific channels (VIP/mention/deep-link).
-    paginator.ingestItem(channel);
-  });
+  routeToPaginators(channelManager, channel);
 
   // AFTER routing, and not awaited: the row relocates immediately off the event, and the watch (plus
   // the state it hydrates) lands whenever it lands. `channel.hidden` is excluded — a channel being
   // hidden is the one routed event that must not resurrect a watch.
   if (event.type !== 'channel.hidden') {
-    restoreInterruptedWatch(channel, channelManager.client);
+    restoreInterruptedWatch(channel);
   }
 };
 
-// we have to make sure that client.activeChannels is always up-to-date
+/**
+ * Re-inserts a loaded channel whose data changed in place (`channel.updated`, `channel.truncated`), so
+ * a list sorted or filtered by a changed field moves or drops it. Channels that aren't loaded are
+ * ignored: these events don't make an unknown channel relevant.
+ */
+const reinsertItem: EventHandlerPipelineHandler<EventHandlerContext> = ({
+  event,
+  ctx: { channelManager },
+}) => {
+  const channel = getCachedChannelFromEvent(event, channelManager);
+  if (!channel) return;
+  routeToPaginators(channelManager, channel);
+};
+
+/** Ingests `channel` into the lists that match and own it, and removes it from the rest. */
+function routeToPaginators(channelManager: ChannelManager, channel: Channel) {
+  // The manager never boosts by default on any event — the sort is the single source of truth for
+  // order, so a channel that just became relevant (new message, added, unhidden) relocates via its
+  // updated sort key. Boosting remains a public per-paginator primitive (`paginator.boost`) for
+  // integrators to opt into for specific channels (VIP/mention/deep-link).
+  channelManager.ingestChannel(channel);
+}
+
 const channelDeletedHandler: LabeledEventHandler<EventHandlerContext> = {
   handle: removeItem,
   id: 'ChannelManager:default-handler:channel.deleted',
 };
 
-// fixme: this handler should not be handled by the channel manager but as Channel does not have reactive state,
-// we need to re-emit the whole list to reflect the changes
 const channelUpdatedHandler: LabeledEventHandler<EventHandlerContext> = {
-  handle: reEmit,
+  handle: reinsertItem,
   id: 'ChannelManager:default-handler:channel.updated',
 };
 
-// fixme: this handler should not be handled by the channel manager but as Channel does not have reactive state,
-// we need to re-emit the whole list to reflect the changes
 const channelTruncatedHandler: LabeledEventHandler<EventHandlerContext> = {
-  handle: reEmit,
+  handle: reinsertItem,
   id: 'ChannelManager:default-handler:channel.truncated',
 };
 
@@ -264,7 +235,7 @@ const messageNewHandler: LabeledEventHandler<EventHandlerContext> = {
 };
 
 /**
- * Sort fields `channelSortPathResolver` resolves from read state. `SortParamRequest.field` is an open
+ * Sort fields the channel list's sort resolver resolves from read state. `SortParamRequest.field` is an open
  * string, so there is no type enumerating them.
  */
 const READ_STATE_SORT_FIELDS: string[] = ['has_unread', 'unread_count'];
@@ -296,7 +267,7 @@ const readStateChangedHandler: LabeledEventHandler<EventHandlerContext> = {
     if (event.thread_id) return;
 
     // a mark-all-read names no channel, so there is no target to route
-    const channel = getCachedChannelFromEvent(event, client.activeChannels);
+    const channel = getCachedChannelFromEvent(event, channelManager);
     if (!channel) return;
 
     // hot path: `message.read` fires on every channel the user opens
@@ -342,34 +313,6 @@ const notificationChannelMutesUpdatedHandler: LabeledEventHandler<EventHandlerCo
   id: 'ChannelManager:default-handler:notification.channel_mutes_updated',
 };
 
-// fixme: updates users for member object in all the channels which are loaded with that member - normalization would be beneficial
-const userPresenceChangedHandler: LabeledEventHandler<EventHandlerContext> = {
-  handle: ({ event, ctx: { channelManager } }) => {
-    const eventUser = event.user;
-    if (!eventUser?.id) return;
-    channelManager.paginators.forEach((paginator) => {
-      const paginatorItems = paginator.items;
-      if (!paginatorItems) return;
-      let updated = false;
-      paginatorItems.forEach((channel) => {
-        if (channel.state.members[eventUser.id]) {
-          channel.state.members[eventUser.id].user = event.user;
-          updated = true;
-        }
-        if (channel.state.membership.user?.id === eventUser.id) {
-          channel.state.membership.user = eventUser;
-          updated = true;
-        }
-      });
-      if (updated) {
-        // fixme: user is not reactive and so the whole list has to be re-rendered
-        paginator.state.partialNext({ items: [...paginatorItems] });
-      }
-    });
-  },
-  id: 'ChannelManager:default-handler:user.presence.changed',
-};
-
 export type ChannelManagerState = {
   paginators: ChannelPaginator[];
 };
@@ -398,14 +341,58 @@ export type ChannelManagerOptions = {
   ownershipResolver?: PaginatorOwnershipResolver | string[];
 };
 
+/**
+ * A stored channel, the key it is stored under, and what keeps it: its own state (`'watched'`,
+ * `'active'`, `'querying-channel'`) and the names of its holders. None: a call to
+ * `releaseUnusedChannels()` would remove it.
+ */
+export type ChannelUsage = {
+  channel: Channel;
+  key: string;
+  keptBy: string[];
+};
+
+/** What in the channel's own state keeps it in the channel store. */
+const keptByOwnState = (channel: Channel) => {
+  const reasons: string[] = [];
+  if (channel.watchStatus !== ChannelWatchStatus.NotWatching) reasons.push('watched');
+  if (channel.active) reasons.push('active');
+  if (channel.isQueryingChannel) reasons.push('querying-channel');
+  return reasons;
+};
+
 export class ChannelManager extends WithSubscriptions {
   client: StreamChat;
   state: StateStore<ChannelManagerState>;
+  /**
+   * Every `Channel` instance, one per cid. A channel created from members, before the server assigns
+   * its id, is stored under its temporary cid until {@link ChannelManager.changeChannelId} moves it.
+   * A channel stays until a known end (deleted, or the current user removed from it) or logout removes
+   * it, or the app calls {@link ChannelManager.releaseUnusedChannels} while it is disconnected, or
+   * neither watched nor held; each removes it and runs its {@link Channel.disconnect}. A channel
+   * list holds the channels it shows by linking them, which also tells it about removals and cid
+   * changes; other users hold theirs through claims.
+   *
+   * @internal
+   */
+  readonly channelStore = new EntityStore<Channel>({
+    getEntityId: (channel) => channel.cid,
+    onRelease: (channel) => channel.disconnect(),
+    releaseOnLastUnlink: false,
+  });
+
   protected _pipelines = new Map<
     SupportedEventType,
     EventHandlerPipeline<EventHandlerContext>
   >();
   protected ownershipResolver?: PaginatorOwnershipResolver;
+  /**
+   * Instances replaced by a stored one ({@link ChannelManager.supersedeChannel}). Not in the store, so
+   * they are tracked here to be disconnected ({@link Channel.disconnect}) at logout
+   * ({@link ChannelManager.clearChannels}). Nothing disconnects them earlier, as the app may still hold
+   * them.
+   */
+  private readonly supersededChannels = new Set<Channel>();
   /**
    * The `filterQueryResults` each registered paginator had before this manager wrapped it.
    *
@@ -439,7 +426,6 @@ export class ChannelManager extends WithSubscriptions {
     'notification.mark_unread': [readStateChangedHandler],
     'notification.message_new': [notificationMessageNewHandler],
     'notification.removed_from_channel': [notificationRemovedFromChannelHandler],
-    'user.presence.changed': [userPresenceChangedHandler],
   };
 
   constructor({
@@ -465,6 +451,341 @@ export class ChannelManager extends WithSubscriptions {
 
   get paginators(): ChannelPaginator[] {
     return this.state.getLatestValue().paginators;
+  }
+
+  /** The stored channel for `cid`, if any. */
+  get(cid: string): Channel | undefined {
+    return this.channelStore.get(cid);
+  }
+
+  /**
+   * The instance a channel list should show for `channel`: the one that superseded it, else the one
+   * stored under its cid, else `channel` itself. A list never puts another instance in place of the
+   * stored one, which would leave the stored one out of the store, unfinished and without events.
+   * `undefined` when that instance is disconnected (`pendingDisposal`), stored or not: it receives
+   * no events, and a list that already shows it drops it at the next `releaseUnusedChannels()`.
+   *
+   * @internal
+   */
+  resolveListedChannel(channel: Channel): Channel | undefined {
+    const candidate = channel.supersededBy ?? channel;
+    const stored = this.get(candidate.cid);
+    const resolved = stored ?? candidate;
+    if (resolved.pendingDisposal) return undefined;
+    if (resolved !== channel) {
+      logger
+        .withExtraTags('resolveListedChannel', channel.cid)
+        .warn(
+          'A channel list was given an instance other than the stored one; listing the stored one.',
+        );
+    }
+    return resolved;
+  }
+
+  /** Every stored channel. */
+  values(): Channel[] {
+    return this.channelStore.values();
+  }
+
+  /**
+   * Returns the channel for `type` and `id`, creating it if it isn't stored yet. Use this to get a
+   * channel instead of calling `new Channel()`; there is one instance per cid. A stored channel
+   * already disconnected (`pendingDisposal`) is replaced by a fresh one.
+   *
+   * Leave out `id` and pass `data.members` for a distinct channel between those members (one channel
+   * per set of members). It is stored under a temporary cid built from the member IDs until
+   * `watch()`, `query()` or `create()` returns the real one; a stored distinct channel with the same
+   * loaded members is returned instead. If another instance holds the real cid by then (its members
+   * weren't loaded, or an event stored it meanwhile), that instance stays stored and this one is
+   * left unstored. A group with the same members as another needs its own `id` instead.
+   *
+   * A channel created from members is {@link Channel.isProvisional} until its query is answered: it
+   * has no id yet, so nothing but that query can be sent for it. A channel with an id is not, even one
+   * whose id the app generated and the server doesn't have yet: requests for it go to the server.
+   *
+   * A channel got this way stays stored until it is deleted, the current user is removed from it, or
+   * the user logs out. The SDK never releases it on its own; an app freeing memory calls
+   * {@link ChannelManager.releaseUnusedChannels}, which releases it only while nothing uses it.
+   *
+   * ```ts
+   * const general = client.channelManager.ensure({ type: 'messaging', id: 'general' });
+   * const dm = client.channelManager.ensure({
+   *   type: 'messaging',
+   *   data: { members: [{ user_id: 'ann' }, { user_id: 'bob' }] },
+   * });
+   * await dm.watch();
+   * ```
+   *
+   * @param params.type - The channel type.
+   * @param params.id - The channel ID; leave it out for a distinct channel created from members.
+   * @param params.data - Data for a new channel (members, custom fields). For a stored channel only
+   *   `data.custom` is applied.
+   * @returns The channel; initialize it with `channel.watch()`.
+   */
+  ensure({
+    data = {},
+    id,
+    type,
+  }: {
+    type: string;
+    id?: string | null;
+    data?: ChannelInput;
+  }): Channel {
+    const { client } = this;
+    if (!client.userId) {
+      throw Error('Call connectUser or connectAnonymousUser before creating a channel');
+    }
+    if (type.includes(':')) {
+      throw new Error(`Invalid channel group ${type}, can't contain the : character`);
+    }
+    if (id) return this.ensureById(type, id, data);
+    if (data.members?.length) return this.ensureByMembers(type, data);
+    return new Channel(client, type, undefined, data);
+  }
+
+  private ensureById(type: string, id: string, data: ChannelInput): Channel {
+    if (id.includes(':')) {
+      throw Error(`Invalid channel id ${id}, can't contain the : character`);
+    }
+
+    const cid = `${type}:${id}`;
+    if (this.get(cid)?.pendingDisposal) this.removeChannel(cid);
+
+    return this.getOrCreateChannel(
+      cid,
+      () => new Channel(this.client, type, id, data),
+      (channel) => {
+        // Only `custom` is applied to a stored channel, and only when the caller passed it: other
+        // fields (e.g. `{ members }`) would otherwise wipe its existing custom data, such as its name.
+        if (data.custom !== undefined) {
+          channel.data = { ...channel.data, custom: data.custom };
+          channel._data = { ...channel._data, custom: data.custom };
+        }
+      },
+    );
+  }
+
+  private ensureByMembers(type: string, data: ChannelInput): Channel {
+    // the id `Channel` gives itself until the server answers, from the same members
+    const tempId = generateChannelTempId((data.members ?? []).map(getMemberUserId));
+    if (!tempId) {
+      throw Error('Please specify atleast one member when creating unique conversation');
+    }
+    const tempCid = `${type}:${tempId}`;
+
+    // Stored under the temporary cid until the server returns the real one, then under the real
+    // cid, whose id for a distinct channel starts with `!members-`. A loaded one with the same
+    // members is that conversation.
+    if (this.get(tempCid)?.pendingDisposal) this.removeChannel(tempCid);
+    if (!this.get(tempCid)) {
+      const existing = this.values().find(
+        (channel) =>
+          !channel.pendingDisposal &&
+          channel.type === type &&
+          channel.id?.startsWith('!members-') &&
+          generateChannelTempId(Object.keys(channel.state.members)) === tempId,
+      );
+      if (existing) return existing;
+    }
+
+    return this.getOrCreateChannel(
+      tempCid,
+      () => new Channel(this.client, type, undefined, data),
+    );
+  }
+
+  /**
+   * Returns the channel stored under `cid`, passing it to `hydrate`, or stores and returns the result
+   * of `create`.
+   *
+   * @internal
+   */
+  getOrCreateChannel(
+    cid: string,
+    create: () => Channel,
+    hydrate?: (stored: Channel) => void,
+  ): Channel {
+    return this.channelStore.getOrCreate(cid, create, hydrate);
+  }
+
+  /**
+   * Moves a channel from its temporary cid to the one the server assigned (see `Channel.query`).
+   * Returns `false` when `oldCid` isn't stored or `newCid` already holds another channel.
+   *
+   * @internal
+   */
+  changeChannelId(oldCid: string, newCid: string): boolean {
+    return this.channelStore.changeId(oldCid, newCid);
+  }
+
+  /**
+   * `previous`, created without an id, was answered with a cid `successor` already holds (stored by an
+   * event or a channel list while `previous` waited). `successor` stays the one instance for the cid
+   * and takes over, without losing anything of its own:
+   *
+   * - the server's response, as a `queryChannels` result for a stored channel is applied: its data
+   *   and members, and its messages merged into the loaded ones (a local message, such as a failed
+   *   one, is never removed; an open channel's or a scrolled-back one's window isn't re-seeded);
+   * - `previous`'s local messages (sending or failed), added by id; a message `successor` already has
+   *   keeps `successor`'s copy;
+   * - `previous`'s composer, when `previous` is open and `successor` isn't: the user is typing in
+   *   `previous`, and nobody in `successor`. When both are open, neither composer is overwritten.
+   *
+   * `successor` is marked watched only when the query asked to watch (`watch: true`): the server then
+   * watches the cid for this connection. A query without a watch leaves its watch status as it was.
+   *
+   * `previous`'s own entry (`storedUnder`, its temporary cid) is dropped first, without disconnecting
+   * it: its query is still being applied to it and it may be on screen. It is marked superseded
+   * (`state.supersededBy`) so its holders switch over, and tracked here until logout, so the SDK
+   * never loses track of it.
+   *
+   * @internal
+   */
+  supersedeChannel(
+    previous: Channel,
+    successor: Channel,
+    response: ChannelStateResponseFields,
+    { storedUnder, watch }: { storedUnder?: string; watch?: boolean } = {},
+  ) {
+    if (storedUnder && this.get(storedUnder) === previous) {
+      this.channelStore.detach(storedUnder);
+    }
+    // `false`, not `undefined`: `hydrateChannels` would take a missing `watch` as "watched if
+    // connected", and this query may not have asked the server to watch
+    this.client.hydrateChannels([response], {}, { watch: watch === true });
+    successor.messagePaginator.batch(
+      () => {
+        for (const message of previous.messagePaginator.items ?? []) {
+          if (message.status === 'received') continue;
+          if (successor.messagePaginator.getItem(message.id)) continue;
+          // composed in `previous`, it carries `previous`'s temporary cid
+          successor.messagePaginator.ingestItem({ ...message, cid: successor.cid });
+        }
+      },
+      { coalesce: true },
+    );
+    if (previous.active && !successor.active) {
+      previous.messageComposer.transferTo(successor.messageComposer);
+    }
+    previous.state.partialNext({ supersededBy: successor });
+    this.supersededChannels.add(previous);
+  }
+
+  /**
+   * Removes every stored channel the app disconnected ({@link Channel.disconnect}, so
+   * `pendingDisposal`), whatever still holds or uses it: disconnecting says the app is done with
+   * it.
+   * Every list showing it drops it, as the store's removal reaches each list's index. Objects that
+   * still refer to the instance keep it, finished.
+   *
+   * Then removes, and disconnects, every stored channel that is neither watched nor held. A watched
+   * channel (`watching`,
+   * or `wasWatching` until its watch is restored) stays, because its events keep it current; so does
+   * an active one ({@link Channel.activate}), one being loaded (`watch()`, `query()` or `create()` in flight), and
+   * one a holder holds in {@link ChannelManager.channelStore}: a channel list links each of its
+   * channels, while threads, the composer cache and an active channel search hold theirs through
+   * claims ({@link EntityStore.addClaim}).
+   *
+   * What remains is an unwatched snapshot nothing shows, which saves no request: using it again
+   * needs a query, which stores it again.
+   *
+   * The SDK never calls this: it can't see the channels an app keeps in its own state, such as a
+   * stopped watch kept for re-entry or search results held after the search ended. Call it when the
+   * app is done with what it held, for example after closing a search screen
+   * (`searchController.dispose()`, then this). A channel your code still uses but that none of the
+   * above keeps would be released, so keep it with {@link Channel.activate} first.
+   */
+  releaseUnusedChannels() {
+    for (const [key, channel] of this.channelStore.entries()) {
+      if (channel.pendingDisposal) this.removeChannel(key);
+    }
+    for (const [key, channel] of this.channelStore.unheldEntries()) {
+      if (!keptByOwnState(channel).length) this.removeChannel(key);
+    }
+  }
+
+  /**
+   * Every stored channel with what keeps it, by the same rule as
+   * {@link ChannelManager.releaseUnusedChannels}: a channel kept by nothing would be released by a
+   * call to it. For debugging tools.
+   *
+   * @internal
+   */
+  getChannelUsage(): ChannelUsage[] {
+    return this.channelStore.entries().map(([key, channel]) => ({
+      channel,
+      key,
+      keptBy: [...keptByOwnState(channel), ...this.channelStore.holderNames(key)],
+    }));
+  }
+
+  /**
+   * Removes the channel stored under `cid` whatever uses it, and disconnects it
+   * ({@link Channel.disconnect}).
+   * Every list showing it drops it too, as the store's removal reaches each list's index.
+   *
+   * @internal
+   */
+  removeChannel(cid: string) {
+    this.channelStore.remove(cid);
+  }
+
+  /**
+   * Removes and disconnects ({@link Channel.disconnect}) every stored channel, and every superseded
+   * one.
+   *
+   * @internal
+   */
+  clearChannels() {
+    this.channelStore.clear();
+    this.supersededChannels.forEach((channel) => channel.disconnect());
+    this.supersededChannels.clear();
+  }
+
+  /**
+   * Fans the client-owned `mutedChannels` out to every stored channel's reactive `state.muteStatus`.
+   * Each channel republishes only when its own mute status actually changed, so this stays cheap on
+   * the frequent `health.check` path.
+   *
+   * @internal
+   */
+  reflectMutedChannels() {
+    for (const channel of this.values()) channel._syncMuteStatus();
+  }
+
+  /**
+   * Resets the AI indicator state to `Idle` on every stored channel. Invoked from `closeConnection`
+   * as it's a deliberate shutdown and will not natively trigger a WS event.
+   *
+   * @internal
+   */
+  resetAIStateOnChannels() {
+    for (const channel of this.values()) channel.state.resetAIState();
+  }
+
+  /**
+   * Demotes every actively-watched channel to `WasWatching`. The server keys watches by connection
+   * ID, so losing the socket ends every watch this client held — a reconnect issues a NEW id and the
+   * channels have to be re-queried to watch again. `WasWatching` is what records that they should be.
+   *
+   * Only `Watching` is demoted: a channel the consumer stopped on purpose, or one already
+   * disconnected (`disconnect()`), stays `NotWatching` and must not be resurrected by a reconnect.
+   *
+   * Invoked from two places on the WebSocket, because neither covers the other:
+   * `StableWSConnection._setHealth(false)` for an abnormal close/error, and `closeConnection()` for a
+   * deliberate shutdown (e.g. mobile backgrounding), whose `disconnect()` writes the status through
+   * `_applyHealth` and so never reaches `_setHealth`. After an `enableWSFallback` switch the
+   * long-poll calls it too, from `WSConnectionFallback._setState()` whenever going closed or
+   * disconnected takes the status offline.
+   *
+   * @internal
+   */
+  markChannelsWatchInterrupted() {
+    for (const channel of this.values()) {
+      if (channel.watchStatus === ChannelWatchStatus.Watching) {
+        channel.watchStatus = ChannelWatchStatus.WasWatching;
+      }
+    }
   }
 
   get pipelines(): Map<SupportedEventType, EventHandlerPipeline<EventHandlerContext>> {
@@ -527,27 +848,29 @@ export class ChannelManager extends WithSubscriptions {
    *
    * Use this to surface a channel the app just opened — a search result, a freshly created DM —
    * in the list(s) without a full re-query. `ingestItem` dedupes by cid and inserts in sort
-   * order, so calling this repeatedly is safe.
+   * order, so calling this repeatedly is safe. A channel created from members is ignored until its
+   * first query gives it an id: ingest it once `watch()` (or `ensureWatched()`) resolves.
    *
    * A channel that matches no paginator is not added anywhere. To have such channels still
    * appear, register a catch-all paginator (empty filter) with the lowest ownership priority as
    * a local fallback list.
    */
-  ingestChannel(channel: Channel) {
+  ingestChannel(input: Channel) {
+    // not listed until it has its id (see `ChannelPaginator.ingestItem`)
+    if (input.isProvisional) return;
+    const channel = this.resolveListedChannel(input);
+    if (!channel) return;
     const matchingPaginators = this.paginators.filter((p) => p.matchesFilter(channel));
-    const matchingIds = new Set(matchingPaginators.map((p) => p.id));
+    const matchingPaginatorIds = new Set(matchingPaginators.map((p) => p.id));
     const ownerIds = this.resolveOwnership(channel, matchingPaginators);
 
-    this.paginators.forEach((paginator) => {
-      const isMatch = matchingIds.has(paginator.id);
-      const isOwner = ownerIds.size === 0 || ownerIds.has(paginator.id);
-      if (isMatch && isOwner) {
-        paginator.ingestItem(channel);
-      } else {
-        // Not a match, or matched but not the selected owner — enforce exclusivity.
-        paginator.removeItem({ item: channel });
-      }
-    });
+    for (const paginator of this.paginators) {
+      const isOwner =
+        matchingPaginatorIds.has(paginator.id) &&
+        (ownerIds.size === 0 || ownerIds.has(paginator.id));
+      if (isOwner) paginator.ingestItem(channel);
+      else paginator.removeItem({ item: channel });
+    }
   }
 
   /**

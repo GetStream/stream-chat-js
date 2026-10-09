@@ -78,6 +78,11 @@ export class FixedSizeQueueCache<K, T> {
     return foundItem;
   }
 
+  /** Every cached value, as a new array. */
+  values(): T[] {
+    return Array.from(this.map.values());
+  }
+
   /**
    * Clears queue entirely and disposes of each item individually.
    */

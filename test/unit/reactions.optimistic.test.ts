@@ -27,7 +27,10 @@ const connect = () => {
 
 const createChannel = (client: StreamChat) => {
   const { channel: channelResponse } = generateChannel();
-  const channel = client.channel(channelResponse.type, channelResponse.id);
+  const channel = client.channelManager.ensure({
+    type: channelResponse.type,
+    id: channelResponse.id,
+  });
   channel.initialized = true;
   return channel;
 };

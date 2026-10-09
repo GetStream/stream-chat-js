@@ -1021,7 +1021,7 @@ describe('BaseSearchSource and implementations', () => {
 		});
 
 		it('skips channel loading if all channels are loaded', async () => {
-			mockClient.activeChannels = { 'channel-1': {} };
+			mockClient.channelManager.getOrCreateChannel('channel-1', () => ({}));
 			messageSource.activate();
 			mockClient.search.resolves({
 				results: [{ message: { cid: 'channel-1' } }],

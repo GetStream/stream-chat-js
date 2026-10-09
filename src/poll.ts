@@ -15,6 +15,7 @@ import type {
   SortParamRequest,
   UpdatePollOptionRequest,
   UpdatePollRequest,
+  UserResponse,
   VotingVisibility,
 } from './types';
 import type {
@@ -271,6 +272,60 @@ export class Poll {
       latest_answers: latestAnswers,
       ownAnswer,
     });
+  };
+
+  /**
+   * Puts an updated user (new name or image) into the votes, answers and creator this poll keeps,
+   * so voter avatars show it. Each vote is replaced, not edited in place, and everything goes out in
+   * one state update; nothing is published when the poll doesn't contain the user. An option whose
+   * votes don't contain the user keeps its array, so what renders it doesn't re-render. The offline
+   * DB gets the updated poll, as with the other poll events.
+   */
+  public handleUserUpdated = (user: UserResponse) => {
+    const currentState = this.data;
+    let changed = false;
+    const withUser = <V extends PollVoteResponseData>(vote: V): V => {
+      if (vote.user?.id !== user.id || vote.user === user) return vote;
+      changed = true;
+      return { ...vote, user };
+    };
+    // the same array when none of its votes is the user's
+    const withUserAll = (votes?: PollVoteResponseData[]) => {
+      if (!votes) return votes;
+      const next = votes.map(withUser);
+      return next.some((vote, index) => vote !== votes[index]) ? next : votes;
+    };
+
+    const latestVotesByOption = Object.fromEntries(
+      Object.entries(currentState.latest_votes_by_option ?? {}).map(
+        ([optionId, votes]) => [
+          optionId,
+          withUserAll(votes as PollVoteResponseData[]) ?? [],
+        ],
+      ),
+    );
+    const latestAnswers = withUserAll(
+      currentState.latest_answers as PollVoteResponseData[],
+    );
+    const ownVotesByOptionId = Object.fromEntries(
+      Object.entries(currentState.ownVotesByOptionId).map(([optionId, vote]) => [
+        optionId,
+        withUser(vote),
+      ]),
+    );
+    const ownAnswer = currentState.ownAnswer && withUser(currentState.ownAnswer);
+    const createdByChanged =
+      currentState.created_by?.id === user.id && currentState.created_by !== user;
+
+    if (!changed && !createdByChanged) return;
+    this.state.partialNext({
+      ...(createdByChanged && { created_by: user }),
+      latest_answers: latestAnswers ?? [],
+      latest_votes_by_option: latestVotesByOption,
+      ownAnswer,
+      ownVotesByOptionId,
+    });
+    this.upsertOfflineDb();
   };
 
   query = async (id: string) => {

@@ -78,8 +78,12 @@ const setup = ({
 
   mockClient.getOG = vi.fn().mockResolvedValue(enrichURLReturnValue);
 
-  const mockChannel = mockClient.channel('messaging', 'test-channel', {
-    members: [],
+  const mockChannel = mockClient.channelManager.ensure({
+    type: 'messaging',
+    id: 'test-channel',
+    data: {
+      members: [],
+    },
   });
   stubServerConfig(mockChannel, { url_enrichment: true });
   const messageComposer = new MessageComposer({
@@ -678,8 +682,12 @@ const setupForDraft = ({
   const mockClient = getClientWithUser({ id: 'user' });
   mockClient.getOG = vi.fn().mockResolvedValue(enrichURLReturnValue);
 
-  const mockChannel = mockClient.channel('messaging', 'test-channel', {
-    members: [],
+  const mockChannel = mockClient.channelManager.ensure({
+    type: 'messaging',
+    id: 'test-channel',
+    data: {
+      members: [],
+    },
   });
   stubServerConfig(mockChannel, { url_enrichment: true });
   const messageComposer = new MessageComposer({

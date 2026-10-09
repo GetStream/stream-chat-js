@@ -33,10 +33,10 @@ const setupMiddleware = (
   client.user = user;
 
   const channelResponse = generateChannel();
-  const channel = client.channel(
-    channelResponse.channel.type,
-    channelResponse.channel.id,
-  );
+  const channel = client.channelManager.ensure({
+    type: channelResponse.channel.type,
+    id: channelResponse.channel.id,
+  });
   channel.initialized = true;
 
   const messageComposer =

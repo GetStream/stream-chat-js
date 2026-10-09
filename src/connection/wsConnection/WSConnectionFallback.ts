@@ -166,7 +166,7 @@ export class WSConnectionFallback {
       // The server keyed watches by this connection id, so no request may carry it any more.
       this.client.connectionIdManager.invalidate();
       if (this.client.wsConnection._setStatus({ isHealthy: false })) {
-        this.client._markActiveChannelsWatchInterrupted();
+        this.client.channelManager.markChannelsWatchInterrupted();
       }
     }
   }

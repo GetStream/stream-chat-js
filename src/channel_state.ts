@@ -60,7 +60,7 @@ export type ChannelWatchState = {
    * See {@link ChannelWatchStatus}. Goes to `Watching` when a query carrying `watch: true` succeeds
    * (`channel.watch()`, `channel.query({ watch: true })`, `client.queryChannels()`); to
    * `WasWatching` when the WS connection is lost (only from `Watching` — a deliberate stop is never
-   * resurrected); and to `NotWatching` on `channel.stopWatching()` or teardown.
+   * resurrected); and to `NotWatching` on `channel.stopWatching()` or `channel.disconnect()`.
    *
    * It is truthful by construction: `channel.watch()` and `client.queryChannels()` wait for a live
    * socket rather than degrading, so a query carrying `watch: true` can only succeed against a
@@ -129,14 +129,17 @@ export type MuteStatusState = {
 /**
  * Connection / initialization lifecycle flags for the channel. Previously plain fields on `Channel`;
  * now store-backed so consumers can react to them via `useStateStore(channel.state, selector)`.
- * Read/written through the `channel.initialized` / `channel.offlineMode` /
- * `channel.pendingDisposal` getters/setters, which proxy this slice.
+ * Read through the `channel.initialized` / `channel.offlineMode` / `channel.pendingDisposal`
+ * getters, which proxy this slice; `initialized` and `offlineMode` have setters too, while
+ * `pendingDisposal` is set only by `channel.disconnect()`.
  */
 export type ChannelLifecycleState = {
   /**
-   * A vague indication of whether the channel exists on the chat backend. `true` once the channel
-   * has been initialized by `channel.create()` / `channel.query()` / `channel.watch()`. `false`
-   * means the channel may or may not exist — only those calls confirm it.
+   * Whether a live server response was applied to this instance since it was created: a query
+   * (`channel.query()`, and `watch()` and `create()`, which use it) or a `queryChannels` result.
+   * Its data was current when it arrived; `watchStatus` tells whether it is kept current since.
+   * `false` means nothing confirmed it yet: the channel may or may not exist on the server.
+   * Data restored from the offline database doesn't count (see `offlineMode`). Never reset.
    */
   initialized: boolean;
   /**
@@ -146,11 +149,19 @@ export type ChannelLifecycleState = {
    */
   offlineMode: boolean;
   /**
-   * Whether the channel has been torn down and is awaiting disposal (deleted, the current user
-   * removed, or the client disconnected). One-way and terminal — see
+   * Whether `channel.disconnect()` has run: the channel was deleted, the current user removed from
+   * it, the client disconnected, or nothing used it any more. One-way and terminal — see
    * {@link Channel.pendingDisposal}: the instance is never revived.
    */
   pendingDisposal: boolean;
+  /**
+   * The stored instance that replaced this one: this instance was created without an id, and when
+   * the server answered with the real cid, another instance was already stored under it (put there by
+   * an event or a channel list meanwhile). The stored instance took this one's server data, local
+   * messages and, when this one was open and it wasn't, its composer. Anything still holding this
+   * instance should switch to it. Set once.
+   */
+  supersededBy: Channel | undefined;
 };
 
 /**
@@ -160,8 +171,8 @@ export type ChannelLifecycleState = {
 export type ChannelActivationState = {
   /**
    * Whether a consumer has declared this channel as the one it is currently reading, via
-   * `channel.activate()` / `channel.deactivate()` (refcounted, as a single `Channel` instance can
-   * be held by several consumers at once). It carries no rendering semantics; it tells the client
+   * `channel.activate()` and the release function it returns (refcounted, as a single `Channel`
+   * instance can be held by several consumers at once). It carries no rendering semantics; it tells the client
    * that the channel's own state is being consumed and takes precedence over bulk state writes —
    * channel-list hydration does not re-seed the message list of an `active` channel (the channel's
    * own `channel.reload()` owns that window).
@@ -221,16 +232,17 @@ export class ChannelState extends StateStore<ChannelStateData> {
       memberCount: 0,
       membership: {} as ChannelMemberResponse,
       ownCapabilities: [],
-      data: channel?.data,
+      // written by the `Channel.data` setter, which the channel calls once its state exists
+      data: undefined,
       muteStatus: { muted: false, createdAt: null, expiresAt: null },
       initialized: false,
       offlineMode: false,
       pendingDisposal: false,
+      supersededBy: undefined,
       active: false,
       aiState: AIStates.Idle,
     });
     this._channel = channel;
-    this.syncStateFromChannelData(channel?.data);
     this.pending_messages = [];
   }
 
@@ -293,67 +305,6 @@ export class ChannelState extends StateStore<ChannelStateData> {
     if (this._channel?.messageComposer) {
       this._channel.messageComposer.textComposer.setTyping(typing);
     }
-  }
-
-  /**
-   * Reflects the channel's server-provided `data` into the unified store and derives the
-   * `memberCount` and `ownCapabilities` slices from it.
-   *
-   * `fallbackData` (the previous `channel.data`) makes both derived fields sticky: a data update
-   * that omits `member_count`/`own_capabilities` keeps the last known value rather than wiping it.
-   * The sticky value is written back onto `data` as a plain field (only when `data` itself is
-   * missing it) so raw readers — e.g. `channelHasReadEvents`, which inspects
-   * `channel.data.own_capabilities` directly — stay consistent with the store. `own_capabilities`
-   * is never coerced to `[]` while unknown, so "not yet loaded" is not mistaken for "explicitly no
-   * capabilities" (regression #1732). This replaces the previous `Object.defineProperty` machinery;
-   * direct in-place mutation of `channel.data.member_count`/`own_capabilities` no longer syncs to
-   * the store — reassign `channel.data` (as the WS handlers do) instead.
-   */
-  syncStateFromChannelData(
-    data: Channel['data'],
-    fallbackData: Channel['data'] = this._channel?.data,
-  ) {
-    const fallbackMemberCount =
-      typeof fallbackData?.member_count === 'number'
-        ? fallbackData.member_count
-        : this.getLatestValue().memberCount;
-
-    const memberCount =
-      typeof data?.member_count === 'number'
-        ? data.member_count
-        : typeof fallbackMemberCount === 'number'
-          ? fallbackMemberCount
-          : undefined;
-
-    const ownCapabilities = Array.isArray(data?.own_capabilities)
-      ? [...data.own_capabilities]
-      : Array.isArray(fallbackData?.own_capabilities)
-        ? [...fallbackData.own_capabilities]
-        : undefined;
-
-    // Carry a genuinely-known previous value forward onto the new `data` object when the update
-    // omits it — never fabricate one (an empty channel keeps `data === {}`, its `own_capabilities`
-    // undefined). This is a plain assignment, not an accessor.
-    if (data && typeof data === 'object') {
-      if (
-        typeof data.member_count !== 'number' &&
-        typeof fallbackData?.member_count === 'number'
-      ) {
-        data.member_count = fallbackData.member_count;
-      }
-      if (
-        !Array.isArray(data.own_capabilities) &&
-        Array.isArray(fallbackData?.own_capabilities)
-      ) {
-        data.own_capabilities = [...fallbackData.own_capabilities];
-      }
-    }
-
-    this.partialNext({
-      data,
-      memberCount: memberCount ?? 0,
-      ownCapabilities: ownCapabilities ?? [],
-    });
   }
 
   setTypingEvent(userID: string, event: Event) {

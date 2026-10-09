@@ -96,7 +96,10 @@ describe('Threads 2.0', () => {
     channelResponse = generateChannel({
       channel: { id: uuidv4(), members: [], custom: { name: 'Test channel' } },
     }).channel as ChannelResponse;
-    channel = client.channel(channelResponse.type, channelResponse.id);
+    channel = client.channelManager.ensure({
+      type: channelResponse.type,
+      id: channelResponse.id,
+    });
     channel.initialized = true;
     parentMessageResponse = generateMsg() as MessageResponse;
     threadManager = new ThreadManager({ client });
@@ -1393,7 +1396,7 @@ describe('Threads 2.0', () => {
         it("ignores another channel's watch ending", () => {
           const thread = createTestThread();
           subscribeThread(thread);
-          const other = client.channel('messaging', uuidv4());
+          const other = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
           other.watchStatus = ChannelWatchStatus.Watching;
 
           other.watchStatus = ChannelWatchStatus.NotWatching;
@@ -2542,7 +2545,7 @@ describe('Threads 2.0', () => {
           client.threads.registerSubscriptions();
           const alive = threadOn('alive');
           const dead = threadOn('dead');
-          dead.channel.pendingDisposal = true;
+          dead.channel.disconnect();
 
           await loadList(client.threads, [alive, dead]);
 
@@ -2562,7 +2565,7 @@ describe('Threads 2.0', () => {
           opened.activate();
           expect(unsubscribes).to.have.lengthOf(1);
 
-          listed.channel.pendingDisposal = true;
+          listed.channel.disconnect();
 
           expect(unsubscribes[0]).toHaveBeenCalledOnce();
           expect(listOf(client.threads)).to.deep.equal([other]);
@@ -2573,7 +2576,7 @@ describe('Threads 2.0', () => {
 
         it('releases a thread activated after its channel was disposed, leaving no listener', () => {
           const thread = threadOn('dead');
-          thread.channel.pendingDisposal = true;
+          thread.channel.disconnect();
           const unsubscribes = trackDisposalListeners(thread.channel);
 
           thread.activate();
@@ -2601,7 +2604,7 @@ describe('Threads 2.0', () => {
         it('tracks a re-created channel as a new instance', () => {
           const old = threadOn('recreated');
           old.activate();
-          old.channel.pendingDisposal = true;
+          old.channel.disconnect();
           expect(client.threads.get(old.id)).to.be.undefined;
 
           const fresh = threadOn('recreated');
@@ -2609,7 +2612,7 @@ describe('Threads 2.0', () => {
           fresh.activate();
 
           expect(client.threads.get(fresh.id)).to.equal(fresh);
-          fresh.channel.pendingDisposal = true;
+          fresh.channel.disconnect();
           expect(client.threads.get(fresh.id)).to.be.undefined;
         });
       });
@@ -2876,7 +2879,11 @@ describe('Threads 2.0', () => {
 
         it('ensure marks a thread it builds stale, so it loads its data once when opened', () => {
           client.threads.registerSubscriptions();
-          const parentMessage = { ...parentMessageResponse, id: uuidv4() };
+          const parentMessage = {
+            ...parentMessageResponse,
+            id: uuidv4(),
+            reply_count: 2,
+          };
 
           const thread = client.threads.ensure({ channel, parentMessage });
           const reload = vi.spyOn(thread, 'reload').mockResolvedValue(undefined);
@@ -2885,6 +2892,59 @@ describe('Threads 2.0', () => {
           thread.activate();
           expect(reload).toHaveBeenCalledOnce();
           client.threads.unregisterSubscriptions();
+        });
+
+        it('ensure builds a thread with no replies in a watched channel up to date, so opening it sends no request', () => {
+          client.threads.registerSubscriptions();
+          channel.watchStatus = ChannelWatchStatus.Watching;
+          const parentMessage = {
+            ...parentMessageResponse,
+            id: uuidv4(),
+            reply_count: 0,
+          };
+
+          const thread = client.threads.ensure({ channel, parentMessage });
+          const reload = vi.spyOn(thread, 'reload').mockResolvedValue(undefined);
+          thread.activate();
+
+          // there is no server-side thread yet: getThread would answer 404
+          expect(thread.hasStaleState).to.be.false;
+          expect(reload).not.toHaveBeenCalled();
+          client.threads.unregisterSubscriptions();
+        });
+
+        it('ensure builds a thread in a channel that is not watched stale, as its reply count may miss replies', () => {
+          client.threads.registerSubscriptions();
+          channel.watchStatus = ChannelWatchStatus.NotWatching;
+          const parentMessage = {
+            ...parentMessageResponse,
+            id: uuidv4(),
+            reply_count: 0,
+          };
+
+          const thread = client.threads.ensure({ channel, parentMessage });
+          const reload = vi.spyOn(thread, 'reload').mockResolvedValue(undefined);
+          thread.activate();
+
+          expect(thread.hasStaleState).to.be.true;
+          expect(reload).toHaveBeenCalledTimes(1);
+          client.threads.unregisterSubscriptions();
+        });
+
+        it('new Thread() follows the same rule as ensure', () => {
+          const build = (watchStatus: string, reply_count: number) => {
+            channel.watchStatus = watchStatus as never;
+            return new Thread({
+              channel,
+              client,
+              parentMessage: { ...parentMessageResponse, id: uuidv4(), reply_count },
+            });
+          };
+
+          expect(build(ChannelWatchStatus.Watching, 0).hasStaleState).to.be.false;
+          expect(build(ChannelWatchStatus.Watching, 2).hasStaleState).to.be.true;
+          expect(build(ChannelWatchStatus.NotWatching, 0).hasStaleState).to.be.true;
+          expect(build(ChannelWatchStatus.WasWatching, 0).hasStaleState).to.be.true;
         });
 
         it('ensure leaves a stored thread as it is, so opening a listed one does not reload', async () => {
@@ -2931,7 +2991,7 @@ describe('Threads 2.0', () => {
           expect(disposalListeners).to.have.lengthOf(1);
           expect(sink).not.toHaveBeenCalled();
           // Still a single hold: one release on disposal removes it and unsubscribes the thread.
-          channel.pendingDisposal = true;
+          channel.disconnect();
           expect(client.threads.get(thread.id)).to.be.undefined;
           expect(thread.hasSubscriptions).to.be.false;
           client.threads.unregisterSubscriptions();
@@ -3038,12 +3098,28 @@ describe('Threads 2.0', () => {
           const thread = createThreadWithId();
           const unregisterSpy = sinon.spy(thread, 'unregisterSubscriptions');
 
-          thread.activate();
-          thread.deactivate();
+          const release = thread.activate();
+
+          release();
 
           expect(client.threads.get(thread.id)).to.equal(thread);
           expect(unregisterSpy.called).to.be.false;
           client.threads.unregisterSubscriptions();
+        });
+
+        it('stays active until every activation is released, each release ending only its own', () => {
+          const thread = createThreadWithId();
+
+          const releaseFirst = thread.activate();
+          const releaseSecond = thread.activate();
+          releaseFirst();
+          releaseFirst();
+
+          expect(thread.state.getLatestValue().active).to.be.true;
+
+          releaseSecond();
+
+          expect(thread.state.getLatestValue().active).to.be.false;
         });
 
         it('keeps an opened thread registered when the list evicts it', async () => {
@@ -3051,8 +3127,8 @@ describe('Threads 2.0', () => {
           const thread = createThreadWithId();
           const unregisterSpy = sinon.spy(thread, 'unregisterSubscriptions');
           setList(client.threads, [thread]);
-          thread.activate();
-          thread.deactivate();
+          const release = thread.activate();
+          release();
 
           await replaceList(client.threads, []);
 
@@ -3091,8 +3167,9 @@ describe('Threads 2.0', () => {
           const thread = createThreadWithId();
           setList(client.threads, [thread]);
 
-          thread.activate();
-          thread.deactivate();
+          const release = thread.activate();
+
+          release();
 
           expect(client.threads.get(thread.id)).to.equal(thread);
         });
@@ -3128,10 +3205,10 @@ describe('Threads 2.0', () => {
             .stub(client, 'getThreadAndHydrate')
             .resolves(createThreadWithId(thread.id));
 
-          thread.activate();
-          thread.deactivate();
-          thread.activate();
-          thread.deactivate();
+          const releaseFirst = thread.activate();
+          releaseFirst();
+          const releaseSecond = thread.activate();
+          releaseSecond();
 
           expect(getThread.called).to.be.false;
 

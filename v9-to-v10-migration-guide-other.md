@@ -58,6 +58,18 @@
   `isThreadOrderStale` and `unreadThreadCount` stay on `client.threads.state`.
   `client.threads.loadNextPage()` and `client.threads.queryThreads()` are removed: use
   `paginator.toTail()` and `client.queryThreadsAndHydrate()`. See below.
+- **`client.activeChannels` is removed.** Channels live in a channel store owned by
+  `client.channelManager`: read one with `client.channelManager.get(cid)`, all of them with
+  `client.channelManager.values()`. As in v9, a channel stays stored until it is deleted, the user
+  is removed from it, or the user logs out. To free memory, call
+  `client.channelManager.releaseUnusedChannels()`: it drops every channel your app disconnected
+  (`channel.disconnect()`, formerly `_disconnect()`), and disposes of and drops every channel that is
+  neither watched nor used (not in a channel list, not opened with `activate()`, not a thread's or a
+  cached composer's). See below for what disposing of a channel does.
+  `client.hydrateActiveChannels()` is renamed to `client.hydrateChannels()`. `client.channel()` is
+  still available, as a shorthand for `client.channelManager.ensure({ type, id, data })`; its `data`
+  is now typed `ChannelInput`, so custom fields go under `custom` and members are `{ user_id }`
+  objects. See below.
 - `Role` type renamed to `RoleName`.
 - Assorted small tightenings: `TokenManager.setTokenOrProvider` user param narrowed, `revokeTokens(before)` no longer accepts `string`.
 
@@ -933,8 +945,9 @@ connection recovery and an edit composer's submit target all missed it. The work
 the open thread to `state.threads` yourself, which put it on the thread list screen too.
 
 `ThreadManager` now keeps a registry holding the list's threads plus every **opened** one.
-`thread.activate()` registers a thread and subscribes it for the rest of the session. `deactivate()`
-does not release it, so reopening the thread reuses the loaded instance with no fetch. It is dropped
+`thread.activate()` registers a thread and subscribes it for the rest of the session, and returns the
+function that ends that activation, as `channel.activate()` does. `thread.deactivate()` is removed:
+call the returned function instead. Ending the activation does not release the thread, so reopening the thread reuses the loaded instance with no fetch. It is dropped
 when its channel is deleted or the user is removed from it, and on `disconnectUser()`. A reconnect
 marks every registered thread nobody is displaying stale, and it reloads the next time it is activated.
 
@@ -946,7 +959,7 @@ client.threads.state.next((s) => ({ ...s, threads: [thread, ...s.threads] })); /
 
 // v10
 const thread = client.threads.ensure({ channel, parentMessage });
-thread.activate(); // on mount; thread.deactivate() on unmount
+const release = thread.activate(); // on mount; release() on unmount
 ```
 
 `ensure()` returns the stored instance, or builds a new one, and registers it either way, so a list
@@ -966,6 +979,97 @@ through them `thread.reload()` and the thread list) now sets the channel's `watc
 since the server does watch the thread's channel. A thread marks itself stale when that status becomes
 `NotWatching` (the watch was stopped while connected) instead of reacting to `user.watching.stop`; a
 dropped connection is handled by connection recovery, as before.
+
+### `client.activeChannels` removed; channels live in the channel store
+
+`client.activeChannels` was a plain object keyed by cid that only grew: a channel left it only when it
+was deleted, when the user was removed from it, or on `disconnectUser()`. Every channel ever loaded
+stayed in memory with its subscriptions and message lists.
+
+`client.channelManager` now owns a channel store with one `Channel` instance per cid.
+`client.channelManager.ensure()` (and `client.channel()`, its shorthand) and every query and event go
+through it, so they all return the same instance:
+
+```ts
+// v9
+const channel = client.activeChannels[cid];
+const all = Object.values(client.activeChannels);
+
+// v10
+const channel = client.channelManager.get(cid);
+const all = client.channelManager.values();
+```
+
+**A channel stays in the store until it ends, the user logs out, or the app releases it.** The SDK
+never releases a channel on its own: it can't see the channels your app keeps in its own state. A
+deleted channel, one the user is removed from, and every channel on `disconnectUser()` are disposed
+of right away, whatever uses them.
+
+**`client.channelManager.releaseUnusedChannels()` releases the channels nothing uses.** Call it to
+free memory, for example after closing a search screen (`searchController.dispose()` first). It
+first drops every stored channel your app disposed of with `channel.disconnect()`, whatever still
+holds it, and every list showing it drops it too. Then it releases the unused ones. A
+watched channel (`watchStatus` `watching`, or `wasWatching` after a dropped connection, until the
+watch is restored) always stays: its events keep it current, which is what makes it worth keeping.
+An unwatched channel stays while it is used:
+
+- a channel list (`ChannelPaginator`) has it in its loaded pages;
+- it is active: `channel.activate()` was called and its release function not yet;
+- a `watch()`, `query()` or `create()` for it is in flight;
+- it is the channel of a thread in `client.threads`, or of a composer in
+  `client.messageComposerCache` (such as a message edit's);
+- an active channel search shows it.
+
+Every other stored channel is removed from the store and disposed of. It holds a snapshot nothing
+shows, so releasing it costs no request beyond the query that using it again needs anyway.
+
+Disposing of a channel (`channel.disconnect()`, public now; it was `_disconnect()`) stops the
+instance for good: it stops listening to the client's configuration, releases its loaded messages,
+and sets `pendingDisposal` to `true` and `watchStatus` to `NotWatching`. It sends no request, and
+frees no memory by itself: once the SDK no longer refers to the instance, it is garbage collected
+when your code doesn't either. A channel your app disconnects stays stored until the next
+`releaseUnusedChannels()`, but the SDK treats it as gone: lists don't take it, an event for its cid
+gets a fresh instance, and a query that finds it under its cid takes its place.
+
+So when your app calls `releaseUnusedChannels()`, a channel your code keeps a reference to, without
+watching or opening it, is disposed of too. A disposed channel throws from `getClient()`, and its
+`query()` and `watch()` reject before the request is sent;
+`client.channelManager.ensure({ type, id })` returns a fresh instance. Call `activate()` on a channel
+you keep, as a UI does when it opens one.
+
+**Channel search results are not watched.** `ChannelSearchSource` queries with `watch: false` unless
+its `searchOptions` say otherwise: a result is a preview. Watch a result when the user opens it.
+
+**Neither are the channels of message search results.** `MessageSearchSource` fetches the channels of
+its results that the client doesn't have yet, and now does so with `watch: false` unless its
+`channelQueryOptions` say otherwise. Watch the channel when the user opens a result, for example with
+`channel.messagePaginator.jumpToMessage(messageId, { watchChannel: true })`, which loads the message
+and watches the channel in one request.
+
+**`channel.activate()` is new.** It declares that a consumer is showing the channel, which sets
+`channel.active`, and returns the function that ends it. Each call gets its own, and calling it twice
+does nothing, so one consumer can't end another's activation:
+
+```ts
+const release = channel.activate(); // on mount
+release(); // on unmount
+```
+
+The release function unsets `active` once the last consumer releases. It doesn't drop the channel
+from the store by itself: an unwatched channel nothing else uses goes at the next release of unused
+channels.
+
+**`client.hydrateActiveChannels()` is renamed to `client.hydrateChannels()`**, with the same
+arguments.
+
+**`channel.data` is read from and written to `channel.state`.** Assigning `channel.data = …` publishes
+`data`, `memberCount` and `ownCapabilities` in one state update, so subscribers see it. An object that
+omits `member_count` or `own_capabilities` gets the last known values on a copy: the assigned object
+isn't changed, and `channel.data` may then not be the same object you assigned. Editing
+`channel.data.x` in place still doesn't reach the state; assign a new object.
+
+**One `ChannelManager` per client.** The client creates its own; constructing a second one for the same
+client is unsupported, because only `client.channelManager` sees the channels `ensure()` creates.
 
 ### The thread list is a `ThreadPaginator`
 
@@ -1407,3 +1511,4 @@ For each source file that touches the SDK:
 22. **Polyfill `atob`** if your React Native / Hermes target lacks it (`typeof atob === 'undefined'`); `UserFromToken` depends on it during `connectUser`.
 23. **Call `liveLocationManager.dispose()`** when you are finished with a manager you constructed, alongside whatever `unregisterSubscriptions()` you already call. Nothing will fail to compile: `dispose()` is the _configuration_ teardown, and until it runs the client's configuration registry holds a handle to the manager — a long-lived client and many short-lived managers will accumulate them. `unregisterSubscriptions()` is unchanged and stays ref-counted, so it deliberately no longer releases configuration; it never should have, since with two callers sharing a manager the first to leave stopped a still-live instance from tracking `client.config`. `SearchController` already worked this way.
 24. **Put `undefined` in the request slot before `requestOptions` on methods with no request.** `client.getAppSettings({ signal })` becomes `client.getAppSettings(undefined, { signal })`, `client.getMessage({ id }, opts)` becomes `client.getMessage({ id }, undefined, opts)`, and `channel.pin(opts)` / `archive` / `deleteReaction` / `removeVote` follow the same pattern. `tsc` flags every call site that still has the old form. Calls without `requestOptions` are unchanged. See [`requestOptions`](./v9-to-v10-migration-guide-methods.md#global-renames-applied-everywhere).
+25. **Replace `client.activeChannels`** with `client.channelManager.get(cid)` / `client.channelManager.values()`, `client.hydrateActiveChannels()` with `client.hydrateChannels()`, and `client.getChannelById()` / `client.getChannelByMembers()` with `client.channel()` or `client.channelManager.ensure({ type, id, data })`. Channels stay stored until they end or the user logs out, as in v9; call `client.channelManager.releaseUnusedChannels()` to free the ones nothing uses, after calling `activate()` on any channel your code keeps a reference to without watching or opening it. Watch a channel search result, or a message search result's channel, when it is opened: search no longer watches them. Replace `channel._disconnect()` with `channel.disconnect()`, and `channel.disconnected` with the read-only `channel.pendingDisposal`.

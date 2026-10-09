@@ -95,7 +95,9 @@ describe('configuration publishes skip no-ops', () => {
     });
 
     it('keeps a repeated channel query from waking live composers', () => {
-      const channels = ['a', 'b', 'c'].map((id) => client.channel('messaging', id));
+      const channels = ['a', 'b', 'c'].map((id) =>
+        client.channelManager.ensure({ type: 'messaging', id: id }),
+      );
       const composers = channels.map((channel) => {
         channel.messageComposer.registerSubscriptions();
         return channel.messageComposer;
@@ -128,7 +130,10 @@ describe('configuration publishes skip no-ops', () => {
       // What the source guard buys over the sink guard, which would suppress the notification but only after
       // every composer had resolved its configuration and thrown the result away. Removing the sink guard
       // leaves this passing; removing the source guard is what turns it red.
-      const channel = client.channel('messaging', channelResponse.id);
+      const channel = client.channelManager.ensure({
+        type: 'messaging',
+        id: channelResponse.id,
+      });
       const composer = channel.messageComposer;
       composer.registerSubscriptions();
       client._addChannelConfig({
@@ -149,7 +154,10 @@ describe('configuration publishes skip no-ops', () => {
     });
 
     it('does wake them when the server config actually changes', () => {
-      const channel = client.channel('messaging', channelResponse.id);
+      const channel = client.channelManager.ensure({
+        type: 'messaging',
+        id: channelResponse.id,
+      });
       const composer = channel.messageComposer;
       composer.registerSubscriptions();
       client._addChannelConfig({
@@ -169,7 +177,10 @@ describe('configuration publishes skip no-ops', () => {
 
   describe('at the sink — MessageComposer.publishConfig', () => {
     it('does not notify when a declarative re-registration changes nothing', () => {
-      const composer = client.channel('messaging', channelResponse.id).messageComposer;
+      const composer = client.channelManager.ensure({
+        type: 'messaging',
+        id: channelResponse.id,
+      }).messageComposer;
       composer.registerSubscriptions();
       client.config.set({ messageComposer: { drafts: { enabled: true } } });
 
@@ -184,7 +195,10 @@ describe('configuration publishes skip no-ops', () => {
     });
 
     it('does not notify for an empty updateConfig', () => {
-      const composer = client.channel('messaging', channelResponse.id).messageComposer;
+      const composer = client.channelManager.ensure({
+        type: 'messaging',
+        id: channelResponse.id,
+      }).messageComposer;
       const listener = vi.fn();
       composer.configState.subscribe(listener);
       listener.mockClear();
@@ -195,7 +209,10 @@ describe('configuration publishes skip no-ops', () => {
     });
 
     it('still notifies for a real change', () => {
-      const composer = client.channel('messaging', channelResponse.id).messageComposer;
+      const composer = client.channelManager.ensure({
+        type: 'messaging',
+        id: channelResponse.id,
+      }).messageComposer;
       const listener = vi.fn();
       composer.configState.subscribe(listener);
       listener.mockClear();
@@ -209,7 +226,10 @@ describe('configuration publishes skip no-ops', () => {
     it('still notifies when a server restriction lifts a value it had narrowed', () => {
       // The guard must compare the *resolved* value, not the request — otherwise a restriction changing
       // while the request stays put would be silently swallowed.
-      const channel = client.channel('messaging', channelResponse.id);
+      const channel = client.channelManager.ensure({
+        type: 'messaging',
+        id: channelResponse.id,
+      });
       client._addChannelConfig({
         cid: channel.cid,
         config: { shared_locations: false } as never,
@@ -245,7 +265,10 @@ describe('configuration publishes skip no-ops', () => {
    */
   describe('at the derivation — Channel / Thread initializeConfig', () => {
     it('does not notify a channel whose derived requestHandlers have not moved', () => {
-      const channel = client.channel('messaging', channelResponse.id);
+      const channel = client.channelManager.ensure({
+        type: 'messaging',
+        id: channelResponse.id,
+      });
       const listener = vi.fn();
       channel.configState.subscribe(listener);
       listener.mockClear();
@@ -258,7 +281,10 @@ describe('configuration publishes skip no-ops', () => {
     });
 
     it('still notifies when a handler is registered', () => {
-      const channel = client.channel('messaging', channelResponse.id);
+      const channel = client.channelManager.ensure({
+        type: 'messaging',
+        id: channelResponse.id,
+      });
       const listener = vi.fn();
       channel.configState.subscribe(listener);
       listener.mockClear();
@@ -279,7 +305,10 @@ describe('configuration publishes skip no-ops', () => {
       client.config.setConfig('channel', {
         requestHandlers: { sendMessageRequest },
       } as never);
-      const channel = client.channel('messaging', channelResponse.id);
+      const channel = client.channelManager.ensure({
+        type: 'messaging',
+        id: channelResponse.id,
+      });
       expect(channel.configState.getLatestValue().requestHandlers).toBeDefined();
 
       const listener = vi.fn();

@@ -52,6 +52,15 @@ export class CustomDataManager {
     this.state.next(initState({ composer: this.composer, message }));
   };
 
+  /**
+   * Takes over `source`'s custom message data.
+   *
+   * @internal
+   */
+  takeOver = (source: CustomDataManager) => {
+    this.state.next({ ...source.state.getLatestValue() });
+  };
+
   getSnapshot = (): CustomDataManagerSnapshot => this.state.getLatestValue();
 
   restoreSnapshot = (snapshot: CustomDataManagerSnapshot) => {

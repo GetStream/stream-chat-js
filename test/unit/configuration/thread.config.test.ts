@@ -245,7 +245,10 @@ describe("the 'thread' configuration key", () => {
         channel: { messagePaginator: { pageSize: 50 } },
         thread: { messagePaginator: { pageSize: 25 } },
       });
-      const channel = client.channel('messaging', channelResponse.id);
+      const channel = client.channelManager.ensure({
+        type: 'messaging',
+        id: channelResponse.id,
+      });
 
       client.config.reset('thread');
 

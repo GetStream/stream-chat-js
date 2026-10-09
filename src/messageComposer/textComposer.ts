@@ -272,6 +272,26 @@ export class TextComposer {
     this.state.next(initState({ composer: this.composer, message }));
   };
 
+  /**
+   * Takes over `source`'s text: the text, selection, mentions and command. Not its suggestions,
+   * which belong to `source`'s open search, nor its typing events, which are the other users' in
+   * `source`'s channel.
+   *
+   * @internal
+   */
+  takeOver = (source: TextComposer) => {
+    const { command, mentionedUsers, mentions, selection, text } =
+      source.state.getLatestValue();
+    this.state.partialNext({
+      command,
+      mentionedUsers,
+      mentions,
+      selection,
+      suggestions: undefined,
+      text,
+    });
+  };
+
   getSnapshot = (state = this.state.getLatestValue()): TextComposerSnapshot => state;
 
   restoreSnapshot = (snapshot: TextComposerSnapshot) => {

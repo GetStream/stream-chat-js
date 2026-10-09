@@ -36,7 +36,7 @@ describe('ConnectionRecoveryManager', () => {
 
   /** A channel a consumer has declared it is reading, i.e. what recovery reloads. */
   const activeChannel = (id: string) => {
-    const channel = client.channel('messaging', id);
+    const channel = client.channelManager.ensure({ type: 'messaging', id: id });
     channel.initialized = true;
     channel.activate();
     const reload = vi.spyOn(channel, 'reload').mockResolvedValue(undefined);
@@ -45,8 +45,13 @@ describe('ConnectionRecoveryManager', () => {
 
   /** Builds a thread the way a UI SDK does, without activating or listing it. */
   const buildThread = (id: string) => {
-    const channel = client.channel('messaging', `channel-for-${id}`);
+    const channel = client.channelManager.ensure({
+      type: 'messaging',
+      id: `channel-for-${id}`,
+    });
     channel.initialized = true;
+    // a thread is opened from a loaded channel, which is watched
+    channel.watchStatus = ChannelWatchStatus.Watching;
     const thread = new Thread({
       client,
       channel,
@@ -70,8 +75,7 @@ describe('ConnectionRecoveryManager', () => {
   const activeThread = (id: string) => {
     const built = buildThread(id);
     addToList(built.thread);
-    built.thread.activate();
-    return built;
+    return { ...built, release: built.thread.activate() };
   };
 
   beforeEach(() => {
@@ -134,9 +138,9 @@ describe('ConnectionRecoveryManager', () => {
     });
 
     it('leaves a thread nobody is displaying alone', async () => {
-      const { thread, reload } = activeThread('closed-thread');
-      // Closing the thread screen deactivates it; recovery must then skip it entirely.
-      thread.deactivate();
+      const { release, reload } = activeThread('closed-thread');
+      // Closing the thread screen ends its activation; recovery must then skip it entirely.
+      release();
       const { reload: channelReload } = activeChannel('still-open');
       vi.spyOn(client.channelManager, 'recover').mockResolvedValue([]);
 
@@ -149,7 +153,7 @@ describe('ConnectionRecoveryManager', () => {
 
     it('skips a thread whose channel is being torn down', async () => {
       const { thread, reload, channel } = activeThread('doomed-thread');
-      channel.pendingDisposal = true;
+      channel.disconnect();
       const { reload: channelReload } = activeChannel('still-open');
       vi.spyOn(client.channelManager, 'recover').mockResolvedValue([]);
 
@@ -161,8 +165,8 @@ describe('ConnectionRecoveryManager', () => {
 
     it('marks an opened thread nobody is displaying stale, without fetching it', async () => {
       const { thread, reload } = buildThread('opened-then-closed');
-      thread.activate();
-      thread.deactivate();
+      const release = thread.activate();
+      release();
       const open = activeThread('still-open');
       vi.spyOn(client.channelManager, 'recover').mockResolvedValue([]);
 
@@ -189,7 +193,7 @@ describe('ConnectionRecoveryManager', () => {
     });
 
     it('leaves channels nobody is reading alone', async () => {
-      const idle = client.channel('messaging', 'idle');
+      const idle = client.channelManager.ensure({ type: 'messaging', id: 'idle' });
       idle.initialized = true;
       // Watched before the drop, but not active — it must NOT be eagerly re-queried. Such channels
       // come back demand-driven, when an event proves them relevant.
@@ -219,7 +223,7 @@ describe('ConnectionRecoveryManager', () => {
 
     it('skips a channel pending disposal', async () => {
       const { channel, reload } = activeChannel('disposing');
-      channel.pendingDisposal = true;
+      channel.disconnect();
       vi.spyOn(client.channelManager, 'recover').mockResolvedValue([]);
 
       await client.connectionRecovery.recover();
@@ -233,7 +237,10 @@ describe('ConnectionRecoveryManager', () => {
       // recovery on `WasWatching` would strand exactly that channel forever — it would never load its
       // messages, on any subsequent reconnect. `Channel.reload()`'s own `initialized || offlineMode`
       // check is the correct gate.
-      const channel = client.channel('messaging', 'opened-offline');
+      const channel = client.channelManager.ensure({
+        type: 'messaging',
+        id: 'opened-offline',
+      });
       channel.offlineMode = true;
       channel.activate();
       expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);

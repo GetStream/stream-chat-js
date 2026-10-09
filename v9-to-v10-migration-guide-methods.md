@@ -377,19 +377,81 @@ client.userMuteStatus(targetID);
 client.userMuteStatus(targetId);
 ```
 
-#### `client.getChannelById` / `client.channel(...)` overload
+#### `client.channel()`, `client.channelManager.ensure()`
+
+`client.channel()` takes the same arguments in the same forms as in v9, `(type, id?, data?)` and
+`(type, data)`, and is now a shorthand for `client.channelManager.ensure()`, which takes one object.
+Only the type of `data` changed (below). Both return the stored channel for the cid or create and
+store it, as `client.channel()` did. The channel stays stored, as in v9, until it is deleted, the
+user is removed from it, or the user logs out. An app that wants to free memory calls
+`client.channelManager.releaseUnusedChannels()`, which releases only channels nothing uses (see the
+[other changes guide](./v9-to-v10-migration-guide-other.md)); call `channel.activate()` on a channel
+you keep, so that call leaves it alone.
+
+The channel data is typed `ChannelInput`, which replaced `ChannelData` (see the
+[type renames guide](./v9-to-v10-migration-guide-type-renames.md)): custom fields go under `custom`
+instead of at the top level, and members are `{ user_id }` objects.
 
 ```ts
 // v9
-client.channel(channelType, channelID?, custom?);
-client.channel(channelType, custom?);
-client.getChannelById(channelType, channelID, custom);
+client.channel(type, id);
+client.channel(type, id, { name });
+client.channel(type, { members: ['ann', 'bob'] });
+client.channel(type, undefined, { members: ['ann', 'bob'] });
 
-// v10 — same overload shape; positional param renamed
-client.channel(channelType, channelId?, custom?);
-client.channel(channelType, custom?);
-client.getChannelById(channelType, channelId, custom);
+// v10
+client.channel(type, id);
+client.channel(type, id, { custom: { name } });
+client.channel(type, { members: [{ user_id: 'ann' }, { user_id: 'bob' }] });
+client.channel(type, undefined, { members: [{ user_id: 'ann' }, { user_id: 'bob' }] });
+
+// v10, the same channels through ensure()
+client.channelManager.ensure({ type, id });
+client.channelManager.ensure({ type, id, data: { custom: { name } } });
+client.channelManager.ensure({
+  type,
+  data: { members: [{ user_id: 'ann' }, { user_id: 'bob' }] },
+});
+client.channelManager.ensure({
+  type,
+  data: { members: [{ user_id: 'ann' }, { user_id: 'bob' }] },
+});
 ```
+
+A channel created without an id (from members, as above) is **provisional** (`channel.isProvisional`)
+until its query is answered: it has no id yet, so no request but that query can be sent for it. Typing
+events and drafts are skipped; any other request throws before it is sent, and nothing is queued for
+offline replay. The query's response gives it the id the server assigned. A channel with an id is never
+provisional, even one whose id your app generated and the server doesn't have yet: its requests go to
+the server as in v9, loaded or not, and the server answers for them.
+
+A channel created from members is stored under a temporary cid built from the sorted member ids
+(`type:!members-ann,bob`), which is also its `channel.cid` until the server answers; it then moves to
+the real cid. If another instance was stored under the real cid meanwhile (by an event or a channel
+list), that instance stays the one for the cid and takes over: it gets the server's response, the new
+instance's local messages (its own local messages, such as failed ones, are kept), and, when the new
+instance is open and it isn't, the composer, including uploads still running. The new instance is
+marked `channel.supersededBy` (reactive) and receives no events from then on. The SDK doesn't
+dispose of it before `disconnectUser()`, as your app may still hold it; call `channel.disconnect()`
+on it once nothing uses it (see the [other changes guide](./v9-to-v10-migration-guide-other.md)).
+stream-chat-react moves a ChatView slot to the replacing instance on its own; other UIs holding the
+new instance should switch to `channel.supersededBy`.
+
+`channel.initialized` is now set by any query, so `query()` and `create()` set it as `watch()` does.
+
+`client.getChannelById()` and `client.getChannelByMembers()` are removed; use either form above.
+
+```ts
+// v9
+client.getChannelById(type, id, custom);
+
+// v10
+client.channel(type, id, custom);
+```
+
+The SDK itself gets channels through `client.channelManager.ensure()`, so a spy on `client.channel`
+sees only your own calls; spy on `client.channelManager.ensure` (called with `{ type, id, data }`) to
+see every channel the client gets.
 
 #### `client.setAnonymousUser` alias
 
@@ -530,7 +592,8 @@ Unchanged signature: `partialUpdateThread(messageId, partialThreadObject)`.
 
 #### `client.hydrateActiveChannels`
 
-Unchanged.
+Renamed to `client.hydrateChannels`, with the same arguments. `client.activeChannels` itself is removed;
+see the [other changes guide](./v9-to-v10-migration-guide-other.md).
 
 #### `client.setBaseURL` / `client.setUserAgent` / `client.getUserAgent`
 
@@ -693,14 +756,15 @@ Webhook verification is inherently server-side work: it needs the API secret, wh
 
 ### Constructor and lifecycle
 
-`getClient()`, `clean()`, `_initializeState(...)`, `_disconnect()`, and `create(options?)` are unchanged.
+`getClient()`, `clean()`, `_initializeState(...)` and `create(options?)` are unchanged. `_disconnect()` is
+public now, as `channel.disconnect()` (see [below](#channeldisconnect-was-_disconnect)).
 
 #### `channel._checkInitialized()` / the new `channel._checkHasId()`
 
 `_checkInitialized()` itself is unchanged — same signature, same "channel hasn't been initialized" error. What changed is **which methods call it**. It was applied inconsistently in v9: to methods that needed nothing from the query response, and not to some that did. v10 splits the two questions apart.
 
 - **`_checkInitialized()`** — "has the channel been queried?" Now called by `markRead()` and `markUnread()` only. Both read the channel's `read_events` setting, which arrives with the query response, so answering without it would silently use a default.
-- **`_checkHasId()`** — **new**, and the weaker of the two: "does the channel have an id?" It throws `Channel isn't yet created, call getOrCreateDistinctChannel() before this operation`. A channel built from members alone (`client.channel(type, { members })`) has no id until it has been queried; every other channel has one immediately.
+- **`_checkHasId()`** — **new**, and the weaker of the two: "does the channel have an id?" It throws `Channel isn't yet created, call getOrCreateDistinctChannel() before this operation`. A channel built from members alone (`client.channelManager.ensure({ type, data: { members } })`) has no id until it has been queried; every other channel has one immediately.
 
 Both are `@internal`. The consumer-visible effects:
 
@@ -988,6 +1052,87 @@ channel.stopWatching();
 channel.stopWatching(request?: Gen_ChannelStopWatchingRequest);
 ```
 
+A channel that is no longer watched stays in the channel store, as it stayed in
+`client.activeChannels` in v9. `client.channelManager.releaseUnusedChannels()` releases it if
+nothing still uses it (a channel list, `activate()`, a thread, a cached composer).
+
+#### `channel.activate` (new)
+
+`channel.activate()` is new in v10: it sets `channel.active` and returns the function that ends the
+activation; each call gets its own, and calling it twice does nothing. On a disposed channel it logs a warning,
+leaves `channel.active` unchanged and returns a release that does nothing; get a live instance with
+`client.channelManager.ensure()`.
+
+```ts
+const release = channel.activate();
+release();
+```
+
+An active channel also stays in the channel store. After `release()` unsets `active`, it is kept
+only while it is watched or otherwise used.
+
+#### `channel.disconnect` (was `_disconnect`)
+
+`channel._disconnect()` is renamed to `channel.disconnect()` and is public: call it to say your app is
+done with a channel instance. It stops the instance for good: it stops listening to the client's
+configuration, releases its loaded messages, and sets `pendingDisposal` to `true` and `watchStatus`
+to `NotWatching`. It sends no request (call `channel.stopWatching()` first to end a watch on the
+server), and calling it again does nothing.
+
+It doesn't remove the channel from the channel store, as something may still show it; the next
+`client.channelManager.releaseUnusedChannels()` does. Until then the SDK treats the channel as not
+stored: lists don't take it, an event for its cid gets a fresh instance through
+`client.channelManager.ensure()`, and a query that finds it under its cid takes its place.
+
+```ts
+// v9
+channel._disconnect();
+
+// v10
+channel.disconnect();
+```
+
+#### `channel.disconnected` → `channel.pendingDisposal`
+
+v9's `channel.disconnected` field is removed. Whether a channel was disconnected is now
+`channel.pendingDisposal`, which is read-only: only `channel.disconnect()` sets it, and nothing sets it
+back, as a disconnected instance is never revived. Once it is `true`, `getClient()` throws, `query()`
+and `watch()` reject before the request is sent, and `activate()` does nothing; get a live instance
+with `client.channelManager.ensure({ type, id })`.
+
+It lives in `channel.state`, so it can also be followed reactively:
+
+```ts
+// v9
+if (channel.disconnected) {
+  // …
+}
+
+// v10
+if (channel.pendingDisposal) {
+  // …
+}
+
+channel.state.subscribeWithSelector(
+  ({ pendingDisposal }) => ({ pendingDisposal }),
+  ({ pendingDisposal }) => {
+    // …
+  },
+);
+```
+
+#### `channel.ensureWatched` (new)
+
+`channel.ensureWatched(options?)` watches the channel unless it is already watched, and joins a watch
+already in flight with equal options instead of sending a second request. It resolves with the
+channel to use from then on: the instance that superseded this one (`channel.supersededBy`), if any.
+Use it where several places may ask for the same channel at once, such as opening a search result.
+`channel.watch()` and `channel.query()` still always send their request.
+
+```ts
+const channel = await client.channelManager.ensure({ type, id }).ensureWatched();
+```
+
 #### `channel.hide` / `channel.show`
 
 ```ts
@@ -1164,11 +1309,11 @@ paginator reports no loaded page, not only on mount.
 
 ### Options
 
-| v9 option                                | v10                                                                                                                                                                                                                                                                                                                                                                               |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `lockChannelOrder`                       | `paginatorOptions.lockItemOrder`                                                                                                                                                                                                                                                                                                                                                  |
-| `abortInFlightQuery`                     | removed — a query is never started while one is in flight; `paginator.cancelScheduledQuery()` cancels a debounced one                                                                                                                                                                                                                                                             |
-| `allowNotLoadedChannelPromotionForEvent` | removed — insert the exported `ignoreEventsForUnknownChannels` handler at the head of the pipeline (`index: 0`) for the event types you want to ignore: <br>`manager.addEventHandler({ eventType: 'message.new', handle: ignoreEventsForUnknownChannels, id: 'ignore-unknown', index: 0 })` <br>It stops the chain for any event whose channel is not in `client.activeChannels`. |
+| v9 option                                | v10                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lockChannelOrder`                       | `paginatorOptions.lockItemOrder`                                                                                                                                                                                                                                                                                                                                                                               |
+| `abortInFlightQuery`                     | removed — a query is never started while one is in flight; `paginator.cancelScheduledQuery()` cancels a debounced one                                                                                                                                                                                                                                                                                          |
+| `allowNotLoadedChannelPromotionForEvent` | removed — insert the exported `ignoreEventsForUnknownChannels` handler at the head of the pipeline (`index: 0`) for the event types you want to ignore: <br>`manager.addEventHandler({ eventType: 'message.new', handle: ignoreEventsForUnknownChannels, id: 'ignore-unknown', index: 0 })` <br>It stops the chain for any event whose channel is not in the channel store (`client.channelManager.get(cid)`). |
 
 ### Event handlers
 
@@ -1190,7 +1335,8 @@ The 10 named overrides (`newMessageHandler`, `channelDeletedHandler`, …), each
 
 Default-handler ids are `ChannelManager:default-handler:<event.type>` — pass them to `removeEventHandlers`
 or to `position` when inserting. Unlike v9, `channel.updated` and `channel.truncated` are **not** no-ops by
-default (they re-emit the affected lists), `channel.hidden` re-evaluates the filters instead of removing
+default: they re-insert the channel into the lists, so it moves to its new sort position, and a list
+whose filter it no longer matches drops it. `channel.hidden` re-evaluates the filters instead of removing
 the channel outright (so a list filtering `{ hidden: true }` keeps it), and
 `notification.channel_mutes_updated` re-routes every loaded channel so `muted` filters settle on their own.
 
@@ -1244,11 +1390,11 @@ No deprecated alias is exported — the old names are gone. For the RC deltas ou
 `getAndWatchChannel` and the `PromoteChannelParams` type existed only to serve the v9 manager's
 hand-written ordering. Replacements:
 
-| Removed                                                                                                                     | Use instead                                                                                                                                              |
-| --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `promoteChannel`, `findLastPinnedChannelIndex`, `findPinnedAtSortOrder`, `shouldConsiderPinnedChannels`, `extractSortValue` | nothing — stop reordering the list yourself; see [If you called `promoteChannel`](#if-you-called-promotechannel)                                         |
-| `isChannelPinned`, `isChannelArchived`, `shouldConsiderArchivedChannels`                                                    | `paginator.matchesFilter(channel)` with `{ pinned: true }` / `{ archived: true }` filters                                                                |
-| `getAndWatchChannel`                                                                                                        | `client.channel(type, id).watch()`. The SDK's own helper (`getChannel`, which additionally coalesces concurrent watches of the same cid) stays internal. |
+| Removed                                                                                                                     | Use instead                                                                                                                                                      |
+| --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `promoteChannel`, `findLastPinnedChannelIndex`, `findPinnedAtSortOrder`, `shouldConsiderPinnedChannels`, `extractSortValue` | nothing — stop reordering the list yourself; see [If you called `promoteChannel`](#if-you-called-promotechannel)                                                 |
+| `isChannelPinned`, `isChannelArchived`, `shouldConsiderArchivedChannels`                                                    | `paginator.matchesFilter(channel)` with `{ pinned: true }` / `{ archived: true }` filters                                                                        |
+| `getAndWatchChannel`                                                                                                        | `client.channelManager.ensure({ type, id }).watch()`, or `.ensureWatched()`, which skips a channel already watched and joins a watch in flight for the same cid. |
 
 #### If you called `promoteChannel`
 

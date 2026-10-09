@@ -16,6 +16,7 @@ import { FilterBuilder } from '../FilterBuilder';
 import { makeComparator } from '../sortCompiler';
 import { filterConstrainsField, itemMatchesFilter } from '../filterCompiler';
 import { StoreBackedItemIndex } from '../../entityStore/StoreBackedItemIndex';
+import type { EntityStore } from '../../entityStore/EntityStore';
 import { generateUUIDv4 } from '../../utils';
 import type { StreamChat } from '../../client';
 import type { Channel } from '../../channel';
@@ -84,6 +85,13 @@ export type ChannelPaginatorOptions = {
   requestOptions?: ChannelPaginatorRequestOptions;
   sort?: SortParamRequest[];
   sortComparatorFactory?: ChannelSortComparatorFactory;
+  /**
+   * The channel store the list's index holds its channels in. Defaults to `client.channelManager`'s
+   * store, so every list shares one instance per cid and keeps the channels it lists stored.
+   *
+   * @internal
+   */
+  store?: EntityStore<Channel>;
 };
 
 /**
@@ -113,10 +121,16 @@ const archivedFilterResolver: FieldToDataResolver<Channel> = {
   resolve: (channel) => channel.state.membership.archived_at != null,
 };
 
-const appBannedFilterResolver: FieldToDataResolver<Channel> = {
+// The resolvers that need the current user or the client's mute list read them from the list's own
+// client, not through `channel.getClient()`: that throws once the channel is disposed (to stop requests
+// for it), and a disposed channel must still sort and filter, so that a list can locate it to drop it.
+
+const createAppBannedFilterResolver = (
+  client: StreamChat,
+): FieldToDataResolver<Channel> => ({
   matchesField: (field) => field === 'app_banned',
   resolve: (channel) => {
-    const ownUserId = channel.getClient().user?.id;
+    const ownUserId = client.userId;
     const otherMembers = Object.values(channel.state.members).filter(
       ({ user }) => user?.id !== ownUserId,
     );
@@ -125,19 +139,21 @@ const appBannedFilterResolver: FieldToDataResolver<Channel> = {
     const otherMember = otherMembers[0];
     return otherMember.user?.banned ? 'only' : 'excluded';
   },
-};
+});
 
-const hasUnreadFilterResolver: FieldToDataResolver<Channel> = {
+const createHasUnreadFilterResolver = (
+  client: StreamChat,
+): FieldToDataResolver<Channel> => ({
   matchesField: (field) => field === 'has_unread',
   resolve: (channel) => {
-    const ownUserId = channel.getClient().user?.id;
+    const ownUserId = client.userId;
     return (
       ownUserId &&
       channel.state.read[ownUserId] &&
       channel.state.read[ownUserId].unread_messages > 0
     );
   },
-};
+});
 
 const hiddenFilterResolver: FieldToDataResolver<Channel> = {
   matchesField: (field) => field === 'hidden',
@@ -163,15 +179,22 @@ const lastUpdatedFilterResolver: FieldToDataResolver<Channel> = {
 
 const membersFilterResolver: FieldToDataResolver<Channel> = {
   matchesField: (field) => field === 'members',
-  resolve: (channel) =>
-    channel.state.members
+  resolve: (channel) => {
+    const ids = channel.state.members
       ? Object.values(channel.state.members).reduce<string[]>((ids, member) => {
           if (member.user?.id) {
             ids.push(member.user?.id);
           }
           return ids;
         }, [])
-      : [],
+      : [];
+    // Only a page of a large channel's members may be loaded, but the current user's membership is
+    // always there, so `members: { $in: [ownId] }` holds even when they aren't in that page.
+    const { membership } = channel.state;
+    const ownId = membership?.user?.id ?? membership?.user_id;
+    if (ownId && !ids.includes(ownId)) ids.push(ownId);
+    return ids;
+  },
 };
 
 const memberUserNameFilterResolver: FieldToDataResolver<Channel> = {
@@ -192,44 +215,61 @@ const pinnedFilterResolver: FieldToDataResolver<Channel> = {
   resolve: (channel) => channel.state.membership.pinned_at != null,
 };
 
-const mutedFilterResolver: FieldToDataResolver<Channel> = {
+const createMutedFilterResolver = (client: StreamChat): FieldToDataResolver<Channel> => ({
   matchesField: (field) => field === 'muted',
   // UserMuteResponse state lives on the client (client.mutedChannels), not on channel.data — resolve it via
   // the client so `{ muted: true/false }` matches client-side, rather than letting the generic
   // data resolver read a non-existent `channel.data.muted` (which would resolve to undefined and
   // never equal a boolean filter value).
-  resolve: (channel) => channel.getClient()._muteStatus(channel.cid).muted,
+  resolve: (channel) => client._muteStatus(channel.cid).muted,
+});
+
+/**
+ * A channel field by path: from `channel.data`, or, for a field it doesn't have, from
+ * `channel.data.custom`, where a channel response keeps `name` and the app's custom fields. So
+ * `{ name: … }` and `{ color: … }` match what `{ 'custom.name': … }` and `{ 'custom.color': … }` do.
+ *
+ * `type`, `id` and `cid` come from the instance, which has them from construction, while
+ * `channel.data` has them only after a query: a stored channel an event reaches before its first
+ * query (such as one a thread created) must still match `{ type: … }`.
+ */
+const resolveChannelDataValue = (channel: Channel, path: string) => {
+  if (path === 'type' || path === 'id' || path === 'cid') return channel[path];
+  const value = resolveDotPathValue(channel.data, path);
+  return value !== undefined ? value : resolveDotPathValue(channel.data?.custom, path);
 };
 
 const dataFieldFilterResolver: FieldToDataResolver<Channel> = {
   matchesField: () => true,
-  resolve: (channel, path) => resolveDotPathValue(channel.data, path),
+  resolve: resolveChannelDataValue,
 };
 
 // very, very unfortunately channel data is dispersed btw Channel.data and Channel.state
-const channelSortPathResolver: PathResolver<Channel> = (channel, path) => {
-  switch (path) {
-    case 'last_message_at':
-      return channel.messagePaginator.lastMessageAt;
-    case 'has_unread': {
-      return hasUnreadFilterResolver.resolve(channel, path);
+const createChannelSortPathResolver = (client: StreamChat): PathResolver<Channel> => {
+  const hasUnreadResolver = createHasUnreadFilterResolver(client);
+  return (channel, path) => {
+    switch (path) {
+      case 'last_message_at':
+        return channel.messagePaginator.lastMessageAt;
+      case 'has_unread': {
+        return hasUnreadResolver.resolve(channel, path);
+      }
+      case 'last_updated': {
+        return lastUpdatedFilterResolver.resolve(channel, path) ?? 0;
+      }
+      case 'pinned_at':
+        return channel.state.membership.pinned_at;
+      case 'unread_count': {
+        const userId = client.userId;
+        // a channel without a read entry for the user has nothing unread
+        return userId ? (channel.state.read[userId]?.unread_messages ?? 0) : 0;
+      }
+      default:
+        return resolveChannelDataValue(channel, path);
     }
-    case 'last_updated': {
-      return lastUpdatedFilterResolver.resolve(channel, path) ?? 0;
-    }
-    case 'pinned_at':
-      return channel.state.membership.pinned_at;
-    case 'unread_count': {
-      const userId = channel.getClient().user?.id;
-      return userId ? channel.state.read[userId].unread_messages : 0;
-    }
-    default:
-      return resolveDotPathValue(channel.data, path);
-  }
+  };
 };
 
-// todo: maybe items could be just an array of {cid: string} and the data would be retrieved from client.activeChannels
-// todo: maybe we should introduce client._cache.channels  that would be reactive and orchestrator would subscribe to client._cache.channels state to keep all the dependent state in sync
 /**
  * A paginated channel list. Filters are described along three independent axes — the names follow them:
  *
@@ -287,12 +327,18 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     requestOptions,
     sort,
     sortComparatorFactory,
+    store,
   }: ChannelPaginatorOptions) {
     super({
       hasPaginationQueryShapeChanged,
-      itemIndex: new StoreBackedItemIndex<Channel>({
-        getEntityId: (channel) => channel.cid,
-      }),
+      // the index is this list's holder in the store: a channel stays stored while the list lists it
+      createItemIndex: (owner) =>
+        new StoreBackedItemIndex<Channel>({
+          getEntityId: (channel) => channel.cid,
+          holderName: 'channel-paginator',
+          owner: owner as ChannelPaginator,
+          store: store ?? client.channelManager?.channelStore,
+        }),
       retryCount: DEFAULT_QUERY_CHANNELS_RETRY_COUNT,
       ...paginatorOptions,
     });
@@ -308,12 +354,12 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     this.sortComparator = this.buildSortComparator(definedSort);
     this.setFilterResolvers([
       archivedFilterResolver,
-      appBannedFilterResolver,
-      hasUnreadFilterResolver,
+      createAppBannedFilterResolver(client),
+      createHasUnreadFilterResolver(client),
       hiddenFilterResolver,
       lastUpdatedFilterResolver,
       pinnedFilterResolver,
-      mutedFilterResolver,
+      createMutedFilterResolver(client),
       membersFilterResolver,
       memberUserNameFilterResolver,
       dataFieldFilterResolver,
@@ -334,7 +380,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   protected buildSortComparator(sort: SortParamRequest[]) {
     const defaultComparator = makeComparator<Channel>({
       sort,
-      resolvePathValue: channelSortPathResolver,
+      resolvePathValue: createChannelSortPathResolver(this.client),
       tiebreaker: (l, r) => {
         const leftId = this.getItemId(l);
         const rightId = this.getItemId(r);
@@ -579,10 +625,14 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
    * running; skipping those would leave the cached order stale until the next full re-query.
    */
   protected persistLoadedCids() {
-    if (!this.client.offlineDb) return;
+    // Without a connected user the list is being emptied by `disconnectUser()`: what stays in the
+    // offline DB is the app's call (`resetDB()`), so nothing is written.
+    if (!this.client.offlineDb || !this.client.userId) return;
 
     this.cacheCidsForQuery({
-      cids: (this.items ?? []).map((channel) => channel.cid),
+      cids: (this.items ?? [])
+        .filter((channel) => !channel.isProvisional)
+        .map((channel) => channel.cid),
       request: this.loadedQueryRequest,
     });
   }
@@ -609,7 +659,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
         if (cachedQuery.predefinedFilter) {
           this.applyPredefinedFilterResponse(cachedQuery.predefinedFilter);
         }
-        return this.client.hydrateActiveChannels(cachedQuery.channels, {
+        return this.client.hydrateChannels(cachedQuery.channels, {
           offlineMode: true,
           skipInitialization: [], // passing empty array will clear out the existing messages from channel state, this removes the possibility of duplicate messages
         });
@@ -735,10 +785,46 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     this.persistLoadedCids();
   }
 
-  ingestItem(channel: Channel): boolean {
+  /**
+   * Places `channel` in the list if it matches, or drops it if it no longer does. A provisional
+   * channel (created from members, still without an id) is refused: it is stored under a temporary
+   * cid until its first query gives it the real one, and a list holding it would keep the temporary
+   * cid. It is listed once it has its id, as the channels in a server page always do. Another
+   * instance for a stored cid (a superseded one, or one made with `new Channel()`) is replaced by
+   * the stored instance (see `ChannelManager.resolveListedChannel`).
+   */
+  ingestItem(input: Channel): boolean {
+    if (input.isProvisional) return false;
+    // the stored instance, never another one for the same cid (see `resolveListedChannel`)
+    const channel = this.client.channelManager.resolveListedChannel(input);
+    if (!channel) return false;
     const changed = super.ingestItem(channel);
+    // a channel that left the result set is no longer listed, so the list stops holding it
+    if (!this.matchesFilter(channel)) this._itemIndex.remove(channel.cid);
     if (changed) this.persistLoadedCids();
     return changed;
+  }
+
+  /**
+   * Entity-store subscriber (as the owner of its index). A channel publishes its own changes through
+   * `channel.state`, so the list has nothing to re-project when the store reports a change.
+   */
+  onEntitiesChanged(): void {
+    return;
+  }
+
+  /**
+   * Entity-store subscriber: the store removed a channel this list holds (a known end, logout), so
+   * the list drops it from its windows.
+   */
+  onEntityRemoved(id: string, channel: unknown): void {
+    this.removeItem({ id, item: channel as Channel });
+  }
+
+  resetState() {
+    super.resetState();
+    // nothing is listed anymore, so the list holds no channels
+    this._itemIndex.clear();
   }
 
   removeItem(params: { id?: string; item?: Channel }): ItemCoordinates {

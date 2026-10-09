@@ -33,7 +33,7 @@ const setup = () => {
   const client = getClientWithUser({ id: 'user-id' });
   const composer = new MessageComposer({
     client,
-    compositionContext: client.channel('type', 'id'),
+    compositionContext: client.channelManager.ensure({ type: 'type', id: 'id' }),
   });
   return { composer, middleware: createUploadConfigCheckMiddleware(composer) };
 };

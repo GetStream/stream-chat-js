@@ -121,6 +121,18 @@ export class LocationComposer {
     this.state.next(initState({ message }));
   };
 
+  /**
+   * Takes over `source`'s location, now for this composer's message (`message_id`).
+   *
+   * @internal
+   */
+  takeOver = (source: LocationComposer) => {
+    const { location } = source.state.getLatestValue();
+    this.state.next({
+      location: location && { ...location, message_id: this.composer.id },
+    });
+  };
+
   getSnapshot = (): LocationComposerSnapshot => this.state.getLatestValue();
 
   restoreSnapshot = (snapshot: LocationComposerSnapshot) => {

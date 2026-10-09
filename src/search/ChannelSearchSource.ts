@@ -16,6 +16,10 @@ export type ChannelSearchSourceOptions = SearchSourceOptions & {
   /** Static base filters merged under the dynamically generated ones. */
   filters?: ChannelFilters;
   sort?: SortParamRequest[];
+  /**
+   * Query options. Results are not watched unless `watch: true` is passed: not watched channels serve as a preview,
+   * and opening one is what watches it.
+   */
   searchOptions?: Omit<ChannelOptions, 'limit' | 'offset'>;
 };
 
@@ -31,6 +35,8 @@ export class ChannelSearchSource<
     ChannelFilters,
     ChannelSearchSourceFilterBuilderContext<TFilterContext>
   >;
+
+  private removeClaim?: () => void;
 
   constructor(
     client: StreamChat,
@@ -60,6 +66,37 @@ export class ChannelSearchSource<
         ...filterBuilderOptions.initialFilterConfig,
       },
     });
+
+    // A subscription to the source's own state, so it lives and goes with the source itself.
+    this.state.subscribeWithSelector(
+      ({ isActive }) => ({ isActive }),
+      () => this.registerSubscriptions(),
+    );
+  }
+
+  /**
+   * While the search is active its results are on screen, so they count as used in the channel store
+   * (see `EntityStore.addClaim`). Follows `isActive`; also called by
+   * `SearchController.registerSubscriptions()` to take the registration again after `dispose()`.
+   */
+  registerSubscriptions() {
+    if (!this.isActive) {
+      this.dispose();
+      return;
+    }
+    this.removeClaim ??= this.client.channelManager.channelStore.addClaim({
+      heldBy: () => this.items ?? [],
+      name: 'channel-search',
+    });
+  }
+
+  /**
+   * Removes the registration that keeps the results in the channel store, so a source that is
+   * dropped while active doesn't keep them, or itself, alive. A later activation registers again.
+   */
+  dispose() {
+    this.removeClaim?.();
+    this.removeClaim = undefined;
   }
 
   protected async query(searchQuery: string, queryOptions: SearchQueryOptions = {}) {
@@ -73,7 +110,12 @@ export class ChannelSearchSource<
       >,
     });
     const sort = this.sort;
-    const options = { ...this.searchOptions, limit: this.pageSize, offset: this.offset };
+    const options = {
+      watch: false,
+      ...this.searchOptions,
+      limit: this.pageSize,
+      offset: this.offset,
+    };
     const items = await this.client.queryChannelsAndHydrate(
       {
         filter_conditions: filters,

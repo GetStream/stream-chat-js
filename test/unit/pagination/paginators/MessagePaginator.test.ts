@@ -370,6 +370,134 @@ describe('MessagePaginator', () => {
       expect(result).toBe(true);
     });
 
+    describe('watchChannel', () => {
+      const target = () =>
+        createMessage({
+          cid: 'channel-id',
+          id: 'target',
+          created_at: convertDateToTimestamp('2020-01-05T00:00:00.000Z'),
+        });
+      const respondWith = (messages: LocalMessage[]) =>
+        (channel.query as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+          messages,
+        });
+      const setWatchStatus = (watchStatus: string) =>
+        ((channel as unknown as { watchStatus: string }).watchStatus = watchStatus);
+
+      it('watches an unwatched channel with the request that loads the message', async () => {
+        setWatchStatus('notWatching');
+        respondWith([target()]);
+        const paginator = new MessagePaginator({ channel, itemIndex });
+
+        expect(
+          await paginator.jumpToMessage('target', { pageSize: 13, watchChannel: true }),
+        ).toBe(true);
+
+        expect(channel.query).toHaveBeenCalledTimes(1);
+        expect(channel.query).toHaveBeenCalledWith({
+          messages: { id_around: 'target', limit: 13 },
+          watch: true,
+        });
+      });
+
+      it('sends one request to watch when the message is already loaded', async () => {
+        setWatchStatus('notWatching');
+        respondWith([target()]);
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        paginator.ingestPage({ page: [target()], isHead: true, setActive: true });
+
+        expect(await paginator.jumpToMessage('target', { watchChannel: true })).toBe(
+          true,
+        );
+
+        expect(channel.query).toHaveBeenCalledTimes(1);
+        expect(channel.query).toHaveBeenCalledWith(
+          expect.objectContaining({ watch: true }),
+        );
+      });
+
+      it('does not watch a channel that is already watched', async () => {
+        setWatchStatus('watching');
+        respondWith([target()]);
+        const paginator = new MessagePaginator({ channel, itemIndex });
+
+        await paginator.jumpToMessage('target', { watchChannel: true });
+
+        expect(channel.query).toHaveBeenCalledWith({
+          messages: { id_around: 'target', limit: undefined },
+        });
+      });
+
+      it('does not watch without the option', async () => {
+        setWatchStatus('notWatching');
+        respondWith([target()]);
+        const paginator = new MessagePaginator({ channel, itemIndex });
+
+        await paginator.jumpToMessage('target');
+
+        expect(channel.query).toHaveBeenCalledWith({
+          messages: { id_around: 'target', limit: undefined },
+        });
+      });
+
+      it('asks only the jump request to watch, not later page requests', async () => {
+        setWatchStatus('notWatching');
+        respondWith([target()]);
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        await paginator.jumpToMessage('target', { watchChannel: true });
+
+        // @ts-expect-error setting protected field for test coverage
+        paginator._nextQueryShape = { id_lt: 'target', limit: 30 };
+        await paginator.query({ direction: 'tailward' });
+
+        expect(channel.query).toHaveBeenLastCalledWith({
+          messages: { id_lt: 'target', limit: 30 },
+        });
+      });
+
+      it('asks to watch again when the request is retried', async () => {
+        vi.useFakeTimers();
+        (channel.query as unknown as ReturnType<typeof vi.fn>)
+          .mockRejectedValueOnce(new Error('network'))
+          .mockResolvedValue({ messages: [target()] });
+        const paginator = new MessagePaginator({ channel, itemIndex });
+
+        const done = paginator.executeQuery({
+          queryShape: { id_around: 'target' },
+          requestOptions: { watch: true },
+          retryCount: 1,
+          updateState: false,
+        });
+        await vi.runAllTimersAsync();
+        await done;
+        vi.useRealTimers();
+
+        expect(channel.query).toHaveBeenCalledTimes(2);
+        expect(
+          (channel.query as unknown as ReturnType<typeof vi.fn>).mock.calls.map(
+            ([payload]) => payload.watch,
+          ),
+        ).toEqual([true, true]);
+      });
+
+      it('is ignored for a thread reply list, whose request cannot watch', async () => {
+        setWatchStatus('notWatching');
+        (channel.getReplies as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+          messages: [target()],
+        });
+        const paginator = new MessagePaginator({
+          channel,
+          itemIndex,
+          parentMessageId: 'parent-1',
+        });
+
+        await paginator.jumpToMessage('target', { watchChannel: true });
+
+        expect(channel.getReplies).toHaveBeenCalledTimes(1);
+        expect(channel.query).not.toHaveBeenCalled();
+      });
+    });
+
     it('updates cursor when jumping between already loaded intervals', async () => {
       const paginator = new MessagePaginator({ channel, itemIndex });
 
@@ -1609,6 +1737,26 @@ describe('MessagePaginator', () => {
       expect(paginator.headmostItem?.id).toBe('m9');
       expect(paginator.hasMoreHead).toBe(false);
       expect(paginator.hasMoreTail).toBe(false);
+    });
+
+    it('seeds a page into a list loaded empty, rather than dropping it', () => {
+      (channel as unknown as { getClient: () => unknown }).getClient = () => ({
+        user: undefined,
+        getReplies: channel.getReplies,
+      });
+      const paginator = new MessagePaginator({ channel, itemIndex });
+      // a channel opened while it had no messages: loaded, with nothing in it
+      paginator.seedFirstPageSync([], 100);
+      expect(paginator.items).toEqual([]);
+
+      // a later query of the same channel (a re-query, or `watch()` of a channel created from members)
+      paginator.seedFirstPageSync([msg('m8', '08'), msg('m9', '09')], 100, undefined, {
+        candidateIds: new Set(),
+        reconcile: true,
+      });
+
+      expect(paginator.items?.map((m) => m.id)).toEqual(['m8', 'm9']);
+      expect(paginator.headmostItem?.id).toBe('m9');
     });
 
     it('seeds an around/jump open as a middle window, not the head', () => {
@@ -3135,7 +3283,7 @@ describe('MessagePaginator', () => {
     });
   });
 
-  // seedFirstPageSync is the synchronous channel-open seed (Channel.query / hydrateActiveChannels).
+  // seedFirstPageSync is the synchronous channel-open seed (Channel.query / hydrateChannels).
   // With `options.reconcile` it doubles as the reconnect / re-hydrate fold: over an already-loaded
   // window it delegates to mergeNewestPage (merge + destructive reconcile + disjoint rebuild), whose
   // internals are covered above — these tests pin only the ROUTING decision (which branch it picks).

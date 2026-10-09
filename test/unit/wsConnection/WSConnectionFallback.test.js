@@ -17,7 +17,7 @@ describe('WSConnectionFallback', () => {
 		_buildWSAuthPayload: sinon.stub().returns('payload'),
 		dispatchEvent: sinon.spy(),
 		_settleConnectPromises: sinon.spy(),
-		_markActiveChannelsWatchInterrupted: sinon.spy(),
+		channelManager: { markChannelsWatchInterrupted: sinon.spy() },
 		connectionIdManager: new ConnectionIdManager(),
 		wsConnection: {
 			isHealthy: false,
@@ -93,7 +93,7 @@ describe('WSConnectionFallback', () => {
 				{ isHealthy: false },
 			]);
 			expect(client.connectionIdManager.connectionId).to.be.undefined;
-			expect(client._markActiveChannelsWatchInterrupted.calledOnce).to.be.true;
+			expect(client.channelManager.markChannelsWatchInterrupted.calledOnce).to.be.true;
 
 			// no Connecting => Connected transition, so no online status
 			c._setState(WSFallbackConnectionState.Connected);
@@ -101,7 +101,7 @@ describe('WSConnectionFallback', () => {
 
 			// already offline: nothing new to mark
 			c._setState(WSFallbackConnectionState.Disconnected);
-			expect(client._markActiveChannelsWatchInterrupted.calledOnce).to.be.true;
+			expect(client.channelManager.markChannelsWatchInterrupted.calledOnce).to.be.true;
 		});
 
 		it('should already be in the new state when it reports the status', function () {

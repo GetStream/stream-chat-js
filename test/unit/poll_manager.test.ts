@@ -12,9 +12,10 @@ import {
   PollManager,
   PollResponse,
   StreamChat,
+  UserResponse,
 } from '../../src';
 
-import { describe, beforeEach, afterEach, it, expect } from 'vitest';
+import { describe, beforeEach, afterEach, it, expect, vi } from 'vitest';
 import { convertDateToTimestamp } from './test-utils/time';
 
 const TEST_USER_ID = 'observer';
@@ -229,7 +230,10 @@ describe('PollManager', () => {
           messages: prevMessages,
         });
         channels.push(channelResponse);
-        client.channel(channelResponse.channel.type, channelResponse.channel.id);
+        client.channelManager.ensure({
+          type: channelResponse.channel.type,
+          id: channelResponse.channel.id,
+        });
         client.polls.hydratePollCache(prevMessages, true);
       }
 
@@ -260,7 +264,7 @@ describe('PollManager', () => {
     });
 
     it('populates pollCache on channel.query invocation', async () => {
-      const channel = client.channel('messaging', uuidv4());
+      const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
       const { messages, pollMessages } = generateRandomMessagesWithPolls(5, ``);
       const mockedChannelQueryResponse = {
         ...mockChannelQueryResponse,
@@ -275,7 +279,10 @@ describe('PollManager', () => {
     });
 
     it('populates pollCache with only new messages on channel.query invocation', async () => {
-      const channel = client.channel('messaging', mockChannelQueryResponse.channel.id);
+      const channel = client.channelManager.ensure({
+        type: 'messaging',
+        id: mockChannelQueryResponse.channel.id,
+      });
       const { messages: prevMessages, pollMessages: prevPollMessages } =
         generateRandomMessagesWithPolls(5, `_prev`);
       const { messages, pollMessages } = generateRandomMessagesWithPolls(5, ``);
@@ -296,7 +303,7 @@ describe('PollManager', () => {
       expect(spy.calledWith([...prevMessages, ...messages], true)).to.be.false;
     });
 
-    it('populates pollCache on client.hydrateActiveChannels', async () => {
+    it('populates pollCache on client.hydrateChannels', async () => {
       const mockedChannelsQueryResponse = [];
 
       let pollMessages: MessageResponse[] = [];
@@ -310,7 +317,7 @@ describe('PollManager', () => {
         });
       }
 
-      client.hydrateActiveChannels(mockedChannelsQueryResponse);
+      client.hydrateChannels(mockedChannelsQueryResponse);
 
       expect(client.polls.data.size).to.equal(pollMessages.length);
       // Map.prototype.keys() preserves the insertion order so we can do this
@@ -433,6 +440,91 @@ describe('PollManager', () => {
       pollMessage1 = generatePollMessage(pollId1);
       pollMessage2 = generatePollMessage(pollId2);
       pollManager.hydratePollCache([pollMessage1, pollMessage2]);
+    });
+
+    it('puts an updated user into the votes, answers and creator of every poll, in one update', () => {
+      const poll = pollManager.fromState(pollId1) as Poll;
+      const before = poll.data;
+      const otherVoterVotes = Object.values(before.latest_votes_by_option)
+        .flat()
+        .filter((vote) => vote.user?.id !== 'admin');
+      const published: unknown[] = [];
+      const unsubscribe = poll.state.subscribe((state) => published.push(state));
+      published.length = 0;
+      const renamed = { ...(before.created_by as UserResponse), name: 'Renamed Admin' };
+
+      client.dispatchEvent({ type: 'user.updated', user: renamed });
+      unsubscribe();
+
+      const after = poll.data;
+      const votesOf = (userId: string) =>
+        Object.values(after.latest_votes_by_option)
+          .flat()
+          .filter((vote) => vote.user?.id === userId);
+      expect(published).toHaveLength(1);
+      expect(votesOf('admin').length).toBeGreaterThan(0);
+      expect(votesOf('admin').every((vote) => vote.user === renamed)).toBe(true);
+      expect(after.latest_answers.every((answer) => answer.user === renamed)).toBe(true);
+      expect(
+        Object.values(after.ownVotesByOptionId).every((v) => v.user === renamed),
+      ).toBe(true);
+      expect(after.ownAnswer?.user).toBe(renamed);
+      expect(after.created_by).toBe(renamed);
+      // other voters keep their vote objects
+      expect(otherVoterVotes.length).toBeGreaterThan(0);
+      for (const vote of otherVoterVotes) {
+        expect(Object.values(after.latest_votes_by_option).flat()).toContain(vote);
+      }
+      expect((pollManager.fromState(pollId2) as Poll).data.created_by?.name).toBe(
+        'Renamed Admin',
+      );
+    });
+
+    it('keeps the vote array of an option the updated user has not voted for', () => {
+      const poll = pollManager.fromState(pollId1) as Poll;
+      const before = poll.data.latest_votes_by_option;
+      const untouched = Object.entries(before).filter(([, votes]) =>
+        votes.every((vote) => vote.user?.id !== 'admin'),
+      );
+      const renamed = {
+        ...(poll.data.created_by as UserResponse),
+        name: 'Renamed Admin',
+      };
+
+      client.dispatchEvent({ type: 'user.updated', user: renamed });
+
+      expect(untouched.length).toBeGreaterThan(0);
+      for (const [optionId, votes] of untouched) {
+        expect(poll.data.latest_votes_by_option[optionId]).toBe(votes);
+      }
+    });
+
+    it('writes the poll with the updated user to the offline DB', () => {
+      const poll = pollManager.fromState(pollId1) as Poll;
+      const upsertOfflineDb = vi.spyOn(
+        poll as unknown as { upsertOfflineDb: () => void },
+        'upsertOfflineDb',
+      );
+      const renamed = {
+        ...(poll.data.created_by as UserResponse),
+        name: 'Renamed Admin',
+      };
+
+      client.dispatchEvent({ type: 'user.updated', user: renamed });
+
+      expect(upsertOfflineDb).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not publish for a user the poll does not contain', () => {
+      const poll = pollManager.fromState(pollId1) as Poll;
+      const published: unknown[] = [];
+      const unsubscribe = poll.state.subscribe((state) => published.push(state));
+      published.length = 0;
+
+      client.dispatchEvent({ type: 'user.updated', user: { id: 'stranger', name: 'X' } });
+      unsubscribe();
+
+      expect(published).toHaveLength(0);
     });
 
     it('should not register subscription handlers twice', () => {

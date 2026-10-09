@@ -263,7 +263,7 @@ export class MessageComposer extends WithSubscriptions {
       this.channel = compositionContext.channel;
     } else if (compositionContext.cid) {
       const [type, id] = compositionContext.cid.split(':');
-      this.channel = client.channel(type, id);
+      this.channel = client.channelManager.ensure({ type, id });
     } else {
       throw new Error(
         'MessageComposer requires composition context pointing to channel (channel or context.cid)',
@@ -786,6 +786,26 @@ export class MessageComposer extends WithSubscriptions {
     this.textComposer.restoreSnapshot(snapshot.textComposer);
   };
 
+  /**
+   * Moves this composition into `target`, replacing what `target` held, and clears this composer
+   * locally: the text, attachments, poll, location, link previews, custom data, quoted message and
+   * reply-in-channel choice. An upload still running keeps running and its result lands in `target`
+   * (see {@link AttachmentManager.takeOver}). Nothing is sent.
+   *
+   * @internal
+   */
+  transferTo = (target: MessageComposer) => {
+    target.textComposer.takeOver(this.textComposer);
+    target.attachmentManager.takeOver(this.attachmentManager);
+    target.linkPreviewsManager.takeOver(this.linkPreviewsManager);
+    target.locationComposer.takeOver(this.locationComposer);
+    target.pollComposer.takeOver(this.pollComposer);
+    target.customDataManager.takeOver(this.customDataManager);
+    const { pollId, quotedMessage, showReplyInChannel } = this.state.getLatestValue();
+    target.state.partialNext({ pollId, quotedMessage, showReplyInChannel });
+    this.clear();
+  };
+
   captureSnapshot = (snapshot = this.getSnapshot()) => {
     if (this.snapshots.length) return;
     this.snapshots.push(snapshot);
@@ -890,7 +910,7 @@ export class MessageComposer extends WithSubscriptions {
 
   /**
    * The channel's server-side config (`client.channelServerConfigs[cid]`) is populated by `query`/`watch`,
-   * which for a channel opened via `client.channel(type, id)` happens *after* this composer was
+   * which for a channel opened via `client.channelManager.ensure({ type, id })` happens *after* this composer was
    * constructed. Left unwatched, the composer would keep the defaults it derived when `serverConfig` was
    * still undefined — so `location.enabled` would stay `true` for an app that disables `shared_locations`
    * server-side. Re-deriving when the config lands keeps the server authoritative.
@@ -1156,7 +1176,9 @@ export class MessageComposer extends WithSubscriptions {
   createDraft = async () => {
     // server-side drafts are not stored on message level but on thread and channel level
     // therefore we don't need to create a draft if the message is edited
-    if (this.editedMessage || !this.config.drafts.enabled) return;
+    // nor for a channel without an id yet: there is nothing to save it for (see `isProvisional`)
+    if (this.editedMessage || !this.config.drafts.enabled || this.channel.isProvisional)
+      return;
     const composition = await this.composeDraft();
     if (!composition) return;
     const { draft } = composition;
@@ -1182,7 +1204,13 @@ export class MessageComposer extends WithSubscriptions {
   };
 
   deleteDraft = async () => {
-    if (this.editedMessage || !this.config.drafts.enabled || !this.draftId) return;
+    if (
+      this.editedMessage ||
+      !this.config.drafts.enabled ||
+      !this.draftId ||
+      this.channel.isProvisional
+    )
+      return;
     this.state.partialNext({ draftId: null }); // todo: should we clear the whole state?
     const parentId = this.threadId ?? undefined;
     if (this.client.offlineDb) {

@@ -4,7 +4,11 @@ import type {
   UploadRequestFn,
   UploadRequestOptions,
 } from './configuration';
-import { isLocalImageAttachment, isUploadedAttachment } from './attachmentIdentity';
+import {
+  isLocalImageAttachment,
+  isPendingUpload,
+  isUploadedAttachment,
+} from './attachmentIdentity';
 import {
   createFileFromBlobs,
   ensureIsLocalAttachment,
@@ -282,6 +286,24 @@ export class AttachmentManager {
 
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {
     this.state.next(initState({ message }));
+  };
+
+  /**
+   * Moves `source`'s attachments here, as they are, replacing this manager's own (whose uploads are
+   * cancelled) and leaving `source` with none. An upload still running keeps running: it isn't
+   * cancelled, and this manager attaches to it (`UploadManager` runs one request per attachment), so
+   * its result lands here. `source`'s list is emptied without touching the uploads, so clearing
+   * `source` afterwards doesn't cancel them either.
+   *
+   * @internal
+   */
+  takeOver = (source: AttachmentManager) => {
+    this.cancelAttachmentUploads();
+    this.state.next({ ...source.state.getLatestValue() });
+    source.state.partialNext({ attachments: [] });
+    for (const attachment of this.attachments) {
+      if (isPendingUpload(attachment)) void this.uploadAndProcess(attachment);
+    }
   };
 
   getSnapshot = (): AttachmentManagerSnapshot => {
@@ -783,7 +805,7 @@ export class AttachmentManager {
       mode: 'concurrent',
     });
 
-    let attachment: LocalUploadAttachment = preUpload.state.attachment;
+    const attachment: LocalUploadAttachment = preUpload.state.attachment;
 
     if (preUpload.status === 'discard') return attachment;
     // todo: remove with the next major release as filtering can be done in middleware
@@ -795,6 +817,27 @@ export class AttachmentManager {
       return preUpload.state.attachment;
     }
 
+    return this.uploadAndProcess(attachment);
+  };
+
+  uploadFiles = async (files: FileReference[] | FileList | FileLike[]) => {
+    if (!this.isUploadEnabled) return;
+
+    const iterableFiles: FileReference[] | FileLike[] = isFileList(files)
+      ? Array.from(files)
+      : files;
+
+    return await Promise.all(
+      iterableFiles.slice(0, this.availableUploadSlots).map(this.uploadFile),
+    );
+  };
+
+  /**
+   * Uploads `attachment` (or joins its upload already running, see {@link UploadManager.upload}) and
+   * runs the post-upload middleware over the result.
+   */
+  private uploadAndProcess = async (initialAttachment: LocalUploadAttachment) => {
+    let attachment = initialAttachment;
     let response: MinimumUploadRequestResult | undefined;
     let error: Error | undefined;
     try {
@@ -830,18 +873,6 @@ export class AttachmentManager {
 
     this.updateAttachment(attachment);
     return attachment;
-  };
-
-  uploadFiles = async (files: FileReference[] | FileList | FileLike[]) => {
-    if (!this.isUploadEnabled) return;
-
-    const iterableFiles: FileReference[] | FileLike[] = isFileList(files)
-      ? Array.from(files)
-      : files;
-
-    return await Promise.all(
-      iterableFiles.slice(0, this.availableUploadSlots).map(this.uploadFile),
-    );
   };
 
   private upload(attachment: LocalUploadAttachment) {

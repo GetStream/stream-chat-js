@@ -69,7 +69,10 @@ const setup = ({
 
   mockClient.queryUsers = vi.fn().mockResolvedValue({ users: [] });
 
-  const mockChannel = mockClient.channel('channelType', 'channelId');
+  const mockChannel = mockClient.channelManager.ensure({
+    type: 'channelType',
+    id: 'channelId',
+  });
   mockChannel.keystroke = vi.fn().mockResolvedValue({});
   mockChannel.getClient = vi.fn().mockReturnValue(mockClient);
 

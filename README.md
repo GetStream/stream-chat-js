@@ -54,8 +54,10 @@ await client.upsertUser({
 });
 
 // create a channel
-const channel = client.channel('messaging', 'test-channel', {
-  created_by_id: 'vishal-1',
+const channel = client.channelManager.ensure({
+  type: 'messaging',
+  id: 'test-channel',
+  data: { created_by_id: 'vishal-1' },
 });
 await channel.create();
 

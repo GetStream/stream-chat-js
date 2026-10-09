@@ -63,6 +63,7 @@ export class ThreadPaginator extends BasePaginator<Thread, QueryThreadsRequest> 
       initialCursor: ZERO_PAGE_CURSOR,
       itemIndex: new StoreBackedItemIndex<Thread>({
         getEntityId: (thread) => thread.id,
+        holderName: 'thread-paginator',
         store,
       }),
       pageSize: DEFAULT_THREAD_PAGE_SIZE,

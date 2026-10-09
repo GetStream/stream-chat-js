@@ -711,7 +711,7 @@ export class StableWSConnection {
     if (this.isHealthy) return;
 
     // The server keys channel watches by connection ID, so they are gone the moment the socket is.
-    this.client._markActiveChannelsWatchInterrupted();
+    this.client.channelManager.markChannelsWatchInterrupted();
   };
 
   /**

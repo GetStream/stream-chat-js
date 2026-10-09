@@ -104,6 +104,15 @@ export class PollComposer {
     this.state.next(this.initialState);
   };
 
+  /**
+   * Takes over the poll `source` is composing.
+   *
+   * @internal
+   */
+  takeOver = (source: PollComposer) => {
+    this.state.next({ ...source.state.getLatestValue() });
+  };
+
   getSnapshot = (): PollComposerSnapshot => this.state.getLatestValue();
 
   restoreSnapshot = (snapshot: PollComposerSnapshot) => {

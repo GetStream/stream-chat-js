@@ -50,11 +50,11 @@ describe('publish amplification — one event, one publish per collection', () =
   const linked = () => {
     const client = getClientWithUser({ id: 'me' });
     const { channel: channelResponse } = generateChannel();
-    const channel = client.channel(channelResponse.type, channelResponse.id);
+    const channel = client.channelManager.ensure({
+      type: channelResponse.type,
+      id: channelResponse.id,
+    });
     channel.initialized = true;
-    (client as unknown as { activeChannels: Record<string, unknown> }).activeChannels[
-      channel.cid
-    ] = channel;
 
     // pinned AND show_in_channel, so all three collections genuinely hold it
     const held = {
