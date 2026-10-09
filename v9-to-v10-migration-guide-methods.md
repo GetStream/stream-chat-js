@@ -1092,6 +1092,35 @@ channel._disconnect();
 channel.disconnect();
 ```
 
+#### `channel.disconnected` → `channel.pendingDisposal`
+
+v9's `channel.disconnected` field is removed. Whether a channel was disconnected is now
+`channel.pendingDisposal`, which is read-only: only `channel.disconnect()` sets it, and nothing sets it
+back, as a disconnected instance is never revived. Once it is `true`, `getClient()` throws, `query()`
+and `watch()` reject before the request is sent, and `activate()` does nothing; get a live instance
+with `client.channelManager.ensure({ type, id })`.
+
+It lives in `channel.state`, so it can also be followed reactively:
+
+```ts
+// v9
+if (channel.disconnected) {
+  // …
+}
+
+// v10
+if (channel.pendingDisposal) {
+  // …
+}
+
+channel.state.subscribeWithSelector(
+  ({ pendingDisposal }) => ({ pendingDisposal }),
+  ({ pendingDisposal }) => {
+    // …
+  },
+);
+```
+
 #### `channel.ensureWatched` (new)
 
 `channel.ensureWatched(options?)` watches the channel unless it is already watched, and joins a watch

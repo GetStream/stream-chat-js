@@ -1436,11 +1436,12 @@ export class Channel extends ChannelApi {
    * from it, the client disconnected, or nothing used it any more. Store-backed and reactive.
    *
    * One-way and terminal — read-only, set only by {@link Channel.disconnect}, and nothing revives
-   * the instance. Its resources are
-   * already released ({@link Channel.disconnect} disposes the paginators and unregisters the
-   * subscriptions) and the channel store drops it, so nothing should touch it:
-   * `client.channelManager.ensure(…)` mints a fresh instance for its cid, never re-watched on recovery,
-   * refused as a source of `channel.data` by the offline DB, and `getClient()` throws on it so a reference held across a `disconnectUser()`
+   * the instance. Its resources are already released ({@link Channel.disconnect} disposes the
+   * paginators and unregisters the subscriptions), so nothing should touch it. It stays in the
+   * channel store until `client.channelManager.releaseUnusedChannels()` drops it, and until then the
+   * SDK treats it as not stored: `client.channelManager.ensure(…)` gives a fresh instance for its
+   * cid, lists refuse it, and recovery never re-watches it. The offline DB refuses it as a source of
+   * `channel.data`, and `getClient()` throws on it, so a reference held across a `disconnectUser()`
    * fails loudly instead of quietly requesting on a client with no user.
    */
   get pendingDisposal() {

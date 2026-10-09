@@ -129,8 +129,9 @@ export type MuteStatusState = {
 /**
  * Connection / initialization lifecycle flags for the channel. Previously plain fields on `Channel`;
  * now store-backed so consumers can react to them via `useStateStore(channel.state, selector)`.
- * Read/written through the `channel.initialized` / `channel.offlineMode` /
- * `channel.pendingDisposal` getters/setters, which proxy this slice.
+ * Read through the `channel.initialized` / `channel.offlineMode` / `channel.pendingDisposal`
+ * getters, which proxy this slice; `initialized` and `offlineMode` have setters too, while
+ * `pendingDisposal` is set only by `channel.disconnect()`.
  */
 export type ChannelLifecycleState = {
   /**
