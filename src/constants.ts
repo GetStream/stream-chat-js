@@ -1,3 +1,5 @@
+import type { LocalMessage, MessageResponse } from './types';
+
 export const DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE = 25;
 export const DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE = 100;
 export const DEFAULT_MESSAGE_SET_PAGINATION = Object.freeze({
@@ -30,6 +32,21 @@ export const RESERVED_UPDATED_MESSAGE_FIELDS = Object.freeze({
   __html: true,
   user: true,
 });
-export const LOCAL_MESSAGE_FIELDS = Object.freeze({ error: true });
+/**
+ * Fields a LocalMessage has on top of a MessageResponse. Adding such a field to LocalMessage
+ * is a compile error here until it is listed.
+ */
+export const LOCAL_MESSAGE_FIELDS = Object.freeze({ error: true } satisfies Record<
+  Exclude<keyof LocalMessage, keyof MessageResponse>,
+  true
+>);
+/**
+ * Fields of a message that only the client sets, the backend never sends them. `status` can't be
+ * derived like LOCAL_MESSAGE_FIELDS: it is declared on MessageResponseBase so the SDKs can carry it.
+ */
+export const CLIENT_ONLY_MESSAGE_FIELDS = Object.freeze({
+  ...LOCAL_MESSAGE_FIELDS,
+  status: true,
+});
 export const DEFAULT_QUERY_CHANNELS_RETRY_COUNT = 3;
 export const DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES = 1000; // 1 second

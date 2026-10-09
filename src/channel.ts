@@ -11,6 +11,7 @@ import {
   messageSetPagination,
   normalizeQuerySort,
   sanitizeOutgoingAttachments,
+  stripClientOnlyMessageFields,
   unformatMessage,
 } from './utils';
 import { isMessageAlreadyExistsError } from './errors';
@@ -291,17 +292,15 @@ export class Channel {
     const localCopy = this.state.findMessage(id, parent_id);
     if (!localCopy) return;
 
-    // Strip the client-only fields (unformatMessage keeps them), the backend never sends them
-    /* eslint-disable @typescript-eslint/no-unused-vars */
-    const { error, quoted_message, status, ...storedMessage } = unformatMessage(
-      localCopy,
-    ) as MessageResponse & Pick<LocalMessage, 'error'>;
-    const messageResponse: MessageResponse = storedMessage;
-    if (quoted_message) {
-      const { status: quotedMessageStatus, ...quotedMessage } = quoted_message;
-      messageResponse.quoted_message = quotedMessage;
+    // unformatMessage keeps the client-only fields, the backend never sends them
+    const messageResponse: MessageResponse = stripClientOnlyMessageFields(
+      unformatMessage(localCopy),
+    );
+    if (messageResponse.quoted_message) {
+      messageResponse.quoted_message = stripClientOnlyMessageFields(
+        messageResponse.quoted_message,
+      );
     }
-    /* eslint-enable @typescript-eslint/no-unused-vars */
 
     return { duration: '', message: messageResponse };
   }

@@ -25,7 +25,11 @@ import type {
 import type { StreamChat } from './client';
 import type { Channel } from './channel';
 import type { AxiosRequestConfig } from 'axios';
-import { LOCAL_MESSAGE_FIELDS, RESERVED_UPDATED_MESSAGE_FIELDS } from './constants';
+import {
+  CLIENT_ONLY_MESSAGE_FIELDS,
+  LOCAL_MESSAGE_FIELDS,
+  RESERVED_UPDATED_MESSAGE_FIELDS,
+} from './constants';
 
 /**
  * logChatPromiseExecution - utility function for logging the execution of a promise..
@@ -511,6 +515,20 @@ export const localMessageToNewMessagePayload = (localMessage: LocalMessage): Mes
     mentioned_users: mentioned_users?.map((user) => user.id),
   };
 };
+
+/**
+ * Removes the fields only the client sets (CLIENT_ONLY_MESSAGE_FIELDS), so that the message has
+ * the shape the backend sends.
+ */
+export const stripClientOnlyMessageFields = <T extends object>(
+  message: T,
+): Omit<T, keyof typeof CLIENT_ONLY_MESSAGE_FIELDS> =>
+  Object.fromEntries(
+    Object.entries(message).filter(
+      ([key]) =>
+        !CLIENT_ONLY_MESSAGE_FIELDS[key as keyof typeof CLIENT_ONLY_MESSAGE_FIELDS],
+    ),
+  ) as Omit<T, keyof typeof CLIENT_ONLY_MESSAGE_FIELDS>;
 
 export const toUpdatedMessagePayload = (
   message: LocalMessage | Partial<MessageResponse>,
