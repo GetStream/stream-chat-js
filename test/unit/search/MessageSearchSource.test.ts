@@ -399,6 +399,62 @@ describe('MessageSearchSource', () => {
     );
   });
 
+  it("stores a result's channel the follow-up query didn't return, from the result's channel data", async () => {
+    const hidden = generateMsg({ cid: 'messaging:hidden' }) as ReturnType<
+      typeof generateMsg
+    >;
+    searchMock.mockResolvedValueOnce({
+      results: [
+        {
+          message: {
+            ...hidden,
+            channel: {
+              cid: 'messaging:hidden',
+              id: 'hidden',
+              name: 'Hidden',
+              type: 'messaging',
+            },
+          },
+        },
+      ],
+      next: undefined,
+    } as any);
+
+    // @ts-expect-error protected access
+    await searchSource.query('query');
+
+    const channel = client.channelManager.get('messaging:hidden');
+    expect(channel).toBeDefined();
+    expect(channel?.data?.name).toBe('Hidden');
+    expect(channel?.watchStatus).not.toBe('watching');
+  });
+
+  it('keeps a stored result channel as it is', async () => {
+    const stored = client.channelManager.ensure({ id: 'kept', type: 'messaging' });
+    searchMock.mockResolvedValueOnce({
+      results: [
+        {
+          message: {
+            ...generateMsg({ cid: 'messaging:kept' }),
+            channel: {
+              cid: 'messaging:kept',
+              id: 'kept',
+              name: 'From search',
+              type: 'messaging',
+            },
+          },
+        },
+      ],
+      next: undefined,
+    } as any);
+
+    // @ts-expect-error protected access
+    await searchSource.query('query');
+
+    expect(client.channelManager.get('messaging:kept')).toBe(stored);
+    expect(stored.data?.name).not.toBe('From search');
+  });
+
   it('does not call queryChannels if all channels are loaded locally', async () => {
     const m1 = generateMsg({ cid: 'cid1' });
     client.channelManager.getOrCreateChannel('cid1', () => ({}) as any);

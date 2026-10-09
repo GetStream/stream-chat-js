@@ -285,6 +285,22 @@ export class MessageSearchSource<
       );
     }
 
+    if (queryOptions.signal?.aborted) return { items, next };
+
+    // The query above doesn't return every result's channel: it leaves out hidden channels by
+    // default, and those its filters exclude. Each result carries its channel's data, so such a
+    // channel is stored from it, unwatched and not loaded, and every result has a channel to show and
+    // to open (opening loads and watches it).
+    for (const message of items) {
+      if (!message.cid) continue;
+      const stored = this.client.channelManager.get(message.cid);
+      if (stored && !stored.pendingDisposal) continue;
+      const [type, id] = message.cid.split(':');
+      if (!type || !id) continue;
+      const channel = this.client.channelManager.ensure({ id, type });
+      if (message.channel) channel.data = message.channel;
+    }
+
     return { items, next };
   }
 
