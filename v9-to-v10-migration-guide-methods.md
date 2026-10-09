@@ -42,11 +42,11 @@ await client.deleteReaction({ id: messageId, type: 'love' }, undefined, {
 await channel.pin(undefined, { signal: controller.signal });
 ```
 
-The slot keeps `requestOptions` in the same position when the endpoint later gains a query parameter. Without it, `getApp(requestOptions)` would become `getApp(request, requestOptions)`, and options passed by existing callers would quietly go out as query parameters. The generated methods affected today are `getApp`, `unreadCounts`, `listDevices`, `getBlockedUsers`, `getUserLiveLocations`, `getMessage`, `deleteReaction`, `deletePoll`, `getPoll`, `deletePollOption`, `getPollOption`, `deletePollVote` and `deleteReminder` on `client`, and `listQueues`, `getQueue`, `getAppeal` and `deleteActionConfig` on `client.moderation`. The wrappers around them take the same shape (`client.getAppSettings`, `channel.removeVote`). So do the hand-written `Channel` conveniences that send a fixed request: `archive`, `unarchive`, `pin`, `unpin`, `disableSlowMode`, `clearAIIndicator` and `stopAIResponse`. A call that omits `requestOptions` is unaffected (`client.getAppSettings()`, `channel.pin()`). A call that passes it in the first free position is a compile error, because no `StreamRequestOptions` value is assignable to `Record<string, never>`.
+The slot keeps `requestOptions` in the same position when the endpoint later gains a query parameter. Without it, `getApp(requestOptions)` would become `getApp(request, requestOptions)`, and options passed by existing callers would quietly go out as query parameters. The generated methods affected today are `getApp`, `unreadCounts`, `listDevices`, `getBlockedUsers`, `getUserLiveLocations`, `getMessage`, `deleteReaction`, `deletePoll`, `getPoll`, `deletePollOption`, `getPollOption`, `deletePollVote` and `deleteReminder` on `client`, and `listQueues`, `getQueue`, `getAppeal` and `deleteActionConfig` on `client.moderation`. The wrappers around them take the same shape (`client.getAppSettings`, `channel.deleteReaction`, `channel.removeVote`). So do the hand-written `Channel` conveniences that send a fixed request: `archive`, `unarchive`, `pin`, `unpin`, `disableSlowMode`, `clearAIIndicator` and `stopAIResponse`. A call that omits `requestOptions` is unaffected (`client.getAppSettings()`, `channel.pin()`). A call that passes it in the first free position is a compile error, because no `StreamRequestOptions` value is assignable to `Record<string, never>`.
 
 This replaces v9's `client.createAbortControllerForNextRequest()` — see [below](#clientcreateabortcontrollerfornextrequest). The upload methods are **not** an exception: they take the same `requestOptions`, which carries `onUploadProgress` alongside `signal`. v9's `axiosRequestConfig` parameter is gone everywhere.
 
-**Path parameters are their own argument.** A generated method whose endpoint has URL path parameters takes them as a separate first argument: `method(pathParams, request?, requestOptions?)`. `request` carries the query and body fields; a method whose arguments are all path parameters keeps an unused `_request` slot so `requestOptions` stays third ([see above](#global-renames-applied-everywhere)). The hand-written methods that wrap one of these take the same shape (`channel.vote`, `client.queryReactionsAndHydrate`, `client.queryPollAnswers`, `client.reminders.upsertReminder` / `createReminder` / `updateReminder`).
+**Path parameters are their own argument.** A generated method whose endpoint has URL path parameters takes them as a separate first argument: `method(pathParams, request?, requestOptions?)`. `request` carries the query and body fields; a method whose arguments are all path parameters keeps an unused `_request` slot so `requestOptions` stays third ([see above](#global-renames-applied-everywhere)). The hand-written methods that wrap one of these take the same shape (`channel.sendReaction`, `channel.vote`, `client.queryReactionsAndHydrate`, `client.queryPollAnswers`, `client.reminders.upsertReminder` / `createReminder` / `updateReminder`).
 
 ```ts
 await client.sendReaction({ id: messageId }, { reaction: { type: 'love' } });
@@ -848,14 +848,16 @@ channel.queryMembers(request?: { payload?: Partial<QueryMembersPayload> });
 
 For rewriting the `sort` value, see `v9-to-v10-migration-guide-sort.md`.
 
-#### `channel.sendReaction` / `channel.deleteReaction` — removed
+#### `channel.sendReaction` / `channel.deleteReaction`
 
 ```ts
 // v9
 channel.sendReaction(messageID, reaction: Reaction, options?);
 channel.deleteReaction(messageID, reactionType, user_id?);
 
-// v10 — the HTTP request
+// v10 — the HTTP request (the channel methods pass straight through to the client ones)
+channel.sendReaction(pathParams: { id: messageId }, request: { reaction, enforce_unique?, skip_push? });
+channel.deleteReaction(pathParams: { id: messageId, type: reactionType }, _request?: Record<string, never>);
 client.sendReaction(pathParams: { id: messageId }, request: { reaction, enforce_unique?, skip_push? });
 client.deleteReaction(pathParams: { id: messageId, type: reactionType }, _request?: Record<string, never>);
 
@@ -1593,10 +1595,13 @@ Each message action now has exactly two entry points: the HTTP request alone, an
 | `updateMessageWithLocalUpdate(p)`                                                                                            | `messageOperations.update(p)`                            |
 | `deleteMessageWithLocalUpdate(p)`                                                                                            | `messageOperations.delete(p)`                            |
 | `addReactionWithLocalUpdate(p)` / `deleteReactionWithLocalUpdate(p)`                                                         | `messageOperations.addReaction(p)` / `deleteReaction(p)` |
-| `channel.sendReaction(r)` / `channel.deleteReaction(r)`                                                                      | `client.sendReaction(r)` / `client.deleteReaction(r)`    |
 | `channel._sendMessage`, `client._updateMessage`, `client._deleteMessage`, `channel._sendReaction`, `channel._deleteReaction` | the HTTP method above                                    |
 
 Parameters are unchanged.
+
+`channel.sendReaction` / `channel.deleteReaction` were removed in this release too, and came back
+after `10.0.0-rc.20` as pass-throughs to `client.sendReaction` / `client.deleteReaction`: the HTTP
+request only, with no local state and no offline queueing.
 
 **Behaviour change for direct callers:** `channel.sendMessage`, `client.updateMessage` and
 `client.deleteMessage` no longer queue for offline replay; they used to. Call the full operation
