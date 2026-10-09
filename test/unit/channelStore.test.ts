@@ -3,7 +3,12 @@ import { getClientWithUser } from './test-utils/getClient';
 import { generateChannel } from './test-utils/generateChannel';
 import { generateMsg } from './test-utils/generateMessage';
 import { formatMessage } from '../../src/utils';
-import { ChannelPaginator, ChannelWatchStatus, MessageComposer } from '../../src';
+import {
+  Channel as ChannelClass,
+  ChannelPaginator,
+  ChannelWatchStatus,
+  MessageComposer,
+} from '../../src';
 import type {
   Channel,
   ChannelStateResponseFields,
@@ -120,6 +125,72 @@ describe('ChannelManager channel store', () => {
       expect(() => client.channelManager.ingestChannel(channel)).not.toThrow();
       paginator.removeItem({ item: channel });
       expect(paginator.items).toEqual([]);
+    });
+
+    it('lists the instance that superseded it, never the superseded one', async () => {
+      const stored = client.channelManager.ensure({
+        type: 'messaging',
+        id: '!members-xyz',
+      });
+      const paginator = new ChannelPaginator({ client, filters: { type: 'messaging' } });
+      paginator.setItems({
+        isFirstPage: true,
+        isLastPage: true,
+        valueOrFactory: [stored],
+      });
+      client.channelManager.setPaginators([paginator]);
+      const created = client.channelManager.ensure({
+        type: 'messaging',
+        data: { members: [{ user_id: 'ann' }, { user_id: 'bob' }] },
+      });
+      respondWith('!members-xyz');
+      await created.query({});
+      expect(created.supersededBy).toBe(stored);
+
+      client.channelManager.ingestChannel(created);
+      paginator.ingestItem(created);
+
+      expect(client.channelManager.get(stored.cid)).toBe(stored);
+      expect(paginator.items).toEqual([stored]);
+      expect(stored.pendingDisposal).toBe(false);
+    });
+
+    it('ensureWatched() resolves with the instance superseding it during its watch', async () => {
+      const stored = client.channelManager.ensure({
+        type: 'messaging',
+        id: '!members-xyz',
+      });
+      stored.watchStatus = ChannelWatchStatus.Watching;
+      const created = client.channelManager.ensure({
+        type: 'messaging',
+        data: { members: [{ user_id: 'ann' }, { user_id: 'bob' }] },
+      });
+      respondWith('!members-xyz');
+
+      const watched = await created.ensureWatched();
+
+      expect(created.supersededBy).toBe(stored);
+      expect(watched).toBe(stored);
+    });
+
+    it('ensureWatched() on a superseded instance resolves with its successor', async () => {
+      const stored = client.channelManager.ensure({
+        type: 'messaging',
+        id: '!members-xyz',
+      });
+      stored.watchStatus = ChannelWatchStatus.Watching;
+      const created = client.channelManager.ensure({
+        type: 'messaging',
+        data: { members: [{ user_id: 'ann' }, { user_id: 'bob' }] },
+      });
+      respondWith('!members-xyz');
+      await created.query({});
+      const watch = vi.spyOn(created, 'watch');
+      const storedWatch = vi.spyOn(stored, 'watch');
+
+      expect(await created.ensureWatched()).toBe(stored);
+      expect(watch).not.toHaveBeenCalled();
+      expect(storedWatch).not.toHaveBeenCalled();
     });
 
     it('resolves to a stored distinct channel with the same loaded members', () => {
@@ -725,6 +796,57 @@ describe('channel lists as users', () => {
     expect(client.channelManager.ensure({ type: 'messaging', id: 'general' })).not.toBe(
       channel,
     );
+  });
+
+  it('lists the stored instance when given another instance for its cid', () => {
+    const stored = client.channelManager.ensure({ type: 'messaging', id: 'general' });
+    const paginator = list();
+    paginator.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: [stored] });
+    client.channelManager.setPaginators([paginator]);
+    const other = new ChannelClass(client, 'messaging', 'general', {});
+
+    client.channelManager.ingestChannel(other);
+    paginator.ingestItem(other);
+
+    expect(client.channelManager.get('messaging:general')).toBe(stored);
+    expect(paginator.items).toEqual([stored]);
+  });
+
+  it('lists the fresh stored instance when given a disconnected one for its cid', () => {
+    const disconnected = client.channelManager.ensure({
+      type: 'messaging',
+      id: 'general',
+    });
+    disconnected.disconnect();
+    release();
+    const fresh = client.channelManager.ensure({ type: 'messaging', id: 'general' });
+    const paginator = list();
+    paginator.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: [fresh] });
+    client.channelManager.setPaginators([paginator]);
+
+    client.channelManager.ingestChannel(disconnected);
+    paginator.ingestItem(disconnected);
+
+    expect(client.channelManager.get('messaging:general')).toBe(fresh);
+    expect(paginator.items).toEqual([fresh]);
+  });
+
+  it('neither lists nor stores again a disconnected instance whose cid has none stored', () => {
+    const disconnected = client.channelManager.ensure({
+      type: 'messaging',
+      id: 'general',
+    });
+    disconnected.disconnect();
+    release();
+    const paginator = list();
+    paginator.setItems({ isFirstPage: true, isLastPage: true, valueOrFactory: [] });
+    client.channelManager.setPaginators([paginator]);
+
+    client.channelManager.ingestChannel(disconnected);
+    expect(paginator.ingestItem(disconnected)).toBe(false);
+
+    expect(client.channelManager.get('messaging:general')).toBeUndefined();
+    expect(paginator.items).toEqual([]);
   });
 
   it('keeps a listed channel that is also watched or opened', () => {

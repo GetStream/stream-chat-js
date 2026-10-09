@@ -1701,14 +1701,21 @@ export class Channel extends WithMessageOperations(ChannelApi) {
    * and are not joined by this method. A channel already watched sends nothing, so `options` such as
    * a message window apply only when the call watches it; use the message paginator to load a window.
    *
+   * Resolves with the instance to use from now on: this one, or the one that superseded it
+   * ({@link Channel.supersededBy}). A channel created from members is superseded when its watch
+   * answers with a cid another instance is already stored under; that instance is the one stored,
+   * listed and receiving events, so it is the one this ensures watched and resolves with.
+   *
    * Rejects as the watch does, and every caller waiting for that watch gets its rejection. The next
    * call sends a new request.
    *
    * @param options - Options for the watch request (optional). Calls join only a watch with the same
    *   options.
-   * @returns This channel, so it can follow `client.channelManager.ensure(...)` in one expression.
+   * @returns The instance to use, so it can follow `client.channelManager.ensure(...)` in one
+   *   expression.
    */
   async ensureWatched(options?: ChannelGetOrCreateRequest): Promise<Channel> {
+    if (this.supersededBy) return this.supersededBy.ensureWatched(options);
     if (this.watchStatus === ChannelWatchStatus.Watching) return this;
     const requested = options ?? {};
     // deep equality, as for query shapes: key order doesn't matter
@@ -1717,7 +1724,7 @@ export class Channel extends WithMessageOperations(ChannelApi) {
       isEqual(this._ensureWatchedInFlight.options, requested)
     ) {
       await this._ensureWatchedInFlight.promise;
-      return this;
+      return this.afterEnsuredWatch(options);
     }
     const promise = this.watch(options);
     this._ensureWatchedInFlight = { options: requested, promise };
@@ -1727,7 +1734,12 @@ export class Channel extends WithMessageOperations(ChannelApi) {
       if (this._ensureWatchedInFlight?.promise === promise)
         this._ensureWatchedInFlight = undefined;
     }
-    return this;
+    return this.afterEnsuredWatch(options);
+  }
+
+  /** This instance, or its successor if the watch just superseded it (see `ensureWatched`). */
+  private afterEnsuredWatch(options?: ChannelGetOrCreateRequest) {
+    return this.supersededBy ? this.supersededBy.ensureWatched(options) : this;
   }
 
   /**

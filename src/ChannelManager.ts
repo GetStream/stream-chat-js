@@ -17,6 +17,9 @@ import { Channel } from './channel';
 import { ChannelWatchStatus } from './channel_state';
 import { generateChannelTempId, getMemberUserId, runDetached } from './utils';
 import { EntityStore } from './entityStore/EntityStore';
+import { chatLoggerSystem } from './logger';
+
+const logger = chatLoggerSystem.getLogger('channel-manager');
 
 export type ChannelManagerEventHandlerContext = {
   channelManager: ChannelManager;
@@ -451,6 +454,31 @@ export class ChannelManager extends WithSubscriptions {
     return this.channelStore.get(cid);
   }
 
+  /**
+   * The instance a channel list should show for `channel`: the one that superseded it, else the one
+   * stored under its cid, else `channel` itself. A list never puts another instance in place of the
+   * stored one, which would leave the stored one out of the store, unfinished and without events.
+   * `undefined` for a disconnected instance that isn't the stored one: there is nothing to show.
+   *
+   * @internal
+   */
+  resolveListedChannel(channel: Channel): Channel | undefined {
+    const candidate = channel.supersededBy ?? channel;
+    const stored = this.get(candidate.cid);
+    const resolved = stored ?? candidate;
+    const resolvedIsCandidatePendingDisposal =
+      resolved !== stored && resolved.pendingDisposal;
+    if (resolvedIsCandidatePendingDisposal) return undefined;
+    if (resolved !== channel) {
+      logger
+        .withExtraTags('resolveListedChannel', channel.cid)
+        .warn(
+          'A channel list was given an instance other than the stored one; listing the stored one.',
+        );
+    }
+    return resolved;
+  }
+
   /** Every stored channel. */
   values(): Channel[] {
     return this.channelStore.values();
@@ -830,9 +858,11 @@ export class ChannelManager extends WithSubscriptions {
    * appear, register a catch-all paginator (empty filter) with the lowest ownership priority as
    * a local fallback list.
    */
-  ingestChannel(channel: Channel) {
+  ingestChannel(input: Channel) {
     // not listed until it has its id (see `ChannelPaginator.ingestItem`)
-    if (channel.isProvisional) return;
+    if (input.isProvisional) return;
+    const channel = this.resolveListedChannel(input);
+    if (!channel) return;
     const matchingPaginators = this.paginators.filter((p) => p.matchesFilter(channel));
     const matchingPaginatorIds = new Set(matchingPaginators.map((p) => p.id));
     const ownerIds = this.resolveOwnership(channel, matchingPaginators);

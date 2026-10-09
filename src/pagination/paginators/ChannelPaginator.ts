@@ -789,10 +789,15 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
    * Places `channel` in the list if it matches, or drops it if it no longer does. A provisional
    * channel (created from members, still without an id) is refused: it is stored under a temporary
    * cid until its first query gives it the real one, and a list holding it would keep the temporary
-   * cid. It is listed once it has its id, as the channels in a server page always do.
+   * cid. It is listed once it has its id, as the channels in a server page always do. Another
+   * instance for a stored cid (a superseded one, or one made with `new Channel()`) is replaced by
+   * the stored instance (see `ChannelManager.resolveListedChannel`).
    */
-  ingestItem(channel: Channel): boolean {
-    if (channel.isProvisional) return false;
+  ingestItem(input: Channel): boolean {
+    if (input.isProvisional) return false;
+    // the stored instance, never another one for the same cid (see `resolveListedChannel`)
+    const channel = this.client.channelManager.resolveListedChannel(input);
+    if (!channel) return false;
     const changed = super.ingestItem(channel);
     // a channel that left the result set is no longer listed, so the list stops holding it
     if (!this.matchesFilter(channel)) this._itemIndex.remove(channel.cid);
