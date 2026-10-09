@@ -13,7 +13,7 @@ import { getClientWithUser } from './test-utils/getClient';
 import { MockOfflineDB } from './offline-support/MockOfflineDB';
 
 /**
- * CHA-5603: a re-send of a message id the backend already stored is answered with
+ * A re-send of a message id the backend already stored is answered with
  * HTTP 400 / code 4 / "a message with ID … already exists" (the insert is ON CONFLICT DO NOTHING).
  * The SDK should treat that as delivered, not as a failed send.
  */
@@ -51,7 +51,7 @@ const localCopyOf = (
     status,
   }) as MessageResponse;
 
-describe('CHA-5603: re-sending an already stored message id', () => {
+describe('re-sending an already stored message id', () => {
   let client: StreamChat;
   let channel: Channel;
   let postSpy: MockInstance;
