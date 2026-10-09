@@ -39,21 +39,6 @@ const axiosTimeoutError = () =>
     code: 'ECONNABORTED',
   });
 
-// What the server returns: no client-side `status`, server timestamps.
-const serverCopyOf = (
-  local: Pick<MessageResponse, 'id' | 'text' | 'user'>,
-  createdAt: string,
-) => {
-  const message = generateMsg({
-    id: local.id,
-    text: local.text,
-    user: local.user,
-    date: createdAt,
-  }) as Partial<MessageResponse>;
-  delete message.status;
-  return message as MessageResponse;
-};
-
 // The optimistic copy the UI SDK puts into state before sending
 const localCopyOf = (
   id: string,
@@ -73,10 +58,8 @@ describe('CHA-5603: re-sending an already stored message id', () => {
   let getSpy: MockInstance;
 
   const localCreatedAt = '2026-10-08T10:00:00.000Z';
-  const serverCreatedAt = '2026-10-08T10:00:02.000Z';
 
   let messageId: string;
-  let serverMessage: MessageResponse;
 
   beforeEach(async () => {
     client = await getClientWithUser({ id: 'alice' });
@@ -86,17 +69,10 @@ describe('CHA-5603: re-sending an already stored message id', () => {
     channel.state.initMessages();
 
     messageId = `alice-${Math.random().toString(36).slice(2)}`;
-    serverMessage = serverCopyOf(
-      { id: messageId, text: 'hello', user: { id: 'alice' } },
-      serverCreatedAt,
-    );
 
     postSpy = vi.spyOn(client.axiosInstance, 'post');
-    // getMessage(id) — the only way to get the stored copy, the 400 body carries no message
-    getSpy = vi.spyOn(client.axiosInstance, 'get').mockResolvedValue({
-      status: 200,
-      data: { message: serverMessage, duration: '0.01ms' },
-    });
+    // recovery must not fetch the stored message
+    getSpy = vi.spyOn(client.axiosInstance, 'get');
   });
 
   afterEach(() => {
@@ -104,8 +80,8 @@ describe('CHA-5603: re-sending an already stored message id', () => {
   });
 
   describe('Channel.sendMessage without offline support', () => {
-    it.each(['sending', 'failed'] as const)(
-      'resolves with the stored message when the local copy is %s',
+    it.each(['sending', 'failed', 'received'] as const)(
+      'resolves with the local copy when it is %s, without fetching',
       async (status) => {
         channel.state.addMessageSorted(localCopyOf(messageId, status, localCreatedAt));
         postSpy.mockRejectedValue(axiosHttpError(400, 4, DUPLICATE_ID_TEXT(messageId)));
@@ -113,33 +89,36 @@ describe('CHA-5603: re-sending an already stored message id', () => {
         const response = await channel.sendMessage({ id: messageId, text: 'hello' });
 
         expect(response.message.id).toBe(messageId);
-        expect(response.message.created_at).toBe(serverCreatedAt);
-        expect(getSpy).toHaveBeenCalledWith(
-          expect.stringContaining(`/messages/${encodeURIComponent(messageId)}`),
-          expect.anything(),
-        );
+        expect(response.message.created_at).toBe(localCreatedAt);
+        expect(getSpy).not.toHaveBeenCalled();
+        // shaped like a backend response: no client-only fields
+        expect(response.message).not.toHaveProperty('status');
+        expect(response.message).not.toHaveProperty('error');
       },
     );
 
-    it('resolves with the local copy, without a GET, when it is already received', async () => {
-      channel.state.addMessageSorted(localCopyOf(messageId, 'received', localCreatedAt));
+    it('drops the error of the earlier failed attempt and is received once added to state', async () => {
+      const quoted = localCopyOf('quoted-id', 'received', '2026-10-08T09:00:00.000Z');
+      channel.state.addMessageSorted({
+        ...localCopyOf(messageId, 'failed', localCreatedAt),
+        // the earlier attempt left its error on the local copy
+        error: axiosTimeoutError(),
+        quoted_message: quoted,
+      } as MessageResponse);
       postSpy.mockRejectedValue(axiosHttpError(400, 4, DUPLICATE_ID_TEXT(messageId)));
 
       const response = await channel.sendMessage({ id: messageId, text: 'hello' });
 
-      expect(response.message.id).toBe(messageId);
-      expect(getSpy).not.toHaveBeenCalled();
-    });
+      expect(response.message).not.toHaveProperty('error');
+      expect(response.message).not.toHaveProperty('status');
+      expect(response.message.quoted_message?.id).toBe('quoted-id');
+      expect(response.message.quoted_message).not.toHaveProperty('status');
 
-    it('falls back to the local copy as received when getMessage fails', async () => {
-      channel.state.addMessageSorted(localCopyOf(messageId, 'sending', localCreatedAt));
-      postSpy.mockRejectedValue(axiosHttpError(400, 4, DUPLICATE_ID_TEXT(messageId)));
-      getSpy.mockRejectedValue(axiosTimeoutError());
-
-      const response = await channel.sendMessage({ id: messageId, text: 'hello' });
-
-      expect(response.message.id).toBe(messageId);
-      expect(response.message.status).toBe('received');
+      // what the UI SDKs do with the response: formatMessage defaults status to received
+      channel.state.addMessageSorted(response.message, true);
+      const inState = channel.state.findMessage(messageId);
+      expect(inState?.status).toBe('received');
+      expect(inState?.error).toBeNull();
     });
 
     it('still rejects when the message is not in local state', async () => {
@@ -148,7 +127,6 @@ describe('CHA-5603: re-sending an already stored message id', () => {
       await expect(channel.sendMessage({ id: messageId, text: 'hello' })).rejects.toThrow(
         /code 4/,
       );
-      expect(getSpy).not.toHaveBeenCalled();
     });
 
     it('still rejects for other code 4 "already exists" errors (e.g. poll option)', async () => {
@@ -156,19 +134,6 @@ describe('CHA-5603: re-sending an already stored message id', () => {
       postSpy.mockRejectedValue(
         axiosHttpError(400, 4, 'poll option with text `a` already exists'),
       );
-
-      await expect(channel.sendMessage({ id: messageId, text: 'hello' })).rejects.toThrow(
-        /code 4/,
-      );
-    });
-
-    it('still rejects when the stored message belongs to another user', async () => {
-      channel.state.addMessageSorted(localCopyOf(messageId, 'sending', localCreatedAt));
-      postSpy.mockRejectedValue(axiosHttpError(400, 4, DUPLICATE_ID_TEXT(messageId)));
-      getSpy.mockResolvedValue({
-        status: 200,
-        data: { message: { ...serverMessage, user: { id: 'mallory' } }, duration: '' },
-      });
 
       await expect(channel.sendMessage({ id: messageId, text: 'hello' })).rejects.toThrow(
         /code 4/,
@@ -256,90 +221,29 @@ describe('CHA-5603: re-sending an already stored message id', () => {
       });
     });
 
-    it('replaying a queued send that gets the duplicate-id error leaves the message as received', async () => {
-      // local copy shown as failed after the original attempt timed out
+    it('offline-queue replay is unchanged: the task is dropped and the local copy is left as is', async () => {
       channel.state.addMessageSorted(localCopyOf(messageId, 'failed', localCreatedAt));
-
-      const task: PendingTask = {
-        id: 1,
-        type: 'send-message',
-        channelType: channel.type,
-        channelId: channel.id as string,
-        messageId,
-        payload: [{ id: messageId, text: 'hello' }, {}],
-      };
-      offlineDb.getPendingTasks.mockResolvedValue([task]);
+      offlineDb.getPendingTasks.mockResolvedValue([
+        {
+          id: 1,
+          type: 'send-message',
+          channelType: channel.type,
+          channelId: channel.id as string,
+          messageId,
+          payload: [{ id: messageId, text: 'hello' }, {}],
+        },
+      ]);
       postSpy.mockRejectedValue(axiosHttpError(400, 4, DUPLICATE_ID_TEXT(messageId)));
 
       await offlineDb.executePendingTasks();
 
+      // code 4 is skippable, so the task is deleted; recovery is left to a user retry
       expect(offlineDb.deletePendingTask).toHaveBeenCalledWith({ id: 1 });
-      const inState = channel.state.messages.filter((m) => m.id === messageId);
-      expect(inState).toHaveLength(1);
-      expect(inState[0].status).toBe('received');
-    });
-
-    describe('replay before the channel is loaded into state (cold start)', () => {
-      const queueTask = (): PendingTask => ({
-        id: 1,
-        type: 'send-message',
-        channelType: channel.type,
-        channelId: channel.id as string,
-        messageId,
-        payload: [{ id: messageId, text: 'hello' }, {}],
-      });
-
-      beforeEach(() => {
-        offlineDb.getPendingTasks.mockResolvedValue([queueTask()]);
-        postSpy.mockRejectedValue(axiosHttpError(400, 4, DUPLICATE_ID_TEXT(messageId)));
-      });
-
-      it('fetches the stored message and writes it to the DB and state', async () => {
-        await offlineDb.executePendingTasks();
-
-        expect(getSpy).toHaveBeenCalledTimes(1);
-        expect(offlineDb.upsertMessages).toHaveBeenCalledWith({
-          messages: [serverMessage],
-        });
-        expect(offlineDb.deletePendingTask).toHaveBeenCalledWith({ id: 1 });
-        const inState = channel.state.messages.filter((m) => m.id === messageId);
-        expect(inState).toHaveLength(1);
-        expect(inState[0].status).toBe('received');
-      });
-
-      it('does not adopt a stored message owned by another user', async () => {
-        getSpy.mockResolvedValue({
-          status: 200,
-          data: { message: { ...serverMessage, user: { id: 'mallory' } }, duration: '' },
-        });
-
-        await offlineDb.executePendingTasks();
-
-        expect(offlineDb.upsertMessages).not.toHaveBeenCalled();
-        expect(channel.state.messages.some((m) => m.id === messageId)).toBe(false);
-        // code 4 stays skippable, so the task is dropped as before
-        expect(offlineDb.deletePendingTask).toHaveBeenCalledWith({ id: 1 });
-      });
-
-      it('drops the task as before when the stored message cannot be fetched', async () => {
-        getSpy.mockRejectedValue(axiosTimeoutError());
-
-        await offlineDb.executePendingTasks();
-
-        expect(offlineDb.upsertMessages).not.toHaveBeenCalled();
-        expect(offlineDb.deletePendingTask).toHaveBeenCalledWith({ id: 1 });
-      });
-
-      it('still deletes the task when writing the stored message to the DB fails', async () => {
-        offlineDb.upsertMessages.mockRejectedValue(new Error('disk full'));
-
-        await offlineDb.executePendingTasks();
-
-        expect(offlineDb.deletePendingTask).toHaveBeenCalledWith({ id: 1 });
-        expect(channel.state.messages.find((m) => m.id === messageId)?.status).toBe(
-          'received',
-        );
-      });
+      expect(getSpy).not.toHaveBeenCalled();
+      expect(offlineDb.upsertMessages).not.toHaveBeenCalled();
+      expect(channel.state.messages.find((m) => m.id === messageId)?.status).toBe(
+        'failed',
+      );
     });
 
     it('a leftover queued send for an already received message replays harmlessly', async () => {
@@ -360,7 +264,6 @@ describe('CHA-5603: re-sending an already stored message id', () => {
       await offlineDb.executePendingTasks();
 
       expect(postSpy).toHaveBeenCalledTimes(1);
-      expect(getSpy).not.toHaveBeenCalled();
       expect(offlineDb.deletePendingTask).toHaveBeenCalledWith({ id: 1 });
       const inState = channel.state.messages.filter((m) => m.id === messageId);
       expect(inState).toHaveLength(1);

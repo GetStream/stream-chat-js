@@ -235,12 +235,10 @@ export class Channel {
     } catch (error) {
       if (!message.id || !isMessageAlreadyExistsError(error)) throw error;
       // The message was stored by an earlier attempt whose response was lost
-      const recovered = await this._recoverAlreadyStoredMessage(message, {
-        localCopyRequired: true,
-      });
+      const recovered = this._recoverAlreadyStoredMessage(message);
       if (!recovered) throw error;
       await this._deletePendingSendMessageTasks(message.id);
-      return recovered.response;
+      return recovered;
     }
   }
 
@@ -275,58 +273,37 @@ export class Channel {
   /**
    * @private
    * Resolves a send that was rejected because the message id is already stored on the
-   * backend. Prefers the stored copy from the server, falls back to the local copy.
-   * Returns `undefined` when the send can't be treated as delivered.
+   * backend, using the local copy of the message. Only resolves if the message is in local
+   * state (proves it was sent from this client). Like on Android and iOS, the local copy
+   * stands in until the server copy replaces it (message.new, channel query).
    *
    * @param message The message that was sent
-   * @param options.localCopyRequired Only resolve if the message is in local state
-   * (proves it was sent from this client). Offline-queue replay passes `false`, the
-   * pending task itself proves that.
    *
-   * @return The response to use instead of the error, and whether it was fetched from the server
+   * @return The response to use instead of the error, or `undefined` if the send can't be
+   * treated as delivered (the caller rethrows the original error)
    */
-  async _recoverAlreadyStoredMessage(
+  private _recoverAlreadyStoredMessage(
     message: Pick<Message, 'id' | 'parent_id'>,
-    { localCopyRequired }: { localCopyRequired: boolean },
-  ): Promise<{ fetched: boolean; response: SendMessageAPIResponse } | undefined> {
-    const client = this.getClient();
+  ): SendMessageAPIResponse | undefined {
     const { id, parent_id } = message;
     if (!id) return;
 
     const localCopy = this.state.findMessage(id, parent_id);
-    if (localCopyRequired && !localCopy) return;
+    if (!localCopy) return;
 
-    // already confirmed, e.g. by message.new
-    if (localCopy?.status === 'received') {
-      return {
-        fetched: false,
-        response: { duration: '', message: unformatMessage(localCopy) },
-      };
+    // Strip the client-only fields (unformatMessage keeps them), the backend never sends them
+    /* eslint-disable @typescript-eslint/no-unused-vars */
+    const { error, quoted_message, status, ...storedMessage } = unformatMessage(
+      localCopy,
+    ) as MessageResponse & Pick<LocalMessage, 'error'>;
+    const messageResponse: MessageResponse = storedMessage;
+    if (quoted_message) {
+      const { status: quotedMessageStatus, ...quotedMessage } = quoted_message;
+      messageResponse.quoted_message = quotedMessage;
     }
+    /* eslint-enable @typescript-eslint/no-unused-vars */
 
-    try {
-      const { duration, message: storedMessage } = await client.getMessage(id);
-      // the backend answers the same way whoever owns the stored message
-      if (storedMessage?.user?.id !== client.userID) return;
-      return { fetched: true, response: { duration, message: storedMessage } };
-    } catch (error) {
-      client.logger(
-        'warn',
-        'channel:sendMessage() - failed to fetch already stored message',
-        {
-          error,
-          tags: ['channel'],
-        },
-      );
-      if (!localCopy) return;
-      return {
-        fetched: false,
-        response: {
-          duration: '',
-          message: unformatMessage({ ...localCopy, status: 'received' }),
-        },
-      };
-    }
+    return { duration: '', message: messageResponse };
   }
 
   private async _sendMessageWithOfflineSupport(
