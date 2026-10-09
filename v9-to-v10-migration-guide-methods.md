@@ -756,7 +756,8 @@ Webhook verification is inherently server-side work: it needs the API secret, wh
 
 ### Constructor and lifecycle
 
-`getClient()`, `clean()`, `_initializeState(...)`, `_disconnect()`, and `create(options?)` are unchanged.
+`getClient()`, `clean()`, `_initializeState(...)` and `create(options?)` are unchanged. `_disconnect()` is
+public now, as `channel.disconnect()` (see [below](#channeldisconnect-was-_disconnect)).
 
 #### `channel._checkInitialized()` / the new `channel._checkHasId()`
 
@@ -1070,6 +1071,39 @@ release();
 An active channel also stays in the channel store. After `release()` unsets `active`, it is kept
 only while it is watched or otherwise used.
 
+#### `channel.disconnect` (was `_disconnect`)
+
+`channel._disconnect()` is renamed to `channel.disconnect()` and is public: call it to say your app is
+done with a channel instance. It stops the instance for good: it stops listening to the client's
+configuration, releases its loaded messages, and sets `pendingDisposal` to `true` and `watchStatus`
+to `NotWatching`. It sends no request (call `channel.stopWatching()` first to end a watch on the
+server), and calling it again does nothing.
+
+It doesn't remove the channel from the channel store, as something may still show it; the next
+`client.channelManager.releaseUnusedChannels()` does. Until then the SDK treats the channel as not
+stored: lists don't take it, an event for its cid gets a fresh instance through
+`client.channelManager.ensure()`, and a query that finds it under its cid takes its place.
+
+```ts
+// v9
+channel._disconnect();
+
+// v10
+channel.disconnect();
+```
+
+#### `channel.ensureWatched` (new)
+
+`channel.ensureWatched(options?)` watches the channel unless it is already watched, and joins a watch
+already in flight with equal options instead of sending a second request. It resolves with the
+channel to use from then on: the instance that superseded this one (`channel.supersededBy`), if any.
+Use it where several places may ask for the same channel at once, such as opening a search result.
+`channel.watch()` and `channel.query()` still always send their request.
+
+```ts
+const channel = await client.channelManager.ensure({ type, id }).ensureWatched();
+```
+
 #### `channel.hide` / `channel.show`
 
 ```ts
@@ -1327,11 +1361,11 @@ No deprecated alias is exported — the old names are gone. For the RC deltas ou
 `getAndWatchChannel` and the `PromoteChannelParams` type existed only to serve the v9 manager's
 hand-written ordering. Replacements:
 
-| Removed                                                                                                                     | Use instead                                                                                                                                                                |
-| --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `promoteChannel`, `findLastPinnedChannelIndex`, `findPinnedAtSortOrder`, `shouldConsiderPinnedChannels`, `extractSortValue` | nothing — stop reordering the list yourself; see [If you called `promoteChannel`](#if-you-called-promotechannel)                                                           |
-| `isChannelPinned`, `isChannelArchived`, `shouldConsiderArchivedChannels`                                                    | `paginator.matchesFilter(channel)` with `{ pinned: true }` / `{ archived: true }` filters                                                                                  |
-| `getAndWatchChannel`                                                                                                        | `client.channelManager.ensure({ type, id }).watch()`. The SDK's own helper (`getChannel`, which additionally coalesces concurrent watches of the same cid) stays internal. |
+| Removed                                                                                                                     | Use instead                                                                                                                                                      |
+| --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `promoteChannel`, `findLastPinnedChannelIndex`, `findPinnedAtSortOrder`, `shouldConsiderPinnedChannels`, `extractSortValue` | nothing — stop reordering the list yourself; see [If you called `promoteChannel`](#if-you-called-promotechannel)                                                 |
+| `isChannelPinned`, `isChannelArchived`, `shouldConsiderArchivedChannels`                                                    | `paginator.matchesFilter(channel)` with `{ pinned: true }` / `{ archived: true }` filters                                                                        |
+| `getAndWatchChannel`                                                                                                        | `client.channelManager.ensure({ type, id }).watch()`, or `.ensureWatched()`, which skips a channel already watched and joins a watch in flight for the same cid. |
 
 #### If you called `promoteChannel`
 

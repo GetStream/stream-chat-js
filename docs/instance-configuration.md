@@ -294,7 +294,7 @@ Pass `null` to clear a setup function; its teardown runs against every live inst
    afterwards. There is no "register before you connect" requirement.
 2. **Replacing tears down first.** The previous function's teardown runs before the new one is applied.
 3. **Disposing an instance tears down.** `unregisterSubscriptions()` for composers and threads,
-   `_disconnect()` for channels, `disconnectUser()` for the client.
+   `disconnect()` for channels, `disconnectUser()` for the client.
 4. **Errors are contained.** A throwing setup or teardown is caught and logged; it cannot break
    `client.channelManager.ensure()` or a `Thread` construction.
 5. **Your function may run more than once for the same instance.** That is the contract: return a
