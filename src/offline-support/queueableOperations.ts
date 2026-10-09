@@ -22,10 +22,16 @@ export type QueueableOperation<T extends QueueableType> = {
    */
   logFailureAs: { message: string; method: string };
   /**
+   * Whether a replay has to look the channel up from the task. Such a task is only queued when it
+   * carries `channelId` and `channelType`, because without them it could never be replayed.
+   */
+  needsChannel: boolean;
+  /**
    * Performs the request. Used both for a first attempt and for a replay.
    *
    * `channel` is the instance the CALLER already holds, when there is one. A first attempt comes from a
-   * `Channel` method and must run on that exact object; only a replay has to look one up.
+   * channel's or thread's `messageOperations`, or a `Channel` method such as `createDraft`, and must run
+   * on that exact channel; only a replay has to look one up.
    */
   run: (params: {
     channel?: Channel;
@@ -78,6 +84,7 @@ export const QUEUEABLE_OPERATIONS: {
   [T in QueueableType]: QueueableOperation<T>;
 } = {
   'create-draft': {
+    needsChannel: true,
     logFailureAs: {
       message: 'Creating the draft in the offline database failed.',
       method: 'createDraft',
@@ -86,6 +93,7 @@ export const QUEUEABLE_OPERATIONS: {
       channelOf(client, task, channel)._createDraft(...task.payload),
   },
   'delete-draft': {
+    needsChannel: true,
     logFailureAs: {
       message: 'Deleting the draft from the offline database failed.',
       method: 'deleteDraft',
@@ -94,15 +102,17 @@ export const QUEUEABLE_OPERATIONS: {
       channelOf(client, task, channel)._deleteDraft(...task.payload),
   },
   'delete-message': {
+    needsChannel: false,
     logFailureAs: { message: 'Deleting the message failed.', method: 'deleteMessage' },
-    run: ({ client, task }) => client._deleteMessage(...task.payload),
+    run: ({ client, task }) => client.deleteMessage(...task.payload),
   },
   'delete-reaction': {
+    needsChannel: false,
     logFailureAs: { message: 'Deleting the reaction failed.', method: 'deleteReaction' },
-    run: ({ channel, client, task }) =>
-      channelOf(client, task, channel)._deleteReaction(...task.payload),
+    run: ({ client, task }) => client.deleteReaction(...task.payload),
   },
   'send-message': {
+    needsChannel: true,
     logFailureAs: { message: 'Sending the message failed.', method: 'sendMessage' },
     /**
      * A replayed send is the first time local state learns the message exists server-side: the
@@ -122,16 +132,17 @@ export const QUEUEABLE_OPERATIONS: {
       channelOf(client, task).messagePaginator.trackLastMessage(formatMessage(message));
     },
     run: ({ channel, client, task }) =>
-      channelOf(client, task, channel)._sendMessage(...task.payload),
+      channelOf(client, task, channel).sendMessage(...task.payload),
   },
   'send-reaction': {
+    needsChannel: false,
     logFailureAs: { message: 'Sending the reaction failed.', method: 'sendReaction' },
-    run: ({ channel, client, task }) =>
-      channelOf(client, task, channel)._sendReaction(...task.payload),
+    run: ({ client, task }) => client.sendReaction(...task.payload),
   },
   'update-message': {
+    needsChannel: false,
     logFailureAs: { message: 'Updating the message failed.', method: 'updateMessage' },
-    run: ({ client, task }) => client._updateMessage(...task.payload),
+    run: ({ client, task }) => client.updateMessage(...task.payload),
   },
 };
 
@@ -173,20 +184,16 @@ export const queueOrRun = async <T extends QueueableType>({
   task: PendingTaskOf<T>;
 }): Promise<QueueableResult<T>> => {
   const { offlineDb } = client;
-  // A channel without an id has nothing a replayed request could address either, so its operations
-  // are never queued. The channel is the one passed, or the one the task names.
-  const taskChannel =
-    channel ??
-    (task.channelType && task.channelId
-      ? client.channelManager?.get(`${task.channelType}:${task.channelId}`)
-      : undefined);
-  taskChannel?._checkHasId();
+  const operation = QUEUEABLE_OPERATIONS[task.type];
+  // We never queue a task that could not be replayed. It still runs once, so the request reports the
+  // problem itself, i.e that the channel has no id yet.
+  const replayable = !operation.needsChannel || !!(task.channelType && task.channelId);
 
-  if (offlineDb && queue) {
+  if (offlineDb && queue && replayable) {
     try {
       return await offlineDb.queueTask<QueueableResult<T>>({ task });
     } catch (error) {
-      const { message, method } = QUEUEABLE_OPERATIONS[task.type].logFailureAs;
+      const { message, method } = operation.logFailureAs;
       // The cid comes from the task when it carries a channel, so a channel-scoped failure is logged
       // against its channel without the caller having to say so.
       const cid =
@@ -230,4 +237,34 @@ export const runQueueableOperation = async <T extends QueueableType>({
   ) as PendingTaskOf<T>['payload'];
 
   return await operation.run({ channel, client, task: { ...task, payload } });
+};
+
+/**
+ * Whether this message's mutation is sitting in the offline queue waiting to be replayed. A queued
+ * mutation is pending, not failed: nothing to roll back and nothing to mark.
+ *
+ * Reads the queue. Inferring it from the error's shape ("an initialized offline DB plus an
+ * `isEphemeral` error, so it must have been queued") over-reports, because the queue declines
+ * tasks no error shape can predict — an `update-message` whose payload still points at a local
+ * attachment URL is refused by `isMessageUpdateReplayable`, and the edit would then be suppressed as
+ * "pending" with nothing to replay it. A row in the pending-tasks table is the actual fact.
+ *
+ * Ordering is safe: `queueTask` awaits `handleAddPendingTask` before it rethrows, so the row exists by
+ * the time an operation's `catch` runs.
+ */
+export const isQueuedForReplay = async (
+  client: StreamChat,
+  messageId: string,
+  types: readonly QueueableType[],
+): Promise<boolean> => {
+  const { offlineDb } = client;
+  // No queue at all, so nothing can be pending. `initialized` matters as much as existence: a DB whose
+  // `init()` never succeeded cannot hold a pending task.
+  if (!offlineDb?.state.getLatestValue().initialized) return false;
+
+  // Optional-chained: `getPendingTasks` is part of the `OfflineDBApi` an integrator can implement, so
+  // this must not assume a well-formed return.
+  const pending = await offlineDb.getPendingTasks({ messageId });
+
+  return !!pending?.some((task) => types.includes(task.type));
 };

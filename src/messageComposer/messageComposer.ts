@@ -1359,7 +1359,7 @@ export class MessageComposer extends WithSubscriptions {
     this.releaseSubmittedComposition();
 
     try {
-      await this.defaultSubmitTarget.sendMessageWithLocalUpdate({
+      await this.defaultSubmitTarget.messageOperations.send({
         localMessage,
         message,
         options: sendOptions,
@@ -1391,7 +1391,7 @@ export class MessageComposer extends WithSubscriptions {
     this.releaseSubmittedComposition();
 
     try {
-      await this.defaultSubmitTarget.updateMessageWithLocalUpdate({
+      await this.defaultSubmitTarget.messageOperations.update({
         localMessage,
         options: sendOptions,
       });

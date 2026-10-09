@@ -1,16 +1,21 @@
 import type {
   MessageRequest,
+  MessageResponse,
   ReactionRequest,
   SendReactionRequest,
   UpdateMessageOptions,
 } from '../types';
-import { addReactionOptimistically, deleteReactionOptimistically } from './optimistic';
+import { applyReactionLocally } from './applyReactionLocally';
+import { FailedSendCache } from './FailedSendCache';
 import { deepFreezeConfig } from '../configuration/utils/deepFreezeConfig';
 import type { StateStore } from '@stream-io/state-store';
 import { ConfigController } from '../configuration/ConfigController';
-import { localMessageToNewMessagePayload } from '../utils';
+import { formatMessage, localMessageToNewMessagePayload } from '../utils';
+import { dateToNs } from '../utils/time';
 import { MessageOperationStatePolicy } from './MessageOperationStatePolicy';
+import type { QueueableType } from '../offline-support';
 import type {
+  DefaultOperationRequest,
   MessageOperationsContext,
   OperationKind,
   OperationParams,
@@ -30,16 +35,23 @@ export const DEFAULT_MESSAGE_OPERATIONS_CONFIG: MessageOperationsConfig =
     failedSendCacheTtlMs: 5 * 60 * 1000,
   });
 
-type FailedSendCacheEntry = {
-  message: MessageRequest;
-  options?: OperationParams<'send'>['options'];
-  cachedAt: number;
-};
-
+/**
+ * Every optimistic operation on a message, each one method reading top to bottom.
+ *
+ * Send, retry, update and delete are message REQUESTS with a status lifecycle, so they share
+ * {@link run} and {@link MessageOperationStatePolicy}. Anything else (reactions, and whatever comes
+ * next) applies its change, sends its request, and on failure calls {@link rollbackUnlessQueued}.
+ */
 export class MessageOperations {
   private ctx: MessageOperationsContext;
   private policy: MessageOperationStatePolicy;
-  private failedSendCache = new Map<string, FailedSendCacheEntry>();
+  private readonly failedSendCache = new FailedSendCache(() => this.config);
+  private readonly normalizeOutgoingMessage: NonNullable<
+    MessageOperationsContext['normalizeOutgoingMessage']
+  >;
+  private readonly sequenceRequests: NonNullable<
+    MessageOperationsContext['sequenceRequests']
+  >;
 
   /** The shared configuration machinery — see {@link ConfigController}. */
   private readonly configController: ConfigController<MessageOperationsConfig>;
@@ -54,6 +66,8 @@ export class MessageOperations {
       purge: ctx.purge,
       remove: ctx.remove,
     });
+    this.normalizeOutgoingMessage = ctx.normalizeOutgoingMessage ?? ((m) => m);
+    this.sequenceRequests = ctx.sequenceRequests ?? ((_kind, request) => request());
     this.configController = new ConfigController<MessageOperationsConfig>({
       defaults: DEFAULT_MESSAGE_OPERATIONS_CONFIG,
     });
@@ -95,86 +109,11 @@ export class MessageOperations {
     this.configController.initialize(config);
   }
 
-  private normalizeMessage(message: MessageRequest): MessageRequest {
-    return this.ctx.normalizeOutgoingMessage
-      ? this.ctx.normalizeOutgoingMessage(message)
-      : message;
-  }
-
-  private pruneExpiredFailedSendCache() {
-    const now = Date.now();
-
-    for (const [messageId, entry] of this.failedSendCache) {
-      if (now - entry.cachedAt > this.config.failedSendCacheTtlMs) {
-        this.clearCachedFailedSend(messageId);
-      }
-    }
-  }
-
-  private cacheFailedSend(params: {
-    messageId: string;
-    message: MessageRequest;
-    options?: OperationParams<'send'>['options'];
-  }) {
-    this.pruneExpiredFailedSendCache();
-
-    if (
-      !this.failedSendCache.has(params.messageId) &&
-      this.failedSendCache.size >= this.config.failedSendCacheMaxSize
-    ) {
-      const oldestMessageId = this.failedSendCache.keys().next().value;
-      if (oldestMessageId) {
-        this.clearCachedFailedSend(oldestMessageId);
-      }
-    }
-
-    this.failedSendCache.set(params.messageId, {
-      cachedAt: Date.now(),
-      message: params.message,
-      options: params.options,
-    });
-  }
-
-  private getCachedFailedSend(messageId: string) {
-    const cached = this.failedSendCache.get(messageId);
-    if (!cached) return;
-
-    if (Date.now() - cached.cachedAt > this.config.failedSendCacheTtlMs) {
-      this.clearCachedFailedSend(messageId);
-      return;
-    }
-
-    return cached;
-  }
-
-  private clearCachedFailedSend(messageId: string) {
-    this.failedSendCache.delete(messageId);
-  }
-
-  /**
-   * Folds an edit into the payload cached for this message's failed send, so `retry` resends what the
-   * message contains now rather than what it contained when the send failed.
-   *
-   * This exists so a retry while offline for example is also persisted, rather than just disappearing.
-   */
-  private rewriteCachedFailedSend(localMessage: OperationParams<'send'>['localMessage']) {
-    const cached = this.getCachedFailedSend(localMessage.id);
-    if (!cached) return;
-
-    this.failedSendCache.set(localMessage.id, {
-      ...cached,
-      message: {
-        ...cached.message,
-        ...localMessageToNewMessagePayload(localMessage),
-      },
-    });
-  }
-
   /**
    * Resolves any in-flight upload and folds the URLs back into both payloads. A no-op without
    * {@link MessageOperationsContext.settlePendingUploads} or a pending attachment.
    */
-  private async settlePendingUploads<K extends OperationKind>(
+  private async withSettledUploads<K extends OperationKind>(
     params: OperationParams<K>,
   ): Promise<{ params: OperationParams<K>; failureReason?: unknown }> {
     const settle = this.ctx.settlePendingUploads;
@@ -203,18 +142,6 @@ export class MessageOperations {
   }
 
   /**
-   * Applies the owner's request-ordering policy for this kind, if it supplied one.
-   */
-  private withRequestSequencing<T>(
-    kind: OperationKind,
-    request: () => Promise<T>,
-  ): Promise<T> {
-    return this.ctx.sequenceRequests
-      ? this.ctx.sequenceRequests(kind, request)
-      : request();
-  }
-
-  /**
    * The shared lifecycle: apply the optimistic state, settle any attachment upload still in flight,
    * fire the request, then reconcile or record the failure. `kind` is threaded through because the
    * three operations want materially different state transitions — see
@@ -223,7 +150,7 @@ export class MessageOperations {
   private async run<K extends OperationKind>(
     kind: K,
     params: OperationParams<K>,
-    doRequest: OperationRequestFn<K>,
+    doRequest: DefaultOperationRequest<K>,
   ): Promise<void> {
     const messageId = params.localMessage.id;
 
@@ -236,12 +163,12 @@ export class MessageOperations {
     try {
       // Ordering starts here, after the optimistic update and around the settle + request — the
       // transfer is the slow part being ordered.
-      const response = await this.withRequestSequencing(kind, async () => {
+      const response = await this.sequenceRequests(kind, async () => {
         // An edit composes through the same middleware as a send, so it too can carry a pending
         // upload. Only a delete is excluded — it discards the message. Deliberately not the
         // `sequenceRequests` predicate, which asks a different question.
         if (kind !== 'delete') {
-          const settled = await this.settlePendingUploads(params);
+          const settled = await this.withSettledUploads(params);
           // Writes the outer `effective`, not a new local — the `catch` is outside this callback
           // and needs the settled attachments to report partial success.
           effective = settled.params;
@@ -287,92 +214,81 @@ export class MessageOperations {
   }
 
   /*
-   * Each operation resolves its request as `requestFn ?? handlers.<kind> ?? defaults.<kind>`.
-   *
-   * `handlers` is the integrator seam (`ChannelConfig.requestHandlers`). `requestFn` is a direct
-   * injection point for tests; it is not exposed on the public methods because it wins over
-   * `handlers`, so a caller reaching for it would bypass whatever the host SDK registered.
+   * Each operation sends through the integrator's handler for its kind
+   * (`ChannelConfig.requestHandlers`) when one is registered, and through `defaults.<kind>`
+   * otherwise. A handler is handed the default as `defaultRequest`, so it can still send that way.
+   * There is deliberately no per-call override: one would win over whatever the host SDK registered.
    */
 
-  async send(
-    params: OperationParams<'send'>,
-    requestFn?: OperationRequestFn<'send'>,
-  ): Promise<void> {
+  private resolveRequest<K extends OperationKind>(
+    handler: OperationRequestFn<K> | undefined,
+    defaultRequest: DefaultOperationRequest<K>,
+  ): DefaultOperationRequest<K> {
+    return handler ? (p) => handler(p, defaultRequest) : defaultRequest;
+  }
+
+  async send(params: OperationParams<'send'>): Promise<void> {
+    this.ctx.beforeSend?.();
     const handlers = this.ctx.handlers();
-    const messageToSend = this.normalizeMessage(
-      params.message ?? localMessageToNewMessagePayload(params.localMessage),
+    await this.sendWithFailedSendCache(
+      'send',
+      {
+        ...params,
+        message: this.normalizeOutgoingMessage(
+          params.message ?? localMessageToNewMessagePayload(params.localMessage),
+        ),
+      },
+      handlers.send,
     );
+  }
+
+  /** A send with a cached payload: resends what failed, unless the caller passes a new one. */
+  async retry(params: OperationParams<'retry'>): Promise<void> {
+    const handlers = this.ctx.handlers();
+    // A failed message can carry an `error` type; what is resent is a regular message.
+    const localMessage = { ...params.localMessage, type: 'regular' as const };
+    const cachedPayload = this.failedSendCache.get(localMessage.id);
+    await this.sendWithFailedSendCache(
+      'retry',
+      {
+        ...params,
+        localMessage,
+        message: this.normalizeOutgoingMessage(
+          params.message ??
+            cachedPayload?.message ??
+            localMessageToNewMessagePayload(localMessage),
+        ),
+        options: params.options ?? cachedPayload?.options,
+      },
+      handlers.retry ?? handlers.send,
+    );
+  }
+
+  /** Runs a send or retry, keeping the payload cached for a later retry until one succeeds. */
+  private async sendWithFailedSendCache(
+    kind: 'send' | 'retry',
+    params: OperationParams<'send'> & { message: MessageRequest },
+    handler: OperationRequestFn<'send'> | OperationRequestFn<'retry'> | undefined,
+  ): Promise<void> {
+    const { localMessage, message, options } = params;
+    const defaultRequest: DefaultOperationRequest<'send' | 'retry'> = async (p) =>
+      await this.ctx.defaults.send(p.message ?? message, p.options);
 
     try {
-      await this.run<'send'>(
-        'send',
-        { ...params, message: messageToSend },
-        requestFn ??
-          handlers.send ??
-          (async (p) =>
-            await this.ctx.defaults.send(p.message ?? messageToSend, p.options)),
+      await this.run(
+        kind,
+        params,
+        handler ? (p) => handler(p, defaultRequest) : defaultRequest,
       );
-
-      this.clearCachedFailedSend(params.localMessage.id);
+      this.failedSendCache.clear(localMessage.id);
     } catch (error) {
-      this.cacheFailedSend({
-        messageId: params.localMessage.id,
-        message: messageToSend,
-        options: params.options,
-      });
+      this.failedSendCache.add({ message, messageId: localMessage.id, options });
       throw error;
     }
   }
 
-  async retry(
-    params: OperationParams<'retry'>,
-    requestFn?: OperationRequestFn<'retry'>,
-  ): Promise<void> {
-    const handlers = this.ctx.handlers();
-    const cachedPayload = this.getCachedFailedSend(params.localMessage.id);
-    const messageToSend = this.normalizeMessage(
-      params.message ??
-        cachedPayload?.message ??
-        localMessageToNewMessagePayload(params.localMessage),
-    );
-    const optionsToSend = params.options ?? cachedPayload?.options;
-
-    const send = handlers.send;
-    const sendAsRetry: OperationRequestFn<'retry'> | undefined = send
-      ? (p) => send({ ...p } as OperationParams<'send'>)
-      : undefined;
-
-    try {
-      await this.run<'retry'>(
-        'retry',
-        {
-          ...params,
-          message: messageToSend,
-          options: optionsToSend,
-        },
-        requestFn ??
-          handlers.retry ??
-          sendAsRetry ??
-          (async (p) =>
-            await this.ctx.defaults.send(p.message ?? messageToSend, p.options)),
-      );
-
-      this.clearCachedFailedSend(params.localMessage.id);
-    } catch (error) {
-      this.cacheFailedSend({
-        messageId: params.localMessage.id,
-        message: messageToSend,
-        options: optionsToSend,
-      });
-      throw error;
-    }
-  }
-
-  async update(
-    params: OperationParams<'update'>,
-    requestFn?: OperationRequestFn<'update'>,
-  ): Promise<void> {
-    this.rewriteCachedFailedSend(params.localMessage);
+  async update(params: OperationParams<'update'>): Promise<void> {
+    this.failedSendCache.rewriteWithEdit(params.localMessage);
 
     const handlers = this.ctx.handlers();
     let updateOptions: UpdateMessageOptions | undefined;
@@ -387,55 +303,114 @@ export class MessageOperations {
     return await this.run<'update'>(
       'update',
       params,
-      requestFn ??
-        handlers.update ??
-        (async (p) => await this.ctx.defaults.update(p.localMessage, updateOptions)),
+      this.resolveRequest(
+        handlers.update,
+        async (p) => await this.ctx.defaults.update(p.localMessage, updateOptions),
+      ),
     );
   }
 
-  async delete(
-    params: OperationParams<'delete'>,
-    requestFn?: OperationRequestFn<'delete'>,
-  ): Promise<void> {
+  async delete(params: OperationParams<'delete'>): Promise<void> {
     const handlers = this.ctx.handlers();
-    const doRequest =
-      requestFn ??
-      handlers.delete ??
-      (async (p: OperationParams<'delete'>) =>
-        await this.ctx.defaults.delete(p.localMessage.id, p.options));
 
-    return await this.run<'delete'>('delete', params, doRequest);
-  }
-
-  async retrySendWithLocalUpdate({
-    localMessage,
-    options,
-  }: Omit<OperationParams<'retry'>, 'message'>): Promise<void> {
-    await this.retry({ localMessage: { ...localMessage, type: 'regular' }, options });
+    return await this.run<'delete'>(
+      'delete',
+      params,
+      this.resolveRequest(
+        handlers.delete,
+        async (p) => await this.ctx.defaults.delete(p.localMessage.id, p.options),
+      ),
+    );
   }
 
   /**
-   * Adds a reaction with an optimistic local state update — see {@link addReactionOptimistically}.
+   * Adds a reaction with an optimistic local state update: the reaction is applied to the cached
+   * message immediately, then the request is sent through the offline queue. The server-authoritative counts reconcile on the response; the reaction is
+   * rolled back on a definitive failure, and left alone when the request was queued for replay.
    *
    * The request routes through the channel because reactions are channel-level, while the local write
    * is addressed by message id and so reaches a pure thread reply that no channel collection holds.
    */
-  async addReactionWithLocalUpdate(params: {
+  async addReaction({
+    messageId,
+    options,
+    reaction,
+  }: {
     messageId: string;
     reaction: ReactionRequest;
     options?: Pick<SendReactionRequest, 'enforce_unique' | 'skip_push'>;
   }): Promise<void> {
-    await addReactionOptimistically({ channel: this.ctx.channel, ...params });
+    const { channel } = this.ctx;
+    // `reaction` is a REQUEST, so any timestamps on it are `Date`s. The local store speaks the wire
+    // unit, so bring them across rather than handing a `Date` to a numeric field.
+    const { created_at, updated_at, ...restOfReaction } = reaction;
+    const undo = applyReactionLocally(channel.getClient(), {
+      enforceUnique: options?.enforce_unique ?? false,
+      messageId,
+      reaction: {
+        ...restOfReaction,
+        ...(created_at ? { created_at: dateToNs(created_at) } : {}),
+        ...(updated_at ? { updated_at: dateToNs(updated_at) } : {}),
+      },
+    });
+
+    try {
+      const response = await this.ctx.defaults.sendReaction(
+        { id: messageId },
+        { reaction, ...options },
+      );
+      this.reconcileHeldMessage(response?.message);
+    } catch (error) {
+      await this.rollbackUnlessQueued(messageId, ['send-reaction'], undo);
+      throw error;
+    }
   }
 
-  /**
-   * Removes the current user's reaction with an optimistic local state update, mirroring
-   * {@link MessageOperations.addReactionWithLocalUpdate}.
-   */
-  async deleteReactionWithLocalUpdate(params: {
+  /** Removes the current user's reaction optimistically, mirroring {@link addReaction}. */
+  async deleteReaction({
+    messageId,
+    type,
+  }: {
     messageId: string;
     type: string;
   }): Promise<void> {
-    await deleteReactionOptimistically({ channel: this.ctx.channel, ...params });
+    const { channel } = this.ctx;
+    const undo = applyReactionLocally(channel.getClient(), {
+      messageId,
+      reaction: { type },
+      removed: true,
+    });
+
+    try {
+      const response = await this.ctx.defaults.deleteReaction({ id: messageId, type });
+      this.reconcileHeldMessage(response?.message);
+    } catch (error) {
+      await this.rollbackUnlessQueued(messageId, ['delete-reaction'], undo);
+      throw error;
+    }
+  }
+
+  /**
+   * The failure rule every operation outside {@link run} shares: a request queued for replay is
+   * pending, not failed, so its optimistic change stays. Name the operation's OWN task types — every
+   * task carries the same `messageId`, so "anything queued" would let an unrelated task answer.
+   */
+  private async rollbackUnlessQueued(
+    messageId: string,
+    types: readonly QueueableType[],
+    undo: (() => unknown) | undefined,
+  ) {
+    if (!(await this.ctx.isQueued(messageId, types))) undo?.();
+  }
+
+  /**
+   * Reconciles the server-authoritative copy, but only if we still hold it — a bare upsert of an unheld
+   * id would orphan it (the store's refcount GC only reclaims held ids).
+   */
+  private reconcileHeldMessage(message: MessageResponse | undefined | null) {
+    if (!message) return;
+    const { messageStore } = this.ctx.channel.getClient();
+    if (!messageStore.has(message.id)) return;
+    messageStore.upsert(formatMessage(message));
   }
 }

@@ -1,3 +1,13 @@
+## [10.0.0-rc.19](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.18...v10.0.0-rc.19) (2026-10-06)
+
+### Features
+
+* poll optimistic votes v10 port ([#1904](https://github.com/GetStream/stream-chat-js/issues/1904)) ([143446b](https://github.com/GetStream/stream-chat-js/commit/143446bf57b66bdda85d3b1ef68a01bac6348c6e))
+
+### Refactors
+
+* simplify optimistic updates ([#1897](https://github.com/GetStream/stream-chat-js/issues/1897)) ([8b84f02](https://github.com/GetStream/stream-chat-js/commit/8b84f026bcaf271c632b2ff3974e1809ae7718b7)), closes [#1882](https://github.com/GetStream/stream-chat-js/issues/1882)
+
 ## [10.0.0-rc.18](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.17...v10.0.0-rc.18) (2026-10-05)
 
 ### ⚠ BREAKING CHANGES
@@ -333,6 +343,18 @@ docs/breaking-changes-v14-v15.md for the full migration guide.
 * add message/channel paginator stack with thread minimal-init and state stores ([#1795](https://github.com/GetStream/stream-chat-js/issues/1795)) ([62f0507](https://github.com/GetStream/stream-chat-js/commit/62f050786dc153b89920d59aacecaf5f051fbaed))
 * integrate OpenAPI generated clients ([#1760](https://github.com/GetStream/stream-chat-js/issues/1760)) ([0776bc4](https://github.com/GetStream/stream-chat-js/commit/0776bc460598a91afb91d4d04d3281a562073f13))
 * v10 ([cd3141e](https://github.com/GetStream/stream-chat-js/commit/cd3141efe47b49cf83d3d58725bb8ed3b4f88f08))
+
+## [9.54.0](https://github.com/GetStream/stream-chat-js/compare/v9.53.0...v9.54.0) (2026-10-05)
+
+### Bug Fixes
+
+* don't override local message attachments in createLinkPreviewsCo… ([#1885](https://github.com/GetStream/stream-chat-js/issues/1885)) ([2aa5144](https://github.com/GetStream/stream-chat-js/commit/2aa5144eb4e3767dea704bebcee2985e2a2f8955))
+* **types:** add before_message_send_hook_system_messages to app settings response ([#1887](https://github.com/GetStream/stream-chat-js/issues/1887)) ([724b4f7](https://github.com/GetStream/stream-chat-js/commit/724b4f7b13b5b24b9d09f40aa7512be1c4f44d3a))
+
+### Features
+
+* add poll translation i18n fields ([#1878](https://github.com/GetStream/stream-chat-js/issues/1878)) ([9d396e5](https://github.com/GetStream/stream-chat-js/commit/9d396e552d7049b83675805770101fc4a70d64a7)), closes [GetStream/chat#17029](https://github.com/GetStream/chat/issues/17029)
+* poll optimistic updates ([#1895](https://github.com/GetStream/stream-chat-js/issues/1895)) ([e3dac59](https://github.com/GetStream/stream-chat-js/commit/e3dac594bc9c0f61f3654d63a5f010548814a572))
 
 ## [9.53.0](https://github.com/GetStream/stream-chat-js/compare/v9.52.1...v9.53.0) (2026-09-15)
 

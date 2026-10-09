@@ -1150,7 +1150,7 @@ describe('message update', () => {
 	let client;
 	let loggerSpy;
 	let queueTaskSpy;
-	let _updateMessageSpy;
+	let updateMessageSpy;
 
 	beforeEach(async () => {
 		client = await getClientWithUser();
@@ -1164,7 +1164,7 @@ describe('message update', () => {
 			default: { sink: loggerSpy, level: 'trace' },
 		});
 		queueTaskSpy = vi.spyOn(client.offlineDb, 'queueTask').mockResolvedValue({});
-		_updateMessageSpy = vi.spyOn(client, '_updateMessage').mockResolvedValue({});
+		updateMessageSpy = vi.spyOn(client, 'updateMessage').mockResolvedValue({});
 	});
 
 	afterEach(() => {
@@ -1172,16 +1172,16 @@ describe('message update', () => {
 		vi.resetAllMocks();
 	});
 
-	describe('_updateMessage', () => {
-		// Sanitization lives here rather than in `updateMessage` because this is where every path
-		// converges - including the offline replay of a queued `update-message` task, and the
-		// replay of a `send-message` task that a failed edit was merged into.
+	describe('updateMessage (the HTTP request)', () => {
+		// Sanitization lives here because this is where every path converges - the full edit, the
+		// offline replay of a queued `update-message` task, and the replay of a `send-message` task
+		// that a failed edit was merged into.
 		let sendRequestSpy;
 
 		const sentMessage = () => sendRequestSpy.mock.calls[0][4].message;
 
 		beforeEach(() => {
-			_updateMessageSpy.mockRestore();
+			updateMessageSpy.mockRestore();
 			sendRequestSpy = vi
 				.spyOn(client.api, 'sendRequest')
 				.mockResolvedValue({ metadata: {} });
@@ -1199,7 +1199,7 @@ describe('message update', () => {
 				],
 			});
 
-			await client._updateMessage({ id: message.id }, { message });
+			await client.updateMessage({ id: message.id }, { message });
 
 			const sent = sentMessage();
 			expect(sent.attachments).toHaveLength(1);
@@ -1219,7 +1219,7 @@ describe('message update', () => {
 				],
 			});
 
-			await client._updateMessage({ id: message.id }, { message });
+			await client.updateMessage({ id: message.id }, { message });
 
 			expect(sentMessage().attachments).toEqual([]);
 			expect(loggerSpy).toHaveBeenCalledWith(
@@ -1228,19 +1228,41 @@ describe('message update', () => {
 				expect.objectContaining({ attachments: expect.any(Array) }),
 			);
 		});
+
+		it('sends the request without queueing it, even with an offline DB', async () => {
+			const message = generateMsg({ id: 'msg-123', cid: 'messaging:channel-123' });
+
+			await client.updateMessage({ id: message.id }, { message });
+
+			expect(queueTaskSpy).not.toHaveBeenCalled();
+			expect(sendRequestSpy).toHaveBeenCalledTimes(1);
+		});
 	});
 
-	describe('updateMessage', () => {
-		it('queues replayable updates through offlineDb', async () => {
-			const message = generateMsg({
-				id: 'msg-123',
-				cid: 'messaging:channel-123',
-				text: 'edited',
+	describe('the full edit (messageOperations.update) queues through the offline DB', () => {
+		const edit = (overrides) =>
+			utils.formatMessage(
+				generateMsg({
+					id: 'msg-123',
+					cid: 'messaging:channel-123',
+					status: 'received',
+					text: 'edited',
+					...overrides,
+				}),
+			);
+		const update = (localMessage, options) =>
+			client.channel('messaging', 'channel-123').messageOperations.update({
+				localMessage,
+				options,
 			});
-			const pathParams = { id: message.id };
-			const request = { message, skip_enrich_url: true };
+		const pathParams = { id: 'msg-123' };
+		const queuedRequest = (extra = {}) => ({
+			message: expect.objectContaining({ id: 'msg-123', text: 'edited' }),
+			...extra,
+		});
 
-			await client.updateMessage(pathParams, request);
+		it('queues the edit, keyed by the channel its cid names', async () => {
+			await update(edit(), { skip_enrich_url: true });
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 			expect(queueTaskSpy).toHaveBeenCalledWith({
@@ -1248,153 +1270,98 @@ describe('message update', () => {
 					channelId: 'channel-123',
 					channelType: 'messaging',
 					messageId: 'msg-123',
-					payload: [pathParams, request],
+					payload: [pathParams, queuedRequest({ skip_enrich_url: true })],
 					type: 'update-message',
 				},
 			});
-			expect(_updateMessageSpy).not.toHaveBeenCalled();
+			expect(updateMessageSpy).not.toHaveBeenCalled();
 		});
 
-		it('queues replayable updates without channel data if cid is missing or invalid', async () => {
-			const message = generateMsg({
-				id: 'msg-123',
-				cid: 'invalid-cid',
-				text: 'edited',
-			});
-			const pathParams = { id: message.id };
-			const request = { message };
-
-			await client.updateMessage(pathParams, request);
+		it('queues it without channel data if the cid is missing or invalid', async () => {
+			await update(edit({ cid: 'invalid-cid' }));
 
 			expect(queueTaskSpy).toHaveBeenCalledWith({
 				task: {
 					messageId: 'msg-123',
-					payload: [pathParams, request],
+					payload: [pathParams, queuedRequest()],
 					type: 'update-message',
 				},
 			});
 		});
 
-		it('falls back to _updateMessage if offlineDb is not set', async () => {
-			const message = generateMsg({
-				id: 'msg-123',
-				text: 'edited',
-			});
-			const pathParams = { id: message.id };
-			const request = { message, skip_enrich_url: true };
-
+		it('sends the request directly if offlineDb is not set', async () => {
 			client.offlineDb = undefined;
 
-			await client.updateMessage(pathParams, request);
+			await update(edit(), { skip_enrich_url: true });
 
-			expect(_updateMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_updateMessageSpy).toHaveBeenCalledWith(pathParams, request);
+			expect(updateMessageSpy).toHaveBeenCalledTimes(1);
+			expect(updateMessageSpy).toHaveBeenCalledWith(
+				pathParams,
+				queuedRequest({ skip_enrich_url: true }),
+			);
 		});
 
-		it('routes updates with local attachment metadata through offlineDb queue handling', async () => {
-			const message = generateMsg({
-				id: 'msg-123',
-				attachments: [
-					{
-						type: 'image',
-						image_url: 'https://example.com/image.jpg',
-						localMetadata: {
-							file: { uri: 'file://test.jpg' },
-							id: 'local-1',
-							uploadState: 'pending',
+		it('routes an edit whose attachments carry local metadata through the queue', async () => {
+			await update(
+				edit({
+					attachments: [
+						{
+							type: 'image',
+							image_url: 'https://example.com/image.jpg',
+							localMetadata: { id: 'local-1', uploadState: 'finished' },
 						},
-					},
-				],
-			});
-			const pathParams = { id: message.id };
-			const request = { message };
-
-			await client.updateMessage(pathParams, request);
+					],
+				}),
+			);
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
-			expect(queueTaskSpy).toHaveBeenCalledWith({
-				task: {
-					// Derived from the message's `cid` by `getPendingTaskChannelData`, so a queued task
-					// always carries the channel it belongs to.
-					channelId: 'general',
-					channelType: 'messaging',
-					messageId: 'msg-123',
-					payload: [pathParams, request],
-					type: 'update-message',
-				},
-			});
-			expect(_updateMessageSpy).not.toHaveBeenCalled();
+			expect(updateMessageSpy).not.toHaveBeenCalled();
 		});
 
-		it('routes updates with originalFile attachments through offlineDb queue handling', async () => {
-			const message = generateMsg({
-				id: 'msg-123',
-				attachments: [
-					{
-						type: 'file',
-						asset_url: 'https://example.com/test.pdf',
-						originalFile: { uri: 'content://test.pdf' },
-					},
-				],
-			});
-			const pathParams = { id: message.id };
-			const request = { message };
-
-			await client.updateMessage(pathParams, request);
+		it('routes an edit with originalFile attachments through the queue', async () => {
+			await update(
+				edit({
+					attachments: [
+						{
+							type: 'file',
+							asset_url: 'https://example.com/test.pdf',
+							originalFile: { uri: 'content://test.pdf' },
+						},
+					],
+				}),
+			);
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
-			expect(queueTaskSpy).toHaveBeenCalledWith({
-				task: {
-					// Derived from the message's `cid` by `getPendingTaskChannelData`, so a queued task
-					// always carries the channel it belongs to.
-					channelId: 'general',
-					channelType: 'messaging',
-					messageId: 'msg-123',
-					payload: [pathParams, request],
-					type: 'update-message',
-				},
-			});
-			expect(_updateMessageSpy).not.toHaveBeenCalled();
+			expect(updateMessageSpy).not.toHaveBeenCalled();
 		});
 
-		it('logs and falls back to _updateMessage if offline queueing throws', async () => {
-			const message = generateMsg({
-				id: 'msg-123',
-				text: 'edited',
-			});
-			const pathParams = { id: message.id };
-			const request = { message };
+		it('logs and sends the request directly if offline queueing throws', async () => {
 			queueTaskSpy.mockRejectedValue(new Error('Offline failure'));
 
-			await client.updateMessage(pathParams, request);
+			await update(edit());
 
-			expect(loggerSpy).toHaveBeenCalledTimes(1);
-			expect(_updateMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_updateMessageSpy).toHaveBeenCalledWith(pathParams, request);
+			expect(loggerSpy).toHaveBeenCalledWith(
+				'error',
+				expect.stringContaining('Updating the message failed.'),
+				expect.anything(),
+			);
+			expect(updateMessageSpy).toHaveBeenCalledTimes(1);
+			expect(updateMessageSpy).toHaveBeenCalledWith(pathParams, queuedRequest());
 		});
 
-		it('logs and falls back to _updateMessage when queueTask rethrows for failed offline edits', async () => {
-			const failedEditedMessage = generateMsg({
-				id: 'msg-123',
-				status: 'failed',
-				text: 'edited',
-				message_text_updated_at: convertDateToTimestamp('2026-04-01T20:48:43.886269Z'),
-			});
-			const pathParams = { id: failedEditedMessage.id };
-			const request = { message: failedEditedMessage };
-
+		it('reconciles the direct response when queueTask rethrows for a failed offline edit', async () => {
 			client.wsConnection = { isHealthy: false };
 			queueTaskSpy.mockRejectedValue(new Error('Offline failure'));
-			_updateMessageSpy.mockResolvedValue({ message: failedEditedMessage });
+			updateMessageSpy.mockResolvedValue({
+				message: generateMsg({ id: 'msg-123', text: 'from server' }),
+			});
+			const channel = client.channel('messaging', 'channel-123');
 
-			const response = await client.updateMessage(pathParams, request);
+			await update(edit());
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
-			expect(loggerSpy).toHaveBeenCalledTimes(1);
-			expect(_updateMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_updateMessageSpy).toHaveBeenCalledWith(pathParams, request);
-			expect(response.message.text).toBe('edited');
-			expect(response.message.status).toBe('failed');
+			expect(updateMessageSpy).toHaveBeenCalledTimes(1);
+			expect(channel.messagePaginator.getItem('msg-123')?.text).toBe('from server');
 		});
 	});
 });
@@ -1813,82 +1780,74 @@ describe('message deletion', () => {
 		vi.resetAllMocks();
 	});
 
-	describe('deleteMessage', () => {
-		let _deleteMessageSpy;
+	describe('the full delete (messageOperations.delete) queues through the offline DB', () => {
+		let deleteMessageSpy;
+		const del = (options) =>
+			client.channel('messaging', 'general').messageOperations.delete({
+				localMessage: utils.formatMessage(generateMsg({ id: messageId })),
+				options,
+			});
 
 		beforeEach(() => {
-			_deleteMessageSpy = vi.spyOn(client, '_deleteMessage').mockResolvedValue({});
+			deleteMessageSpy = vi.spyOn(client, 'deleteMessage').mockResolvedValue({});
 		});
 
 		afterEach(() => {
 			vi.resetAllMocks();
 		});
 
-		// The offline-DB row is NOT written here: the optimistic layer owns it
-		// (`MessageOperationStatePolicy`), so this method only queues the request. Writing it here ran
-		// ahead of the state it mirrors, and a custom `deleteMessageRequest` skipped it entirely.
-		it('queues a soft delete without touching the offline-DB row', async () => {
-			const pathParams = { id: messageId };
-
-			await client.deleteMessage(pathParams);
-
-			expect(client.offlineDb.softDeleteMessage).not.toHaveBeenCalled();
-			expect(client.offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
+		it('queues a soft delete', async () => {
+			await del();
 
 			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 			expect(queueTaskSpy).toHaveBeenCalledWith({
 				task: {
 					messageId,
-					payload: [pathParams],
+					payload: [{ id: messageId }, undefined],
 					type: 'delete-message',
 				},
 			});
-			expect(_deleteMessageSpy).not.toHaveBeenCalled();
+			expect(deleteMessageSpy).not.toHaveBeenCalled();
 		});
 
-		it('queues a hard delete without touching the offline-DB row', async () => {
-			const pathParams = { id: messageId };
-			const request = { hard: true };
+		it('queues a hard delete', async () => {
+			await del({ hard: true });
 
-			await client.deleteMessage(pathParams, request);
-
-			expect(client.offlineDb.hardDeleteMessage).not.toHaveBeenCalled();
-			expect(client.offlineDb.softDeleteMessage).not.toHaveBeenCalled();
-
-			expect(queueTaskSpy).toHaveBeenCalledTimes(1);
 			expect(queueTaskSpy).toHaveBeenCalledWith({
 				task: {
 					messageId,
-					payload: [pathParams, request],
+					payload: [{ id: messageId }, { hard: true }],
 					type: 'delete-message',
 				},
 			});
-			expect(_deleteMessageSpy).not.toHaveBeenCalled();
+			expect(deleteMessageSpy).not.toHaveBeenCalled();
 		});
 
-		it('falls back to _deleteMessage if offlineDb is not set', async () => {
+		it('sends the request directly if offlineDb is not set', async () => {
 			client.offlineDb = undefined;
-			const pathParams = { id: messageId };
 
-			await client.deleteMessage(pathParams);
+			await del();
 
-			expect(_deleteMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_deleteMessageSpy).toHaveBeenCalledWith(pathParams);
+			expect(deleteMessageSpy).toHaveBeenCalledTimes(1);
+			expect(deleteMessageSpy).toHaveBeenCalledWith({ id: messageId }, undefined);
 		});
 
-		it('logs and falls back to _deleteMessage if offline queueing throws', async () => {
+		it('logs and sends the request directly if offline queueing throws', async () => {
 			queueTaskSpy.mockRejectedValue(new Error('Offline failure'));
-			const pathParams = { id: messageId };
 
-			await client.deleteMessage(pathParams);
+			await del();
 
-			expect(loggerSpy).toHaveBeenCalledTimes(1);
-			expect(_deleteMessageSpy).toHaveBeenCalledTimes(1);
-			expect(_deleteMessageSpy).toHaveBeenCalledWith(pathParams);
+			expect(loggerSpy).toHaveBeenCalledWith(
+				'error',
+				expect.stringContaining('Deleting the message failed.'),
+				expect.anything(),
+			);
+			expect(deleteMessageSpy).toHaveBeenCalledTimes(1);
+			expect(deleteMessageSpy).toHaveBeenCalledWith({ id: messageId }, undefined);
 		});
 	});
 
-	describe('_deleteMessage', () => {
+	describe('deleteMessage (the HTTP request)', () => {
 		let sendRequestSpy;
 
 		beforeEach(() => {
@@ -1903,14 +1862,14 @@ describe('message deletion', () => {
 		});
 
 		it('returns the response from the underlying deleteMessage call', async () => {
-			const result = await client._deleteMessage({ id: messageId });
+			const result = await client.deleteMessage({ id: messageId });
 
 			expect(sendRequestSpy).toHaveBeenCalledTimes(1);
 			expect(result.message).toMatchObject({ id: messageId });
 		});
 
 		it('enriches the message with type="deleted" and deleted_for_me=true when delete_for_me is set', async () => {
-			const result = await client._deleteMessage(
+			const result = await client.deleteMessage(
 				{ id: messageId },
 				{ delete_for_me: true },
 			);
@@ -1923,12 +1882,19 @@ describe('message deletion', () => {
 		});
 
 		it('does not enrich the message when delete_for_me is not set', async () => {
-			const result = await client._deleteMessage({ id: messageId }, { hard: true });
+			const result = await client.deleteMessage({ id: messageId }, { hard: true });
 
 			expect(sendRequestSpy.mock.calls[0][3]).toEqual({ hard: true });
 			expect(result.message).toMatchObject({ id: messageId });
 			expect(result.message).not.toHaveProperty('deleted_for_me');
 			expect(result.message).not.toHaveProperty('type');
+		});
+
+		it('sends the request without queueing it, even with an offline DB', async () => {
+			await client.deleteMessage({ id: messageId });
+
+			expect(queueTaskSpy).not.toHaveBeenCalled();
+			expect(sendRequestSpy).toHaveBeenCalledTimes(1);
 		});
 	});
 });

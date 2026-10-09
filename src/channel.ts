@@ -6,13 +6,9 @@ import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
 import type { ReadStoreReconcileMeta } from './messageDelivery';
 import { MessagePaginator, PinnedMessagePaginator } from './pagination/paginators';
-import {
-  createMessageOperations,
-  reflectReactionEvent,
-  WithMessageOperations,
-} from './messageOperations';
+import { createMessageOperations, reflectReactionEvent } from './messageOperations';
 import type { MessageOperations } from './messageOperations';
-import type { OperationParams, OperationRequestFn } from './messageOperations/types';
+import type { OperationRequestFn } from './messageOperations/types';
 import {
   channelHasReadEvents,
   formatMessage,
@@ -96,6 +92,7 @@ const logger = chatLoggerSystem.getLogger('channel');
  * kind extends them rather than needing a new hand-written pair.
  */
 export type {
+  DefaultOperationRequest,
   MessageOperationSpec,
   OperationKind,
   OperationParams,
@@ -226,7 +223,7 @@ export const DEFAULT_CHANNEL_CONFIG: ChannelConfig = deepFreezeConfig({
 /**
  * The Channel class manages its own state.
  */
-export class Channel extends WithMessageOperations(ChannelApi) {
+export class Channel extends ChannelApi {
   _client: StreamChat;
   _data: ChannelInput;
   cid: string;
@@ -562,17 +559,6 @@ export class Channel extends WithMessageOperations(ChannelApi) {
     return this.getClient().channelServerConfigs[this.cid];
   }
 
-  _sendMessage(...args: Parameters<ChannelApi['sendMessage']>) {
-    const [request, requestOptions] = args;
-
-    // Sanitized at the point of sending, which is the only place every path converges: the
-    // offline replay of a queued `send-message` task calls this method directly.
-    return super.sendMessage(
-      { ...request, message: sanitizeOutgoingAttachments(request.message) },
-      requestOptions,
-    );
-  }
-
   /**
    * Sends a message to this channel.
    *
@@ -584,41 +570,12 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   override async sendMessage(...args: Parameters<ChannelApi['sendMessage']>) {
     this._checkHasId();
 
-    const [request] = args;
-    const messageId = request.message?.id;
+    const [request, requestOptions] = args;
 
-    return await queueOrRun({
-      channel: this,
-      client: this.getClient(),
-      // Nothing to key a queue entry on without a message id, so it runs but is not queued.
-      queue: !!messageId,
-      task: {
-        channelId: this.id,
-        channelType: this.type,
-        messageId,
-        payload: args,
-        type: 'send-message',
-      },
-    });
-  }
-
-  /**
-   * Sends a message with optimistic local state update, stopping the typing indicator first.
-   *
-   * The only collection-specific part of the optimistic API: typing is a channel concern and a
-   * `Thread` has no counterpart, so it is an override rather than part of the mixin.
-   */
-  override async sendMessageWithLocalUpdate(
-    params: OperationParams<'send'>,
-  ): Promise<void> {
-    // Before the send and not awaited: a send carrying an upload lasts as long as the transfer,
-    // which would otherwise leave everyone watching a typing indicator throughout. Best-effort,
-    // so it must not delay or fail the send.
-    if (this.messageComposer.config.text.publishTypingEvents) {
-      this.stopTyping().catch(() => undefined);
-    }
-
-    await super.sendMessageWithLocalUpdate(params);
+    return await super.sendMessage(
+      { ...request, message: sanitizeOutgoingAttachments(request.message) },
+      requestOptions,
+    );
   }
 
   /**
@@ -731,76 +688,6 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   }
 
   /**
-   * Sends a reaction to a message. If offline support is enabled, it will make sure
-   * that sending the reaction is queued up if it fails due to bad internet conditions and executed
-   * later.
-   *
-   * @param ...args - `[pathParams, request, requestOptions]`. `pathParams.id` is the target message
-   *   ID; `request` holds the reaction object (e.g. `{ reaction: { type: 'love' } }`) and optional
-   *   flags such as `enforce_unique` and `skip_push`; `requestOptions` carries per-request options
-   *   such as an abort `signal`.
-   *   When the call is queued for offline replay, `requestOptions` is queued with it - see the
-   *   note on signal persistence in `AbstractOfflineDB.queueTask`.
-   * @returns The server response.
-   */
-  async sendReaction(...args: Parameters<ChatApi['sendReaction']>) {
-    this._checkHasId();
-
-    const [{ id: messageId }] = args;
-
-    // The optimistic reaction row is written by the local-update layer (`applyReactionLocally`); here
-    // we only queue the request for replay.
-    return await queueOrRun({
-      channel: this,
-      client: this.getClient(),
-      task: {
-        channelId: this.id,
-        channelType: this.type,
-        messageId,
-        payload: args,
-        type: 'send-reaction',
-      },
-    });
-  }
-
-  _sendReaction(...args: Parameters<ChatApi['sendReaction']>) {
-    return this.getClient().sendReaction(...args);
-  }
-
-  async deleteReaction(...args: Parameters<ChatApi['deleteReaction']>) {
-    this._checkHasId();
-
-    const [pathParams] = args;
-
-    // The optimistic reaction-row removal is handled by the local-update layer
-    // (`applyReactionLocally`); here we only queue the request for replay.
-    return await queueOrRun({
-      channel: this,
-      client: this.getClient(),
-      task: {
-        channelId: this.id,
-        channelType: this.type,
-        messageId: pathParams.id,
-        payload: args,
-        type: 'delete-reaction',
-      },
-    });
-  }
-
-  /**
-   * Deletes a reaction by user and type.
-   *
-   * @param ...args - `[pathParams, _request, requestOptions]`. `pathParams` identifies the target
-   *   message and reaction type; `_request` is an unused placeholder (pass `undefined`);
-   *   `requestOptions` carries per-request options such as an abort `signal` and is never
-   *   serialized into the request.
-   * @returns The server response.
-   */
-  async _deleteReaction(...args: Parameters<ChatApi['deleteReaction']>) {
-    return await this.getClient().deleteReaction(...args);
-  }
-
-  /**
    * Edit the channel using the inherited `update()` from `ChannelApi`. Caches the
    * server-returned channel onto `this.data`.
    *
@@ -879,10 +766,20 @@ export class Channel extends WithMessageOperations(ChannelApi) {
   }
 
   public async sendSharedLocation(location: SharedLocation & { message_id?: string }) {
-    const result = await this.sendMessage({
-      message: {
-        id: location.message_id,
-        shared_location: location,
+    this._checkHasId();
+
+    const messageId = location.message_id;
+    const result = await queueOrRun({
+      channel: this,
+      client: this.getClient(),
+      // Nothing to key a queue entry on without a message id, so it runs but is not queued.
+      queue: !!messageId,
+      task: {
+        channelId: this.id,
+        channelType: this.type,
+        messageId,
+        payload: [{ message: { id: messageId, shared_location: location } }],
+        type: 'send-message',
       },
     });
 

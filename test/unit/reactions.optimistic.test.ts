@@ -120,10 +120,10 @@ describe('optimistic reactions', () => {
         reaction_groups: { love: { count: 9, sum_scores: 9 } },
       });
       const sendReaction = vi
-        .spyOn(channel, 'sendReaction')
+        .spyOn(client, 'sendReaction')
         .mockResolvedValue(apiReactionResponse(serverMessage));
 
-      const pending = channel.addReactionWithLocalUpdate({
+      const pending = channel.messageOperations.addReaction({
         messageId: message.id,
         reaction: { type: 'love' },
       });
@@ -144,11 +144,11 @@ describe('optimistic reactions', () => {
     it('replaces the existing own reaction when enforce_unique is set', async () => {
       const message = buildMessage(['like']);
       seed(channel, message);
-      vi.spyOn(channel, 'sendReaction').mockResolvedValue(
+      vi.spyOn(client, 'sendReaction').mockResolvedValue(
         apiReactionResponse(generateMsg({ id: message.id })),
       );
 
-      const pending = channel.addReactionWithLocalUpdate({
+      const pending = channel.messageOperations.addReaction({
         messageId: message.id,
         reaction: { type: 'love' },
         options: { enforce_unique: true },
@@ -162,11 +162,11 @@ describe('optimistic reactions', () => {
     it('removes the own reaction immediately', async () => {
       const message = buildMessage(['love']);
       seed(channel, message);
-      vi.spyOn(channel, 'deleteReaction').mockResolvedValue(
+      vi.spyOn(client, 'deleteReaction').mockResolvedValue(
         apiReactionResponse(generateMsg({ id: message.id })),
       );
 
-      const pending = channel.deleteReactionWithLocalUpdate({
+      const pending = channel.messageOperations.deleteReaction({
         messageId: message.id,
         type: 'love',
       });
@@ -181,10 +181,10 @@ describe('optimistic reactions', () => {
     it('reverts an added reaction', async () => {
       const message = buildMessage();
       seed(channel, message);
-      vi.spyOn(channel, 'sendReaction').mockRejectedValue(networkError());
+      vi.spyOn(client, 'sendReaction').mockRejectedValue(networkError());
 
       await expect(
-        channel.addReactionWithLocalUpdate({
+        channel.messageOperations.addReaction({
           messageId: message.id,
           reaction: { type: 'love' },
         }),
@@ -196,10 +196,10 @@ describe('optimistic reactions', () => {
     it('restores a removed reaction', async () => {
       const message = buildMessage(['love']);
       seed(channel, message);
-      vi.spyOn(channel, 'deleteReaction').mockRejectedValue(networkError());
+      vi.spyOn(client, 'deleteReaction').mockRejectedValue(networkError());
 
       await expect(
-        channel.deleteReactionWithLocalUpdate({ messageId: message.id, type: 'love' }),
+        channel.messageOperations.deleteReaction({ messageId: message.id, type: 'love' }),
       ).rejects.toThrow('network down');
 
       expect(ownReactionTypes(channel.messagePaginator, message.id)).toEqual(['love']);
@@ -208,10 +208,10 @@ describe('optimistic reactions', () => {
     it('restores the displaced reaction when an enforce_unique add fails', async () => {
       const message = buildMessage(['like']);
       seed(channel, message);
-      vi.spyOn(channel, 'sendReaction').mockRejectedValue(networkError());
+      vi.spyOn(client, 'sendReaction').mockRejectedValue(networkError());
 
       await expect(
-        channel.addReactionWithLocalUpdate({
+        channel.messageOperations.addReaction({
           messageId: message.id,
           reaction: { type: 'love' },
           options: { enforce_unique: true },
@@ -242,10 +242,10 @@ describe('optimistic reactions', () => {
       const message = buildMessage();
       seed(channel, message);
       queueIsHolding(message.id);
-      vi.spyOn(channel, 'sendReaction').mockRejectedValue(networkError());
+      vi.spyOn(client, 'sendReaction').mockRejectedValue(networkError());
 
       await expect(
-        channel.addReactionWithLocalUpdate({
+        channel.messageOperations.addReaction({
           messageId: message.id,
           reaction: { type: 'love' },
         }),
@@ -258,10 +258,10 @@ describe('optimistic reactions', () => {
       const message = buildMessage();
       seed(channel, message);
       queueIsHolding(message.id);
-      vi.spyOn(channel, 'sendReaction').mockRejectedValue(apiError(9));
+      vi.spyOn(client, 'sendReaction').mockRejectedValue(apiError(9));
 
       await expect(
-        channel.addReactionWithLocalUpdate({
+        channel.messageOperations.addReaction({
           messageId: message.id,
           reaction: { type: 'love' },
         }),
@@ -273,10 +273,10 @@ describe('optimistic reactions', () => {
     it('reverts when the server responds with a non-retryable code', async () => {
       const message = buildMessage();
       seed(channel, message);
-      vi.spyOn(channel, 'sendReaction').mockRejectedValue(apiError(4));
+      vi.spyOn(client, 'sendReaction').mockRejectedValue(apiError(4));
 
       await expect(
-        channel.addReactionWithLocalUpdate({
+        channel.messageOperations.addReaction({
           messageId: message.id,
           reaction: { type: 'love' },
         }),
@@ -291,10 +291,10 @@ describe('optimistic reactions', () => {
     it('reverts when the caller cancelled the request', async () => {
       const message = buildMessage();
       seed(channel, message);
-      vi.spyOn(channel, 'sendReaction').mockRejectedValue(new CanceledError('canceled'));
+      vi.spyOn(client, 'sendReaction').mockRejectedValue(new CanceledError('canceled'));
 
       await expect(
-        channel.addReactionWithLocalUpdate({
+        channel.messageOperations.addReaction({
           messageId: message.id,
           reaction: { type: 'love' },
         }),
@@ -309,10 +309,10 @@ describe('optimistic reactions', () => {
       const db = enableOfflineDb(client);
       const message = buildMessage();
       seed(channel, message);
-      vi.spyOn(channel, 'sendReaction').mockRejectedValue(apiError(4));
+      vi.spyOn(client, 'sendReaction').mockRejectedValue(apiError(4));
 
       await expect(
-        channel.addReactionWithLocalUpdate({
+        channel.messageOperations.addReaction({
           messageId: message.id,
           reaction: { type: 'love' },
         }),
@@ -326,10 +326,10 @@ describe('optimistic reactions', () => {
       const db = enableOfflineDb(client);
       const message = buildMessage(['like']);
       seed(channel, message);
-      vi.spyOn(channel, 'sendReaction').mockRejectedValue(apiError(4));
+      vi.spyOn(client, 'sendReaction').mockRejectedValue(apiError(4));
 
       await expect(
-        channel.addReactionWithLocalUpdate({
+        channel.messageOperations.addReaction({
           messageId: message.id,
           reaction: { type: 'love' },
           options: { enforce_unique: true },
@@ -345,10 +345,10 @@ describe('optimistic reactions', () => {
       const db = enableOfflineDb(client);
       const message = buildMessage(['love']);
       seed(channel, message);
-      vi.spyOn(channel, 'deleteReaction').mockRejectedValue(apiError(4));
+      vi.spyOn(client, 'deleteReaction').mockRejectedValue(apiError(4));
 
       await expect(
-        channel.deleteReactionWithLocalUpdate({ messageId: message.id, type: 'love' }),
+        channel.messageOperations.deleteReaction({ messageId: message.id, type: 'love' }),
       ).rejects.toThrow();
 
       expect(db.deleteReaction).toHaveBeenCalledTimes(1);
@@ -388,11 +388,11 @@ describe('optimistic reactions', () => {
 
     it('mirrors a channel-side reaction onto the thread copy', async () => {
       const { reply, thread } = setupDualHomed();
-      vi.spyOn(channel, 'sendReaction').mockResolvedValue(
+      vi.spyOn(client, 'sendReaction').mockResolvedValue(
         apiReactionResponse(generateMsg({ id: reply.id })),
       );
 
-      const pending = channel.addReactionWithLocalUpdate({
+      const pending = channel.messageOperations.addReaction({
         messageId: reply.id,
         reaction: { type: 'love' },
       });
@@ -405,11 +405,11 @@ describe('optimistic reactions', () => {
 
     it('mirrors a thread-side reaction onto the channel copy', async () => {
       const { reply, thread } = setupDualHomed();
-      vi.spyOn(channel, 'sendReaction').mockResolvedValue(
+      vi.spyOn(client, 'sendReaction').mockResolvedValue(
         apiReactionResponse(generateMsg({ id: reply.id })),
       );
 
-      const pending = thread.addReactionWithLocalUpdate({
+      const pending = thread.messageOperations.addReaction({
         messageId: reply.id,
         reaction: { type: 'love' },
       });
@@ -427,12 +427,13 @@ describe('optimistic reactions', () => {
      */
     it('routes a thread-side reaction request through the parent channel', async () => {
       const { reply, thread } = setupDualHomed();
+      const db = enableOfflineDb(client);
+      const queueTask = vi.spyOn(db, 'queueTask');
       const sendReaction = vi
-        .spyOn(channel, 'sendReaction')
+        .spyOn(client, 'sendReaction')
         .mockResolvedValue(apiReactionResponse(generateMsg({ id: reply.id })));
-      const threadSendReaction = vi.spyOn(thread.channel, 'sendReaction');
 
-      await thread.addReactionWithLocalUpdate({
+      await thread.messageOperations.addReaction({
         messageId: reply.id,
         reaction: { type: 'love' },
       });
@@ -441,15 +442,20 @@ describe('optimistic reactions', () => {
         { id: reply.id },
         { reaction: { type: 'love' } },
       );
-      expect(threadSendReaction).toBe(sendReaction);
+      // The queued task is keyed by the parent channel, which is what a replay runs against.
+      expect(queueTask.mock.calls[0][0].task).toMatchObject({
+        channelId: channel.id,
+        channelType: channel.type,
+        type: 'send-reaction',
+      });
     });
 
     it('reverts a thread-side reaction on a terminal failure', async () => {
       const { reply, thread } = setupDualHomed();
-      vi.spyOn(channel, 'sendReaction').mockRejectedValue(apiError(4));
+      vi.spyOn(client, 'sendReaction').mockRejectedValue(apiError(4));
 
       await expect(
-        thread.addReactionWithLocalUpdate({
+        thread.messageOperations.addReaction({
           messageId: reply.id,
           reaction: { type: 'love' },
         }),
@@ -461,9 +467,9 @@ describe('optimistic reactions', () => {
 
     it('reverts both copies when the request fails', async () => {
       const { reply, thread } = setupDualHomed();
-      vi.spyOn(channel, 'sendReaction').mockRejectedValue(networkError());
+      vi.spyOn(client, 'sendReaction').mockRejectedValue(networkError());
 
-      const pending = channel.addReactionWithLocalUpdate({
+      const pending = channel.messageOperations.addReaction({
         messageId: reply.id,
         reaction: { type: 'love' },
       });
@@ -508,11 +514,11 @@ describe('optimistic reactions', () => {
 
     it('mirrors a main-list reaction onto the pinned copy (shared canonical message)', async () => {
       const { message } = setupPinnedAndMain();
-      vi.spyOn(channel, 'sendReaction').mockResolvedValue(
+      vi.spyOn(client, 'sendReaction').mockResolvedValue(
         apiReactionResponse(generateMsg({ id: message.id })),
       );
 
-      const pending = channel.addReactionWithLocalUpdate({
+      const pending = channel.messageOperations.addReaction({
         messageId: message.id,
         reaction: { type: 'love' },
       });
@@ -525,9 +531,9 @@ describe('optimistic reactions', () => {
 
     it('reverts the pinned copy when the request fails', async () => {
       const { message } = setupPinnedAndMain();
-      vi.spyOn(channel, 'sendReaction').mockRejectedValue(networkError());
+      vi.spyOn(client, 'sendReaction').mockRejectedValue(networkError());
 
-      const pending = channel.addReactionWithLocalUpdate({
+      const pending = channel.messageOperations.addReaction({
         messageId: message.id,
         reaction: { type: 'love' },
       });
@@ -627,11 +633,11 @@ describe('optimistic reactions', () => {
 
     it('applies an added reaction to the parent immediately even when the channel has not loaded it', async () => {
       const { parentId, thread } = setupParentThread();
-      vi.spyOn(channel, 'sendReaction').mockResolvedValue(
+      vi.spyOn(client, 'sendReaction').mockResolvedValue(
         apiReactionResponse(generateMsg({ id: parentId })),
       );
 
-      const pending = channel.addReactionWithLocalUpdate({
+      const pending = channel.messageOperations.addReaction({
         messageId: parentId,
         reaction: { type: 'love' },
       });
@@ -646,11 +652,11 @@ describe('optimistic reactions', () => {
 
     it('mirrors the reaction onto both the channel copy and the thread parent when both hold it', async () => {
       const { parentId, thread } = setupParentThread([], { seedInChannel: true });
-      vi.spyOn(channel, 'sendReaction').mockResolvedValue(
+      vi.spyOn(client, 'sendReaction').mockResolvedValue(
         apiReactionResponse(generateMsg({ id: parentId })),
       );
 
-      const pending = channel.addReactionWithLocalUpdate({
+      const pending = channel.messageOperations.addReaction({
         messageId: parentId,
         reaction: { type: 'love' },
       });
@@ -663,11 +669,11 @@ describe('optimistic reactions', () => {
 
     it('preserves the user other own_reactions when adding to the parent', async () => {
       const { parentId, thread } = setupParentThread(['like']);
-      vi.spyOn(channel, 'sendReaction').mockResolvedValue(
+      vi.spyOn(client, 'sendReaction').mockResolvedValue(
         apiReactionResponse(generateMsg({ id: parentId })),
       );
 
-      const pending = channel.addReactionWithLocalUpdate({
+      const pending = channel.messageOperations.addReaction({
         messageId: parentId,
         reaction: { type: 'love' },
       });
@@ -679,11 +685,11 @@ describe('optimistic reactions', () => {
 
     it('replaces the existing own reaction on the parent when enforce_unique is set', async () => {
       const { parentId, thread } = setupParentThread(['like']);
-      vi.spyOn(channel, 'sendReaction').mockResolvedValue(
+      vi.spyOn(client, 'sendReaction').mockResolvedValue(
         apiReactionResponse(generateMsg({ id: parentId })),
       );
 
-      const pending = channel.addReactionWithLocalUpdate({
+      const pending = channel.messageOperations.addReaction({
         messageId: parentId,
         reaction: { type: 'love' },
         options: { enforce_unique: true },
@@ -696,11 +702,11 @@ describe('optimistic reactions', () => {
 
     it('removes the own reaction from the parent immediately', async () => {
       const { parentId, thread } = setupParentThread(['love']);
-      vi.spyOn(channel, 'deleteReaction').mockResolvedValue(
+      vi.spyOn(client, 'deleteReaction').mockResolvedValue(
         apiReactionResponse(generateMsg({ id: parentId })),
       );
 
-      const pending = channel.deleteReactionWithLocalUpdate({
+      const pending = channel.messageOperations.deleteReaction({
         messageId: parentId,
         type: 'love',
       });
@@ -712,9 +718,9 @@ describe('optimistic reactions', () => {
 
     it('reverts the parent reaction on a terminal failure', async () => {
       const { parentId, thread } = setupParentThread();
-      vi.spyOn(channel, 'sendReaction').mockRejectedValue(networkError());
+      vi.spyOn(client, 'sendReaction').mockRejectedValue(networkError());
 
-      const pending = channel.addReactionWithLocalUpdate({
+      const pending = channel.messageOperations.addReaction({
         messageId: parentId,
         reaction: { type: 'love' },
       });
