@@ -69,3 +69,27 @@ export function isErrorResponse(
 ): res is AxiosResponse<APIErrorResponse> {
   return !res.status || res.status < 200 || 300 <= res.status;
 }
+
+/**
+ * Whether the error is the backend rejecting a send because a message with the same id
+ * is already stored. This happens when a send whose response was lost (client timeout,
+ * edge retry) is sent again with the same client-minted id: the backend inserts with
+ * `ON CONFLICT DO NOTHING` and answers with the generic input error code (4), so the
+ * message text has to be matched as well to tell it apart from other input errors
+ * (e.g. a poll option or vote that already exists).
+ */
+export function isMessageAlreadyExistsError(error: unknown): boolean {
+  const { code, response, status } = (error ?? {}) as {
+    code?: unknown;
+    response?: { data?: Partial<APIErrorResponse>; status?: number };
+    status?: unknown;
+  };
+  const text = response?.data?.message;
+  return (
+    (status ?? response?.status) === 400 &&
+    (code ?? response?.data?.code) === 4 &&
+    typeof text === 'string' &&
+    text.includes('a message with ID') &&
+    text.includes('already exists')
+  );
+}

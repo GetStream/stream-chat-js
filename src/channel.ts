@@ -11,7 +11,10 @@ import {
   messageSetPagination,
   normalizeQuerySort,
   sanitizeOutgoingAttachments,
+  stripClientOnlyMessageFields,
+  unformatMessage,
 } from './utils';
+import { isMessageAlreadyExistsError } from './errors';
 import type { StreamChat } from './client';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import type {
@@ -228,6 +231,84 @@ export class Channel {
   }
 
   async sendMessage(message: Message, options?: SendMessageOptions) {
+    try {
+      return await this._sendMessageWithOfflineSupport(message, options);
+    } catch (error) {
+      if (!message.id || !isMessageAlreadyExistsError(error)) throw error;
+      // The message was stored by an earlier attempt whose response was lost
+      const recovered = this._recoverAlreadyStoredMessage(message);
+      if (!recovered) throw error;
+      await this._deletePendingSendMessageTasks(message.id);
+      return recovered;
+    }
+  }
+
+  /**
+   * @private
+   * Removes queued send-message tasks of a message that turned out to be already stored,
+   * e.g. the task queued by a timed out attempt. Other tasks of the message (reactions,
+   * edits) are kept.
+   */
+  private async _deletePendingSendMessageTasks(messageId: string) {
+    const offlineDb = this.getClient().offlineDb;
+    if (!offlineDb) return;
+    try {
+      const pendingTasks = await offlineDb.getPendingTasks({ messageId });
+      for (const task of pendingTasks) {
+        if (task.type === 'send-message' && task.id) {
+          await offlineDb.deletePendingTask({ id: task.id });
+        }
+      }
+    } catch (error) {
+      this._client.logger(
+        'error',
+        'offlineDb:send-message - pending task cleanup failed',
+        {
+          error,
+          tags: ['channel', 'offlineDb'],
+        },
+      );
+    }
+  }
+
+  /**
+   * @private
+   * Resolves a send that was rejected because the message id is already stored on the
+   * backend, using the local copy of the message. Only resolves if the message is in local
+   * state (proves it was sent from this client). Like on Android and iOS, the local copy
+   * stands in until the server copy replaces it (message.new, channel query).
+   *
+   * @param message The message that was sent
+   *
+   * @return The response to use instead of the error, or `undefined` if the send can't be
+   * treated as delivered (the caller rethrows the original error)
+   */
+  private _recoverAlreadyStoredMessage(
+    message: Pick<Message, 'id' | 'parent_id'>,
+  ): SendMessageAPIResponse | undefined {
+    const { id, parent_id } = message;
+    if (!id) return;
+
+    const localCopy = this.state.findMessage(id, parent_id);
+    if (!localCopy) return;
+
+    // unformatMessage keeps the client-only fields, the backend never sends them
+    const messageResponse: MessageResponse = stripClientOnlyMessageFields(
+      unformatMessage(localCopy),
+    );
+    if (messageResponse.quoted_message) {
+      messageResponse.quoted_message = stripClientOnlyMessageFields(
+        messageResponse.quoted_message,
+      );
+    }
+
+    return { duration: '', message: messageResponse };
+  }
+
+  private async _sendMessageWithOfflineSupport(
+    message: Message,
+    options?: SendMessageOptions,
+  ) {
     try {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
