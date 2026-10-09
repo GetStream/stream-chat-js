@@ -578,6 +578,14 @@ export class Channel extends ChannelApi {
     );
   }
 
+  async sendReaction(...args: Parameters<ChatApi['sendReaction']>) {
+    return await this.getClient().sendReaction(...args);
+  }
+
+  async deleteReaction(...args: Parameters<ChatApi['deleteReaction']>) {
+    return await this.getClient().deleteReaction(...args);
+  }
+
   /**
    * Upload a file to this channel's file endpoint (multipart).
    *

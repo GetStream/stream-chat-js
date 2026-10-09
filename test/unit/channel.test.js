@@ -3837,6 +3837,38 @@ describe('send reaction flow', () => {
 			expect(result.message).toMatchObject({ id: messageId });
 		});
 	});
+
+	describe('channel.sendReaction (a pass-through to client.sendReaction)', () => {
+		it('forwards every argument to client.sendReaction and returns its response', async () => {
+			const response = { message: { id: messageId } };
+			const clientSendReaction = vi
+				.spyOn(client, 'sendReaction')
+				.mockResolvedValue(response);
+			const requestOptions = { signal: new AbortController().signal };
+
+			const result = await channel.sendReaction(pathParams, request, requestOptions);
+
+			expect(clientSendReaction).toHaveBeenCalledTimes(1);
+			expect(clientSendReaction).toHaveBeenCalledWith(
+				pathParams,
+				request,
+				requestOptions,
+			);
+			expect(result).toBe(response);
+			expect(queueTaskSpy).not.toHaveBeenCalled();
+		});
+
+		it('does not need the channel to have an id, since a reaction is addressed by message', async () => {
+			const clientSendReaction = vi.spyOn(client, 'sendReaction').mockResolvedValue({});
+			const distinct = client.channel('messaging', undefined, {
+				members: ['user-abc', 'other-user'],
+			});
+
+			await distinct.sendReaction(pathParams, request);
+
+			expect(clientSendReaction).toHaveBeenCalledWith(pathParams, request);
+		});
+	});
 });
 
 describe('delete reaction flow', () => {
@@ -3952,6 +3984,28 @@ describe('delete reaction flow', () => {
 
 			expect(queueTaskSpy).not.toHaveBeenCalled();
 			expect(result.message).toMatchObject({ id: messageId });
+		});
+	});
+
+	describe('channel.deleteReaction (a pass-through to client.deleteReaction)', () => {
+		it('forwards every argument to client.deleteReaction and returns its response', async () => {
+			const response = { message: { id: messageId } };
+			const clientDeleteReaction = vi
+				.spyOn(client, 'deleteReaction')
+				.mockResolvedValue(response);
+			const requestOptions = { signal: new AbortController().signal };
+
+			const result = await channel.deleteReaction(request, undefined, requestOptions);
+
+			expect(clientDeleteReaction).toHaveBeenCalledTimes(1);
+			expect(clientDeleteReaction).toHaveBeenCalledWith(
+				request,
+				undefined,
+				requestOptions,
+			);
+			expect(result).toBe(response);
+			expect(queueTaskSpy).not.toHaveBeenCalled();
+			expect(deleteReactionSpy).not.toHaveBeenCalled();
 		});
 	});
 });
