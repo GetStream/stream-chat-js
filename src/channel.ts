@@ -1888,6 +1888,11 @@ export class Channel extends ChannelApi {
     this.cid = serverCid;
     const isStoredUnderOldCid =
       storedUnder !== serverCid && channelManager.get(storedUnder) === this;
+    // A channel the app disconnected is done with: this instance takes its place rather than being
+    // superseded by it, as `ensure()` would give a fresh instance for its cid.
+    if (channelManager.get(serverCid)?.pendingDisposal) {
+      channelManager.removeChannel(serverCid);
+    }
     const stored = channelManager.get(serverCid);
 
     if (!stored) {

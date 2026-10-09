@@ -299,6 +299,20 @@ describe('ChannelManager channel store', () => {
       expect(created.pendingDisposal).toBe(false);
     });
 
+    it('takes the place of a stored instance the app disconnected instead of being superseded by it', async () => {
+      const { created, stored } = setup();
+      stored.disconnect();
+      created.messageComposer.textComposer.setText('draft');
+      respond();
+
+      await created.query({}, 'latest');
+
+      expect(client.channelManager.get(REAL_CID)).toBe(created);
+      expect(created.supersededBy).toBeUndefined();
+      expect(created.messageComposer.textComposer.text).toBe('draft');
+      expect(created.data?.custom?.name).toBe('Fresh');
+    });
+
     it("keeps the stored instance's local messages", async () => {
       const { created, stored } = setup();
       stored.messagePaginator.ingestItem(message('failed', { status: 'failed' }));

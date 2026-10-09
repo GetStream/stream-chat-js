@@ -1166,7 +1166,7 @@ describe('ChannelManager', () => {
       expect(ensureWatched).not.toHaveBeenCalled();
     });
 
-    it('never re-watches a channel pending disposal', async () => {
+    it('gives an event for a channel the app disconnected a live instance, never the disconnected one', async () => {
       const ch = makeChannel('messaging:disposing');
       ch.watchStatus = ChannelWatchStatus.WasWatching;
       const { ingestItem } = routeEventFor(ch);
@@ -1174,8 +1174,22 @@ describe('ChannelManager', () => {
 
       client.dispatchEvent({ type: 'message.new', cid: ch.cid });
 
-      await vi.waitFor(() => expect(ingestItem).toHaveBeenCalledWith(ch));
-      expect(ensureWatched).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(ingestItem).toHaveBeenCalled());
+      const fresh = client.channelManager.get(ch.cid);
+      expect(fresh).not.toBe(ch);
+      expect(fresh?.pendingDisposal).toBe(false);
+      expect(ingestItem).toHaveBeenCalledWith(fresh);
+      expect(ingestItem).not.toHaveBeenCalledWith(ch);
+      expect(ensureWatched.mock.contexts).toEqual([fresh]);
+    });
+
+    it('does not list a channel the app disconnected', () => {
+      const ch = makeChannel('messaging:disconnected');
+      client.channelManager.getOrCreateChannel(ch.cid, () => ch);
+      const paginator = new ChannelPaginator({ client });
+      ch.disconnect();
+
+      expect(paginator.ingestItem(ch)).toBe(false);
     });
 
     it('does not re-watch a channel that is being hidden', async () => {

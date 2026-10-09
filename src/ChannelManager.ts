@@ -90,12 +90,15 @@ const getCidFromEvent = (event: PipelineEvent): string | undefined => {
   return event.channel?.cid;
 };
 
+// A channel the app disconnected counts as not stored: it stays in the store only until the next
+// `releaseUnusedChannels()`, and an event that makes its cid relevant again gets a live instance.
 const getCachedChannelFromEvent = (
   event: PipelineEvent,
   channelManager: ChannelManager,
 ): Channel | undefined => {
   const cid = getCidFromEvent(event);
-  return cid ? channelManager.get(cid) : undefined;
+  const channel = cid ? channelManager.get(cid) : undefined;
+  return channel?.pendingDisposal ? undefined : channel;
 };
 
 const removeItem: EventHandlerPipelineHandler<EventHandlerContext> = ({
@@ -459,7 +462,8 @@ export class ChannelManager extends WithSubscriptions {
    * The instance a channel list should show for `channel`: the one that superseded it, else the one
    * stored under its cid, else `channel` itself. A list never puts another instance in place of the
    * stored one, which would leave the stored one out of the store, unfinished and without events.
-   * `undefined` for a disconnected instance that isn't the stored one: there is nothing to show.
+   * `undefined` when that instance is disconnected (`pendingDisposal`), stored or not: it receives
+   * no events, and a list that already shows it drops it at the next `releaseUnusedChannels()`.
    *
    * @internal
    */
@@ -467,9 +471,7 @@ export class ChannelManager extends WithSubscriptions {
     const candidate = channel.supersededBy ?? channel;
     const stored = this.get(candidate.cid);
     const resolved = stored ?? candidate;
-    const resolvedIsCandidatePendingDisposal =
-      resolved !== stored && resolved.pendingDisposal;
-    if (resolvedIsCandidatePendingDisposal) return undefined;
+    if (resolved.pendingDisposal) return undefined;
     if (resolved !== channel) {
       logger
         .withExtraTags('resolveListedChannel', channel.cid)
