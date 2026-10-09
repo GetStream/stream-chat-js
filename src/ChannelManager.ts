@@ -631,6 +631,9 @@ export class ChannelManager extends WithSubscriptions {
    * - `previous`'s composer, when `previous` is open and `successor` isn't: the user is typing in
    *   `previous`, and nobody in `successor`. When both are open, neither composer is overwritten.
    *
+   * `successor` is marked watched only when the query asked to watch (`watch: true`): the server then
+   * watches the cid for this connection. A query without a watch leaves its watch status as it was.
+   *
    * `previous`'s own entry (`storedUnder`, its temporary cid) is dropped first, without disconnecting
    * it: its query is still being applied to it and it may be on screen. It is marked superseded
    * (`state.supersededBy`) so its holders switch over, and tracked here until logout, so the SDK
@@ -647,7 +650,9 @@ export class ChannelManager extends WithSubscriptions {
     if (storedUnder && this.get(storedUnder) === previous) {
       this.channelStore.detach(storedUnder);
     }
-    this.client.hydrateChannels([response], {}, { watch });
+    // `false`, not `undefined`: `hydrateChannels` would take a missing `watch` as "watched if
+    // connected", and this query may not have asked the server to watch
+    this.client.hydrateChannels([response], {}, { watch: watch === true });
     successor.messagePaginator.batch(
       () => {
         for (const message of previous.messagePaginator.items ?? []) {
