@@ -375,7 +375,25 @@ describe('MessageSearchSource', () => {
       {
         filter_conditions: { cid: { $in: ['cid2'] }, type: 'abc' },
         sort: [{ direction: -1, field: 'last_message_at' }],
+        watch: false,
       },
+      {},
+      withoutSignal,
+    );
+  });
+
+  it('watches the channels it queries when channelQueryOptions ask for it', async () => {
+    searchSource.channelQueryOptions = { watch: true };
+    searchMock.mockResolvedValueOnce({
+      results: [{ message: generateMsg({ cid: 'cid2' }) }],
+      next: undefined,
+    } as any);
+
+    // @ts-expect-error protected access
+    await searchSource.query('query');
+
+    expect(queryChannelsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ watch: true }),
       {},
       withoutSignal,
     );
@@ -418,6 +436,7 @@ describe('MessageSearchSource', () => {
       {
         filter_conditions: { cid: { $in: ['cid2'] }, type: 'efg' },
         sort: [{ direction: -1, field: 'last_message_at' }],
+        watch: false,
       },
       {},
       withoutSignal,

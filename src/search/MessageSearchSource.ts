@@ -63,6 +63,11 @@ export type MessageSearchSourceOptions = SearchSourceOptions & {
   /** Static base filters for the follow-up query that hydrates unknown channels. */
   channelQueryFilters?: ChannelFilters;
   channelQuerySort?: SortParamRequest[];
+  /**
+   * Options for the follow-up query that hydrates unknown channels. Those channels are not watched
+   * unless `watch: true` is passed: a result is a preview, and opening one is what watches its
+   * channel.
+   */
   channelQueryOptions?: Omit<ChannelOptions, 'limit' | 'offset'>;
 };
 
@@ -272,6 +277,7 @@ export class MessageSearchSource<
         {
           filter_conditions: channelQueryFilters,
           sort: [{ direction: -1, field: 'last_message_at' }],
+          watch: false,
           ...this.channelQueryOptions,
         },
         {},
