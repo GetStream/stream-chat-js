@@ -1968,9 +1968,12 @@ export abstract class BasePaginator<T, Q> {
   protected locateByItemInInterval({
     item,
     interval,
+    plateauScan = true,
   }: {
     item: T;
     interval: Interval | LogicalInterval;
+    /** Walk the interval for an item the binary search missed. Off when it cannot be there. */
+    plateauScan?: boolean;
   }): ItemLocation | null {
     const ids = interval.itemIds;
 
@@ -1982,7 +1985,7 @@ export abstract class BasePaginator<T, Q> {
         this.getItemId(item1) === this.getItemId(item2),
       // items in intervals are not sorted by effectiveComparator
       compare: this.itemOrderComparator.bind(this),
-      plateauScan: true,
+      plateauScan,
     });
   }
 
@@ -2008,22 +2011,21 @@ export abstract class BasePaginator<T, Q> {
   }
 
   protected locateByItemInIntervals(item: T): ItemCoordinates['interval'] | undefined {
-    // Two different questions, asked in this order:
-    //  1. which interval's sort bounds does this item fall into (`locateIntervalForItem`)? The only
-    //     one that can answer for an item this paginator has never stored.
-    //  2. which interval actually lists this id (`findIntervalHoldingItem`)?
-    //
-    // They disagree when an item is updated in place: the interval holds the very object being
-    // ingested, so it already carries the item's NEW sort value, and an item that moved outside its
-    // own window's bounds is no longer found by (1) — even though (2) still lists it. The fallback
-    // is what lets `ingestItem` take the old entry out before re-inserting; without it the id stays
-    // behind in that interval and ends up stored in two places at once.
-    const interval =
-      this.locateIntervalForItem(item) ?? this.findIntervalHoldingItem(item);
-    if (!interval) return undefined;
-    const itemLocation = this.locateByItemInInterval({ item, interval });
-    if (!itemLocation) return undefined;
-    return { interval, ...itemLocation };
+    const locateIn = (interval: AnyInterval | undefined, plateauScan?: boolean) => {
+      const location =
+        interval && this.locateByItemInInterval({ item, interval, plateauScan });
+      return interval && location ? { interval, ...location } : undefined;
+    };
+    const boundsInterval = this.locateIntervalForItem(item);
+    // Not held by this list, so it is in no interval. It goes where it should be located.
+    if (!this._itemIndex.has(this.getItemId(item)))
+      return locateIn(boundsInterval, false);
+    // Item held by some interval and has not moved. It goes where its sort value puts it, found without a scan.
+    const inBounds = locateIn(boundsInterval);
+    if (inBounds && inBounds.currentIndex > -1) return inBounds;
+    // The item is held by some interval but has moved. We have to scan all intervals to find it.
+    const holdingInterval = this.findIntervalHoldingItem(item);
+    return holdingInterval ? locateIn(holdingInterval) : inBounds;
   }
 
   /**

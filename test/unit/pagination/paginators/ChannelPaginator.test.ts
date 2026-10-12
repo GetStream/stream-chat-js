@@ -1117,6 +1117,37 @@ describe('ChannelPaginator', () => {
       );
     });
 
+    it('keeps paginating after removing a channel that moved into the loaded window from the logical tail', async () => {
+      const [a, b, c, d] = ['a', 'b', 'c', 'd'].map((id, index) => {
+        const channel = new Channel(client, 'type', id, {});
+        setLastMessageAt(channel, new Date(Date.UTC(1970, 0, 10 - index * 2)));
+        return channel;
+      });
+      vi.spyOn(client, 'queryChannelsAndHydrate')
+        .mockResolvedValueOnce({ channels: [a, b], duration: '0.1ms' })
+        .mockResolvedValueOnce({ channels: [c, d], duration: '0.1ms' });
+      const paginator = new ChannelPaginator({
+        client,
+        filters: {},
+        paginatorOptions: { pageSize: 2 },
+        sort: [{ field: 'last_message_at', direction: -1 }],
+      });
+      await paginator.toTail();
+
+      // It is added with no messages yet, so it sorts below the loaded page into the logical tail.
+      const added = new Channel(client, 'type', 'added', {});
+      paginator.ingestItem(added);
+      // Its first message arrives on the same instance, so it now sorts between a and b.
+      setLastMessageAt(added, new Date(Date.UTC(1970, 0, 9)));
+      // Then it leaves the list (archived, say).
+      paginator.removeItem({ item: added });
+
+      await paginator.toTail();
+
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.items?.map((channel) => channel.id)).toEqual(['a', 'b', 'c', 'd']);
+    });
+
     it('persists only the first page, including after paginating and live reorders', async () => {
       await setUpOfflineDb({ isSynced: true });
       const [a, b, c, d] = ['a', 'b', 'c', 'd'].map((id, index) => {

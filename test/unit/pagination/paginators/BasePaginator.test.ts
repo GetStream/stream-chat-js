@@ -1765,6 +1765,65 @@ describe('BasePaginator', () => {
         ]);
       });
 
+      it('removes an item from the interval that holds it, even after it sorts into another one', async () => {
+        const index = new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id });
+        paginator = new Paginator({ itemIndex: index });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+        paginator.ingestPage({ page: [b, d], setActive: true });
+        // Parked below the loaded window, then updated in place so it now sorts inside it, the way a
+        // listed channel moves once its last message arrives.
+        const moved: TestItem = { id: 'moved', age: 1 };
+        paginator.ingestItem(moved);
+        moved.age = 22;
+
+        paginator.removeItem({ id: 'moved' });
+
+        // @ts-expect-error accessing protected property _itemIntervals
+        const intervals = Array.from(paginator._itemIntervals.values()) as {
+          itemIds: string[];
+        }[];
+        expect(intervals.some((interval) => interval.itemIds.includes('moved'))).toBe(
+          false,
+        );
+
+        // The next query reconciles against the intervals and has to finish.
+        const query = paginator.toTail();
+        await sleep(0);
+        paginator.queryResolve({ items: [x] });
+        await query.catch(() => undefined);
+        expect(paginator.isLoading).toBe(false);
+      });
+
+      it('locates unmoved and new items without scanning every interval', () => {
+        const index = new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id });
+        paginator = new Paginator({ itemIndex: index });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+        const stored: TestItem = { id: 'stored', age: 22 };
+        paginator.ingestPage({ page: [b, stored, d], setActive: true });
+        // @ts-expect-error spying on a protected method
+        const scan = vi.spyOn(paginator, 'findIntervalHoldingItem');
+        // @ts-expect-error spying on a protected method
+        const search = vi.spyOn(paginator, 'locateByItemInInterval');
+
+        // Updated in place without changing where it sorts.
+        stored.name = 'renamed';
+        paginator.ingestItem(stored);
+        expect(scan).not.toHaveBeenCalled();
+
+        // No interval holds it, so its position is found without walking the interval for it.
+        search.mockClear();
+        paginator.ingestItem({ id: 'new', age: 21 });
+        expect(search).toHaveBeenCalledWith(
+          expect.objectContaining({ plateauScan: false }),
+        );
+        expect(scan).not.toHaveBeenCalled();
+        expect(paginator.items?.map(({ id }) => id)).toEqual(['b', 'stored', 'new', 'd']);
+      });
+
       it('merges all the overlapping anchored intervals, parts of logical intervals with target interval', () => {
         let keys: string[] = [];
         paginator.ingestPage({ page: [c, d], setActive: true });
