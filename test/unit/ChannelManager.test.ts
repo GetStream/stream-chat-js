@@ -1361,6 +1361,26 @@ describe('ChannelManager', () => {
     });
   });
 
+  describe('event message.deleted', () => {
+    it('re-sorts a loaded channel on a hard delete only', async () => {
+      const cid = 'messaging:deleted-1';
+      const channel = makeChannel(cid);
+      client.channelManager.getOrCreateChannel(cid, () => channel);
+      const channelManager = useClientManager({
+        paginators: [new ChannelPaginator({ client })],
+      });
+      channelManager.registerSubscriptions();
+      const ingestChannel = vi.spyOn(channelManager, 'ingestChannel');
+
+      // events are handled in order, so once the hard delete is handled the soft one was too
+      client.dispatchEvent({ type: 'message.deleted', cid, hard_delete: false });
+      client.dispatchEvent({ type: 'message.deleted', cid, hard_delete: true });
+
+      await vi.waitFor(() => expect(ingestChannel).toHaveBeenCalled());
+      expect(ingestChannel).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('event channel.hidden', () => {
     const seed = (paginator: ChannelPaginator, channels: Channel[]) =>
       paginator.setItems({

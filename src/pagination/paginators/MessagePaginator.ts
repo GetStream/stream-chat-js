@@ -297,13 +297,29 @@ export class MessagePaginator extends MessageIntervalPaginator {
   ): ReturnType<MessageIntervalPaginator['removeItem']> {
     const removedId =
       params.id ?? (params.item ? this.getItemId(params.item) : undefined);
-    const wasLatest =
-      !!removedId && this.aggregateState.getLatestValue().lastMessage?.id === removedId;
+    const { lastMessage, seededLastMessageAt } = this.aggregateState.getLatestValue();
+    const wasLatest = !!removedId && lastMessage?.id === removedId;
     const result = super.removeItem(params);
     if (wasLatest) {
       // The tracked latest was hard-removed; fall back to the newest still-loaded message that
       // passes the filter. `trackLastMessage` cannot do this (it only advances), so recompute here.
-      this.aggregateState.partialNext({ lastMessage: this.recomputeLastMessage() });
+      const previous = this.recomputeLastMessage();
+      const previousAt = getMessageCreatedAtTimestamp(previous);
+      const removedAt = getMessageCreatedAtTimestamp(lastMessage);
+      const isSeedFromRemovedMessage =
+        seededLastMessageAt !== null &&
+        removedAt !== null &&
+        seededLastMessageAt <= removedAt;
+      // The server moves `last_message_at` back to the previous message without sending it, so the
+      // seed takes the previous loaded message's time. With none loaded the new value is unknown,
+      // and the seed stays.
+      this.aggregateState.partialNext({
+        lastMessage: previous,
+        seededLastMessageAt:
+          isSeedFromRemovedMessage && previousAt !== null
+            ? previousAt
+            : seededLastMessageAt,
+      });
     }
     return result;
   }

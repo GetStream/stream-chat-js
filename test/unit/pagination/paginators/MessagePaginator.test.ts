@@ -2174,6 +2174,63 @@ describe('MessagePaginator', () => {
       });
     });
 
+    describe('hard-removing the last message', () => {
+      it('moves the sort key back to the previous message', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        // the server's last_message_at is the message about to be removed
+        paginator.seedLastMessageAt(convertDateToTimestamp('2020-01-02T00:00:00.000Z'));
+        paginator.ingestPage({
+          page: [msg('m1', '01'), msg('m2', '02')],
+          isHead: true,
+          isTail: true,
+          setActive: true,
+        });
+
+        paginator.removeItem({ id: 'm2' });
+
+        expect(paginator.lastMessage?.id).toBe('m1');
+        expect(paginator.lastMessageAt).toBe(
+          convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
+        );
+      });
+
+      it('keeps a seed newer than the removed message', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        // a newer message exists on the server that is not loaded
+        paginator.seedLastMessageAt(convertDateToTimestamp('2020-01-05T00:00:00.000Z'));
+        paginator.ingestPage({
+          page: [msg('m1', '01'), msg('m2', '02')],
+          isHead: true,
+          isTail: true,
+          setActive: true,
+        });
+
+        paginator.removeItem({ id: 'm2' });
+
+        expect(paginator.lastMessageAt).toBe(
+          convertDateToTimestamp('2020-01-05T00:00:00.000Z'),
+        );
+      });
+
+      it('keeps the seed when no previous message is loaded', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        // older messages exist on the server, but only the latest is loaded
+        paginator.seedLastMessageAt(convertDateToTimestamp('2020-01-02T00:00:00.000Z'));
+        paginator.ingestPage({
+          page: [msg('m2', '02')],
+          isHead: true,
+          setActive: true,
+        });
+
+        paginator.removeItem({ id: 'm2' });
+
+        expect(paginator.lastMessage).toBeNull();
+        expect(paginator.lastMessageAt).toBe(
+          convertDateToTimestamp('2020-01-02T00:00:00.000Z'),
+        );
+      });
+    });
+
     describe('message.new routing (replaces the isUpToDate flag)', () => {
       it('appends a newer message when the head window is active', () => {
         const paginator = new MessagePaginator({ channel, itemIndex });
