@@ -1503,6 +1503,47 @@ describe('MessagePaginator', () => {
       expect(paginator.items?.find((m) => m.id === 'a1')?.user?.name).toBe('Renamed A');
     });
 
+    it('renames the author of the last message', () => {
+      const paginator = new MessagePaginator({ channel, itemIndex });
+      paginator.ingestPage({
+        page: [
+          createMessage({
+            id: 'a1',
+            user: { id: 'A' },
+            created_at: convertDateToTimestamp('2021-01-01T00:00:00.000Z'),
+          }),
+        ],
+        isHead: true,
+        isTail: true,
+        setActive: true,
+      });
+
+      paginator.reflectUserUpdate({ id: 'A', name: 'Renamed A' });
+
+      expect(paginator.lastMessage?.user?.name).toBe('Renamed A');
+    });
+
+    it('leaves the last message alone when another user is renamed', () => {
+      const paginator = new MessagePaginator({ channel, itemIndex });
+      paginator.ingestPage({
+        page: [
+          createMessage({
+            id: 'b1',
+            user: { id: 'B', name: 'B' },
+            created_at: convertDateToTimestamp('2021-01-01T00:00:00.000Z'),
+          }),
+        ],
+        isHead: true,
+        isTail: true,
+        setActive: true,
+      });
+      const lastMessage = paginator.lastMessage;
+
+      paginator.reflectUserUpdate({ id: 'A', name: 'Renamed A' });
+
+      expect(paginator.lastMessage).toBe(lastMessage);
+    });
+
     it('skips messages already carrying the same user object, so siblings are not dirtied back', () => {
       // Two collections over ONE store, as channel.messagePaginator and pinnedMessagesPaginator
       // are. Both run reflectUserUpdate for the same event; without the reference guard the second
@@ -1548,6 +1589,41 @@ describe('MessagePaginator', () => {
       expect(second.getItem('a1')?.user?.name).toBe('Renamed A');
 
       unsubscribe();
+    });
+  });
+
+  describe('last message refreshed from the store', () => {
+    const setup = () => {
+      const store = new EntityStore<LocalMessage>({ getEntityId: (m) => m.id });
+      const linkedChannel = {
+        ...channel,
+        getClient: () => ({ messageStore: store, userId: 'me' }),
+      } as unknown as Channel;
+      const paginator = new MessagePaginator({ channel: linkedChannel });
+      const message = (id: string, day: string) =>
+        createMessage({
+          cid: linkedChannel.cid,
+          id,
+          user: { id: 'A' },
+          created_at: convertDateToTimestamp(`2021-01-${day}T00:00:00.000Z`),
+        });
+      return { message, paginator, store };
+    };
+
+    it('reflects a write to the store that does not go through the paginator', () => {
+      const { message, paginator, store } = setup();
+      const latest = message('m1', '01');
+      paginator.ingestPage({
+        page: [latest],
+        isHead: true,
+        isTail: true,
+        setActive: true,
+      });
+
+      // a soft delete writes the store directly
+      store.upsert({ ...latest, type: 'deleted' });
+
+      expect(paginator.lastMessage?.type).toBe('deleted');
     });
   });
 

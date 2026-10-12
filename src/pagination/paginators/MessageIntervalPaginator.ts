@@ -1486,7 +1486,7 @@ export class MessageIntervalPaginator extends BasePaginator<
    * re-emits the active window a single time (if it held an affected message) rather than one
    * `ingestItem` re-emit per message.
    */
-  reflectUserUpdate = (user: UserResponse) => {
+  reflectUserUpdate(user: UserResponse) {
     const activeIds = new Set((this.items ?? []).map((m) => this.getItemId(m)));
     let activeAffected = false;
     // Batch: a user rename can touch many messages; coalesce the shared-store fan-out to sibling
@@ -1504,7 +1504,7 @@ export class MessageIntervalPaginator extends BasePaginator<
         items: (this.items ?? []).map((m) => this.getItem(this.getItemId(m)) ?? m),
       });
     }
-  };
+  }
 
   /**
    * Map a timestamp to a loaded message — the first message in the latest (head) window whose

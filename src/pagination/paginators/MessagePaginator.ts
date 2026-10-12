@@ -11,7 +11,8 @@ import {
   MessageIntervalPaginator,
   type MessageQueryShape,
 } from './MessageIntervalPaginator';
-import type { LocalMessage, TimestampNS } from '../../types';
+import type { LocalMessage, TimestampNS, UserResponse } from '../../types';
+import type { EntityStoreChangeBatch } from '../../entityStore/EntityStore';
 import { asTimestampNS, nsToDate } from '../../utils/time';
 import { StateStore } from '@stream-io/state-store';
 
@@ -274,6 +275,21 @@ export class MessagePaginator extends MessageIntervalPaginator {
       for (const item of params.page) this.trackLastMessage(item);
     }
     return interval;
+  }
+
+  onEntitiesChanged(batch: EntityStoreChangeBatch) {
+    super.onEntitiesChanged(batch);
+    const { lastMessage } = this.aggregateState.getLatestValue();
+    if (!lastMessage || !batch.changedIds.has(lastMessage.id)) return;
+    const stored = this.getItem(lastMessage.id);
+    if (stored) this.aggregateState.partialNext({ lastMessage: stored });
+  }
+
+  reflectUserUpdate(user: UserResponse) {
+    super.reflectUserUpdate(user);
+    const { lastMessage } = this.aggregateState.getLatestValue();
+    if (lastMessage?.user?.id !== user.id) return;
+    this.aggregateState.partialNext({ lastMessage: { ...lastMessage, user } });
   }
 
   removeItem(
