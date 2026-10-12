@@ -1606,13 +1606,8 @@ const makeDeriveCursor =
 
     if ((ctx.queryShape as MessagePaginationParams)?.created_at_around) {
       return injectCursor(
-        deriveCreatedAtAroundPaginationFlags<
-          LocalMessage,
-          MessagePaginationParams,
-          MessageIntervalPaginator
-        >({
+        deriveCreatedAtAroundPaginationFlags<LocalMessage, MessagePaginationParams>({
           ...ctx,
-          paginator,
           page: pageWithPermittedMessages,
           requestedPageSize: requestedPageSizeAfterAdjustment,
         }),

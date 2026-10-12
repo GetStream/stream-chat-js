@@ -4144,13 +4144,9 @@ describe('MessagePaginator', () => {
       (channel[endpoint] as unknown as ReturnType<typeof vi.fn>)
         .mockReset()
         .mockResolvedValue({ messages });
+    // The latest page, seeded the way a channel opens: nothing newer to load.
     const loadNewestPage = (paginator: MessagePaginator) =>
-      paginator.ingestPage({
-        page: [m('m50', 50), m('m51', 51), m('m52', 52)],
-        isHead: true,
-        isTail: false,
-        setActive: true,
-      });
+      paginator.seedFirstPageSync([m('m50', 50), m('m51', 51), m('m52', 52)], 3);
 
     beforeEach(() => {
       (channel as unknown as { getClient: () => unknown }).getClient = () => ({
@@ -4188,8 +4184,8 @@ describe('MessagePaginator', () => {
       paginator.pageSize = 4;
       // Every loaded message is newer than the last read time, so the boundary has to be queried.
       loadNewestPage(paginator);
-      // A full page around the boundary, so there is more to load on both sides.
-      respondWith('query', [m('m19', 19), m('m20', 20), m('m21', 21), m('m22', 22)]);
+      // A full page split evenly around the boundary, so there is more to load on both sides.
+      respondWith('query', [m('m18', 18), m('m19', 19), m('m21', 21), m('m22', 22)]);
 
       expect(await paginator.jumpToTheFirstUnreadMessage()).toBe(true);
       expect(channel.query).toHaveBeenCalledWith({
@@ -4238,6 +4234,103 @@ describe('MessagePaginator', () => {
       expect(paginator.pageSize).toBeGreaterThan(5);
       expect(paginator.hasMoreHead).toBe(true);
       expect(paginator.hasMoreTail).toBe(true);
+    });
+
+    describe('jump window flags follow how the server fills an around-page', () => {
+      // The server centres the page on the target and fills a short side from the other one.
+      const page = (from: number, to: number) =>
+        Array.from({ length: to - from + 1 }, (_, i) => m(`m${from + i}`, from + i));
+      const jump = async (messageId: string, response: LocalMessage[], pageSize = 10) => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        loadNewestPage(paginator);
+        respondWith('query', response);
+        expect(await paginator.jumpToMessage(messageId, { pageSize })).toBe(true);
+        return paginator;
+      };
+
+      it.each([
+        // 5 older, 4 newer, and the even split the other way round
+        ['an even split', 'm15', page(10, 19)],
+        ['the opposite even split', 'm14', page(10, 19)],
+      ])('has more both ways after %s', async (_, target, response) => {
+        const paginator = await jump(target, response);
+        expect(paginator.hasMoreHead).toBe(true);
+        expect(paginator.hasMoreTail).toBe(true);
+      });
+
+      it('has nothing older but more newer after a jump to the oldest message', async () => {
+        const paginator = await jump('m1', page(1, 10));
+        expect(paginator.hasMoreTail).toBe(false);
+        expect(paginator.hasMoreHead).toBe(true);
+      });
+
+      it('has nothing older when the older side came back short', async () => {
+        const paginator = await jump('m3', page(1, 10));
+        expect(paginator.hasMoreTail).toBe(false);
+        expect(paginator.hasMoreHead).toBe(true);
+      });
+
+      it('has nothing newer when the newer side came back short', async () => {
+        const paginator = await jump('m28', page(20, 29));
+        expect(paginator.hasMoreHead).toBe(false);
+        expect(paginator.hasMoreTail).toBe(true);
+      });
+
+      it('has nothing either way when the page is shorter than the limit', async () => {
+        const paginator = await jump('m12', page(10, 14));
+        expect(paginator.hasMoreHead).toBe(false);
+        expect(paginator.hasMoreTail).toBe(false);
+      });
+
+      it('has more newer after a first-unread jump near the oldest messages', async () => {
+        (channel as unknown as { state: unknown }).state = {
+          read: {
+            me: {
+              first_unread_message_id: null,
+              last_read: convertDateToTimestamp('2020-01-01T00:00:30.000Z'),
+              last_read_message_id: null,
+            },
+          },
+        };
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        paginator.pageSize = 4;
+        loadNewestPage(paginator);
+        // Read up to before the first message: nothing older, the page filled from the newer side.
+        respondWith('query', page(1, 4));
+
+        expect(await paginator.jumpToTheFirstUnreadMessage()).toBe(true);
+        expect(paginator.hasMoreTail).toBe(false);
+        expect(paginator.hasMoreHead).toBe(true);
+      });
+
+      it('stays at the head when an evenly split page ends at the newest message', async () => {
+        // 4 older and 4 newer: the page alone would say "more newer", but its last item is the
+        // newest message of the loaded latest window.
+        const paginator = await jump('m48', page(44, 52), 9);
+        expect(paginator.hasMoreHead).toBe(false);
+        expect(paginator.hasMoreTail).toBe(true);
+      });
+
+      it('stays at the tail when an evenly split page starts at the oldest loaded message', async () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        loadNewestPage(paginator);
+        // The oldest messages, already paged in down to the start of the channel.
+        paginator.ingestPage({ page: page(1, 3), isHead: false, isTail: true });
+        // 4 older and 4 newer: the page alone would say "more older", but it starts at m1.
+        respondWith('query', page(1, 9));
+
+        expect(await paginator.jumpToMessage('m5', { pageSize: 9 })).toBe(true);
+        expect(paginator.hasMoreTail).toBe(false);
+        expect(paginator.hasMoreHead).toBe(true);
+      });
+
+      it('keeps the head of a loaded window the jump page merged into', async () => {
+        // Overlaps the loaded newest page (m50..m52), so the merged window ends at the dataset head.
+        const paginator = await jump('m45', page(41, 50));
+        expect(paginator.items?.at(-1)?.id).toBe('m52');
+        expect(paginator.hasMoreHead).toBe(false);
+        expect(paginator.hasMoreTail).toBe(true);
+      });
     });
   });
 });
