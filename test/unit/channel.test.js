@@ -1660,6 +1660,20 @@ describe('Channel _handleChannelEvent', function () {
 
 			expect(pinnedIds()).to.eql([]);
 		});
+
+		it('takes the channel data from the event and keeps the fields it leaves out', () => {
+			channel.data = { ...channel.data, hidden: false, updated_at: 1 };
+			const updatedAt = convertDateToTimestamp('2020-02-01T00:00:00.000Z');
+
+			channel._handleChannelEvent({
+				type: 'channel.truncated',
+				channel: { truncated_at: updatedAt, updated_at: updatedAt },
+			});
+
+			expect(channel.data.updated_at).to.equal(updatedAt);
+			expect(channel.data.truncated_at).to.equal(updatedAt);
+			expect(channel.data.hidden).to.equal(false);
+		});
 	});
 
 	describe('message.deleted', () => {

@@ -292,6 +292,20 @@ export class MessagePaginator extends MessageIntervalPaginator {
     return result;
   }
 
+  truncate(params: Parameters<MessageIntervalPaginator['truncate']>[0]) {
+    super.truncate(params);
+    const { lastMessage, seededLastMessageAt } = this.aggregateState.getLatestValue();
+    const isTruncated = (timestamp: TimestampNS | null) =>
+      timestamp !== null && timestamp < params.truncatedAt;
+    const isLastMessageTruncated = isTruncated(getMessageCreatedAtTimestamp(lastMessage));
+    const isSeedTruncated = isTruncated(seededLastMessageAt);
+    if (!isLastMessageTruncated && !isSeedTruncated) return;
+    this.aggregateState.partialNext({
+      lastMessage: isLastMessageTruncated ? this.recomputeLastMessage() : lastMessage,
+      seededLastMessageAt: isSeedTruncated ? null : seededLastMessageAt,
+    });
+  }
+
   /**
    * The still-loaded message with the greatest `created_at` that passes
    * {@link shouldAdvanceLastMessage} (skips system / thread-only per config), from the newest-loaded

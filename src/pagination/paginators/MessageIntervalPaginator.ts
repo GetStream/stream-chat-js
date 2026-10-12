@@ -1332,7 +1332,7 @@ export class MessageIntervalPaginator extends BasePaginator<
    * `isTail`/`hasMoreTail` are set; intervals entirely newer keep their flags (unloaded older
    * messages may still sit between them and the cutoff). The active window is re-emitted once.
    */
-  truncate = ({ truncatedAt }: { truncatedAt: TimestampNS }) => {
+  truncate({ truncatedAt }: { truncatedAt: TimestampNS }) {
     const cutoff = truncatedAt;
     if (!Number.isFinite(cutoff)) return;
 
@@ -1400,7 +1400,7 @@ export class MessageIntervalPaginator extends BasePaginator<
       // Nothing loaded survived the truncation.
       this.state.partialNext({ items: [] });
     }
-  };
+  }
 
   applyMessageDeletionForUser = ({
     userId,

@@ -2710,6 +2710,7 @@ export class Channel extends ChannelApi {
         }
         break;
       case 'channel.truncated': {
+        if (event.channel) channel.data = { ...channel.data, ...event.channel };
         const truncatedAt = event.channel?.truncated_at;
         if (truncatedAt != null) {
           this._setOwnUnreadCount(this.countUnread(truncatedAt));

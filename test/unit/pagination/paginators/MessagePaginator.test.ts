@@ -2015,6 +2015,87 @@ describe('MessagePaginator', () => {
         expect(paginator.items?.map((m) => m.id)).toEqual(['m1']);
         expect(partialNextSpy).not.toHaveBeenCalled();
       });
+
+      it('clears the last message and the sort key when nothing survives', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        paginator.seedLastMessageAt(convertDateToTimestamp('2020-01-01T00:00:00.000Z'));
+        paginator.ingestPage({
+          page: [msg('m1', '01'), msg('m2', '02')],
+          isHead: true,
+          isTail: true,
+          setActive: true,
+        });
+
+        paginator.truncate({
+          truncatedAt: convertDateToTimestamp('2020-01-03T00:00:00.000Z'),
+        });
+
+        expect(paginator.lastMessage).toBeNull();
+        expect(paginator.lastMessageAt).toBeNull();
+      });
+
+      it('keeps the last message when it is newer than the cutoff', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        paginator.ingestPage({
+          page: [msg('m1', '01'), msg('m5', '05')],
+          isHead: true,
+          isTail: true,
+          setActive: true,
+        });
+
+        paginator.truncate({
+          truncatedAt: convertDateToTimestamp('2020-01-03T00:00:00.000Z'),
+        });
+
+        expect(paginator.lastMessage?.id).toBe('m5');
+        expect(paginator.lastMessageAt).toBe(
+          convertDateToTimestamp('2020-01-05T00:00:00.000Z'),
+        );
+      });
+
+      it('keeps a last message newer than the cutoff that was tracked without being loaded', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        paginator.seedLastMessageAt(convertDateToTimestamp('2020-01-01T00:00:00.000Z'));
+        // a replayed offline send is tracked before its message.new is ingested
+        paginator.trackLastMessage(msg('m5', '05'));
+
+        paginator.truncate({
+          truncatedAt: convertDateToTimestamp('2020-01-03T00:00:00.000Z'),
+        });
+
+        expect(paginator.lastMessage?.id).toBe('m5');
+      });
+
+      it('clears a seed older than the cutoff when no message is loaded', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        paginator.seedLastMessageAt(convertDateToTimestamp('2020-01-01T00:00:00.000Z'));
+
+        paginator.truncate({
+          truncatedAt: convertDateToTimestamp('2020-01-03T00:00:00.000Z'),
+        });
+
+        expect(paginator.lastMessageAt).toBeNull();
+      });
+
+      it('keeps a seed newer than the cutoff', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        paginator.seedLastMessageAt(convertDateToTimestamp('2020-01-05T00:00:00.000Z'));
+        paginator.ingestPage({
+          page: [msg('m1', '01')],
+          isHead: true,
+          isTail: true,
+          setActive: true,
+        });
+
+        paginator.truncate({
+          truncatedAt: convertDateToTimestamp('2020-01-03T00:00:00.000Z'),
+        });
+
+        expect(paginator.lastMessage).toBeNull();
+        expect(paginator.lastMessageAt).toBe(
+          convertDateToTimestamp('2020-01-05T00:00:00.000Z'),
+        );
+      });
     });
 
     describe('message.new routing (replaces the isUpToDate flag)', () => {
