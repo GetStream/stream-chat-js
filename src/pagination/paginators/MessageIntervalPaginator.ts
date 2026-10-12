@@ -641,6 +641,15 @@ export class MessageIntervalPaginator extends BasePaginator<
     );
   }
 
+  /** A jump sends its own `limit`, so its head/tail flags are derived against that, not `pageSize`. */
+  protected override getRequestedPageSize(
+    queryShape: MessageQueryShape | undefined,
+  ): number {
+    return queryShape && this.isJumpQueryShape(queryShape)
+      ? (queryShape.limit ?? this.pageSize)
+      : this.pageSize;
+  }
+
   jumpToMessage = async (
     messageId: string,
     {
@@ -688,7 +697,9 @@ export class MessageIntervalPaginator extends BasePaginator<
       };
     } else {
       const result = await this.executeQuery({
-        queryShape: { id_around: messageId, limit: pageSize },
+        // Always send a limit, since the replies endpoint ignores `id_around` without one and returns the
+        // newest replies instead.
+        queryShape: { id_around: messageId, limit: pageSize ?? this.pageSize },
         ...(watch && { requestOptions: { watch: true } }),
         updateState: false,
       });

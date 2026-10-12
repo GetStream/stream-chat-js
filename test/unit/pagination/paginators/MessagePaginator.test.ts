@@ -424,7 +424,7 @@ describe('MessagePaginator', () => {
         await paginator.jumpToMessage('target', { watchChannel: true });
 
         expect(channel.query).toHaveBeenCalledWith({
-          messages: { id_around: 'target', limit: undefined },
+          messages: { id_around: 'target', limit: paginator.pageSize },
         });
       });
 
@@ -436,7 +436,7 @@ describe('MessagePaginator', () => {
         await paginator.jumpToMessage('target');
 
         expect(channel.query).toHaveBeenCalledWith({
-          messages: { id_around: 'target', limit: undefined },
+          messages: { id_around: 'target', limit: paginator.pageSize },
         });
       });
 
@@ -4127,6 +4127,117 @@ describe('MessagePaginator', () => {
       // not to `headmostItem` (which is the system message).
       paginator.removeItem({ id: 'm1' });
       expect(paginator.lastMessage?.id).toBe('m0');
+    });
+  });
+
+  describe('jump queries leave the list paginating', () => {
+    const notifications = { addError: vi.fn() };
+    const m = (id: string, minute: number) =>
+      createMessage({
+        cid: 'channel-id',
+        id,
+        created_at: convertDateToTimestamp(
+          `2020-01-01T00:${String(minute).padStart(2, '0')}:00.000Z`,
+        ),
+      });
+    const respondWith = (endpoint: 'getReplies' | 'query', messages: LocalMessage[]) =>
+      (channel[endpoint] as unknown as ReturnType<typeof vi.fn>)
+        .mockReset()
+        .mockResolvedValue({ messages });
+    const loadNewestPage = (paginator: MessagePaginator) =>
+      paginator.ingestPage({
+        page: [m('m50', 50), m('m51', 51), m('m52', 52)],
+        isHead: true,
+        isTail: false,
+        setActive: true,
+      });
+
+    beforeEach(() => {
+      (channel as unknown as { getClient: () => unknown }).getClient = () => ({
+        getReplies: channel.getReplies,
+        notifications,
+        user: { id: 'me' },
+      });
+      (channel as unknown as { state: unknown }).state = { read: {} };
+    });
+
+    it('ends loading when the jump target is not in the response', async () => {
+      const paginator = new MessagePaginator({ channel, itemIndex });
+      loadNewestPage(paginator);
+      respondWith('query', [m('m10', 10), m('m11', 11)]);
+
+      expect(await paginator.jumpToMessage('missing')).toBe(false);
+      expect(paginator.isLoading).toBe(false);
+
+      respondWith('query', [m('m49', 49)]);
+      await paginator.toTail();
+      expect(channel.query).toHaveBeenCalledTimes(1);
+    });
+
+    it('ends loading after the first-unread jump queries around the last read time', async () => {
+      (channel as unknown as { state: unknown }).state = {
+        read: {
+          me: {
+            first_unread_message_id: null,
+            last_read: convertDateToTimestamp('2020-01-01T00:20:00.000Z'),
+            last_read_message_id: null,
+          },
+        },
+      };
+      const paginator = new MessagePaginator({ channel, itemIndex });
+      paginator.pageSize = 4;
+      // Every loaded message is newer than the last read time, so the boundary has to be queried.
+      loadNewestPage(paginator);
+      // A full page around the boundary, so there is more to load on both sides.
+      respondWith('query', [m('m19', 19), m('m20', 20), m('m21', 21), m('m22', 22)]);
+
+      expect(await paginator.jumpToTheFirstUnreadMessage()).toBe(true);
+      expect(channel.query).toHaveBeenCalledWith({
+        messages: expect.objectContaining({
+          created_at_around: expect.any(Date),
+          limit: 4,
+        }),
+      });
+      expect(paginator.items?.map((message) => message.id)).toContain('m21');
+      expect(paginator.isLoading).toBe(false);
+
+      respondWith('query', [m('m18', 18)]);
+      await paginator.toTail();
+      expect(channel.query).toHaveBeenCalledTimes(1);
+    });
+
+    it('sends a limit with a thread jump, which the replies endpoint needs to honour id_around', async () => {
+      const paginator = new MessagePaginator({
+        channel,
+        itemIndex,
+        parentMessageId: 'parent-1',
+      });
+      loadNewestPage(paginator);
+      respondWith('getReplies', [m('m10', 10), m('m11', 11), m('m12', 12)]);
+
+      expect(await paginator.jumpToMessage('m11')).toBe(true);
+      expect(channel.getReplies).toHaveBeenCalledWith(
+        { parent_id: 'parent-1' },
+        expect.objectContaining({ id_around: 'm11', limit: paginator.pageSize }),
+      );
+    });
+
+    it('derives the jump window flags from the limit the jump sent, not the page size', async () => {
+      const paginator = new MessagePaginator({ channel, itemIndex });
+      loadNewestPage(paginator);
+      // A full 5-message page centred on the target: there is more on both sides.
+      respondWith('query', [
+        m('m9', 9),
+        m('m10', 10),
+        m('m11', 11),
+        m('m12', 12),
+        m('m13', 13),
+      ]);
+
+      expect(await paginator.jumpToMessage('m11', { pageSize: 5 })).toBe(true);
+      expect(paginator.pageSize).toBeGreaterThan(5);
+      expect(paginator.hasMoreHead).toBe(true);
+      expect(paginator.hasMoreTail).toBe(true);
     });
   });
 });

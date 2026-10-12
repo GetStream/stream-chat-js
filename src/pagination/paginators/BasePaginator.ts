@@ -3064,6 +3064,11 @@ export abstract class BasePaginator<T, Q> {
     return false;
   }
 
+  /** The page size a query's results are measured against when deriving the head/tail flags. */
+  protected getRequestedPageSize(_queryShape: Q | undefined): number {
+    return this.pageSize;
+  }
+
   protected getStateAfterQuery(
     stateUpdate: Partial<PaginatorState<T>>,
 
@@ -3223,7 +3228,7 @@ export abstract class BasePaginator<T, Q> {
       isFirstPage,
       keepPreviousItems,
       queryShape,
-      requestedPageSize: this.pageSize,
+      requestedPageSize: this.getRequestedPageSize(queryShape),
       results,
       updateState,
     });
@@ -3408,7 +3413,10 @@ export abstract class BasePaginator<T, Q> {
     }
 
     const state = this.getStateAfterQuery(stateUpdate, isFirstPage);
+    // `updateState` decides whether the results are committed, not whether the query is over: a
+    // caller that commits its own state must not be left with the `isLoading` executeQuery published.
     if (updateState) this.state.next(state);
+    else if (this.isLoading) this.state.partialNext({ isLoading: false });
     // Only the first page is cached and a later page cannot change it.
     if (isFirstPage) this.populateOfflineDbAfterQuery({ items: state.items, queryShape });
 

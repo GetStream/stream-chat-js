@@ -442,7 +442,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
           queryShape: {
             // `created_at_around` is a request field and still takes a `Date`.
             created_at_around: nsToDate(lastReadBoundary),
-            limit: options?.pageSize,
+            limit: options?.pageSize ?? this.pageSize,
           },
           updateState: false,
         });
