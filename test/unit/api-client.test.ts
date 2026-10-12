@@ -3,9 +3,11 @@ import { AxiosError } from 'axios';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { requiresConnectionId } from '../../src/api-client';
+import { isAlreadyExistsError, parseError } from '../../src/errors';
 import { getClientWithUser } from './test-utils/getClient';
 
 import { StreamChat } from '../../src/client';
+import { StreamAPIError } from '../../src/types';
 import type { StreamRequestOptions } from '../../src/types';
 
 describe('ApiClient request options', () => {
@@ -206,6 +208,85 @@ describe('ApiClient response shape', () => {
     }).not.toThrow();
 
     await expect(request).rejects.toThrow(URIError);
+  });
+});
+
+describe('ApiClient error wrapping', () => {
+  let client: StreamChat;
+  let requestSpy: ReturnType<typeof vi.spyOn>;
+
+  // What a second copy of axios throws - e.g. through an adapter installed from another package's
+  // copy: flagged like any axios error, but not an instance of this copy's `AxiosError`.
+  const foreignAxiosError = (status: number, data: unknown) => {
+    const error = Object.assign(new Error(`Request failed with status code ${status}`), {
+      isAxiosError: true,
+      name: 'AxiosError',
+      response: { data, headers: {}, status },
+      status,
+    });
+    expect(error).not.toBeInstanceOf(AxiosError);
+    return error;
+  };
+
+  const alreadyExists = {
+    code: 4,
+    message: 'SendMessage failed with error: "a message with ID abc already exists"',
+    StatusCode: 400,
+  };
+
+  beforeEach(() => {
+    client = getClientWithUser();
+    requestSpy = vi.spyOn(client.axiosInstance, 'request');
+  });
+
+  it('wraps an API error from this axios copy in a StreamAPIError', async () => {
+    requestSpy.mockRejectedValueOnce(
+      Object.assign(new AxiosError('Request failed with status code 400'), {
+        response: { data: alreadyExists, headers: {}, status: 400 },
+        status: 400,
+      }),
+    );
+
+    const error = await client.api
+      .sendRequest('POST', '/api/v2/chat/channels')
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(StreamAPIError);
+    expect(error).toMatchObject({ code: 4, message: alreadyExists.message, status: 400 });
+  });
+
+  it('wraps an API error from another axios copy in a StreamAPIError', async () => {
+    requestSpy.mockRejectedValueOnce(foreignAxiosError(400, alreadyExists));
+
+    const error = await client.api
+      .sendRequest('POST', '/api/v2/chat/channels')
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(StreamAPIError);
+    expect(error).toMatchObject({ code: 4, message: alreadyExists.message, status: 400 });
+    // What the message-operations failure policy keys "already exists" on.
+    expect(isAlreadyExistsError(error, parseError(error))).toBe(true);
+  });
+
+  it('retries a rate-limited request from another axios copy', async () => {
+    requestSpy
+      .mockRejectedValueOnce(
+        foreignAxiosError(429, { code: 9, message: 'Too many requests' }),
+      )
+      .mockResolvedValueOnce({ data: {}, status: 200, headers: {} });
+
+    await client.api.sendRequest('GET', '/api/v2/chat/channels');
+
+    expect(requestSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('rethrows an axios error with no Stream error body unwrapped', async () => {
+    const error = foreignAxiosError(502, '<html>Bad Gateway</html>');
+    requestSpy.mockRejectedValueOnce(error);
+
+    await expect(client.api.sendRequest('GET', '/api/v2/chat/channels')).rejects.toBe(
+      error,
+    );
   });
 });
 

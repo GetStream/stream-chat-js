@@ -1,5 +1,5 @@
-import type { AxiosRequestConfig, AxiosResponse, Method } from 'axios';
-import { AxiosError } from 'axios';
+import type { AxiosError, AxiosRequestConfig, AxiosResponse, Method } from 'axios';
+import { isAxiosError } from 'axios';
 
 import type {
   APIError,
@@ -268,7 +268,7 @@ export class ApiClient {
           delayBetweenRetries: (attemptNumber) => retryInterval(attemptNumber + 1),
           retryAttempts: 10,
           isRetryable: (error) => {
-            if (!(error instanceof AxiosError)) return false;
+            if (!isAxiosError(error)) return false;
 
             if (error.status === 429 || isTokenExpiredError(error)) return true;
 
@@ -354,8 +354,14 @@ const toAxiosRequestConfig = ({
   ...(typeof timeout === 'number' ? { timeout } : {}),
 });
 
+/**
+ * `isAxiosError` checks the flag axios sets on its errors rather than `instanceof AxiosError`: an
+ * error raised by a second copy of axios (e.g. an adapter installed from another package's copy, as
+ * `stream-chat-react-native` does) is an instance of that copy's class, so `instanceof` misses it and
+ * the error would escape unwrapped, without its Stream `code`.
+ */
 const errorIsApiError = (error: unknown): error is AxiosError<APIError> => {
-  if (!(error instanceof AxiosError)) return false;
+  if (!isAxiosError(error)) return false;
 
   return (
     typeof (error as AxiosError<APIError | undefined>).response?.data?.code === 'number'
