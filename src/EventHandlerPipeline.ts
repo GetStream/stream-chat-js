@@ -207,8 +207,9 @@ export class EventHandlerPipeline<CTX extends Record<string, unknown> = {}> {
           ctx,
         });
         if (result?.action === 'stop') return;
-      } catch {
+      } catch (error) {
         console.error(`[pipeline:${this.id}] handler failed`, {
+          error,
           handlerId: handler.id ?? 'unknown',
           handlerIndex: i,
         });
