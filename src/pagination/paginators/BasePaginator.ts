@@ -3337,6 +3337,21 @@ export abstract class BasePaginator<T, Q> {
         stateUpdate.cursor = cursor;
         stateUpdate.hasMoreTail = hasMoreTail;
         stateUpdate.hasMoreHead = hasMoreHead;
+      } else if (this.config.deriveCursor && direction && !isFirstPage) {
+        // Nothing was ingested, so there is no interval to derive from and the query only resolved
+        // the direction it paginated in. The other side keeps its cursor.
+        stateUpdate.cursor =
+          direction === 'headward'
+            ? {
+                headward: resolvedHeadward || null,
+                tailward: this.cursor?.tailward ?? null,
+              }
+            : {
+                headward: this.cursor?.headward ?? null,
+                tailward: resolvedTailward || null,
+              };
+        if (direction === 'headward') stateUpdate.hasMoreHead = !!resolvedHeadward;
+        else stateUpdate.hasMoreTail = !!resolvedTailward;
       } else {
         stateUpdate.cursor = {
           tailward: resolvedTailward || null,

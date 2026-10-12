@@ -4236,6 +4236,53 @@ describe('MessagePaginator', () => {
       expect(paginator.hasMoreTail).toBe(true);
     });
 
+    it.each([
+      ['newer', 'toHead', 'id_lt', 'm9'],
+      ['older', 'toTail', 'id_gt', 'm13'],
+    ] as const)(
+      'keeps paging the other way after an empty %s page',
+      async (_, emptyDirection, otherCursorParam, otherCursorId) => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        loadNewestPage(paginator);
+        respondWith('query', [
+          m('m9', 9),
+          m('m10', 10),
+          m('m11', 11),
+          m('m12', 12),
+          m('m13', 13),
+        ]);
+        await paginator.jumpToMessage('m11', { pageSize: 5 });
+
+        // Nothing further this way: that side ends, the other keeps its cursor.
+        respondWith('query', []);
+        await paginator[emptyDirection]();
+        const otherWay = emptyDirection === 'toHead' ? 'toTail' : 'toHead';
+        expect(
+          emptyDirection === 'toHead' ? paginator.hasMoreHead : paginator.hasMoreTail,
+        ).toBe(false);
+
+        respondWith('query', []);
+        await paginator[otherWay]();
+        expect(channel.query).toHaveBeenCalledWith({
+          messages: expect.objectContaining({ [otherCursorParam]: otherCursorId }),
+        });
+      },
+    );
+
+    it('has nothing either way when the first page of a list comes back empty', async () => {
+      const paginator = new MessagePaginator({
+        channel,
+        itemIndex,
+        parentMessageId: 'parent-1',
+      });
+      respondWith('getReplies', []);
+
+      await paginator.toTail();
+
+      expect(paginator.hasMoreHead).toBe(false);
+      expect(paginator.hasMoreTail).toBe(false);
+    });
+
     describe('jump window flags follow how the server fills an around-page', () => {
       // The server centres the page on the target and fills a short side from the other one.
       const page = (from: number, to: number) =>
