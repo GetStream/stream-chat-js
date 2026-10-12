@@ -1411,6 +1411,29 @@ describe('ChannelManager', () => {
         expect(regular.items?.map((c) => c.cid)).toEqual([cid]);
       });
     });
+
+    it.each(['message.new', 'notification.message_new'] as const)(
+      're-adds the channel on %s, which unhides it on the server without channel.visible',
+      async (type) => {
+        const cid = `messaging:hidden-${type.replace('.', '-')}`;
+        const channel = makeChannel(cid);
+        client.channelManager.getOrCreateChannel(cid, () => channel);
+
+        const regular = new ChannelPaginator({ client });
+        const channelManager = useClientManager({ paginators: [regular] });
+        channelManager.registerSubscriptions();
+
+        client.dispatchEvent({ type: 'channel.hidden', cid } as const);
+        await vi.waitFor(() => expect(regular.items ?? []).toEqual([]));
+
+        client.dispatchEvent({ type, cid });
+
+        await vi.waitFor(() => {
+          expect(channel.data?.hidden).toBe(false);
+          expect(regular.items?.map((c) => c.cid)).toEqual([cid]);
+        });
+      },
+    );
   });
 
   describe('channel resolution from the event', () => {

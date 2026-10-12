@@ -2414,6 +2414,15 @@ export class Channel extends ChannelApi {
       .debug(`Received an event of type "${event.type}".`, { event });
 
     const channelState = channel.state;
+
+    // The server unhides a channel on any new message without sending `channel.visible`.
+    if (
+      (event.type === 'message.new' || event.type === 'notification.message_new') &&
+      channel.data?.hidden
+    ) {
+      channel.data = { ...channel.data, hidden: false };
+    }
+
     switch (event.type) {
       case 'typing.start':
         if (event.user?.id) {
