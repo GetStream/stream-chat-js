@@ -8,6 +8,7 @@ import {
   DEFAULT_PAGINATION_OPTIONS,
   type FilterBuilderGenerators,
   formatMessage,
+  type Interval,
   PaginatorCursor,
   type StreamChat,
 } from '../../../../src';
@@ -734,6 +735,98 @@ describe('ChannelPaginator', () => {
       // @ts-expect-error using undeclared custom property
       channel1.data!.custom = { nested: 'y' };
       expect(paginator.matchesFilter(channel1)).toBeFalsy();
+    });
+  });
+
+  describe('unchanged items', () => {
+    const setup = () => {
+      const newer = new Channel(client, 'type', 'unchanged-newer', {});
+      setLastMessageAt(newer, new Date('1971-01-01T00:00:00.000Z'));
+      const older = new Channel(client, 'type', 'unchanged-older', {});
+      setLastMessageAt(older, new Date('1970-01-01T00:00:00.000Z'));
+      const paginator = new ChannelPaginator({ client, filters: {} });
+      paginator.setItems({
+        valueOrFactory: [newer, older],
+        isFirstPage: true,
+        isLastPage: true,
+      });
+      return { newer, older, paginator };
+    };
+
+    it('keeps the items array when an ingested channel stays in place', () => {
+      const { newer, paginator } = setup();
+      const items = paginator.items;
+
+      paginator.ingestItem(newer);
+
+      expect(paginator.items).toBe(items);
+    });
+
+    it('publishes a new items array when the order changes', () => {
+      const { older, paginator } = setup();
+      const items = paginator.items;
+
+      setLastMessageAt(older, new Date('1972-01-01T00:00:00.000Z'));
+      paginator.boost(older.cid);
+      paginator.ingestItem(older);
+
+      expect(paginator.items).not.toBe(items);
+      expect(paginator.items?.map((c) => c.id)).toEqual([
+        'unchanged-older',
+        'unchanged-newer',
+      ]);
+    });
+
+    it('keeps the items array when setItems gets the same channels', () => {
+      const { newer, older, paginator } = setup();
+      const items = paginator.items;
+
+      paginator.setItems({
+        valueOrFactory: [newer, older],
+        isFirstPage: true,
+        isLastPage: true,
+      });
+
+      expect(paginator.items).toBe(items);
+    });
+
+    it('keeps the items array when a page with the same channels is ingested', () => {
+      const { newer, older, paginator } = setup();
+      const items = paginator.items;
+
+      paginator.ingestPage({
+        page: [newer, older],
+        isHead: true,
+        isTail: true,
+        setActive: true,
+      });
+
+      expect(paginator.items).toBe(items);
+    });
+
+    it('keeps the items array when the active interval is activated again', () => {
+      const { paginator } = setup();
+      const items = paginator.items;
+
+      paginator.setActiveInterval(paginator.itemIntervals[0] as Interval);
+
+      expect(paginator.items).toBe(items);
+    });
+
+    it('keeps the items array when a refresh returns the same channels, and still ends loading', async () => {
+      const { newer, older, paginator } = setup();
+      vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
+        channels: [newer, older],
+        duration: '0.1ms',
+      });
+      await paginator.toTail();
+      const items = paginator.items;
+
+      // the refresh reconnect recovery runs
+      await paginator.toTail({ keepPreviousItems: true, reset: 'yes' });
+
+      expect(paginator.items).toBe(items);
+      expect(paginator.isLoading).toBe(false);
     });
   });
 

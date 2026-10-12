@@ -32,6 +32,13 @@ import type { FieldToDataResolver, PathResolver } from '../types.normalization';
 import { resolveDotPathValue } from '../utility.normalization';
 import { isEqual } from '../../utils/mergeWith/mergeWithCore';
 
+const hasSameItems = (current: Channel[] | undefined, next: Channel[] | undefined) => {
+  if (current === next) return false;
+  if (!current || !next || current.length !== next.length) return false;
+  for (let i = 0; i < next.length; i++) if (current[i] !== next[i]) return false;
+  return true;
+};
+
 const DEFAULT_BACKEND_SORT: SortParamRequest[] = [
   { direction: -1, field: 'last_message_at' },
   { direction: -1, field: 'updated_at' },
@@ -357,6 +364,12 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       memberUserNameFilterResolver,
       dataFieldFilterResolver,
     ]);
+    // since channels are reactive objects, we only really care about updating the
+    // list if their order of membership in the list changes.
+    this.state.addPreprocessor((next, previous) => {
+      if (previous && hasSameItems(previous.items, next.items))
+        next.items = previous.items;
+    });
   }
 
   /**
