@@ -165,16 +165,9 @@ const hiddenFilterResolver: FieldToDataResolver<Channel> = {
 
 const lastUpdatedFilterResolver: FieldToDataResolver<Channel> = {
   matchesField: (field) => field === 'last_updated',
-  resolve: (channel) => {
-    // combination of last_message_at and updated_at — both already wire timestamps, so they are
-    // directly comparable. Deriving one of them through `new Date(...).getTime()` would put the two
-    // in different units and make `updated_at` win every comparison.
-    const lastMessageAt = channel.messagePaginator.lastMessageAt ?? null;
-    const updatedAt = channel.data?.updated_at;
-    return lastMessageAt !== null && updatedAt !== undefined
-      ? Math.max(lastMessageAt, updatedAt)
-      : (lastMessageAt ?? updatedAt);
-  },
+  // the server uses the creation time for a channel without messages
+  resolve: (channel) =>
+    channel.messagePaginator.lastMessageAt ?? channel.data?.created_at,
 };
 
 const membersFilterResolver: FieldToDataResolver<Channel> = {

@@ -503,20 +503,27 @@ describe('ChannelPaginator', () => {
           client,
           filters: { last_updated: new Date(1000).toISOString() },
         });
-        channel1.data = { updated_at: undefined };
+        channel1.data = { created_at: undefined };
         setLastMessageAt(channel1, new Date(1000));
 
         expect(paginator.matchesFilter(channel1)).toBeTruthy();
 
         channel1.data = {
-          updated_at: convertDateToTimestamp(new Date(1000).toISOString()),
+          created_at: convertDateToTimestamp(new Date(1000).toISOString()),
         };
         setLastMessageAt(channel1, null);
 
         expect(paginator.matchesFilter(channel1)).toBeTruthy();
 
-        channel1.data = { updated_at: undefined };
+        channel1.data = { created_at: undefined };
         setLastMessageAt(channel1, null);
+        expect(paginator.matchesFilter(channel1)).toBeFalsy();
+
+        // the server ignores `updated_at` for `last_updated`
+        channel1.data = {
+          created_at: undefined,
+          updated_at: convertDateToTimestamp(new Date(1000).toISOString()),
+        };
         expect(paginator.matchesFilter(channel1)).toBeFalsy();
       });
 
@@ -568,7 +575,7 @@ describe('ChannelPaginator', () => {
           filters: { last_updated: { [operator]: new Date(1000).toISOString() } },
         });
 
-        channel1.data = { updated_at: undefined };
+        channel1.data = { created_at: undefined };
         scenarios.forEach(({ val, expected }) => {
           setLastMessageAt(channel1, new Date(val));
           expect(paginator.matchesFilter(channel1)).toBe(expected);
@@ -577,12 +584,12 @@ describe('ChannelPaginator', () => {
         setLastMessageAt(channel1, null);
         scenarios.forEach(({ val, expected }) => {
           channel1.data = {
-            updated_at: convertDateToTimestamp(new Date(val).toISOString()),
+            created_at: convertDateToTimestamp(new Date(val).toISOString()),
           };
           expect(paginator.matchesFilter(channel1)).toBe(expected);
         });
 
-        channel1.data = { updated_at: undefined };
+        channel1.data = { created_at: undefined };
         setLastMessageAt(channel1, null);
         expect(paginator.matchesFilter(channel1)).toBe(false);
       });
