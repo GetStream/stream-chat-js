@@ -1407,6 +1407,21 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@stream-io/node-sdk@npm:^0.8.10":
+  version: 0.8.10
+  resolution: "@stream-io/node-sdk@npm:0.8.10"
+  dependencies:
+    "@types/jsonwebtoken": "npm:^9.0.10"
+    jsonwebtoken: "npm:^9.0.3"
+  peerDependencies:
+    "@stream-io/openai-realtime-api": ~0.1.3 || ~0.2.0 || ~0.3.0 || ~0.4.0
+  peerDependenciesMeta:
+    "@stream-io/openai-realtime-api":
+      optional: true
+  checksum: 10c0/791ada53fe4eb0b14434b22298ae9a73c06db17764b255a501483745ab3896244559036e93b91aa28814a0f7890a3270318d0362b3cb5370bf7fce7c278b13f7
+  languageName: node
+  linkType: hard
+
 "@tufjs/canonical-json@npm:2.0.0":
   version: 2.0.0
   resolution: "@tufjs/canonical-json@npm:2.0.0"
@@ -1459,6 +1474,16 @@ __metadata:
   version: 0.0.29
   resolution: "@types/json5@npm:0.0.29"
   checksum: 10c0/6bf5337bc447b706bb5b4431d37686aa2ea6d07cfd6f79cc31de80170d6ff9b1c7384a9c0ccbc45b3f512bae9e9f75c2e12109806a15331dc94e8a8db6dbb4ac
+  languageName: node
+  linkType: hard
+
+"@types/jsonwebtoken@npm:^9.0.10":
+  version: 9.0.10
+  resolution: "@types/jsonwebtoken@npm:9.0.10"
+  dependencies:
+    "@types/ms": "npm:*"
+    "@types/node": "npm:*"
+  checksum: 10c0/0688ac8fb75f809201cb7e18a12b9d80ce539cb9dd27e1b01e11807cb1a337059e899b8ee3abc3f2c9417f02e363a3069d9eab9ef9724b1da1f0e10713514f94
   languageName: node
   linkType: hard
 
@@ -7224,6 +7249,7 @@ __metadata:
     "@eslint/js": "npm:^9.39.4"
     "@semantic-release/changelog": "npm:^6.0.3"
     "@semantic-release/git": "npm:^10.0.1"
+    "@stream-io/node-sdk": "npm:^0.8.10"
     "@types/jsonwebtoken": "npm:^9.0.8"
     "@types/node": "npm:^22.19.19"
     "@types/sinon": "npm:^10.0.6"
