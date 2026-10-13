@@ -752,10 +752,11 @@ export abstract class BasePaginator<T, Q> {
    * interval).
    *
    * NOTE: this deliberately uses the head-*most loaded* interval rather than requiring the
-   * `isHead` flag — the query/hydration seed does not reliably mark a freshly loaded latest page
-   * as `isHead`, so an isHead-only check would miss channel-list channels entirely. The trade-off
-   * is that after jumping to an older window with the latest window not loaded, this reports that
-   * older window as "latest" (best effort). Use for "latest"-derived reads: last message, unread
+   * `isHead` flag, so it also answers for a window loaded without knowing where it sits (a page set
+   * directly with `ingestPage`/`setItems`). The trade-off: while only a jumped-to older window is
+   * loaded and the newest window never was, this reports that older window as "latest" (best
+   * effort). Once a newest page arrives it is kept as the head window under the jumped-to one (see
+   * `mergeNewestPage`), and this returns it. Use for "latest"-derived reads: last message, unread
    * counting, delivery candidates, channel-list previews.
    */
   get headItems(): T[] {
@@ -3066,6 +3067,14 @@ export abstract class BasePaginator<T, Q> {
     return false;
   }
 
+  /**
+   * Whether a first page queried with this shape is the dataset's head page. True unless the shape
+   * starts the page elsewhere, such as at a cursor.
+   */
+  protected isHeadPageQueryShape(_queryShape: Q | undefined): boolean {
+    return true;
+  }
+
   /** The page size a query's results are measured against when deriving the head/tail flags. */
   protected getRequestedPageSize(_queryShape: Q | undefined): number {
     return this.pageSize;
@@ -3284,15 +3293,16 @@ export abstract class BasePaginator<T, Q> {
     const interval = this.ingestPage({
       page: stateUpdate.items,
       policy: isJumpQuery ? 'strict-overlap-only' : 'auto',
-      // the first page should be always marked as head
+      // a first page is the head unless its query started it elsewhere (at a cursor)
       isHead: isJumpQuery
         ? undefined //head/tail doesn't apply / is unknown for this ingestion
-        : isFirstPage ||
+        : (isFirstPage && this.isHeadPageQueryShape(queryShape)) ||
           (direction === 'headward' ? requestedPageSize > items.length : undefined),
-      // even though the page is first, we have to compare the requested vs returned page size
+      // even though the page is first, we have to compare the requested vs returned page size;
+      // a first page queried towards the head says nothing about the tail
       isTail: isJumpQuery
         ? undefined //head/tail doesn't apply / is unknown for this ingestion
-        : isFirstPage || direction === 'tailward'
+        : (isFirstPage && direction !== 'headward') || direction === 'tailward'
           ? requestedPageSize > items.length
           : undefined,
       targetIntervalId: isJumpQuery ? undefined : this._activeIntervalId,

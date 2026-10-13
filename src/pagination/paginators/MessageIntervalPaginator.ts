@@ -39,7 +39,10 @@ import type { EntityStoreChangeBatch } from '../../entityStore/EntityStore';
 import { StoreBackedItemIndex } from '../../entityStore/StoreBackedItemIndex';
 import { deriveCreatedAtAroundPaginationFlags } from '../cursorDerivation';
 import { deriveIdAroundPaginationFlags } from '../cursorDerivation/idAroundPaginationFlags';
-import { deriveLinearPaginationFlags } from '../cursorDerivation/linearPaginationFlags';
+import {
+  deriveLinearPaginationFlags,
+  getLinearQueryDirection,
+} from '../cursorDerivation/linearPaginationFlags';
 
 export type MessageFocusReason =
   | 'jump-to-message'
@@ -621,8 +624,9 @@ export class MessageIntervalPaginator extends BasePaginator<
     }
 
     this.postQueryReconcile({
-      // A jump/around page spans both directions; a plain latest page paginates tailward (older).
-      direction: isJump ? undefined : 'tailward',
+      // A jump/around page spans both directions; a page at a cursor pages the way its cursor points,
+      // and a plain latest page paginates tailward (older).
+      direction: isJump ? undefined : (getLinearQueryDirection(queryShape) ?? 'tailward'),
       isFirstPage: true,
       queryShape,
       requestedPageSize,
@@ -638,6 +642,16 @@ export class MessageIntervalPaginator extends BasePaginator<
     return (
       !!queryShape?.id_around ||
       !!(queryShape as MessagePaginationParams)?.created_at_around
+    );
+  }
+
+  /** Only a query without a cursor and not around a message returns the newest page. */
+  protected override isHeadPageQueryShape(
+    queryShape: MessageQueryShape | undefined,
+  ): boolean {
+    return (
+      !queryShape ||
+      (!this.isJumpQueryShape(queryShape) && !getLinearQueryDirection(queryShape))
     );
   }
 
@@ -822,28 +836,37 @@ export class MessageIntervalPaginator extends BasePaginator<
   private _mergeNewestPage = (page: LocalMessage[], options?: MergeNewestPageOptions) => {
     const headInterval = this.itemIntervals[0] as Interval | undefined;
     if (!headInterval?.isHead) {
-      // Live content no page has anchored yet, the first query came back empty and the reply the
-      // user then sent went to the logical head (a thread/channel creation for example). Returning would
-      // discard the fetched page, so the window could never catch up. We anchor it, so `ingestPage` folds
-      // overlapping logical intervals in, absorbing those items.
+      // The newest messages are not loaded as a window: only live content arrived (the first query
+      // came back empty and the reply the user then sent went to the logical head, a thread/channel
+      // creation for example), or only a window the reader jumped to is loaded. Returning would discard
+      // the fetched page, so the newest messages could never be reached. We anchor it as the head, so
+      // `ingestPage` folds overlapping logical intervals in, absorbing those items.
       //
-      // It's narrow on purpose, `liveHeadLogical` rather than `itemIntervals[0]`, which is only the head
-      // by convention and could be a logical tail and no anchored head, whose presence would mean
-      // this window is anchored with an older island merely in view. Keeps both neighbouring no-op
-      // contracts, so nothing loaded has no logical head (seeding is `postQueryReconcile`'s job).
+      // Nothing loaded at all stays a no-op: seeding is `postQueryReconcile`'s job.
       const logicalHead = this.liveHeadLogical;
       const hasAnchoredHead = this.itemIntervals.some(
         (interval) => !isLogicalInterval(interval) && interval.isHead,
       );
-      if (!logicalHead || hasAnchoredHead || !page?.length) return;
+      if (!this.itemIntervals.length || hasAnchoredHead || !page?.length) return;
 
       // Take over the view only if the reader is on the live content being absorbed, so if they jumped
       // to another interval, anchor for their return and leave them there (the rule the jumped away
       // branch below enforces).
-      const takeOverView = this.isActiveInterval(logicalHead);
+      const takeOverView = !!logicalHead && this.isActiveInterval(logicalHead);
 
       const anchored = this.ingestPage({ page, isHead: true, setActive: false });
-      if (!anchored || !takeOverView) return;
+      if (!anchored) return;
+      if (!takeOverView) {
+        // The page merged into the window being read, which now reaches the head: show what it gained.
+        if (this.isActiveInterval(anchored)) {
+          this.state.partialNext({
+            items: this.intervalToItems(anchored),
+            hasMoreHead: false,
+            cursor: { headward: null, tailward: this.cursor?.tailward ?? null },
+          });
+        }
+        return;
+      }
 
       const hasMoreTail = !this.pageReachedChannelStart(page, options);
       anchored.hasMoreTail = hasMoreTail;

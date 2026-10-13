@@ -33,6 +33,24 @@ const HEADWARD_QUERY_PROPERTIES: Array<keyof LinearPaginationQueryShape> = [
   'id_gt',
   'id_gte',
 ];
+
+const hasAnyOf = (
+  queryShape: LinearPaginationQueryShape | undefined,
+  properties: Array<keyof LinearPaginationQueryShape>,
+) => !!queryShape && properties.some((p) => typeof queryShape[p] !== 'undefined');
+
+/**
+ * The direction a query pages in, read from its cursor keys: `headward` for newer items, `tailward`
+ * for older, `undefined` for a query without a cursor (the newest page) or with only unknown keys.
+ */
+export const getLinearQueryDirection = (
+  queryShape: LinearPaginationQueryShape | undefined,
+): 'headward' | 'tailward' | undefined => {
+  if (hasAnyOf(queryShape, HEADWARD_QUERY_PROPERTIES)) return 'headward';
+  if (hasAnyOf(queryShape, TAILWARD_QUERY_PROPERTIES)) return 'tailward';
+  return undefined;
+};
+
 export const deriveLinearPaginationFlags = <
   T extends { id: string; created_at: TimestampNS },
   Q extends LinearPaginationQueryShape,
@@ -52,21 +70,18 @@ export const deriveLinearPaginationFlags = <
     lastPageMsg?.id && lastPageMsg.id === interval.itemIds.slice(-1)[0],
   ];
 
-  const containsCursorPaginationProperties =
-    !!queryShape &&
-    HEADWARD_QUERY_PROPERTIES.concat(TAILWARD_QUERY_PROPERTIES).some(
-      (p) => typeof queryShape[p] !== 'undefined',
-    );
+  const containsCursorPaginationProperties = hasAnyOf(
+    queryShape,
+    HEADWARD_QUERY_PROPERTIES.concat(TAILWARD_QUERY_PROPERTIES),
+  );
 
   const queriedMessagesTowardsHead =
-    direction === 'headward' ||
-    (!!queryShape &&
-      HEADWARD_QUERY_PROPERTIES.some((p) => typeof queryShape[p] !== 'undefined'));
+    direction === 'headward' || hasAnyOf(queryShape, HEADWARD_QUERY_PROPERTIES);
 
   const queriedMessagesTowardsTail =
     direction === 'tailward' ||
     typeof queryShape === 'undefined' ||
-    TAILWARD_QUERY_PROPERTIES.some((p) => typeof queryShape[p] !== 'undefined');
+    hasAnyOf(queryShape, TAILWARD_QUERY_PROPERTIES);
 
   const containsNonLinearPaginationProperties =
     !!(queryShape as MessagePaginationParams)?.id_around ||
@@ -77,28 +92,29 @@ export const deriveLinearPaginationFlags = <
     !queriedMessagesTowardsTail &&
     !containsNonLinearPaginationProperties;
 
+  // A query without a cursor asks for the newest page.
   const isFirstPage = !containsCursorPaginationProperties;
 
   const hasMore = page.length >= requestedPageSize;
+  const pageIsEmpty = page.length === 0;
 
-  if (
-    typeof queriedMessagesTowardsTail !== 'undefined' ||
-    containsUnrecognizedOptionsOnly
-  ) {
+  // A page says something about the side it was queried towards, and the newest page about both.
+  // An older page cannot tell whether newer items exist, nor a newer page whether older ones do.
+  if (queriedMessagesTowardsTail || isFirstPage || containsUnrecognizedOptionsOnly) {
     // Without the isFirstPage branch, a partial first page (e.g. an
     // offline prehydrate returning fewer than `requestedPageSize`) latches `hasMoreTail`
     // to `false` and a subsequent full network first page can never restore it.
     hasMoreTail = isFirstPage ? hasMore : !hasMoreTail ? false : hasMore;
+    if (firstPageMsgIsFirstInSet || pageIsEmpty) flags.hasMoreTail = hasMoreTail;
   }
-  if (typeof queriedMessagesTowardsHead !== 'undefined') {
-    hasMoreHead = !hasMoreHead || isFirstPage ? false : hasMore;
+  if (isFirstPage) {
+    // The server has nothing newer than its newest page, so the interval holding it reaches the head
+    // even where it ends with newer items than the page: those arrived live, by events.
+    flags.hasMoreHead = false;
+  } else if (queriedMessagesTowardsHead) {
+    hasMoreHead = !hasMoreHead ? false : hasMore;
+    if (lastPageMsgIsLastInSet || pageIsEmpty) flags.hasMoreHead = hasMoreHead;
   }
-  const pageIsEmpty = page.length === 0;
-
-  if ((firstPageMsgIsFirstInSet || pageIsEmpty) && typeof hasMoreTail !== 'undefined')
-    flags.hasMoreTail = hasMoreTail;
-  if ((lastPageMsgIsLastInSet || pageIsEmpty) && typeof hasMoreHead !== 'undefined')
-    flags.hasMoreHead = hasMoreHead;
 
   return flags;
 };
