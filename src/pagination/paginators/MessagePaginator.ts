@@ -11,7 +11,8 @@ import {
   MessageIntervalPaginator,
   type MessageQueryShape,
 } from './MessageIntervalPaginator';
-import type { LocalMessage, TimestampNS } from '../../types';
+import type { LocalMessage, TimestampNS, UserResponse } from '../../types';
+import type { EntityStoreChangeBatch } from '../../entityStore/EntityStore';
 import { asTimestampNS, nsToDate } from '../../utils/time';
 import { StateStore } from '@stream-io/state-store';
 
@@ -276,20 +277,65 @@ export class MessagePaginator extends MessageIntervalPaginator {
     return interval;
   }
 
+  onEntitiesChanged(batch: EntityStoreChangeBatch) {
+    super.onEntitiesChanged(batch);
+    const { lastMessage } = this.aggregateState.getLatestValue();
+    if (!lastMessage || !batch.changedIds.has(lastMessage.id)) return;
+    const stored = this.getItem(lastMessage.id);
+    if (stored) this.aggregateState.partialNext({ lastMessage: stored });
+  }
+
+  reflectUserUpdate(user: UserResponse) {
+    super.reflectUserUpdate(user);
+    const { lastMessage } = this.aggregateState.getLatestValue();
+    if (lastMessage?.user?.id !== user.id) return;
+    this.aggregateState.partialNext({ lastMessage: { ...lastMessage, user } });
+  }
+
   removeItem(
     params: Parameters<MessageIntervalPaginator['removeItem']>[0],
   ): ReturnType<MessageIntervalPaginator['removeItem']> {
     const removedId =
       params.id ?? (params.item ? this.getItemId(params.item) : undefined);
-    const wasLatest =
-      !!removedId && this.aggregateState.getLatestValue().lastMessage?.id === removedId;
+    const { lastMessage, seededLastMessageAt } = this.aggregateState.getLatestValue();
+    const wasLatest = !!removedId && lastMessage?.id === removedId;
     const result = super.removeItem(params);
     if (wasLatest) {
       // The tracked latest was hard-removed; fall back to the newest still-loaded message that
       // passes the filter. `trackLastMessage` cannot do this (it only advances), so recompute here.
-      this.aggregateState.partialNext({ lastMessage: this.recomputeLastMessage() });
+      const previous = this.recomputeLastMessage();
+      const previousAt = getMessageCreatedAtTimestamp(previous);
+      const removedAt = getMessageCreatedAtTimestamp(lastMessage);
+      const isSeedFromRemovedMessage =
+        seededLastMessageAt !== null &&
+        removedAt !== null &&
+        seededLastMessageAt <= removedAt;
+      // The server moves `last_message_at` back to the previous message without sending it, so the
+      // seed takes the previous loaded message's time. With none loaded the new value is unknown,
+      // and the seed stays.
+      this.aggregateState.partialNext({
+        lastMessage: previous,
+        seededLastMessageAt:
+          isSeedFromRemovedMessage && previousAt !== null
+            ? previousAt
+            : seededLastMessageAt,
+      });
     }
     return result;
+  }
+
+  truncate(params: Parameters<MessageIntervalPaginator['truncate']>[0]) {
+    super.truncate(params);
+    const { lastMessage, seededLastMessageAt } = this.aggregateState.getLatestValue();
+    const isTruncated = (timestamp: TimestampNS | null) =>
+      timestamp !== null && timestamp < params.truncatedAt;
+    const isLastMessageTruncated = isTruncated(getMessageCreatedAtTimestamp(lastMessage));
+    const isSeedTruncated = isTruncated(seededLastMessageAt);
+    if (!isLastMessageTruncated && !isSeedTruncated) return;
+    this.aggregateState.partialNext({
+      lastMessage: isLastMessageTruncated ? this.recomputeLastMessage() : lastMessage,
+      seededLastMessageAt: isSeedTruncated ? null : seededLastMessageAt,
+    });
   }
 
   /**
@@ -442,7 +488,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
           queryShape: {
             // `created_at_around` is a request field and still takes a `Date`.
             created_at_around: nsToDate(lastReadBoundary),
-            limit: options?.pageSize,
+            limit: options?.pageSize ?? this.pageSize,
           },
           updateState: false,
         });

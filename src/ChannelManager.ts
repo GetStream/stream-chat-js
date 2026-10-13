@@ -212,6 +212,12 @@ const channelTruncatedHandler: LabeledEventHandler<EventHandlerContext> = {
   id: 'ChannelManager:default-handler:channel.truncated',
 };
 
+// a hard delete of the last message might move the channel's `last_message_at` back
+const messageDeletedHandler: LabeledEventHandler<EventHandlerContext> = {
+  handle: (context) => (context.event.hard_delete ? reinsertItem(context) : undefined),
+  id: 'ChannelManager:default-handler:message.deleted',
+};
+
 const channelVisibleHandler: LabeledEventHandler<EventHandlerContext> = {
   handle: updateLists,
   id: 'ChannelManager:default-handler:channel.visible',
@@ -417,6 +423,7 @@ export class ChannelManager extends WithSubscriptions {
     'channel.hidden': [channelHiddenHandler],
     'channel.visible': [channelVisibleHandler],
     'member.updated': [memberUpdatedHandler],
+    'message.deleted': [messageDeletedHandler],
     'message.new': [messageNewHandler],
     'message.read': [readStateChangedHandler],
     'message.read_locally': [readStateChangedHandler],

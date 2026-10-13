@@ -8,6 +8,7 @@ import {
   DEFAULT_PAGINATION_OPTIONS,
   type FilterBuilderGenerators,
   formatMessage,
+  type Interval,
   PaginatorCursor,
   type StreamChat,
 } from '../../../../src';
@@ -503,20 +504,27 @@ describe('ChannelPaginator', () => {
           client,
           filters: { last_updated: new Date(1000).toISOString() },
         });
-        channel1.data = { updated_at: undefined };
+        channel1.data = { created_at: undefined };
         setLastMessageAt(channel1, new Date(1000));
 
         expect(paginator.matchesFilter(channel1)).toBeTruthy();
 
         channel1.data = {
-          updated_at: convertDateToTimestamp(new Date(1000).toISOString()),
+          created_at: convertDateToTimestamp(new Date(1000).toISOString()),
         };
         setLastMessageAt(channel1, null);
 
         expect(paginator.matchesFilter(channel1)).toBeTruthy();
 
-        channel1.data = { updated_at: undefined };
+        channel1.data = { created_at: undefined };
         setLastMessageAt(channel1, null);
+        expect(paginator.matchesFilter(channel1)).toBeFalsy();
+
+        // the server ignores `updated_at` for `last_updated`
+        channel1.data = {
+          created_at: undefined,
+          updated_at: convertDateToTimestamp(new Date(1000).toISOString()),
+        };
         expect(paginator.matchesFilter(channel1)).toBeFalsy();
       });
 
@@ -568,7 +576,7 @@ describe('ChannelPaginator', () => {
           filters: { last_updated: { [operator]: new Date(1000).toISOString() } },
         });
 
-        channel1.data = { updated_at: undefined };
+        channel1.data = { created_at: undefined };
         scenarios.forEach(({ val, expected }) => {
           setLastMessageAt(channel1, new Date(val));
           expect(paginator.matchesFilter(channel1)).toBe(expected);
@@ -577,12 +585,12 @@ describe('ChannelPaginator', () => {
         setLastMessageAt(channel1, null);
         scenarios.forEach(({ val, expected }) => {
           channel1.data = {
-            updated_at: convertDateToTimestamp(new Date(val).toISOString()),
+            created_at: convertDateToTimestamp(new Date(val).toISOString()),
           };
           expect(paginator.matchesFilter(channel1)).toBe(expected);
         });
 
-        channel1.data = { updated_at: undefined };
+        channel1.data = { created_at: undefined };
         setLastMessageAt(channel1, null);
         expect(paginator.matchesFilter(channel1)).toBe(false);
       });
@@ -727,6 +735,98 @@ describe('ChannelPaginator', () => {
       // @ts-expect-error using undeclared custom property
       channel1.data!.custom = { nested: 'y' };
       expect(paginator.matchesFilter(channel1)).toBeFalsy();
+    });
+  });
+
+  describe('unchanged items', () => {
+    const setup = () => {
+      const newer = new Channel(client, 'type', 'unchanged-newer', {});
+      setLastMessageAt(newer, new Date('1971-01-01T00:00:00.000Z'));
+      const older = new Channel(client, 'type', 'unchanged-older', {});
+      setLastMessageAt(older, new Date('1970-01-01T00:00:00.000Z'));
+      const paginator = new ChannelPaginator({ client, filters: {} });
+      paginator.setItems({
+        valueOrFactory: [newer, older],
+        isFirstPage: true,
+        isLastPage: true,
+      });
+      return { newer, older, paginator };
+    };
+
+    it('keeps the items array when an ingested channel stays in place', () => {
+      const { newer, paginator } = setup();
+      const items = paginator.items;
+
+      paginator.ingestItem(newer);
+
+      expect(paginator.items).toBe(items);
+    });
+
+    it('publishes a new items array when the order changes', () => {
+      const { older, paginator } = setup();
+      const items = paginator.items;
+
+      setLastMessageAt(older, new Date('1972-01-01T00:00:00.000Z'));
+      paginator.boost(older.cid);
+      paginator.ingestItem(older);
+
+      expect(paginator.items).not.toBe(items);
+      expect(paginator.items?.map((c) => c.id)).toEqual([
+        'unchanged-older',
+        'unchanged-newer',
+      ]);
+    });
+
+    it('keeps the items array when setItems gets the same channels', () => {
+      const { newer, older, paginator } = setup();
+      const items = paginator.items;
+
+      paginator.setItems({
+        valueOrFactory: [newer, older],
+        isFirstPage: true,
+        isLastPage: true,
+      });
+
+      expect(paginator.items).toBe(items);
+    });
+
+    it('keeps the items array when a page with the same channels is ingested', () => {
+      const { newer, older, paginator } = setup();
+      const items = paginator.items;
+
+      paginator.ingestPage({
+        page: [newer, older],
+        isHead: true,
+        isTail: true,
+        setActive: true,
+      });
+
+      expect(paginator.items).toBe(items);
+    });
+
+    it('keeps the items array when the active interval is activated again', () => {
+      const { paginator } = setup();
+      const items = paginator.items;
+
+      paginator.setActiveInterval(paginator.itemIntervals[0] as Interval);
+
+      expect(paginator.items).toBe(items);
+    });
+
+    it('keeps the items array when a refresh returns the same channels, and still ends loading', async () => {
+      const { newer, older, paginator } = setup();
+      vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
+        channels: [newer, older],
+        duration: '0.1ms',
+      });
+      await paginator.toTail();
+      const items = paginator.items;
+
+      // the refresh reconnect recovery runs
+      await paginator.toTail({ keepPreviousItems: true, reset: 'yes' });
+
+      expect(paginator.items).toBe(items);
+      expect(paginator.isLoading).toBe(false);
     });
   });
 
@@ -1117,6 +1217,37 @@ describe('ChannelPaginator', () => {
       );
     });
 
+    it('keeps paginating after removing a channel that moved into the loaded window from the logical tail', async () => {
+      const [a, b, c, d] = ['a', 'b', 'c', 'd'].map((id, index) => {
+        const channel = new Channel(client, 'type', id, {});
+        setLastMessageAt(channel, new Date(Date.UTC(1970, 0, 10 - index * 2)));
+        return channel;
+      });
+      vi.spyOn(client, 'queryChannelsAndHydrate')
+        .mockResolvedValueOnce({ channels: [a, b], duration: '0.1ms' })
+        .mockResolvedValueOnce({ channels: [c, d], duration: '0.1ms' });
+      const paginator = new ChannelPaginator({
+        client,
+        filters: {},
+        paginatorOptions: { pageSize: 2 },
+        sort: [{ field: 'last_message_at', direction: -1 }],
+      });
+      await paginator.toTail();
+
+      // It is added with no messages yet, so it sorts below the loaded page into the logical tail.
+      const added = new Channel(client, 'type', 'added', {});
+      paginator.ingestItem(added);
+      // Its first message arrives on the same instance, so it now sorts between a and b.
+      setLastMessageAt(added, new Date(Date.UTC(1970, 0, 9)));
+      // Then it leaves the list (archived, say).
+      paginator.removeItem({ item: added });
+
+      await paginator.toTail();
+
+      expect(paginator.isLoading).toBe(false);
+      expect(paginator.items?.map((channel) => channel.id)).toEqual(['a', 'b', 'c', 'd']);
+    });
+
     it('persists only the first page, including after paginating and live reorders', async () => {
       await setUpOfflineDb({ isSynced: true });
       const [a, b, c, d] = ['a', 'b', 'c', 'd'].map((id, index) => {
@@ -1301,6 +1432,120 @@ describe('ChannelPaginator', () => {
 
         expect(blanked).toBe(false);
         expect(paginator.items).toStrictEqual([cachedChannel]);
+      });
+
+      describe('when the list is requested again before the sync completes', () => {
+        const setUpCachedPage = async () => {
+          await setUpOfflineDb({ isSynced: false });
+          const cachedChannel = new Channel(client, 'type', 'cached', {});
+          getChannelsForQuery.mockResolvedValue({
+            channels: [{ channel: cachedChannel.data }],
+          });
+          vi.spyOn(client, 'hydrateChannels').mockReturnValue([cachedChannel]);
+          const queryChannels = vi
+            .spyOn(client, 'queryChannelsAndHydrate')
+            .mockResolvedValue({ channels: [cachedChannel], duration: '0.1ms' });
+          return { queryChannels };
+        };
+
+        const runScheduledQuery = async () => {
+          client.offlineDb!.syncManager.isSynced = true;
+          await scheduleSyncStatusChangeCallback.mock.calls.at(-1)![1]();
+        };
+
+        it('reads the cache and queries once for calls made in the same tick', async () => {
+          const { queryChannels } = await setUpCachedPage();
+          const paginator = makePaginator();
+
+          await Promise.all([paginator.reload(), paginator.reload(), paginator.toTail()]);
+          await runScheduledQuery();
+
+          expect(getChannelsForQuery).toHaveBeenCalledTimes(1);
+          expect(scheduleSyncStatusChangeCallback).toHaveBeenCalledTimes(1);
+          expect(queryChannels).toHaveBeenCalledTimes(1);
+        });
+
+        it('reads the cache and queries once for calls made after the cache was read', async () => {
+          const { queryChannels } = await setUpCachedPage();
+          const paginator = makePaginator();
+
+          await paginator.reload();
+          await paginator.reload();
+          await paginator.toTail();
+          await runScheduledQuery();
+
+          expect(getChannelsForQuery).toHaveBeenCalledTimes(1);
+          expect(scheduleSyncStatusChangeCallback).toHaveBeenCalledTimes(1);
+          expect(queryChannels).toHaveBeenCalledTimes(1);
+        });
+
+        it('reads the cache again for a different query made in the same tick', async () => {
+          await setUpCachedPage();
+          const paginator = makePaginator();
+
+          const first = paginator.reload();
+          paginator.staticFilters = { type: 'other' } as ChannelFilters;
+          await Promise.all([first, paginator.reload()]);
+
+          expect(getChannelsForQuery).toHaveBeenCalledTimes(2);
+          expect(
+            getChannelsForQuery.mock.calls[1][0].options.filter_conditions,
+          ).toStrictEqual({
+            type: 'other',
+          });
+        });
+
+        it('reads the cache again after the state was reset', async () => {
+          await setUpCachedPage();
+          const paginator = makePaginator();
+
+          await paginator.reload();
+          paginator.resetState();
+          await paginator.reload();
+
+          expect(getChannelsForQuery).toHaveBeenCalledTimes(2);
+        });
+
+        it('reads the cache again after the cache read failed', async () => {
+          await setUpCachedPage();
+          getChannelsForQuery.mockRejectedValueOnce(new Error('db failed'));
+          const paginator = makePaginator();
+          paginator.updateConfig({ throwErrors: true });
+
+          await expect(paginator.reload()).rejects.toThrow('db failed');
+          await paginator.reload();
+
+          expect(getChannelsForQuery).toHaveBeenCalledTimes(2);
+          expect(scheduleSyncStatusChangeCallback).toHaveBeenCalledTimes(1);
+        });
+
+        it('waits for the next sync again once the waiting query ran', async () => {
+          await setUpCachedPage();
+          const paginator = makePaginator();
+
+          await paginator.reload();
+          await runScheduledQuery();
+          // the socket dropped, so the next sync is pending again
+          client.offlineDb!.syncManager.isSynced = false;
+          await paginator.reload();
+
+          expect(scheduleSyncStatusChangeCallback).toHaveBeenCalledTimes(2);
+        });
+
+        it('waits for the next sync again once the query ran right after the cache read', async () => {
+          await setUpCachedPage();
+          getChannelsForQuery.mockImplementationOnce(async () => {
+            client.offlineDb!.syncManager.isSynced = true;
+            return null;
+          });
+          const paginator = makePaginator();
+
+          await paginator.reload();
+          client.offlineDb!.syncManager.isSynced = false;
+          await paginator.reload();
+
+          expect(scheduleSyncStatusChangeCallback).toHaveBeenCalledTimes(1);
+        });
       });
 
       it('seeds the preloaded channels into the index so a concurrent ingest does not collapse the list', async () => {

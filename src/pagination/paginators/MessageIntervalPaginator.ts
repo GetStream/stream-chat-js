@@ -641,6 +641,15 @@ export class MessageIntervalPaginator extends BasePaginator<
     );
   }
 
+  /** A jump sends its own `limit`, so its head/tail flags are derived against that, not `pageSize`. */
+  protected override getRequestedPageSize(
+    queryShape: MessageQueryShape | undefined,
+  ): number {
+    return queryShape && this.isJumpQueryShape(queryShape)
+      ? (queryShape.limit ?? this.pageSize)
+      : this.pageSize;
+  }
+
   jumpToMessage = async (
     messageId: string,
     {
@@ -688,7 +697,9 @@ export class MessageIntervalPaginator extends BasePaginator<
       };
     } else {
       const result = await this.executeQuery({
-        queryShape: { id_around: messageId, limit: pageSize },
+        // Always send a limit, since the replies endpoint ignores `id_around` without one and returns the
+        // newest replies instead.
+        queryShape: { id_around: messageId, limit: pageSize ?? this.pageSize },
         ...(watch && { requestOptions: { watch: true } }),
         updateState: false,
       });
@@ -1321,7 +1332,7 @@ export class MessageIntervalPaginator extends BasePaginator<
    * `isTail`/`hasMoreTail` are set; intervals entirely newer keep their flags (unloaded older
    * messages may still sit between them and the cutoff). The active window is re-emitted once.
    */
-  truncate = ({ truncatedAt }: { truncatedAt: TimestampNS }) => {
+  truncate({ truncatedAt }: { truncatedAt: TimestampNS }) {
     const cutoff = truncatedAt;
     if (!Number.isFinite(cutoff)) return;
 
@@ -1389,7 +1400,7 @@ export class MessageIntervalPaginator extends BasePaginator<
       // Nothing loaded survived the truncation.
       this.state.partialNext({ items: [] });
     }
-  };
+  }
 
   applyMessageDeletionForUser = ({
     userId,
@@ -1475,7 +1486,7 @@ export class MessageIntervalPaginator extends BasePaginator<
    * re-emits the active window a single time (if it held an affected message) rather than one
    * `ingestItem` re-emit per message.
    */
-  reflectUserUpdate = (user: UserResponse) => {
+  reflectUserUpdate(user: UserResponse) {
     const activeIds = new Set((this.items ?? []).map((m) => this.getItemId(m)));
     let activeAffected = false;
     // Batch: a user rename can touch many messages; coalesce the shared-store fan-out to sibling
@@ -1493,7 +1504,7 @@ export class MessageIntervalPaginator extends BasePaginator<
         items: (this.items ?? []).map((m) => this.getItem(this.getItemId(m)) ?? m),
       });
     }
-  };
+  }
 
   /**
    * Map a timestamp to a loaded message — the first message in the latest (head) window whose
@@ -1595,13 +1606,8 @@ const makeDeriveCursor =
 
     if ((ctx.queryShape as MessagePaginationParams)?.created_at_around) {
       return injectCursor(
-        deriveCreatedAtAroundPaginationFlags<
-          LocalMessage,
-          MessagePaginationParams,
-          MessageIntervalPaginator
-        >({
+        deriveCreatedAtAroundPaginationFlags<LocalMessage, MessagePaginationParams>({
           ...ctx,
-          paginator,
           page: pageWithPermittedMessages,
           requestedPageSize: requestedPageSizeAfterAdjustment,
         }),
