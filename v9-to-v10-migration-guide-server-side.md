@@ -21,7 +21,7 @@ Any one of these means yes — this guide applies to you:
 
 - You construct `stream-chat` with a non-empty second positional argument: `new StreamChat(key, 'secret', ...)` — including via env vars like `process.env.STREAM_SECRET` / `STREAM_API_SECRET`.
 - You read `client.secret` or call `client._isUsingServerAuth()`.
-- You pass `allowServerSideConnect: true` in `StreamChatOptions`.
+- You pass `client: { allowServerSideConnect: true }` as the client configuration.
 - You call any admin method: `createToken`, `devToken`, `revokeUserToken(s)`, `updateAppSettings`, `getAppSettings`, `deleteUser`, `partialUpdateUser(s)`, `restoreUsers`, `deactivateUser(s)`, `reactivateUser(s)`, `exportUser(s)`, `createChannelType`, `updateChannelType`, `deleteChannelType`, `listChannelTypes`, `getChannelType`, `createCommand` / `updateCommand` / `deleteCommand` / `listCommands` / `getCommand`, `createRole` / `deleteRole` / `listRoles`, `createPermission` / `updatePermission` / `deletePermission` / `getPermission` / `listPermissions`, `createBlockList` / `updateBlockList` / `deleteBlockList` / `getBlockList` / `listBlockLists` / `importBlockList`, `upsertPushProvider` / `deletePushProvider` / `listPushProviders`, `checkPush` / `checkSNS` / `checkSQS`, `createImport` / `createImportURL` / `getImport` / `listImports`, retention-policy admin (`setRetentionPolicy` / `deleteRetentionPolicy` / `getRetentionPolicy` / `getRetentionPolicyRuns`), moderation config admin, campaign / segment methods.
 - You call `verifyWebhook`, `verifyAndParseWebhook`, `parseSqs`, `parseSns`, `verifySignature`, or `CheckSignature` — the JWT helpers `JWTUserToken` / `JWTServerToken` / `DevToken` — these were all removed from `stream-chat/signing`.
 - You import from removed barrel paths: `stream-chat/dist/.../campaign`, `.../segment`, `.../channel_batch_updater`, `.../events`, `.../base64`.
@@ -389,9 +389,11 @@ import https from 'node:https';
 import { StreamChat } from 'stream-chat';
 
 const ws = new StreamChat(apiKey, {
-  allowServerSideConnect: true,
-  axiosRequestConfig: {
-    httpsAgent: new https.Agent({ keepAlive: true, keepAliveMsecs: 3000 }),
+  client: {
+    allowServerSideConnect: true,
+    axiosRequestConfig: {
+      httpsAgent: new https.Agent({ keepAlive: true, keepAliveMsecs: 3000 }),
+    },
   },
 });
 ```
@@ -491,7 +493,7 @@ await admin.upsertUsers([{ id: botUserId, role: 'admin', name: 'Support bot' }])
 const botToken = admin.generateUserToken({ user_id: botUserId });
 
 // 2. WS client — signed in as the bot, listens for events.
-const ws = new StreamChat(apiKey, { allowServerSideConnect: true });
+const ws = new StreamChat(apiKey, { client: { allowServerSideConnect: true } });
 await ws.connectUser({ id: botUserId }, botToken);
 
 ws.on('message.new', async (evt) => {
@@ -519,26 +521,29 @@ Things to know when running both clients:
 
 `stream-chat@10` no longer bundles `isomorphic-ws` or `ws` — the internal `StableWSConnection` picks up the runtime's global `WebSocket` (see `src/StableWSConnection.ts`). What that means per runtime:
 
-| Runtime             | Do you need to do anything?                                                                                |
-| ------------------- | ---------------------------------------------------------------------------------------------------------- |
-| **Browser / RN**    | No — global `WebSocket` is native.                                                                         |
-| **Node.js 22+**     | No — Node ships a native global `WebSocket` since 22.0.                                                    |
-| **Node.js 18 / 20** | Yes — inject a WebSocket implementation via `WebSocketImpl` (see below).                                   |
-| **Bun / Deno**      | No — global `WebSocket` is native.                                                                         |
-| **Test suites**     | Yes — pass a mock/drivable class via `WebSocketImpl`; see the `connection.test.js` fixtures for the shape. |
+| Runtime             | Do you need to do anything?                                                                                                    |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **Browser / RN**    | No — global `WebSocket` is native.                                                                                             |
+| **Node.js 22+**     | No — Node ships a native global `WebSocket` since 22.0.                                                                        |
+| **Node.js 18 / 20** | Yes — inject a WebSocket implementation via `client.wsConnection.webSocketImpl` (see below).                                   |
+| **Bun / Deno**      | No — global `WebSocket` is native.                                                                                             |
+| **Test suites**     | Yes — pass a mock/drivable class via `client.wsConnection.webSocketImpl`; see the `connection.test.js` fixtures for the shape. |
 
-### `WebSocketImpl` option
+### `webSocketImpl` configuration field
 
 ```ts
-export type StreamChatOptions = {
-  // ...
-  /**
-   * Overrides the `WebSocket` constructor used by `StableWSConnection`. Intended purely for
-   * testing so a mock/drivable WebSocket can be swapped in; production code should leave this
-   * unset and rely on the platform's global `WebSocket`.
-   */
-  WebSocketImpl?: typeof WebSocket;
-};
+new StreamChat(apiKey, {
+  client: {
+    wsConnection: {
+      /**
+       * Overrides the `WebSocket` constructor the socket is opened with. Intended for hosts with no
+       * usable global and for tests, so a mock/drivable WebSocket can be swapped in; production code
+       * should leave this unset and rely on the platform's global `WebSocket`.
+       */
+      webSocketImpl: MockWebSocket,
+    },
+  },
+});
 ```
 
 Signature is `typeof WebSocket` — the constructor, not an instance. `StableWSConnection` calls `new WS(wsURL)` internally, so anything that satisfies the browser `WebSocket` interface works:
@@ -555,10 +560,12 @@ import { StreamChat } from 'stream-chat';
 import WebSocket from 'ws';
 
 const ws = new StreamChat(apiKey, {
-  allowServerSideConnect: true,
-  // WebSocketImpl accepts anything that mirrors the browser WebSocket constructor.
-  // The `ws` package's default export matches that shape at runtime.
-  WebSocketImpl: WebSocket as unknown as typeof globalThis.WebSocket,
+  client: {
+    allowServerSideConnect: true,
+    // webSocketImpl accepts anything that mirrors the browser WebSocket constructor.
+    // The `ws` package's default export matches that shape at runtime.
+    wsConnection: { webSocketImpl: WebSocket as unknown as typeof globalThis.WebSocket },
+  },
 });
 ```
 
@@ -571,11 +578,11 @@ One internal detail that matters if you inject `ws`: v9 called `ws.removeAllList
 > Everything in this section still works mechanically, and is still the right answer if you are stuck on
 > an older runtime, but treat it as an unsupported bridge rather than a supported configuration.
 >
-> **Officially, `WebSocketImpl` is documented as "purely for testing."** In practice it is also the escape hatch for Node <22 until the LTS ships a native `WebSocket`. If you rely on it in production, pin the `ws` version (it's stable, but its lifecycle isn't tied to `stream-chat`'s releases) and keep an eye on the SDK changelog in case the option gains stricter typing.
+> **Officially, `webSocketImpl` is documented as "purely for testing."** In practice it is also the escape hatch for Node <22 until the LTS ships a native `WebSocket`. If you rely on it in production, pin the `ws` version (it's stable, but its lifecycle isn't tied to `stream-chat`'s releases) and keep an eye on the SDK changelog in case the option gains stricter typing.
 
 ### Simplifying the hybrid example on Node 22+
 
-On Node 22+, the [Two-client hybrid pattern](#two-client-hybrid-pattern) snippet works verbatim — no `WebSocketImpl` needed. Drop the `WebSocketImpl` line when you can rely on the runtime. This is the recommended target: no extra dep, no cast, and no drift when Node itself ships fixes to its WebSocket implementation.
+On Node 22+, the [Two-client hybrid pattern](#two-client-hybrid-pattern) snippet works verbatim — no `webSocketImpl` needed. Drop the `webSocketImpl` line when you can rely on the runtime. This is the recommended target: no extra dep, no cast, and no drift when Node itself ships fixes to its WebSocket implementation.
 
 ## Verification checklist
 
@@ -587,8 +594,8 @@ Before shipping the migrated backend:
 - [ ] An admin call (`client.chat.queryChannels(...)`, `client.upsertUsers(...)`) succeeds against the dashboard.
 - [ ] All uses of `verifyWebhook` / `parseSqs` / `parseSns` / `createToken` / `JWTUserToken` / `DevToken` are imported from `@stream-io/node-sdk`, not `stream-chat`.
 - [ ] No remaining imports from `stream-chat/dist/.../campaign`, `.../segment`, `.../channel_batch_updater`, `.../events`, `.../base64`.
-- [ ] If you kept a `stream-chat@10` client for WS: it is constructed **without** a secret, and `allowServerSideConnect: true` is set.
-- [ ] If you deploy on Node 18/20: `WebSocketImpl` is wired to the `ws` package and `ws` is pinned in `dependencies`. On Node 22+, no `WebSocketImpl` is needed.
+- [ ] If you kept a `stream-chat@10` client for WS: it is constructed **without** a secret, and `client.allowServerSideConnect: true` is set.
+- [ ] If you deploy on Node 18/20: `client.wsConnection.webSocketImpl` is wired to the `ws` package and `ws` is pinned in `dependencies`. On Node 22+, no `webSocketImpl` is needed.
 - [ ] Bot / worker users are upserted with `role: 'admin'` (or a role that grants the endpoints they need) before their WS token is minted.
 - [ ] No `fs.createReadStream(...)`, `Buffer`, or `File` reaches `channel.uploadFile` / `uploadImage` / `client.uploadFile` / `uploadImage` — every backend upload goes through `@stream-io/node-sdk`.
 - [ ] If keep-alive mattered, `axiosRequestConfig.httpsAgent` is set explicitly — the implicit Node keep-alive agent is gone.

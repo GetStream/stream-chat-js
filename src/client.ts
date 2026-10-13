@@ -1,7 +1,7 @@
 /* eslint no-unused-vars: "off" */
 /* global process */
 
-import type { AxiosInstance } from 'axios';
+import type { AxiosInstance, AxiosRequestConfig } from 'axios';
 import axios from 'axios';
 
 import type { Channel } from './channel';
@@ -48,7 +48,6 @@ import type {
   QueryThreadsRequest,
   ReactionResponse,
   SdkIdentifier,
-  StreamChatOptions,
   StreamRequestOptions,
   TimestampNS,
   TokenOrProvider,
@@ -80,7 +79,8 @@ import type { AbstractOfflineDB } from './offline-support';
 import { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';
 import { isEqual } from './utils/mergeWith/mergeWithCore';
 import type { MessageComposer } from './messageComposer';
-import type { InstanceSetupState } from './configuration';
+import type { InstanceConfigTree, InstanceSetupState } from './configuration';
+import type { DeepPartial } from './types.utility';
 import { InstanceConfigurationRegistry } from './configuration/InstanceConfigurationRegistry';
 import { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
 import { StateStore } from '@stream-io/state-store';
@@ -203,10 +203,8 @@ export class StreamChat extends ChatApi {
   offlineDb?: AbstractOfflineDB;
   notifications: NotificationManager;
   reminders: ReminderManager;
-  persistUserOnConnectionFailure?: boolean;
   axiosInstance: AxiosInstance;
   baseURL?: string;
-  browser: boolean;
   cleaningIntervalRef?: ReturnType<typeof setTimeout>;
   clientId?: string;
   key: string;
@@ -231,8 +229,6 @@ export class StreamChat extends ChatApi {
    */
   readonly channelServerConfigsStore: StateStore<ChannelConfigsState>;
   blockedUsers: StateStore<BlockedUsersState>;
-  node: boolean;
-  options: StreamChatOptions;
   setUserPromise: ConnectAPIResponse | null;
   state: ClientState;
   tokenManager: TokenManager;
@@ -246,6 +242,16 @@ export class StreamChat extends ChatApi {
   private _resolveWsPromise?: (value: Awaited<ConnectAPIResponse>) => void;
   private _rejectWsPromise?: (reason?: unknown) => void;
 
+  /**
+   * Whether the client runs in a browser. `client.browser` in the configuration when set, otherwise
+   * whether a global `window` exists.
+   */
+  get browser(): boolean {
+    return this.config.getConfig('client')?.browser ?? typeof window !== 'undefined';
+  }
+  get node(): boolean {
+    return !this.browser;
+  }
   get anonymous(): boolean {
     return this.tokenManager.isAnonymous;
   }
@@ -293,16 +299,16 @@ export class StreamChat extends ChatApi {
    *
    * @example <caption>initialize the client in user mode</caption>
    * new StreamChat('api_key')
-   * @example <caption>initialize the client with options</caption>
-   * new StreamChat('api_key', { axiosRequestConfig: { timeout: 5000 } })
+   * @example <caption>initialize the client with configuration</caption>
+   * new StreamChat('api_key', { client: { axiosRequestConfig: { timeout: 5000 } } })
    *
    * @param key - The API key.
-   * @param options - Additional options (optional).
-   * @param options.browser - Enforce the client to be in browser mode (optional).
-   * @param options.axiosRequestConfig - Axios-level request configuration such as `timeout`,
-   *   `headers` or `httpsAgent`, spread into the client's axios instance (optional).
+   * @param config - Declarative configuration, the same tree `client.config.set()` takes (optional).
+   *   Seeded before anything is built, so it reaches the client's own managers and the fields that are
+   *   read once during construction — `client.baseURL`, `client.axiosRequestConfig` and
+   *   `client.notificationManager`.
    */
-  constructor(key: string, options: StreamChatOptions = {}) {
+  constructor(key: string, config?: DeepPartial<InstanceConfigTree>) {
     // generated client requires ApiClient right away
     super(new ApiClient());
     // but ApiClient relies on properties defined here so we set it after (can't pass `this` in super call)
@@ -310,6 +316,12 @@ export class StreamChat extends ChatApi {
 
     // set the key
     this.key = key;
+
+    // Seeded before anything is built: the fields read once below come from the `client` slice, and the
+    // registry is a field initializer, so it exists from here on. Wiring the managers to it stays the last
+    // statement of the constructor.
+    if (config) this.config.set(config);
+    const clientConfig = this.config.getConfig('client');
     this.listeners = new Map();
     this.state = new ClientState({ client: this });
     // a list of channels to hide ws events from
@@ -324,22 +336,17 @@ export class StreamChat extends ChatApi {
 
     this.moderation = new Moderation(this);
 
-    this.notifications = options?.notifications ?? new NotificationManager();
+    this.notifications = clientConfig?.notificationManager ?? new NotificationManager();
     this.uploadManager = new UploadManager(this);
-
-    this.browser = options.browser ?? typeof window !== 'undefined';
-    this.node = !this.browser;
-
-    this.options = { ...options };
 
     this.axiosInstance = axios.create({
       timeout: 3000,
       withCredentials: false,
-      ...this.options.axiosRequestConfig,
+      ...(clientConfig?.axiosRequestConfig as AxiosRequestConfig | undefined),
       paramsSerializer: axiosParamsSerializer,
     });
 
-    this.setBaseURL(this.options.baseURL || 'https://chat.stream-io-api.com');
+    this.setBaseURL(clientConfig?.baseURL || 'https://chat.stream-io-api.com');
 
     const streamLocalTestRun = getEnv('STREAM_LOCAL_TEST_RUN');
     const streamLocalTestHost = getEnv('STREAM_LOCAL_TEST_HOST');
@@ -362,8 +369,6 @@ export class StreamChat extends ChatApi {
     this.setUserPromise = null;
     // keeps a reference to all the channels that are in use
 
-    this.persistUserOnConnectionFailure = this.options?.persistUserOnConnectionFailure;
-
     this.tokenManager = new TokenManager();
 
     this.messageStore = new EntityStore<LocalMessage>({
@@ -384,11 +389,6 @@ export class StreamChat extends ChatApi {
         this.messageComposerCache.values().map((composer) => composer.channel),
       name: 'message-composer-cache',
     });
-
-    // Seed the declarative configuration before wiring, so a tree passed via `options.config` reaches
-    // the managers above. `'client'` is the one key that cannot be configured after construction —
-    // this registry is born here, so there is no earlier moment for a caller to register anything.
-    if (this.options.config) this.config.set(this.options.config);
 
     // Last statement: everything a setup function might reach now exists. Subscribing applies the
     // current configuration on the spot, which is the managers' one derivation — deriving here as
@@ -485,23 +485,24 @@ export class StreamChat extends ChatApi {
    *
    * This function always returns the same client instance to avoid issues raised by multiple client and WS connections.
    *
-   * **After the first call, the client configuration will not change if the key or options parameters change.**
+   * **After the first call, the client configuration will not change if the key or config parameters change.**
    *
    * @example <caption>initialize the client in user mode</caption>
    * StreamChat.getInstance('api_key')
-   * @example <caption>initialize the client with options</caption>
-   * StreamChat.getInstance('api_key', { axiosRequestConfig: { timeout: 5000 } })
+   * @example <caption>initialize the client with configuration</caption>
+   * StreamChat.getInstance('api_key', { client: { axiosRequestConfig: { timeout: 5000 } } })
    *
    * @param key - The API key.
-   * @param options - Additional options (optional).
-   * @param options.browser - Enforce the client to be in browser mode (optional).
-   * @param options.axiosRequestConfig - Axios-level request configuration such as `timeout`,
-   *   `headers` or `httpsAgent`, spread into the client's axios instance (optional).
+   * @param config - Declarative configuration, as for the constructor (optional). Ignored once the
+   *   instance exists.
    * @returns The shared client instance.
    */
-  public static getInstance(key: string, options?: StreamChatOptions): StreamChat {
+  public static getInstance(
+    key: string,
+    config?: DeepPartial<InstanceConfigTree>,
+  ): StreamChat {
     if (!StreamChat._instance) {
-      StreamChat._instance = new StreamChat(key, options);
+      StreamChat._instance = new StreamChat(key, config);
     }
 
     return StreamChat._instance as StreamChat;
@@ -568,11 +569,11 @@ export class StreamChat extends ChatApi {
       );
     }
 
-    if (this.node && !this.options.allowServerSideConnect) {
+    if (this.node && !this.config.getConfig('client')?.allowServerSideConnect) {
       logger
         .withExtraTags('connectUser')
         .warn(
-          'Do not use connectUser server-side. connectUser impacts MAU and concurrent connection usage, and therefore your bill. If you have a valid use case, set "allowServerSideConnect: true" in the client options to disable this warning.',
+          'Do not use connectUser server-side. connectUser impacts MAU and concurrent connection usage, and therefore your bill. If you have a valid use case, set `client.allowServerSideConnect: true` in the client configuration to disable this warning.',
         );
     }
 
@@ -595,7 +596,7 @@ export class StreamChat extends ChatApi {
       // connectAnonymousUser(), which never sets setUserPromise, and a bare disconnectUser()
       // that already cleaned up.
       if (this.setUserPromise === setUserPromise && this.userId === user.id) {
-        if (!this.persistUserOnConnectionFailure) {
+        if (!this.config.getConfig('client')?.persistUserOnConnectionFailure) {
           // No user is kept, so there is nothing left to reconnect as. Tearing the socket down with
           // it is the point: the application is expected to call `connectUser` again.
           this.disconnectUser();
@@ -888,11 +889,11 @@ export class StreamChat extends ChatApi {
    * @returns A promise that resolves when the connection is set up.
    */
   connectAnonymousUser = () => {
-    if (this.node && !this.options.allowServerSideConnect) {
+    if (this.node && !this.config.getConfig('client')?.allowServerSideConnect) {
       logger
         .withExtraTags('connectAnonymousUser')
         .warn(
-          'Do not use connectUser server-side. connectUser impacts MAU and concurrent connection usage, and therefore your bill. If you have a valid use case, set "allowServerSideConnect: true" in the client options to disable this warning.',
+          'Do not use connectUser server-side. connectUser impacts MAU and concurrent connection usage, and therefore your bill. If you have a valid use case, set `client.allowServerSideConnect: true` in the client configuration to disable this warning.',
         );
     }
 

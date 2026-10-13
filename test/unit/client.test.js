@@ -59,7 +59,9 @@ describe('StreamChat getInstance', () => {
 	});
 
 	it('should throw error if connectUser called twice on an instance', async () => {
-		const client1 = StreamChat.getInstance('key2', { allowServerSideConnect: true });
+		const client1 = StreamChat.getInstance('key2', {
+			client: { allowServerSideConnect: true },
+		});
 		client1.openConnection = () => Promise.resolve();
 		client1._setToken = () => Promise.resolve();
 
@@ -72,7 +74,9 @@ describe('StreamChat getInstance', () => {
 	});
 
 	it('should not throw error if connectUser called twice with the same user', async () => {
-		const client1 = StreamChat.getInstance('key2', { allowServerSideConnect: true });
+		const client1 = StreamChat.getInstance('key2', {
+			client: { allowServerSideConnect: true },
+		});
 		client1.openConnection = () => Promise.resolve('openConnection');
 		client1._setToken = () => Promise.resolve();
 
@@ -84,17 +88,19 @@ describe('StreamChat getInstance', () => {
 
 	it('should set base url correctly', async () => {
 		const baseURL = 'http://example.com';
-		const client = StreamChat.getInstance('key3', { baseURL });
+		const client = StreamChat.getInstance('key3', { client: { baseURL } });
 
 		expect(client.baseURL).to.equal(baseURL);
 	});
 
 	it('should set axios request config correctly', async () => {
 		const client = StreamChat.getInstance('key', {
-			axiosRequestConfig: {
-				headers: {
-					'Cache-Control': 'no-cache',
-					Pragma: 'no-cache',
+			client: {
+				axiosRequestConfig: {
+					headers: {
+						'Cache-Control': 'no-cache',
+						Pragma: 'no-cache',
+					},
 				},
 			},
 		});
@@ -231,7 +237,7 @@ describe('Client userMuteStatus', function () {
 
 describe('Client anonymous auth type', () => {
 	it('should stay anonymous after the hello event replaces client.user', async () => {
-		const client = new StreamChat('key', { allowServerSideConnect: true });
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 		await client.tokenManager.setTokenOrProvider('', { id: 'local-anon-id', anon: true });
 		client._setUser({ id: 'local-anon-id', anon: true });
 
@@ -254,14 +260,14 @@ describe('Client anonymous auth type', () => {
 	});
 
 	it('should send an empty token rather than omitting it for anonymous sessions', async () => {
-		const client = new StreamChat('key', { allowServerSideConnect: true });
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 		await client.tokenManager.setTokenOrProvider('', { id: 'local-anon-id', anon: true });
 
 		expect(client.api._getToken()).to.equal('');
 	});
 
 	it('should report jwt for a regular user', async () => {
-		const client = new StreamChat('key', { allowServerSideConnect: true });
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 		const token =
 			'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYW1pbiJ9.1R88K_f1CC2yrR6j1_OzMEbasfS_dxRSNbundEDBlJI';
 		await client.tokenManager.setTokenOrProvider(token, { id: 'amin' });
@@ -272,7 +278,7 @@ describe('Client anonymous auth type', () => {
 	});
 
 	it('should reset the anonymous flag on disconnect', async () => {
-		const client = new StreamChat('key', { allowServerSideConnect: true });
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 		await client.tokenManager.setTokenOrProvider('', { id: 'local-anon-id', anon: true });
 		expect(client.anonymous).to.be.true;
 
@@ -293,7 +299,7 @@ describe('Client createGuest', () => {
 	afterEach(() => sinon.restore());
 
 	it('should send the request as anonymous when the client has no token', async () => {
-		const client = new StreamChat('key', { allowServerSideConnect: true });
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 		let authTypeDuringRequest;
 		let tokenDuringRequest;
 		sinon.stub(ChatApi.prototype, 'createGuest').callsFake(async () => {
@@ -312,7 +318,7 @@ describe('Client createGuest', () => {
 	});
 
 	it('should restore the un-authenticated state afterwards', async () => {
-		const client = new StreamChat('key', { allowServerSideConnect: true });
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 		sinon.stub(ChatApi.prototype, 'createGuest').resolves(guestResponse);
 
 		await client.createGuest({ user: { id: 'guest-1' } });
@@ -322,7 +328,7 @@ describe('Client createGuest', () => {
 	});
 
 	it('should restore state even when the request fails', async () => {
-		const client = new StreamChat('key', { allowServerSideConnect: true });
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 		sinon.stub(ChatApi.prototype, 'createGuest').rejects(new Error('boom'));
 
 		await expect(client.createGuest({ user: { id: 'guest-1' } })).rejects.toThrow(/boom/);
@@ -332,7 +338,7 @@ describe('Client createGuest', () => {
 	});
 
 	it('should not touch the auth mode of an already authenticated client', async () => {
-		const client = new StreamChat('key', { allowServerSideConnect: true });
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 		const token = 'xyz.eyJ1c2VyX2lkIjoiYW1pbiJ9.xyz';
 		await client.tokenManager.setTokenOrProvider(token, { id: 'amin' });
 
@@ -511,7 +517,7 @@ describe('Client openConnection', () => {
 			});
 		});
 
-		client = new StreamChat('', { allowServerSideConnect: true });
+		client = new StreamChat('', { client: { allowServerSideConnect: true } });
 	});
 
 	afterEach(() => {
@@ -572,9 +578,7 @@ describe('Client watching requests across close/reopen', () => {
 
 	const setup = () => {
 		HeldWebSocket.instances = [];
-		const client = new StreamChat('key', {
-			allowServerSideConnect: true,
-		});
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 		client.wsConnection.updateConfig({ webSocketImpl: HeldWebSocket });
 		client.tokenManager.getToken = () => 'mock-token';
 		client.tokenManager.tokenReady = () => Promise.resolve();
@@ -685,7 +689,7 @@ describe('Client connection id after a failed initial connect', () => {
 		);
 
 	const openConnectionFailingWith = async (error) => {
-		const client = new StreamChat('key', { allowServerSideConnect: true });
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 		client._setUser({ id: 'user' });
 
 		vi.spyOn(StableWSConnection.prototype, 'connect').mockImplementation(
@@ -735,7 +739,7 @@ describe('Client wsPromise close/reopen race', () => {
 		const connectResolvers = [];
 		let failNext = false;
 
-		const client = new StreamChat('key', { allowServerSideConnect: true });
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 
 		const wsConnection = {
 			isConnecting: false,
@@ -924,7 +928,7 @@ describe('Client wsPromise close/reopen race', () => {
 describe('Client connectUser', () => {
 	let client;
 	beforeEach(() => {
-		client = new StreamChat('', { allowServerSideConnect: true });
+		client = new StreamChat('', { client: { allowServerSideConnect: true } });
 		client.openConnection = () => Promise.resolve('openConnection');
 		client._setToken = () => Promise.resolve('_setToken');
 	});
@@ -1037,7 +1041,7 @@ describe('Client disconnectUser', () => {
 		let resolveClose;
 
 		beforeEach(() => {
-			client = new StreamChat('key', { allowServerSideConnect: true });
+			client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 			// the real connectUser, without a socket
 			client.openConnection = () => Promise.resolve();
 			const { resolve, promise } = Promise.withResolvers();
@@ -2436,7 +2440,7 @@ describe('X-Stream-Client header', () => {
 	});
 
 	it('client-side integration', () => {
-		client.node = false;
+		client.config.setConfig('client', { browser: true });
 		const userAgent = client.getUserAgent();
 
 		expect(userAgent).toMatchInlineSnapshot(
@@ -2724,7 +2728,7 @@ describe('Client WSFallback', () => {
 	};
 
 	beforeEach(() => {
-		client = new StreamChat('key', { allowServerSideConnect: true });
+		client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 		client.config.set({ client: { wsConnection: { enableWSFallback: true } } });
 		// As the real socket does: arms the connection id before failing.
 		socketConnect = vi

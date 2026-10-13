@@ -71,6 +71,11 @@ export const CONSTRUCTION_ONLY_CONFIG_PATHS: Readonly<Record<string, readonly st
     // `messagePaginator` was silent while the identical field under `channel`/`thread` warned — the same
     // read-once field, warned through one route and not the other.
     messagePaginator: ['initialCursor', 'initialOffset', 'unreadReferencePolicy'],
+    // Each is consumed while the client is being constructed — the axios instance, the base URL and the
+    // notification manager are built from it — so a value registered once the client exists never
+    // reaches them. `browser` and `persistUserOnConnectionFailure` are read when needed, so they are not
+    // listed.
+    client: ['axiosRequestConfig', 'baseURL', 'notificationManager'],
     channel: [
       'messagePaginator.initialCursor',
       'messagePaginator.initialOffset',

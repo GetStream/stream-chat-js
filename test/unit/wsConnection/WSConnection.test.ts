@@ -190,7 +190,7 @@ describe('client.wsConnection', () => {
       // this one proves nothing.
       vi.useFakeTimers();
       const replacing = new StreamChat('api-key-replace', {
-        allowServerSideConnect: true,
+        client: { allowServerSideConnect: true },
       });
 
       replacing.wsConnection.connect(10);
@@ -235,7 +235,9 @@ describe('client.wsConnection', () => {
       vi.spyOn(StableWSConnection.prototype, '_waitForHealthy').mockResolvedValue(
         undefined as never,
       );
-      const replacing = new StreamChat('api-key-wsid', { allowServerSideConnect: true });
+      const replacing = new StreamChat('api-key-wsid', {
+        client: { allowServerSideConnect: true },
+      });
 
       replacing.wsConnection.connect(10);
       const first = replacing.wsConnection.connection;
@@ -254,7 +256,9 @@ describe('client.wsConnection', () => {
       const injected = new StableWSConnection({ wsConnection: client.wsConnection });
       injected.connect = vi.fn().mockResolvedValue(undefined) as never;
       const disconnect = vi.spyOn(injected, 'disconnect');
-      const reusing = new StreamChat('api-key-reuse', { allowServerSideConnect: true });
+      const reusing = new StreamChat('api-key-reuse', {
+        client: { allowServerSideConnect: true },
+      });
       reusing.wsConnection.updateConfig({ connection: injected });
 
       reusing.wsConnection.connect(10);
@@ -269,9 +273,9 @@ describe('client.wsConnection', () => {
       injected.connect = vi.fn().mockResolvedValue(undefined) as never;
 
       const withInjected = new StreamChat('api-key-injected', {
-        allowServerSideConnect: true,
+        client: { allowServerSideConnect: true },
       });
-      // Properly typed now that it is a config field — no `as never` to get past `StreamChatOptions`.
+      // Properly typed now that it is a config field — no `as never` needed.
       withInjected.wsConnection.updateConfig({ connection: injected });
 
       withInjected.wsConnection.connect(10);
@@ -440,7 +444,7 @@ describe('client.wsConnection', () => {
       injected.connect = vi.fn().mockResolvedValue({ connection_id: 'x' }) as never;
 
       const withInjected = new StreamChat('api-key-2', {
-        allowServerSideConnect: true,
+        client: { allowServerSideConnect: true },
       });
       withInjected.wsConnection.updateConfig({ connection: injected });
       const wrapper = withInjected.wsConnection;
