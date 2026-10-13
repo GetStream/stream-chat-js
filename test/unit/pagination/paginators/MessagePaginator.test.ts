@@ -1964,6 +1964,101 @@ describe('MessagePaginator', () => {
       expect(paginator.hasMoreTail).toBe(false);
     });
 
+    describe('a page holding the newest message reaches the head, whatever query fetched it', () => {
+      const at = (day: string) => convertDateToTimestamp(`2020-01-${day}T00:00:00.000Z`);
+
+      it('marks a page around a message as the newest window when it holds the newest message', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        paginator.seedLastMessageAt(at('09'));
+
+        paginator.seedFirstPageSync(page(5, 9), 5, { id_around: 'm7' });
+
+        expect(headOf(paginator)).toEqual(['m5', 'm6', 'm7', 'm8', 'm9']);
+        expect(paginator.hasMoreHead).toBe(false);
+        expect(paginator.cursor?.headward).toBeNull();
+        expect(paginator.hasMoreTail).toBe(true);
+      });
+
+      it('leaves a page around a message unmarked when newer messages exist', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        paginator.seedLastMessageAt(at('20'));
+
+        paginator.seedFirstPageSync(page(5, 9), 5, { id_around: 'm7' });
+
+        expect(headOf(paginator)).toBeUndefined();
+        expect(paginator.hasMoreHead).toBe(true);
+      });
+
+      it('joins live messages to a jumped-to page that reaches the newest message', async () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        paginator.seedLastMessageAt(at('09'));
+        paginator.seedFirstPageSync(page(1, 3), 3, { id_around: 'm2' });
+
+        await paginator.postQueryReconcile({
+          isFirstPage: false,
+          queryShape: { id_around: 'm8', limit: 3 },
+          requestedPageSize: 3,
+          results: { items: page(7, 9) },
+        });
+        // received live after the jump
+        paginator.ingestItem(msg('m10', '10'));
+
+        expect(headOf(paginator)).toEqual(['m7', 'm8', 'm9', 'm10']);
+      });
+
+      it('applies to a reply list, from the newest reply time of the thread', () => {
+        const paginator = new MessagePaginator({
+          channel,
+          itemIndex,
+          parentMessageId: 'parent',
+        });
+        // as seeded from the thread response's `last_message_at`
+        paginator.seedLastMessageAt(at('09'));
+        const replies = page(5, 9).map((m) => ({ ...m, parent_id: 'parent' }));
+
+        paginator.seedFirstPageSync(replies, 5, { id_around: 'm7' });
+
+        expect(headOf(paginator)).toEqual(['m5', 'm6', 'm7', 'm8', 'm9']);
+      });
+
+      it('takes a custom doRequest reporting no newer page (null headward) as reaching the head', async () => {
+        const doRequest = vi.fn().mockResolvedValue({
+          items: page(5, 9),
+          cursor: { headward: null, tailward: 'm5' },
+        });
+        const paginator = new MessagePaginator({
+          channel,
+          itemIndex,
+          paginatorOptions: { doRequest, pageSize: 5 },
+        });
+        // nothing known about the newest message, so only the doRequest can tell
+
+        await paginator.executeQuery({ queryShape: { id_around: 'm7', limit: 5 } });
+
+        expect(headOf(paginator)).toEqual(['m5', 'm6', 'm7', 'm8', 'm9']);
+        expect(paginator.hasMoreHead).toBe(false);
+        expect(paginator.hasMoreTail).toBe(true);
+      });
+
+      it('takes a custom doRequest reporting no older page (null tailward) as reaching the tail', async () => {
+        const doRequest = vi.fn().mockResolvedValue({
+          items: page(1, 5),
+          cursor: { headward: 'm5', tailward: null },
+        });
+        const paginator = new MessagePaginator({
+          channel,
+          itemIndex,
+          paginatorOptions: { doRequest, pageSize: 5 },
+        });
+
+        await paginator.executeQuery({ queryShape: { id_around: 'm3', limit: 5 } });
+
+        expect(paginator.hasMoreTail).toBe(false);
+        expect(paginator.hasMoreHead).toBe(true);
+        expect(headOf(paginator)).toBeUndefined();
+      });
+    });
+
     it('does not mark a newer first page as the oldest window', () => {
       const paginator = new MessagePaginator({ channel, itemIndex });
 
@@ -4364,15 +4459,19 @@ describe('MessagePaginator', () => {
       expect(paginator.lastMessageAt).toBe(at('2020-01-01T00:00:00.000Z'));
     });
 
-    it('seeds lastMessageAt from the server value (monotonic)', () => {
+    it('seeds lastMessageAt from the server value, which replaces the previous one', () => {
       const paginator = buildPaginator();
 
       paginator.seedLastMessageAt(convertDateToTimestamp('2020-06-01T00:00:00.000Z'));
       expect(paginator.lastMessageAt).toBe(at('2020-06-01T00:00:00.000Z'));
 
-      // an older server value does not move it back
+      // an earlier server value moves it back: the newest message was hard-deleted
       paginator.seedLastMessageAt(convertDateToTimestamp('2020-01-01T00:00:00.000Z'));
-      expect(paginator.lastMessageAt).toBe(at('2020-06-01T00:00:00.000Z'));
+      expect(paginator.lastMessageAt).toBe(at('2020-01-01T00:00:00.000Z'));
+
+      // a value missing from the response leaves it
+      paginator.seedLastMessageAt(undefined);
+      expect(paginator.lastMessageAt).toBe(at('2020-01-01T00:00:00.000Z'));
 
       // a newer ingested message advances past the seed
       paginator.ingestItem(
@@ -4383,6 +4482,19 @@ describe('MessagePaginator', () => {
         }),
       );
       expect(paginator.lastMessageAt).toBe(at('2021-01-01T00:00:00.000Z'));
+
+      // ...and keeps counting when a response produced before it arrived carries an earlier value
+      paginator.seedLastMessageAt(convertDateToTimestamp('2020-06-01T00:00:00.000Z'));
+      expect(paginator.lastMessageAt).toBe(at('2021-01-01T00:00:00.000Z'));
+    });
+
+    it('clears the seed when the server reports no messages', () => {
+      const paginator = buildPaginator();
+      paginator.seedLastMessageAt(convertDateToTimestamp('2020-06-01T00:00:00.000Z'));
+
+      paginator.seedLastMessageAt(null);
+
+      expect(paginator.lastMessageAt).toBeNull();
     });
 
     describe('reply list (parentMessageId) auto-tracks on ingestion', () => {

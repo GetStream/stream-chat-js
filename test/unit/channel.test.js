@@ -3730,6 +3730,32 @@ describe('Channel.query', async () => {
 		stub.restore();
 	});
 
+	it('marks a channel opened around a message as at its newest when the page holds the newest message', async () => {
+		const client = await getClientWithUser();
+		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
+		const at = (minute) => new Date(Date.UTC(2020, 0, 1, 0, minute, 0));
+		const messages = [1, 2, 3].map((minute) =>
+			generateMsg({ id: `m${minute}`, cid: channel.cid, date: at(minute) }),
+		);
+		vi.spyOn(channel, 'getOrCreate').mockResolvedValue(
+			generateChannel({
+				channel: {
+					id: channel.id,
+					type: channel.type,
+					last_message_at: convertDateToTimestamp(at(3)),
+				},
+				messages,
+			}),
+		);
+
+		// e.g. opening at the first unread message, which is near the newest. A full page: from its shape
+		// alone, newer messages could exist.
+		await channel.watch({ messages: { id_around: 'm2', limit: 3 } });
+
+		expect(channel.messagePaginator.anchoredHeadItem?.id).to.equal('m3');
+		expect(channel.messagePaginator.hasMoreHead).to.equal(false);
+	});
+
 	it('does not seed the message paginator on a plain query', async () => {
 		const client = await getClientWithUser();
 		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });

@@ -244,15 +244,34 @@ export class MessagePaginator extends MessageIntervalPaginator {
   }
 
   /**
-   * Seed {@link lastMessageAt} from the server-provided `ChannelResponse.last_message_at`, the
-   * authoritative whole-channel aggregate. Monotonic: a no-op when the paginator already advanced
-   * past it (e.g. from ingested messages), so seed order does not matter.
+   * Seed {@link lastMessageAt} from a server response's `last_message_at` (a channel's, or a thread's
+   * for a reply list). The response is the server's current answer, so it replaces the seed, also
+   * with an earlier value: the newest message may have been hard-deleted, which no event reports with
+   * the new value. A message received live after the response was produced still counts, through
+   * {@link lastMessage}. `null` clears the seed (no messages); `undefined` (not in the response)
+   * leaves it.
    */
   seedLastMessageAt(value: TimestampNS | null | undefined) {
-    if (value == null || !Number.isFinite(value)) return;
-    const current = this.aggregateState.getLatestValue().seededLastMessageAt;
-    if (current !== null && value <= current) return;
-    this.aggregateState.partialNext({ seededLastMessageAt: value });
+    if (value === undefined) return;
+    const next = value !== null && Number.isFinite(value) ? value : null;
+    if (next === this.aggregateState.getLatestValue().seededLastMessageAt) return;
+    this.aggregateState.partialNext({ seededLastMessageAt: next });
+  }
+
+  /**
+   * A page reaches the newest message when its newest message is at or after {@link lastMessageAt},
+   * as known before the page is ingested; one older than that is not the newest. That value comes from
+   * the server — `ChannelResponse` for a channel, `ThreadStateResponse` for a reply list — and events
+   * keep it current, like the rest of the list's state. `undefined` while it is not known.
+   */
+  protected override pageReachesHead(page: LocalMessage[]): boolean | undefined {
+    const lastMessageAt = this.lastMessageAt;
+    if (lastMessageAt === null) return undefined;
+    // the page's newest message is at its head edge
+    const createdAt = getMessageCreatedAtTimestamp(
+      this.getPagePaginationEdges(page).head,
+    );
+    return createdAt !== null && createdAt >= lastMessageAt;
   }
 
   ingestItem(item: LocalMessage): boolean {

@@ -495,20 +495,14 @@ export class MessageIntervalPaginator extends BasePaginator<
     direction?: PaginationDirection;
     items: LocalMessage[];
   }) => {
-    if (!items.length) {
+    // Newer side is the pagination head for messages.
+    const { head, tail } = this.getPagePaginationEdges(items);
+    if (!head || !tail) {
       return {
         tailward: undefined,
         headward: undefined,
       };
     }
-
-    const start = items[0];
-    const end = items[items.length - 1];
-
-    // Newer side is the pagination head for messages. Which bound is considered "head"
-    // is determined by intervalItemIdsAreHeadFirst (see BasePaginator.getIntervalPaginationEdges).
-    const head = this.intervalItemIdsAreHeadFirst ? start : end;
-    const tail = this.intervalItemIdsAreHeadFirst ? end : start;
 
     // if there is no direction, then we are jumping, and we want to set both directions in the cursor
     return {
@@ -534,20 +528,16 @@ export class MessageIntervalPaginator extends BasePaginator<
 
     const options = this._nextQueryShape;
     let items: LocalMessage[];
-    let tailward: string | undefined;
-    let headward: string | undefined;
+    let tailward: string | null | undefined;
+    let headward: string | null | undefined;
     if (this.config.doRequest) {
       const result = await this.config.doRequest(options);
       items = this.getCanonicalQueryItems(result?.items ?? []);
       // if there is no direction, then we are jumping, and we want to set both directions in the cursor
       tailward =
-        !direction || direction === 'tailward'
-          ? (result.cursor?.tailward ?? undefined)
-          : undefined;
+        !direction || direction === 'tailward' ? result.cursor?.tailward : undefined;
       headward =
-        !direction || direction === 'headward'
-          ? (result.cursor?.headward ?? undefined)
-          : undefined;
+        !direction || direction === 'headward' ? result.cursor?.headward : undefined;
     } else {
       const { messages } = this.parentMessageId
         ? await this.channel
@@ -623,6 +613,9 @@ export class MessageIntervalPaginator extends BasePaginator<
       return;
     }
 
+    // In item order, as `query()` hands its pages over, so the page's edges are its first and last item.
+    const items = this.getCanonicalQueryItems(messages);
+    const { head: headItem, tail: tailItem } = this.getPagePaginationEdges(items);
     this.postQueryReconcile({
       // A jump/around page spans both directions; a page at a cursor pages the way its cursor points,
       // and a plain latest page paginates tailward (older).
@@ -631,9 +624,9 @@ export class MessageIntervalPaginator extends BasePaginator<
       queryShape,
       requestedPageSize,
       results: {
-        items: messages,
-        headward: isJump ? messages[messages.length - 1]?.id : undefined,
-        tailward: messages[0]?.id,
+        items,
+        headward: isJump ? headItem?.id : undefined,
+        tailward: tailItem?.id,
       },
     });
   }

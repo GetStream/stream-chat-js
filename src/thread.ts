@@ -517,6 +517,9 @@ export class Thread extends WithSubscriptions {
     const incomingReplies = thread.messagePaginator.state.getLatestValue().items ?? [];
 
     if (!options?.reconcile) this.messagePaginator.clearStateAndCache();
+    // The re-queried thread's newest reply time replaces what was known, so lastMessageAt is right even
+    // when the merged page does not include the newest reply, or the newest reply was hard-deleted.
+    this.messagePaginator.seedLastMessageAt(thread.messagePaginator.lastMessageAt);
     if (typeof this.messagePaginator.items === 'undefined') {
       // Nothing loaded yet — the common case for a thread opened from a message, whose paginator
       // has never held a window. `mergeNewestPage` deliberately no-ops there (it merges into an
@@ -534,9 +537,6 @@ export class Thread extends WithSubscriptions {
       this.messagePaginator.mergeNewestPage(incomingReplies, options?.reconcile);
     }
     pendingReplies.forEach((reply) => this.messagePaginator.ingestItem(reply));
-    // Carry the re-queried thread's last-activity floor so lastMessageAt stays fresh even when the
-    // merged page does not include the newest reply. Monotonic, so an older value is a no-op.
-    this.messagePaginator.seedLastMessageAt(thread.messagePaginator.lastMessageAt);
   };
 
   public registerSubscriptions = () => {

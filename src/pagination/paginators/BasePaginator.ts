@@ -235,8 +235,22 @@ export type ExecuteQueryReturnValue<T> = {
 };
 
 export type PaginationQueryReturnValue<T> = { items: T[] } & {
-  headward?: string;
-  tailward?: string;
+  /**
+   * The cursor to the next page towards the head.
+   *
+   * - `null`: the page reaches the head of the dataset, so there is none. This holds for every
+   *   paginator, including one that derives its cursors (`deriveCursor`).
+   * - `undefined` depends on where the paginator takes its cursors from. One that derives them reads it
+   *   as not reported (a page queried towards the tail says nothing about the head side) and derives
+   *   the cursor itself. One that takes them from the query reads it as no next page, as an API leaves
+   *   out the cursor at the end.
+   */
+  headward?: string | null;
+  /**
+   * The cursor to the next page towards the tail; `null` and `undefined` as for {@link headward}, with
+   * `null` meaning the page reaches the tail of the dataset.
+   */
+  tailward?: string | null;
   /**
    * @deprecated Use `tailward` instead.
    */
@@ -381,7 +395,12 @@ export type PaginatorOptions<T, Q> = {
    * If not provided, BasePaginator uses its own default implementation.
    */
   deriveCursor?: CursorDerivator<T, Q>;
-  /** Custom function to retrieve items pages and optionally return a cursor in case of cursor pagination. */
+  /**
+   * Custom function to retrieve items pages and optionally return a cursor in case of cursor
+   * pagination. A `null` cursor side tells that the page reaches that end of the dataset; an
+   * `undefined` side is read as {@link PaginationQueryReturnValue.headward} describes for this
+   * paginator.
+   */
   doRequest?: (queryParams: Q) => Promise<{ items: T[]; cursor?: PaginatorCursor }>;
   /** In case of cursor pagination, specify the initial cursor value. */
   initialCursor?: PaginatorCursor;
@@ -1681,6 +1700,20 @@ export abstract class BasePaginator<T, Q> {
     const start = this._itemIndex?.get?.(ids[0]);
     const end = this._itemIndex?.get?.(ids[ids.length - 1]);
     return { start, end } as IntervalSortBounds<T>;
+  }
+
+  /**
+   * The items at the head and tail edges of a page given in item order (`sortComparator` order), as
+   * {@link getIntervalPaginationEdges} gives them for an interval. Both `undefined` for an empty page.
+   */
+  protected getPagePaginationEdges(page: T[]): {
+    head: T | undefined;
+    tail: T | undefined;
+  } {
+    const [first, last] = [page[0], page[page.length - 1]];
+    return this.intervalItemIdsAreHeadFirst
+      ? { head: first, tail: last }
+      : { head: last, tail: first };
   }
 
   /**
@@ -3071,6 +3104,23 @@ export abstract class BasePaginator<T, Q> {
     return true;
   }
 
+  /**
+   * Whether a fetched page reaches the head of the dataset, whatever query fetched it — for example a
+   * page around a message that turns out to include the newest item. Consulted when the query result
+   * does not say (a `null` {@link PaginationQueryReturnValue.headward} does), with the page sorted in
+   * item order, before it is ingested.
+   *
+   * - `true`: the page reaches the head; the window it lands in is marked as the head.
+   * - `false`: the page does not reach the head.
+   * - `undefined` (the default): not known.
+   *
+   * Only `true` acts. On `false` or `undefined` the query shape and the cursor derivation decide, so a
+   * window they mark as the head stays marked — for example a newest page that a live item joins.
+   */
+  protected pageReachesHead(_page: T[], _queryShape: Q | undefined): boolean | undefined {
+    return undefined;
+  }
+
   /** The page size a query's results are measured against when deriving the head/tail flags. */
   protected getRequestedPageSize(_queryShape: Q | undefined): number {
     return this.pageSize;
@@ -3269,8 +3319,9 @@ export abstract class BasePaginator<T, Q> {
     // Internal SDK paginators already return tailward/headward, so this fallback is
     // only to keep non-migrated external subclasses working during transition.
     const { items, headward, tailward, next, prev } = results;
-    const resolvedHeadward = headward ?? prev;
-    const resolvedTailward = tailward ?? next;
+    // `null` (no more that way) is kept, it is not the same as a side the query did not report
+    const resolvedHeadward = headward !== undefined ? headward : prev;
+    const resolvedTailward = tailward !== undefined ? tailward : next;
 
     stateUpdate.lastQueryError = undefined;
     // Filtering is a synchronous local predicate (see filterQueryResults), so the whole
@@ -3280,6 +3331,10 @@ export abstract class BasePaginator<T, Q> {
     stateUpdate.items = filteredItems;
 
     const isJumpQuery = !!queryShape && this.isJumpQueryShape(queryShape);
+    // Asked before the ingest, which may itself advance what the paginator knows about the head.
+    const reachesHead =
+      resolvedHeadward === null || this.pageReachesHead(items, queryShape) === true;
+    const reachesTail = resolvedTailward === null;
     // A non-destructive refresh merges page 1 into the window it kept, so the ids that window held
     // have to be read before the ingest below adds the page to it.
     const keptItemIds =
@@ -3290,17 +3345,21 @@ export abstract class BasePaginator<T, Q> {
       page: stateUpdate.items,
       policy: isJumpQuery ? 'strict-overlap-only' : 'auto',
       // a first page is the head unless its query started it elsewhere (at a cursor)
-      isHead: isJumpQuery
-        ? undefined //head/tail doesn't apply / is unknown for this ingestion
-        : (isFirstPage && this.isHeadPageQueryShape(queryShape)) ||
-          (direction === 'headward' ? requestedPageSize > items.length : undefined),
+      isHead: reachesHead
+        ? true
+        : isJumpQuery
+          ? undefined //head/tail doesn't apply / is unknown for this ingestion
+          : (isFirstPage && this.isHeadPageQueryShape(queryShape)) ||
+            (direction === 'headward' ? requestedPageSize > items.length : undefined),
       // even though the page is first, we have to compare the requested vs returned page size;
       // a first page queried towards the head says nothing about the tail
-      isTail: isJumpQuery
-        ? undefined //head/tail doesn't apply / is unknown for this ingestion
-        : (isFirstPage && direction !== 'headward') || direction === 'tailward'
-          ? requestedPageSize > items.length
-          : undefined,
+      isTail: reachesTail
+        ? true
+        : isJumpQuery
+          ? undefined //head/tail doesn't apply / is unknown for this ingestion
+          : (isFirstPage && direction !== 'headward') || direction === 'tailward'
+            ? requestedPageSize > items.length
+            : undefined,
       targetIntervalId: isJumpQuery ? undefined : this._activeIntervalId,
     });
     if (interval && updateState) {
@@ -3367,6 +3426,16 @@ export abstract class BasePaginator<T, Q> {
         };
         stateUpdate.hasMoreTail = !!resolvedTailward;
         stateUpdate.hasMoreHead = !!resolvedHeadward;
+      }
+      if (interval && (reachesHead || reachesTail)) {
+        // The page reaches an end of the dataset, whatever the derivation guessed from its shape and size.
+        const cursor = stateUpdate.cursor ?? this.cursor;
+        stateUpdate.cursor = {
+          headward: reachesHead ? null : (cursor?.headward ?? null),
+          tailward: reachesTail ? null : (cursor?.tailward ?? null),
+        };
+        if (reachesHead) stateUpdate.hasMoreHead = false;
+        if (reachesTail) stateUpdate.hasMoreTail = false;
       }
     } else {
       // todo: we could keep the offset in two directions (initial tailward offset would be taken from config.initialOffset)
