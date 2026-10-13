@@ -1241,9 +1241,25 @@ These are aliases for the generated `channel.uploadChannelFile` / `channel.uploa
 
 **Routes changed** from `/channels/{type}/{id}/file` and `/image` to `POST /api/v2/chat/channels/{type}/{id}/file` and `/image`. The file response additionally carries `moderation_action`.
 
-#### `channel.deleteFile` / `channel.deleteImage` / `channel.getPinnedMessages` / `channel.getMessagesById` / `channel.lastRead` / `channel.countUnread` / `channel.countUnreadMentions` / `channel.lastMessage` / `channel.watch`
+#### `channel.deleteFile` / `channel.deleteImage` / `channel.getPinnedMessages` / `channel.getMessagesById` / `channel.lastRead` / `channel.countUnread` / `channel.countUnreadMentions` / `channel.watch`
 
 Signatures unchanged.
+
+#### `channel.lastMessage` — removed
+
+```ts
+// v9
+channel.lastMessage();
+
+// v10
+channel.messagePaginator.lastMessage;
+```
+
+v10 keeps the channel's messages in `channel.messagePaginator`, which tracks the newest message as `lastMessage`. It is a getter, not a method; subscribe to `channel.messagePaginator.aggregateState` to be notified when it changes. Differences from v9:
+
+- It is `null`, not `undefined`, when there is no message.
+- It skips system messages when the channel type sets `skip_last_msg_update_for_system_msgs`, as `lastMessageAt` does. v9 returned the newest message whatever its type. For that, use `channel.messagePaginator.anchoredHeadItem`: the newest message of the window holding the channel's newest messages, `undefined` while that window is not loaded.
+- `created_at` is a unix-nanosecond number, not a `Date` (see `v9-to-v10-migration-guide-dates.md`).
 
 #### `channel.query`
 
