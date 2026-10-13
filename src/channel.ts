@@ -55,7 +55,6 @@ import type {
   MessagePaginationParams,
   MessageRequest,
   MessageResponse,
-  MessageSetType,
   QueryMembersPayload,
   SharedLocation,
   StreamRequestOptions,
@@ -1677,10 +1676,10 @@ export class Channel extends ChannelApi {
     // handshake has produced a connection id, so `watch: true` always binds to a current one and
     // `watchStatus = Watching` is truthful by construction — while a call asking for neither goes out
     // with no socket at all.
-    const state = await this.query(combined, 'latest', requestOptions);
+    const state = await this.queryOpeningChannel(combined, requestOptions);
     this.data = state.channel;
 
-    // The message paginator is seeded synchronously inside query() (before read-state hydration),
+    // The message paginator is seeded synchronously by the query (before read-state hydration),
     // so a channel opened via watch() alone — a deep-link restore, a search result, a freshly
     // created DM — already has its latest page loaded here.
 
@@ -1696,9 +1695,9 @@ export class Channel extends ChannelApi {
    *
    * This is intentionally thin: it only re-issues `watch()` with a limit sized to the loaded window
    * (`items.length`, so the whole loaded window is refreshed — not the smaller channel-list page). The
-   * actual fold + destructive reconciliation happens inside `query()` → `seedFirstPageSync`
+   * actual fold + destructive reconciliation happens in the channel-opening query → `seedFirstPageSync`
    * (the same path the channel-list re-hydrate and connection recovery use), driven by the loaded-id
-   * snapshot `query()` captures before its await. Owning that single path is what lets the SDK stop
+   * snapshot that query captures before its await. Owning that single path is what lets the SDK stop
    * passing the reconciliation window/snapshot itself.
    *
    * Preserves failed (unsent) messages: an overlap merge keeps them (the reconcile's provenance guard
@@ -1875,7 +1874,7 @@ export class Channel extends ChannelApi {
       state: false,
       presence: false,
     };
-    return await this.query(defaultOptions, 'latest');
+    return await this.queryOpeningChannel(defaultOptions);
   };
 
   /**
@@ -1929,19 +1928,36 @@ export class Channel extends ChannelApi {
   /**
    * Queries the API to load messages, members, or other channel fields.
    *
+   * The returned messages are not added to {@link Channel.messagePaginator}: the paginator loads its
+   * own pages, and {@link Channel.watch} / {@link Channel.create} load the channel's first page.
+   *
    * @param options - The query options (optional, defaults to `{}`).
-   * @param messageSetToAddToIfDoesNotExist - It's possible to load disjunct sets of a channel's
-   *   messages into state. Use `current` to load the initial channel state or to extend the
-   *   currently displayed messages; use `latest` to load/extend the latest messages; `new` is
-   *   used for loading a specific message and its surroundings (optional, defaults to `'current'`).
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns A query response.
    */
   async query(
     options: ChannelGetOrCreateRequest = {},
-    messageSetToAddToIfDoesNotExist: MessageSetType = 'current',
     requestOptions?: StreamRequestOptions,
+  ) {
+    return await this.countedQuery(options, requestOptions, { opensChannel: false });
+  }
+
+  /**
+   * The query behind {@link Channel.watch} and {@link Channel.create}: its response is the channel's
+   * first page, so it seeds the message paginator and is reported as the latest message set.
+   */
+  private async queryOpeningChannel(
+    options: ChannelGetOrCreateRequest,
+    requestOptions?: StreamRequestOptions,
+  ) {
+    return await this.countedQuery(options, requestOptions, { opensChannel: true });
+  }
+
+  private async countedQuery(
+    options: ChannelGetOrCreateRequest,
+    requestOptions: StreamRequestOptions | undefined,
+    { opensChannel }: { opensChannel: boolean },
   ) {
     // A disposed instance is done for good: its query would load it again and, for a watch, register
     // a watch whose events go to the instance now stored for the cid. Refused before it is sent.
@@ -1950,11 +1966,7 @@ export class Channel extends ChannelApi {
     // channel that is being loaded
     this._channelQueriesInFlight += 1;
     try {
-      return await this.runQuery(
-        options,
-        messageSetToAddToIfDoesNotExist,
-        requestOptions,
-      );
+      return await this.runQuery(options, requestOptions, { opensChannel });
     } finally {
       this._channelQueriesInFlight -= 1;
     }
@@ -1962,10 +1974,10 @@ export class Channel extends ChannelApi {
 
   private async runQuery(
     options: ChannelGetOrCreateRequest,
-    messageSetToAddToIfDoesNotExist: MessageSetType,
-    requestOptions?: StreamRequestOptions,
+    requestOptions: StreamRequestOptions | undefined,
+    { opensChannel }: { opensChannel: boolean },
   ) {
-    // Snapshot the loaded message ids BEFORE the network await, for a latest-window (re)seed only.
+    // Snapshot the loaded message ids BEFORE the network await, for a channel-opening (re)seed only.
     // When this query re-seeds an already-loaded window (reconnect / re-hydrate), seedFirstPageSync
     // reconciles the fresh page against what is loaded, and the snapshot lets it tell an offline
     // hard-delete (in the snapshot, absent from the page) from a message that arrives live
@@ -1977,10 +1989,9 @@ export class Channel extends ChannelApi {
     // `new Set(this.memberIds)`) and use it here AND in client.queryChannelsAndHydrate. The broader
     // scope (all intervals vs just the head) is inert: the reconcile only consults head ids, older
     // island ids are never at/above-newest, and local messages are guarded by isServerConfirmedMessage.
-    const candidateIds =
-      messageSetToAddToIfDoesNotExist === 'latest'
-        ? new Set(this.messagePaginator.headItems.map((message) => message.id))
-        : undefined;
+    const candidateIds = opensChannel
+      ? new Set(this.messagePaginator.headItems.map((message) => message.id))
+      : undefined;
 
     // The INITIAL channel-open query honors the paginator's OWN pageSize (light on native, 25) rather
     // than the server's larger default — opening loads the same page size it paginates by. A caller
@@ -1996,10 +2007,7 @@ export class Channel extends ChannelApi {
       // Ask the server for exactly the initial-open page size (not its default), so the loaded window
       // matches the paginator's pageSize. Explicit messages (reconnect/around/pagination) pass through.
       messages:
-        options?.messages ??
-        (messageSetToAddToIfDoesNotExist === 'latest'
-          ? { limit: requestedPageSize }
-          : undefined),
+        options?.messages ?? (opensChannel ? { limit: requestedPageSize } : undefined),
     };
 
     const state = this.id
@@ -2035,9 +2043,9 @@ export class Channel extends ChannelApi {
     // hydrates the read state and (via MessageReceiptsTracker) resolves read/delivered cursors
     // against this paginator. Seeding first guarantees the tracker sees a populated timeline; a
     // later async seed would run after the reconcile and mislabel delivery status. Only the
-    // latest-page open paths (watch/create) pass 'latest' — the paginator's own pagination queries
-    // use 'current' and must not be reseeded as a first page here.
-    if (messageSetToAddToIfDoesNotExist === 'latest' && Array.isArray(state.messages)) {
+    // channel-opening queries (watch/create) seed — the paginator's own pagination queries go
+    // through query() and ingest their pages themselves, so they must not be seeded as a first page.
+    if (opensChannel && Array.isArray(state.messages)) {
       // Pass the query's message pagination options through: a channel can be opened AROUND a
       // message (id_around / created_at_around), in which case the fetched page is a jump window,
       // not the latest page — the paginator must reconcile it with jump semantics.
@@ -2063,9 +2071,9 @@ export class Channel extends ChannelApi {
 
     // Seed read/members/pinned/thread-cleanup state; the message list is in the paginator.
     this._initializeState(state);
-    // The queried page is the latest set unless this was a jump/around query.
+    // A channel-opening page is the latest set unless it was opened around a message.
     const isLatestMessageSet =
-      messageSetToAddToIfDoesNotExist === 'latest' &&
+      opensChannel &&
       !options?.messages?.id_around &&
       !(options?.messages as MessagePaginationParams | undefined)?.created_at_around;
 

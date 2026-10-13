@@ -1241,9 +1241,23 @@ These are aliases for the generated `channel.uploadChannelFile` / `channel.uploa
 
 **Routes changed** from `/channels/{type}/{id}/file` and `/image` to `POST /api/v2/chat/channels/{type}/{id}/file` and `/image`. The file response additionally carries `moderation_action`.
 
-#### `channel.deleteFile` / `channel.deleteImage` / `channel.getPinnedMessages` / `channel.getMessagesById` / `channel.lastRead` / `channel.countUnread` / `channel.countUnreadMentions` / `channel.lastMessage` / `channel.watch` / `channel.query`
+#### `channel.deleteFile` / `channel.deleteImage` / `channel.getPinnedMessages` / `channel.getMessagesById` / `channel.lastRead` / `channel.countUnread` / `channel.countUnreadMentions` / `channel.lastMessage` / `channel.watch`
 
 Signatures unchanged.
+
+#### `channel.query`
+
+```ts
+// v9
+channel.query(options?, messageSetToAddToIfDoesNotExist?: 'latest' | 'current' | 'new');
+
+// v10
+channel.query(options?: ChannelGetOrCreateRequest, requestOptions?: StreamRequestOptions);
+```
+
+The second parameter is gone, and the `MessageSetType` type with it. In v9 it picked which of the channel's message sets the response went into. In v10 the messages live in `channel.messagePaginator`, which loads its own pages, so `channel.query()` returns the response without adding its messages anywhere. To open a channel and load its latest messages, call `channel.watch()` (or `channel.create()`).
+
+In JavaScript a leftover second argument is not an error: the string lands in the `requestOptions` slot and is ignored. Search for `query(` calls with two arguments when migrating.
 
 #### `channel._handleChannelEvent` / `channel._callChannelListeners`
 

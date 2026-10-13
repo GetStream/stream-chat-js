@@ -466,14 +466,14 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 		// A plain read needs no connection id, so an explicit `watch: false` must not be made to wait
 		// for one — which is what would make it unusable offline.
 		socketDown();
-		const query = sinon
-			.stub(channel, 'query')
-			.resolves({ channel: {}, members: [], messages: [] });
+		const getOrCreate = sinon
+			.stub(channel, 'getOrCreate')
+			.resolves(generateChannel({ channel: { id: channel.id, type: channel.type } }));
 
 		await channel.watch({ watch: false, presence: false });
 
-		expect(query.calledOnce).to.be.true;
-		expect(query.firstCall.args[0]).to.include({ watch: false });
+		expect(getOrCreate.calledOnce).to.be.true;
+		expect(getOrCreate.firstCall.args[0]).to.include({ watch: false });
 	});
 
 	it('rejects at once after a deliberate closeConnection', async () => {
@@ -3629,7 +3629,7 @@ describe('Channel _initializeState', () => {
 });
 
 describe('Channel.query', async () => {
-	it('seeds the message paginator with the full latest page on query', async () => {
+	it('seeds the message paginator with the full latest page on watch', async () => {
 		const client = await getClientWithUser();
 		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
 		const mockedChannelQueryResponse = {
@@ -3642,8 +3642,8 @@ describe('Channel.query', async () => {
 		const stub = sinon
 			.stub(client.api, 'sendRequest')
 			.resolves({ ...mockedChannelQueryResponse, metadata: {} });
-		await channel.query({}, 'latest');
-		// A latest-page query seeds the message paginator with the returned page.
+		await channel.watch();
+		// Opening the channel seeds the message paginator with the returned page.
 		expect(channel.messagePaginator.items).to.have.length(
 			DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
 		);
@@ -3651,7 +3651,7 @@ describe('Channel.query', async () => {
 		stub.restore();
 	});
 
-	it('seeds the message paginator with a partial latest page on query', async () => {
+	it('seeds the message paginator with a partial latest page on watch', async () => {
 		const client = await getClientWithUser();
 		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
 		const mockedChannelQueryResponse = {
@@ -3664,11 +3664,101 @@ describe('Channel.query', async () => {
 		const stub = sinon
 			.stub(client.api, 'sendRequest')
 			.resolves({ ...mockedChannelQueryResponse, metadata: {} });
-		await channel.query({}, 'latest');
+		await channel.watch();
 		expect(channel.messagePaginator.items).to.have.length(
 			DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE - 1,
 		);
 		stub.restore();
+	});
+
+	it('seeds the message paginator on create', async () => {
+		const client = await getClientWithUser();
+		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
+		const stub = sinon.stub(client.api, 'sendRequest').resolves({
+			...mockChannelQueryResponse,
+			messages: Array.from({ length: 3 }, generateMsg),
+			metadata: {},
+		});
+		await channel.create();
+		expect(channel.messagePaginator.items).to.have.length(3);
+		stub.restore();
+	});
+
+	it('does not seed the message paginator on a plain query', async () => {
+		const client = await getClientWithUser();
+		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
+		const stub = sinon.stub(client.api, 'sendRequest').resolves({
+			...mockChannelQueryResponse,
+			messages: Array.from({ length: 3 }, generateMsg),
+			metadata: {},
+		});
+		await channel.query({});
+		expect(channel.messagePaginator.items).to.equal(undefined);
+		stub.restore();
+	});
+
+	it('does not add the paginator page size to a plain query', async () => {
+		const client = await getClientWithUser();
+		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
+		const getOrCreate = vi
+			.spyOn(channel, 'getOrCreate')
+			.mockResolvedValue(
+				generateChannel({ channel: { id: channel.id, type: channel.type } }),
+			);
+		await channel.query({});
+		expect(getOrCreate.mock.calls[0][0].messages).toBeUndefined();
+	});
+
+	describe('reports whether the queried page is the latest message set', () => {
+		const queriedFlags = async (run) => {
+			const client = await getClientWithUser();
+			const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
+			vi.spyOn(channel, 'getOrCreate').mockResolvedValue(
+				generateChannel({ channel: { id: channel.id, type: channel.type } }),
+			);
+			const upsertChannels = vi.fn();
+			client.offlineDb = {
+				executeQuerySafely: (fn, { method }) =>
+					method === 'upsertChannels' ? fn({ upsertChannels }) : undefined,
+			};
+			const events = [];
+			client.on('channels.queried', (event) => events.push(event));
+			await run(channel);
+			client.offlineDb = undefined;
+			return {
+				event: events[0].queriedChannels.isLatestMessageSet,
+				offline: upsertChannels.mock.calls[0][0].isLatestMessagesSet,
+			};
+		};
+
+		it('as latest for watch', async () => {
+			expect(await queriedFlags((channel) => channel.watch())).toEqual({
+				event: true,
+				offline: true,
+			});
+		});
+
+		it('as latest for create', async () => {
+			expect(await queriedFlags((channel) => channel.create())).toEqual({
+				event: true,
+				offline: true,
+			});
+		});
+
+		it('as not latest for watch around a message', async () => {
+			expect(
+				await queriedFlags((channel) =>
+					channel.watch({ messages: { id_around: 'm1', limit: 25 } }),
+				),
+			).toEqual({ event: false, offline: false });
+		});
+
+		it('as not latest for a plain query', async () => {
+			expect(await queriedFlags((channel) => channel.query({}))).toEqual({
+				event: false,
+				offline: false,
+			});
+		});
 	});
 
 	it(`update the messageComposer config`, async () => {
@@ -4451,7 +4541,7 @@ describe('Channel.query — initial page size', () => {
 				generateChannel({ channel: { id: channel.id, type: channel.type } }),
 			);
 
-		await channel.query({}, 'latest');
+		await channel.watch();
 
 		// The initial open asks the server for exactly pageSize messages (not its larger default).
 		expect(getOrCreate).toHaveBeenCalledWith(
@@ -4469,7 +4559,7 @@ describe('Channel.query — initial page size', () => {
 			);
 
 		// e.g. channel.reload → watch({ messages: { limit: items.length } }) — passed through as-is.
-		await channel.query({ messages: { limit: 80 } }, 'latest');
+		await channel.watch({ messages: { limit: 80 } });
 
 		expect(getOrCreate).toHaveBeenCalledWith(
 			expect.objectContaining({ messages: { limit: 80 } }),

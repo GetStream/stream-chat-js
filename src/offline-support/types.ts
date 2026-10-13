@@ -66,7 +66,7 @@ export type DBUpsertChannelsType = {
   channels: ChannelStateResponseFields[];
   /** Whether to immediately execute the operation. */
   execute?: boolean;
-  /** If true, marks that the latest messages are already set. */
+  /** True when the channels' messages are their latest page (a channel opened with `watch()` / `create()`, or `queryChannels`). */
   isLatestMessagesSet?: boolean;
 };
 
