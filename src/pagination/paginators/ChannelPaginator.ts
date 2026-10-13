@@ -32,6 +32,13 @@ import type { FieldToDataResolver, PathResolver } from '../types.normalization';
 import { resolveDotPathValue } from '../utility.normalization';
 import { isEqual } from '../../utils/mergeWith/mergeWithCore';
 
+const hasSameItems = (current: Channel[] | undefined, next: Channel[] | undefined) => {
+  if (current === next) return false;
+  if (!current || !next || current.length !== next.length) return false;
+  for (let i = 0; i < next.length; i++) if (current[i] !== next[i]) return false;
+  return true;
+};
+
 const DEFAULT_BACKEND_SORT: SortParamRequest[] = [
   { direction: -1, field: 'last_message_at' },
   { direction: -1, field: 'updated_at' },
@@ -165,16 +172,9 @@ const hiddenFilterResolver: FieldToDataResolver<Channel> = {
 
 const lastUpdatedFilterResolver: FieldToDataResolver<Channel> = {
   matchesField: (field) => field === 'last_updated',
-  resolve: (channel) => {
-    // combination of last_message_at and updated_at — both already wire timestamps, so they are
-    // directly comparable. Deriving one of them through `new Date(...).getTime()` would put the two
-    // in different units and make `updated_at` win every comparison.
-    const lastMessageAt = channel.messagePaginator.lastMessageAt ?? null;
-    const updatedAt = channel.data?.updated_at;
-    return lastMessageAt !== null && updatedAt !== undefined
-      ? Math.max(lastMessageAt, updatedAt)
-      : (lastMessageAt ?? updatedAt);
-  },
+  // the server uses the creation time for a channel without messages
+  resolve: (channel) =>
+    channel.messagePaginator.lastMessageAt ?? channel.data?.created_at,
 };
 
 const membersFilterResolver: FieldToDataResolver<Channel> = {
@@ -313,6 +313,8 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   private _itemsLoadedFromOfflineDB = false;
   /** The query in flight refreshes a cache-only window, so its response replaces the window. */
   private _replaceOfflineSeedOnResponse = false;
+  /** The query handed to the sync manager, from the cache read until it runs. See `executeQuery`. */
+  private _queryAwaitingSync: ChannelQueryShape | undefined;
   protected _sortComparatorFactory: ChannelSortComparatorFactory | undefined;
   sortComparator: (a: Channel, b: Channel) => number;
   filterBuilder: FilterBuilder<ChannelFilters>;
@@ -364,6 +366,12 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       memberUserNameFilterResolver,
       dataFieldFilterResolver,
     ]);
+    // since channels are reactive objects, we only really care about updating the
+    // list if their order of membership in the list changes.
+    this.state.addPreprocessor((next, previous) => {
+      if (previous && hasSameItems(previous.items, next.items))
+        next.items = previous.items;
+    });
   }
 
   /**
@@ -716,11 +724,25 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
 
     if (!shouldDeferUntilSynced) return await super.executeQuery(effectiveParams);
 
+    if (
+      this._queryAwaitingSync &&
+      !this.config.hasPaginationQueryShapeChanged(this._queryAwaitingSync, queryShape)
+    ) {
+      return;
+    }
+    this._queryAwaitingSync = queryShape;
+
     if (!this.isInitialized) {
-      const cachedChannels = await this.preloadFirstPageFromOfflineDb({
-        ...effectiveParams,
-        queryShape,
-      });
+      let cachedChannels: Channel[] | undefined;
+      try {
+        cachedChannels = await this.preloadFirstPageFromOfflineDb({
+          ...effectiveParams,
+          queryShape,
+        });
+      } catch (error) {
+        this._queryAwaitingSync = undefined;
+        throw error;
+      }
       if (cachedChannels?.length) {
         // Seed via `setItems` (which ingests the page into the interval/index storage), so that the items
         // actually appear within the adequate index.
@@ -745,10 +767,12 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     // Otherwise, the sync status change will never fire and so `executeQuery` will never really be
     // run.
     if (offlineDb.syncManager.isSynced) {
+      this._queryAwaitingSync = undefined;
       return await super.executeQuery(refreshParams);
     }
 
     offlineDb.syncManager.scheduleSyncStatusChangeCallback(this.id, async () => {
+      this._queryAwaitingSync = undefined;
       await this.executeQuery(refreshParams);
     });
   }
@@ -825,6 +849,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     super.resetState();
     // nothing is listed anymore, so the list holds no channels
     this._itemIndex.clear();
+    this._queryAwaitingSync = undefined;
   }
 
   removeItem(params: { id?: string; item?: Channel }): ItemCoordinates {

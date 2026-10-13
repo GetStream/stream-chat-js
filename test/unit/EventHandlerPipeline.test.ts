@@ -511,11 +511,12 @@ describe('EventHandlerPipeline', () => {
         },
       };
 
+      const error = new Error('fail');
       const boom = {
         id: 'boom',
         handle: () => {
           order.push('boom');
-          throw new Error('fail');
+          throw error;
         },
       };
 
@@ -534,7 +535,10 @@ describe('EventHandlerPipeline', () => {
       await pipeline.run(makeEvt('e'), ctx);
       // reverse exec: after -> boom -> before; boom throws but processing continues
       expect(order).toEqual(['before', 'boom', 'after']);
-      expect(consoleErrorSpy).toHaveBeenCalled(); // logged
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('handler failed'),
+        expect.objectContaining({ error, handlerId: 'boom' }),
+      );
     });
 
     it('snapshot isolation: handlers added during a run do not affect the current event', async () => {

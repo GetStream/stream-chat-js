@@ -1361,6 +1361,26 @@ describe('ChannelManager', () => {
     });
   });
 
+  describe('event message.deleted', () => {
+    it('re-sorts a loaded channel on a hard delete only', async () => {
+      const cid = 'messaging:deleted-1';
+      const channel = makeChannel(cid);
+      client.channelManager.getOrCreateChannel(cid, () => channel);
+      const channelManager = useClientManager({
+        paginators: [new ChannelPaginator({ client })],
+      });
+      channelManager.registerSubscriptions();
+      const ingestChannel = vi.spyOn(channelManager, 'ingestChannel');
+
+      // events are handled in order, so once the hard delete is handled the soft one was too
+      client.dispatchEvent({ type: 'message.deleted', cid, hard_delete: false });
+      client.dispatchEvent({ type: 'message.deleted', cid, hard_delete: true });
+
+      await vi.waitFor(() => expect(ingestChannel).toHaveBeenCalled());
+      expect(ingestChannel).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('event channel.hidden', () => {
     const seed = (paginator: ChannelPaginator, channels: Channel[]) =>
       paginator.setItems({
@@ -1411,6 +1431,29 @@ describe('ChannelManager', () => {
         expect(regular.items?.map((c) => c.cid)).toEqual([cid]);
       });
     });
+
+    it.each(['message.new', 'notification.message_new'] as const)(
+      're-adds the channel on %s, which unhides it on the server without channel.visible',
+      async (type) => {
+        const cid = `messaging:hidden-${type.replace('.', '-')}`;
+        const channel = makeChannel(cid);
+        client.channelManager.getOrCreateChannel(cid, () => channel);
+
+        const regular = new ChannelPaginator({ client });
+        const channelManager = useClientManager({ paginators: [regular] });
+        channelManager.registerSubscriptions();
+
+        client.dispatchEvent({ type: 'channel.hidden', cid } as const);
+        await vi.waitFor(() => expect(regular.items ?? []).toEqual([]));
+
+        client.dispatchEvent({ type, cid });
+
+        await vi.waitFor(() => {
+          expect(channel.data?.hidden).toBe(false);
+          expect(regular.items?.map((c) => c.cid)).toEqual([cid]);
+        });
+      },
+    );
   });
 
   describe('channel resolution from the event', () => {

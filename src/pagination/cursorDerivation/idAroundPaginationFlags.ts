@@ -1,3 +1,4 @@
+import { deriveAroundPaginationFlags } from './aroundPaginationFlags';
 import type { CursorDeriveContext, PaginationFlags } from '../paginators';
 
 export const deriveIdAroundPaginationFlags = <
@@ -11,43 +12,14 @@ export const deriveIdAroundPaginationFlags = <
   queryShape,
   requestedPageSize,
 }: CursorDeriveContext<T, Q>): PaginationFlags => {
-  let flags: PaginationFlags = { hasMoreHead, hasMoreTail };
-  if (!queryShape?.id_around) return flags;
-  const { id_around } = queryShape;
-
-  const [firstPageMsg, lastPageMsg] = [page[0], page.slice(-1)[0]];
-  const [firstPageMsgIsFirstInSet, lastPageMsgIsLastInSet] = [
-    firstPageMsg?.id === interval.itemIds[0],
-    lastPageMsg?.id === interval.itemIds.slice(-1)[0],
-  ];
-
-  const midPoint = Math.floor(page.length / 2);
-  const noMoreMessages =
-    (requestedPageSize > interval.itemIds.length ||
-      interval.itemIds.length >= page.length) &&
-    requestedPageSize > page.length;
-
-  if (noMoreMessages) {
-    flags = { hasMoreHead: false, hasMoreTail: false };
-  } else if (!page[midPoint]) {
-    return flags;
-  } else if (page[midPoint].id === id_around) {
-    flags = { hasMoreHead: true, hasMoreTail: true };
-  } else {
-    const halves = [page.slice(0, midPoint), page.slice(midPoint)];
-    if (firstPageMsgIsFirstInSet) {
-      const targetMsg = halves[0].find((message) => message.id === id_around);
-      if (targetMsg) {
-        flags.hasMoreTail = false;
-      }
-    }
-    if (lastPageMsgIsLastInSet) {
-      const targetMsg = halves[1].find((message) => message.id === id_around);
-      if (targetMsg) {
-        flags.hasMoreHead = false;
-      }
-    }
-  }
-
-  return flags;
+  const targetIndex = page.findIndex((item) => item.id === queryShape?.id_around);
+  // Without the target in the page, the page says nothing about where it sits.
+  if (!queryShape?.id_around || targetIndex === -1) return { hasMoreHead, hasMoreTail };
+  return deriveAroundPaginationFlags({
+    interval,
+    newerCount: page.length - 1 - targetIndex,
+    olderCount: targetIndex,
+    pageLength: page.length,
+    requestedPageSize,
+  });
 };
