@@ -1714,7 +1714,7 @@ export class StreamChat extends ChatApi {
         !c.active &&
         (!c.messagePaginator.isInitialized || c.messagePaginator.isActiveIntervalAtHead)
       ) {
-        // The server's newest message time first, so the seed can tell whether the page reaches it.
+        // The response's `last_message_at` first, so the seed can tell whether the page reaches it.
         c.messagePaginator.seedLastMessageAt(channelState.channel?.last_message_at);
         c.messagePaginator.seedFirstPageSync(
           channelState.messages.map(formatMessage),

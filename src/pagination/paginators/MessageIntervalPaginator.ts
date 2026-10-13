@@ -881,14 +881,13 @@ export class MessageIntervalPaginator extends BasePaginator<
     // (overlap branch only): did we believe we were at the channel start, and how much was loaded.
     const wasAtChannelStart = !this.state.getLatestValue().hasMoreTail;
     const preMergeLoadedCount = headInterval.itemIds.length;
-    // If the caller jumped to a separate (older) window, that window is active and the head is merely
-    // still-loaded underneath. Don't MERGE the fresh page or switch the view (that would yank them to
-    // the newest) — but STILL prune offline hard-deletes out of the hidden head, otherwise returning to
-    // it later (scroll-to-latest) surfaces ghosts that were deleted while jumped away. Reconciliation
-    // targets the head interval regardless of which interval is active, and removing a hidden-head ghost
-    // leaves the active island's items untouched.
+    // If the caller jumped to a separate (older) window, that window is active and the head is not.
+    // Prune offline hard-deletes out of the inactive head, then merge the fresh page into it, so
+    // returning to it later (scroll-to-latest) shows neither ghosts nor a stale newest window. The
+    // active window stays: the reader stays where they jumped to.
     if (!this.isActiveInterval(headInterval)) {
       this.reconcileHeadAgainstPage(page, options);
+      this.mergeNewestPageIntoInactiveHead(page);
       return;
     }
 
@@ -901,7 +900,11 @@ export class MessageIntervalPaginator extends BasePaginator<
     }
 
     const loadedIds = new Set(headInterval.itemIds);
-    const overlapsLoadedHead = page.some((item) => loadedIds.has(this.getItemId(item)));
+    // A head made only of messages newer than the page arrived after the page was produced, so the two
+    // are contiguous and merge like an overlapping page.
+    const overlapsLoadedHead =
+      page.some((item) => loadedIds.has(this.getItemId(item))) ||
+      this.isEntirelyHeadwardOf(headInterval, page);
 
     if (!overlapsLoadedHead) {
       // Disjoint window: rebuild from the fetched page as a fresh newest slice. Clearing
@@ -930,7 +933,12 @@ export class MessageIntervalPaginator extends BasePaginator<
     }
 
     // Overlapping window: merge in place, keeping every already-loaded (incl. older) item.
-    const interval = this.ingestPage({ page, isHead: true, setActive: false });
+    const interval = this.ingestPage({
+      page,
+      isHead: true,
+      setActive: false,
+      targetIntervalId: headInterval.id,
+    });
     if (!interval) return;
 
     // hasMoreTail: does the fetched page prove it reached the channel's own oldest message? Only a
@@ -979,6 +987,95 @@ export class MessageIntervalPaginator extends BasePaginator<
       );
     }
   };
+
+  /**
+   * Whether every item of `interval` is newer (more headward) than every item of `page`. For a page
+   * holding the newest messages when it was produced, such an interval holds messages that arrived
+   * afterwards, so the two are contiguous.
+   *
+   * In time: the page is produced before the newer messages arrive as events, and reaches the
+   * client after them.
+   *
+   * ```text
+   * t1  the page is produced            page = m15 … m19  (m19 is the newest message)
+   * t2  m20 is sent, arrives as event   head window = [ m20 ]
+   * t3  the page reaches the client     page m15 … m19, head window m20
+   * ```
+   *
+   * In message order: nothing can be missing between the two, since every message newer than m19
+   * was sent after t1 and arrived as an event, in order, into the head window.
+   *
+   * ```text
+   * oldest ──────────────────────────────────────────────▶ newest
+   *   … m14 │ m15  m16  m17  m18  m19 │ m20  m21
+   *         │◀──────── page ─────────▶│◀ interval ▶│
+   * ```
+   *
+   * This assumes no event was missed between t1 and t3. A message sent while the socket was down is
+   * in neither; connection recovery fetches the newest page again, which overlaps the window and
+   * brings it in.
+   */
+  private isEntirelyHeadwardOf(interval: Interval, page: LocalMessage[]): boolean {
+    const intervalTail = this.getIntervalPaginationEdges(interval)?.tail;
+    const pageHead = this.getPagePaginationEdges(this.getCanonicalQueryItems(page)).head;
+    return (
+      !!intervalTail && !!pageHead && this.aIsMoreHeadwardThanB(intervalTail, pageHead)
+    );
+  }
+
+  /**
+   * Merges a fetched newest page into the head window while another window is active, which stays
+   * active. The page joins the head window when they overlap or are contiguous; across a gap it
+   * becomes the head window, and the old one no longer reaches the newest message.
+   *
+   * ```text
+   * oldest ──────────────────────────────────────────────▶ newest
+   *
+   * overlap: they share messages → merged
+   *   head window:      m8  m9  m10
+   *   page:                 m9  m10  m11
+   *   result:           m8  m9  m10  m11
+   *
+   * contiguous: the head window is newer than the page → merged (see isEntirelyHeadwardOf)
+   *   page:             m15 … m19
+   *   head window:                   m20  m21
+   *   result:           m15 … m19    m20  m21
+   *
+   * gap: the head window is older than the page → the page replaces it as the head window
+   *   head window:      m8  m9
+   *   page:                        … (not loaded) …   m20 … m24
+   *   result:           m8  m9 (no longer the head)    m20 … m24 (head window)
+   * ```
+   */
+  private mergeNewestPageIntoInactiveHead(page: LocalMessage[]) {
+    if (!page.length) return;
+    const head = this.anchoredHeadInterval;
+    const headIds = new Set(head?.itemIds ?? []);
+    const overlapsHead = page.some((item) => headIds.has(this.getItemId(item)));
+    const contiguous = !!head && !overlapsHead && this.isEntirelyHeadwardOf(head, page);
+    const acrossGap = !!head && !overlapsHead && !contiguous;
+    if (head && acrossGap) {
+      head.isHead = false;
+      head.hasMoreHead = true;
+      this.syncAnchoredHeadAfterHeadFlip(head, true);
+    }
+    const interval = this.ingestPage({
+      page,
+      isHead: true,
+      // across a gap there are older messages to load (the gap); otherwise the window keeps its flag
+      isTail: acrossGap ? false : undefined,
+      setActive: false,
+      targetIntervalId: contiguous ? head?.id : undefined,
+    });
+    // The page may also overlap the window being read, which then grows into the newest window.
+    if (interval && this.isActiveInterval(interval)) {
+      this.state.partialNext({
+        items: this.intervalToItems(interval),
+        hasMoreHead: false,
+        cursor: { headward: null, tailward: this.cursor?.tailward ?? null },
+      });
+    }
+  }
 
   /**
    * Whether `page` proves it reached the channel's own oldest message: the caller's request was

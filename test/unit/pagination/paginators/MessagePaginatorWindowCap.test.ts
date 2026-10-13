@@ -268,11 +268,14 @@ describe('MessagePaginator — window cap (pruning)', () => {
       expect(memberIds(p)).toContain('m10');
     });
 
-    it('does not prune a logical (live-only) window, which could never be fetched back', () => {
+    it('prunes a window started by live messages only so far as it can load the pruned ones back', () => {
       const p = make(2);
-      // No page ever loaded: live messages land in the logical head, with no pagination provenance.
+      // No page ever loaded: the live messages start the newest window, which pages towards older
+      // messages from its oldest one, so a pruned message is fetched back by loading older.
       for (let i = 1; i <= 6; i++) p.ingestItem(msg(`m${i}`, i));
-      expect(ids(p)).toHaveLength(6);
+      expect(ids(p)).toEqual(['m4', 'm5', 'm6']);
+      expect(p.hasMoreTail).toBe(true);
+      expect(p.cursor?.tailward).toBe('m4');
     });
   });
 

@@ -2063,8 +2063,8 @@ export class Channel extends ChannelApi {
     // deliberately turned off (**DV-18**).
     this.messageComposer.applyServerRestrictions();
 
-    // The server's newest message time from this response, before any page is ingested: the paginator
-    // tells from it whether a page reaches the newest message (`_initializeState` sets it too, after).
+    // This response's `last_message_at`, before any page is ingested: the paginator tells from it whether
+    // a page reaches the newest message (`_initializeState` sets it too, after).
     this.messagePaginator.seedLastMessageAt(channel.last_message_at);
 
     // Seed the message paginator with the first (latest) page BEFORE _initializeState, which

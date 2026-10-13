@@ -244,10 +244,10 @@ export class MessagePaginator extends MessageIntervalPaginator {
   }
 
   /**
-   * Seed {@link lastMessageAt} from a server response's `last_message_at` (a channel's, or a thread's
-   * for a reply list). The response is the server's current answer, so it replaces the seed, also
-   * with an earlier value: the newest message may have been hard-deleted, which no event reports with
-   * the new value. A message received live after the response was produced still counts, through
+   * Seed {@link lastMessageAt} from a response's `last_message_at` (a channel's, or a thread's for a
+   * reply list). The latest response replaces the seed, also with an earlier value: the newest message
+   * may have been hard-deleted, which no event reports with the new value. A message ingested after
+   * the response was produced, such as a new one from an event, still counts, through
    * {@link lastMessage}. `null` clears the seed (no messages); `undefined` (not in the response)
    * leaves it.
    */
@@ -261,8 +261,9 @@ export class MessagePaginator extends MessageIntervalPaginator {
   /**
    * A page reaches the newest message when its newest message is at or after {@link lastMessageAt},
    * as known before the page is ingested; one older than that is not the newest. That value comes from
-   * the server — `ChannelResponse` for a channel, `ThreadStateResponse` for a reply list — and events
-   * keep it current, like the rest of the list's state. `undefined` while it is not known.
+   * the latest response (`ChannelResponse` for a channel, `ThreadStateResponse` for a reply list,
+   * through {@link seedLastMessageAt}) and from the messages ingested since, such as new ones from
+   * events. `undefined` while it is not known.
    */
   protected override pageReachesHead(page: LocalMessage[]): boolean | undefined {
     const lastMessageAt = this.lastMessageAt;
@@ -279,9 +280,69 @@ export class MessagePaginator extends MessageIntervalPaginator {
     // of items that no longer match). The advance writes the separate `aggregateState` store, so it
     // is independent of `super`'s `state`/index mutations.
     if (this.matchesFilter(item)) {
+      if (this.isNewNewestMessage(item)) return this.ingestAsNewestWindow(item);
       this.trackLastMessage(item);
     }
     return super.ingestItem(item);
+  }
+
+  /**
+   * A message the paginator does not hold yet, at or after {@link lastMessageAt} (as known before it
+   * arrives), while no loaded window reaches the newest message. It is then the newest message, so it
+   * starts the newest window, as a page holding it would (see {@link pageReachesHead}).
+   */
+  private isNewNewestMessage(message: LocalMessage): boolean {
+    if (this.anchoredHeadItem !== undefined || this.getItem(message.id)) return false;
+    const lastMessageAt = this.lastMessageAt;
+    const createdAt = getMessageCreatedAtTimestamp(message);
+    return lastMessageAt !== null && createdAt !== null && createdAt >= lastMessageAt;
+  }
+
+  /**
+   * The logical-head items (ingested one by one, usually from events, rather than as part of a page)
+   * not older than `seededLastMessageAt`, the `last_message_at` of the latest channel or thread
+   * response; all of them when no response has set it. They were ingested after that response, one
+   * after another, so nothing is missing between them. Items older than that, such as a message
+   * arriving out of order, are left out.
+   */
+  private get logicalHeadItemsSinceSeededLastMessageAt(): LocalMessage[] {
+    const { seededLastMessageAt } = this.aggregateState.getLatestValue();
+    return this.logicalHeadItems.filter((item) => {
+      const createdAt = getMessageCreatedAtTimestamp(item);
+      return (
+        seededLastMessageAt === null ||
+        (createdAt !== null && createdAt >= seededLastMessageAt)
+      );
+    });
+  }
+
+  /**
+   * Starts the newest window with `message`, together with the
+   * {@link logicalHeadItemsSinceSeededLastMessageAt} ingested before it. The messages before the
+   * window are not loaded, so it can still load older ones. It becomes the active window only when no
+   * window was active, or the logical head it takes items from was.
+   */
+  private ingestAsNewestWindow(message: LocalMessage): boolean {
+    const liveHead = this.liveHeadLogical;
+    const interval = this.ingestPage({
+      page: [...this.logicalHeadItemsSinceSeededLastMessageAt, message],
+      isHead: true,
+      setActive: false,
+    });
+    if (!interval) return false;
+
+    const takeOverView =
+      !this._activeIntervalId || (!!liveHead && this.isActiveInterval(liveHead));
+    if (takeOverView) {
+      this.setActiveInterval(interval, { updateState: false });
+      this.state.partialNext({
+        items: this.intervalToItems(interval),
+        hasMoreHead: false,
+        hasMoreTail: interval.hasMoreTail,
+        cursor: this.getCursorFromInterval(interval),
+      });
+    }
+    return true;
   }
 
   ingestPage(
@@ -360,9 +421,10 @@ export class MessagePaginator extends MessageIntervalPaginator {
   /**
    * The still-loaded message with the greatest `created_at` that passes
    * {@link shouldAdvanceLastMessage} (skips system / thread-only per config), from the window that
-   * reaches the newest message and the live messages received while it was not loaded. A window
-   * reached by a jump is not searched: its newest message is not the channel's previous message. Used to recompute the tracked latest after the current one is removed. `null` when nothing
-   * loaded qualifies.
+   * reaches the newest message and the {@link logicalHeadItemsSinceSeededLastMessageAt}. A window
+   * reached by a jump is not searched, nor an out-of-order older message: neither is the channel's
+   * previous message. Used to recompute the tracked latest after the current one is removed. `null`
+   * when nothing loaded qualifies.
    *
    * "Latest" is defined by `created_at` (matching {@link trackLastMessage}), NOT by the paginator's
    * display order — so this compares timestamps rather than assuming a position, and stays correct
@@ -371,7 +433,10 @@ export class MessagePaginator extends MessageIntervalPaginator {
   private recomputeLastMessage(): LocalMessage | null {
     let latest: LocalMessage | null = null;
     let latestTimestamp = -Infinity;
-    for (const item of [...this.anchoredHeadItems, ...this.logicalHeadItems]) {
+    for (const item of [
+      ...this.anchoredHeadItems,
+      ...this.logicalHeadItemsSinceSeededLastMessageAt,
+    ]) {
       if (!this.shouldAdvanceLastMessage(item)) continue;
       const timestamp = getMessageCreatedAtTimestamp(item);
       if (timestamp === null || timestamp <= latestTimestamp) continue;
