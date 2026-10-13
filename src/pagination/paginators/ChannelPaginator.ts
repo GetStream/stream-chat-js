@@ -313,6 +313,8 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   private _itemsLoadedFromOfflineDB = false;
   /** The query in flight refreshes a cache-only window, so its response replaces the window. */
   private _replaceOfflineSeedOnResponse = false;
+  /** The query handed to the sync manager, from the cache read until it runs. See `executeQuery`. */
+  private _queryAwaitingSync: ChannelQueryShape | undefined;
   protected _sortComparatorFactory: ChannelSortComparatorFactory | undefined;
   sortComparator: (a: Channel, b: Channel) => number;
   filterBuilder: FilterBuilder<ChannelFilters>;
@@ -722,11 +724,25 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
 
     if (!shouldDeferUntilSynced) return await super.executeQuery(effectiveParams);
 
+    if (
+      this._queryAwaitingSync &&
+      !this.config.hasPaginationQueryShapeChanged(this._queryAwaitingSync, queryShape)
+    ) {
+      return;
+    }
+    this._queryAwaitingSync = queryShape;
+
     if (!this.isInitialized) {
-      const cachedChannels = await this.preloadFirstPageFromOfflineDb({
-        ...effectiveParams,
-        queryShape,
-      });
+      let cachedChannels: Channel[] | undefined;
+      try {
+        cachedChannels = await this.preloadFirstPageFromOfflineDb({
+          ...effectiveParams,
+          queryShape,
+        });
+      } catch (error) {
+        this._queryAwaitingSync = undefined;
+        throw error;
+      }
       if (cachedChannels?.length) {
         // Seed via `setItems` (which ingests the page into the interval/index storage), so that the items
         // actually appear within the adequate index.
@@ -751,10 +767,12 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     // Otherwise, the sync status change will never fire and so `executeQuery` will never really be
     // run.
     if (offlineDb.syncManager.isSynced) {
+      this._queryAwaitingSync = undefined;
       return await super.executeQuery(refreshParams);
     }
 
     offlineDb.syncManager.scheduleSyncStatusChangeCallback(this.id, async () => {
+      this._queryAwaitingSync = undefined;
       await this.executeQuery(refreshParams);
     });
   }
@@ -831,6 +849,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     super.resetState();
     // nothing is listed anymore, so the list holds no channels
     this._itemIndex.clear();
+    this._queryAwaitingSync = undefined;
   }
 
   removeItem(params: { id?: string; item?: Channel }): ItemCoordinates {

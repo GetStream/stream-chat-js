@@ -1434,6 +1434,120 @@ describe('ChannelPaginator', () => {
         expect(paginator.items).toStrictEqual([cachedChannel]);
       });
 
+      describe('when the list is requested again before the sync completes', () => {
+        const setUpCachedPage = async () => {
+          await setUpOfflineDb({ isSynced: false });
+          const cachedChannel = new Channel(client, 'type', 'cached', {});
+          getChannelsForQuery.mockResolvedValue({
+            channels: [{ channel: cachedChannel.data }],
+          });
+          vi.spyOn(client, 'hydrateChannels').mockReturnValue([cachedChannel]);
+          const queryChannels = vi
+            .spyOn(client, 'queryChannelsAndHydrate')
+            .mockResolvedValue({ channels: [cachedChannel], duration: '0.1ms' });
+          return { queryChannels };
+        };
+
+        const runScheduledQuery = async () => {
+          client.offlineDb!.syncManager.isSynced = true;
+          await scheduleSyncStatusChangeCallback.mock.calls.at(-1)![1]();
+        };
+
+        it('reads the cache and queries once for calls made in the same tick', async () => {
+          const { queryChannels } = await setUpCachedPage();
+          const paginator = makePaginator();
+
+          await Promise.all([paginator.reload(), paginator.reload(), paginator.toTail()]);
+          await runScheduledQuery();
+
+          expect(getChannelsForQuery).toHaveBeenCalledTimes(1);
+          expect(scheduleSyncStatusChangeCallback).toHaveBeenCalledTimes(1);
+          expect(queryChannels).toHaveBeenCalledTimes(1);
+        });
+
+        it('reads the cache and queries once for calls made after the cache was read', async () => {
+          const { queryChannels } = await setUpCachedPage();
+          const paginator = makePaginator();
+
+          await paginator.reload();
+          await paginator.reload();
+          await paginator.toTail();
+          await runScheduledQuery();
+
+          expect(getChannelsForQuery).toHaveBeenCalledTimes(1);
+          expect(scheduleSyncStatusChangeCallback).toHaveBeenCalledTimes(1);
+          expect(queryChannels).toHaveBeenCalledTimes(1);
+        });
+
+        it('reads the cache again for a different query made in the same tick', async () => {
+          await setUpCachedPage();
+          const paginator = makePaginator();
+
+          const first = paginator.reload();
+          paginator.staticFilters = { type: 'other' } as ChannelFilters;
+          await Promise.all([first, paginator.reload()]);
+
+          expect(getChannelsForQuery).toHaveBeenCalledTimes(2);
+          expect(
+            getChannelsForQuery.mock.calls[1][0].options.filter_conditions,
+          ).toStrictEqual({
+            type: 'other',
+          });
+        });
+
+        it('reads the cache again after the state was reset', async () => {
+          await setUpCachedPage();
+          const paginator = makePaginator();
+
+          await paginator.reload();
+          paginator.resetState();
+          await paginator.reload();
+
+          expect(getChannelsForQuery).toHaveBeenCalledTimes(2);
+        });
+
+        it('reads the cache again after the cache read failed', async () => {
+          await setUpCachedPage();
+          getChannelsForQuery.mockRejectedValueOnce(new Error('db failed'));
+          const paginator = makePaginator();
+          paginator.updateConfig({ throwErrors: true });
+
+          await expect(paginator.reload()).rejects.toThrow('db failed');
+          await paginator.reload();
+
+          expect(getChannelsForQuery).toHaveBeenCalledTimes(2);
+          expect(scheduleSyncStatusChangeCallback).toHaveBeenCalledTimes(1);
+        });
+
+        it('waits for the next sync again once the waiting query ran', async () => {
+          await setUpCachedPage();
+          const paginator = makePaginator();
+
+          await paginator.reload();
+          await runScheduledQuery();
+          // the socket dropped, so the next sync is pending again
+          client.offlineDb!.syncManager.isSynced = false;
+          await paginator.reload();
+
+          expect(scheduleSyncStatusChangeCallback).toHaveBeenCalledTimes(2);
+        });
+
+        it('waits for the next sync again once the query ran right after the cache read', async () => {
+          await setUpCachedPage();
+          getChannelsForQuery.mockImplementationOnce(async () => {
+            client.offlineDb!.syncManager.isSynced = true;
+            return null;
+          });
+          const paginator = makePaginator();
+
+          await paginator.reload();
+          client.offlineDb!.syncManager.isSynced = false;
+          await paginator.reload();
+
+          expect(scheduleSyncStatusChangeCallback).toHaveBeenCalledTimes(1);
+        });
+      });
+
       it('seeds the preloaded channels into the index so a concurrent ingest does not collapse the list', async () => {
         // The cold start preload must SEED the paginator (populate the interval/index), not
         // just set the displayed `items`. Otherwise a channel ingested concurrently during the presync
