@@ -1,8 +1,5 @@
-import type { AxiosRequestConfig, AxiosResponse } from 'axios';
+import type { AxiosResponse } from 'axios';
 import type { CustomEventTypes } from './custom_types';
-import type { NotificationManager } from './notifications';
-import type { InstanceConfigTree } from './configuration/types';
-import type { DeepPartial } from './types.utility';
 import type {
   APIError,
   Attachment,
@@ -137,42 +134,6 @@ export type PinnedMessagePaginationOptions = Omit<
 >;
 
 export type QueryMembersOptions = Partial<Omit<QueryMembersPayload, 'filter_conditions'>>;
-
-export type StreamChatOptions = {
-  /**
-   * Used to disable warnings that are triggered by using connectUser or connectAnonymousUser server-side.
-   */
-  allowServerSideConnect?: boolean;
-  axiosRequestConfig?: AxiosRequestConfig;
-  /**
-   * Base url to use for API
-   * such as https://chat-proxy-dublin.stream-io-api.com
-   */
-  baseURL?: string;
-  browser?: boolean;
-  /**
-   * Custom notification manager service to use for the client.
-   * If not provided, a default notification manager will be created.
-   * Notifications are used to communicate events like errors, warnings, info, etc. Other services can publish notifications or subscribe to the NotificationManager state changes.
-   */
-  notifications?: NotificationManager;
-  /**
-   * Declarative configuration for instances the SDK creates on your behalf, seeded before the client's
-   * own managers are constructed.
-   *
-   * Equivalent to calling `client.config.set(tree)` immediately after construction, except for the
-   * `client` subtree — the configuration registry is created inside the constructor, so this is the only
-   * way to configure `reminders` / `notifications` before they are built.
-   */
-  config?: DeepPartial<InstanceConfigTree>;
-  /**
-   * When true, user will be persisted on client. Otherwise if `connectUser` call fails, then you need to
-   * call `connectUser` again to retry.
-   * This is mainly useful for chat application working in offline mode, where you will need client.user to
-   * persist even if connectUser call fails.
-   */
-  persistUserOnConnectionFailure?: boolean;
-};
 
 export type UnBanUserOptions = {
   client_id?: string;

@@ -264,14 +264,16 @@ describe('ApiClient header precedence', () => {
 
   beforeEach(() => {
     client = getClientWithUser();
-    client.options.axiosRequestConfig = {
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'integrator-token',
-        'x-stream-client': 'integrator-agent',
-        'x-custom': 'kept',
+    client.config.setConfig('client', {
+      axiosRequestConfig: {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'integrator-token',
+          'x-stream-client': 'integrator-agent',
+          'x-custom': 'kept',
+        },
       },
-    };
+    });
     requestSpy = vi
       .spyOn(client.axiosInstance, 'request')
       .mockResolvedValue({ data: {}, status: 200, headers: {} });
@@ -440,9 +442,9 @@ describe('ApiClient multipart encoding', () => {
   // `JSON.stringify(formDataToJSON(form))` - the file disappears and the request still returns
   // 2xx, so assert on the resolved header rather than on the eventual body.
   it('keeps the multipart Content-Type over a client-level application/json', async () => {
-    client.options.axiosRequestConfig = {
-      headers: { 'Content-Type': 'application/json' },
-    };
+    client.config.setConfig('client', {
+      axiosRequestConfig: { headers: { 'Content-Type': 'application/json' } },
+    });
 
     await sendMultipart({ file: new File(['x'], 'a.jpg', { type: 'image/jpeg' }) });
 

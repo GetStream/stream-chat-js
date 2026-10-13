@@ -28,9 +28,9 @@ describe('client.config', () => {
     expect(c.reminders.configState.getLatestValue().scheduledOffsetsMs).toEqual([1234]);
   });
 
-  it('options.config seeds before managers are built', () => {
+  it('the constructor config seeds before managers are built', () => {
     const c = new StreamChat('k', {
-      config: { client: { reminders: { scheduledOffsetsMs: [42] } } },
+      client: { reminders: { scheduledOffsetsMs: [42] } },
     });
     expect(c.reminders.configState.getLatestValue().scheduledOffsetsMs).toEqual([42]);
   });

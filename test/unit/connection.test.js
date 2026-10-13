@@ -133,7 +133,9 @@ describe('connection', function () {
 
 	describe('Connection tokenProvider', () => {
 		it('should handle token provider rejection ', async () => {
-			const client = new StreamChat('apiKey', { allowServerSideConnect: true });
+			const client = new StreamChat('apiKey', {
+				client: { allowServerSideConnect: true },
+			});
 			client.config.set({
 				client: {
 					wsConnection: { connectTimeoutMs: 20, webSocketImpl: MockWebSocket },
@@ -504,7 +506,7 @@ describe('connection', function () {
 
 		it('arms the deferred synchronously, so an un-awaited connectUser still gates requests', () => {
 			const client = new StreamChat('apiKey', {
-				allowServerSideConnect: true,
+				client: { allowServerSideConnect: true },
 			});
 			client.wsConnection.updateConfig({ webSocketImpl: MockWebSocket });
 			client.setBaseURL(wsBaseURL);
@@ -523,7 +525,7 @@ describe('connection', function () {
 
 		it('releases a request that queued up during the handshake', async () => {
 			const client = new StreamChat('apiKey', {
-				allowServerSideConnect: true,
+				client: { allowServerSideConnect: true },
 			});
 			client.wsConnection.updateConfig({ webSocketImpl: MockWebSocket });
 			client.setBaseURL(wsBaseURL);
@@ -627,8 +629,7 @@ describe('connection', function () {
 
 		it('fails a request still waiting when the initial connect gives up', async () => {
 			const client = new StreamChat('apiKey', {
-				allowServerSideConnect: true,
-				baseURL: 'http://localhost:1111',
+				client: { allowServerSideConnect: true, baseURL: 'http://localhost:1111' },
 			});
 			client.config.set({
 				client: {
@@ -650,8 +651,10 @@ describe('connection', function () {
 
 		it('should fail with invalid URL', async function () {
 			const client = new StreamChat('apiKey', {
-				allowServerSideConnect: true,
-				baseURL: 'http://localhost:1111', // invalid base url
+				client: {
+					allowServerSideConnect: true,
+					baseURL: 'http://localhost:1111', // invalid base url
+				},
 			});
 			client.config.set({
 				client: {
@@ -671,15 +674,14 @@ describe('connection', function () {
 			// nothing else re-opens the socket when connectivity comes back — the UI SDKs only
 			// forward the network change via `onlineStatusChanged`.
 			const client = new StreamChat('apiKey', {
-				allowServerSideConnect: true,
-				baseURL: 'http://localhost:1111',
+				client: { allowServerSideConnect: true, baseURL: 'http://localhost:1111' },
 			});
 			client.config.set({
 				client: {
 					wsConnection: { connectTimeoutMs: 1000, webSocketImpl: FailingWebSocket },
 				},
 			});
-			client.persistUserOnConnectionFailure = true;
+			client.config.setConfig('client', { persistUserOnConnectionFailure: true });
 
 			await expect(client.connectUser({ id: 'amin' }, token)).rejects.toThrow(
 				/initial WS connection could not be established/,
@@ -702,12 +704,11 @@ describe('connection', function () {
 			// The counterpart of the test above: a failure the retry loop cannot fix must still be
 			// cleaned up, so nothing is left retrying against a connection that will never succeed.
 			const client = new StreamChat('apiKey', {
-				allowServerSideConnect: true,
-				baseURL: 'http://localhost:1111',
+				client: { allowServerSideConnect: true, baseURL: 'http://localhost:1111' },
 			});
 			client.wsConnection.updateConfig({ webSocketImpl: MockWebSocket });
 			client.wsBaseURL = wsBaseURL;
-			client.persistUserOnConnectionFailure = true;
+			client.config.setConfig('client', { persistUserOnConnectionFailure: true });
 			const closeConnection = sinon.spy(client, 'closeConnection');
 
 			await expect(
@@ -721,8 +722,7 @@ describe('connection', function () {
 
 		it('should retry until connection is established', async function () {
 			const client = new StreamChat('apiKey', {
-				allowServerSideConnect: true,
-				baseURL: 'http://localhost:1111',
+				client: { allowServerSideConnect: true, baseURL: 'http://localhost:1111' },
 			});
 			client.config.set({
 				client: {
