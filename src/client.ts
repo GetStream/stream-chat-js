@@ -1573,12 +1573,12 @@ export class StreamChat extends ChatApi {
     stateOptions: ChannelStateOptions = {},
     requestOptions?: StreamRequestOptions,
   ): Promise<Channel[] | QueryChannelsResponseWithChannels> {
-    // TODO(perf/cleanup): prefer a `memberIds` snapshot over `headItems.map` here too — see the
+    // TODO(perf/cleanup): prefer an id snapshot over `anchoredHeadItems.map` here too — see the
     // matching TODO in Channel.runQuery for the full rationale.
     const candidateIdsByCid = new Map<string, ReadonlySet<string>>();
     for (const channel of this.channelManager.values()) {
       const { cid } = channel;
-      const head = channel.messagePaginator?.headItems;
+      const head = channel.messagePaginator?.anchoredHeadItems;
       if (head?.length)
         candidateIdsByCid.set(cid, new Set(head.map((message) => message.id)));
     }

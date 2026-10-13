@@ -31,8 +31,9 @@ const otherUser = {
 const mkMsg = (id: string, at: string | number | Date) =>
   ({ id, created_at: convertDateToTimestamp(new Date(at)) }) as any;
 
-// The delivery reporter now derives the latest message from `channel.messagePaginator.headItems`,
-// so tests seed the paginator's latest (head) window instead of assigning `channel.state.latestMessages`.
+// The delivery reporter takes the newest message from `channel.messagePaginator.lastMessage`, which
+// ingesting a page advances, so tests seed the paginator's newest window instead of assigning
+// `channel.state.latestMessages`.
 const setLatest = (channel: Channel, msgs: ReturnType<typeof mkMsg>[]) => {
   channel.messagePaginator.clearStateAndCache();
   if (msgs.length) {
@@ -98,6 +99,34 @@ describe('MessageDeliveryReporter', () => {
           id: 'm1',
         },
       ],
+    });
+  });
+
+  it('announces a message received live while only an older window is loaded', async () => {
+    const markDeliveredSpy = vi
+      .spyOn(client, 'markDelivered')
+      .mockResolvedValue({ ok: true } as any);
+
+    channel.messagePaginator.clearStateAndCache();
+    // a window reached by a jump, older than anything unread
+    channel.messagePaginator.ingestPage({
+      page: [mkMsg('old', '2025-01-01T08:00:00Z')],
+      setActive: true,
+    });
+    // received live while the reader sits in that window
+    channel.messagePaginator.ingestItem({
+      ...mkMsg('live', '2025-01-01T10:00:00Z'),
+      cid: channel.cid,
+    });
+    (channel.state as any).read['me'] = {
+      last_read: convertDateToTimestamp(new Date('2025-01-01T09:00:00Z')),
+    };
+
+    client.syncDeliveredCandidates([channel]);
+    vi.advanceTimersByTime(1000);
+
+    expect(markDeliveredSpy).toHaveBeenCalledWith({
+      latest_delivered_messages: [{ cid: channel.cid, id: 'live' }],
     });
   });
 
@@ -245,8 +274,8 @@ describe('MessageDeliveryReporter', () => {
     vi.advanceTimersByTime(1000);
 
     // Thread delivery reporting is not yet supported: the thread branch returns before producing a
-    // candidate, so nothing is announced. (When enabled, it reads `messagePaginator.headItems` — the
-    // newest-loaded window — mirroring the channel branch.)
+    // candidate, so nothing is announced. (When enabled, it reads the thread's newest reply,
+    // `messagePaginator.lastMessage`, mirroring the channel branch.)
     expect(markDeliveredSpy).not.toHaveBeenCalled();
   });
 

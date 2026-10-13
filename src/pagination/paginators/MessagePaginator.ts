@@ -340,8 +340,9 @@ export class MessagePaginator extends MessageIntervalPaginator {
 
   /**
    * The still-loaded message with the greatest `created_at` that passes
-   * {@link shouldAdvanceLastMessage} (skips system / thread-only per config), from the newest-loaded
-   * window. Used to recompute the tracked latest after the current one is removed. `null` when nothing
+   * {@link shouldAdvanceLastMessage} (skips system / thread-only per config), from the window that
+   * reaches the newest message and the live messages received while it was not loaded. A window
+   * reached by a jump is not searched: its newest message is not the channel's previous message. Used to recompute the tracked latest after the current one is removed. `null` when nothing
    * loaded qualifies.
    *
    * "Latest" is defined by `created_at` (matching {@link trackLastMessage}), NOT by the paginator's
@@ -351,7 +352,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
   private recomputeLastMessage(): LocalMessage | null {
     let latest: LocalMessage | null = null;
     let latestTimestamp = -Infinity;
-    for (const item of this.headItems) {
+    for (const item of [...this.anchoredHeadItems, ...this.logicalHeadItems]) {
       if (!this.shouldAdvanceLastMessage(item)) continue;
       const timestamp = getMessageCreatedAtTimestamp(item);
       if (timestamp === null || timestamp <= latestTimestamp) continue;

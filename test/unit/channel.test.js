@@ -19,7 +19,7 @@ import { msToNs } from '../../src/utils/time';
 import { chatLoggerSystem } from '../../src/logger';
 
 // Seed the channel's messagePaginator "latest" (head) window from raw generated messages.
-// The unread/last-message readers now source from `messagePaginator.headItems`/`headmostItem`,
+// The unread/last-message readers now source from `messagePaginator.anchoredHeadItems`/`anchoredHeadItem`,
 // so tests populate the paginator (formatted) rather than the legacy `state.addMessagesSorted`.
 const seedLatestWindow = (channel, messages) =>
 	channel.messagePaginator.ingestPage({
@@ -989,6 +989,38 @@ describe('Channel local unread count (readEvents.localUnreadCountEnabled)', func
 		expect(returned.created_at).to.be.a('number');
 	});
 
+	describe('while only a window reached by a jump is loaded', () => {
+		const at = (minute) => new Date(Date.UTC(2020, 0, 1, 0, minute, 0));
+		const msgIn = (channel, id, minute) =>
+			formatMessage(
+				generateMsg({ id, cid: channel.cid, date: at(minute), user: otherUser }),
+			);
+		const loadOlderWindowAndLiveMessage = (channel) => {
+			channel.messagePaginator.ingestPage({
+				page: [msgIn(channel, 'old1', 1), msgIn(channel, 'old2', 2)],
+				setActive: true,
+			});
+			// received live while the reader sits in the older window
+			channel.messagePaginator.ingestItem(msgIn(channel, 'live', 30));
+		};
+
+		it('markReadLocally marks the channel read up to its newest message', function () {
+			const { channel } = setupChannel({ localUnreadCountEnabled: true });
+			loadOlderWindowAndLiveMessage(channel);
+
+			const event = channel.markReadLocally();
+
+			expect(event.last_read_message_id).to.be.equal('live');
+		});
+
+		it('countUnread counts the newest messages, not the older window', function () {
+			const { channel } = setupChannel({ localUnreadCountEnabled: true });
+			loadOlderWindowAndLiveMessage(channel);
+
+			expect(channel.countUnread(convertDateToTimestamp(at(0)))).to.be.equal(1);
+		});
+	});
+
 	it('markReadLocally returns undefined and dispatches nothing when there is no connected user', function () {
 		const { client, channel } = setupChannel({ localUnreadCountEnabled: true });
 		client.user = undefined;
@@ -1546,7 +1578,7 @@ describe('Channel _handleChannelEvent', function () {
 			].map(generateMsg);
 
 			seedLatestWindow(channel, messages);
-			expect(channel.messagePaginator.headItems.length).to.be.equal(3);
+			expect(channel.messagePaginator.anchoredHeadItems.length).to.be.equal(3);
 
 			channel._handleChannelEvent({
 				type: 'channel.truncated',
@@ -1556,7 +1588,7 @@ describe('Channel _handleChannelEvent', function () {
 				},
 			});
 
-			expect(channel.messagePaginator.headItems.length).to.be.equal(0);
+			expect(channel.messagePaginator.anchoredHeadItems.length).to.be.equal(0);
 		});
 
 		it('resets read[userId].unread_messages together with unreadCount so the badge does not go stale (#29)', function () {
@@ -1625,7 +1657,7 @@ describe('Channel _handleChannelEvent', function () {
 			].map(generateMsg);
 
 			seedLatestWindow(channel, messages);
-			expect(channel.messagePaginator.headItems.length).to.be.equal(3);
+			expect(channel.messagePaginator.anchoredHeadItems.length).to.be.equal(3);
 
 			channel._handleChannelEvent({
 				type: 'channel.truncated',
@@ -1635,7 +1667,7 @@ describe('Channel _handleChannelEvent', function () {
 				},
 			});
 
-			expect(channel.messagePaginator.headItems.length).to.be.equal(2);
+			expect(channel.messagePaginator.anchoredHeadItems.length).to.be.equal(2);
 		});
 
 		it('prunes pinned messages older than the cutoff on a partial channel.truncated', () => {
@@ -2772,7 +2804,7 @@ describe('Channel _handleChannelEvent', function () {
 			expect(Object.keys(channel.state.members).length).to.be.eq(1);
 			expect(Object.keys(channel.state.watchers).length).to.be.eq(1);
 			expect(Object.keys(channel.state.read).length).to.be.eq(1);
-			expect(channel.messagePaginator.headItems.length).to.be.eq(1);
+			expect(channel.messagePaginator.anchoredHeadItems.length).to.be.eq(1);
 			expect(channel.state.watcher_count).to.be.eq(5);
 		});
 
@@ -3440,7 +3472,7 @@ describe('Channel lastMessage', async () => {
 			generateMsg({ date: latestMessageDate }),
 		]);
 
-		expect(channel.messagePaginator.headmostItem.created_at).to.be.equal(
+		expect(channel.messagePaginator.anchoredHeadItem.created_at).to.be.equal(
 			convertDateToTimestamp(latestMessageDate),
 		);
 	});
@@ -3454,7 +3486,7 @@ describe('Channel lastMessage', async () => {
 			generateMsg({ date: '2018-01-01T00:00:00' }),
 		]);
 
-		expect(channel.messagePaginator.headmostItem.created_at).to.be.equal(
+		expect(channel.messagePaginator.anchoredHeadItem.created_at).to.be.equal(
 			convertDateToTimestamp(latestMessageDate),
 		);
 	});
@@ -3478,7 +3510,7 @@ describe('Channel lastMessage', async () => {
 			setActive: false,
 		});
 
-		expect(channel.messagePaginator.headmostItem.created_at).to.be.equal(
+		expect(channel.messagePaginator.anchoredHeadItem.created_at).to.be.equal(
 			convertDateToTimestamp(latestMessageDate),
 		);
 	});
@@ -3661,7 +3693,7 @@ describe('Channel.query', async () => {
 		expect(channel.messagePaginator.items).to.have.length(
 			DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
 		);
-		expect(channel.messagePaginator.headmostItem).to.not.equal(undefined);
+		expect(channel.messagePaginator.anchoredHeadItem).to.not.equal(undefined);
 		stub.restore();
 	});
 

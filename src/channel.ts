@@ -1566,7 +1566,7 @@ export class Channel extends ChannelApi {
       channel_type: this.type,
       cid: this.cid,
       created_at: nowNs(),
-      last_read_message_id: this.messagePaginator.headmostItem?.id,
+      last_read_message_id: this.messagePaginator.lastMessage?.id,
       team: this.data?.team,
       type: 'message.read_locally',
       user: client.user as UserResponse,
@@ -1713,11 +1713,17 @@ export class Channel extends ChannelApi {
     this._reloading = true;
     try {
       const paginator = this.messagePaginator;
-      const headItems = paginator.headItems;
+      // The reload refreshes the window that reaches the newest message, sized to what it holds.
       const requestedLimit =
-        Math.max(headItems.length, paginator.pageSize ?? 0) || undefined;
+        Math.max(paginator.anchoredHeadItems.length, paginator.pageSize ?? 0) ||
+        undefined;
       const offlineDb = this.getClient().offlineDb;
-      const failedInMemory = headItems.filter((message) => message.status === 'failed');
+      // Unsent messages are newest-side: in the newest window, or among the live items received while
+      // that window was not loaded.
+      const failedInMemory = [
+        ...paginator.anchoredHeadItems,
+        ...paginator.logicalHeadItems,
+      ].filter((message) => message.status === 'failed');
       // Read before the await, so this cannot pick up a message that failed DURING the reload — that
       // one is already in the paginator and does not need re-ingesting.
       const failedInDb = offlineDb
@@ -1819,6 +1825,9 @@ export class Channel extends ChannelApi {
   /**
    * Count of unread messages.
    *
+   * Counting from `lastRead` counts within the channel's newest messages that are loaded (see
+   * {@link newestKnownMessages}).
+   *
    * @param lastRead - The time that the user read a message, in unix nanoseconds (optional,
    *   defaults to the current user's read state).
    * @returns Unread count.
@@ -1827,7 +1836,7 @@ export class Channel extends ChannelApi {
     // Nullish, not truthy: `0` is a legitimate wire timestamp (the epoch).
     if (lastRead == null) return this.state.unreadCount;
     let count = 0;
-    const latestMessages = this.messagePaginator.headItems;
+    const latestMessages = this.newestKnownMessages();
     for (let i = 0; i < latestMessages.length; i += 1) {
       const message = latestMessages[i];
       if (message.created_at > lastRead && this._countMessageAsUnread(message)) {
@@ -1838,7 +1847,22 @@ export class Channel extends ChannelApi {
   }
 
   /**
+   * The channel's newest messages that are loaded: the window that reaches the newest message (the
+   * paginator's anchored head), or, while that window is not loaded, the messages received live since.
+   * A window reached by a jump is never part of it, as the messages between it and the newest are
+   * unknown.
+   */
+  private newestKnownMessages() {
+    const paginator = this.messagePaginator;
+    return paginator.anchoredHeadItem !== undefined
+      ? paginator.anchoredHeadItems
+      : paginator.logicalHeadItems;
+  }
+
+  /**
    * Count the number of unread messages mentioning the current user.
+   *
+   * Counts within the channel's newest messages that are loaded (see {@link newestKnownMessages}).
    *
    * @returns Unread mentions count.
    */
@@ -1847,7 +1871,7 @@ export class Channel extends ChannelApi {
     const userId = this.getClient().userId;
 
     let count = 0;
-    const latestMessages = this.messagePaginator.headItems;
+    const latestMessages = this.newestKnownMessages();
     for (let i = 0; i < latestMessages.length; i += 1) {
       const message = latestMessages[i];
       if (
@@ -1983,14 +2007,14 @@ export class Channel extends ChannelApi {
     // hard-delete (in the snapshot, absent from the page) from a message that arrives live
     // during the fetch (not in the snapshot). Captured here — the only place with the pre-await state —
     // so callers (channel.reload, watch) need not thread it. Empty on a cold open, so it is harmless.
-    // TODO(perf/cleanup): `headItems` materializes full message objects (intervalToItems) just to map
-    // them down to ids. A cheaper, clearer equivalent is a straight copy of the paginator index's own
+    // TODO(perf/cleanup): `anchoredHeadItems` materializes full message objects (intervalToItems) just
+    // to map them down to ids. A cheaper, clearer equivalent is a straight copy of the paginator index's own
     // id set — expose `memberIds` on StoreBackedItemIndex (e.g. `snapshotMembers()` returning
     // `new Set(this.memberIds)`) and use it here AND in client.queryChannelsAndHydrate. The broader
     // scope (all intervals vs just the head) is inert: the reconcile only consults head ids, older
     // island ids are never at/above-newest, and local messages are guarded by isServerConfirmedMessage.
     const candidateIds = opensChannel
-      ? new Set(this.messagePaginator.headItems.map((message) => message.id))
+      ? new Set(this.messagePaginator.anchoredHeadItems.map((message) => message.id))
       : undefined;
 
     // The INITIAL channel-open query honors the paginator's OWN pageSize (light on native, 25) rather

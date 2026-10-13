@@ -3582,7 +3582,7 @@ describe('BasePaginator', () => {
         expect(paginator.logicalHeadItems).toEqual([]);
         expect(paginator.logicalTailItems).toEqual([]);
         expect(paginator.anchoredHeadItems).toEqual([]);
-        expect(paginator.headItems).toEqual([]);
+        expect(paginator.anchoredHeadItems).toEqual([]);
       });
 
       it('an out-of-order head ingest publishes logicalHead only, leaving the active interval, logicalTail, and anchoredHead untouched', () => {
@@ -3617,8 +3617,9 @@ describe('BasePaginator', () => {
         // ...selectors on the untouched logicalTail / anchoredHead never fired...
         expect(logicalTail.tracker.fires).toBe(0);
         expect(anchoredHead.tracker.fires).toBe(0);
-        // ...and the computed head-most getter still reflects the flip (non-reactive read).
-        expect(paginator.headItems.map((i) => i.id)).toEqual(['x']);
+        // ...and a live item is not an anchored head: the dataset head is still not loaded.
+        expect(paginator.anchoredHeadItem).toBeUndefined();
+        expect(paginator.anchoredHeadItems).toEqual([]);
 
         logicalHead.unsub();
         logicalTail.unsub();
@@ -3928,15 +3929,25 @@ describe('BasePaginator', () => {
       });
     });
 
-    describe('headItems (newest loaded window)', () => {
-      it('is empty before the first load and mirrors items in flat mode', () => {
+    describe('anchoredHeadItems (the window that reaches the dataset head)', () => {
+      it('is empty before the first load and mirrors a first page in flat mode', () => {
         const paginator = new Paginator();
-        expect(paginator.headItems).toEqual([]);
+        expect(paginator.anchoredHeadItems).toEqual([]);
 
         const loaded = [{ id: 'a' }];
-        paginator.setItems({ valueOrFactory: loaded });
+        paginator.setItems({ valueOrFactory: loaded, isFirstPage: true });
 
-        expect(paginator.headItems).toStrictEqual(loaded);
+        expect(paginator.anchoredHeadItems).toStrictEqual(loaded);
+        expect(paginator.anchoredHeadItem).toStrictEqual(loaded[0]);
+      });
+
+      it('stays empty for items not known to reach the head', () => {
+        const paginator = new Paginator();
+
+        paginator.setItems({ valueOrFactory: [{ id: 'a' }] });
+
+        expect(paginator.anchoredHeadItems).toEqual([]);
+        expect(paginator.anchoredHeadItem).toBeUndefined();
       });
 
       it('materializes the head window in interval-storage mode', () => {
@@ -3952,8 +3963,8 @@ describe('BasePaginator', () => {
           setActive: true,
         });
 
-        expect(paginator.headItems.length).toBeGreaterThan(0);
-        expect(paginator.headItems.map((item) => item.id)).toEqual(
+        expect(paginator.anchoredHeadItems.length).toBeGreaterThan(0);
+        expect(paginator.anchoredHeadItems.map((item) => item.id)).toEqual(
           paginator.items?.map((item) => item.id),
         );
         itemIndex.clear();

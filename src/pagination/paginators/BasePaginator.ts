@@ -267,9 +267,9 @@ export type PaginatorState<T> = {
  * Reactive projections of specific (fixed-identity) intervals, published independently of the
  * paginated `state` (which tracks only the *active* interval). See {@link BasePaginator.intervalViews}.
  * A field is rewritten only when its own interval changes, so a `useStateStore`/`subscribeWithSelector`
- * consumer selecting one field only wakes when *that* interval changes. (The head-most window that can
- * be either a logical or an anchored interval is a derived *role*, not a fixed interval, so it is not
- * published here — read it one-shot via {@link BasePaginator.headItems} / {@link BasePaginator.headmostItem}.)
+ * consumer selecting one field only wakes when *that* interval changes. One-shot reads:
+ * {@link BasePaginator.anchoredHeadItems}, {@link BasePaginator.logicalHeadItems},
+ * {@link BasePaginator.logicalTailItems}.
  */
 export type PaginatorIntervalViews<T> = {
   /** Live logical-head interval — out-of-order items above the loaded window. */
@@ -277,8 +277,8 @@ export type PaginatorIntervalViews<T> = {
   /** Live logical-tail interval — out-of-order items below the loaded window. */
   logicalTail: T[];
   /**
-   * Anchored head interval — the loaded page bounded at the dataset head (`isHead`), i.e. the newest
-   * loaded page; empty when the head is not loaded. Its content updates when that page ingests/removes
+   * Anchored head interval — the loaded page bounded at the dataset head (`isHead`); empty when the
+   * head is not loaded. Its content updates when that page ingests/removes
    * an item, and its identity updates when a page's `isHead` flag flips during query reconciliation.
    */
   anchoredHead: T[];
@@ -745,34 +745,6 @@ export abstract class BasePaginator<T, Q> {
     return this.state.getLatestValue().items;
   }
 
-  /**
-   * The newest loaded window of items, independent of which window is currently *active*
-   * (`items` follows the active interval, which may point at a jumped-to / searched window). This is
-   * the head-most loaded interval under the paginator's ordering (anchored or the live-head logical
-   * interval).
-   *
-   * NOTE: this deliberately uses the head-*most loaded* interval rather than requiring the
-   * `isHead` flag, so it also answers for a window loaded without knowing where it sits (a page set
-   * directly with `ingestPage`/`setItems`). The trade-off: while only a jumped-to older window is
-   * loaded and the newest window never was, this reports that older window as "latest" (best
-   * effort). Once a newest page arrives it is kept as the head window under the jumped-to one (see
-   * `mergeNewestPage`), and this returns it. Use for "latest"-derived reads: last message, unread
-   * counting, delivery candidates, channel-list previews.
-   */
-  get headItems(): T[] {
-    const head = this.getHeadIntervalFromSortedIntervals(this.itemIntervals);
-    return head ? this.intervalToItems(head) : [];
-  }
-
-  /**
-   * The item on the head edge of the head pagination interval (of {@link BasePaginator.headItems}).
-   * `undefined` when nothing is loaded.
-   */
-  get headmostItem(): T | undefined {
-    const head = this.getHeadIntervalFromSortedIntervals(this.itemIntervals);
-    return head ? (this.getIntervalPaginationEdges(head)?.head ?? undefined) : undefined;
-  }
-
   get cursor() {
     return this.state.getLatestValue().cursor;
   }
@@ -872,11 +844,35 @@ export abstract class BasePaginator<T, Q> {
   }
 
   /**
-   * The current contents of the anchored head interval (the loaded page bounded at the dataset head,
-   * `isHead`). Reads the same value published to {@link BasePaginator.intervalViews}.`anchoredHead`.
+   * The anchored head interval: the loaded window that reaches the head of the dataset (`isHead`).
+   * `undefined` while that window is not loaded, for example when only a window reached by a jump is.
+   */
+  protected get anchoredHeadInterval(): Interval | undefined {
+    for (const interval of this._itemIntervals.values()) {
+      if (!isLogicalInterval(interval) && interval.isHead) return interval;
+    }
+    return undefined;
+  }
+
+  /**
+   * The contents of the anchored head interval (the loaded window that reaches the head of the
+   * dataset, `isHead`). Empty while that window is not loaded. Never a window that does not reach the
+   * head: a window reached by a jump stays out of it. Reactive counterpart:
+   * {@link BasePaginator.intervalViews}.`anchoredHead`.
    */
   get anchoredHeadItems(): T[] {
-    return this.intervalViews.getLatestValue().anchoredHead;
+    const head = this.anchoredHeadInterval;
+    return head ? this.intervalToItems(head) : [];
+  }
+
+  /**
+   * The item at the head edge of the anchored head interval (see {@link anchoredHeadItems}).
+   * `undefined` while that window is not loaded. A loaded window always holds an item, so this also
+   * tells whether it is loaded.
+   */
+  get anchoredHeadItem(): T | undefined {
+    const head = this.anchoredHeadInterval;
+    return head ? (this.getIntervalPaginationEdges(head)?.head ?? undefined) : undefined;
   }
 
   /**

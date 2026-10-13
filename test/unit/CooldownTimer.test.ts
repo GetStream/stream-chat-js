@@ -7,7 +7,8 @@ import type { Channel, ChannelResponse, Event } from '../../src';
 import { convertDateToTimestamp } from './test-utils/time';
 
 // CooldownTimer.refresh() derives the current user's latest message from the message paginator's
-// latest (head) window, so tests seed the paginator (formatted) rather than legacy channel state.
+// newest window (its anchored head), so tests seed the paginator (formatted) rather than legacy
+// channel state.
 const seedLatestWindow = (
   channel: Channel,
   ...messages: ReturnType<typeof generateMsg>[]
@@ -79,6 +80,28 @@ describe('CooldownTimer', () => {
       expect(channel.cooldownTimer.ownLatestMessageTimestamp).toBe(
         convertDateToTimestamp(created_at),
       );
+    });
+
+    it('keeps the own latest message while only an older window is loaded', async () => {
+      const channel = await open('cooldown-older-window');
+      const created_at = convertDateToTimestamp('2024-01-01T00:10:00.000Z');
+      seedLatestWindow(channel, generateMsg({ created_at, user: { id: 'user-1' } }));
+
+      // the reader jumps to an older part of the channel, and the newest window is dropped
+      channel.messagePaginator.clearStateAndCache();
+      channel.messagePaginator.ingestPage({
+        page: [
+          formatMessage(
+            generateMsg({
+              created_at: convertDateToTimestamp('2024-01-01T00:00:00.000Z'),
+              user: { id: 'someone-else' },
+            }),
+          ),
+        ],
+        setActive: true,
+      });
+
+      expect(channel.cooldownTimer.ownLatestMessageTimestamp).toBe(created_at);
     });
 
     it('stops deriving once unregistered', async () => {

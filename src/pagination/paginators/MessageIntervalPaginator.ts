@@ -1530,18 +1530,37 @@ export class MessageIntervalPaginator extends BasePaginator<
   }
 
   /**
-   * Map a timestamp to a loaded message — the first message in the latest (head) window whose
-   * `created_at` is >= `timestamp` (mirrors the legacy `ChannelState.findMessageByTimestamp`
-   * lower-bound search), or the newest loaded message when the timestamp is beyond it. Used by the
-   * receipts tracker to resolve read/delivered cursors. Searches the newest loaded window — where
-   * read cursors live — which is already sorted, so this is O(log n) with no re-sort.
+   * Map a timestamp to a loaded message — the last loaded message created at or before `timestamp`.
+   * Used by the receipts tracker to resolve read/delivered cursors. Searches the loaded windows from
+   * the head down; the first one holding a message at or before `timestamp` holds the answer, since
+   * every newer window starts after it. Each window is already sorted, so this is O(log n) per window
+   * with no re-sort.
    */
   findItemByTimestamp = (
     timestamp: TimestampNS,
     exactTsMatch = false,
   ): LocalMessage | null => {
-    const items = this.headItems; // ascending by created_at
-    if (!items.length) return null;
+    for (const interval of this.sortIntervals(this.itemIntervals)) {
+      const found = this.findItemByTimestampIn(
+        this.intervalToItems(interval),
+        timestamp,
+        exactTsMatch,
+      );
+      if (found !== undefined) return found;
+    }
+    return null;
+  };
+
+  /**
+   * {@link findItemByTimestamp} within one window (`items` ascending by `created_at`). `undefined`
+   * when every item is newer than `timestamp`, so an older window has to be searched.
+   */
+  private findItemByTimestampIn(
+    items: LocalMessage[],
+    timestamp: TimestampNS,
+    exactTsMatch: boolean,
+  ): LocalMessage | null | undefined {
+    if (!items.length) return undefined;
     // Resolve the last message created AT OR BEFORE `timestamp` (floor). The sole caller is
     // read/delivered cursor resolution (MessageReceiptsTracker): the cursor carries the timestamp of
     // the last message a participant reached, so a message created strictly after the cursor has NOT
@@ -1553,7 +1572,7 @@ export class MessageIntervalPaginator extends BasePaginator<
       const t = getMessageCreatedAtTimestamp(items[i]);
       return t === null || t > timestamp;
     });
-    if (firstAfter === 0) return null; // target precedes every loaded message
+    if (firstAfter === 0) return undefined; // target precedes every message in this window
     const found = items[firstAfter - 1];
     const foundTimestamp = getMessageCreatedAtTimestamp(found);
     // A message without a resolvable created_at (e.g. an optimistic message still missing its
@@ -1561,7 +1580,7 @@ export class MessageIntervalPaginator extends BasePaginator<
     if (foundTimestamp === null) return null;
     if (!exactTsMatch) return found;
     return foundTimestamp === timestamp ? found : null;
-  };
+  }
 
   filterQueryResults = (items: LocalMessage[]) =>
     items.filter(this.shouldIncludeMessageInInterval.bind(this));
