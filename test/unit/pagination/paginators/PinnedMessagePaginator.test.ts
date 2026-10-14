@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { PinnedMessagePaginator } from '../../../../src/pagination/paginators/PinnedMessagePaginator';
 import type { LocalMessage, MessageResponse } from '../../../../src/types';
 import { convertDateToTimestamp } from '../../test-utils/time';
+import { formatMessage } from '../../../../src/utils';
 
 const CID = 'messaging:cid';
 
@@ -52,6 +53,32 @@ describe('PinnedMessagePaginator', () => {
       expect.objectContaining({ sort: [{ direction: 1, field: 'pinned_at' }] }),
     );
     expect(paginator.items?.map((m) => m.id)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('re-seeds the first page into the newest window, not into an older window being shown', () => {
+    const paginator = new PinnedMessagePaginator({ channel: makeChannel() });
+    const pinned = (id: string, at: number) => formatMessage(makePinned(id, at));
+    paginator.placePageSync(
+      [pinned('p8', 8000), pinned('p9', 9000), pinned('p10', 10000)],
+      3,
+    );
+    // jumped to an older pinned message: its window is shown, the newest one stays loaded
+    paginator.ingestPage({
+      page: [pinned('p1', 1000), pinned('p2', 2000), pinned('p3', 3000)],
+      setActive: true,
+    });
+
+    // a channel response carries the pinned first page again, with a newly pinned message
+    paginator.placePageSync(
+      [pinned('p9', 9000), pinned('p10', 10000), pinned('p11', 11000)],
+      3,
+    );
+
+    const intervals = (
+      paginator as unknown as { itemIntervals: { itemIds: string[] }[] }
+    ).itemIntervals.map((interval) => interval.itemIds);
+    expect(intervals).toContainEqual(['p1', 'p2', 'p3']);
+    expect(intervals).toContainEqual(['p8', 'p9', 'p10', 'p11']);
   });
 
   it('excludes non-pinned and shadowed messages from the queried page', async () => {

@@ -625,9 +625,10 @@ export class MessageIntervalPaginator extends BasePaginator<
     const items = this.getCanonicalQueryItems(messages);
     const { head: headItem, tail: tailItem } = this.getPagePaginationEdges(items);
     this.postQueryReconcile({
-      // A page other than the newest has no known place relative to the active window, so it is stored
-      // as a separate interval, as a jump is.
-      continuesActiveWindow: isNewestPage,
+      // The newest page continues the active window only when that window is the head window; any
+      // other page has no known place relative to the active window, so it is stored as a separate
+      // interval, as a jump is.
+      continuesActiveWindow: isNewestPage && this.isActiveIntervalAtHead,
       // A jump/around page spans both directions; a page at a cursor pages the way its cursor points,
       // and a plain latest page paginates tailward (older).
       direction: isJump ? undefined : (getLinearQueryDirection(queryShape) ?? 'tailward'),
