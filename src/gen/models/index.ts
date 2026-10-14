@@ -48,6 +48,11 @@ export type Filters<
       }>
     | ('$eq' extends FCHelper<FilterConditions>[Property]['operators']
         ? FilterValue<FCHelper<FilterConditions>[Property], '$eq'>
+        : never)
+    // `allowEmpty` marks a key whose empty filter (`{}`) has a meaning of its own,
+    // e.g. `team: {}` (all teams) in a multi-tenant channel query.
+    | (FCHelper<FilterConditions>[Property] extends { allowEmpty: true }
+        ? Record<string, never>
         : never);
 }>;
 
@@ -6818,9 +6823,14 @@ export interface QueryChannelsRequest {
       operators: '$eq';
     };
 
+    /**
+     * With multi-tenancy, client-side queries without a `team` filter only return channels of
+     * the user's teams; an empty filter (`team: {}`) queries across all teams.
+     */
     team: {
       type: string;
       operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
+      allowEmpty: true;
     };
 
     type: {
@@ -8833,9 +8843,14 @@ export interface SearchPayload {
       operators: '$eq';
     };
 
+    /**
+     * With multi-tenancy, client-side queries without a `team` filter only return channels of
+     * the user's teams; an empty filter (`team: {}`) queries across all teams.
+     */
     team: {
       type: string;
       operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
+      allowEmpty: true;
     };
 
     type: {

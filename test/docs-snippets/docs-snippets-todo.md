@@ -2,9 +2,9 @@
 
 Pages under `getstream.io/content/docs/` that contain JavaScript snippets. Give each page to an agent with `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/docs-snippets-agent-prompt.md`. **Run pages one at a time**: tests may change app settings (they must restore them).
 
-- Only client-side snippets are in scope: fences labelled `JavaScript` of pages in the JavaScript sidebar. Unlabelled `js` fences get a label (`JavaScript` or `Node.js`). `Node.js` fences and pages only in the Node sidebar are out of scope.
+- Only client-side snippets are in scope: fences labelled `JavaScript` of pages in the chat JavaScript sidebar and the platform sidebar. On platform pages, only fences that use stream-chat-js count: Feeds sections are excluded (`EXCLUDED_SECTIONS` in `sync/parse.ts`). Unlabelled `js` fences get a label (`JavaScript` or `Node.js`). `Node.js` fences and pages only in the Node sidebar are out of scope.
 - **JS / unlabelled**: number of `js` fences labelled `JavaScript` / with no label (before the docs were changed).
-- **Client test**: `yes` when the page gets a test under `test/docs-snippets/pages/...`; `-` when nothing on it can be tested client-side.
+- **Client test**: `yes` when the page gets a test under `test/docs-snippets/pages/...` (`chat/_default/X` maps to `pages/chat/X`, `platform/X` to `pages/platform/X`); `-` when nothing on it can be tested client-side.
 
 **Blockers** (details below; empty = fully runnable, maybe with setup notes):
 
@@ -16,7 +16,7 @@ Status: `[ ]` todo, `[x]` done, `[~]` done with open questions.
 
 **v10 (2026-10-13):** every page below was ported to stream-chat-js v10 (tests + JavaScript fences on the getstream.io branch `stream-chat-js-v10-docs-snippets`); no page is blocked. Behaviour worth knowing: moderation v2 records only a user's first flag on a message (later flags don't update reason/custom).
 
-App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy off (can be toggled), campaigns on, no webhook/SQS/SNS. Enabled since (not probed yet): message history (`queryMessageHistory`). Probed and **working**: location sharing (enabled by support 2026-10-06), private messaging (restricted visibility, 2026-10-06), pending messages, delivery receipts, translation, review queue, guest users, dynamic partitioning config, multi-tenancy toggle.
+App facts (2026-10-05): push v3 (providers: type `firebase` named `firebase`, type `firebase` named `apn`; the docs' Firebase example config is rejected by `upsertPushProvider`), permissions v2, multi-tenancy off (can be toggled), campaigns on, no webhook/SQS/SNS. Enabled since (not probed yet): message history (`queryMessageHistory`). Probed and **working**: location sharing (enabled by support 2026-10-06), private messaging (restricted visibility, 2026-10-06), pending messages, delivery receipts, translation, review queue, guest users, dynamic partitioning config, multi-tenancy toggle.
 
 ## chat/\_default/02-init_and_users
 
@@ -91,11 +91,44 @@ App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy of
 | [x]    | `chat/javascript/01-quick_start/01-plain_js_introduction.md`     | 4   | 0          | yes         |          |
 | —      | ~~`chat/javascript/11-debugging_and_cli/10-upgrading_to_v9.md`~~ | 0   | 8          | -           | Excluded |
 
+## platform/02-identity-and-access
+
+**JS** counts only stream-chat-js fences; Feeds `JavaScript` fences in excluded sections are listed in the Blockers cell.
+
+| Status | Page                                                  | JS  | Unlabelled | Client test | Blockers                       |
+| ------ | ----------------------------------------------------- | --- | ---------- | ----------- | ------------------------------ |
+| [x]    | `platform/02-identity-and-access/02-users.md`         | 0   | 0          | -           | Excluded sections (2 Feeds JS) |
+| [x]    | `platform/02-identity-and-access/04-multi-tenancy.md` | 2   | 0          | yes         |                                |
+
+## platform/03-events-and-notifications
+
+| Status | Page                                                            | JS  | Unlabelled | Client test | Blockers                       |
+| ------ | --------------------------------------------------------------- | --- | ---------- | ----------- | ------------------------------ |
+| [x]    | `platform/03-events-and-notifications/01-webhooks.md`           | 1   | 1          | yes         |                                |
+| [x]    | `platform/03-events-and-notifications/02-push-notifications.md` | 0   | 0          | -           | Excluded sections (2 Feeds JS) |
+| [x]    | `platform/03-events-and-notifications/04-push-devices.md`       | 3   | 0          | yes         | ◐ push provider config         |
+| [x]    | `platform/03-events-and-notifications/05-push-preferences.md`   | 9   | 0          | yes         | Excluded sections (9 Feeds JS) |
+
+## platform/04-using-the-api
+
+| Status | Page                                                 | JS  | Unlabelled | Client test | Blockers |
+| ------ | ---------------------------------------------------- | --- | ---------- | ----------- | -------- |
+| [x]    | `platform/04-using-the-api/06-connection-pooling.md` | 0   | 1          | -           |          |
+
 ## Blockers detail
 
 ### `chat/javascript/11-debugging_and_cli/10-upgrading_to_v9.md` (Excluded)
 
 - Not validated; leave the page as is (React/TSX type examples, no runnable JS). Listed in `EXCLUDED_PAGES` (`sync/parse.ts`), so the sync coverage and label checks skip it.
+
+### `platform/03-events-and-notifications/04-push-devices.md` (◐ push provider config)
+
+- The app has one push provider (added 2026-10-14): type `firebase`, named `firebase` (multi-bundle). Devices need both the type and the name: `addDevice(id, "firebase")` without the name fails with code 4 'push provider "" with type "firebase" not found'. The listing and removing tests register a device in setup with `addDevice(id, "firebase", undefined, name)`, where `name` comes from `STREAM_PUSH_PROVIDER_NAME` in `.env` (the name of a Firebase provider; the tests are skipped when it's empty).
+- "Registering from the chat client SDKs" stays `it.skip('BLOCKED: ...')`. The fence shows two alternatives: `addDevice(id, "apn")` for single-provider apps and `addDevice(id, "apn", undefined, push_provider_name)` for multi-bundle apps. The test app is multi-bundle (named providers), and as the page documents, multi-bundle configurations require `push_provider_name`: the first call fails with code 4 'push provider "" with type "apn" not found'. One app can't run both lines. The app's provider named `apn` has type `firebase`, so the second line would also need an `apn`-type provider.
+
+### Excluded sections (Feeds)
+
+- `platform/02-identity-and-access/02-users.md` ("Guest users", "Anonymous users"), `platform/03-events-and-notifications/02-push-notifications.md` (all `JavaScript` / `React` / `React Native` fences), the Feeds fences of `04-push-devices.md` and the "Feeds Push Preferences" section of `05-push-preferences.md` use `@stream-io/feeds-client` (or notifee), not stream-chat-js. They're listed in `EXCLUDED_SECTIONS` (`sync/parse.ts`) and not validated.
 
 ## Setup notes (not blockers)
 
@@ -111,6 +144,11 @@ App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy of
 - **05-features/09-translation**: `translateMessage` works (probe). Enable auto-translation per channel server-side (`update({ data: { auto_translation_enabled: true } })`); no app setting to change.
 - **05-features/10-advanced/11-slow_mode_and_throttling**: Slow mode cooldown is 30s in the snippet: use a short cooldown in assertions.
 - **12-best_practices/02-moderation**: Review queue works client-side for a user with role `admin` (probe OK).
+- **platform/02-identity-and-access/04-multi-tenancy**: Toggle multi-tenancy like `chat/_default/02-init_and_users/04-user_groups` (`serverClient.updateApp({ multi_tenant_enabled })` + `waitForAppSetting`, restore it). `team: "red"`: use a `uniqueId` team in a COPY variable. The "all teams" / "no team" queries need a user with `read-channel-any-team` (built-in `global_read_only` or `global_admin` role): for other users the API returns an access error (code 70) when inaccessible channels match, as the page documents.
+- **platform/03-events-and-notifications/01-webhooks**: Don't verify that webhooks are delivered: asserting on the response or a getter is enough. The unlabelled fence ("Where each argument comes from") is node-sdk code: label it `Node.js`.
+- **platform/03-events-and-notifications/04-push-devices**: Use the app's `firebase` provider (type and name `firebase`), see Blockers detail. Don't verify that a push arrives: `getDevices()` is enough.
+- **platform/03-events-and-notifications/05-push-preferences**: Don't verify that pushes are delivered or suppressed. Setting preferences needs no push provider. Read them back client-side: user-level from a fresh `connectUser` (`me.push_preferences`), channel-member level from `queryChannels`/`watch` (`channel.push_preferences`). Channel preferences need an existing channel (code 16 "channel with CID ... does not exist").
+- **platform/04-using-the-api/06-connection-pooling**: The unlabelled fence ("SDK-specific notes") is node-sdk code (`StreamClient`, undici): label it `Node.js`; no test.
 - **All pages that create/update channel types**: Wait 30s (`waitForChannelTypePropagation()`) after `createChannelType` / `updateChannelType` before using the type.
 
 ## Known docs bugs
@@ -150,6 +188,15 @@ Found while migrating the snippets to v10 and patched by hand in `src/gen/models
 
 - [ ] **Object-valued custom fields in filters** (`generator/templates/templates/typescript/models.tpl`, `CustomHelper`): a typed `custom.<field>` key is built for every custom data field, including object-valued ones (e.g. `CustomChannelData.source_detail: { user_id: number }`). Its value doesn't fit the `custom.${string}` index signature (`string | boolean | number | Date`), so every filter type built from the custom data stops being assignable, including the SDK's own search sources (`ChannelSearchSource`, `MessageSearchSource`). Fix: only emit typed keys for primitive and `Date` fields (`NonNullable<T['type'][P]> extends string | boolean | number | Date`); object fields fall back to the index signature, which already accepts nested paths like `custom.source_detail.user_id`. Covered by `test/types/custom-filters.ts`.
 - [ ] **Request dates typed as response dates** (OpenAPI spec): `created_at_after`, `created_at_after_or_equal`, `created_at_before` and `created_at_before_or_equal` on `QueryMembersPayload`, `QueryBannedUsersPayload` and `QueryFutureChannelBansPayload` are typed `TimestampNS` (the spec types them as numbers, the server-sent direction). They are request fields, sent in the JSON `payload` query param, and the server parses them as RFC 3339: a number fails with `Time.UnmarshalJSON: input is not a JSON string` (`03-channels/04-query_members`, "Paginate by created_at"). Fix the spec so they are request (string) dates, which the generator types as `Date`. Also check `ChannelStopWatchingRequest` (`created_at`, `received_at` typed `TimestampNS`), not investigated.
+- [ ] **Empty `team` channel filter** (OpenAPI spec + `models.tpl`, `Filters`): with multi-tenancy, `team: {}` queries channels across all teams (`platform/02-identity-and-access/04-multi-tenancy`, "Querying chat channels"), but every filter key only accepted an operator object with exactly one operator. Patched by hand: an `allowEmpty: true` flag on the `team` entries of `QueryChannelsRequest` and `SearchPayload` (both are `ChannelFilters`, and `MessageSearchSource` assigns one to the other), which `Filters` turns into an extra `Record<string, never>` member. Fix: have the spec mark the key and the template emit the flag and the `Filters` branch. Covered by `test/types/team-filter.ts`.
+
+## Possible API issues
+
+Found while testing. Not blockers.
+
+- **Multi-tenancy, code 70 hint** (`platform/02-identity-and-access/04-multi-tenancy`, backend): the access error for cross-team queries (documented: "an access error will be returned") suggests "Did you forget to include {members: $in: [...]}?" even when the filter already has it. Misleading hint.
+- **Multi-tenancy, cross-team membership** (backend): server-side `getOrCreate({ data: { team, members } })` accepts members from other teams, but `update({ add_members })` rejects them (code 5 "user from teams [...] cannot be a member of a channel with team ..."). Inconsistent.
+- **Push preferences response** (backend): the `setPushPreferences` response for a channel-only update has `user_preferences: { <user>: null }`.
 
 ## Notes
 

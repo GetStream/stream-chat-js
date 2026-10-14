@@ -3,15 +3,14 @@ import path from 'node:path';
 import { format } from 'prettier';
 import type { Options } from 'prettier';
 
-/** `content/docs/chat` in a getstream.io checkout (override with DOCS_CHAT_DIR). */
-export const DOCS_CHAT_DIR = path.resolve(
-  process.env.DOCS_CHAT_DIR ??
-    path.join(__dirname, '../../../../getstream.io/content/docs/chat'),
+/** `content/docs` in a getstream.io checkout (override with DOCS_DIR). */
+export const DOCS_DIR = path.resolve(
+  process.env.DOCS_DIR ?? path.join(__dirname, '../../../../getstream.io/content/docs'),
 );
 
 /** Identifies one code fence on a docs page. */
 export type FenceKey = {
-  /** Page path relative to `content/docs/chat`, e.g. `_default/04-messages/01-send_message.md`. */
+  /** Page path relative to `content/docs`, e.g. `chat/_default/04-messages/01-send_message.md`. */
   docs: string;
   /** Text of the nearest heading above the fence (`""` before the first heading). */
   heading: string;
@@ -26,6 +25,8 @@ export type DocsFence = FenceKey & {
   lang: string;
   /** Fence body, de-indented. */
   code: string;
+  /** Texts of the headings the fence is nested under, outermost first (ends with `heading`). */
+  headingPath: string[];
   /** 1-based line of the opening ``` line. */
   line: number;
   /** 0-based line range of the body in the file (end exclusive), plus the fence indent. */
@@ -51,22 +52,71 @@ export const fenceId = (key: FenceKey) =>
 const JS_LANGS = new Set(['js', 'javascript', 'ts', 'typescript']);
 /** The tested tab. */
 export const JS_TAB = 'JavaScript';
-/** Out of scope (server-side `@stream-io/node-sdk` code). */
+/**
+ * Out of scope: server-side code, both `@stream-io/node-sdk` code and Node.js reference
+ * implementations without an SDK (raw HTTP, AWS SDK, ...). Neither tested nor changed.
+ */
 export const NODE_TAB = 'Node.js';
 /** Every JS fence must carry one of these labels. */
 export const ALLOWED_JS_LABELS = [JS_TAB, NODE_TAB];
 
-/** JavaScript sidebar of the chat docs: the pages whose `JavaScript` fences are tested. */
-const SIDEBAR_FILE = '[chat][javascript].json';
+/**
+ * Sidebars whose pages' `JavaScript` fences are tested: sidebar file in
+ * `content/docs/_sidebars`, and the prefix of the page paths taken from it.
+ */
+const SIDEBARS = [
+  { file: '[chat][javascript].json', prefix: 'chat/' },
+  { file: '[platform][default].json', prefix: 'platform/' },
+];
 
 /**
- * Pages in the JavaScript sidebar that are deliberately not validated (page path
- * relative to `content/docs/chat`, reason).
+ * Sidebar pages that are deliberately not validated (page path relative to
+ * `content/docs`, reason).
  */
 export const EXCLUDED_PAGES: Record<string, string> = {
-  'javascript/11-debugging_and_cli/10-upgrading_to_v9.md':
+  'chat/javascript/11-debugging_and_cli/10-upgrading_to_v9.md':
     'React/TSX type examples, no runnable JS',
 };
+
+const FEEDS =
+  'Feeds client SDK (@stream-io/feeds-client and its React hooks), not stream-chat-js';
+
+/**
+ * Sections of a page that are not validated: every fence under one of these headings
+ * (at any level above the fence) is skipped by the coverage and label checks.
+ */
+export const EXCLUDED_SECTIONS: Record<string, { headings: string[]; reason: string }> = {
+  'platform/02-identity-and-access/02-users.md': {
+    headings: ['Guest users', 'Anonymous users'],
+    reason: FEEDS,
+  },
+  'platform/03-events-and-notifications/02-push-notifications.md': {
+    headings: [
+      'Handling Push Notifications on the Foreground',
+      'Direct Push Notifications',
+      'Notification Feed Push Notifications',
+    ],
+    reason: `${FEEDS}; React Native notifee example`,
+  },
+  'platform/03-events-and-notifications/04-push-devices.md': {
+    headings: [
+      'Multi-Bundle Device Registration',
+      'Listing from the feeds client SDKs',
+      'Removing from the feeds client SDKs',
+    ],
+    reason: FEEDS,
+  },
+  'platform/03-events-and-notifications/05-push-preferences.md': {
+    headings: ['Feeds Push Preferences'],
+    reason: FEEDS,
+  },
+};
+
+/** True when the fence is in one of its page's `EXCLUDED_SECTIONS`. */
+export const isExcludedFence = (fence: DocsFence) =>
+  fence.headingPath.some((heading) =>
+    EXCLUDED_SECTIONS[fence.docs]?.headings.includes(heading),
+  );
 
 const dedent = (lines: string[]) => {
   const indents = lines
@@ -97,11 +147,16 @@ export const parseDocsFences = (docs: string, markdown: string): DocsFence[] => 
   const fences: DocsFence[] = [];
   const counts = new Map<string, number>();
   let heading = '';
+  // Open headings by level: `headings[level - 1]`.
+  let headings: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     const open = /^(\s*)(`{3,})(\S*)(.*)$/.exec(lines[i]);
     if (!open) {
-      const h = /^#{1,6}\s+(.*?)\s*#*\s*$/.exec(lines[i]);
-      if (h) heading = h[1];
+      const h = /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(lines[i]);
+      if (h) {
+        heading = h[2];
+        headings = [...headings.slice(0, h[1].length - 1), heading];
+      }
       continue;
     }
     const [, indent, ticks, lang, rest] = open;
@@ -117,6 +172,7 @@ export const parseDocsFences = (docs: string, markdown: string): DocsFence[] => 
       fences.push({
         docs,
         heading,
+        headingPath: headings.filter(Boolean),
         tab,
         index,
         lang,
@@ -262,26 +318,29 @@ export const formatForDocs = async (code: string, markdownFile: string) => {
 type SidebarItem = { markdown?: string; children?: SidebarItem[] };
 
 /**
- * Pages of the chat JavaScript sidebar (paths relative to `content/docs/chat`), minus
+ * Pages of the tested sidebars (`SIDEBARS`, paths relative to `content/docs`), minus
  * `EXCLUDED_PAGES`.
  */
 export const findSidebarPages = () => {
-  const file = path.join(DOCS_CHAT_DIR, '..', '_sidebars', SIDEBAR_FILE);
-  const { items } = JSON.parse(fs.readFileSync(file, 'utf8')) as { items: SidebarItem[] };
   const pages = new Set<string>();
-  const walk = (entries: SidebarItem[] = []) => {
-    for (const entry of entries) {
-      if (entry.markdown?.startsWith('chat/'))
-        pages.add(entry.markdown.slice('chat/'.length));
-      walk(entry.children);
-    }
-  };
-  walk(items);
+  for (const sidebar of SIDEBARS) {
+    const file = path.join(DOCS_DIR, '_sidebars', sidebar.file);
+    const { items } = JSON.parse(fs.readFileSync(file, 'utf8')) as {
+      items: SidebarItem[];
+    };
+    const walk = (entries: SidebarItem[] = []) => {
+      for (const entry of entries) {
+        if (entry.markdown?.startsWith(sidebar.prefix)) pages.add(entry.markdown);
+        walk(entry.children);
+      }
+    };
+    walk(items);
+  }
   return [...pages].filter((page) => !(page in EXCLUDED_PAGES)).sort();
 };
 
 export const readDocsPage = (docs: string) => {
-  const file = path.join(DOCS_CHAT_DIR, docs);
+  const file = path.join(DOCS_DIR, docs);
   return { file, markdown: fs.readFileSync(file, 'utf8') };
 };
 
