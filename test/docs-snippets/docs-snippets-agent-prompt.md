@@ -4,7 +4,7 @@ Replace `{{PAGE}}` with a path from `/Users/zitaszupera/Stream/stream-chat-js/te
 
 ---
 
-You are verifying the client-side JavaScript code snippets of one Stream Chat docs page by writing typed tests that run them against a real Stream app with a user token. Only fences labelled `JavaScript` are in scope. Docs fences must always have a label: if you find an unlabelled `js` fence, label it (`JavaScript` for client code, `Node.js` for `@stream-io/node-sdk` code, `Node.js (no SDK)` for server-side Node.js without an SDK) and report it. `Node.js` and `Node.js (no SDK)` fences are out of scope: don't test, add or change them.
+You are verifying the client-side JavaScript code snippets of one Stream Chat docs page by writing typed tests that run them against a real Stream app with a user token. Only fences labelled `JavaScript` are in scope. Docs fences must always have a label: if you find an unlabelled `js` fence, label it (`JavaScript` for client code, `Node.js` for server-side code, with or without `@stream-io/node-sdk`) and report it. `Node.js` fences are out of scope: don't test, add or change them.
 
 **Page:** `/Users/zitaszupera/Stream/getstream.io/content/docs/{{PAGE}}`
 
@@ -45,7 +45,7 @@ You are verifying the client-side JavaScript code snippets of one Stream Chat do
   - `beforeAll` creates the shared users and channels with `uniqueId(...)` ids and registers them on a `Cleanup`.
   - `afterAll` disconnects the clients and runs `cleanup.run()`.
   - One `it` per snippet, or per tab group when the snippets in it depend on each other.
-- **Snippet markers.** Every `JavaScript` fence on the page needs exactly one marker in a test (`Node.js` / `Node.js (no SDK)` fences are ignored). `yarn test-docs-sync` checks the format and the coverage.
+- **Snippet markers.** Every `JavaScript` fence on the page needs exactly one marker in a test (`Node.js` fences are ignored). `yarn test-docs-sync` checks the format and the coverage.
   - Wrap the docs code like this:
     ```ts
     // #region snippet docs="chat/_default/04-messages/01-send_message.md" heading="Sending a Message" tab="JavaScript" index=1
@@ -111,7 +111,7 @@ yarn test-docs <your test files>     # green, with no `LEAK` or `DRIFT` error
 yarn types-docs                      # no type errors (strict TS, no `any` escapes, no `!` non-null assertions)
 yarn eslint test/docs-snippets         # zero warnings (same rules as src/: `import type`, sorted import members, no `!`, no unused vars)
 npx prettier --check test/docs-snippets
-yarn test-docs-sync                  # every JavaScript fence on the tested sidebars (chat JS, platform) covered, every JS fence labelled JavaScript / Node.js / Node.js (no SDK), every region identical to its docs fence
+yarn test-docs-sync                  # every JavaScript fence on the tested sidebars (chat JS, platform) covered, every JS fence labelled JavaScript / Node.js, every region identical to its docs fence
 ```
 
 Don't use `@ts-ignore`/`@ts-expect-error` to silence a docs snippet. A type error in a snippet is either a docs bug (fix it as above) or an SDK typing bug (fix the type in `src/` and report it).

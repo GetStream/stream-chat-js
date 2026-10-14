@@ -11,11 +11,11 @@ import {
   findTestFiles,
   formatForDocs,
   isExcludedFence,
+  NODE_TAB,
   normalize,
   parseDocsFences,
   parseTestRegions,
   readDocsPage,
-  SERVER_TABS,
 } from './parse';
 import type { DocsFence, TestRegion } from './parse';
 
@@ -72,9 +72,7 @@ describe.skipIf(!hasDocs)(`docs sync (${DOCS_DIR})`, () => {
       fences
         .filter(
           (fence) =>
-            !SERVER_TABS.includes(fence.tab) &&
-            !fence.commentOnly &&
-            !covered.has(fenceId(fence)),
+            fence.tab !== NODE_TAB && !fence.commentOnly && !covered.has(fenceId(fence)),
         )
         .map((fence) => where(file, fence)),
     );
@@ -92,7 +90,7 @@ describe.skipIf(!hasDocs)(`docs sync (${DOCS_DIR})`, () => {
     );
     expect(
       mislabelled,
-      `JS fences need label="${ALLOWED_JS_LABELS.join('" or label="')}" (client-side code, @stream-io/node-sdk code, or server-side Node.js code without an SDK)`,
+      `JS fences need label="${ALLOWED_JS_LABELS.join('" or label="')}" (client-side code, or server-side Node.js code with or without @stream-io/node-sdk)`,
     ).toEqual([]);
   });
 
@@ -108,7 +106,7 @@ describe.skipIf(!hasDocs)(`docs sync (${DOCS_DIR})`, () => {
       expect(
         unknown.map((region) => `${fenceId(region)} (${region.file}:${region.line})`),
         `no such fence. Fences on this page:\n${fences
-          .filter((fence) => !SERVER_TABS.includes(fence.tab))
+          .filter((fence) => fence.tab !== NODE_TAB)
           .map((fence) => `  ${fenceId(fence)}`)
           .join('\n')}\n`,
       ).toEqual([]);

@@ -3,7 +3,7 @@
 Typed tests that run the client-side JavaScript snippets of the chat and platform docs (the pages of the
 sidebars `getstream.io/content/docs/_sidebars/[chat][javascript].json` and `[platform][default].json`) against a
 real Stream app. Only fences labelled `JavaScript` are in scope (docs fences must always have a label): they are fixed
-when they are wrong or contain server-side code. `Node.js` and `Node.js (no SDK)` fences are out of scope and are neither tested nor changed.
+when they are wrong or contain server-side code. `Node.js` fences (server-side, with or without `@stream-io/node-sdk`) are out of scope and are neither tested nor changed.
 Platform pages also cover other products: their Feeds fences (`@stream-io/feeds-client` and its React / React Native
 hooks) are excluded with `EXCLUDED_SECTIONS` (see below).
 
@@ -79,8 +79,8 @@ const message = await client
   - `index` is 1-based among fences with the same heading text and tab (default 1).
 - **COPY**: `name="literal"` pairs, applied to the region before comparing (identifier `name` becomes the docs literal). Don't use COPY variables as object keys or shorthand properties.
 - **Comparison**: both sides are formatted with the same prettier options, so quote style and line wrapping don't matter, but any code or comment change does.
-- **Coverage** (checked first): every JS fence (`js`/`javascript`/`ts`/`typescript`) on the pages of the tested sidebars (`SIDEBARS` in `sync/parse.ts`: `[chat][javascript].json`, `[platform][default].json`), whether or not the page has tests yet, must have a region (inside `it.skip` if it can't run). `Node.js` / `Node.js (no SDK)` fences and comment-only fences (e.g. the "server-side only" placeholders) are ignored.
-- **Labels**: every JS fence on those pages must be labelled `JavaScript`, `Node.js` or `Node.js (no SDK)`; unlabelled or otherwise labelled JS fences fail.
+- **Coverage** (checked first): every JS fence (`js`/`javascript`/`ts`/`typescript`) on the pages of the tested sidebars (`SIDEBARS` in `sync/parse.ts`: `[chat][javascript].json`, `[platform][default].json`), whether or not the page has tests yet, must have a region (inside `it.skip` if it can't run). `Node.js` fences and comment-only fences (e.g. the "server-side only" placeholders) are ignored.
+- **Labels**: every JS fence on those pages must be labelled `JavaScript` or `Node.js`; unlabelled or otherwise labelled JS fences fail.
 - **Excluded pages**: `EXCLUDED_PAGES` in `sync/parse.ts` lists sidebar pages that are deliberately not validated, with a reason (e.g. the v9 upgrade guide's TSX type examples). Both checks skip them.
 - **Excluded sections**: `EXCLUDED_SECTIONS` in `sync/parse.ts` lists headings per page, with a reason. Every fence nested under one of them (at any heading level) is skipped by both checks. Used for the Feeds fences on platform pages (e.g. `Feeds Push Preferences`, whose `JavaScript`, `React` and `React Native` tabs use `@stream-io/feeds-client`).
 - **`DOCS_SYNC_WRITE=<page path, e.g. chat/_default/04-messages/01-send_message.md> yarn test-docs-sync`** writes the regions of that page into the docs fences (docs prettier style). Use it to apply a fix to the docs. `DOCS_SYNC_WRITE=1` writes all pages.

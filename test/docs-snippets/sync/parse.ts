@@ -52,14 +52,13 @@ export const fenceId = (key: FenceKey) =>
 const JS_LANGS = new Set(['js', 'javascript', 'ts', 'typescript']);
 /** The tested tab. */
 export const JS_TAB = 'JavaScript';
-/** Out of scope (server-side `@stream-io/node-sdk` code). */
+/**
+ * Out of scope: server-side code, both `@stream-io/node-sdk` code and Node.js reference
+ * implementations without an SDK (raw HTTP, AWS SDK, ...). Neither tested nor changed.
+ */
 export const NODE_TAB = 'Node.js';
-/** Out of scope as well: server-side Node.js code without an SDK (raw HTTP, AWS SDK, ...). */
-export const NODE_NO_SDK_TAB = 'Node.js (no SDK)';
-/** Labels of server-side fences, which are neither tested nor changed. */
-export const SERVER_TABS = [NODE_TAB, NODE_NO_SDK_TAB];
 /** Every JS fence must carry one of these labels. */
-export const ALLOWED_JS_LABELS = [JS_TAB, ...SERVER_TABS];
+export const ALLOWED_JS_LABELS = [JS_TAB, NODE_TAB];
 
 /**
  * Sidebars whose pages' `JavaScript` fences are tested: sidebar file in
