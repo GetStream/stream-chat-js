@@ -211,6 +211,8 @@ export class Channel {
    * @param {boolean} [options.pending] Make this message pending
    * @param {Record<string,string>} [options.pending_message_metadata] Metadata for the pending message
    * @param {boolean} [options.force_moderation] Apply force moderation for server-side requests
+   * @param {string | Date} [options.scheduled_at] Do not send the message now but schedule it to be sent at this time.
+   * The response then carries `scheduled_message`, and `message` is not added to the channel.
    *
    * @return {Promise<SendMessageAPIResponse>} The Server Response
    */
@@ -221,13 +223,25 @@ export class Channel {
       message: rawMessage,
     });
 
-    return await client.post<SendMessageAPIResponse>(this._channelURL() + '/message', {
-      message,
-      ...options,
-    });
+    const response = await client.post<SendMessageAPIResponse>(
+      this._channelURL() + '/message',
+      {
+        message,
+        ...options,
+      },
+    );
+    if (response.scheduled_message) {
+      client.scheduledMessages.upsertToState(response.scheduled_message);
+    }
+    return response;
   }
 
   async sendMessage(message: Message, options?: SendMessageOptions) {
+    // A scheduled send is not queued offline: replaying the queued task adds the
+    // response message to the channel state as if it had been sent.
+    if (options?.scheduled_at) {
+      return await this._sendMessage(message, options);
+    }
     try {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
@@ -1657,6 +1671,10 @@ export class Channel {
 
     this.getClient().polls.hydratePollCache(state.messages, true);
     this.getClient().reminders.hydrateState(state.messages);
+    this.getClient().scheduledMessages.hydrateChannelState(
+      this.cid,
+      state.scheduled_messages,
+    );
 
     this.messageComposer.initStateFromChannelResponse(state);
 
