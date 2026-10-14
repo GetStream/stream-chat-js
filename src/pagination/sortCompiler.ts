@@ -168,7 +168,7 @@ export function makeComparator<T>({
           // Null/undefined always sort to the tail, INDEPENDENT of `direction`. Return here so the
           // result bypasses the direction flip below — otherwise a descending sort (e.g.
           // `{ last_message_at: -1 }`) negates "null last" into "null first" and floats value-less
-          // items (e.g. channels with no last message) to the head of the list.
+          // items (e.g. channels with no latest message) to the head of the list.
           if (leftValue == null && rightValue == null) {
             comparison = 0; // tie on this term; fall through to the next term / tiebreaker
             break;

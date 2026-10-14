@@ -242,7 +242,7 @@ export class MessageDeliveryReporter {
 
     // todo: unify the API for read state access btw channel and threads
     if (isChannel(collection)) {
-      latestMessage = collection.messagePaginator.lastMessage;
+      latestMessage = collection.messagePaginator.latestMessage;
       const ownReadState = collection.state.read[ownUserId] ?? {};
       lastReadAt = ownReadState?.last_read;
       lastDeliveredAt = ownReadState?.last_delivered_at;
@@ -250,7 +250,7 @@ export class MessageDeliveryReporter {
     } else if (isThread(collection)) {
       // The newest reply, not the active/visible interval, which only holds it when scrolled to the
       // head. Mirrors the channel branch above.
-      latestMessage = collection.messagePaginator.lastMessage;
+      latestMessage = collection.messagePaginator.latestMessage;
       const ownReadState =
         collection.state.getLatestValue().read[ownUserId] ?? ({} as ThreadUserReadState);
       lastReadAt = ownReadState?.lastReadAt;

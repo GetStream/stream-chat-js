@@ -26,7 +26,7 @@ import {
 	afterAll,
 	vi,
 } from 'vitest';
-import { Channel } from '../../src';
+import { Channel, ChannelWatchStatus, formatMessage } from '../../src';
 import { MockOfflineDB } from './offline-support/MockOfflineDB';
 import { convertDateToTimestamp } from './test-utils/time';
 
@@ -1546,9 +1546,9 @@ describe('StreamChat.queryChannels', async () => {
 		const [channel] = await client.queryChannelsAndHydrate({ message_limit: 3 });
 		expect(channel.messagePaginator.getItem('m7')).to.not.be.undefined;
 
-		// While the app was closed, m7 (the last message) was hard-deleted. The next channel-list query
-		// returns the window WITHOUT it. m7 is above the newest returned message (m6), so only the
-		// pre-fetch head snapshot lets the reconcile prune it — the cold-boot path must supply it.
+		// While the app was closed, m7 (the latest message) was hard-deleted. The next channel-list
+		// query returns the window WITHOUT it. m7 is above the newest returned message (m6), so only
+		// the pre-fetch head snapshot lets the reconcile prune it — the cold-boot path must supply it.
 		stub.resolves({
 			channels: [{ ...mockChannelQueryResponse, messages: [full[0], full[1]] }],
 		});
@@ -1557,6 +1557,62 @@ describe('StreamChat.queryChannels', async () => {
 		expect(channel.messagePaginator.getItem('m7')).to.be.undefined;
 
 		stub.restore();
+	});
+
+	describe('a list response reporting newer messages than the newest window holds', () => {
+		const at = (second) => convertDateToTimestamp(`2023-11-14T12:00:0${second}.000Z`);
+		const message = (id, second) => generateMsg({ id, created_at: at(second) });
+		const respond = (client, messages, lastSecond) =>
+			sinon.stub(client, 'queryChannels').resolves({
+				channels: [
+					{
+						...mockChannelQueryResponse,
+						channel: {
+							...mockChannelQueryResponse.channel,
+							last_message_at: at(lastSecond),
+						},
+						messages,
+					},
+				],
+			});
+		// m5–m6 loaded as the newest window, the reader jumped to m1, then the connection dropped
+		const loadJumpedAwayChannel = async (client) => {
+			const stub = respond(client, [message('m5', 5), message('m6', 6)], 6);
+			const [channel] = await client.queryChannelsAndHydrate({ message_limit: 2 });
+			stub.restore();
+			channel.messagePaginator.ingestPage({
+				page: [formatMessage(message('m1', 1))],
+				setActive: true,
+			});
+			channel.watchStatus = ChannelWatchStatus.WasWatching;
+			return channel;
+		};
+
+		it('stops treating the newest window as such when the reader jumped away from it', async () => {
+			const client = await getClientWithUser();
+			const channel = await loadJumpedAwayChannel(client);
+			expect(channel.messagePaginator.anchoredHeadItem?.id).toBe('m6');
+
+			// m7–m9 were sent while the connection was down
+			const stub = respond(client, [message('m8', 8), message('m9', 9)], 9);
+			await client.queryChannelsAndHydrate({ message_limit: 2 });
+			stub.restore();
+
+			expect(channel.messagePaginator.anchoredHeadItem).toBeUndefined();
+			expect(channel.messagePaginator.items.map((m) => m.id)).toEqual(['m1']);
+		});
+
+		it('leaves an on-screen channel to its own reload', async () => {
+			const client = await getClientWithUser();
+			const channel = await loadJumpedAwayChannel(client);
+			channel.activate();
+
+			const stub = respond(client, [message('m8', 8), message('m9', 9)], 9);
+			await client.queryChannelsAndHydrate({ message_limit: 2 });
+			stub.restore();
+
+			expect(channel.messagePaginator.anchoredHeadItem?.id).toBe('m6');
+		});
 	});
 
 	it('seeds each queried channel paginator with its full message page', async () => {

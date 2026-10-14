@@ -268,12 +268,12 @@ never empty.
 // WRONG — an epoch timestamp reads as "no timestamp".
 if (!message.pinned_at) return;
 const at = reminder.remind_at ? new Date(reminder.remind_at) : null;
-const last = paginator.lastMessageAt || nowNs();
+const last = paginator.latestMessageAt || nowNs();
 
 // RIGHT
 if (message.pinned_at == null) return;
 const at = reminder.remind_at != null ? nsToDate(reminder.remind_at) : null;
-const last = paginator.lastMessageAt ?? nowNs();
+const last = paginator.latestMessageAt ?? nowNs();
 ```
 
 **This is not hypothetical for read state.** `0` is the sentinel this SDK actively writes for "never
@@ -459,8 +459,8 @@ Type changes where the member name is unchanged and only the type moved from `Da
 | `ReminderState.created_at` / `.updated_at`                  | `Date`              | `TimestampNS`              |
 | `ReminderState.remind_at`                                   | `Date \| null`      | `TimestampNS \| null`      |
 | `UnreadSnapshotState.lastReadAt`                            | `Date \| null`      | `TimestampNS \| null`      |
-| `MessagePaginatorAggregateState.seededLastMessageAt`        | `Date \| null`      | `TimestampNS \| null`      |
-| `MessagePaginator.lastMessageAt` (getter)                   | `Date \| null`      | `TimestampNS \| null`      |
+| `MessagePaginatorAggregateState.queriedLatestMessageAt`     | `Date \| null`      | `TimestampNS \| null`      |
+| `MessagePaginator.latestMessageAt` (getter)                 | `Date \| null`      | `TimestampNS \| null`      |
 | `LocalEvent` `created_at`, and `received_at` on every event | `Date`              | `TimestampNS`              |
 | `ConnectedEvent.created_at` / `.received_at`                | `Date`              | `TimestampNS`              |
 | `DBDeleteMessagesForChannelType.truncated_at`               | `Date \| undefined` | `TimestampNS \| undefined` |
@@ -472,7 +472,7 @@ Signature changes:
 | `channel.countUnread(lastRead?)`                                 | `Date \| null`                         | `TimestampNS \| null`                      |
 | `channel.lastRead()`                                             | `Date \| null \| undefined`            | `TimestampNS \| null \| undefined`         |
 | `channel.muteStatus()`                                           | `{ createdAt: Date \| null; … }`       | `{ createdAt: TimestampNS \| null; … }`    |
-| `MessagePaginator.seedLastMessageAt(value)`                      | `string \| Date \| null \| undefined`  | `TimestampNS \| null \| undefined`         |
+| `MessagePaginator.setQueriedLatestMessageAt(value)`              | `string \| Date \| null \| undefined`  | `TimestampNS \| null \| undefined`         |
 | `MessagePaginator.truncate({ truncatedAt })`                     | `Date`                                 | `TimestampNS`                              |
 | `MessagePaginator.applyMessageDeletionForUser({ deletedAt })`    | `Date`                                 | `TimestampNS`                              |
 | `MessagePaginator.findItemByTimestamp(timestamp, exactTsMatch?)` | epoch **ms**                           | `TimestampNS`                              |

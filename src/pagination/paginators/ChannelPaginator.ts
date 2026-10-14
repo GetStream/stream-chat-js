@@ -174,7 +174,7 @@ const lastUpdatedFilterResolver: FieldToDataResolver<Channel> = {
   matchesField: (field) => field === 'last_updated',
   // the server uses the creation time for a channel without messages
   resolve: (channel) =>
-    channel.messagePaginator.lastMessageAt ?? channel.data?.created_at,
+    channel.messagePaginator.latestMessageAt ?? channel.data?.created_at,
 };
 
 const membersFilterResolver: FieldToDataResolver<Channel> = {
@@ -250,7 +250,7 @@ const createChannelSortPathResolver = (client: StreamChat): PathResolver<Channel
   return (channel, path) => {
     switch (path) {
       case 'last_message_at':
-        return channel.messagePaginator.lastMessageAt;
+        return channel.messagePaginator.latestMessageAt;
       case 'has_unread': {
         return hasUnreadResolver.resolve(channel, path);
       }

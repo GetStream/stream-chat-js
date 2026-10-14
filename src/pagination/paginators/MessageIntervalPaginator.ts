@@ -127,7 +127,7 @@ const dataFieldFilterResolver: FieldToDataResolver<LocalMessage> = {
  * is absent or not a finite number.
  *
  * Accepts `null`/`undefined` so callers holding an optional message (e.g.
- * `MessagePaginator.lastMessage`) do not each repeat the guard.
+ * `MessagePaginator.latestMessage`) do not each repeat the guard.
  */
 export const getMessageCreatedAtTimestamp = (
   message: LocalMessage | null | undefined,
@@ -210,12 +210,12 @@ export type MessagePagePlacement = {
 export type PlacePageOptions = {
   /**
    * When true and messages are loaded, the newest page is merged into the newest window via
-   * {@link MessageIntervalPaginator.mergeNewestPage} — merged in place, messages hard-deleted
-   * while no events were received removed, the tail cursor re-derived, rebuilt on a disjoint window, and merged into the head
-   * window even while another window is active — instead of ingested as a first page. Lets callers
-   * (`channel.reload`, the channel-list hydrate, connection recovery) share one reconciling path.
-   * Left false for the differently-sorted pinned list. Has no effect on a page at a cursor or
-   * around a message, nor when nothing is loaded.
+   * {@link MessageIntervalPaginator.mergeNewestPage} — merged in place, messages hard-deleted while
+   * no events were received removed, the tail cursor re-derived, rebuilt when separated by a gap,
+   * and merged into the head window even while another window is active — instead of ingested as a
+   * first page. Lets callers (`channel.reload`, the channel-list hydrate, connection recovery)
+   * share one reconciling path. Left false for the differently-sorted pinned list. Has no effect on
+   * a page at a cursor or around a message, nor when nothing is loaded.
    */
   reconcile?: boolean;
   /**
@@ -847,46 +847,59 @@ export class MessageIntervalPaginator extends BasePaginator<
   };
 
   /**
-   * Fold an already fetched newest (head) page into the currently loaded items without issuing a
-   * query. The caller supplies a page it obtained on its own and this reconciles it against what is
-   * loaded, instead of rerunning the first page query, so the loaded set is updated in place rather
-   * than blanked and reloaded. Two cases, decided by whether the incoming page overlaps the loaded
-   * head:
+   * Merges an already fetched newest page into the loaded windows without issuing a query. The
+   * caller supplies a page it obtained on its own (a reload, a channel-list query, connection
+   * recovery) and this reconciles it against what is loaded, so the loaded windows are updated in
+   * place rather than blanked and reloaded. What happens depends on which window is being read.
+   *
+   * When the head window is the one being read, two cases, decided by whether the incoming page
+   * overlaps or is contiguous with it:
    *
    * 1. OVERLAP - the incoming page shares at least one id with the loaded head (fewer than a full
-   *    page is new). Merge in place: existing items are reconciled by id (edits, soft deletes), new
-   *    items are appended and every already loaded item (including older pages already paged in) is
-   *    kept. The tail boundary (`hasMoreTail`/`cursor.tailward`) is set from whether the page reached
-   *    the channel start ({@link pageReachedChannelStart}): a bounded page that came back short means
-   *    no more older, otherwise "load older" stays enabled and the cursor re-anchors to the true loaded
-   *    oldest (which also clears a stale offline-DB cursor). Then destructive reconciliation
-   *    ({@link reconcileHeadAgainstPage}) removes any loaded message that the authoritative page
-   *    proves was hard-deleted while no events were received (see that method + the
-   *    {@link MergeNewestPageOptions} for the exact, safe window).
+   *    page is new), or the head holds only messages newer than the page, which arrived after the
+   *    page was produced (contiguous). Merge in place: existing items are reconciled by id (edits,
+   *    soft deletes), new items are appended and every already loaded item (including older pages
+   *    already paged in) is kept. The tail boundary (`hasMoreTail`/`cursor.tailward`) is set from
+   *    whether the page reached the channel start ({@link pageReachedChannelStart}): a bounded page
+   *    that came back short means no more older, otherwise "load older" stays enabled and the
+   *    cursor re-anchors to the true loaded oldest (which also clears a stale offline-DB cursor).
+   *    Then destructive reconciliation ({@link reconcileHeadAgainstPage}) removes any loaded
+   *    message that the authoritative page proves was hard-deleted while no events were received
+   *    (see that method + the {@link MergeNewestPageOptions} for the exact, safe window).
    *
-   * 2. DISJOINT - the incoming page shares no id with the loaded head (at least a full page is new).
-   *    Merging would weld the two across the gap (the interval merge treats two head intervals as
-   *    overlapping when one reaches further headward), hiding the items in between with no way to
-   *    reach them. Instead the loaded set is discarded and rebuilt from the incoming page as a fresh
-   *    contiguous head (`hasMoreTail: true`, cursor reanchored to the page's oldest item) so the
-   *    gap and older history load again when paginating older. No separate reconciliation is needed:
-   *    the rebuilt window IS the server truth, so any hard-deleted message is simply absent from it.
+   * 2. SEPARATED BY A GAP - the incoming page shares no id with the loaded head, which is entirely
+   *    older: the messages between them are not loaded (at least a full page is new). Merging would
+   *    weld the two across the gap (the interval merge treats two head intervals as overlapping
+   *    when one reaches further headward), hiding the items in between with no way to reach them.
+   *    Instead the loaded set is discarded and rebuilt from the incoming page as a fresh contiguous
+   *    head (`hasMoreTail: true`, cursor reanchored to the page's oldest item) so the gap and older
+   *    history load again when paginating older. No separate reconciliation is needed: the rebuilt
+   *    window IS the server truth, so any hard-deleted message is simply absent from it.
    *
-   * Never blanks the loaded set. Noop unless the newest slice is both loaded AND the interval
-   * currently in view (the head interval is anchored at the head and active); when the caller has
-   * jumped to a separate older window the merge is skipped so their position is preserved, and the
-   * incoming page is picked up on a later load. An empty page never wipes the list on its own, but
-   * — given a pre-fetch snapshot via `options.headIntervalItemIdsAtRequest` — is reconciled as "the channel has no
-   * messages" (every server-confirmed loaded message removed).
+   * When another window is being read (the reader jumped to an older one), the reader stays there.
+   * Messages the page proves were hard-deleted are removed from the head window, then the page is
+   * merged into it when they overlap or are contiguous, or becomes the head window when they are
+   * separated by a gap (see {@link mergeNewestPageIntoInactiveHead}). If the page also overlaps the
+   * window being read, that window grows into the head window.
    *
-   * @param page - The fetched newest window (may be empty). `created_at` order is normalized on ingest.
-   * @param options - See {@link MergeNewestPageOptions}. Omit to prune only within the page's own span.
-   */
-  /**
-   * Merges a freshly fetched newest page into the loaded window (the hydrate path). Wraps the
-   * implementation so the query shape is recorded on EVERY exit — the body returns early in
-   * several places, and a window left without a shape loses itself on the next pagination (see
-   * `recordLoadedWindowQueryShape`).
+   * When no window is marked as the head (only live messages arrived, only a window the reader
+   * jumped to is loaded, or the head mark was cleared, see {@link unmarkHead}), the page becomes
+   * the head window. It merges with the windows it overlaps, live messages included, and removes
+   * from them what it proves was hard-deleted. If the reader was on the live messages it absorbed,
+   * it becomes the window being read; if it merged into the window being read, that window grows.
+   *
+   * It never blanks the loaded windows, and with nothing loaded it does nothing: placing a first
+   * page is {@link postQueryReconcile}'s job. An empty page changes nothing on its own but, given a
+   * pre-fetch snapshot (`options.headIntervalItemIdsAtRequest`), is reconciled as "the channel has
+   * no messages": every server-confirmed message of the head window is removed.
+   *
+   * The query shape of the loaded window is recorded on every exit (see
+   * `recordLoadedWindowQueryShape`): a window left without one loses itself on the next pagination.
+   *
+   * @param page - The fetched newest window (may be empty). `created_at` order is normalized on
+   *   ingest.
+   * @param options - See {@link MergeNewestPageOptions}. Omit to prune only within the page's own
+   *   span.
    */
   mergeNewestPage = (page: LocalMessage[], options?: MergeNewestPageOptions) => {
     this._mergeNewestPage(page, options);
@@ -898,11 +911,12 @@ export class MessageIntervalPaginator extends BasePaginator<
     if (!headInterval?.isHead) {
       // The newest messages are not loaded as a window: only live content arrived (the first query
       // came back empty and the reply the user then sent went to the logical head, a thread/channel
-      // creation for example), or only a window the reader jumped to is loaded. Returning would discard
-      // the fetched page, so the newest messages could never be reached. We anchor it as the head, so
-      // `ingestPage` folds overlapping logical intervals in, absorbing those items.
+      // creation for example), only a window the reader jumped to is loaded, or the head mark was
+      // cleared (see `unmarkHead`). Returning would discard the fetched page, so the newest
+      // messages could never be reached. We mark it as the head window, and `ingestPage` merges
+      // into it the windows it overlaps, live messages included.
       //
-      // Nothing loaded at all stays a no-op: seeding is `postQueryReconcile`'s job.
+      // Nothing loaded at all stays a no-op: placing a first page is `postQueryReconcile`'s job.
       const logicalHead = this.liveHeadLogical;
       const hasAnchoredHead = this.itemIntervals.some(
         (interval) => !isLogicalInterval(interval) && interval.isHead,
@@ -916,6 +930,9 @@ export class MessageIntervalPaginator extends BasePaginator<
 
       const anchored = this.ingestPage({ page, isHead: true, setActive: false });
       if (!anchored) return;
+      // The page may have merged into a window that stopped reaching the newest message (see
+      // `unmarkHead`); remove from it, as from the head, what the page proves was hard-deleted.
+      this.reconcileHeadAgainstPage(page, options);
       if (!takeOverView) {
         // The page merged into the window being read, which now reaches the head: show what it gained.
         if (this.isActiveInterval(anchored)) {
@@ -974,7 +991,7 @@ export class MessageIntervalPaginator extends BasePaginator<
       this.isEntirelyHeadwardOf(headInterval, page);
 
     if (!overlapsLoadedHead) {
-      // Disjoint window: rebuild from the fetched page as a fresh newest slice. Clearing
+      // Separated by a gap: rebuild from the fetched page as a fresh newest slice. Clearing
       // the stale intervals first ensures `ingestPage` builds a single head interval instead of
       // merging across the gap so reanchoring the cursor to this page's oldest item keeps the next
       // "load older" contiguous.
@@ -983,8 +1000,9 @@ export class MessageIntervalPaginator extends BasePaginator<
       const resetInterval = this.ingestPage({
         page,
         isHead: true,
-        // Disjoint means the previously loaded head was entirely OLDER than this newest window, so
-        // there is always older data to load (the gap + the prior history) - keep hasMoreTail true.
+        // Separated by a gap, the previously loaded head was entirely OLDER than this newest
+        // window, so there is always older data to load (the gap + the prior history) - keep
+        // hasMoreTail true.
         isTail: false,
         setActive: false,
       });
@@ -1092,8 +1110,8 @@ export class MessageIntervalPaginator extends BasePaginator<
 
   /**
    * Merges a fetched newest page into the head window while another window is active, which stays
-   * active. The page joins the head window when they overlap or are contiguous; across a gap it
-   * becomes the head window, and the old one no longer reaches the newest message.
+   * active. The page joins the head window when they overlap or are contiguous; separated by a gap,
+   * it becomes the head window, and the old one no longer reaches the newest message.
    *
    * ```text
    * oldest ──────────────────────────────────────────────▶ newest
@@ -1119,18 +1137,18 @@ export class MessageIntervalPaginator extends BasePaginator<
     const head = this.anchoredHeadInterval;
     const headIds = new Set(head?.itemIds ?? []);
     const overlapsHead = page.some((item) => headIds.has(this.getItemId(item)));
-    const contiguous = !!head && !overlapsHead && this.isEntirelyHeadwardOf(head, page);
-    const acrossGap = !!head && !overlapsHead && !contiguous;
-    if (head && acrossGap) {
-      head.isHead = false;
-      head.hasMoreHead = true;
-      this.syncAnchoredHeadAfterHeadFlip(head, true);
-    }
+    // Sharing no message with the head window, the page is either contiguous with it or separated
+    // from it by a gap.
+    const sharesNoMessage = !!head && !overlapsHead;
+    const contiguous = sharesNoMessage && this.isEntirelyHeadwardOf(head, page);
+    const separatedByGap = sharesNoMessage && !contiguous;
+    if (separatedByGap) this.unmarkHead(head);
     const interval = this.ingestPage({
       page,
       isHead: true,
-      // across a gap there are older messages to load (the gap); otherwise the window keeps its flag
-      isTail: acrossGap ? false : undefined,
+      // separated by a gap, there are older messages to load (the gap); otherwise the window keeps
+      // its flag
+      isTail: separatedByGap ? false : undefined,
       setActive: false,
       targetIntervalId: contiguous ? head?.id : undefined,
     });
@@ -1252,7 +1270,7 @@ export class MessageIntervalPaginator extends BasePaginator<
    * omits any real delete).
    *
    * Removal goes through {@link removeItem} (batched) so the item index, intervals, shared message
-   * store and — via the {@link MessagePaginator} override — the tracked last message all stay correct;
+   * store and — via the {@link MessagePaginator} override — the latest message all stay correct;
    * the active window is then re-emitted once.
    *
    * @returns the below-window leftover ids (loaded, server-confirmed, older than `page`'s oldest, absent

@@ -185,17 +185,17 @@ describe('Threads 2.0', () => {
       expect(thread.messagePaginator.isInitialized).to.be.false;
     });
 
-    it('seeds the reply paginator lastMessageAt from the thread last_message_at', () => {
+    it('sets the reply paginator queried latestMessageAt from the thread last_message_at', () => {
       const thread = createTestThread({
         latest_replies: [],
         reply_count: 0,
         last_message_at: convertDateToTimestamp('2030-01-01T00:00:00.000Z'),
       });
       // The server floor seeds the sort key even with no replies loaded to display.
-      expect(thread.messagePaginator.lastMessageAt).to.equal(
+      expect(thread.messagePaginator.latestMessageAt).to.equal(
         convertDateToTimestamp('2030-01-01T00:00:00.000Z'),
       );
-      expect(thread.messagePaginator.lastMessage).to.be.null;
+      expect(thread.messagePaginator.latestMessage).to.be.null;
     });
 
     it('initializes properly without threadData', () => {

@@ -28,10 +28,10 @@ const user = { id: 'custom-id' };
 // `channel.state.last_message_at` is derived (read-only) from the message paginator's tracked latest
 // message. To stage a specific value for sort tests, seed the paginator: clear first so any value
 // (including an earlier one) applies, since tracking is monotonic.
-const setLastMessageAt = (channel: Channel, date: Date | null) => {
+const setLatestMessageAt = (channel: Channel, date: Date | null) => {
   channel.messagePaginator.clearStateAndCache();
   if (date) {
-    channel.messagePaginator.trackLastMessage(
+    channel.messagePaginator.trackLatestMessage(
       formatMessage(generateMsg({ date: date.toISOString() })),
     );
   }
@@ -46,11 +46,11 @@ describe('ChannelPaginator', () => {
     client = getClientWithUser(user);
 
     channel1 = new Channel(client, 'type', 'id1', {});
-    setLastMessageAt(channel1, new Date('1972-01-01T08:39:35.235Z'));
+    setLatestMessageAt(channel1, new Date('1972-01-01T08:39:35.235Z'));
     channel1.data!.updated_at = convertDateToTimestamp('1972-01-01T08:39:35.235Z');
 
     channel2 = new Channel(client, 'type', 'id1', {});
-    setLastMessageAt(channel2, new Date('1971-01-01T08:39:35.235Z'));
+    setLatestMessageAt(channel2, new Date('1971-01-01T08:39:35.235Z'));
     channel2.data!.updated_at = convertDateToTimestamp('1971-01-01T08:39:35.235Z');
   });
 
@@ -70,10 +70,10 @@ describe('ChannelPaginator', () => {
       expect(paginator.id.startsWith('channel-paginator')).toBeTruthy();
       expect(paginator.sortComparator).toBeDefined();
 
-      setLastMessageAt(channel1, new Date('1970-01-01T08:39:35.235Z'));
+      setLatestMessageAt(channel1, new Date('1970-01-01T08:39:35.235Z'));
       channel1.data!.updated_at = convertDateToTimestamp('1970-01-01T08:39:35.235Z');
 
-      setLastMessageAt(channel2, new Date('1971-01-01T08:39:35.235Z'));
+      setLatestMessageAt(channel2, new Date('1971-01-01T08:39:35.235Z'));
       channel2.data!.updated_at = convertDateToTimestamp('1971-01-01T08:39:35.235Z');
 
       expect(paginator.sortComparator(channel1, channel2)).toBe(1); // channel2 comes before channel1
@@ -173,10 +173,10 @@ describe('ChannelPaginator', () => {
       const paginator = new ChannelPaginator({ client });
       expect(paginator.sortComparator(channel1, channel2)).toBe(keepOrder);
 
-      setLastMessageAt(channel1, new Date('1970-01-01T08:39:35.235Z'));
+      setLatestMessageAt(channel1, new Date('1970-01-01T08:39:35.235Z'));
       channel1.data!.updated_at = convertDateToTimestamp('1970-01-01T08:39:35.235Z');
 
-      setLastMessageAt(channel2, new Date('1971-01-01T08:39:35.235Z'));
+      setLatestMessageAt(channel2, new Date('1971-01-01T08:39:35.235Z'));
       channel2.data!.updated_at = convertDateToTimestamp('1971-01-01T08:39:35.235Z');
 
       expect(paginator.sortComparator(channel1, channel2)).toBe(changeOrder);
@@ -240,16 +240,16 @@ describe('ChannelPaginator', () => {
       });
 
       // compares channel1.state.last_message_at with channel2.data!.updated_at
-      setLastMessageAt(channel1, new Date('1975-01-01T08:39:35.235Z'));
+      setLatestMessageAt(channel1, new Date('1975-01-01T08:39:35.235Z'));
       channel1.data!.updated_at = convertDateToTimestamp('1970-01-01T08:39:35.235Z');
-      setLastMessageAt(channel2, new Date('1971-01-01T08:39:35.235Z'));
+      setLatestMessageAt(channel2, new Date('1971-01-01T08:39:35.235Z'));
       channel2.data!.updated_at = convertDateToTimestamp('1973-01-01T08:39:35.235Z');
       expect(paginator.sortComparator(channel1, channel2)).toBe(changeOrder);
 
       // compares channel2.state.last_message_at with channel1.data!.updated_at
-      setLastMessageAt(channel1, new Date('1975-01-01T08:39:35.235Z'));
+      setLatestMessageAt(channel1, new Date('1975-01-01T08:39:35.235Z'));
       channel1.data!.updated_at = convertDateToTimestamp('1976-01-01T08:39:35.235Z');
-      setLastMessageAt(channel2, new Date('1978-01-01T08:39:35.235Z'));
+      setLatestMessageAt(channel2, new Date('1978-01-01T08:39:35.235Z'));
       channel2.data!.updated_at = convertDateToTimestamp('1973-01-01T08:39:35.235Z');
       expect(paginator.sortComparator(channel1, channel2)).toBe(keepOrder);
     });
@@ -505,19 +505,19 @@ describe('ChannelPaginator', () => {
           filters: { last_updated: new Date(1000).toISOString() },
         });
         channel1.data = { created_at: undefined };
-        setLastMessageAt(channel1, new Date(1000));
+        setLatestMessageAt(channel1, new Date(1000));
 
         expect(paginator.matchesFilter(channel1)).toBeTruthy();
 
         channel1.data = {
           created_at: convertDateToTimestamp(new Date(1000).toISOString()),
         };
-        setLastMessageAt(channel1, null);
+        setLatestMessageAt(channel1, null);
 
         expect(paginator.matchesFilter(channel1)).toBeTruthy();
 
         channel1.data = { created_at: undefined };
-        setLastMessageAt(channel1, null);
+        setLatestMessageAt(channel1, null);
         expect(paginator.matchesFilter(channel1)).toBeFalsy();
 
         // the server ignores `updated_at` for `last_updated`
@@ -578,11 +578,11 @@ describe('ChannelPaginator', () => {
 
         channel1.data = { created_at: undefined };
         scenarios.forEach(({ val, expected }) => {
-          setLastMessageAt(channel1, new Date(val));
+          setLatestMessageAt(channel1, new Date(val));
           expect(paginator.matchesFilter(channel1)).toBe(expected);
         });
 
-        setLastMessageAt(channel1, null);
+        setLatestMessageAt(channel1, null);
         scenarios.forEach(({ val, expected }) => {
           channel1.data = {
             created_at: convertDateToTimestamp(new Date(val).toISOString()),
@@ -591,7 +591,7 @@ describe('ChannelPaginator', () => {
         });
 
         channel1.data = { created_at: undefined };
-        setLastMessageAt(channel1, null);
+        setLatestMessageAt(channel1, null);
         expect(paginator.matchesFilter(channel1)).toBe(false);
       });
     });
@@ -741,9 +741,9 @@ describe('ChannelPaginator', () => {
   describe('unchanged items', () => {
     const setup = () => {
       const newer = new Channel(client, 'type', 'unchanged-newer', {});
-      setLastMessageAt(newer, new Date('1971-01-01T00:00:00.000Z'));
+      setLatestMessageAt(newer, new Date('1971-01-01T00:00:00.000Z'));
       const older = new Channel(client, 'type', 'unchanged-older', {});
-      setLastMessageAt(older, new Date('1970-01-01T00:00:00.000Z'));
+      setLatestMessageAt(older, new Date('1970-01-01T00:00:00.000Z'));
       const paginator = new ChannelPaginator({ client, filters: {} });
       paginator.setItems({
         valueOrFactory: [newer, older],
@@ -766,7 +766,7 @@ describe('ChannelPaginator', () => {
       const { older, paginator } = setup();
       const items = paginator.items;
 
-      setLastMessageAt(older, new Date('1972-01-01T00:00:00.000Z'));
+      setLatestMessageAt(older, new Date('1972-01-01T00:00:00.000Z'));
       paginator.boost(older.cid);
       paginator.ingestItem(older);
 
@@ -878,9 +878,9 @@ describe('ChannelPaginator', () => {
     it('does not re-sort the list into cid order when an item is ingested', () => {
       // `zeta` is the most recently active, so it must stay on top however often it is re-ingested.
       const zeta = new Channel(client, 'type', 'zeta', {});
-      setLastMessageAt(zeta, new Date('1999-01-01T00:00:00.000Z'));
+      setLatestMessageAt(zeta, new Date('1999-01-01T00:00:00.000Z'));
       const alpha = new Channel(client, 'type', 'alpha', {});
-      setLastMessageAt(alpha, new Date('1980-01-01T00:00:00.000Z'));
+      setLatestMessageAt(alpha, new Date('1980-01-01T00:00:00.000Z'));
       const paginator = new ChannelPaginator({ client, filters: {}, sort: [] });
       paginator.setItems({ valueOrFactory: [zeta, alpha], isFirstPage: true });
 
@@ -1184,9 +1184,9 @@ describe('ChannelPaginator', () => {
     it('persists the new cid order after a live ingest and after a removal', async () => {
       await setUpOfflineDb({ isSynced: true });
       const channelA = new Channel(client, 'type', 'offline-a', {});
-      setLastMessageAt(channelA, new Date('1971-01-01T00:00:00.000Z'));
+      setLatestMessageAt(channelA, new Date('1971-01-01T00:00:00.000Z'));
       const channelB = new Channel(client, 'type', 'offline-b', {});
-      setLastMessageAt(channelB, new Date('1970-01-01T00:00:00.000Z'));
+      setLatestMessageAt(channelB, new Date('1970-01-01T00:00:00.000Z'));
       vi.spyOn(client, 'queryChannelsAndHydrate').mockResolvedValue({
         channels: [channelA, channelB],
         duration: '0.1ms',
@@ -1201,7 +1201,7 @@ describe('ChannelPaginator', () => {
       // Mirrors what the manager's `updateLists` does: boost, then ingest. The boost is what moves the
       // channel — `ingestItem` alone cannot, because the mutated `Channel` is the same object the
       // paginator already holds, so it has no previous sort key to relocate from.
-      setLastMessageAt(channelB, new Date('1972-01-01T00:00:00.000Z'));
+      setLatestMessageAt(channelB, new Date('1972-01-01T00:00:00.000Z'));
       paginator.boost(channelB.cid, { seq: paginator.maxBoostSeq + 1 });
       paginator.ingestItem(channelB);
 
@@ -1220,7 +1220,7 @@ describe('ChannelPaginator', () => {
     it('keeps paginating after removing a channel that moved into the loaded window from the logical tail', async () => {
       const [a, b, c, d] = ['a', 'b', 'c', 'd'].map((id, index) => {
         const channel = new Channel(client, 'type', id, {});
-        setLastMessageAt(channel, new Date(Date.UTC(1970, 0, 10 - index * 2)));
+        setLatestMessageAt(channel, new Date(Date.UTC(1970, 0, 10 - index * 2)));
         return channel;
       });
       vi.spyOn(client, 'queryChannelsAndHydrate')
@@ -1238,7 +1238,7 @@ describe('ChannelPaginator', () => {
       const added = new Channel(client, 'type', 'added', {});
       paginator.ingestItem(added);
       // Its first message arrives on the same instance, so it now sorts between a and b.
-      setLastMessageAt(added, new Date(Date.UTC(1970, 0, 9)));
+      setLatestMessageAt(added, new Date(Date.UTC(1970, 0, 9)));
       // Then it leaves the list (archived, say).
       paginator.removeItem({ item: added });
 
@@ -1252,7 +1252,7 @@ describe('ChannelPaginator', () => {
       await setUpOfflineDb({ isSynced: true });
       const [a, b, c, d] = ['a', 'b', 'c', 'd'].map((id, index) => {
         const channel = new Channel(client, 'type', id, {});
-        setLastMessageAt(channel, new Date(Date.UTC(1970, 0, 10 - index)));
+        setLatestMessageAt(channel, new Date(Date.UTC(1970, 0, 10 - index)));
         return channel;
       });
       vi.spyOn(client, 'queryChannelsAndHydrate')
@@ -1278,7 +1278,7 @@ describe('ChannelPaginator', () => {
       expect(upsertCidsForQuery).not.toHaveBeenCalled();
 
       // `d` receives a newer message and moves to the top.
-      setLastMessageAt(d, new Date(Date.UTC(1970, 0, 20)));
+      setLatestMessageAt(d, new Date(Date.UTC(1970, 0, 20)));
       paginator.boost(d.cid, { seq: paginator.maxBoostSeq + 1 });
       paginator.ingestItem(d);
 
@@ -1888,15 +1888,15 @@ describe('ChannelPaginator', () => {
 
       it('orders a live ingest into the seeded window by the restored sort', async () => {
         const older = new Channel(client, 'type', 'older', {});
-        setLastMessageAt(older, new Date('1970-01-01T00:00:00.000Z'));
+        setLatestMessageAt(older, new Date('1970-01-01T00:00:00.000Z'));
         const newer = new Channel(client, 'type', 'newer', {});
-        setLastMessageAt(newer, new Date('1980-01-01T00:00:00.000Z'));
+        setLatestMessageAt(newer, new Date('1980-01-01T00:00:00.000Z'));
         // RESOLVED sorts ASCENDING - the opposite of the `DEFAULT_BACKEND_SORT` fallback, so the
         // placement below tells the two rules apart.
         const { paginator } = await seedWith(RESOLVED, [older, newer]);
 
         const oldest = new Channel(client, 'type', 'oldest', {});
-        setLastMessageAt(oldest, new Date('1960-01-01T00:00:00.000Z'));
+        setLatestMessageAt(oldest, new Date('1960-01-01T00:00:00.000Z'));
         paginator.ingestItem(oldest);
 
         // Ascending, it belongs at the head - which the seeded window has loaded. Under the fallback
@@ -2076,7 +2076,7 @@ describe('ChannelPaginator', () => {
       // removal while live-ingested channels are still loaded, and the next page must still be one page.
       const dated = (id: string, date: string) => {
         const datedChannel = new Channel(client, 'type', id, {});
-        setLastMessageAt(datedChannel, new Date(date));
+        setLatestMessageAt(datedChannel, new Date(date));
         return datedChannel;
       };
       const a = dated('a', '2020-01-01');
@@ -2301,9 +2301,9 @@ describe('ChannelPaginator', () => {
       const newest = new Channel(client, 'type', 'newest', {});
       const middle = new Channel(client, 'type', 'middle', {});
       const oldest = new Channel(client, 'type', 'oldest', {});
-      setLastMessageAt(newest, new Date('2020-03-01T00:00:00.000Z'));
-      setLastMessageAt(middle, new Date('2020-02-01T00:00:00.000Z'));
-      setLastMessageAt(oldest, new Date('2020-01-01T00:00:00.000Z'));
+      setLatestMessageAt(newest, new Date('2020-03-01T00:00:00.000Z'));
+      setLatestMessageAt(middle, new Date('2020-02-01T00:00:00.000Z'));
+      setLatestMessageAt(oldest, new Date('2020-01-01T00:00:00.000Z'));
 
       const paginator = new ChannelPaginator({
         client,
@@ -2333,9 +2333,9 @@ describe('ChannelPaginator', () => {
       const a = new Channel(client, 'type', 'a', {});
       const b = new Channel(client, 'type', 'b', {});
       const c = new Channel(client, 'type', 'c', {});
-      setLastMessageAt(a, new Date('2020-03-01T00:00:00.000Z'));
-      setLastMessageAt(b, new Date('2020-02-01T00:00:00.000Z'));
-      setLastMessageAt(c, new Date('2020-01-01T00:00:00.000Z')); // oldest / non-headmost
+      setLatestMessageAt(a, new Date('2020-03-01T00:00:00.000Z'));
+      setLatestMessageAt(b, new Date('2020-02-01T00:00:00.000Z'));
+      setLatestMessageAt(c, new Date('2020-01-01T00:00:00.000Z')); // oldest / non-headmost
 
       const paginator = new ChannelPaginator({
         client,
@@ -2352,7 +2352,7 @@ describe('ChannelPaginator', () => {
       ]);
 
       // c receives a new message → newest; re-ingest to reposition (mirrors updateLists)
-      setLastMessageAt(c, new Date('2020-04-01T00:00:00.000Z'));
+      setLatestMessageAt(c, new Date('2020-04-01T00:00:00.000Z'));
       paginator.ingestItem(c);
 
       const cids = paginator.items?.map((ch) => ch.cid);
@@ -2370,9 +2370,9 @@ describe('ChannelPaginator', () => {
       };
       plainA.state.membership = {};
       plainB.state.membership = {};
-      setLastMessageAt(pinned, new Date('2020-01-01T00:00:00.000Z')); // old, but pinned → stays on top
-      setLastMessageAt(plainA, new Date('2020-03-01T00:00:00.000Z')); // newest unpinned
-      setLastMessageAt(plainB, new Date('2020-02-01T00:00:00.000Z')); // older unpinned
+      setLatestMessageAt(pinned, new Date('2020-01-01T00:00:00.000Z')); // old, but pinned → stays on top
+      setLatestMessageAt(plainA, new Date('2020-03-01T00:00:00.000Z')); // newest unpinned
+      setLatestMessageAt(plainB, new Date('2020-02-01T00:00:00.000Z')); // older unpinned
 
       const paginator = new ChannelPaginator({
         client,
@@ -2393,7 +2393,7 @@ describe('ChannelPaginator', () => {
       ]);
 
       // plainB receives a new message → newest last_message_at; re-ingest as updateLists does (no boost).
-      setLastMessageAt(plainB, new Date('2020-05-01T00:00:00.000Z'));
+      setLatestMessageAt(plainB, new Date('2020-05-01T00:00:00.000Z'));
       paginator.ingestItem(plainB);
 
       // plainB relocates ABOVE plainA (newer message) but stays BELOW the pinned channel — the sort's
@@ -2419,7 +2419,7 @@ describe('ChannelPaginator', () => {
           `channel-${String(index).padStart(2, '0')}`,
           {},
         );
-        setLastMessageAt(channel, new Date(CHANNEL_COUNT - index));
+        setLatestMessageAt(channel, new Date(CHANNEL_COUNT - index));
         channel.state.read = {
           [user.id]: {
             last_read: convertDateToTimestamp(new Date(0)),
@@ -2481,7 +2481,7 @@ describe('ChannelPaginator', () => {
     it('is the head, so a channel with a newer message moves to the top instead of vanishing', async () => {
       const channels = [0, 1, 2].map((i) => {
         const channel = new Channel(client, 'messaging', `kpi-${i}`, {});
-        setLastMessageAt(channel, new Date(Date.UTC(2020, 0, 3 - i)));
+        setLatestMessageAt(channel, new Date(Date.UTC(2020, 0, 3 - i)));
         return channel;
       });
       const paginator = new ChannelPaginator({
@@ -2495,7 +2495,7 @@ describe('ChannelPaginator', () => {
       await paginator.toTail({ keepPreviousItems: true, reset: 'yes' });
       expect(paginator.itemIntervals.map((i) => i.isHead)).toEqual([true]);
 
-      setLastMessageAt(channels[2], new Date(Date.UTC(2020, 0, 9)));
+      setLatestMessageAt(channels[2], new Date(Date.UTC(2020, 0, 9)));
       paginator.ingestItem(channels[2]);
 
       expect(paginator.items?.map((channel) => channel.id)).toEqual([

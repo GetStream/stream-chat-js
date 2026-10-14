@@ -871,8 +871,9 @@ export abstract class BasePaginator<T, Q> {
 
   /**
    * The item at the head edge of the anchored head interval (see {@link anchoredHeadItems}).
-   * `undefined` while that window is not loaded. A loaded window always holds an item, so this also
-   * tells whether it is loaded.
+   * `undefined` while that window is not loaded, including once a window is known to lack newer
+   * items (see {@link unmarkHead}; for messages, `MessagePaginator.unmarkStaleHead`). A loaded
+   * window always holds an item, so this also tells whether it is loaded.
    */
   get anchoredHeadItem(): T | undefined {
     const head = this.anchoredHeadInterval;
@@ -943,6 +944,24 @@ export abstract class BasePaginator<T, Q> {
   protected syncAnchoredHeadAfterHeadFlip(interval: Interval, wasHead: boolean) {
     if (interval.isHead === wasHead) return;
     this.publishAsAnchoredHead(interval.isHead ? interval : undefined);
+  }
+
+  /**
+   * Clears the head mark of `interval`: it no longer reaches the head of the dataset, which holds
+   * more items toward the head. It stops being the anchored head ({@link anchoredHeadItem} is then
+   * `undefined`) and can load toward the head, which the paginator state reflects when it is the
+   * active interval.
+   */
+  protected unmarkHead(interval: Interval) {
+    interval.isHead = false;
+    interval.hasMoreHead = true;
+    this.syncAnchoredHeadAfterHeadFlip(interval, true);
+    if (this.isActiveInterval(interval)) {
+      this.state.partialNext({
+        hasMoreHead: true,
+        cursor: this.getCursorFromInterval(interval),
+      });
+    }
   }
 
   private intervalItemsOrEmpty(interval: AnyInterval | undefined): T[] {

@@ -31,8 +31,8 @@ const otherUser = {
 const mkMsg = (id: string, at: string | number | Date) =>
   ({ id, created_at: convertDateToTimestamp(new Date(at)) }) as any;
 
-// The delivery reporter takes the newest message from `channel.messagePaginator.lastMessage`, which
-// ingesting a page advances, so tests seed the paginator's newest window instead of assigning
+// The delivery reporter takes the newest message from `channel.messagePaginator.latestMessage`,
+// which ingesting a page advances, so tests seed the paginator's newest window instead of assigning
 // `channel.state.latestMessages`.
 const setLatest = (channel: Channel, msgs: ReturnType<typeof mkMsg>[]) => {
   channel.messagePaginator.clearStateAndCache();
@@ -79,7 +79,7 @@ describe('MessageDeliveryReporter', () => {
       .spyOn(client, 'markDelivered')
       .mockResolvedValue({ ok: true } as any);
 
-    // last_read < last message
+    // last_read < latest message
     setLatest(channel, [mkMsg('m1', '2025-01-01T10:00:00Z')]);
     (channel.state as any).read['me'] = {
       last_read: convertDateToTimestamp(new Date('2025-01-01T09:00:00Z')),
@@ -135,7 +135,7 @@ describe('MessageDeliveryReporter', () => {
       .spyOn(client, 'markDelivered')
       .mockResolvedValue({ ok: true } as any);
 
-    // last_read < last message
+    // last_read < latest message
     const channels = Array.from({ length: 110 }, (_, i) => {
       const channel = client.channelManager.ensure({
         type: channelType,
@@ -275,7 +275,7 @@ describe('MessageDeliveryReporter', () => {
 
     // Thread delivery reporting is not yet supported: the thread branch returns before producing a
     // candidate, so nothing is announced. (When enabled, it reads the thread's newest reply,
-    // `messagePaginator.lastMessage`, mirroring the channel branch.)
+    // `messagePaginator.latestMessage`, mirroring the channel branch.)
     expect(markDeliveredSpy).not.toHaveBeenCalled();
   });
 
@@ -599,7 +599,7 @@ describe('MessageDeliveryReporter', () => {
   });
 
   const receiveMessages = (count: number, startId = 0) => {
-    // last_read < last message
+    // last_read < latest message
     const channels = Array.from({ length: count }, (_, i) => {
       const channel = client.channelManager.ensure({
         type: channelType,

@@ -18,9 +18,10 @@ import { convertDateToTimestamp } from './test-utils/time';
 import { msToNs } from '../../src/utils/time';
 import { chatLoggerSystem } from '../../src/logger';
 
-// Seed the channel's messagePaginator "latest" (head) window from raw generated messages.
-// The unread/last-message readers now source from `messagePaginator.anchoredHeadItems`/`anchoredHeadItem`,
-// so tests populate the paginator (formatted) rather than the legacy `state.addMessagesSorted`.
+// Seed the channel's messagePaginator "latest" (head) window from raw generated messages. The
+// unread/latest-message readers now source from
+// `messagePaginator.anchoredHeadItems`/`anchoredHeadItem`, so tests populate the paginator
+// (formatted) rather than the legacy `state.addMessagesSorted`.
 const seedLatestWindow = (channel, messages) =>
 	channel.messagePaginator.ingestPage({
 		page: messages.map((m) => formatMessage(m)),
@@ -3454,7 +3455,7 @@ describe('Message search', async () => {
 	});
 });
 
-describe('Channel lastMessage', async () => {
+describe('Channel latestMessage', async () => {
 	let channel;
 	let client;
 	beforeEach(async () => {
@@ -3463,7 +3464,7 @@ describe('Channel lastMessage', async () => {
 		client._addChannelConfig({ type: channel.type, config: {} });
 	});
 
-	it('should return last message - messages are in order', () => {
+	it('should return the latest message - messages are in order', () => {
 		channel.state = new ChannelState(channel);
 		const latestMessageDate = '2018-01-01T00:13:24';
 		seedLatestWindow(channel, [
@@ -3477,7 +3478,7 @@ describe('Channel lastMessage', async () => {
 		);
 	});
 
-	it('should return last message - messages are out of order', () => {
+	it('should return the latest message - messages are out of order', () => {
 		channel.state = new ChannelState(channel);
 		const latestMessageDate = '2018-01-01T00:13:24';
 		seedLatestWindow(channel, [
@@ -3491,7 +3492,7 @@ describe('Channel lastMessage', async () => {
 		);
 	});
 
-	it('should return last message - state has more message sets loaded', () => {
+	it('should return the latest message - state has more message sets loaded', () => {
 		channel.state = new ChannelState(channel);
 		const latestMessageDate = '2018-01-01T00:13:24';
 		const latestMessages = [
@@ -3515,7 +3516,7 @@ describe('Channel lastMessage', async () => {
 		);
 	});
 
-	it('should return last message - system message is ignored when skip_last_msg_update_for_system_msgs: true', () => {
+	it('should return the latest message - system message is ignored when skip_last_msg_update_for_system_msgs: true', () => {
 		client._addChannelConfig({
 			cid: channel.cid,
 			config: { skip_last_msg_update_for_system_msgs: true },
@@ -3529,7 +3530,7 @@ describe('Channel lastMessage', async () => {
 		// ingestion advances the tracked latest, skipping the newest (system) message per config.
 		seedLatestWindow(channel, latestMessages);
 
-		expect(channel.messagePaginator.lastMessageAt).toBe(latestMessages[1].created_at);
+		expect(channel.messagePaginator.latestMessageAt).toBe(latestMessages[1].created_at);
 	});
 });
 
@@ -3543,21 +3544,21 @@ describe('Channel last_message_at', () => {
 		channel.state = new ChannelState(channel);
 	});
 
-	const track = (msg) => channel.messagePaginator.trackLastMessage(formatMessage(msg));
+	const track = (msg) => channel.messagePaginator.trackLatestMessage(formatMessage(msg));
 
 	it('advances monotonically as messages are tracked', () => {
-		expect(channel.messagePaginator.lastMessageAt).to.be.null;
+		expect(channel.messagePaginator.latestMessageAt).to.be.null;
 		track(generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }));
-		expect(channel.messagePaginator.lastMessageAt).to.be.equal(
+		expect(channel.messagePaginator.latestMessageAt).to.be.equal(
 			convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
 		);
 		track(generateMsg({ id: '1', date: '2019-01-01T00:00:00.000Z' }));
-		expect(channel.messagePaginator.lastMessageAt).to.be.equal(
+		expect(channel.messagePaginator.latestMessageAt).to.be.equal(
 			convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
 		);
 
 		track(generateMsg({ id: '2', date: '2020-01-01T00:00:00.001Z' }));
-		expect(channel.messagePaginator.lastMessageAt).to.be.equal(
+		expect(channel.messagePaginator.latestMessageAt).to.be.equal(
 			convertDateToTimestamp('2020-01-01T00:00:00.001Z'),
 		);
 	});
@@ -3567,30 +3568,30 @@ describe('Channel last_message_at', () => {
 			generateMsg({ id: 'reply', date: '2020-01-01T00:00:00.000Z', parent_id: 'parent' }),
 		);
 
-		expect(channel.messagePaginator.lastMessageAt).to.be.null;
+		expect(channel.messagePaginator.latestMessageAt).to.be.null;
 	});
 
 	it('is null when nothing has been tracked or seeded', () => {
-		expect(channel.messagePaginator.lastMessageAt).to.be.null;
+		expect(channel.messagePaginator.latestMessageAt).to.be.null;
 	});
 
-	it('is seeded from the server-provided last_message_at', () => {
-		// A channel surfaced by the channel-list query: lastMessageAt is seeded from the server
-		// aggregate so it sorts correctly even before its message paginator loads a page.
-		channel.messagePaginator.seedLastMessageAt(
+	it('takes the queried last_message_at', () => {
+		// A channel surfaced by the channel-list query: latestMessageAt comes from the query's
+		// `last_message_at`, so it sorts correctly even before its message paginator loads a page.
+		channel.messagePaginator.setQueriedLatestMessageAt(
 			convertDateToTimestamp('2023-05-03T11:12:53.993Z'),
 		);
-		expect(channel.messagePaginator.lastMessageAt).to.be.equal(
+		expect(channel.messagePaginator.latestMessageAt).to.be.equal(
 			convertDateToTimestamp('2023-05-03T11:12:53.993Z'),
 		);
 	});
 
-	it('advances past the seeded value when a newer message is tracked (monotonic max)', () => {
-		channel.messagePaginator.seedLastMessageAt(
+	it('advances past the queried value when a newer message is tracked (monotonic max)', () => {
+		channel.messagePaginator.setQueriedLatestMessageAt(
 			convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
 		);
 		track(generateMsg({ id: '0', date: '2021-06-01T00:00:00.000Z' }));
-		expect(channel.messagePaginator.lastMessageAt).to.be.equal(
+		expect(channel.messagePaginator.latestMessageAt).to.be.equal(
 			convertDateToTimestamp('2021-06-01T00:00:00.000Z'),
 		);
 	});
@@ -4945,6 +4946,74 @@ describe('Channel.reload', () => {
 		});
 	});
 });
+
+describe('Channel responses reporting newer messages than the newest window holds', () => {
+	let client;
+	let channel;
+
+	const at = (minute) => new Date(Date.UTC(2020, 0, 1, 0, minute, 0));
+	const msg = (id, minute) => generateMsg({ id, cid: channel.cid, date: at(minute) });
+	const respondWith = ({ lastMessageMinute, messages = [] }) =>
+		vi.spyOn(channel, 'getOrCreate').mockImplementation(async () =>
+			generateChannel({
+				channel: {
+					id: channel.id,
+					type: channel.type,
+					last_message_at: convertDateToTimestamp(at(lastMessageMinute)),
+				},
+				messages,
+			}),
+		);
+
+	beforeEach(() => {
+		client = new StreamChat('apiKey');
+		client.user = { id: 'user' };
+		// `watch()` waits for a live socket; a connected client has one.
+		client.wsConnection._setStatus({ isHealthy: true, connectionId: 'connection-id' });
+		const channelResponse = generateChannel();
+		channel = client.channelManager.ensure({
+			type: channelResponse.channel.type,
+			id: channelResponse.channel.id,
+		});
+		channel.initialized = true;
+		seedLatestWindow(channel, [msg('m1', 1), msg('m2', 2)]);
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('stops treating the window as the newest when the channel was not watched', async () => {
+		respondWith({ lastMessageMinute: 5 });
+
+		await channel.query();
+
+		expect(channel.messagePaginator.anchoredHeadItem).toBeUndefined();
+		expect(channel.messagePaginator.hasMoreHead).toBe(true);
+	});
+
+	it('keeps the window while the channel is watched: the newer messages are still arriving as events', async () => {
+		channel.watchStatus = ChannelWatchStatus.Watching;
+		respondWith({ lastMessageMinute: 5 });
+
+		await channel.query();
+
+		expect(channel.messagePaginator.anchoredHeadItem?.id).toBe('m2');
+	});
+
+	it('keeps the newest page it placed, even when last_message_at is later', async () => {
+		// the server still reports the time of m5, hard-deleted while no events arrived
+		respondWith({
+			lastMessageMinute: 5,
+			messages: [msg('m1', 1), msg('m2', 2), msg('m4', 4)],
+		});
+
+		await channel.watch();
+
+		expect(channel.messagePaginator.anchoredHeadItem?.id).toBe('m4');
+	});
+});
+
 describe('Channel active flag (mark-read stays UI-driven)', () => {
 	let client;
 	let channel;

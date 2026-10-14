@@ -1565,7 +1565,7 @@ export class Channel extends ChannelApi {
       channel_type: this.type,
       cid: this.cid,
       created_at: nowNs(),
-      last_read_message_id: this.messagePaginator.lastMessage?.id,
+      last_read_message_id: this.messagePaginator.latestMessage?.id,
       team: this.data?.team,
       type: 'message.read_locally',
       user: client.user as UserResponse,
@@ -1693,19 +1693,19 @@ export class Channel extends ChannelApi {
    * of it by diffing the re-queried page.
    *
    * This is intentionally thin: it only re-issues `watch()` with a limit sized to the loaded window
-   * (`items.length`, so the whole loaded window is refreshed — not the smaller channel-list page). The
-   * actual fold + destructive reconciliation happens in the channel-opening query → `placePageSync`
-   * (the same path the channel-list re-hydrate and connection recovery use), driven by the loaded-id
-   * snapshot that query captures before its await. Owning that single path is what lets the SDK stop
-   * passing the reconciliation window/snapshot itself.
+   * (`items.length`, so the whole loaded window is refreshed — not the smaller channel-list page).
+   * The merge and the removal of hard-deleted messages happen in the channel-opening query →
+   * `placePageSync` (the same path the channel-list re-hydrate and connection recovery use), driven
+   * by the loaded-id snapshot that query captures before its await. Owning that single path is what
+   * lets the SDK stop passing the reconciliation window/snapshot itself.
    *
-   * Preserves failed (unsent) messages: an overlap merge keeps them (the reconcile's provenance guard
-   * never prunes a non-server message); only a disjoint rebuild can drop them, so any that actually
-   * fell out are re-ingested below. The offline DB is consulted alongside the in-memory window, because
-   * a failed message can be absent from memory and still be the user's unsent work — a cold boot starts
-   * with an empty paginator, and an eviction can drop it mid-session. v9 got this from a second, lagging
-   * copy of the list (the React SDK's own state); with one reactive source of truth the persisted row is
-   * that buffer.
+   * Preserves failed (unsent) messages: an overlap merge keeps them (the reconcile's provenance
+   * guard never prunes a non-server message); only the rebuild for a page separated by a gap can
+   * drop them, so any that actually fell out are re-ingested below. The offline DB is consulted
+   * alongside the in-memory window, because a failed message can be absent from memory and still be
+   * the user's unsent work — a cold boot starts with an empty paginator, and an eviction can drop
+   * it mid-session. v9 got this from a second, lagging copy of the list (the React SDK's own
+   * state); with one reactive source of truth the persisted row is that buffer.
    */
   async reload() {
     if (this._reloading || (!this.initialized && !this.offlineMode)) return;
@@ -1965,7 +1965,7 @@ export class Channel extends ChannelApi {
   ) {
     return await this.runCountedChannelQuery(async () => {
       const { state, watch } = await this.requestChannelState(options, requestOptions);
-      this.applyChannelState(state, { isLatestMessageSet: false, watch });
+      this.applyChannelStateFromResponse(state, { isLatestMessageSet: false, watch });
       return state;
     });
   }
@@ -1990,7 +1990,7 @@ export class Channel extends ChannelApi {
         placement.place(state.messages.map(formatMessage));
       }
       // Only the newest page is the latest message set, for the offline database to store.
-      this.applyChannelState(state, {
+      this.applyChannelStateFromResponse(state, {
         isLatestMessageSet: placement.isNewestPage,
         watch,
       });
@@ -1999,9 +1999,10 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Runs the query that loads the channel's state (`getOrCreate`, through {@link requestChannelState}
-   * and {@link applyChannelState}): refused for a disposed instance, and counted as in flight until
-   * the response is applied, so the channel store keeps the channel meanwhile.
+   * Runs the query that loads the channel's state (`getOrCreate`, through
+   * {@link requestChannelState} and {@link applyChannelStateFromResponse}): refused for a disposed
+   * instance, and counted as in flight until the response is applied, so the channel store keeps
+   * the channel meanwhile.
    */
   private async runCountedChannelQuery<T>(run: () => Promise<T>) {
     // A disposed instance is done for good: its query would load it again and, for a watch, register
@@ -2019,8 +2020,9 @@ export class Channel extends ChannelApi {
 
   /**
    * Sends the channel query and takes in what the response says about the channel itself: its id,
-   * the cid it is stored under, its config, and its `last_message_at`. The messages are placed by the
-   * caller, if at all, and the rest of the response is applied by {@link applyChannelState}.
+   * the cid it is stored under, its config, and its `last_message_at`. The messages are placed by
+   * the caller, if at all, and the rest of the response is applied by
+   * {@link applyChannelStateFromResponse}.
    */
   private async requestChannelState(
     options: ChannelGetOrCreateRequest,
@@ -2061,13 +2063,9 @@ export class Channel extends ChannelApi {
     // deliberately turned off (**DV-18**).
     this.messageComposer.applyServerRestrictions();
 
-    // This response's `last_message_at`, before any page is ingested: the paginator tells from it whether
-    // a page reaches the newest message (`_initializeState` sets it too, after).
-    this.messagePaginator.seedLastMessageAt(channel.last_message_at);
-
     // This response's `last_message_at`, before any page is placed: the paginator tells from it whether
     // a page reaches the newest message (`_initializeState` sets it too, after).
-    this.messagePaginator.seedLastMessageAt(channel.last_message_at);
+    this.messagePaginator.setQueriedLatestMessageAt(channel.last_message_at);
 
     return { state, watch: queryPayload.watch };
   }
@@ -2076,12 +2074,14 @@ export class Channel extends ChannelApi {
    * Applies a channel query response: watch status, read/members state, polls, reminders, composer,
    * channel data, and the `channels.queried` event and offline write.
    */
-  private applyChannelState(
+  private applyChannelStateFromResponse(
     state: ChannelStateResponseFields,
     { isLatestMessageSet, watch }: { isLatestMessageSet: boolean; watch?: boolean },
   ) {
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const channel = state.channel!;
+    // Unless events were arriving before this response, the loaded messages may lack newer ones.
+    const wasWatching = this.watchStatus === ChannelWatchStatus.Watching;
 
     if (this.supersededBy) {
       // This response superseded the instance: events for the cid go to the stored instance, which
@@ -2096,6 +2096,10 @@ export class Channel extends ChannelApi {
 
     // Seed read/members/pinned/thread-cleanup state; the message list is in the paginator.
     this._initializeState(state);
+    // Placing the newest page, when this response did, brought the window up to date.
+    if (!wasWatching && !isLatestMessageSet) {
+      this.messagePaginator.unmarkStaleHead();
+    }
     this.getClient().polls.hydratePollCache(state.messages, true);
     this.getClient().reminders.hydrateState(state.messages);
 
@@ -2982,12 +2986,11 @@ export class Channel extends ChannelApi {
       }
     }
 
-    // Seed the message paginator's `lastMessageAt` aggregate from the server's authoritative
-    // `last_message_at`. The first-page seed (Channel.query / client.hydrateChannels) also
-    // advances it from ingested messages; both feed the same monotonic max, so this additionally
-    // covers the path where the paginator seed is skipped (an already-loaded channel the viewer has
-    // jumped away from, where re-seeding would clobber their window).
-    this.messagePaginator.seedLastMessageAt(state.channel?.last_message_at);
+    // Each channel response's `last_message_at` replaces the queried `latestMessageAt`. Callers
+    // that place a message page set it before placing it, so the paginator can tell whether
+    // the page reaches the newest message; this covers the responses whose page is not placed, such
+    // as a channel-list query for a channel the viewer has jumped away from.
+    this.messagePaginator.setQueriedLatestMessageAt(state.channel?.last_message_at);
 
     // Seed the pinned-messages paginator from the same response.
     this.pinnedMessagesPaginator.placePageSync(
@@ -3010,12 +3013,12 @@ export class Channel extends ChannelApi {
       }
     }
 
-    // initialize read state to last message or current time if the channel is empty
+    // initialize read state to the latest message or current time if the channel is empty
     // if the user is a member, this value will be overwritten later on otherwise this ensures
     // that everything up to this point is not marked as unread
     const readUpdates: ChannelState['read'] = {};
     if (userID != null) {
-      const last_read = this.messagePaginator.lastMessageAt ?? nowNs();
+      const last_read = this.messagePaginator.latestMessageAt ?? nowNs();
       if (user) {
         readUpdates[user.id] = {
           user: user as UserResponse,

@@ -1252,13 +1252,13 @@ Signatures unchanged.
 channel.lastMessage();
 
 // v10
-channel.messagePaginator.lastMessage;
+channel.messagePaginator.latestMessage;
 ```
 
-v10 keeps the channel's messages in `channel.messagePaginator`, which tracks the newest message as `lastMessage`. It is a getter, not a method; subscribe to `channel.messagePaginator.aggregateState` to be notified when it changes. Differences from v9:
+v10 keeps the channel's messages in `channel.messagePaginator`. `latestMessage` is the newest message the client has, from any loaded part of the channel or from an event, so not necessarily the channel's newest message on the server: when the client does not have that one, for example in a channel opened at its first unread message, `channel.messagePaginator.latestMessageAt` is later than its `created_at`. It is a getter, not a method; subscribe to `channel.messagePaginator.aggregateState` to be notified when it changes. Differences from v9:
 
 - It is `null`, not `undefined`, when there is no message.
-- It skips system messages when the channel type sets `skip_last_msg_update_for_system_msgs`, as `lastMessageAt` does. v9 returned the newest message whatever its type. For that, use `channel.messagePaginator.anchoredHeadItem`: the newest message of the window holding the channel's newest messages, `undefined` while that window is not loaded.
+- It skips system messages when the channel type sets `skip_last_msg_update_for_system_msgs`, as `latestMessageAt` does. v9 returned the newest message whatever its type. For that, use `channel.messagePaginator.anchoredHeadItem`: the newest message of the window holding the channel's newest messages, `undefined` while that window is not loaded or is known to lack newer messages.
 - `created_at` is a unix-nanosecond number, not a `Date` (see `v9-to-v10-migration-guide-dates.md`).
 
 #### `channel.query`
@@ -1458,7 +1458,7 @@ block.
 
 Three consequences for code that used to call `promoteChannel` on a WS event:
 
-- **New message in a loaded channel** — nothing to do. `channel.messagePaginator.lastMessageAt` advances
+- **New message in a loaded channel** — nothing to do. `channel.messagePaginator.latestMessageAt` advances
   when the message is ingested, so the next `ingestItem` (which the manager's default handlers perform)
   places the channel correctly.
 - **Surfacing a channel that is not in the list** — a search result, a freshly created DM — use

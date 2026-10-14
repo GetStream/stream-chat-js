@@ -1687,6 +1687,8 @@ export class StreamChat extends ChatApi {
       // public, so a direct caller has no gated request behind it to imply a watch. Offline
       // hydration populates state without a live watch, so it never counts - and a query that did
       // not watch leaves the status untouched (it neither starts nor ends a watch).
+      // Unless events were arriving before this response, the loaded messages may lack newer ones.
+      const wasWatching = c.watchStatus === ChannelWatchStatus.Watching;
       if (!offlineMode && (queryChannelsOptions?.watch ?? this.wsConnection.isHealthy)) {
         c.watchStatus = ChannelWatchStatus.Watching;
       }
@@ -1712,13 +1714,16 @@ export class StreamChat extends ChatApi {
       // Also skip the re-seed for an ACTIVE (on-screen) channel: its own `channel.reload()` owns the
       // loaded window (up to 100 msgs), so a 25-msg list re-seed here is a redundant second update
       // that could perturb the fuller window. (Inert until a UI SDK calls `channel.activate()`.)
-      if (
+      const placesNewestPage =
         willInitialize &&
         !c.active &&
-        (!c.messagePaginator.isInitialized || c.messagePaginator.isActiveIntervalAtHead)
-      ) {
-        // The response's `last_message_at` first, so the seed can tell whether the page reaches it.
-        c.messagePaginator.seedLastMessageAt(channelState.channel?.last_message_at);
+        (!c.messagePaginator.isInitialized || c.messagePaginator.isActiveIntervalAtHead);
+      if (placesNewestPage) {
+        // The response's `last_message_at` first, so the paginator can tell whether the page
+        // reaches it.
+        c.messagePaginator.setQueriedLatestMessageAt(
+          channelState.channel?.last_message_at,
+        );
         c.messagePaginator.placePageSync(
           channelState.messages.map(formatMessage),
           requestedPageSize,
@@ -1735,6 +1740,16 @@ export class StreamChat extends ChatApi {
       } else if (!skipInitialization.includes(channelState.channel.id)) {
         // The paginators are (re)seeded above and via _initializeState → placePageSync.
         c._initializeState(channelState);
+      }
+      // Placing the newest page brought the window up to date; an on-screen channel is left to its
+      // own `channel.reload()`, as above.
+      if (
+        willInitialize &&
+        !c.active &&
+        !wasWatching &&
+        !(placesNewestPage && channelState.messages.length)
+      ) {
+        c.messagePaginator.unmarkStaleHead();
       }
 
       if (willInitialize) {

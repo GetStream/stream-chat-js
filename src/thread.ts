@@ -277,10 +277,10 @@ export class Thread extends WithSubscriptions {
       });
     }
 
-    // Seed the reply paginator's lastMessageAt floor from the thread's server-provided
-    // `last_message_at` (analogous to the channel seed in Channel._initializeState), so a thread whose
-    // newest reply is not among `latest_replies` still reports the correct latest-activity timestamp.
-    this.messagePaginator.seedLastMessageAt(threadData?.last_message_at);
+    // Set the reply paginator's queried latestMessageAt from the thread's `last_message_at` (as
+    // Channel._initializeState does for a channel), so a thread whose newest reply is not among
+    // `latest_replies` still reports the correct latest-activity timestamp.
+    this.messagePaginator.setQueriedLatestMessageAt(threadData?.last_message_at);
 
     this.messageComposer = new MessageComposer({
       client,
@@ -403,10 +403,10 @@ export class Thread extends WithSubscriptions {
    * Preserves failed (unsent) replies. They are read out of the reply paginator rather than out of
    * `failedRepliesMap`, because that map is only written by `upsertReplyLocally`, whose callers are
    * this thread's own subscriptions and the offline-DB path resolved through `client.threads.get` —
-   * neither of which covers a thread that was never activated or listed. Reading the paginator
-   * is true for registered and unregistered threads alike. An overlap merge keeps them anyway (the
-   * reconcile's provenance guard never prunes a non-server message); only a disjoint rebuild can drop
-   * them, so any that actually fell out are re-ingested below.
+   * neither of which covers a thread that was never activated or listed. Reading the paginator is
+   * true for registered and unregistered threads alike. An overlap merge keeps them anyway (the
+   * reconcile's provenance guard never prunes a non-server message); only the rebuild for a page
+   * separated by a gap can drop them, so any that actually fell out are re-ingested below.
    *
    * Rethrows, except for a not-found answer on a thread that never had replies (see the catch).
    */
@@ -520,9 +520,11 @@ export class Thread extends WithSubscriptions {
     const incomingReplies = thread.messagePaginator.state.getLatestValue().items ?? [];
 
     if (!options?.reconcile) this.messagePaginator.clearStateAndCache();
-    // The re-queried thread's newest reply time replaces what was known, so lastMessageAt is right even
-    // when the merged page does not include the newest reply, or the newest reply was hard-deleted.
-    this.messagePaginator.seedLastMessageAt(thread.messagePaginator.lastMessageAt);
+    // The re-queried thread's newest reply time replaces what was known, so latestMessageAt is
+    // right even when the merged page lacks the newest reply, or that reply was hard-deleted.
+    this.messagePaginator.setQueriedLatestMessageAt(
+      thread.messagePaginator.latestMessageAt,
+    );
     if (typeof this.messagePaginator.items === 'undefined') {
       // Nothing loaded yet — the common case for a thread opened from a message, whose paginator
       // has never held a window. `mergeNewestPage` deliberately no-ops there (it merges into an

@@ -1673,7 +1673,7 @@ describe('BasePaginator', () => {
         });
         paginator.ingestPage({ page: [b, d], setActive: true });
         // Parked below the loaded window, then updated in place so it now sorts inside it, the way a
-        // listed channel moves once its last message arrives.
+        // listed channel moves once its latest message arrives.
         const moved: TestItem = { id: 'moved', age: 1 };
         paginator.ingestItem(moved);
         moved.age = 22;
