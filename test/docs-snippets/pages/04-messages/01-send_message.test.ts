@@ -40,7 +40,9 @@ describe('_default/04-messages/01-send_message.md', () => {
     await waitForChannelTypePropagation();
 
     client = await getClientSideClient({ id: userId });
-    channel = client.channel(channelType, channelId, { members: [userId, joshId] });
+    channel = client.channel(channelType, channelId, {
+      members: [{ user_id: userId }, { user_id: joshId }],
+    });
     cleanup.channels.push(`${channelType}:${channelId}`);
     await channel.watch();
   });
@@ -53,7 +55,7 @@ describe('_default/04-messages/01-send_message.md', () => {
   it('sends a message', async () => {
     // #region snippet docs="_default/04-messages/01-send_message.md" heading="Sending a Message" tab="JavaScript" index=1
     const message = await channel.sendMessage({
-      text: 'Hello, world!',
+      message: { text: 'Hello, world!' },
     });
     // #endregion snippet
 
@@ -74,26 +76,28 @@ describe('_default/04-messages/01-send_message.md', () => {
     // COPY: designTeamId="design-team-id"
     // Send a message mentioning all online users
     const message = await channel.sendMessage({
-      text: 'Hey everyone!',
-      mentioned_here: true,
+      message: { text: 'Hey everyone!', mentioned_here: true },
     });
 
     // Send a message mentioning all channel members
     const allMessage = await channel.sendMessage({
-      text: 'Important announcement!',
-      mentioned_channel: true,
+      message: { text: 'Important announcement!', mentioned_channel: true },
     });
 
     // Send a message mentioning specific roles
     const roleMessage = await channel.sendMessage({
-      text: 'Attention moderators!',
-      mentioned_roles: ['channel_moderator', 'admin'],
+      message: {
+        text: 'Attention moderators!',
+        mentioned_roles: ['channel_moderator', 'admin'],
+      },
     });
 
     // Send a message mentioning a user group
     const groupMessage = await channel.sendMessage({
-      text: 'Design team, please review!',
-      mentioned_group_ids: [designTeamId],
+      message: {
+        text: 'Design team, please review!',
+        mentioned_group_ids: [designTeamId],
+      },
     });
     // #endregion snippet
 
@@ -108,37 +112,38 @@ describe('_default/04-messages/01-send_message.md', () => {
     const josh = { id: joshId };
 
     // #region snippet docs="_default/04-messages/01-send_message.md" heading="Sending Messages with Attachments" tab="JavaScript" index=1
-    const message = await channel.sendMessage(
-      {
+    // Custom fields go under `custom`, on the message and on each attachment.
+    const message = await channel.sendMessage({
+      message: {
         text: '@Josh Check out this image!',
         attachments: [
           {
             type: 'image',
             asset_url: 'https://bit.ly/2K74TaG',
             thumb_url: 'https://bit.ly/2Uumxti',
-            myCustomField: 123,
+            custom: { myCustomField: 123 },
           },
         ],
         mentioned_users: [josh.id],
-        priority: 'high',
+        custom: { priority: 'high' },
       },
-      { skip_push: true },
-    );
+      skip_push: true,
+    });
     // #endregion snippet
 
     expect(message.message.attachments?.[0]).toMatchObject({
       type: 'image',
       asset_url: 'https://bit.ly/2K74TaG',
-      myCustomField: 123,
+      custom: { myCustomField: 123 },
     });
     expect(message.message.mentioned_users?.map((u) => u.id)).toEqual([joshId]);
-    expect(message.message.priority).toBe('high');
+    expect(message.message.custom.priority).toBe('high');
   });
 
   it('enriches URLs', async () => {
     // #region snippet docs="_default/04-messages/01-send_message.md" heading="URL Enrichment" tab="JavaScript" index=1
     const response = await channel.sendMessage({
-      text: 'Check this out https://imgur.com/r/bears/4zmGbMN',
+      message: { text: 'Check this out https://imgur.com/r/bears/4zmGbMN' },
     });
     // #endregion snippet
 
@@ -152,7 +157,7 @@ describe('_default/04-messages/01-send_message.md', () => {
     ).id;
 
     // #region snippet docs="_default/04-messages/01-send_message.md" heading="Retrieving a Message" tab="JavaScript" index=1
-    const message = await client.getMessage(messageID);
+    const message = await client.getMessage({ id: messageID });
     // #endregion snippet
 
     expect(message.message.id).toBe(messageID);
@@ -168,8 +173,10 @@ describe('_default/04-messages/01-send_message.md', () => {
     ).id;
 
     // #region snippet docs="_default/04-messages/01-send_message.md" heading="Updating a Message" tab="JavaScript" index=1
-    const message = { id: messageId, text: 'Updated message text' };
-    const updated = await client.updateMessage(message);
+    const updated = await client.updateMessage(
+      { id: messageId },
+      { message: { text: 'Updated message text' } },
+    );
     // #endregion snippet
 
     expect(updated.message.text).toBe('Updated message text');
@@ -177,32 +184,33 @@ describe('_default/04-messages/01-send_message.md', () => {
 
   it('partially updates a message', async () => {
     const { message: originalMessage } = await channel.sendMessage({
-      text: 'original',
-      color: 'red',
-      details: { status: 'pending' },
+      message: {
+        text: 'original',
+        custom: { color: 'red', details: { status: 'pending' } },
+      },
     });
 
     // #region snippet docs="_default/04-messages/01-send_message.md" heading="Partial Update" tab="JavaScript" index=1
     // Update text
-    await client.partialUpdateMessage(originalMessage.id, {
-      set: { text: 'Updated text' },
-    });
+    await client.updateMessagePartial(
+      { id: originalMessage.id },
+      { set: { text: 'Updated text' } },
+    );
 
     // Remove a custom field
-    await client.partialUpdateMessage(originalMessage.id, {
-      unset: ['color'],
-    });
+    await client.updateMessagePartial({ id: originalMessage.id }, { unset: ['color'] });
 
     // Update nested properties
-    await client.partialUpdateMessage(originalMessage.id, {
-      set: { 'details.status': 'complete' },
-    });
+    await client.updateMessagePartial(
+      { id: originalMessage.id },
+      { set: { 'details.status': 'complete' } },
+    );
     // #endregion snippet
 
-    const { message } = await client.getMessage(originalMessage.id);
+    const { message } = await client.getMessage({ id: originalMessage.id });
     expect(message.text).toBe('Updated text');
-    expect(message.color).toBeUndefined();
-    expect(message.details).toEqual({ status: 'complete' });
+    expect(message.custom.color).toBeUndefined();
+    expect(message.custom.details).toEqual({ status: 'complete' });
   });
 
   it('deletes a message', async () => {
@@ -218,13 +226,13 @@ describe('_default/04-messages/01-send_message.md', () => {
 
     // #region snippet docs="_default/04-messages/01-send_message.md" heading="Deleting a Message" tab="JavaScript" index=1
     // Soft delete
-    await client.deleteMessage(messageID);
+    await client.deleteMessage({ id: messageID });
 
     // Hard delete
-    await client.deleteMessage(messageID, { hardDelete: true });
+    await client.deleteMessage({ id: messageID }, { hard: true });
 
     // Delete for me
-    await client.deleteMessage(anotherMessageID, { deleteForMe: true });
+    await client.deleteMessage({ id: anotherMessageID }, { delete_for_me: true });
     // #endregion snippet
 
     await expect(serverClient.chat.getMessage({ id: messageID })).rejects.toMatchObject({
@@ -235,7 +243,7 @@ describe('_default/04-messages/01-send_message.md', () => {
       id: anotherMessageID,
     });
     expect(forOthers.type).not.toBe('deleted');
-    const { message: forMe } = await client.getMessage(anotherMessageID);
+    const { message: forMe } = await client.getMessage({ id: anotherMessageID });
     expect(forMe.deleted_for_me).toBe(true);
   });
 });

@@ -12,6 +12,7 @@ import type {
   ChannelStateResponseFields,
   CreateDeviceRequest,
   CreatePollRequest,
+  CustomEvent,
   DraftPayloadResponse,
   FlagRequest,
   Images,
@@ -234,7 +235,14 @@ type LocalEvent = (
 export type Event =
   | (WSEvent & { received_at?: TimestampNS })
   | LocalEvent
-  | keyof CustomEventTypes;
+  | CustomEventTypeUnion;
+
+// One member per key augmented into `CustomEventTypes`; `never` when none are declared.
+type CustomEventTypeUnion = {
+  [K in keyof CustomEventTypes]: { type: K } & Omit<CustomEvent, 'type'> & {
+      received_at?: TimestampNS;
+    };
+}[keyof CustomEventTypes];
 export type EventType = Event['type'] | 'all';
 
 export type EventHandler<T = string> = (event: Extract<Event, { type: T }>) => void;

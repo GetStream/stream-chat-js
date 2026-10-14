@@ -28,6 +28,7 @@ import { copyConfigPatch } from './configuration/utils/copyConfigPatch';
 import { deepFreezeConfig } from './configuration/utils/deepFreezeConfig';
 import { mergeServerRestrictions } from './configuration/utils/serverAuthority';
 import type { ServerRestrictions } from './configuration/utils/serverAuthority';
+import type { CustomEventData } from './custom_types';
 import type { ChannelDeclarativeConfig } from './configuration/types';
 import {
   mergeDeclarativeMessageOperationsConfig,
@@ -639,21 +640,6 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Sends an event on this channel.
-   *
-   * @param request - For example `{ event: { type: 'message.read' } }`.
-   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
-   *   into the request (optional).
-   * @returns The server response.
-   */
-  override async sendEvent(
-    request: { event: Event },
-    requestOptions?: StreamRequestOptions,
-  ) {
-    return await super.sendEvent(request, requestOptions);
-  }
-
-  /**
    * Queries members.
    *
    * @param request - The query members request payload (optional). The inner `payload` accepts
@@ -828,7 +814,7 @@ export class Channel extends ChannelApi {
    * @returns The server response.
    */
   async acceptInvite(
-    options: ChannelUpdateOptions = {},
+    options: NonNullable<Parameters<ChannelApi['update']>[0]> = {},
     requestOptions?: StreamRequestOptions,
   ) {
     return await this.update({ accept_invite: true, ...options }, requestOptions);
@@ -843,7 +829,7 @@ export class Channel extends ChannelApi {
    * @returns The server response.
    */
   async rejectInvite(
-    options: ChannelUpdateOptions = {},
+    options: NonNullable<Parameters<ChannelApi['update']>[0]> = {},
     requestOptions?: StreamRequestOptions,
   ) {
     return await this.update({ reject_invite: true, ...options }, requestOptions);
@@ -1147,15 +1133,10 @@ export class Channel extends ChannelApi {
    * @see {@link https://getstream.io/chat/docs/typing_indicators/?language=js|Docs}
    *
    * @param parentId - Set this field to `message.id` to indicate that the typing event is happening in a thread (optional).
-   * @param options - Optional override carrying a `user_id` (optional).
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    */
-  async keystroke(
-    parentId?: string,
-    options?: { user_id: string },
-    requestOptions?: StreamRequestOptions,
-  ) {
+  async keystroke(parentId?: string, requestOptions?: StreamRequestOptions) {
     if (!this._isTypingIndicatorsEnabled()) {
       return;
     }
@@ -1171,9 +1152,6 @@ export class Channel extends ChannelApi {
           event: {
             type: 'typing.start',
             parent_id: parentId,
-            ...(options || {}),
-            created_at: nowNs(),
-            custom: {},
           },
         },
         requestOptions,
@@ -1201,12 +1179,14 @@ export class Channel extends ChannelApi {
     await this.sendEvent(
       {
         event: {
-          ...options,
           type: 'ai_indicator.update',
-          message_id: messageId,
-          ai_state: state,
-          created_at: nowNs(),
-          custom: {},
+          // The API reads the AI indicator fields from `custom` and puts them on the event it
+          // delivers. They aren't app custom data, hence the assertion.
+          custom: {
+            ...options,
+            message_id: messageId,
+            ai_state: state,
+          } as CustomEventData,
         },
       },
       requestOptions,
@@ -1230,8 +1210,6 @@ export class Channel extends ChannelApi {
       {
         event: {
           type: 'ai_indicator.clear',
-          created_at: nowNs(),
-          custom: {},
         },
       },
       requestOptions,
@@ -1255,8 +1233,6 @@ export class Channel extends ChannelApi {
       {
         event: {
           type: 'ai_indicator.stop',
-          created_at: nowNs(),
-          custom: {},
         },
       },
       requestOptions,
@@ -1269,15 +1245,10 @@ export class Channel extends ChannelApi {
    * @see {@link https://getstream.io/chat/docs/typing_indicators/?language=js|Docs}
    *
    * @param parentId - Set this field to `message.id` to indicate that the typing event is happening in a thread (optional).
-   * @param options - Optional override carrying a `user_id` (optional).
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    */
-  async stopTyping(
-    parentId?: string,
-    options?: { user_id: string },
-    requestOptions?: StreamRequestOptions,
-  ) {
+  async stopTyping(parentId?: string, requestOptions?: StreamRequestOptions) {
     if (!this._isTypingIndicatorsEnabled()) {
       return;
     }
@@ -1288,9 +1259,6 @@ export class Channel extends ChannelApi {
         event: {
           type: 'typing.stop',
           parent_id: parentId,
-          ...(options || {}),
-          created_at: nowNs(),
-          custom: {},
         },
       },
       requestOptions,

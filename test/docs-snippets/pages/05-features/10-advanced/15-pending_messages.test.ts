@@ -23,7 +23,11 @@ describe('_default/05-features/10-advanced/15-pending_messages.md', () => {
     await serverClient.upsertUsers([{ id: otherId }]);
     client = await getClientSideClient({ id: userId });
     cleanup.channels.push(`messaging:${channelId}`);
-    await client.channel('messaging', channelId, { members: [userId, otherId] }).create();
+    await client
+      .channel('messaging', channelId, {
+        members: [{ user_id: userId }, { user_id: otherId }],
+      })
+      .create();
 
     // Pending messages can only be sent server-side.
     for (const text of ['pending 1', 'pending 2']) {
@@ -50,7 +54,7 @@ describe('_default/05-features/10-advanced/15-pending_messages.md', () => {
     // #region snippet docs="_default/05-features/10-advanced/15-pending_messages.md" heading="Querying pending messages" tab="JavaScript" index=1
     // COPY: pendingMessageId="pending_message_id", pendingMessageId1="pending_message_id_1", pendingMessageId2="pending_message_id_2"
     // To retrieve a single message
-    const response = await client.getMessage(pendingMessageId);
+    const response = await client.getMessage({ id: pendingMessageId });
 
     // To retrieve several messages from one channel
     const messages = await channel.getMessagesById([
@@ -65,7 +69,7 @@ describe('_default/05-features/10-advanced/15-pending_messages.md', () => {
     // Pending messages are only visible to their sender.
     const otherClient = await getClientSideClient({ id: otherId });
     try {
-      await expect(otherClient.getMessage(pendingMessageId)).rejects.toThrow(
+      await expect(otherClient.getMessage({ id: pendingMessageId })).rejects.toThrow(
         /doesn't exist/,
       );
     } finally {
@@ -77,16 +81,19 @@ describe('_default/05-features/10-advanced/15-pending_messages.md', () => {
     // #region snippet docs="_default/05-features/10-advanced/15-pending_messages.md" heading="Query channels" tab="JavaScript" index=1
     // COPY: userId="thierry"
     // Querying multiple channels returns each channel's pending messages
-    const channels = await client.queryChannels(
-      { type: 'messaging', members: { $in: [userId] } },
-      [{ last_message_at: -1 }],
-    );
+    const channels = await client.queryChannelsAndHydrate({
+      filter_conditions: { type: 'messaging', members: { $in: [userId] } },
+      sort: [{ field: 'last_message_at', direction: -1 }],
+    });
+
+    // Pending messages of the first channel
+    const pendingMessages = channels[0]?.state.pending_messages;
     // #endregion snippet
 
-    const channel = channels.find((c) => c.id === channelId);
-    expect(channel).toBeDefined();
-    expect(
-      (channel?.state.pending_messages ?? []).map((p) => p.message.id).sort(),
-    ).toEqual([...pendingIds].sort());
+    // The user's only channel is the one with the pending messages.
+    expect(channels.map((c) => c.id)).toEqual([channelId]);
+    expect((pendingMessages ?? []).map((p) => p.message?.id).sort()).toEqual(
+      [...pendingIds].sort(),
+    );
   });
 });

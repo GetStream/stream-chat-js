@@ -1,17 +1,8 @@
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { Channel, FileLike, FileReference, StreamChat } from '../../../../src';
 import {
-  createUserToken,
   disconnectClients,
+  getClientSideClient,
   getServerClient,
 } from '../../helpers/clients';
 import { Cleanup } from '../../helpers/cleanup';
@@ -20,27 +11,8 @@ import { uniqueId } from '../../helpers/ids';
 import { getServerUser } from '../../helpers/server';
 import { waitForChannelTypePropagation } from '../../helpers/wait';
 
-// The snippets upload browser `File`s. Under Node the SDK builds the multipart body with the
-// `form-data` package (which only takes streams and Buffers) and only detects `File`s when
-// `window` exists. Emulate the browser bundle: native `FormData` (what `form-data` resolves to in
-// browsers) and a `window` with `File`/`Blob`, stubbed only while each test runs.
-vi.mock('form-data', () => ({ default: globalThis.FormData }));
-
-/**
- * Like `getClientSideClient`, but from a fresh import of src: `setup.ts` already loaded src (and
- * the real `form-data`) before the mock above was registered.
- */
-const getBrowserLikeClientSideClient = async (userId: string): Promise<StreamChat> => {
-  const serverClient = getServerClient();
-  await serverClient.upsertUsers([{ id: userId }]);
-  vi.resetModules();
-  const { StreamChat: FreshStreamChat } = await import('../../../../src');
-  const client = new FreshStreamChat(process.env.STREAM_API_KEY as string, {
-    allowServerSideConnect: true,
-  });
-  await client.connectUser({ id: userId }, createUserToken(userId));
-  return client;
-};
+// v10 builds multipart bodies with the global `FormData`, and Node's `File` is a `Blob`, so the
+// snippets' browser `File`s upload as-is under Node.
 
 // 1x1 transparent PNG.
 const PNG_BYTES = Buffer.from(
@@ -51,6 +23,12 @@ const PNG_BYTES = Buffer.from(
 const makeImage = (name: string) => new File([PNG_BYTES], name, { type: 'image/png' });
 const makeTextFile = (name: string) =>
   new File(['hello from the docs tests'], name, { type: 'text/plain' });
+
+/** The upload responses type `file` as optional; it is always set on success. */
+const uploadedUrl = ({ file }: { file?: string }) => {
+  if (!file) throw new Error('upload returned no file URL');
+  return file;
+};
 
 describe('_default/04-messages/02-file_uploads.md', () => {
   const serverClient = getServerClient();
@@ -67,18 +45,10 @@ describe('_default/04-messages/02-file_uploads.md', () => {
     await grantMessagingMembers(serverClient, cleanup, ['create-attachment']);
     await waitForChannelTypePropagation();
 
-    client = await getBrowserLikeClientSideClient(userId);
-    channel = client.channel(channelType, channelId, { members: [userId] });
+    client = await getClientSideClient({ id: userId });
+    channel = client.channel(channelType, channelId, { members: [{ user_id: userId }] });
     cleanup.channels.push(`${channelType}:${channelId}`);
     await channel.watch();
-  });
-
-  beforeEach(() => {
-    vi.stubGlobal('window', { File, Blob });
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
   });
 
   afterAll(async () => {
@@ -92,11 +62,8 @@ describe('_default/04-messages/02-file_uploads.md', () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
 
     // #region snippet docs="_default/04-messages/02-file_uploads.md" heading="Uploading Files to a Channel" tab="JavaScript" index=1
-    const response1 = await channel.sendImage(
-      file1,
-      file1.name,
-      file1.type,
-      undefined,
+    const response1 = await channel.uploadImage(
+      { file: file1 },
       // Optional
       {
         onUploadProgress: (e) => {
@@ -106,11 +73,8 @@ describe('_default/04-messages/02-file_uploads.md', () => {
       },
     );
 
-    const response2 = await channel.sendFile(
-      file2,
-      file2.name,
-      file2.type,
-      undefined,
+    const response2 = await channel.uploadFile(
+      { file: file2 },
       // Optional
       {
         onUploadProgress: (e) => {
@@ -121,19 +85,23 @@ describe('_default/04-messages/02-file_uploads.md', () => {
     );
 
     await channel.sendMessage({
-      text: 'Check these out',
-      attachments: [
-        {
-          type: 'image',
-          asset_url: response1.file,
-          thumb_url: response1.file,
-        },
-        {
-          type: 'file',
-          asset_url: response2.file,
-          title: file2.name,
-        },
-      ],
+      message: {
+        text: 'Check these out',
+        attachments: [
+          {
+            type: 'image',
+            asset_url: response1.file,
+            thumb_url: response1.file,
+            custom: {},
+          },
+          {
+            type: 'file',
+            asset_url: response2.file,
+            title: file2.name,
+            custom: {},
+          },
+        ],
+      },
     });
     // #endregion snippet
 
@@ -147,8 +115,8 @@ describe('_default/04-messages/02-file_uploads.md', () => {
     const { messages } = await channel.query({ messages: { limit: 1 } });
     const [message] = messages;
     expect(message.text).toBe('Check these out');
-    expect(message.attachments?.map((a) => a.type)).toEqual(['image', 'file']);
-    expect(message.attachments?.[1].title).toBe('notes.txt');
+    expect(message.attachments.map((a) => a.type)).toEqual(['image', 'file']);
+    expect(message.attachments[1].title).toBe('notes.txt');
   });
 
   it('uploads a standalone image and uses it as the user avatar', async () => {
@@ -157,10 +125,7 @@ describe('_default/04-messages/02-file_uploads.md', () => {
 
     // #region snippet docs="_default/04-messages/02-file_uploads.md" heading="Uploading Standalone Files" tab="JavaScript" index=1
     const { file: imageUrl } = await client.uploadImage(
-      imageFile,
-      imageFile.name,
-      imageFile.type,
-      undefined,
+      { file: imageFile },
       // Optional
       {
         onUploadProgress: (e) => {
@@ -171,28 +136,32 @@ describe('_default/04-messages/02-file_uploads.md', () => {
     );
 
     // Example: use the image URL as a user avatar
-    await client.partialUpdateUser({
-      id: userId,
-      set: { image: imageUrl },
+    await client.updateUsersPartial({
+      users: [{ id: userId, set: { image: imageUrl } }],
     });
     // #endregion snippet
 
     // Standalone uploads aren't tied to the channel or removed with the user.
-    await client.deleteImage(imageUrl);
+    const uploadedImageUrl = uploadedUrl({ file: imageUrl });
+    await client.deleteImage({ url: uploadedImageUrl });
     const logs = logSpy.mock.calls.map(([line]) => String(line));
     logSpy.mockRestore();
-    expect(imageUrl).toMatch(/^https:\/\//);
+    expect(uploadedImageUrl).toMatch(/^https:\/\//);
     expect(logs.some((line) => /^Image: \d+%$/.test(line))).toBe(true);
 
     const { image } = await getServerUser(serverClient, userId);
     expect(typeof image).toBe('string');
     // The stored URL is re-signed on read, so compare without the query string.
-    expect(String(image).split('?')[0]).toBe(imageUrl.split('?')[0]);
+    expect(String(image).split('?')[0]).toBe(uploadedImageUrl.split('?')[0]);
   });
 
   it('deletes files from a channel', async () => {
-    const { file: fileURL } = await channel.sendFile(makeTextFile('delete-me.txt'));
-    const { file: imageURL } = await channel.sendImage(makeImage('delete-me.png'));
+    const fileURL = uploadedUrl(
+      await channel.uploadFile({ file: makeTextFile('delete-me.txt') }),
+    );
+    const imageURL = uploadedUrl(
+      await channel.uploadImage({ file: makeImage('delete-me.png') }),
+    );
 
     const deleteFileSpy = vi.spyOn(channel, 'deleteFile');
     const deleteImageSpy = vi.spyOn(channel, 'deleteImage');
@@ -224,19 +193,37 @@ describe('_default/04-messages/02-file_uploads.md', () => {
         return Promise.resolve({ url: 'https://cdn.example.com/uploads/photo.png' });
       },
     };
+    // A composer receives configuration changes once its subscriptions are registered (UI SDKs
+    // do this when they mount it); composers created later get it on construction.
     const messageComposer = channel.messageComposer;
+    messageComposer.registerSubscriptions();
 
-    // #region snippet docs="_default/04-messages/02-file_uploads.md" heading="Using Your Own CDN" tab="JavaScript" index=1
-    messageComposer.attachmentManager.setCustomUploadFn(async (file) => {
-      const result = await customCDN.upload(file);
-      return { file: result.url };
-    });
-    // #endregion snippet
+    try {
+      // #region snippet docs="_default/04-messages/02-file_uploads.md" heading="Using Your Own CDN" tab="JavaScript" index=1
+      client.config.set({
+        messageComposer: {
+          attachments: {
+            // Uploads go to storage Stream doesn't host
+            customCdn: true,
+            doUploadRequest: async (file) => {
+              const result = await customCDN.upload(file);
+              return { file: result.url };
+            },
+          },
+        },
+      });
+      // #endregion snippet
 
-    expect(messageComposer.attachmentManager.hasCustomDoUploadRequest).toBe(true);
-    const file = makeImage('photo.png');
-    const result = await messageComposer.attachmentManager.doUploadRequest(file);
-    expect(result).toEqual({ file: 'https://cdn.example.com/uploads/photo.png' });
-    expect(uploaded).toEqual([file]);
+      const { attachmentManager } = messageComposer;
+      expect(attachmentManager.hasCustomDoUploadRequest).toBe(true);
+      expect(attachmentManager.config.customCdn).toBe(true);
+      const file = makeImage('photo.png');
+      const result = await attachmentManager.doUploadRequest(file);
+      expect(result).toEqual({ file: 'https://cdn.example.com/uploads/photo.png' });
+      expect(uploaded).toEqual([file]);
+    } finally {
+      client.config.reset('messageComposer');
+      messageComposer.unregisterSubscriptions();
+    }
   });
 });

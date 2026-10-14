@@ -22,7 +22,7 @@ describe('_default/03-channels/07-channel_management/15-truncating.md', () => {
     const id = uniqueId('general');
     cleanup.channels.push(`messaging:${id}`);
     const channel = client.channel('messaging', id, {
-      members: [userId, janeId, johnId],
+      members: [{ user_id: userId }, { user_id: janeId }, { user_id: johnId }],
     });
     await channel.create();
     return channel;
@@ -30,12 +30,13 @@ describe('_default/03-channels/07-channel_management/15-truncating.md', () => {
 
   // The messages `viewer` gets back when it queries `channel`.
   const messageTexts = async (viewer: StreamChat, channel: Channel) => {
-    const [result] = await viewer.queryChannels(
-      { cid: channel.cid },
-      {},
-      { message_limit: 10, watch: false, state: true },
-    );
-    return result.state.messages.map((message) => message.text);
+    const { channels } = await viewer.queryChannels({
+      filter_conditions: { cid: channel.cid },
+      message_limit: 10,
+      watch: false,
+      state: true,
+    });
+    return channels[0]?.messages.map((message) => message.text);
   };
 
   beforeAll(async () => {
@@ -52,7 +53,7 @@ describe('_default/03-channels/07-channel_management/15-truncating.md', () => {
 
   it('truncates a channel', async () => {
     const channel = await createChannel();
-    await channel.sendMessage({ text: 'first' });
+    await channel.sendMessage({ message: { text: 'first' } });
 
     // #region snippet docs="_default/03-channels/07-channel_management/15-truncating.md" heading="Truncate a Channel" tab="JavaScript" index=1
     await channel.truncate();
@@ -68,7 +69,7 @@ describe('_default/03-channels/07-channel_management/15-truncating.md', () => {
     // #endregion snippet
 
     const { channel: data } = await channel.query({ messages: { limit: 10 } });
-    expect(data.truncated_at).toBeDefined();
+    expect(data?.truncated_at).toBeDefined();
     expect(await messageTexts(client, channel)).toEqual([
       'Dear Everyone. The channel has been truncated.',
     ]);
@@ -76,7 +77,7 @@ describe('_default/03-channels/07-channel_management/15-truncating.md', () => {
 
   it('truncates a channel for specific members', async () => {
     const channel = await createChannel();
-    await channel.sendMessage({ text: 'history' });
+    await channel.sendMessage({ message: { text: 'history' } });
 
     // #region snippet docs="_default/03-channels/07-channel_management/15-truncating.md" heading="Truncate for Specific Members" tab="JavaScript" index=1
     // COPY: janeId="jane", johnId="john"

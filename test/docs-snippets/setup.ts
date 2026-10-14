@@ -1,4 +1,3 @@
-import { config } from 'dotenv';
 import path from 'node:path';
 import { afterAll, beforeAll } from 'vitest';
 import { getServerClient } from './helpers/clients';
@@ -8,7 +7,12 @@ import { diffAppSnapshots, takeAppSnapshot } from './helpers/snapshot';
 import type { AppSnapshot } from './helpers/snapshot';
 import { retry } from './helpers/wait';
 
-config({ path: path.join(__dirname, '.env'), quiet: true });
+// Node's built-in `.env` loader; a missing file is left to the credentials check below.
+try {
+  process.loadEnvFile(path.join(__dirname, '.env'));
+} catch {
+  // no .env
+}
 
 if (!process.env.STREAM_API_KEY || !process.env.STREAM_API_SECRET) {
   throw new Error(

@@ -54,7 +54,7 @@ describe(DOCS, () => {
     });
     const { message } = await client
       .channel(pollChannelType, pollChannelId)
-      .sendMessage({ text: 'Vote now!', poll_id: createdPoll.id });
+      .sendMessage({ message: { text: 'Vote now!', poll_id: createdPoll.id } });
     return message;
   };
 
@@ -72,7 +72,7 @@ describe(DOCS, () => {
     await waitForChannelTypePropagation();
     client = await getClientSideClient({ id: userId, language: 'en' });
     spanishClient = await getClientSideClient({ id: spanishUserId, language: 'es' });
-    channel = client.channel('messaging', channelId, { members: [userId] });
+    channel = client.channel('messaging', channelId, { members: [{ user_id: userId }] });
     cleanup.channels.push(`messaging:${channelId}`);
     await channel.watch();
   });
@@ -88,12 +88,17 @@ describe(DOCS, () => {
     try {
       // #region snippet docs="_default/05-features/09-translation.md" heading="Message Translation Endpoint" tab="JavaScript" index=1
       await channel.sendMessage({
-        id: messageID,
-        text: 'Hello, I would like to have more information about your product.',
+        message: {
+          id: messageID,
+          text: 'Hello, I would like to have more information about your product.',
+        },
       });
 
       // returns the message.text translated into French
-      const response = await client.translateMessage(messageID, 'fr');
+      const response = await client.translateMessage(
+        { id: messageID },
+        { language: 'fr' },
+      );
 
       // the translation will be added to the i18n object
       console.log(response.message.i18n?.fr_text);
@@ -128,9 +133,9 @@ describe(DOCS, () => {
 
     const languageUser = await getServerUser(serverClient, languageUserId);
     expect(languageUser.language).toBe('en');
-    expect(languageClient.activeChannels[`messaging:${meltingPotId}`]?.initialized).toBe(
-      true,
-    );
+    expect(
+      languageClient.channelManager.get(`messaging:${meltingPotId}`)?.initialized,
+    ).toBe(true);
     const meltingPot = await getServerChannel(serverClient, `messaging:${meltingPotId}`);
     expect(meltingPot.channel?.created_by?.id).toBe(languageUserId);
   });
@@ -138,7 +143,8 @@ describe(DOCS, () => {
   it('reads poll translations', async () => {
     const sent = await sendPollMessage();
     // the Spanish member reads the message
-    const message: MessageResponse = (await spanishClient.getMessage(sent.id)).message;
+    const message: MessageResponse = (await spanishClient.getMessage({ id: sent.id }))
+      .message;
     const client = spanishClient;
 
     // #region snippet docs="_default/05-features/09-translation.md" heading="Poll translation" tab="JavaScript" index=1

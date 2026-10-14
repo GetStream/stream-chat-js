@@ -34,7 +34,7 @@ describe('_default/03-channels/01-creating_channels.md', () => {
     // #region snippet docs="_default/03-channels/01-creating_channels.md" heading="Creating a Channel Using a Channel ID" tab="JavaScript" index=1
     // COPY: travel="travel"
     const channel = client.channel('messaging', travel, {
-      name: 'Awesome channel about traveling',
+      custom: { name: 'Awesome channel about traveling' },
     });
     // Here, 'travel' will be the channel ID
     await channel.create();
@@ -52,7 +52,7 @@ describe('_default/03-channels/01-creating_channels.md', () => {
     // #region snippet docs="_default/03-channels/01-creating_channels.md" heading="Distinct Channels" tab="JavaScript" index=1
     // COPY: thierry="thierry", tommaso="tommaso"
     const channel = client.channel('messaging', {
-      members: [thierry, tommaso],
+      members: [{ user_id: thierry }, { user_id: tommaso }],
     });
     await channel.create();
     // #endregion snippet
@@ -62,7 +62,9 @@ describe('_default/03-channels/01-creating_channels.md', () => {
     expect(Object.keys(channel.state.members).sort()).toEqual([thierry, tommaso].sort());
 
     // Same members, in any order: the same channel.
-    const again = client.channel('messaging', { members: [tommaso, thierry] });
+    const again = client.channel('messaging', {
+      members: [{ user_id: tommaso }, { user_id: thierry }],
+    });
     await again.create();
     expect(again.cid).toBe(channel.cid);
   });
@@ -79,8 +81,8 @@ describe('_default/03-channels/01-creating_channels.md', () => {
     // #endregion snippet
 
     // get-or-create: the channel didn't exist before.
-    expect(state.channel.id).toBe(travelChannel);
-    expect(state.channel.created_by?.id).toBe(thierry);
+    expect(state.channel?.id).toBe(travelChannel);
+    expect(state.channel?.created_by?.id).toBe(thierry);
     expect(Array.isArray(state.messages)).toBe(true);
     // Watched: events of the channel now reach this client over the WebSocket.
     const received = new Promise<string | undefined>((resolve) => {

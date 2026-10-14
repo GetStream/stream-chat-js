@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { Channel, Event, StreamChat } from '../../../../src';
+import type { Channel, Event, EventPayload, StreamChat } from '../../../../src';
 import {
   disconnectClients,
   getClientSideClient,
@@ -22,7 +22,9 @@ describe('_default/05-features/02-events.md', () => {
   // the events of other tests.
   const createWatchedChannel = async () => {
     const id = uniqueId('channel');
-    const channel = client.channel('messaging', id, { members: [userId, otherId] });
+    const channel = client.channel('messaging', id, {
+      members: [{ user_id: userId }, { user_id: otherId }],
+    });
     cleanup.channels.push(`messaging:${id}`);
     await channel.watch();
     return channel;
@@ -30,7 +32,7 @@ describe('_default/05-features/02-events.md', () => {
 
   // Drops the listeners a snippet registered on a channel, once its test is done.
   const removeListeners = (channel: Channel) => {
-    channel.listeners = {};
+    channel.listeners.clear();
   };
 
   const sendAsOther = (channel: Channel, text: string) =>
@@ -117,7 +119,7 @@ describe('_default/05-features/02-events.md', () => {
       // COPY: channelId="my-conversation-123", johnId="john", jackId="jack"
       // Watch a channel with presence enabled to receive user presence events
       const channel = client.channel('messaging', channelId, {
-        members: [johnId, jackId],
+        members: [{ user_id: johnId }, { user_id: jackId }],
       });
 
       const state = await channel.watch({ presence: true });
@@ -131,7 +133,7 @@ describe('_default/05-features/02-events.md', () => {
       // #endregion snippet
 
       presenceListener = onSpy.mock.results[0]?.value as { unsubscribe: () => void };
-      expect(state.channel.id).toBe(channelId);
+      expect(state.channel?.id).toBe(channelId);
       expect(state.members.map((m) => m.user_id).sort()).toEqual([johnId, jackId].sort());
 
       // Jack comes online, then goes offline.
@@ -155,39 +157,41 @@ describe('_default/05-features/02-events.md', () => {
 
   it('listens for connection events', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
-    const onSpy = vi.spyOn(client, 'on');
-    let listener: { unsubscribe: () => void } | undefined;
+    const subscribeSpy = vi.spyOn(client.wsConnection.state, 'subscribeWithSelector');
+    let unsubscribe: (() => void) | undefined;
     try {
       // #region snippet docs="_default/05-features/02-events.md" heading="Connection Events" tab="JavaScript" index=1
-      client.on('connection.changed', (e) => {
-        if (e.online) {
-          console.log('the connection is up!');
-        } else {
-          console.log('the connection is down!');
-        }
-      });
+      // the WebSocket's status is a state store: the handler runs once with
+      // the current value, then on every change
+      client.wsConnection.state.subscribeWithSelector(
+        ({ isHealthy }) => ({ isHealthy }),
+        ({ isHealthy }) => {
+          if (isHealthy) {
+            console.log('the connection is up!');
+          } else {
+            console.log('the connection is down!');
+          }
+        },
+      );
       // #endregion snippet
 
-      listener = onSpy.mock.results[0]?.value as { unsubscribe: () => void };
+      unsubscribe = subscribeSpy.mock.results[0]?.value as () => void;
+      // the first call reports the current (healthy) state
+      expect(logSpy).toHaveBeenCalledWith('the connection is up!');
+      logSpy.mockClear();
 
-      // Simulate the browser going offline and back online.
-      client.wsConnection?.onlineStatusChanged(new globalThis.Event('offline'));
-      await retry(() => {
-        expect(logSpy).toHaveBeenCalledWith('the connection is down!');
-        return Promise.resolve();
-      });
-      client.wsConnection?.onlineStatusChanged(new globalThis.Event('online'));
+      // Close the socket and open it again, as an app going to the background would.
+      await client.closeConnection();
+      expect(logSpy).toHaveBeenCalledWith('the connection is down!');
+      await client.openConnection();
       await retry(() => {
         expect(logSpy).toHaveBeenCalledWith('the connection is up!');
         return Promise.resolve();
       });
-      await retry(() => {
-        expect(client.wsConnection?.isHealthy).toBe(true);
-        return Promise.resolve();
-      });
+      expect(client.wsConnection.isHealthy).toBe(true);
     } finally {
-      listener?.unsubscribe();
-      onSpy.mockRestore();
+      unsubscribe?.();
+      subscribeSpy.mockRestore();
       logSpy.mockRestore();
     }
   });
@@ -199,7 +203,7 @@ describe('_default/05-features/02-events.md', () => {
 
     // #region snippet docs="_default/05-features/02-events.md" heading="Stop Listening for Events" tab="JavaScript" index=1
     // remove the handler from all client events
-    const myClientEventListener = client.on('connection.changed', myClientEventHandler);
+    const myClientEventListener = client.on('message.new', myClientEventHandler);
     myClientEventListener.unsubscribe();
 
     // remove the handler from all events on a channel
@@ -211,17 +215,16 @@ describe('_default/05-features/02-events.md', () => {
     const clientControl = vi.fn();
     const channelControl = vi.fn();
     const controls = [
-      client.on('connection.changed', clientControl),
+      client.on('message.new', clientControl),
       channel.on('message.new', channelControl),
     ];
     try {
-      client.dispatchEvent({ type: 'connection.changed', online: true });
       await sendAsOther(channel, 'Nobody listens');
       await retry(() => {
         expect(channelControl).toHaveBeenCalled();
+        expect(clientControl).toHaveBeenCalled();
         return Promise.resolve();
       });
-      expect(clientControl).toHaveBeenCalled();
       expect(myClientEventHandler).not.toHaveBeenCalled();
       expect(myChannelEventHandler).not.toHaveBeenCalled();
     } finally {
@@ -235,14 +238,16 @@ describe('_default/05-features/02-events.md', () => {
     otherClient = await getClientSideClient({ id: otherId, name: 'Jack' });
     const otherChannel = otherClient.channel(channel.type, channel.id);
     await otherChannel.watch();
-    const received: Event[] = [];
+    const received: EventPayload<'friendship_request'>[] = [];
     otherChannel.on('friendship_request', (event) => received.push(event));
 
     // #region snippet docs="_default/05-features/02-events.md" heading="To a channel" tab="JavaScript" index=1
     // sends an event for the current user to all connect clients on the channel
     await channel.sendEvent({
-      type: 'friendship_request',
-      text: 'Hey there, long time no see!',
+      event: {
+        type: 'friendship_request',
+        custom: { text: 'Hey there, long time no see!' },
+      },
     });
     // #endregion snippet
 
@@ -250,9 +255,9 @@ describe('_default/05-features/02-events.md', () => {
       expect(received).toHaveLength(1);
       return Promise.resolve();
     });
-    expect(received[0].text).toBe('Hey there, long time no see!');
-    expect(received[0].user?.id).toBe(userId);
-    expect(received[0].cid).toBe(channel.cid);
+    expect(received[0].custom.text).toBe('Hey there, long time no see!');
+    // `user` and `cid` are on the wire, but not on the custom event type
+    expect(received[0]).toMatchObject({ user: { id: userId }, cid: channel.cid });
 
     await disconnectClients(otherClient);
     otherClient = undefined;

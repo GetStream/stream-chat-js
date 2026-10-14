@@ -25,7 +25,7 @@ describe('_default/02-init_and_users/01-client_tokens_and_authentication.md', ()
         allowServerSideConnect: true,
       });
       try {
-        await probe.connectUser({ id: userId }, probe.devToken(userId));
+        await probe.connectUser({ id: userId }, client.devToken(userId));
         await probe.disconnectUser();
         return;
       } catch (error) {
@@ -55,7 +55,7 @@ describe('_default/02-init_and_users/01-client_tokens_and_authentication.md', ()
       allowServerSideConnect: true,
     });
     await expect(
-      devClient.connectUser({ id: userId }, devClient.devToken(userId)),
+      devClient.connectUser({ id: userId }, client.devToken(userId)),
     ).rejects.toThrow(/"StatusCode":401/);
     await devClient.disconnectUser();
   });
@@ -89,7 +89,7 @@ describe('_default/02-init_and_users/01-client_tokens_and_authentication.md', ()
     // #endregion snippet
 
     expect(client.userID).toBe(userId);
-    expect(client.wsConnection?.isHealthy).toBe(true);
+    expect(client.wsConnection.isHealthy).toBe(true);
     const user = await getServerUser(serverClient, userId);
     expect(user.name).toBe('John Doe');
   });

@@ -18,9 +18,11 @@ describe('_default/03-channels/07-channel_management/13-deleting.md', () => {
   const createChannel = async (name: string) => {
     const id = uniqueId(name);
     cleanup.channels.push(`messaging:${id}`);
-    const channel = client.channel('messaging', id, { members: [userId, otherId] });
+    const channel = client.channel('messaging', id, {
+      members: [{ user_id: userId }, { user_id: otherId }],
+    });
     await channel.create();
-    await channel.sendMessage({ text: 'before deleting' });
+    await channel.sendMessage({ message: { text: 'before deleting' } });
     return channel;
   };
 
@@ -42,9 +44,11 @@ describe('_default/03-channels/07-channel_management/13-deleting.md', () => {
     const destroy = await channel.delete();
     // #endregion snippet
 
-    expect(destroy.channel.cid).toBe(channel.cid);
-    expect(destroy.channel.deleted_at).toBeTruthy();
-    expect(await client.queryChannels({ cid: channel.cid })).toEqual([]);
+    expect(destroy.channel?.cid).toBe(channel.cid);
+    expect(destroy.channel?.deleted_at).toBeTruthy();
+    expect(
+      await client.queryChannelsAndHydrate({ filter_conditions: { cid: channel.cid } }),
+    ).toEqual([]);
   });
 
   it('deletes many channels (soft and hard)', async () => {
@@ -54,19 +58,24 @@ describe('_default/03-channels/07-channel_management/13-deleting.md', () => {
 
     // #region snippet docs="_default/03-channels/07-channel_management/13-deleting.md" heading="Deleting Many Channels" tab="JavaScript" index=1
     // soft delete
-    const response = await client.deleteChannels([cid1, cid2]);
+    const response = await client.deleteChannels({ cids: [cid1, cid2] });
 
     // hard delete
-    const hardResponse = await client.deleteChannels([cid1, cid2], {
+    const hardResponse = await client.deleteChannels({
+      cids: [cid1, cid2],
       hard_delete: true,
     });
     const result = hardResponse.result; // holds deletion result
     // #endregion snippet
 
     // client-side the response has a per-cid `result` and no `task_id`
-    expect(Object.keys(response.result).sort()).toEqual([cid1, cid2].sort());
-    expect(Object.keys(result).sort()).toEqual([cid1, cid2].sort());
+    expect(Object.keys(response.result ?? {}).sort()).toEqual([cid1, cid2].sort());
+    expect(Object.keys(result ?? {}).sort()).toEqual([cid1, cid2].sort());
     expect(hardResponse.task_id).toBeUndefined();
-    expect(await client.queryChannels({ cid: { $in: [cid1, cid2] } })).toEqual([]);
+    expect(
+      await client.queryChannelsAndHydrate({
+        filter_conditions: { cid: { $in: [cid1, cid2] } },
+      }),
+    ).toEqual([]);
   });
 });

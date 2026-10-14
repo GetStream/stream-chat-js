@@ -2,11 +2,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type {
   Channel,
   QueryRemindersResponse,
-  ReminderAPIResponse,
   ReminderFilters,
-  ReminderSort,
+  SortParamRequest,
   StreamChat,
 } from '../../../../src';
+import { nsToMs } from '../../../../src';
 import {
   disconnectClients,
   getClientSideClient,
@@ -37,7 +37,7 @@ describe('_default/04-messages/09-message_reminders.md', () => {
   beforeAll(async () => {
     cleanup.users.push(userId);
     client = await getClientSideClient({ id: userId });
-    channel = client.channel('messaging', channelId, { members: [userId] });
+    channel = client.channel('messaging', channelId, { members: [{ user_id: userId }] });
     cleanup.channels.push(`messaging:${channelId}`);
     await channel.watch();
     // Reminders are off for `messaging` in the test app: enable them for this channel only.
@@ -58,7 +58,7 @@ describe('_default/04-messages/09-message_reminders.md', () => {
       'page4',
     ];
     for (const name of names) {
-      ids[name] = (await channel.sendMessage({ text: name })).message.id;
+      ids[name] = (await channel.sendMessage({ message: { text: name } })).message.id;
     }
   });
 
@@ -77,33 +77,29 @@ describe('_default/04-messages/09-message_reminders.md', () => {
     // #region snippet docs="_default/04-messages/09-message_reminders.md" heading="Creating a Message Reminder" tab="JavaScript" index=1
     // COPY: messageID="message-id", anotherMessageID="another-message-id"
     // Create a reminder with a specific due date (direct API call)
-    await client.createReminder({
-      messageId: messageID,
+    await client.createReminder(
+      { message_id: messageID },
       // Remind in offsetMs
-      remind_at: new Date(new Date().getTime() + offsetMs).toISOString(),
-    });
+      { remind_at: new Date(new Date().getTime() + offsetMs) },
+    );
 
     // Create a reminder with a specific due date (client state optimistic update)
-    await client.reminders.upsertReminder({
-      messageId: messageID,
-      remind_at: new Date(new Date().getTime() + offsetMs).toISOString(),
-    });
+    await client.reminders.upsertReminder(
+      { message_id: messageID },
+      { remind_at: new Date(new Date().getTime() + offsetMs) },
+    );
 
     // Create a "Save for later" reminder without a specific time (direct API call)
-    await client.createReminder({
-      messageId: anotherMessageID,
-    });
+    await client.createReminder({ message_id: anotherMessageID });
 
     // Create a "Save for later" reminder without a specific time (client state optimistic update)
-    await client.reminders.upsertReminder({
-      messageId: messageID,
-    });
+    await client.reminders.upsertReminder({ message_id: messageID });
     // #endregion snippet
 
-    const first = (await createSpy.mock.results[0].value) as ReminderAPIResponse;
+    const first = await createSpy.mock.results[0].value;
     createSpy.mockRestore();
     expect(first.reminder.message_id).toBe(ids.create);
-    expect(new Date(first.reminder.remind_at ?? 0).getTime()).toBeGreaterThanOrEqual(
+    expect(nsToMs(first.reminder.remind_at ?? 0)).toBeGreaterThanOrEqual(
       before + offsetMs - 1000,
     );
     expect(client.reminders.getFromState(ids.create)).toBeDefined();
@@ -114,45 +110,39 @@ describe('_default/04-messages/09-message_reminders.md', () => {
   it('updates reminders', async () => {
     const messageID = ids.update;
     const newOffsetMs = 2 * oneHour;
-    await client.createReminder({
-      messageId: ids.update,
-      remind_at: new Date(Date.now() + oneHour).toISOString(),
-    });
+    await client.createReminder(
+      { message_id: ids.update },
+      { remind_at: new Date(Date.now() + oneHour) },
+    );
     const updateSpy = vi.spyOn(client, 'updateReminder');
     const before = Date.now();
 
     // #region snippet docs="_default/04-messages/09-message_reminders.md" heading="Updating a Message Reminder" tab="JavaScript" index=1
     // COPY: messageID="message-id"
     // Update a reminder with a new due date (direct API call)
-    await client.updateReminder({
-      messageId: messageID,
+    await client.updateReminder(
+      { message_id: messageID },
       // Remind in newOffsetMs
-      remind_at: new Date(new Date().getTime() + newOffsetMs).toISOString(),
-    });
+      { remind_at: new Date(new Date().getTime() + newOffsetMs) },
+    );
 
     // Update a reminder with a new due date (client state optimistic update)
-    await client.reminders.upsertReminder({
-      messageId: messageID,
+    await client.reminders.upsertReminder(
+      { message_id: messageID },
       // Remind in newOffsetMs
-      remind_at: new Date(new Date().getTime() + newOffsetMs).toISOString(),
-    });
+      { remind_at: new Date(new Date().getTime() + newOffsetMs) },
+    );
 
-    // Convert a timed reminder to "Save for later" (direct API call)
-    await client.updateReminder({
-      messageId: messageID,
-      remind_at: null,
-    });
+    // Convert a timed reminder to "Save for later" by omitting remind_at (direct API call)
+    await client.updateReminder({ message_id: messageID });
 
     // Convert a timed reminder to "Save for later" (client state optimistic update)
-    await client.reminders.upsertReminder({
-      messageId: messageID,
-      remind_at: null,
-    });
+    await client.reminders.upsertReminder({ message_id: messageID });
     // #endregion snippet
 
-    const first = (await updateSpy.mock.results[0].value) as ReminderAPIResponse;
+    const first = await updateSpy.mock.results[0].value;
     updateSpy.mockRestore();
-    expect(new Date(first.reminder.remind_at ?? 0).getTime()).toBeGreaterThanOrEqual(
+    expect(nsToMs(first.reminder.remind_at ?? 0)).toBeGreaterThanOrEqual(
       before + newOffsetMs - 1000,
     );
     expect((await reminderOf(ids.update))?.remind_at ?? null).toBeNull();
@@ -161,14 +151,14 @@ describe('_default/04-messages/09-message_reminders.md', () => {
   it('deletes reminders', async () => {
     const messageID = ids.delete;
     const anotherMessageID = ids.deleteOther;
-    await client.createReminder({ messageId: ids.delete });
-    await client.reminders.upsertReminder({ messageId: ids.deleteOther });
+    await client.createReminder({ message_id: ids.delete });
+    await client.reminders.upsertReminder({ message_id: ids.deleteOther });
     expect(client.reminders.getFromState(ids.deleteOther)).toBeDefined();
 
     // #region snippet docs="_default/04-messages/09-message_reminders.md" heading="Deleting a Message Reminder" tab="JavaScript" index=1
     // COPY: messageID="message-id", anotherMessageID="another-message-id"
     // Delete a reminder for a message with id 'message-id' (direct API call)
-    await client.deleteReminder(messageID);
+    await client.deleteReminder({ message_id: messageID });
 
     // Delete a reminder for a message with id 'another-message-id' (client state optimistic update)
     await client.reminders.deleteReminder(anotherMessageID);
@@ -237,17 +227,17 @@ describe('_default/04-messages/09-message_reminders.md', () => {
     // #endregion snippet
 
     try {
-      await client.createReminder({ messageId: ids.events });
-      await client.updateReminder({
-        messageId: ids.events,
-        remind_at: new Date(Date.now() + oneHour).toISOString(),
-      });
-      await client.deleteReminder(ids.events);
+      await client.createReminder({ message_id: ids.events });
+      await client.updateReminder(
+        { message_id: ids.events },
+        { remind_at: new Date(Date.now() + oneHour) },
+      );
+      await client.deleteReminder({ message_id: ids.events });
       // The earliest allowed due time is one minute ahead; the due event arrives shortly after.
-      await client.createReminder({
-        messageId: ids.due,
-        remind_at: new Date(Date.now() + 61000).toISOString(),
-      });
+      await client.createReminder(
+        { message_id: ids.due },
+        { remind_at: new Date(Date.now() + 61000) },
+      );
       await retry(
         () => {
           expect(logged('Reminder created for message:', ids.events)).toBe(true);
@@ -273,10 +263,10 @@ describe('_default/04-messages/09-message_reminders.md', () => {
 
   it('filters reminders', async () => {
     // Runs after the events test, so the `due` reminder is overdue by now.
-    const timed = await client.createReminder({
-      messageId: ids.events,
-      remind_at: new Date(Date.now() + oneHour).toISOString(),
-    });
+    const timed = await client.createReminder(
+      { message_id: ids.events },
+      { remind_at: new Date(Date.now() + oneHour) },
+    );
     expect(timed.reminder.remind_at).toBeDefined();
     const querySpy = vi.spyOn(client, 'queryReminders');
 
@@ -285,21 +275,21 @@ describe('_default/04-messages/09-message_reminders.md', () => {
     // Create filter for overdue reminders
     await client.queryReminders({
       filter: {
-        remind_at: { $lte: new Date().toISOString() },
+        remind_at: { $lte: new Date() },
       },
-      sort: {
-        remind_at: -1, // sort from the most recently expired
-      },
+      sort: [
+        { field: 'remind_at', direction: -1 }, // sort from the most recently expired
+      ],
     });
 
     // Create filter for upcoming reminders
     await client.queryReminders({
       filter: {
-        remind_at: { $gt: new Date().toISOString() },
+        remind_at: { $gt: new Date() },
       },
-      sort: {
-        remind_at: 1, // sort from the nearest to expire
-      },
+      sort: [
+        { field: 'remind_at', direction: 1 }, // sort from the nearest to expire
+      ],
     });
 
     // Create filter for reminders with no due date (saved for later)
@@ -307,9 +297,9 @@ describe('_default/04-messages/09-message_reminders.md', () => {
       filter: {
         remind_at: null,
       },
-      sort: {
-        created_at: -1, // sort from the most recently created
-      },
+      sort: [
+        { field: 'created_at', direction: -1 }, // sort from the most recently created
+      ],
     });
 
     // Client-side calls with local state updates before starting the pagination.
@@ -317,27 +307,27 @@ describe('_default/04-messages/09-message_reminders.md', () => {
 
     // Create filter for overdue reminders
     client.reminders.paginator.filters = {
-      remind_at: { $lte: new Date().toISOString() },
+      remind_at: { $lte: new Date() },
     };
-    client.reminders.paginator.sort = {
-      remind_at: -1, // sort from the most recently expired
-    };
+    client.reminders.paginator.sort = [
+      { field: 'remind_at', direction: -1 }, // sort from the most recently expired
+    ];
 
     // Create filter for upcoming reminders
     client.reminders.paginator.filters = {
-      remind_at: { $gt: new Date().toISOString() },
+      remind_at: { $gt: new Date() },
     };
-    client.reminders.paginator.sort = {
-      remind_at: 1, // sort from the nearest to expire
-    };
+    client.reminders.paginator.sort = [
+      { field: 'remind_at', direction: 1 }, // sort from the nearest to expire
+    ];
     // Create filter for reminders with no due date (saved for later)
 
     client.reminders.paginator.filters = {
       remind_at: null,
     };
-    client.reminders.paginator.sort = {
-      created_at: -1, // sort from the most recently created
-    };
+    client.reminders.paginator.sort = [
+      { field: 'created_at', direction: -1 }, // sort from the most recently created
+    ];
 
     // adjust the page size
     client.reminders.paginator.pageSize = 15;
@@ -365,14 +355,14 @@ describe('_default/04-messages/09-message_reminders.md', () => {
   it('paginates reminders', async () => {
     const pageIds = [ids.page1, ids.page2, ids.page3, ids.page4];
     for (const [i, messageId] of pageIds.entries()) {
-      await client.createReminder({
-        messageId,
-        remind_at: new Date(Date.now() + 3 * oneHour + i * 60000).toISOString(),
-      });
+      await client.createReminder(
+        { message_id: messageId },
+        { remind_at: new Date(Date.now() + 3 * oneHour + i * 60000) },
+      );
     }
     const filter: ReminderFilters = { message_id: { $in: pageIds } };
     const filters = filter;
-    const sort: ReminderSort = { remind_at: 1 };
+    const sort: SortParamRequest[] = [{ field: 'remind_at', direction: 1 }];
     const limit = 2;
     const firstPage = await client.queryReminders({ filter, sort, limit });
     const next = firstPage.next;

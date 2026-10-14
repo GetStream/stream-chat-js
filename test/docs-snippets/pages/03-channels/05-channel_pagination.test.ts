@@ -27,12 +27,14 @@ describe(DOCS, () => {
     await serverClient.upsertUsers(others.map((id) => ({ id })));
     client = await getClientSideClient({ id: owner });
     channel = client.channel('messaging', uniqueId('channel'), {
-      members: [owner, ...others],
+      members: [owner, ...others].map((user_id) => ({ user_id })),
     });
     await channel.create();
     if (channel.cid) cleanup.channels.push(channel.cid);
     for (let i = 0; i < MESSAGE_COUNT; i++) {
-      const { message } = await channel.sendMessage({ text: `message ${i}` });
+      const { message } = await channel.sendMessage({
+        message: { text: `message ${i}` },
+      });
       messageIds.push(message.id);
     }
   });

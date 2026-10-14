@@ -56,7 +56,9 @@ describe('_default/03-channels/07-channel_management/16-channel_invites.md', () 
   it('invites users', async () => {
     const id = uniqueId('general');
     cleanup.channels.push(`messaging:${id}`);
-    const channel = ownerClient.channel('messaging', id, { members: [ownerId] });
+    const channel = ownerClient.channel('messaging', id, {
+      members: [{ user_id: ownerId }],
+    });
     await channel.create();
 
     // #region snippet docs="_default/03-channels/07-channel_management/16-channel_invites.md" heading="Invite Users" tab="JavaScript" index=1
@@ -107,8 +109,8 @@ describe('_default/03-channels/07-channel_management/16-channel_invites.md', () 
 
   it('queries accepted invites', async () => {
     // #region snippet docs="_default/03-channels/07-channel_management/16-channel_invites.md" heading="Query Accepted Invites" tab="JavaScript" index=1
-    const invites = await client.queryChannels({
-      invite: 'accepted',
+    const invites = await client.queryChannelsAndHydrate({
+      filter_conditions: { invite: 'accepted' },
     });
     // #endregion snippet
 
@@ -120,8 +122,8 @@ describe('_default/03-channels/07-channel_management/16-channel_invites.md', () 
 
   it('queries rejected invites', async () => {
     // #region snippet docs="_default/03-channels/07-channel_management/16-channel_invites.md" heading="Query Rejected Invites" tab="JavaScript" index=1
-    const rejected = await client.queryChannels({
-      invite: 'rejected',
+    const rejected = await client.queryChannelsAndHydrate({
+      filter_conditions: { invite: 'rejected' },
     });
     // #endregion snippet
 
@@ -133,8 +135,8 @@ describe('_default/03-channels/07-channel_management/16-channel_invites.md', () 
 
   it('queries pending invites', async () => {
     // #region snippet docs="_default/03-channels/07-channel_management/16-channel_invites.md" heading="Query Pending Invites" tab="JavaScript" index=1
-    const pending = await client.queryChannels({
-      invite: 'pending',
+    const pending = await client.queryChannelsAndHydrate({
+      filter_conditions: { invite: 'pending' },
     });
     // #endregion snippet
 

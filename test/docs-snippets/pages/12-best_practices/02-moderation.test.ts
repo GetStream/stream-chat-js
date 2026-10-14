@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { FlagMessageResponse, StreamChat } from '../../../../src';
+import type { StreamChat } from '../../../../src';
 import {
   disconnectClients,
   getClientSideClient,
@@ -12,6 +12,7 @@ import {
   getServerMember,
   sendServerMessage,
 } from '../../helpers/server';
+import { retry } from '../../helpers/wait';
 
 const DOCS = '_default/12-best_practices/02-moderation.md';
 
@@ -38,6 +39,14 @@ describe(DOCS, () => {
     return message.id;
   };
 
+  /** The flags on `messageId`'s review queue item (server-side). */
+  const flagsOn = async (messageId: string) => {
+    const { items } = await serverClient.moderation.queryReviewQueue({
+      filter: { entity_type: 'stream:chat:v1:message', entity_id: messageId },
+    });
+    return items.flatMap((item) => item.flags);
+  };
+
   beforeAll(async () => {
     cleanup.users.push(ownerId, adminId, jamesBondId, spammerId, ...blockTargets);
     await serverClient.upsertUsers(
@@ -47,7 +56,7 @@ describe(DOCS, () => {
     adminClient = await getClientSideClient({ id: adminId, role: 'admin' });
 
     const channel = client.channel('messaging', channelId, {
-      members: [ownerId, spammerId],
+      members: [{ user_id: ownerId }, { user_id: spammerId }],
     });
     cleanup.channels.push(`messaging:${channelId}`);
     await channel.create();
@@ -60,7 +69,7 @@ describe(DOCS, () => {
 
   it('adds a member with the moderator role', async () => {
     const id = uniqueId('channel');
-    const channel = client.channel('messaging', id, { members: [ownerId] });
+    const channel = client.channel('messaging', id, { members: [{ user_id: ownerId }] });
     cleanup.channels.push(`messaging:${id}`);
     await channel.create();
 
@@ -78,7 +87,7 @@ describe(DOCS, () => {
 
   it('enables and disables slow mode', async () => {
     const id = uniqueId('channel');
-    const channel = client.channel('messaging', id, { members: [ownerId] });
+    const channel = client.channel('messaging', id, { members: [{ user_id: ownerId }] });
     cleanup.channels.push(`messaging:${id}`);
     await channel.create();
     // Changing the cooldown needs UpdateChannelCooldown (a channel creator gets 403 code 17).
@@ -99,7 +108,7 @@ describe(DOCS, () => {
     // #endregion snippet
 
     const results = await Promise.all(enableSpy.mock.results.map((r) => r.value));
-    expect(results.map((r) => r.channel.cooldown)).toEqual([1, 30]);
+    expect(results.map((r) => r.channel?.cooldown)).toEqual([1, 30]);
     const serverChannel = await getServerChannel(serverClient, channel.cid);
     expect(serverChannel.channel?.cooldown ?? 0).toBe(0);
   });
@@ -109,40 +118,40 @@ describe(DOCS, () => {
     flaggedMessageIds.push(messageId);
 
     // #region snippet docs="_default/12-best_practices/02-moderation.md" heading="Flag" tab="JavaScript" index=1
+    // A user's flag on a message is recorded once: flagging it again doesn't update the reason or custom data
     // Flag a message
-    const flag = await client.flagMessage(messageId);
+    const flag = await client.moderation.flagMessage(messageId);
 
     // Flag with a reason and custom data
-    const flagWithReason = await client.flagMessage(messageId, {
-      reason: 'spammy_user',
+    const flagWithReason = await client.moderation.flagMessage(messageId, 'spammy_user', {
       custom: {
         user_comment: 'This user is spamming.',
       },
     });
     // #endregion snippet
 
-    expect(flag.flag.target_message_id).toBe(messageId);
-    expect(flag.flag.user.id).toBe(ownerId);
-    expect(flagWithReason.flag.reason).toBe('spammy_user');
-    expect(flagWithReason.flag.custom).toEqual({
-      user_comment: 'This user is spamming.',
+    // Both flags land on the message's review queue item.
+    expect(flag.item_id).toEqual(expect.any(String));
+    expect(flagWithReason.item_id).toBe(flag.item_id);
+    await retry(async () => {
+      const flags = await flagsOn(messageId);
+      // Only the first flag is recorded, without a reason.
+      expect(flags.map((f) => [f.user_id, f.reason])).toEqual([[ownerId, undefined]]);
     });
   });
 
   it('flags a message with reasons and custom data', async () => {
     const messageID = await sendSpamMessage('Buy more!');
     flaggedMessageIds.push(messageID);
-    const flagSpy = vi.spyOn(client, 'flagMessage');
+    const flagSpy = vi.spyOn(client.moderation, 'flagMessage');
 
     // #region snippet docs="_default/12-best_practices/02-moderation.md" heading="Reasons & custom data" tab="JavaScript" index=1
+    // A user's flag on a message is recorded once: flagging it again doesn't update the reason or custom data
     // flag with a reason
-    let flag = await client.flagMessage(messageID, {
-      reason: 'spammy_user',
-    });
+    let flag = await client.moderation.flagMessage(messageID, 'spammy_user');
 
     // flag with a reason and additional custom data
-    flag = await client.flagMessage(messageID, {
-      reason: 'spammy_user',
+    flag = await client.moderation.flagMessage(messageID, 'spammy_user', {
       custom: {
         user_comment: 'This user is spamming the homepage.',
         page: 'homepage',
@@ -150,25 +159,28 @@ describe(DOCS, () => {
     });
 
     // flag with only custom data
-    flag = await client.flagMessage(messageID, {
+    flag = await client.moderation.flagMessage(messageID, undefined, {
       custom: {
         page: 'homepage',
       },
     });
     // #endregion snippet
 
-    const [withReason, withReasonAndCustom]: FlagMessageResponse[] = await Promise.all(
-      flagSpy.mock.results.map((r) => r.value),
-    );
+    const responses = await Promise.all(flagSpy.mock.results.map((r) => r.value));
     flagSpy.mockRestore();
-    expect(withReason.flag.reason).toBe('spammy_user');
-    expect(withReasonAndCustom.flag.reason).toBe('spammy_user');
-    expect(withReasonAndCustom.flag.custom).toEqual({
-      user_comment: 'This user is spamming the homepage.',
-      page: 'homepage',
+    // All three flags land on the message's review queue item.
+    expect(responses.map((r) => r.item_id)).toEqual([
+      flag.item_id,
+      flag.item_id,
+      flag.item_id,
+    ]);
+    await retry(async () => {
+      const flags = await flagsOn(messageID);
+      // Only the first flag is recorded: its reason, no custom data.
+      expect(flags.map((f) => [f.user_id, f.reason, f.custom])).toEqual([
+        [ownerId, 'spammy_user', undefined],
+      ]);
     });
-    expect(flag.flag.target_message_id).toBe(messageID);
-    expect(flag.flag.custom).toEqual({ page: 'homepage' });
   });
 
   it('queries flagged messages from the review queue', async () => {
@@ -177,10 +189,10 @@ describe(DOCS, () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     try {
       // #region snippet docs="_default/12-best_practices/02-moderation.md" heading="Query Flagged Messages" tab="JavaScript" index=1
-      const response = await client.moderation.queryReviewQueue(
-        { entity_type: 'stream:chat:v1:message' },
-        [{ created_at: -1 }],
-      );
+      const response = await client.moderation.queryReviewQueue({
+        filter: { entity_type: 'stream:chat:v1:message' },
+        sort: [{ field: 'created_at', direction: -1 }],
+      });
 
       for (const item of response.items) {
         console.log(item.message?.id);
@@ -230,7 +242,7 @@ describe(DOCS, () => {
     expect(before.blocks.map((b) => b.blocked_user_id)).toContain(blockedUser);
 
     // #region snippet docs="_default/12-best_practices/02-moderation.md" heading="Unblock user" tab="JavaScript" index=1
-    await client.unBlockUser(blockedUser);
+    await client.unblockUser(blockedUser);
     // #endregion snippet
 
     // #region snippet docs="_default/12-best_practices/02-moderation.md" heading="List of Blocked Users" tab="JavaScript" index=1
@@ -263,7 +275,7 @@ describe(DOCS, () => {
       // #region snippet docs="_default/12-best_practices/02-moderation.md" heading="Server Side" tab="JavaScript" index=2
       // Unblocks a user on behalf of the connected user.
       try {
-        await chatClient.unBlockUser(userId);
+        await chatClient.unblockUser(userId);
       } catch (err) {
         console.log('Error unblocking user:', err);
       }

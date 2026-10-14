@@ -25,7 +25,9 @@ describe('_default/03-channels/07-channel_management/14-freezing.md', () => {
     client = await getClientSideClient({ id: userId });
     const id = uniqueId('general');
     cleanup.channels.push(`messaging:${id}`);
-    channel = client.channel('messaging', id, { members: [userId, otherId] });
+    channel = client.channel('messaging', id, {
+      members: [{ user_id: userId }, { user_id: otherId }],
+    });
     await channel.create();
     await serverClient.chat.channel('messaging', id).update({ add_moderators: [userId] });
   });
@@ -42,36 +44,36 @@ describe('_default/03-channels/07-channel_management/14-freezing.md', () => {
     });
 
     // #region snippet docs="_default/03-channels/07-channel_management/14-freezing.md" heading="Freeze a Channel" tab="JavaScript" index=1
-    const update = await channel.update(
-      { frozen: true },
-      { text: 'Thierry has frozen the channel' },
-    );
+    const update = await channel.update({
+      data: { frozen: true },
+      message: { text: 'Thierry has frozen the channel' },
+    });
 
     const partialUpdate = await channel.updatePartial({ set: { frozen: true } });
     // #endregion snippet
 
-    expect(update.channel.frozen).toBe(true);
+    expect(update.channel?.frozen).toBe(true);
     expect(update.message?.text).toBe('Thierry has frozen the channel');
-    expect(partialUpdate.channel.frozen).toBe(true);
+    expect(partialUpdate.channel?.frozen).toBe(true);
 
     // sending a message returns an error message, reacting fails with 403
-    const sent = await channel.sendMessage({ text: 'while frozen' });
+    const sent = await channel.sendMessage({ message: { text: 'while frozen' } });
     expect(sent.message.type).toBe('error');
-    await expect(channel.sendReaction(otherMessage.id, { type: 'like' })).rejects.toThrow(
-      /frozen/,
-    );
+    await expect(
+      channel.sendReaction({ id: otherMessage.id }, { reaction: { type: 'like' } }),
+    ).rejects.toThrow(/frozen/);
   });
 
   it('unfreezes a channel', async () => {
     // #region snippet docs="_default/03-channels/07-channel_management/14-freezing.md" heading="Unfreeze a Channel" tab="JavaScript" index=1
-    const update = await channel.update(
-      { frozen: false },
-      { text: 'Thierry has unfrozen the channel' },
-    );
+    const update = await channel.update({
+      data: { frozen: false },
+      message: { text: 'Thierry has unfrozen the channel' },
+    });
     // #endregion snippet
 
-    expect(update.channel.frozen).toBe(false);
-    const sent = await channel.sendMessage({ text: 'after unfreezing' });
+    expect(update.channel?.frozen).toBe(false);
+    const sent = await channel.sendMessage({ message: { text: 'after unfreezing' } });
     expect(sent.message.type).toBe('regular');
   });
 });

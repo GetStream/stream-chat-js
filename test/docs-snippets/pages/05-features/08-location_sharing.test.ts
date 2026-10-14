@@ -27,7 +27,11 @@ describe('_default/05-features/08-location_sharing.md', () => {
     await serverClient.upsertUsers([{ id: otherId }]);
     client = await getClientSideClient({ id: userId });
     cleanup.channels.push(`${channelType}:${channelId}`);
-    await client.channel(channelType, channelId, { members: [userId, otherId] }).create();
+    await client
+      .channel(channelType, channelId, {
+        members: [{ user_id: userId }, { user_id: otherId }],
+      })
+      .create();
     // config_overrides can only be set server-side
     await serverClient.chat
       .channel(channelType, channelId)
@@ -55,7 +59,7 @@ describe('_default/05-features/08-location_sharing.md', () => {
     });
     // #endregion snippet
 
-    const { message } = await client.getMessage(messageId);
+    const { message } = await client.getMessage({ id: messageId });
     expect(message.shared_location).toMatchObject({ latitude: 10, longitude: 10 });
     expect(message.shared_location?.end_at).toBeUndefined();
   });
@@ -72,7 +76,7 @@ describe('_default/05-features/08-location_sharing.md', () => {
       // Live location differs from the static location by the termination timestamp end_at.
       await channel.sendSharedLocation({
         created_by_device_id: 'device-id',
-        end_at: '2225-07-22T09:30:12.507Z',
+        end_at: new Date(Date.now() + 60 * 60 * 1000), // 1 hour from now
         latitude: 10,
         longitude: 10,
         message_id: messageId,
@@ -80,20 +84,23 @@ describe('_default/05-features/08-location_sharing.md', () => {
       // #endregion snippet
     }
 
-    const { message: started } = await client.getMessage(messageId);
-    expect(started.shared_location?.end_at).toMatch(/^2225-07-22T09:30:12/);
+    const { message: started } = await client.getMessage({ id: messageId });
+    // `end_at` comes back as unix nanoseconds, about an hour from now.
+    const endAtMs = (started.shared_location?.end_at ?? 0) / 1e6;
+    expect(endAtMs).toBeGreaterThan(Date.now() + 50 * 60 * 1000);
+    expect(endAtMs).toBeLessThan(Date.now() + 70 * 60 * 1000);
 
     // #region snippet docs="_default/05-features/08-location_sharing.md" heading="Updating live location" tab="JavaScript" index=1
     // COPY: messageId="message-id"
     // simple call to update a location
-    await client.updateLocation({
+    await client.updateLiveLocation({
       latitude: 1,
       longitude: 2,
       message_id: messageId,
     });
     // #endregion snippet
 
-    const { active_live_locations } = await client.getSharedLocations();
+    const { active_live_locations } = await client.getUserLiveLocations();
     expect(
       active_live_locations.find((location) => location.message_id === messageId),
     ).toMatchObject({ latitude: 1, longitude: 2 });
@@ -111,7 +118,7 @@ describe('_default/05-features/08-location_sharing.md', () => {
     }
 
     await retry(async () => {
-      const { active_live_locations: active } = await client.getSharedLocations();
+      const { active_live_locations: active } = await client.getUserLiveLocations();
       expect(active.map((location) => location.message_id)).not.toContain(messageId);
     });
   });
@@ -151,6 +158,9 @@ describe('_default/05-features/08-location_sharing.md', () => {
 
     // to stop watching and reporting the manager subscriptions have cleaned up
     manager.unregisterSubscriptions();
+
+    // release the manager when it is no longer needed
+    manager.dispose();
     // #endregion snippet
 
     expect(manager.stateIsReady).toBe(true);
@@ -194,12 +204,16 @@ describe('_default/05-features/08-location_sharing.md', () => {
       const messageId = uniqueId('message');
       await channel.sendSharedLocation({
         created_by_device_id: 'device-id',
-        end_at: '2225-07-22T09:30:12.507Z',
+        end_at: new Date(Date.now() + 60 * 60 * 1000),
         latitude: 10,
         longitude: 10,
         message_id: messageId,
       });
-      await client.updateLocation({ latitude: 1, longitude: 2, message_id: messageId });
+      await client.updateLiveLocation({
+        latitude: 1,
+        longitude: 2,
+        message_id: messageId,
+      });
 
       await retry(() => {
         expect(seen).toContainEqual(['message.new', true]);
@@ -207,8 +221,11 @@ describe('_default/05-features/08-location_sharing.md', () => {
         return Promise.resolve();
       });
     } finally {
+      // Remove the listeners registered here (the snippet doesn't keep the unsubscribes).
+      onSpy.mock.results.forEach((r) => {
+        if (r.type === 'return') r.value.unsubscribe();
+      });
       onSpy.mockRestore();
-      channel.listeners = {};
     }
   });
 });

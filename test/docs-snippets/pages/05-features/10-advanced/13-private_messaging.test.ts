@@ -44,7 +44,9 @@ describe('_default/05-features/10-advanced/13-private_messaging.md', () => {
     client = await getClientSideClient({ id: userId });
     cleanup.channels.push(`messaging:${channelId}`);
     await client
-      .channel('messaging', channelId, { members: [userId, janeId, bobId] })
+      .channel('messaging', channelId, {
+        members: [{ user_id: userId }, { user_id: janeId }, { user_id: bobId }],
+      })
       .create();
   });
 
@@ -61,9 +63,11 @@ describe('_default/05-features/10-advanced/13-private_messaging.md', () => {
 
     // Send a message only visible to Jane
     const message = await channel.sendMessage({
-      text: 'Hi Jane, your driver John will be at your location in 1 minute',
-      type: 'system',
-      restricted_visibility: [janeId],
+      message: {
+        text: 'Hi Jane, your driver John will be at your location in 1 minute',
+        type: 'system',
+        restricted_visibility: [janeId],
+      },
     });
     // #endregion snippet
 

@@ -34,6 +34,8 @@ declare module 'stream-chat' {
   interface CustomAttachmentData {
     // _default/04-messages/01-send_message.md
     myCustomField?: number;
+    // _default/04-messages/07-silent_messages.md
+    distance_km?: number;
   }
 
   interface CustomEventData {

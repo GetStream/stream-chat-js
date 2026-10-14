@@ -19,7 +19,9 @@ describe('_default/03-channels/07-channel_management/08-archiving.md', () => {
   beforeAll(async () => {
     cleanup.users.push(userId);
     client = await getClientSideClient({ id: userId });
-    const channel = client.channel('messaging', channelId, { members: [userId] });
+    const channel = client.channel('messaging', channelId, {
+      members: [{ user_id: userId }],
+    });
     cleanup.channels.push(`messaging:${channelId}`);
     await channel.create();
   });
@@ -41,7 +43,9 @@ describe('_default/03-channels/07-channel_management/08-archiving.md', () => {
     await channel.archive();
 
     // Query for channels that are not archived
-    const resp = await client.queryChannels({ archived: false });
+    const resp = await client.queryChannelsAndHydrate({
+      filter_conditions: { archived: false },
+    });
 
     // Unarchive the channel
     await channel.unarchive();
@@ -49,7 +53,7 @@ describe('_default/03-channels/07-channel_management/08-archiving.md', () => {
 
     const [archived] = await Promise.all(archiveSpy.mock.results.map((r) => r.value));
     archiveSpy.mockRestore();
-    expect(archived?.archived_at).toBeTruthy();
+    expect(archived?.channel_member?.archived_at).toBeTruthy();
     expect(resp.map((c) => c.cid)).not.toContain(`messaging:${channelId}`);
 
     const member = await getServerMember(serverClient, `messaging:${channelId}`, userId);

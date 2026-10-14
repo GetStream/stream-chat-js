@@ -95,13 +95,13 @@ describe('_default/02-init_and_users/04-user_groups.md', () => {
       member_ids: [alice, bob, charlie],
     });
     // #endregion snippet
-    groupIds.push(user_group.id);
+    if (user_group) groupIds.push(user_group.id);
 
-    expect(user_group.id).toBeTruthy();
-    expect(user_group.name).toBe(groupName);
-    expect(user_group.description).toBe('Product design team members');
-    expect(user_group.created_by).toBe(userId);
-    expect(user_group.members?.map((member) => member.user_id).sort()).toEqual(
+    expect(user_group?.id).toBeTruthy();
+    expect(user_group?.name).toBe(groupName);
+    expect(user_group?.description).toBe('Product design team members');
+    expect(user_group?.created_by).toBe(userId);
+    expect(user_group?.members?.map((member) => member.user_id).sort()).toEqual(
       [alice, bob, charlie].sort(),
     );
   });
@@ -109,66 +109,84 @@ describe('_default/02-init_and_users/04-user_groups.md', () => {
   it('updates a user group', async () => {
     // #region snippet docs="_default/02-init_and_users/04-user_groups.md" heading="Updating a User Group" tab="JavaScript" index=1
     // COPY: groupId="design-team", updatedGroupName="Design & Product Team"
-    const { user_group } = await client.updateUserGroup(groupId, {
-      name: updatedGroupName,
-      description: 'Product and design team members',
-    });
+    const { user_group } = await client.updateUserGroup(
+      { id: groupId },
+      {
+        name: updatedGroupName,
+        description: 'Product and design team members',
+      },
+    );
     // #endregion snippet
 
-    expect(user_group.name).toBe(updatedGroupName);
-    expect(user_group.description).toBe('Product and design team members');
+    expect(user_group?.name).toBe(updatedGroupName);
+    expect(user_group?.description).toBe('Product and design team members');
   });
 
   it('adds members and changes their admin status', async () => {
     // #region snippet docs="_default/02-init_and_users/04-user_groups.md" heading="Adding Members" tab="JavaScript" index=1
     // COPY: groupId="design-team", dave="dave", eve="eve", frank="frank", grace="grace"
     // Add members as regular members
-    const { user_group } = await client.addUserGroupMembers(groupId, {
-      member_ids: [dave, eve, frank],
-    });
+    const { user_group } = await client.addUserGroupMembers(
+      { id: groupId },
+      {
+        member_ids: [dave, eve, frank],
+      },
+    );
 
     // Add members as group admins
-    const { user_group: admins } = await client.addUserGroupMembers(groupId, {
-      member_ids: [grace],
-      as_admin: true,
-    });
+    const { user_group: admins } = await client.addUserGroupMembers(
+      { id: groupId },
+      {
+        member_ids: [grace],
+        as_admin: true,
+      },
+    );
 
     // Promote an existing member to admin
-    await client.addUserGroupMembers(groupId, {
-      member_ids: [dave],
-      as_admin: true,
-    });
+    await client.addUserGroupMembers(
+      { id: groupId },
+      {
+        member_ids: [dave],
+        as_admin: true,
+      },
+    );
 
     // Demote an admin back to regular member
-    await client.addUserGroupMembers(groupId, {
-      member_ids: [dave],
-      as_admin: false,
-    });
+    await client.addUserGroupMembers(
+      { id: groupId },
+      {
+        member_ids: [dave],
+        as_admin: false,
+      },
+    );
     // #endregion snippet
 
-    const isAdmin = (id: string, members = user_group.members) =>
+    const isAdmin = (id: string, members = user_group?.members) =>
       members?.find((member) => member.user_id === id)?.is_admin;
     expect(isAdmin(dave)).toBe(false);
     expect(isAdmin(frank)).toBe(false);
-    expect(isAdmin(grace, admins.members)).toBe(true);
+    expect(isAdmin(grace, admins?.members)).toBe(true);
 
-    const { user_group: group } = await client.getUserGroup(groupId);
-    expect(group.members?.map((member) => member.user_id).sort()).toEqual(
+    const { user_group: group } = await client.getUserGroup({ id: groupId });
+    expect(group?.members?.map((member) => member.user_id).sort()).toEqual(
       [dave, eve, frank, grace].sort(),
     );
-    expect(isAdmin(dave, group.members)).toBe(false);
-    expect(isAdmin(grace, group.members)).toBe(true);
+    expect(isAdmin(dave, group?.members)).toBe(false);
+    expect(isAdmin(grace, group?.members)).toBe(true);
   });
 
   it('removes members', async () => {
     // #region snippet docs="_default/02-init_and_users/04-user_groups.md" heading="Removing Members" tab="JavaScript" index=1
     // COPY: groupId="design-team", dave="dave", eve="eve"
-    const { user_group } = await client.removeUserGroupMembers(groupId, {
-      member_ids: [dave, eve],
-    });
+    const { user_group } = await client.removeUserGroupMembers(
+      { id: groupId },
+      {
+        member_ids: [dave, eve],
+      },
+    );
     // #endregion snippet
 
-    expect(user_group.members?.map((member) => member.user_id).sort()).toEqual(
+    expect(user_group?.members?.map((member) => member.user_id).sort()).toEqual(
       [frank, grace].sort(),
     );
   });
@@ -188,14 +206,17 @@ describe('_default/02-init_and_users/04-user_groups.md', () => {
     it('retrieves a user group', async () => {
       // #region snippet docs="_default/02-init_and_users/04-user_groups.md" heading="Retrieving a User Group" tab="JavaScript" index=1
       // COPY: teamGroupId="design-team", teamId="my-team"
-      const { user_group } = await client.getUserGroup(teamGroupId, {
-        team_id: teamId, // only with multi-tenancy
-      });
+      const { user_group } = await client.getUserGroup(
+        { id: teamGroupId },
+        {
+          team_id: teamId, // only with multi-tenancy
+        },
+      );
       // #endregion snippet
 
-      expect(user_group.id).toBe(teamGroupId);
-      expect(user_group.name).toBe(teamGroupName);
-      expect(user_group.team_id).toBe(teamId);
+      expect(user_group?.id).toBe(teamGroupId);
+      expect(user_group?.name).toBe(teamGroupName);
+      expect(user_group?.team_id).toBe(teamId);
     });
 
     it('lists user groups', async () => {
@@ -203,7 +224,7 @@ describe('_default/02-init_and_users/04-user_groups.md', () => {
       const lastId = DOCS_TEST_PREFIX;
       // #region snippet docs="_default/02-init_and_users/04-user_groups.md" heading="Listing User Groups" tab="JavaScript" index=1
       // COPY: lastId="last-id", teamId="my-team"
-      const { user_groups } = await client.queryUserGroups({
+      const { user_groups } = await client.listUserGroups({
         limit: 20,
         id_gt: lastId, // optional: cursor for pagination
         created_at_gt: '2024-01-01T00:00:00Z', // optional: filter by creation date
@@ -235,14 +256,17 @@ describe('_default/02-init_and_users/04-user_groups.md', () => {
     it('deletes a user group', async () => {
       // #region snippet docs="_default/02-init_and_users/04-user_groups.md" heading="Deleting a User Group" tab="JavaScript" index=1
       // COPY: teamGroupId="design-team", teamId="my-team"
-      await client.deleteUserGroup(teamGroupId, {
-        team_id: teamId, // only with multi-tenancy
-      });
+      await client.deleteUserGroup(
+        { id: teamGroupId },
+        {
+          team_id: teamId, // only with multi-tenancy
+        },
+      );
       // #endregion snippet
 
-      await expect(client.getUserGroup(teamGroupId, { team_id: teamId })).rejects.toThrow(
-        /not found/,
-      );
+      await expect(
+        client.getUserGroup({ id: teamGroupId }, { team_id: teamId }),
+      ).rejects.toThrow(/not found/);
     });
   });
 });

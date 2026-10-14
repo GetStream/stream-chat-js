@@ -120,7 +120,7 @@ Any consumer doing `import { Campaign, Segment, ChannelBatchUpdater, EVENT_MAP, 
 
 ### `./signing` is down to one export
 
-The barrel is still there, but it holds a **single** function: `UserFromToken`. Everything else it used to carry — `JWTUserToken`, `JWTServerToken`, `DevToken`, `verifySignature`, `CheckSignature`, `verifyAndParseWebhook`, `parseSqs`, `parseSns`, `gunzipPayload`, `decodeSqsPayload`, `decodeSnsPayload`, `parseEvent`, `InvalidWebhookError`, `InvalidWebhookErrorMessages` — needed the API secret or a Node builtin, and went out with the server-side surface. See [`v9-to-v10-migration-guide-server-side.md`](./v9-to-v10-migration-guide-server-side.md).
+The barrel is still there, but it holds only `UserFromToken` and `DevToken` (also exposed as `client.devToken(userId)`). Everything else it used to carry — `JWTUserToken`, `JWTServerToken`, `verifySignature`, `CheckSignature`, `verifyAndParseWebhook`, `parseSqs`, `parseSns`, `gunzipPayload`, `decodeSqsPayload`, `decodeSnsPayload`, `parseEvent`, `InvalidWebhookError`, `InvalidWebhookErrorMessages` — needed the API secret or a Node builtin, and went out with the server-side surface. See [`v9-to-v10-migration-guide-server-side.md`](./v9-to-v10-migration-guide-server-side.md).
 
 `UserFromToken` itself changed implementation: it decodes the JWT payload with the global `atob` instead of the removed `base64-js` helpers. It runs on the `connectUser` path, so older React Native / Hermes targets — Hermes only gained `atob` / `btoa` around React Native 0.74 — must install a base64 polyfill before the first `connectUser`, or connecting throws `ReferenceError: atob is not defined`. Verify with `typeof atob` on the target rather than by version number; browsers, Node 16+, Bun, and Deno all have it natively.
 
@@ -1487,7 +1487,7 @@ For any of these that survive as a generated shape, the replacement is the gener
 
 For each source file that touches the SDK:
 
-1. **Delete removed imports.** `EVENT_MAP`, `Campaign*`, `Segment*`, `ChannelBatchUpdater`, `encodeBase64`, `decodeBase64`, the webhook / JWT helpers from `./signing` (`verifyAndParseWebhook`, `parseSqs`, `parseSns`, `verifySignature`, `CheckSignature`, `InvalidWebhookError`, `JWTUserToken`, `JWTServerToken`, `DevToken`), `Role` (rename), `MessageResponseBase`, `FormatMessageResponse`, `PredefinedFilterSort(Param)`, and any of the removed type utilities. `Event`, `CustomEventTypes`, and `UserFromToken` are kept — do not delete them.
+1. **Delete removed imports.** `EVENT_MAP`, `Campaign*`, `Segment*`, `ChannelBatchUpdater`, `encodeBase64`, `decodeBase64`, the webhook / JWT helpers from `./signing` (`verifyAndParseWebhook`, `parseSqs`, `parseSns`, `verifySignature`, `CheckSignature`, `InvalidWebhookError`, `JWTUserToken`, `JWTServerToken`), `Role` (rename), `MessageResponseBase`, `FormatMessageResponse`, `PredefinedFilterSort(Param)`, and any of the removed type utilities. `Event`, `CustomEventTypes`, `UserFromToken` and `DevToken` are kept — do not delete them.
 2. **Rename `Role` → `RoleName`** at every import + annotation site.
 3. **Rewrite event-handler callback types where needed.** `Event` is still valid (its union widened) — prefer `EventPayload<'…'>` for narrowed access. Custom event-type augmentation still goes on `CustomEventTypes`, unchanged from v9. Rename any imports of the plural `EventTypes` to the singular `EventType`.
 4. **Guard `channel.state.membership` reads** with `?.` — it's `undefined` on freshly constructed channels.

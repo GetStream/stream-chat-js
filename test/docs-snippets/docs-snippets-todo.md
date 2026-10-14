@@ -14,6 +14,8 @@ Pages under `getstream.io/content/docs/` that contain JavaScript snippets. Give 
 
 Status: `[ ]` todo, `[x]` done, `[~]` done with open questions.
 
+**v10 (2026-10-13):** every page below was ported to stream-chat-js v10 (tests + JavaScript fences on the getstream.io branch `stream-chat-js-v10-docs-snippets`); no page is blocked. Behaviour worth knowing: moderation v2 records only a user's first flag on a message (later flags don't update reason/custom).
+
 App facts (2026-10-05): push v3 (no providers), permissions v2, multi-tenancy off (can be toggled), campaigns on, no webhook/SQS/SNS. Enabled since (not probed yet): message history (`queryMessageHistory`). Probed and **working**: location sharing (enabled by support 2026-10-06), private messaging (restricted visibility, 2026-10-06), pending messages, delivery receipts, translation, review queue, guest users, dynamic partitioning config, multi-tenancy toggle.
 
 ## chat/\_default/02-init_and_users
@@ -141,6 +143,13 @@ Found while testing the v9 snippets. Not fixed: leave v9 as is.
 - **Search `previous` cursor** (`04-messages/06-search`, backend): `next: page2.previous` returns page 1's messages in reverse order (the cursor flips every sort direction, results aren't flipped back). Backend bug, or document it.
 - **Reminder pagination** (`04-messages/09-message_reminders`, backend): with the default sort and a page boundary on a `remind_at: null` reminder, the `next` cursor returned an empty page although more reminders existed.
 - **`PollOptionResponse` custom data** (`05-features/07-polls_api`, `src/types.ts`): extends `CustomPollData` instead of `CustomPollOptionData`, so custom option fields aren't typed on option responses (or in `PartialPollOptionUpdate.set`). Fixing it is a breaking type change for apps that put option fields on `CustomPollData`: do it in v10.
+
+## Generator fixes (`../chat`, `tools/openapi`)
+
+Found while migrating the snippets to v10 and patched by hand in `src/gen/models/index.ts`. A `yarn generate-client` overwrites the patches, so fix them at the source, regenerate, and check that `yarn types`, `yarn types:tests` and the docs tests still pass.
+
+- [ ] **Object-valued custom fields in filters** (`generator/templates/templates/typescript/models.tpl`, `CustomHelper`): a typed `custom.<field>` key is built for every custom data field, including object-valued ones (e.g. `CustomChannelData.source_detail: { user_id: number }`). Its value doesn't fit the `custom.${string}` index signature (`string | boolean | number | Date`), so every filter type built from the custom data stops being assignable, including the SDK's own search sources (`ChannelSearchSource`, `MessageSearchSource`). Fix: only emit typed keys for primitive and `Date` fields (`NonNullable<T['type'][P]> extends string | boolean | number | Date`); object fields fall back to the index signature, which already accepts nested paths like `custom.source_detail.user_id`. Covered by `test/types/custom-filters.ts`.
+- [ ] **Request dates typed as response dates** (OpenAPI spec): `created_at_after`, `created_at_after_or_equal`, `created_at_before` and `created_at_before_or_equal` on `QueryMembersPayload`, `QueryBannedUsersPayload` and `QueryFutureChannelBansPayload` are typed `TimestampNS` (the spec types them as numbers, the server-sent direction). They are request fields, sent in the JSON `payload` query param, and the server parses them as RFC 3339: a number fails with `Time.UnmarshalJSON: input is not a JSON string` (`03-channels/04-query_members`, "Paginate by created_at"). Fix the spec so they are request (string) dates, which the generator types as `Date`. Also check `ChannelStopWatchingRequest` (`created_at`, `received_at` typed `TimestampNS`), not investigated.
 
 ## Notes
 

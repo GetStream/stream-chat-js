@@ -86,10 +86,14 @@ export type CustomHelper<T extends { type: any; operators: string }> = {
   // string extends string = true
   // string extends "custom-string" = false
   // using this "hack" to omit Record<string, any> types when custom types are not specified
+  // Object-valued custom fields are left to the `custom.${string}` index signature: a typed key with
+  // an object value would conflict with it (filters on nested custom data address `custom.a.b`).
   [P in keyof T['type'] as string extends P
     ? never
     : P extends string
-      ? `custom.${P}`
+      ? NonNullable<T['type'][P]> extends string | boolean | number | Date
+        ? `custom.${P}`
+        : never
       : never]-?: {
     type: NonNullable<T['type'][P]>;
     operators: T['operators'];
@@ -6587,10 +6591,10 @@ export interface QueryBannedUsersPayload {
       operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
   }>;
-  created_at_after?: TimestampNS;
-  created_at_after_or_equal?: TimestampNS;
-  created_at_before?: TimestampNS;
-  created_at_before_or_equal?: TimestampNS;
+  created_at_after?: Date;
+  created_at_after_or_equal?: Date;
+  created_at_before?: Date;
+  created_at_before_or_equal?: Date;
   /**
    * Whether to exclude expired bans or not
    */
@@ -6891,10 +6895,10 @@ export interface QueryDraftsResponse {
 }
 
 export interface QueryFutureChannelBansPayload {
-  created_at_after?: TimestampNS;
-  created_at_after_or_equal?: TimestampNS;
-  created_at_before?: TimestampNS;
-  created_at_before_or_equal?: TimestampNS;
+  created_at_after?: Date;
+  created_at_after_or_equal?: Date;
+  created_at_before?: Date;
+  created_at_before_or_equal?: Date;
   /**
    * Whether to exclude expired bans or not
    */
@@ -6934,10 +6938,10 @@ export interface QueryFutureChannelBansResponse {
 
 export interface QueryMembersPayload {
   type: string;
-  created_at_after?: TimestampNS;
-  created_at_after_or_equal?: TimestampNS;
-  created_at_before?: TimestampNS;
-  created_at_before_or_equal?: TimestampNS;
+  created_at_after?: Date;
+  created_at_after_or_equal?: Date;
+  created_at_before?: Date;
+  created_at_before_or_equal?: Date;
   id?: string;
   limit?: number;
   offset?: number;

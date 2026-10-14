@@ -9,6 +9,7 @@ import type { ChannelMuteStatus } from './channel_state';
 import { ChannelWatchStatus } from './channel_state';
 import { ClientState } from './client_state';
 import { UploadManager } from './uploadManager';
+import { DevToken } from './signing';
 import { TokenManager, type TokenManagerMinimalUser } from './token_manager';
 import { ApiClient } from './api-client';
 import {
@@ -55,6 +56,7 @@ import type {
   UnBanUserOptions,
   UpdateUserPartialRequest,
   UserMuteResponse,
+  UserRequest,
   UserResponse,
 } from './types';
 import { isWSFailure } from './errors';
@@ -515,6 +517,17 @@ export class StreamChat extends ChatApi {
     this.offlineDb = offlineDBInstance;
   }
 
+  /**
+   * Creates a development token for `userId`, for apps with auth checks disabled. Never use one in
+   * production. See {@link DevToken}.
+   *
+   * @param userId - The id of the user the token is for.
+   * @returns The development token.
+   */
+  devToken(userId: string) {
+    return DevToken(userId);
+  }
+
   getAuthType() {
     return this.anonymous ? 'anonymous' : 'jwt';
   }
@@ -939,7 +952,7 @@ export class StreamChat extends ChatApi {
    *   into the request (optional).
    * @returns A promise that resolves when the connection is set up.
    */
-  async setGuestUser(user: UserResponse, requestOptions?: StreamRequestOptions) {
+  async setGuestUser(user: UserRequest, requestOptions?: StreamRequestOptions) {
     const response = await this.createGuest({ user }, requestOptions);
 
     const {
@@ -1559,8 +1572,8 @@ export class StreamChat extends ChatApi {
    * @returns The hydrated channel list, or the full response when `withResponse` is `true`.
    */
   async queryChannelsAndHydrate(
-    options?: QueryChannelsRequest,
-    stateOptions?: ChannelStateOptions & { withResponse: true },
+    options: QueryChannelsRequest | undefined,
+    stateOptions: ChannelStateOptions & { withResponse: true },
     requestOptions?: StreamRequestOptions,
   ): Promise<QueryChannelsResponseWithChannels>;
   async queryChannelsAndHydrate(
@@ -2076,8 +2089,8 @@ export class StreamChat extends ChatApi {
     const parentMessages = response.threads.map((thread) => thread.parent_message!);
     this.polls.hydratePollCache(parentMessages);
 
-    const threads = response.threads.map(
-      (thread) => new Thread({ client: this, threadData: thread }),
+    const threads = response.threads.map((thread) =>
+      this.threads.resolveQueried(new Thread({ client: this, threadData: thread })),
     );
     if (optionsWithDefaults.watch) threads.forEach(markThreadChannelWatched);
 
@@ -2119,7 +2132,9 @@ export class StreamChat extends ChatApi {
       requestOptions,
     );
 
-    const thread = new Thread({ client: this, threadData: response.thread });
+    const thread = this.threads.resolveQueried(
+      new Thread({ client: this, threadData: response.thread }),
+    );
     if (optionsWithDefaults.watch) markThreadChannelWatched(thread);
 
     return thread;

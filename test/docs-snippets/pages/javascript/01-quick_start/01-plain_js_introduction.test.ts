@@ -44,7 +44,7 @@ describe(PAGE, () => {
     // #endregion snippet
 
     expect(client.userID).toBe(userId);
-    expect(client.wsConnection?.isHealthy).toBe(true);
+    expect(client.wsConnection.isHealthy).toBe(true);
     const user = await getServerUser(serverClient, userId);
     expect(user.name).toBe('Jim Lahey');
     expect(user.image).toBe('https://i.imgur.com/fR9Jz14.png');
@@ -55,7 +55,7 @@ describe(PAGE, () => {
     // COPY: apiKey="{{ api_key }}", channelId="travel"
     const client = StreamChat.getInstance(apiKey);
     const channel = client.channel('messaging', channelId, {
-      name: 'Awesome channel about traveling',
+      custom: { name: 'Awesome channel about traveling' },
     });
 
     // fetch the channel state, subscribe to future updates
@@ -63,21 +63,23 @@ describe(PAGE, () => {
     // #endregion snippet
 
     expect(client.userID).toBe(userId);
-    expect(state.channel.id).toBe(channelId);
-    expect(state.channel.name).toBe('Awesome channel about traveling');
+    expect(state.channel?.id).toBe(channelId);
+    expect(state.channel?.custom.name).toBe('Awesome channel about traveling');
     expect(channel.initialized).toBe(true);
 
     // #region snippet docs="javascript/01-quick_start/01-plain_js_introduction.md" heading="Messages" tab="JavaScript" index=1
     const text = 'I’m mowing the air Rand, I’m mowing the air.';
 
     const response = await channel.sendMessage({
-      text,
-      customField: '123',
+      message: {
+        text,
+        custom: { customField: '123' },
+      },
     });
     // #endregion snippet
 
     expect(response.message.text).toBe(text);
-    expect(response.message.customField).toBe('123');
+    expect(response.message.custom.customField).toBe('123');
     const { message } = await serverClient.chat.getMessage({ id: response.message.id });
     expect(message.custom.customField).toBe('123');
 
@@ -86,7 +88,9 @@ describe(PAGE, () => {
       // #region snippet docs="javascript/01-quick_start/01-plain_js_introduction.md" heading="Events" tab="JavaScript" index=1
       channel.on('message.new', (event) => {
         console.log('received a new message', event.message?.text);
-        console.log(`Now have ${channel.state.messages.length} stored in local state`);
+        console.log(
+          `Now have ${channel.messagePaginator.items?.length} stored in local state`,
+        );
       });
       // #endregion snippet
 
@@ -102,7 +106,7 @@ describe(PAGE, () => {
       });
     } finally {
       logSpy.mockRestore();
-      channel.listeners = {};
+      channel.listeners.clear();
     }
   });
 });
