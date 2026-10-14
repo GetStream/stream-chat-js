@@ -1574,13 +1574,16 @@ export class StreamChat extends ChatApi {
     requestOptions?: StreamRequestOptions,
   ): Promise<Channel[] | QueryChannelsResponseWithChannels> {
     // TODO(perf/cleanup): prefer an id snapshot over `anchoredHeadItems.map` here too — see the
-    // matching TODO in Channel.runQuery for the full rationale.
-    const candidateIdsByCid = new Map<string, ReadonlySet<string>>();
+    // matching TODO in MessageIntervalPaginator.preparePagePlacement for the full rationale.
+    const headIntervalItemIdsAtRequestByCid = new Map<string, ReadonlySet<string>>();
     for (const channel of this.channelManager.values()) {
       const { cid } = channel;
       const head = channel.messagePaginator?.anchoredHeadItems;
       if (head?.length)
-        candidateIdsByCid.set(cid, new Set(head.map((message) => message.id)));
+        headIntervalItemIdsAtRequestByCid.set(
+          cid,
+          new Set(head.map((message) => message.id)),
+        );
     }
     const queryChannelsResponse = await this.queryChannels(options, requestOptions);
     const channels = queryChannelsResponse.channels;
@@ -1603,7 +1606,7 @@ export class StreamChat extends ChatApi {
       channels,
       stateOptions,
       options,
-      candidateIdsByCid,
+      headIntervalItemIdsAtRequestByCid,
     );
 
     if (stateOptions.withResponse) {
@@ -1659,7 +1662,7 @@ export class StreamChat extends ChatApi {
     channelsFromApi: ChannelStateResponseFields[] = [],
     stateOptions: ChannelStateOptions = {},
     queryChannelsOptions?: ChannelOptions,
-    candidateIdsByCid?: Map<string, ReadonlySet<string>>,
+    headIntervalItemIdsAtRequestByCid?: Map<string, ReadonlySet<string>>,
   ) {
     const { skipInitialization, offlineMode = false } = stateOptions;
     const channels: Channel[] = [];
@@ -1716,18 +1719,21 @@ export class StreamChat extends ChatApi {
       ) {
         // The response's `last_message_at` first, so the seed can tell whether the page reaches it.
         c.messagePaginator.seedLastMessageAt(channelState.channel?.last_message_at);
-        c.messagePaginator.seedFirstPageSync(
+        c.messagePaginator.placePageSync(
           channelState.messages.map(formatMessage),
           requestedPageSize,
           undefined,
-          { reconcile: true, candidateIds: candidateIdsByCid?.get(c.cid) },
+          {
+            reconcile: true,
+            headIntervalItemIdsAtRequest: headIntervalItemIdsAtRequestByCid?.get(c.cid),
+          },
         );
       }
 
       if (skipInitialization === undefined) {
         c._initializeState(channelState);
       } else if (!skipInitialization.includes(channelState.channel.id)) {
-        // The paginators are (re)seeded above and via _initializeState → seedFirstPageSync.
+        // The paginators are (re)seeded above and via _initializeState → placePageSync.
         c._initializeState(channelState);
       }
 

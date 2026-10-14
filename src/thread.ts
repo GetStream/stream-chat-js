@@ -422,7 +422,10 @@ export class Thread extends WithSubscriptions {
       const loadedReplyCount = loadedReplies.length;
       const requestedReplyLimit =
         Math.max(loadedReplyCount, this.messagePaginator.pageSize ?? 0) || undefined;
-      const reconcileCandidateIds = new Set(loadedReplies.map((reply) => reply.id));
+      // the head interval's replies when the request goes out (see MergeNewestPageOptions)
+      const headIntervalItemIdsAtRequest = new Set(
+        this.messagePaginator.anchoredHeadItems.map((reply) => reply.id),
+      );
       const failedBefore = loadedReplies.filter((reply) => reply.status === 'failed');
       const thread = await this.client.getThreadAndHydrate(this.id, {
         watch: true,
@@ -431,7 +434,7 @@ export class Thread extends WithSubscriptions {
       this.hydrateState(thread, {
         reconcile: {
           requestedLimit: requestedReplyLimit,
-          candidateIds: reconcileCandidateIds,
+          headIntervalItemIdsAtRequest,
         },
       });
 

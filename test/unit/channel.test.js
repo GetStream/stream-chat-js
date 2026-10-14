@@ -3831,6 +3831,77 @@ describe('Channel.query', async () => {
 				offline: false,
 			});
 		});
+
+		it('as not latest for watch at a cursor', async () => {
+			expect(
+				await queriedFlags((channel) =>
+					channel.watch({ messages: { id_lt: 'm1', limit: 25 } }),
+				),
+			).toEqual({ event: false, offline: false });
+		});
+	});
+
+	describe('watch places the page it queries', () => {
+		const at = (minute) => new Date(Date.UTC(2020, 0, 1, 0, minute, 0));
+		const setup = async () => {
+			const client = await getClientWithUser();
+			const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
+			channel.messagePaginator.pageSize = 3;
+			const msgIn = (minute) =>
+				generateMsg({ id: `m${minute}`, cid: channel.cid, date: at(minute) });
+			const respond = (minutes, lastMinute = minutes[minutes.length - 1]) =>
+				vi.spyOn(channel, 'getOrCreate').mockResolvedValue(
+					generateChannel({
+						channel: {
+							id: channel.id,
+							type: channel.type,
+							last_message_at: convertDateToTimestamp(at(lastMinute)),
+						},
+						messages: minutes.map(msgIn),
+					}),
+				);
+			const ids = (items) => (items ?? []).map((m) => m.id);
+			return { channel, respond, ids };
+		};
+
+		it('keeps the newest messages when watching at a cursor, and shows the page', async () => {
+			const { channel, respond, ids } = await setup();
+			respond([8, 9, 10]);
+			await channel.watch();
+
+			respond([1, 2, 3], 10);
+			await channel.watch({ messages: { id_lt: 'm4', limit: 3 } });
+
+			expect(ids(channel.messagePaginator.items)).toEqual(['m1', 'm2', 'm3']);
+			expect(ids(channel.messagePaginator.anchoredHeadItems)).toEqual([
+				'm8',
+				'm9',
+				'm10',
+			]);
+		});
+
+		it('leaves the loaded messages alone when watching for no messages', async () => {
+			const { channel, respond, ids } = await setup();
+			respond([8, 9, 10]);
+			await channel.watch();
+
+			respond([], 10);
+			await channel.watch({ messages: { limit: 0 } });
+
+			expect(ids(channel.messagePaginator.items)).toEqual(['m8', 'm9', 'm10']);
+		});
+
+		it('asks for the page size when watching around a message without a limit', async () => {
+			const { channel, respond } = await setup();
+			const getOrCreate = respond([4, 5, 6], 10);
+
+			await channel.watch({ messages: { id_around: 'm5' } });
+
+			expect(getOrCreate.mock.calls[0][0].messages).toEqual({
+				id_around: 'm5',
+				limit: 3,
+			});
+		});
 	});
 
 	it(`update the messageComposer config`, async () => {
@@ -4671,7 +4742,7 @@ describe('Channel.reload', () => {
 		seedLatestWindow(channel, [msg('m1', 1), msg('m2', 2), msg('m3', 3)]);
 		expect(channel.messagePaginator.items.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
 
-		// The fold + reconcile now lives in query() → seedFirstPageSync (shared with the channel-list
+		// The fold + reconcile now lives in query() → placePageSync (shared with the channel-list
 		// re-hydrate and connection recovery); reload() is just watch() with the full-window limit.
 		// query() snapshots the loaded ids BEFORE this fetch, so a brand-new message that lands via WS
 		// DURING it (below) — absent from the server page — must survive. This exercises the whole
@@ -4805,7 +4876,7 @@ describe('Channel.reload', () => {
 		channel.messagePaginator.ingestItem(channel.state.formatMessage(mine));
 		expect(channel.messagePaginator.items.map((m) => m.id)).toEqual(['mine']);
 
-		// Mock the transport, not `watch`: mocking `watch` skips `seedFirstPageSync`, so no fold runs.
+		// Mock the transport, not `watch`: mocking `watch` skips `placePageSync`, so no fold runs.
 		vi.spyOn(channel, 'getOrCreate').mockImplementation(async () =>
 			generateChannel({
 				channel: { id: channel.id, type: channel.type },

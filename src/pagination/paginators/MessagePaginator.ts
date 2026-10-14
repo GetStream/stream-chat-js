@@ -22,11 +22,12 @@ export type {
   MessageFocusReason,
   MessageFocusSignal,
   MessageFocusSignalState,
+  MessagePagePlacement,
   MessagePaginatorFilter,
   MessagePaginatorSort,
   MessagePaginatorState,
   MessageQueryShape,
-  SeedFirstPageOptions,
+  PlacePageOptions,
 } from './MessageIntervalPaginator';
 export { MessageIntervalPaginator } from './MessageIntervalPaginator';
 

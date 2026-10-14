@@ -52,7 +52,6 @@ import type {
   LocalMessage,
   MarkReadRequest,
   MarkReadResponse,
-  MessagePaginationParams,
   MessageRequest,
   MessageResponse,
   QueryMembersPayload,
@@ -1676,7 +1675,7 @@ export class Channel extends ChannelApi {
     // handshake has produced a connection id, so `watch: true` always binds to a current one and
     // `watchStatus = Watching` is truthful by construction — while a call asking for neither goes out
     // with no socket at all.
-    const state = await this.queryOpeningChannel(combined, requestOptions);
+    const state = await this.queryAndPlaceMessages(combined, requestOptions);
     this.data = state.channel;
 
     // The message paginator is seeded synchronously by the query (before read-state hydration),
@@ -1695,7 +1694,7 @@ export class Channel extends ChannelApi {
    *
    * This is intentionally thin: it only re-issues `watch()` with a limit sized to the loaded window
    * (`items.length`, so the whole loaded window is refreshed — not the smaller channel-list page). The
-   * actual fold + destructive reconciliation happens in the channel-opening query → `seedFirstPageSync`
+   * actual fold + destructive reconciliation happens in the channel-opening query → `placePageSync`
    * (the same path the channel-list re-hydrate and connection recovery use), driven by the loaded-id
    * snapshot that query captures before its await. Owning that single path is what lets the SDK stop
    * passing the reconciliation window/snapshot itself.
@@ -1898,7 +1897,7 @@ export class Channel extends ChannelApi {
       state: false,
       presence: false,
     };
-    return await this.queryOpeningChannel(defaultOptions);
+    return await this.queryAndPlaceMessages(defaultOptions);
   };
 
   /**
@@ -1953,7 +1952,7 @@ export class Channel extends ChannelApi {
    * Queries the API to load messages, members, or other channel fields.
    *
    * The returned messages are not added to {@link Channel.messagePaginator}: the paginator loads its
-   * own pages, and {@link Channel.watch} / {@link Channel.create} load the channel's first page.
+   * own pages, and {@link Channel.watch} / {@link Channel.create} place the page they query.
    *
    * @param options - The query options (optional, defaults to `{}`).
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
@@ -1964,25 +1963,47 @@ export class Channel extends ChannelApi {
     options: ChannelGetOrCreateRequest = {},
     requestOptions?: StreamRequestOptions,
   ) {
-    return await this.countedQuery(options, requestOptions, { opensChannel: false });
+    return await this.runCountedChannelQuery(async () => {
+      const { state, watch } = await this.requestChannelState(options, requestOptions);
+      this.applyChannelState(state, { isLatestMessageSet: false, watch });
+      return state;
+    });
   }
 
   /**
-   * The query behind {@link Channel.watch} and {@link Channel.create}: its response is the channel's
-   * first page, so it seeds the message paginator and is reported as the latest message set.
+   * The query behind {@link Channel.watch} and {@link Channel.create}: requests the channel with a
+   * page of messages, has the message paginator place that page, then applies the rest of the
+   * response. Placing comes before the read state is applied, which is resolved against the loaded
+   * messages.
    */
-  private async queryOpeningChannel(
+  private async queryAndPlaceMessages(
     options: ChannelGetOrCreateRequest,
     requestOptions?: StreamRequestOptions,
   ) {
-    return await this.countedQuery(options, requestOptions, { opensChannel: true });
+    return await this.runCountedChannelQuery(async () => {
+      const placement = this.messagePaginator.preparePagePlacement(options.messages);
+      const { state, watch } = await this.requestChannelState(
+        { ...options, messages: placement.messagePaginationParams },
+        requestOptions,
+      );
+      if (Array.isArray(state.messages)) {
+        placement.place(state.messages.map(formatMessage));
+      }
+      // Only the newest page is the latest message set, for the offline database to store.
+      this.applyChannelState(state, {
+        isLatestMessageSet: placement.isNewestPage,
+        watch,
+      });
+      return state;
+    });
   }
 
-  private async countedQuery(
-    options: ChannelGetOrCreateRequest,
-    requestOptions: StreamRequestOptions | undefined,
-    { opensChannel }: { opensChannel: boolean },
-  ) {
+  /**
+   * Runs the query that loads the channel's state (`getOrCreate`, through {@link requestChannelState}
+   * and {@link applyChannelState}): refused for a disposed instance, and counted as in flight until
+   * the response is applied, so the channel store keeps the channel meanwhile.
+   */
+  private async runCountedChannelQuery<T>(run: () => Promise<T>) {
     // A disposed instance is done for good: its query would load it again and, for a watch, register
     // a watch whose events go to the instance now stored for the cid. Refused before it is sent.
     if (this.pendingDisposal) throw this.disposedError();
@@ -1990,48 +2011,25 @@ export class Channel extends ChannelApi {
     // channel that is being loaded
     this._channelQueriesInFlight += 1;
     try {
-      return await this.runQuery(options, requestOptions, { opensChannel });
+      return await run();
     } finally {
       this._channelQueriesInFlight -= 1;
     }
   }
 
-  private async runQuery(
+  /**
+   * Sends the channel query and takes in what the response says about the channel itself: its id,
+   * the cid it is stored under, its config, and its `last_message_at`. The messages are placed by the
+   * caller, if at all, and the rest of the response is applied by {@link applyChannelState}.
+   */
+  private async requestChannelState(
     options: ChannelGetOrCreateRequest,
     requestOptions: StreamRequestOptions | undefined,
-    { opensChannel }: { opensChannel: boolean },
   ) {
-    // Snapshot the loaded message ids BEFORE the network await, for a channel-opening (re)seed only.
-    // When this query re-seeds an already-loaded window (reconnect / re-hydrate), seedFirstPageSync
-    // reconciles the fresh page against what is loaded, and the snapshot lets it tell an offline
-    // hard-delete (in the snapshot, absent from the page) from a message that arrives live
-    // during the fetch (not in the snapshot). Captured here — the only place with the pre-await state —
-    // so callers (channel.reload, watch) need not thread it. Empty on a cold open, so it is harmless.
-    // TODO(perf/cleanup): `anchoredHeadItems` materializes full message objects (intervalToItems) just
-    // to map them down to ids. A cheaper, clearer equivalent is a straight copy of the paginator index's own
-    // id set — expose `memberIds` on StoreBackedItemIndex (e.g. `snapshotMembers()` returning
-    // `new Set(this.memberIds)`) and use it here AND in client.queryChannelsAndHydrate. The broader
-    // scope (all intervals vs just the head) is inert: the reconcile only consults head ids, older
-    // island ids are never at/above-newest, and local messages are guarded by isServerConfirmedMessage.
-    const candidateIds = opensChannel
-      ? new Set(this.messagePaginator.anchoredHeadItems.map((message) => message.id))
-      : undefined;
-
-    // The INITIAL channel-open query honors the paginator's OWN pageSize (light on native, 25) rather
-    // than the server's larger default — opening loads the same page size it paginates by. A caller
-    // that already knows how much to fetch passes an explicit messages.limit, which is respected as-is:
-    // a reconnect/re-hydrate sizes it to the loaded window (channel.reload → items.length), and
-    // pagination/around pass their own cursors + limit.
-    const requestedPageSize = options?.messages?.limit ?? this.messagePaginator.pageSize;
-
     const queryPayload: ChannelGetOrCreateRequest = {
       data: this._data,
       state: true,
       ...options,
-      // Ask the server for exactly the initial-open page size (not its default), so the loaded window
-      // matches the paginator's pageSize. Explicit messages (reconnect/around/pagination) pass through.
-      messages:
-        options?.messages ?? (opensChannel ? { limit: requestedPageSize } : undefined),
     };
 
     const state = this.id
@@ -2067,30 +2065,29 @@ export class Channel extends ChannelApi {
     // a page reaches the newest message (`_initializeState` sets it too, after).
     this.messagePaginator.seedLastMessageAt(channel.last_message_at);
 
-    // Seed the message paginator with the first (latest) page BEFORE _initializeState, which
-    // hydrates the read state and (via MessageReceiptsTracker) resolves read/delivered cursors
-    // against this paginator. Seeding first guarantees the tracker sees a populated timeline; a
-    // later async seed would run after the reconcile and mislabel delivery status. Only the
-    // channel-opening queries (watch/create) seed — the paginator's own pagination queries go
-    // through query() and ingest their pages themselves, so they must not be seeded as a first page.
-    if (opensChannel && Array.isArray(state.messages)) {
-      // Pass the query's message pagination options through: a channel can be opened AROUND a
-      // message (id_around / created_at_around), in which case the fetched page is a jump window,
-      // not the latest page — the paginator must reconcile it with jump semantics.
-      this.messagePaginator.seedFirstPageSync(
-        state.messages.map(formatMessage),
-        requestedPageSize,
-        options?.messages,
-        // Re-seed of an already-loaded window folds + reconciles instead of blanking (see above).
-        { candidateIds, reconcile: true },
-      );
-    }
+    // This response's `last_message_at`, before any page is placed: the paginator tells from it whether
+    // a page reaches the newest message (`_initializeState` sets it too, after).
+    this.messagePaginator.seedLastMessageAt(channel.last_message_at);
+
+    return { state, watch: queryPayload.watch };
+  }
+
+  /**
+   * Applies a channel query response: watch status, read/members state, polls, reminders, composer,
+   * channel data, and the `channels.queried` event and offline write.
+   */
+  private applyChannelState(
+    state: ChannelStateResponseFields,
+    { isLatestMessageSet, watch }: { isLatestMessageSet: boolean; watch?: boolean },
+  ) {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const channel = state.channel!;
 
     if (this.supersededBy) {
       // This response superseded the instance: events for the cid go to the stored instance, which
       // took over the watch (`supersedeChannel`), so this one receives none.
       this.watchStatus = ChannelWatchStatus.NotWatching;
-    } else if (queryPayload.watch) {
+    } else if (watch) {
       // The request carrying `watch: true` came back, so the server has registered this connection
       // as a watcher. Only ever set here because a `watch: false` query does NOT unwatch
       // server-side, so it must not clear the flag.
@@ -2099,12 +2096,6 @@ export class Channel extends ChannelApi {
 
     // Seed read/members/pinned/thread-cleanup state; the message list is in the paginator.
     this._initializeState(state);
-    // A channel-opening page is the latest set unless it was opened around a message.
-    const isLatestMessageSet =
-      opensChannel &&
-      !options?.messages?.id_around &&
-      !(options?.messages as MessagePaginationParams | undefined)?.created_at_around;
-
     this.getClient().polls.hydratePollCache(state.messages, true);
     this.getClient().reminders.hydrateState(state.messages);
 
@@ -2149,7 +2140,6 @@ export class Channel extends ChannelApi {
     );
 
     this.getClient().syncDeliveredCandidates([this]);
-    return state;
   }
 
   /**
@@ -3000,7 +2990,7 @@ export class Channel extends ChannelApi {
     this.messagePaginator.seedLastMessageAt(state.channel?.last_message_at);
 
     // Seed the pinned-messages paginator from the same response.
-    this.pinnedMessagesPaginator.seedFirstPageSync(
+    this.pinnedMessagesPaginator.placePageSync(
       (state.pinned_messages || []).map(formatMessage),
       this.pinnedMessagesPaginator.pageSize,
     );

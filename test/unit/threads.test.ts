@@ -545,7 +545,7 @@ describe('Threads 2.0', () => {
             reply_count: 10,
           });
           thread.hydrateState(hydrationThread, {
-            reconcile: { candidateIds: new Set([existingReply.id]) },
+            reconcile: { headIntervalItemIdsAtRequest: new Set([existingReply.id]) },
           });
 
           expect(thread.messagePaginator.state.getLatestValue().hasMoreTail).to.be.true;
@@ -582,7 +582,7 @@ describe('Threads 2.0', () => {
           });
 
           thread.hydrateState(hydrationThread, {
-            reconcile: { candidateIds: new Set([existingReply.id]) },
+            reconcile: { headIntervalItemIdsAtRequest: new Set([existingReply.id]) },
           });
 
           const paginatorState = thread.messagePaginator.state.getLatestValue();

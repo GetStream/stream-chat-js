@@ -219,6 +219,13 @@ export type PostQueryReconcileParams<T, Q> = Pick<
   PaginationQueryParams<Q>,
   'direction' | 'queryShape' | 'updateState' | 'keepPreviousItems'
 > & {
+  /**
+   * Whether the page continues the active window, as a page the paginator queries from its own
+   * cursor does. `false` stores it as a separate interval, merged only with an interval it overlaps,
+   * as a jump does — for a page queried elsewhere, whose place relative to the active window is not
+   * known. Defaults to `true`, except for jump queries.
+   */
+  continuesActiveWindow?: boolean;
   isFirstPage: boolean;
   requestedPageSize: number;
   results: PaginationQueryReturnValue<T> | null;
@@ -3292,6 +3299,7 @@ export abstract class BasePaginator<T, Q> {
   }
 
   postQueryReconcile({
+    continuesActiveWindow,
     direction,
     isFirstPage,
     keepPreviousItems,
@@ -3326,11 +3334,12 @@ export abstract class BasePaginator<T, Q> {
     stateUpdate.lastQueryError = undefined;
     // Filtering is a synchronous local predicate (see filterQueryResults), so the whole
     // reconciliation runs in a single tick. The channel-open seed relies on this to populate the
-    // paginator synchronously (MessagePaginator.seedFirstPageSync) before read-state hydration.
+    // paginator synchronously (MessagePaginator.placePageSync) before read-state hydration.
     const filteredItems = this.filterQueryResults(items);
     stateUpdate.items = filteredItems;
 
     const isJumpQuery = !!queryShape && this.isJumpQueryShape(queryShape);
+    const isSeparateInterval = isJumpQuery || continuesActiveWindow === false;
     // Asked before the ingest, which may itself advance what the paginator knows about the head.
     const reachesHead =
       resolvedHeadward === null || this.pageReachesHead(items, queryShape) === true;
@@ -3343,7 +3352,7 @@ export abstract class BasePaginator<T, Q> {
         : undefined;
     const interval = this.ingestPage({
       page: stateUpdate.items,
-      policy: isJumpQuery ? 'strict-overlap-only' : 'auto',
+      policy: isSeparateInterval ? 'strict-overlap-only' : 'auto',
       // a first page is the head unless its query started it elsewhere (at a cursor)
       isHead: reachesHead
         ? true
@@ -3360,7 +3369,7 @@ export abstract class BasePaginator<T, Q> {
           : (isFirstPage && direction !== 'headward') || direction === 'tailward'
             ? requestedPageSize > items.length
             : undefined,
-      targetIntervalId: isJumpQuery ? undefined : this._activeIntervalId,
+      targetIntervalId: isSeparateInterval ? undefined : this._activeIntervalId,
     });
     if (interval && updateState) {
       this.setActiveInterval(interval, { updateState: false });
