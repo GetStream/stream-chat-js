@@ -1319,7 +1319,7 @@ paginator reports no loaded page, not only on mount.
 | v9 (`manager.state`)       | v10                                                                                                                      |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `channels: Channel[]`      | `paginator.state.items`                                                                                                  |
-| `pagination.hasNext`       | `paginator.state.hasMoreTail` (`hasNext` getter still exists, deprecated)                                                |
+| `pagination.hasNext`       | `paginator.state.hasMoreTail` (see [Paginator directions](#paginator-directions-next--prev--tail--head))                 |
 | `pagination.isLoading`     | `paginator.state.isLoading`                                                                                              |
 | `pagination.isLoadingNext` | removed — one `isLoading` flag; combine with `hasMoreTail` if needed                                                     |
 | `pagination.options`       | the paginator's `filters` / `sort` / `options` / `pageSize`                                                              |
@@ -1481,6 +1481,41 @@ Three consequences for code that used to call `promoteChannel` on a WS event:
 `ChannelQueryShape` is now the `queryChannels` request itself (`filter_conditions`, `sort`, `limit`, …)
 plus `stateOptions`, rather than a `{ filters, sort, options }` wrapper — relevant if you implement
 `paginatorOptions.doRequest`.
+
+### Paginator directions: `next` / `prev` → tail / head
+
+v9's `BasePaginator`, and the `ReminderPaginator` and `UserGroupPaginator` built on it, named its two
+directions `next` and `prev`. v10 names them by the end of the list they move towards: the tail (where
+`next()` went) and the head. The old names are removed, not deprecated:
+
+| v9                                                      | v10                                                 |
+| ------------------------------------------------------- | --------------------------------------------------- |
+| `paginator.hasNext` / `state.hasNext`                   | `paginator.hasMoreTail` / `state.hasMoreTail`       |
+| `paginator.hasPrev` / `state.hasPrev`                   | `paginator.hasMoreHead` / `state.hasMoreHead`       |
+| `state.cursor`: `{ next, prev }`                        | `{ tailward, headward }`                            |
+| `paginator.next()` / `paginator.prev()`                 | `paginator.toTail()` / `paginator.toHead()`         |
+| `paginator.nextDebounced()` / `prevDebounced()`         | `paginator.toTailDebounced()` / `toHeadDebounced()` |
+| direction `'next'` / `'prev'` (`executeQuery`, `query`) | `'tailward'` / `'headward'`                         |
+| `paginator.canExecuteQuery(direction)`                  | protected; `executeQuery()` checks it               |
+| `query()` returns `{ items, next, prev }`               | `{ items, tailward, headward }`                     |
+
+For a `BasePaginator` subclass, the cursors returned from `query()`:
+
+```ts
+// v9
+return { items, next: nextCursor, prev: prevCursor };
+
+// v10
+return { items, tailward: nextCursor, headward: prevCursor };
+```
+
+- `null` on a side means the page reaches that end of the list. An omitted side means there is no next
+  page that way, as in v9, for a paginator that takes its cursors from the query.
+- v10 does not read `next` / `prev`. A `query()` still returning them gets no cursors, so the paginator
+  stops after the first page. Depending on how the return type is declared, TypeScript may not flag the
+  old names, so search custom `query()` implementations for them.
+
+Search sources (`BaseSearchSource` and its subclasses) are not paginators and keep `hasNext`.
 
 ---
 

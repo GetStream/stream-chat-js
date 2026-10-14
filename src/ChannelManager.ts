@@ -927,7 +927,7 @@ export class ChannelManager extends WithSubscriptions {
    * A channel can enter a list through two doors, and only one of them goes through the manager:
    * - **WS events / `ingestChannel`** — the manager routes the channel and consults
    *   `resolveOwnership` before ingesting, so exclusivity holds by construction.
-   * - **A server query** — `paginator.next()` (a `ChannelList` scrolling, `reload()`) queries and
+   * - **A server query** — `paginator.toTail()` (a `ChannelList` scrolling, `reload()`) queries and
    *   ingests on its own; the manager is not involved. Without this wrapper a page would land in
    *   every list whose *server-side* filter matched it, so a channel matching both
    *   `channels:archived` and `channels:default` would show up in both lists until some later event

@@ -258,14 +258,6 @@ export type PaginationQueryReturnValue<T> = { items: T[] } & {
    * `null` meaning the page reaches the tail of the dataset.
    */
   tailward?: string | null;
-  /**
-   * @deprecated Use `tailward` instead.
-   */
-  next?: string;
-  /**
-   * @deprecated Use `headward` instead.
-   */
-  prev?: string;
 };
 export type PaginatorDebounceOptions = {
   debounceMs: number;
@@ -718,20 +710,6 @@ export abstract class BasePaginator<T, Q> {
 
   get hasMoreHead() {
     return this.state.getLatestValue().hasMoreHead;
-  }
-
-  /**
-   * @deprecated Use `hasMoreTail` instead.
-   */
-  get hasNext() {
-    return this.hasMoreTail;
-  }
-
-  /**
-   * @deprecated Use `hasMoreHead` instead.
-   */
-  get hasPrev() {
-    return this.hasMoreHead;
   }
 
   get hasResults() {
@@ -3320,16 +3298,7 @@ export abstract class BasePaginator<T, Q> {
       return { stateCandidate: stateUpdate, targetInterval: null };
     }
 
-    // Backward compatibility for custom BasePaginator subclasses:
-    // - old PaginationQueryReturnValue used next/prev
-    // - new contract uses tailward/headward
-    //
-    // Internal SDK paginators already return tailward/headward, so this fallback is
-    // only to keep non-migrated external subclasses working during transition.
-    const { items, headward, tailward, next, prev } = results;
-    // `null` (no more that way) is kept, it is not the same as a side the query did not report
-    const resolvedHeadward = headward !== undefined ? headward : prev;
-    const resolvedTailward = tailward !== undefined ? tailward : next;
+    const { items, headward, tailward } = results;
 
     stateUpdate.lastQueryError = undefined;
     // Filtering is a synchronous local predicate (see filterQueryResults), so the whole
@@ -3342,8 +3311,8 @@ export abstract class BasePaginator<T, Q> {
     const isSeparateInterval = isJumpQuery || continuesActiveWindow === false;
     // Asked before the ingest, which may itself advance what the paginator knows about the head.
     const reachesHead =
-      resolvedHeadward === null || this.pageReachesHead(items, queryShape) === true;
-    const reachesTail = resolvedTailward === null;
+      headward === null || this.pageReachesHead(items, queryShape) === true;
+    const reachesTail = tailward === null;
     // A non-destructive refresh merges page 1 into the window it kept, so the ids that window held
     // have to be read before the ingest below adds the page to it.
     const keptItemIds =
@@ -3419,22 +3388,22 @@ export abstract class BasePaginator<T, Q> {
         stateUpdate.cursor =
           direction === 'headward'
             ? {
-                headward: resolvedHeadward || null,
+                headward: headward || null,
                 tailward: this.cursor?.tailward ?? null,
               }
             : {
                 headward: this.cursor?.headward ?? null,
-                tailward: resolvedTailward || null,
+                tailward: tailward || null,
               };
-        if (direction === 'headward') stateUpdate.hasMoreHead = !!resolvedHeadward;
-        else stateUpdate.hasMoreTail = !!resolvedTailward;
+        if (direction === 'headward') stateUpdate.hasMoreHead = !!headward;
+        else stateUpdate.hasMoreTail = !!tailward;
       } else {
         stateUpdate.cursor = {
-          tailward: resolvedTailward || null,
-          headward: resolvedHeadward || null,
+          tailward: tailward || null,
+          headward: headward || null,
         };
-        stateUpdate.hasMoreTail = !!resolvedTailward;
-        stateUpdate.hasMoreHead = !!resolvedHeadward;
+        stateUpdate.hasMoreTail = !!tailward;
+        stateUpdate.hasMoreHead = !!headward;
       }
       if (interval && (reachesHead || reachesTail)) {
         // The page reaches an end of the dataset, whatever the derivation guessed from its shape and size.
@@ -3570,18 +3539,6 @@ export abstract class BasePaginator<T, Q> {
   toHead = (params: Omit<PaginationQueryParams<Q>, 'direction' | 'queryShape'> = {}) =>
     this.executeQuery({ direction: 'headward', ...params });
 
-  /**
-   * @deprecated Use `toTail` instead.
-   */
-  next = (params: Omit<PaginationQueryParams<Q>, 'direction' | 'queryShape'> = {}) =>
-    this.toTail(params);
-
-  /**
-   * @deprecated Use `toHead` instead.
-   */
-  prev = (params: Omit<PaginationQueryParams<Q>, 'direction' | 'queryShape'> = {}) =>
-    this.toHead(params);
-
   toTailDebounced = (
     params: Omit<PaginationQueryParams<Q>, 'direction' | 'queryShape'> = {},
   ) => {
@@ -3592,24 +3549,6 @@ export abstract class BasePaginator<T, Q> {
     params: Omit<PaginationQueryParams<Q>, 'direction' | 'queryShape'> = {},
   ) => {
     this._executeQueryDebounced({ direction: 'headward', ...params });
-  };
-
-  /**
-   * @deprecated Use `toTailDebounced` instead.
-   */
-  nextDebounced = (
-    params: Omit<PaginationQueryParams<Q>, 'direction' | 'queryShape'> = {},
-  ) => {
-    this.toTailDebounced(params);
-  };
-
-  /**
-   * @deprecated Use `toHeadDebounced` instead.
-   */
-  prevDebounced = (
-    params: Omit<PaginationQueryParams<Q>, 'direction' | 'queryShape'> = {},
-  ) => {
-    this.toHeadDebounced(params);
   };
 
   reload = async () => {
