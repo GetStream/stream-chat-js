@@ -1,10 +1,10 @@
 # Agent prompt: test the docs snippets of one page
 
-Replace `{{PAGE}}` with a path from `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/docs-snippets-todo.md`, e.g. `chat/_default/04-messages/01-send_message.md`.
+Replace `{{PAGE}}` with a path from `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/docs-snippets-todo.md`, e.g. `chat/_default/04-messages/01-send_message.md` or `platform/02-identity-and-access/04-multi-tenancy.md`.
 
 ---
 
-You are verifying the client-side JavaScript code snippets of one Stream Chat docs page by writing typed tests that run them against a real Stream app with a user token. Only fences labelled `JavaScript` are in scope. Docs fences must always have a label: if you find an unlabelled `js` fence, label it (`JavaScript` for client code, `Node.js` for `@stream-io/node-sdk` code) and report it. `Node.js` fences are out of scope: don't test, add or change them.
+You are verifying the client-side JavaScript code snippets of one Stream Chat docs page by writing typed tests that run them against a real Stream app with a user token. Only fences labelled `JavaScript` are in scope. Docs fences must always have a label: if you find an unlabelled `js` fence, label it (`JavaScript` for client code, `Node.js` for server-side code, with or without `@stream-io/node-sdk`) and report it. `Node.js` fences are out of scope: don't test, add or change them.
 
 **Page:** `/Users/zitaszupera/Stream/getstream.io/content/docs/{{PAGE}}`
 
@@ -17,9 +17,10 @@ You are verifying the client-side JavaScript code snippets of one Stream Chat do
   - the docs page itself
   - this page's status row in `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/docs-snippets-todo.md`
   - `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/custom-types.d.ts`, to add custom data fields the snippets use (augment the matching `Custom*Data` interface; never remove or change existing fields)
-  - type definitions in `stream-chat-js/src/` (types only, see below)
+  - `stream-chat-js/src/`, to fix SDK issues (see below)
 - Do not edit the helpers, the configs, or other pages. If a helper is missing something, write a local helper in your test file and propose the shared helper in your report.
-- **`src/` may only be edited to fix TypeScript types** (e.g. a wrong or missing field in `src/types.ts`, a too-narrow parameter type), when a correct docs snippet fails to typecheck. No runtime / behavior changes. After such an edit, `yarn types` and `yarn test` must still pass. List every change in the report.
+- **Fix stream-chat-js issues in `src/`** when a correct docs snippet hits one: a wrong or missing type (e.g. a field in `src/types.ts`, a too-narrow parameter type) or an SDK bug. Make the smallest fix; for a runtime fix, add or update a unit test under `test/unit/`. After the edit, `yarn types`, `yarn lint` and `yarn test` must still pass. List every change in the report.
+- **API (backend) behavior issues** are not blockers: if the API behaves unexpectedly (inconsistent, misleading error, missing field) but the snippet can still be tested, test what works, add the issue to the "Possible API issues" list in the TODO (page, behavior, exact error), and carry on.
 - Change existing docs snippets as little as possible, and only when they are actually wrong.
 - Never put the API key or secret in any file. They are loaded from `test/docs-snippets/.env`.
 - In getstream.io, never run `npm run ci` or `npm run lint` for the whole repo. They rewrite thousands of files, including image assets. Use only the per-file commands listed below.
@@ -27,7 +28,7 @@ You are verifying the client-side JavaScript code snippets of one Stream Chat do
 ## Read first
 
 1. `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/learnings.md`: issues that earlier agents ran into. Follow it.
-2. `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/README.md`: layout, helpers, isolation, cleanup and snippet-marker conventions. Look at `pages/04-messages/01-send_message.test.ts` as an example.
+2. `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/README.md`: layout, helpers, isolation, cleanup and snippet-marker conventions. Look at `pages/chat/04-messages/01-send_message.test.ts` as an example.
 3. The page itself, and its row in `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/docs-snippets-todo.md`. Also read the page's entries in the TODO's **Blockers detail**, **Setup notes** and **Known docs bugs** sections.
 
 4. When the page doesn't make clear whether an endpoint is client-side or server-side only, check the OpenAPI specs: https://github.com/GetStream/protocol/tree/main/openapi/v2. An endpoint missing from the client spec is server-only. Also check the SDK source in `stream-chat-js/src/` for the method's signature and types.
@@ -37,7 +38,8 @@ You are verifying the client-side JavaScript code snippets of one Stream Chat do
 - **Client test** (`test/docs-snippets/pages/<section path>/<page>.test.ts`): run each `JavaScript` snippet with a user token, using `getClientSideClient(user)`. Use `getServerClient()` only for setup, cleanup and assertions a client can't do. It returns a `@stream-io/node-sdk` client (see the README's server client notes), never a stream-chat-js `StreamChat` with the secret.
   - If a snippet (or part of it) only works server-side (needs the secret, `user_id` on behalf of others, app settings, ...), it doesn't belong in a client tab: remove it from the page (see "Server-side code in JavaScript snippets") and list it in the report. Don't add a `Node.js` tab for it.
   - If every `JavaScript` fence of the page turns out to be server-only, don't write a test file.
-- **Mirror paths.** The test paths mirror the docs path without the `chat/_default/` prefix. Pages under `chat/javascript/` go under `pages/javascript/...`.
+- **Mirror paths.** The test paths mirror the docs path relative to `content/docs/`, without `_default/`: `chat/_default/04-messages/...` goes under `pages/chat/04-messages/...`, `chat/javascript/...` under `pages/chat/javascript/...`, `platform/...` under `pages/platform/...`.
+- **Other products (platform pages).** Platform pages also have Feeds and Video fences. Only fences that use stream-chat-js are in scope (Chat, and Video `call_level` push preferences set through the chat client). Feeds fences (`@stream-io/feeds-client`, `useCreateFeedsClient`, `feeds_level`, `addComment`, `createDevice`/`listDevices`/`deleteDevice`) and `React` / `React Native` tabs are excluded through `EXCLUDED_SECTIONS` in `sync/parse.ts`. If you find a non-stream-chat-js fence the sync check still asks you to cover, don't test it and don't edit `sync/parse.ts`: report it with the heading to exclude.
 - **Test structure:**
   - `describe` per page.
   - `beforeAll` creates the shared users and channels with `uniqueId(...)` ids and registers them on a `Cleanup`.
@@ -46,12 +48,12 @@ You are verifying the client-side JavaScript code snippets of one Stream Chat do
 - **Snippet markers.** Every `JavaScript` fence on the page needs exactly one marker in a test (`Node.js` fences are ignored). `yarn test-docs-sync` checks the format and the coverage.
   - Wrap the docs code like this:
     ```ts
-    // #region snippet docs="_default/04-messages/01-send_message.md" heading="Sending a Message" tab="JavaScript" index=1
+    // #region snippet docs="chat/_default/04-messages/01-send_message.md" heading="Sending a Message" tab="JavaScript" index=1
     // COPY: channelId="general", userId="john"
     ...docs code...
     // #endregion snippet
     ```
-  - `docs` is the page path relative to `content/docs/chat/`.
+  - `docs` is the page path relative to `content/docs/` (same as `{{PAGE}}`).
   - `heading` is the exact text of the nearest heading above the fence.
   - `tab` is the fence label, or `unlabelled`.
   - `index` (default 1) counts fences with the same heading text and tab on the page. If a key is wrong, the sync check lists the page's fence keys.
@@ -82,7 +84,7 @@ You are verifying the client-side JavaScript code snippets of one Stream Chat do
 
 ## Editing the docs page
 
-- Write fixes from the test with `DOCS_SYNC_WRITE=<page path, e.g. _default/04-messages/01-send_message.md> yarn test-docs-sync`. This writes every region of that page into its fence, applying the COPY values and the docs prettier style (double quotes). Don't paste snippets by hand.
+- Write fixes from the test with `DOCS_SYNC_WRITE=<page path, e.g. chat/_default/04-messages/01-send_message.md> yarn test-docs-sync`. This writes every region of that page into its fence, applying the COPY values and the docs prettier style (double quotes). Don't paste snippets by hand.
 - Follow `/Users/zitaszupera/Stream/getstream.io/content/docs/AGENTS.md`. In particular, no em-dashes in prose or comments.
 - Then run, from `/Users/zitaszupera/Stream/getstream.io/content/docs`:
   - `npx prettier --write <page path>`
@@ -96,7 +98,7 @@ If a docs snippet is wrong (wrong method name or signature, a type error against
 2. Write it to the docs page with `DOCS_SYNC_WRITE=<page path> yarn test-docs-sync`, then check `git diff` in getstream.io: only the intended fence should change.
 3. Record it for the report as before/after with the reason and the evidence (error message or type error).
 
-If the snippet is correct but stream-chat-js types reject it, fix the type in `src/` (types only) instead of the snippet.
+If the snippet is correct but stream-chat-js rejects it (types or runtime), fix `src/` instead of the snippet.
 
 If you're not sure whether the snippet or your setup is wrong, don't edit the docs. Mark it as an open question in the report instead.
 
@@ -109,10 +111,10 @@ yarn test-docs <your test files>     # green, with no `LEAK` or `DRIFT` error
 yarn types-docs                      # no type errors (strict TS, no `any` escapes, no `!` non-null assertions)
 yarn eslint test/docs-snippets         # zero warnings (same rules as src/: `import type`, sorted import members, no `!`, no unused vars)
 npx prettier --check test/docs-snippets
-yarn test-docs-sync                  # every JavaScript fence in the JS sidebar covered, every JS fence labelled JavaScript/Node.js, every region identical to its docs fence
+yarn test-docs-sync                  # every JavaScript fence on the tested sidebars (chat JS, platform) covered, every JS fence labelled JavaScript / Node.js, every region identical to its docs fence
 ```
 
-Don't use `@ts-ignore`/`@ts-expect-error` to silence a docs snippet. A type error in a snippet is either a docs bug (fix it as above) or an SDK typing bug (fix the type in `src/`, types only, and report it).
+Don't use `@ts-ignore`/`@ts-expect-error` to silence a docs snippet. A type error in a snippet is either a docs bug (fix it as above) or an SDK typing bug (fix the type in `src/` and report it).
 
 Finally, update the page's row in `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/docs-snippets-todo.md`: `[x]` when done, `[~]` when there are open questions.
 
@@ -122,6 +124,6 @@ Finally, update the page's row in `/Users/zitaszupera/Stream/stream-chat-js/test
 2. **Docs snippet corrections**: for each one, a before/after diff, the reason, and the evidence. These need human review.
 3. **Skipped / untestable snippets**: for each one, the snippet and why.
 4. **Removed server-side code**: each removed fence or part of a fence, with the client-side error (or the reason) that shows it is server-only.
-5. **stream-chat-js type fixes**: every `src/` change as a diff, with the snippet that needed it.
-6. **Possible SDK issues**: runtime problems that look like stream-chat-js bugs rather than docs bugs (not fixed).
-7. **Proposed learnings** for `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/learnings.md`: a numbered list of short, reusable lessons that would have saved you time (e.g. "`channel.muteStatus()` needs a watched channel"). Skip page-specific trivia. The user will approve or reject each one.
+5. **stream-chat-js fixes**: every `src/` change as a diff, with the snippet that needed it.
+6. **Open SDK issues and API issues**: stream-chat-js problems you couldn't fix, and the API behavior issues you added to the TODO.
+7. **Proposed learnings** for `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/learnings.md`: a numbered list of short, reusable lessons that would have saved you time (e.g. "`channel.muteStatus()` needs a watched channel"). Skip page-specific trivia. They are reviewed before being added.

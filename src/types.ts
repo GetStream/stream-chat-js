@@ -752,6 +752,7 @@ export type PushPreferencesResponse = {
 /** Per-channel push preferences returned by the API (matches OpenAPI `ChannelPushPreferencesResponse`). */
 export type ChannelPushPreference = {
   chat_level?: ChatLevelPushPreference; // "all", "mentions", "direct_mentions", "all_mentions", "none", "default" or other custom strings
+  chat_preferences?: ChatPreferences;
   disabled_until?: string;
 };
 
@@ -2018,8 +2019,19 @@ export type ChannelFilters = QueryFilters<
     last_updated?:
       | RequireOnlyOne<Pick<QueryFilter<string>, '$eq' | '$gt' | '$gte' | '$lt' | '$lte'>>
       | PrimitiveFilter<string>;
+    /**
+     * With multi-tenancy, client-side queries without a `team` filter only return channels of
+     * the user's teams; an empty filter (`team: {}`) queries across all teams.
+     */
+    team?:
+      | RequireOnlyOne<QueryFilter<ChannelResponse['team']>>
+      | PrimitiveFilter<ChannelResponse['team']>
+      | Record<string, never>;
   } & {
-    [Key in keyof Omit<ChannelResponse, 'name' | 'members' | keyof CustomChannelData>]:
+    [Key in keyof Omit<
+      ChannelResponse,
+      'name' | 'members' | 'team' | keyof CustomChannelData
+    >]:
       | RequireOnlyOne<QueryFilter<ChannelResponse[Key]>>
       | PrimitiveFilter<ChannelResponse[Key]>;
   }
