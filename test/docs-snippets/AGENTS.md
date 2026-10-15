@@ -1,9 +1,30 @@
-# Docs snippet tests: learnings
+# Docs snippet tests: agent notes
 
-Lessons collected from agent runs. Read this before working on a page.
-Entries are added only after the user approves them (agents propose them in their final report).
+Read this before working on a page. **Test conventions** are the rules every test follows; **API quirks** are API and SDK behavior found while testing.
+New entries are added only after the user approves them (agents propose them in their final report).
 
-## Setup and tooling
+## Test conventions
+
+### General
+
+- Import the SDK from `../../../src` (relative depth varies) and test helpers from `helpers/`. Use `import type` for types.
+- `stream-chat` is aliased to `src/index.ts` (`resolve.alias` in `vitest.config.mts`, `paths` in `tsconfig.json`), so a docs fence that starts with `import ... from "stream-chat"` can be a region at module level: declare the values it uses (e.g. `apiKey`) above it. Both import paths load the same module, so `StreamChat.getInstance` returns the same singleton.
+- Custom data the docs use (e.g. channel `name`) is declared once in `custom-types.d.ts` by augmenting the `Custom*Data` interfaces of `stream-chat`, the way the docs tell apps to. Add fields there rather than casting in tests.
+- **Isolation**: the id or name of everything a test creates comes from `uniqueId('name')`: users, channels, channel types, roles, commands, blocklists, segments, campaigns (name), user groups, moderation config keys, predefined filters, push providers. Polls are matched by their creator, so create them as a `uniqueId` user. Never use fixed ids like `"john"` or `"general"`.
+- **Cleanup**: register everything you create on a `Cleanup` instance and call `cleanup.run()` in `afterAll`. App-level settings changed by a test must be restored with `cleanup.add(...)`.
+- Tests in one file may share data created in `beforeAll`. Nothing may leak across files.
+- `cleanup.run()` attempts every step and then throws if anything failed, so leftovers show up as a failed `afterAll` instead of piling up in the app. Server-side hard channel deletion is a background task: `Cleanup` waits for it (`waitForTask`) and retries deleting channel types until their channels are gone.
+- **Leak check** (`setup.ts`, runs automatically after each file's own `afterAll`): looks up everything minted by `uniqueId` in that file (users, channels, channel types, commands, roles, custom permissions, blocklists, segments, campaigns, user groups, moderation configs, predefined filters, push providers, polls). Anything still there fails the file with a `LEAK` error listing it, and is then removed. Per-user data (reminders, devices, drafts, ...) goes away with the user. It also snapshots app settings, pre-existing channel types and retention policies before the file and fails with `DRIFT` if anything changed and wasn't restored.
+- Anything created under a non-`uniqueId` name can't be found by the leak check or the sweep. Don't do that.
+- **Eventual consistency**: channel type changes (`createChannelType` / `updateChannelType`) take ~30s to reach every API node. A `create()` can succeed and the next call still fail with `<type>: channel type does not exist`. Call `await waitForChannelTypePropagation()` (from `helpers/wait.ts`) right after creating or updating a channel type. Timeouts are 90s per test and 180s per hook to leave room for this. Use `retry(fn, { retryIf })` for other eventually-consistent reads (e.g. search).
+- **App settings**: pages are run one at a time, so tests may change app settings and built-in channel types, but must restore them (`cleanup.add`). The check after each file fails with `DRIFT` otherwise.
+- **Guest users** get their id rewritten to `guest-<uuid>-<requested id>`: register `client.userID` for cleanup.
+- One `it` per docs snippet (or per closely related group of snippets in the same tab group).
+- `getClientSideClient(user)` returns a connected client. Disconnect it with `disconnectClients` in `afterAll`. Use `getServerClient()` only for setup, cleanup and assertions that a client can't do (server calls need `user_id` / `created_by_id` where a client call would infer the user).
+- The server client is `@stream-io/node-sdk` (`StreamClient`), not stream-chat-js: request objects (`chat.getMessage({ id })`), chat endpoints on `serverClient.chat`, custom data under `custom`, timestamps as `Date` objects. `upsertUsers(serverClient, users)` takes stream-chat-js-shaped users, `createUserToken(userId)` signs tokens, and `updateChannelType(serverClient, name, patch)` (`helpers/channel-types.ts`) fills in the fields node-sdk requires. `helpers/server.ts` has the repeated server-side steps: `sendServerMessage`, `getServerUser` / `getServerMember` / `getServerChannel` (throw unless exactly one result matches), `deletePollsCreatedBy` and `waitForAppSetting`.
+- Add basic `expect`s after each snippet to prove it did what the docs claim.
+
+### Setup and tooling
 
 - To probe API behavior quickly, write a throwaway vitest file under `test/docs-snippets/pages/` that logs each call's result or error. It still runs the leak check, so register what it creates, and delete the file before finishing.
 - Fences containing `import ... from "stream-chat"` can be regions: `stream-chat` is aliased to `src` (vitest `resolve.alias` + tsconfig `paths`). Put the region at module level, below the other imports, with the values it uses (e.g. `const apiKey`) declared above it, since a `const` after it would be in the TDZ. Example: `pages/chat/02-init_and_users/02-init_and_users.test.ts`.
@@ -25,7 +46,7 @@ Entries are added only after the user approves them (agents propose them in thei
 - COPY substitution replaces the identifier everywhere in the region, including comments: a test variable `red` (COPY `red="red"`) turned the docs comment "for team red" into `for team "red"`. Name COPY variables so they can't match words in the docs text (`redTeam`, `channelId`).
 - A heading with double quotes goes into the marker escaped: `heading="1: Creating a \"Do Not Disturb\" Mode"` (marker attributes are parsed as JSON strings).
 
-## Server client (`@stream-io/node-sdk`)
+### Server client (`@stream-io/node-sdk`)
 
 - `getServerClient()` is a node-sdk `StreamClient`. Every method takes one request object; chat endpoints are on `serverClient.chat`, moderation on `serverClient.moderation`.
 - Custom data is under `custom` in node-sdk requests and responses (users, channels, members, messages); `upsertUsers(serverClient, users)` (`helpers/clients.ts`) converts stream-chat-js-shaped users. Timestamps come back as `Date` objects. Errors are `StreamError` (`Stream error code <n>: <message>`, `.code` = API code, HTTP status in `.metadata.responseCode`).
@@ -35,7 +56,30 @@ Entries are added only after the user approves them (agents propose them in thei
 - `chat.createChannelType` requires `automod`, `automod_behavior` and `max_message_length`; use the `updateChannelType(serverClient, name, patch)` helper (`helpers/channel-types.ts`) for updates.
 - Server messages: `chat.channel(type, id).sendMessage({ message: { text, user_id }, pending, skip_push })`; attachments need `custom: {}` (TS2741 otherwise). Reactions: `chat.sendReaction({ id, reaction: { type, user_id } })`.
 
-## API and SDK behavior
+### Docs conventions
+
+- Unawaited async SDK calls in a snippet (`channel.sendSharedLocation(...)`, `manager.init()`) are a docs bug: errors only surface as unhandled rejections, and later lines run too early (e.g. `unregisterSubscriptions()` before `init()` registered anything). Add `await` in the docs instead of spying on the result.
+- Undefined app-supplied placeholders (e.g. `tokenProvider`) aren't docs bugs: define them in the test just before the region (e.g. `const tokenProvider = () => Promise.resolve(createUserToken(userId))`, which also satisfies `require-await`), and don't change the docs.
+- A fence that declares the same `const` twice (e.g. two `const result = ...` or `const filter = ...` showing alternatives) is a real SyntaxError and TS2451. Fix the docs by renaming only the later declarations with descriptive names (`aroundResult`, `membersFilter`); don't split the fence.
+- A fence showing alternative operations on one placeholder id (e.g. soft delete, hard delete, delete for me on `messageID`) can fail when run in sequence (delete-for-me after a hard delete: 404 code 16). Fix the docs by giving the conflicting later call its own id (`anotherMessageID`); don't split the fence.
+- Comment-only `JavaScript` fences ("This is a server-side only feature, choose any of our server-side SDKs...") stay in the docs. The sync check skips them, so they need no marker.
+- When the docs use an identifier (not a string literal) like `randomID`, name the test variable the same and don't put it in COPY. A quoted COPY value (`randomID="randomID"`) turns it into a string literal, and `DOCS_SYNC_WRITE` then silently writes the quoted string into the docs.
+
+### Isolation and cleanup
+
+- Distinct channels (no id) get an auto id `!members-...`: push `channel.cid` to `cleanup.channels` right after `create()`/`watch()`, and use `uniqueId` members.
+- Guest users: push `client.userID` (the rewritten `guest-<uuid>-<id>`) to `cleanup.users` in a `finally` around the snippet, so it is cleaned up even if a later assertion fails.
+- Some names are unique per app (e.g. user group names: `a group with name "Design Team" already exists`), and the leak check matches by id or name. Use a COPY variable from `uniqueId` for every such `name`, including the new name in update/rename snippets.
+- Server-side `deleteUsers` of an id that was never created succeeds, so register a user on `cleanup` before the snippet creates it.
+- Polls and campaigns are NOT deleted when their creator user is hard-deleted. Delete them explicitly via `cleanup.add(...)` (`serverClient.deletePoll({ poll_id, user_id })`; `serverClient.chat.deleteCampaign({ id })`). To also catch polls created inside regions, add `cleanup.add(() => deletePollsCreatedBy(serverClient, userId))` (`helpers/server.ts`), and give campaigns a `uniqueId(...)` name so the leak check can find them.
+- To assert ordering or offset pagination exactly, create ~12 channels in `beforeAll` and send one message to each, sequentially (not `Promise.all`): `last_message_at: -1` order is then the reverse of creation order. Same for message pagination (`id_lt`/`id_around`): send ~30 messages sequentially, record their ids in order, and compare pages to exact slices.
+- To assert member `created_at` order or `created_at_before` pagination, add members one at a time with `addMembers([id])` in `beforeAll`: members passed together to `create()` can share a `created_at`.
+- To prove a "flagged first" sort (e.g. `pinned_at: -1`) is applied, flag a channel first and create a second channel after it: without the sort the newer one comes first, so `toEqual([flagged, other])` shows the sort worked.
+- `cleanup.add` steps run after `disconnectClients`, so they can't use a user client ("Both secret and user tokens are not set"). Standalone uploads (`client.uploadImage`/`uploadFile`) aren't removed with the user or channel and the leak check can't see them: delete them in the test while the client is connected.
+
+## API quirks
+
+### API and SDK behavior
 
 - Since v9, channel `name` (and other fields like `image`) are custom data, not in `ChannelData`/`ChannelResponse`. `test/docs-snippets/custom-types.d.ts` augments `CustomChannelData` with `name`, so snippets passing `{ name }` typecheck as-is. If a snippet needs another custom field, add it there, using the matching interface (`CustomMemberData` for member fields like `code_name`, etc.); no casts or typed client views in tests. Custom event types (`type: "friendship_request"`) go in `CustomEventTypes` and their payload fields in `CustomEventData`; `channel.sendEvent` needs a watched channel.
 - To prove a channel is watched, check that its events reach the client: subscribe with `channel.on('message.new', ...)`, send a message server-side, and await the event. `client.activeChannels[cid]` proves nothing (`client.channel()` adds the channel there before any `watch()`), and `channel.watch()` returns `watchers` only when a watchers limit is requested.
@@ -85,7 +129,7 @@ Entries are added only after the user approves them (agents propose them in thei
 - Multi-tenancy access is team-scoped: a channel only accepts members from its own team (`update({ add_members })`: code 5 "user from teams [...] cannot be a member of a channel with team ..."), a user without teams only sees channels without a team, and a team user's `queryChannels({ team: {} })` / `({ team: { $eq: null } })` fails with code 70 as soon as an inaccessible channel matches (documented on the page; even for a member, even for role `admin`). Cross-team reads need a `*-any-team` grant: the built-in `global_read_only` / `global_admin` roles have `read-channel-any-team`.
 - Push preferences (`setPushPreferences`) work without a push provider. Read them back client-side: user-level from a fresh `connectUser` response (`me.push_preferences`), channel-member level from `queryChannels`/`watch` (`channel.push_preferences`). Devices (`addDevice`) need a matching push provider on the app: the test app's providers are named (multi-bundle), so register with `addDevice(id, "firebase", undefined, process.env.STREAM_PUSH_PROVIDER_NAME)` (a Firebase provider's name, set in `.env`). Without the name: code 4 'push provider "" with type "firebase" not found'.
 
-## Client-side vs server-side
+### Client-side vs server-side
 
 - Server-only `JavaScript` snippets (they fail with a user token) are removed from the page. Don't add a `Node.js` tab for them (`Node.js` fences are out of scope). If only part of a snippet is server-only (e.g. setting `channel_role` in `updateMemberPartial`), remove just that part from the `JavaScript` tab and keep the rest.
 - If every `JavaScript` fence of a page turns out to be server-only (all removed), don't write a client test file: a test that only asserts the user-token rejection covers no docs snippet. Record the error in the report instead.
@@ -97,24 +141,3 @@ Entries are added only after the user approves them (agents propose them in thei
 - Some client-side endpoints need global role `admin` (role `user` gets 403 code 17), e.g. `client.moderation.queryReviewQueue`. Connect a second user with `getClientSideClient({ id, role: 'admin' })` and shadow `const client = adminClient;` in the `it`.
 - Global role changes are server-only: client-side `partialUpdateUser({ set: { role } })` fails with 403 code 17 `UpdateUserRole`, even as `admin`. `getBlockedUsers(userId)` fails with code 4 "Setting user or user_id is only allowed when using server side auth": remove the argument (`blockUser`/`unBlockUser`/`getBlockedUsers()` work for the connected user).
 - Member role changes are server-only: client-side `addModerators`/`demoteModerators` fail with 403 code 17 ("changing channel member roles is not allowed client-side"), and `updateMemberPartial` with `channel_role` fails with code 17 ("this channel role can only be updated server side"). Client-side `updateMemberPartial` of custom fields works for the connected user without a `userId` option (don't pass one client-side: another user's id fails with 400 code 4, and your own is redundant). Client-side `addMembers([{ user_id, channel_role }])` for a new member does work (channel owner, `messaging`).
-
-## Docs conventions
-
-- Unawaited async SDK calls in a snippet (`channel.sendSharedLocation(...)`, `manager.init()`) are a docs bug: errors only surface as unhandled rejections, and later lines run too early (e.g. `unregisterSubscriptions()` before `init()` registered anything). Add `await` in the docs instead of spying on the result.
-- Undefined app-supplied placeholders (e.g. `tokenProvider`) aren't docs bugs: define them in the test just before the region (e.g. `const tokenProvider = () => Promise.resolve(createUserToken(userId))`, which also satisfies `require-await`), and don't change the docs.
-- A fence that declares the same `const` twice (e.g. two `const result = ...` or `const filter = ...` showing alternatives) is a real SyntaxError and TS2451. Fix the docs by renaming only the later declarations with descriptive names (`aroundResult`, `membersFilter`); don't split the fence.
-- A fence showing alternative operations on one placeholder id (e.g. soft delete, hard delete, delete for me on `messageID`) can fail when run in sequence (delete-for-me after a hard delete: 404 code 16). Fix the docs by giving the conflicting later call its own id (`anotherMessageID`); don't split the fence.
-- Comment-only `JavaScript` fences ("This is a server-side only feature, choose any of our server-side SDKs...") stay in the docs. The sync check skips them, so they need no marker.
-- When the docs use an identifier (not a string literal) like `randomID`, name the test variable the same and don't put it in COPY. A quoted COPY value (`randomID="randomID"`) turns it into a string literal, and `DOCS_SYNC_WRITE` then silently writes the quoted string into the docs.
-
-## Isolation and cleanup
-
-- Distinct channels (no id) get an auto id `!members-...`: push `channel.cid` to `cleanup.channels` right after `create()`/`watch()`, and use `uniqueId` members.
-- Guest users: push `client.userID` (the rewritten `guest-<uuid>-<id>`) to `cleanup.users` in a `finally` around the snippet, so it is cleaned up even if a later assertion fails.
-- Some names are unique per app (e.g. user group names: `a group with name "Design Team" already exists`), and the leak check matches by id or name. Use a COPY variable from `uniqueId` for every such `name`, including the new name in update/rename snippets.
-- Server-side `deleteUsers` of an id that was never created succeeds, so register a user on `cleanup` before the snippet creates it.
-- Polls and campaigns are NOT deleted when their creator user is hard-deleted. Delete them explicitly via `cleanup.add(...)` (`serverClient.deletePoll({ poll_id, user_id })`; `serverClient.chat.deleteCampaign({ id })`). To also catch polls created inside regions, add `cleanup.add(() => deletePollsCreatedBy(serverClient, userId))` (`helpers/server.ts`), and give campaigns a `uniqueId(...)` name so the leak check can find them.
-- To assert ordering or offset pagination exactly, create ~12 channels in `beforeAll` and send one message to each, sequentially (not `Promise.all`): `last_message_at: -1` order is then the reverse of creation order. Same for message pagination (`id_lt`/`id_around`): send ~30 messages sequentially, record their ids in order, and compare pages to exact slices.
-- To assert member `created_at` order or `created_at_before` pagination, add members one at a time with `addMembers([id])` in `beforeAll`: members passed together to `create()` can share a `created_at`.
-- To prove a "flagged first" sort (e.g. `pinned_at: -1`) is applied, flag a channel first and create a second channel after it: without the sort the newer one comes first, so `toEqual([flagged, other])` shows the sort worked.
-- `cleanup.add` steps run after `disconnectClients`, so they can't use a user client ("Both secret and user tokens are not set"). Standalone uploads (`client.uploadImage`/`uploadFile`) aren't removed with the user or channel and the leak check can't see them: delete them in the test while the client is connected.

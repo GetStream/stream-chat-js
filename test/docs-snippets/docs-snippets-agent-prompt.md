@@ -11,7 +11,7 @@ You are verifying the client-side JavaScript code snippets of one Stream Chat do
 ## Hard rules
 
 - **Do not commit, push, stash, or create branches** in any repo. Work only in the local working tree.
-- **Do not write to `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/learnings.md`.** Read it, and propose additions in your final report.
+- **Do not write to `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/AGENTS.md`.** Read it, and propose additions in your final report.
 - Only touch:
   - the test files for this page under `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/`
   - the docs page itself
@@ -27,9 +27,9 @@ You are verifying the client-side JavaScript code snippets of one Stream Chat do
 
 ## Read first
 
-1. `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/learnings.md`: issues that earlier agents ran into. Follow it.
-2. `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/README.md`: layout, helpers, isolation, cleanup and snippet-marker conventions. Look at `pages/chat/04-messages/01-send_message.test.ts` as an example.
-3. The page itself, and its row in `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/docs-snippets-todo.md`. Also read the page's entries in the TODO's **Blockers detail**, **Setup notes** and **Known docs bugs** sections.
+1. `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/AGENTS.md`: test conventions and API quirks that earlier agents ran into. Follow it.
+2. `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/README.md`: layout, commands and snippet markers. Look at `pages/chat/04-messages/01-send_message.test.ts` as an example.
+3. The page itself, and its row in `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/docs-snippets-todo.md`.
 
 4. When the page doesn't make clear whether an endpoint is client-side or server-side only, check the OpenAPI specs: https://github.com/GetStream/protocol/tree/main/openapi/v2. An endpoint missing from the client spec is server-only. Also check the SDK source in `stream-chat-js/src/` for the method's signature and types.
 
@@ -69,9 +69,7 @@ You are verifying the client-side JavaScript code snippets of one Stream Chat do
 - **Channel types are eventually consistent.** After `createChannelType` or `updateChannelType`, API nodes can disagree for up to ~30s. A `create()` can succeed and the next `sendMessage` still fail with "channel type does not exist".
   - Call `await waitForChannelTypePropagation()` (from `helpers/wait.ts`) right after the create/update, outside the snippet region.
   - Push the name to `cleanup.channelTypes` straight after `createChannelType`. `Cleanup` deletes it after the channels are gone. Never delete channel types in your own cleanup code.
-- **Blockers** (the page's Blockers cell in the TODO):
-  - ⛔ snippets go in `it.skip('BLOCKED: <reason>', ...)` so they are still typechecked.
-  - If you find a new blocker, use `it.skip('BLOCKED: <reason>')`, mark the page `[~]` and report it, with the exact API error.
+- **Blockers**: if the app doesn't support a snippet, put it in `it.skip('BLOCKED: <reason>', ...)` so it is still typechecked, mark the page `[~]` and report it, with the exact API error.
 - **Guest users** get their id rewritten to `guest-<uuid>-<requested id>`. Register `client.userID` for cleanup, not the id you passed.
 - **Partial snippets** (fragments like `filters = {...}` or `...` placeholders): wrap them in the minimal code needed to compile and run. The region still holds exactly the docs text.
 
@@ -126,4 +124,4 @@ Finally, update the page's row in `/Users/zitaszupera/Stream/stream-chat-js/test
 4. **Removed server-side code**: each removed fence or part of a fence, with the client-side error (or the reason) that shows it is server-only.
 5. **stream-chat-js fixes**: every `src/` change as a diff, with the snippet that needed it.
 6. **Open SDK issues and API issues**: stream-chat-js problems you couldn't fix, and the API behavior issues you added to the TODO.
-7. **Proposed learnings** for `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/learnings.md`: a numbered list of short, reusable lessons that would have saved you time (e.g. "`channel.muteStatus()` needs a watched channel"). Skip page-specific trivia. They are reviewed before being added.
+7. **Proposed additions** to `/Users/zitaszupera/Stream/stream-chat-js/test/docs-snippets/AGENTS.md`: a numbered list of short, reusable lessons that would have saved you time (e.g. "`channel.muteStatus()` needs a watched channel"). Skip page-specific trivia. They are reviewed before being added.
