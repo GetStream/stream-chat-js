@@ -32,7 +32,9 @@ describe('_default/04-messages/10-message_receipts.md', () => {
   const clients: StreamChat[] = [];
 
   const newChatClient = () => {
-    const chatClient = new StreamChat(apiKey, { allowServerSideConnect: true });
+    const chatClient = new StreamChat(apiKey, {
+      client: { allowServerSideConnect: true },
+    });
     clients.push(chatClient);
     return chatClient;
   };

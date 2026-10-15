@@ -12,7 +12,7 @@ const apiKey = process.env.STREAM_API_KEY as string;
 import { StreamChat } from 'stream-chat';
 
 const chatClient = StreamChat.getInstance(apiKey, {
-  axiosRequestConfig: { timeout: 6000 },
+  client: { axiosRequestConfig: { timeout: 6000 } },
 });
 // #endregion snippet
 

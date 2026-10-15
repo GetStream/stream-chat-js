@@ -33,7 +33,7 @@ describe(DOCS, () => {
   let spanishClient: StreamChat;
   let channel: Channel;
   const languageClient = new StreamChat(process.env.STREAM_API_KEY as string, {
-    allowServerSideConnect: true,
+    client: { allowServerSideConnect: true },
   });
 
   /** Sends a poll from the English user in an auto-translated channel with a Spanish member. */

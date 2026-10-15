@@ -19,7 +19,7 @@ describe('_default/05-features/03-unread.md', () => {
   const token = createUserToken(userId);
   // Not connected yet: the first snippet connects it.
   const client = new StreamChat(process.env.STREAM_API_KEY as string, {
-    allowServerSideConnect: true,
+    client: { allowServerSideConnect: true },
   });
   let firstMessageId = '';
 

@@ -252,7 +252,7 @@ describe('_default/04-messages/03-threads.md', () => {
     const readerId = otherId;
     const token = createUserToken(readerId);
     const client = new StreamChat(process.env.STREAM_API_KEY as string, {
-      allowServerSideConnect: true,
+      client: { allowServerSideConnect: true },
     });
 
     try {

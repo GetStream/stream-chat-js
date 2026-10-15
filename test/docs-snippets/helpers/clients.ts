@@ -67,7 +67,7 @@ export const upsertUsers = (serverClient: StreamClient, users: TestUser[]) =>
 export const getClientSideClient = async (user: TestUser): Promise<StreamChat> => {
   await upsertUsers(getServerClient(), [user]);
   // `new StreamChat` instead of `getInstance` so several users can be connected in one file.
-  const client = new StreamChat(apiKey(), { allowServerSideConnect: true });
+  const client = new StreamChat(apiKey(), { client: { allowServerSideConnect: true } });
   await client.connectUser(user, createUserToken(user.id));
   return client;
 };

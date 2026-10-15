@@ -154,7 +154,7 @@ describe('_default/05-features/05-presence_format.md', () => {
     await serverClient.upsertUsers([{ id: userId }]);
     const token = createUserToken(userId);
     const client = new StreamChat(process.env.STREAM_API_KEY as string, {
-      allowServerSideConnect: true,
+      client: { allowServerSideConnect: true },
     });
     extraClients.push(client);
     const connectSpy: { reply?: Awaited<ReturnType<typeof client.connectUser>> } = {};

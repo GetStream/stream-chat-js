@@ -26,7 +26,7 @@ describe('platform/03-events-and-notifications/05-push-preferences.md', () => {
   /** The user's own push preferences, as a fresh connection of the same user sees them. */
   const getUserPreferences = async () => {
     const reader = new StreamChat(process.env.STREAM_API_KEY as string, {
-      allowServerSideConnect: true,
+      client: { allowServerSideConnect: true },
     });
     try {
       const response = await reader.connectUser({ id: userId }, createUserToken(userId));

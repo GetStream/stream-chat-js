@@ -21,7 +21,7 @@ describe('_default/03-channels/07-channel_management/10-muting.md', () => {
   const user: TestUser = { id: userId };
   const token = createUserToken(userId);
   const client = new StreamChat(process.env.STREAM_API_KEY as string, {
-    allowServerSideConnect: true,
+    client: { allowServerSideConnect: true },
   });
 
   beforeAll(async () => {

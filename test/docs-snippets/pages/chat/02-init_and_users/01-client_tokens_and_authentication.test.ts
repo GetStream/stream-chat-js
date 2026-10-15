@@ -12,7 +12,7 @@ describe('_default/02-init_and_users/01-client_tokens_and_authentication.md', ()
   cleanup.users.push(userId);
   // A client initialized with the API key alone, the way the docs set it up.
   const client = new StreamChat(process.env.STREAM_API_KEY as string, {
-    allowServerSideConnect: true,
+    client: { allowServerSideConnect: true },
   });
   let originalDisableAuthChecks = false;
 
@@ -22,7 +22,7 @@ describe('_default/02-init_and_users/01-client_tokens_and_authentication.md', ()
     const deadline = Date.now() + 75000;
     for (;;) {
       const probe = new StreamChat(process.env.STREAM_API_KEY as string, {
-        allowServerSideConnect: true,
+        client: { allowServerSideConnect: true },
       });
       try {
         await probe.connectUser({ id: userId }, client.devToken(userId));
@@ -52,7 +52,7 @@ describe('_default/02-init_and_users/01-client_tokens_and_authentication.md', ()
     if (originalDisableAuthChecks) skip('auth checks are already disabled on the app');
 
     const devClient = new StreamChat(process.env.STREAM_API_KEY as string, {
-      allowServerSideConnect: true,
+      client: { allowServerSideConnect: true },
     });
     await expect(
       devClient.connectUser({ id: userId }, client.devToken(userId)),
