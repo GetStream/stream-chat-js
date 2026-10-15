@@ -183,6 +183,20 @@ describe('ScheduledMessageManager', () => {
       },
     );
 
+    it('keeps a message awaiting a send retry as sending', () => {
+      const { client, manager } = setup();
+      manager.registerSubscriptions();
+      const sm = generateScheduledMessage();
+      manager.upsertToState(sm);
+
+      client.dispatchEvent(
+        generateEvent('scheduled_message.updated', { ...sm, status: 'sending' }),
+      );
+
+      expect(manager.getFromState(sm.id)?.status).toBe('sending');
+      expect(manager.getForChannel(cid)).toHaveLength(1);
+    });
+
     it('marks the scheduled message failed on scheduled_message.failed', () => {
       const { client, manager } = setup();
       manager.registerSubscriptions();

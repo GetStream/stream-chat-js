@@ -1016,8 +1016,8 @@ export type SendMessageAPIResponse = APIResponse & {
   pending_message_metadata?: Record<string, string> | null;
   /**
    * Set only when the message was sent with `scheduled_at`. `message` then holds the
-   * content as it will be sent; it is not in the channel and its `id` is the
-   * scheduled message ID, not the ID the message gets when sent.
+   * content as it will be sent (with hydrated `mentioned_users`); it is not in the
+   * channel and its `id` is the scheduled message ID, not the ID the message gets when sent.
    */
   scheduled_message?: ScheduledMessageResponse;
 };
@@ -3080,7 +3080,7 @@ export type SendMessageOptions = {
   /**
    * When set, the message is not sent now: it is stored and sent at this time.
    * Must be at least 1 minute and at most the app's maximum lead time from now.
-   * The response then carries `scheduled_message`. Cannot be combined with `pending`.
+   * The response then carries `scheduled_message`. Cannot be combined with `pending: true`.
    */
   scheduled_at?: string | Date;
   skip_enrich_url?: boolean;
@@ -4890,7 +4890,8 @@ export type QueryRemindersResponse = {
 /**
  * Status of a scheduled message.
  * - `scheduled`: waiting for its send time; can be edited, sent now or deleted
- * - `sending`: being sent (or a send was tried and is waiting to be retried); cannot change
+ * - `sending`: being sent, or a send was tried and is waiting to be retried; cannot be
+ *   edited, sent now or deleted until the send finishes (409 `scheduled_message_sending`)
  * - `failed`: the send failed (see `failure_reason`); can only be deleted
  * - `canceled`: deleted by its owner (reported by the delete endpoint and event only)
  * - `sent`: sent (reported by the `scheduled_message.sent` event only)
@@ -4994,7 +4995,7 @@ export type UpdateScheduledMessageOptions = {
 export type ScheduledMessageFilters = {
   /** Only scheduled messages of this channel. */
   cid?: string;
-  /** Only these statuses. */
+  /** Only these statuses, matched against the reported `status`. */
   status?: Array<Extract<ScheduledMessageStatus, 'scheduled' | 'sending' | 'failed'>>;
 };
 
