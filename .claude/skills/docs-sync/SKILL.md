@@ -92,6 +92,7 @@ Write a test for it in the page's test file (create the file if the page is new)
 - Run the snippet with a user token (`getClientSideClient(user)`). Use `getServerClient()` (a `@stream-io/node-sdk` client) only for setup, cleanup and assertions a client can't make.
 - Everything between the markers is the docs code; setup goes before, assertions after. Fragments get the minimal surrounding code to compile and run.
 - Comment-only fences (e.g. "This is a server-side only feature...") need no region.
+- A fence that isn't code (e.g. a bare data shape) is a docs bug: rewrite it as code that runs (e.g. reading and logging the fields), and report it. Never remove a `JavaScript` fence just because it is a fragment or can't be tested: wrap it, or put it in `it.skip`.
 - A snippet the test app can't run goes in `it.skip('BLOCKED: <reason>', ...)` so it is still typechecked; report the exact API error.
 - **Server-only code in a `JavaScript` fence** (fails with a user token, e.g. 403 code 17 or "only allowed when using server side auth"): remove that fence, or just the server-only part, from the docs. Don't add a `Node.js` tab for it. To decide whether an endpoint or an acting-user field (`user_id`, `created_by_id`, ...) is client-side, check the client-side OpenAPI spec (`chat-clientside-api.json` in https://github.com/GetStream/protocol/tree/main/openapi/v2): an endpoint or field missing from it is server-only. Report every removal with the error.
 - A fence from another product (Feeds, `@stream-io/feeds-client`, React / React Native tabs on platform pages) isn't tested: report the page and heading so it can be added to `EXCLUDED_SECTIONS` in `test/docs-snippets/sync/parse.ts`. Don't edit `parse.ts` without asking the user.
@@ -122,6 +123,8 @@ yarn types-docs                           # no type errors, no @ts-ignore / @ts-
 yarn eslint test/docs-snippets            # zero warnings
 npx prettier --check test/docs-snippets
 ```
+
+Never silence a docs snippet with `@ts-ignore` / `@ts-expect-error`: a type error in a snippet is a docs bug or an SDK issue.
 
 If you changed `src/`, also `yarn types`, `yarn lint` and `yarn test`.
 

@@ -35,7 +35,6 @@ custom-types.d.ts                           # Custom*Data augmentations for the 
 sync/                                       # `yarn test-docs-sync` (docs fence <-> test region check)
 maintenance/                                # `yarn test-docs-sweep`
 docs-snippets-todo.md                       # pages to cover and their status, open generator and API issues
-docs-snippets-agent-prompt.md               # prompt for an agent that covers one page
 AGENTS.md                                   # test conventions and API quirks, read before working on a page
 ```
 
