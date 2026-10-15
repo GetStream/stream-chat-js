@@ -453,6 +453,20 @@ The SDK itself gets channels through `client.channelManager.ensure()`, so a spy 
 sees only your own calls; spy on `client.channelManager.ensure` (called with `{ type, id, data }`) to
 see every channel the client gets.
 
+#### `client.setGuestUser`
+
+```ts
+// v9
+client.setGuestUser(user: UserResponse);
+
+// v10
+client.setGuestUser(user: UserRequest, requestOptions?);
+```
+
+`user` is the generated `UserRequest` (`id`, plus optional `name`, `image`, `language`, `invisible`,
+`privacy_settings` and `custom`), the shape `createGuest` sends. App custom fields go under `custom`
+rather than at the root.
+
 #### `client.setAnonymousUser` alias
 
 ```ts
@@ -474,7 +488,7 @@ client.sendFile(url, uri, name?, contentType?, user?, axiosRequestConfig?);
 
 // v10
 client.api.doAxiosRequest(type, url, data?, options?);
-client.dispatchEvent(event: Event);                     // Event union expanded to WSEvent | LocalEvent | keyof CustomEventTypes
+client.dispatchEvent(event: Event);                     // Event union is now WSEvent | LocalEvent | CustomEventTypeUnion
 client.api.errorFromResponse(response);                 // moved to ApiClient
 // client.sendFile — REMOVED, and there is no `client.api.sendFile` either. Multipart encoding
 // now lives in `ApiClient.sendRequest`; use the upload methods below.
@@ -1258,7 +1272,7 @@ Signatures unchanged.
 
 #### `channel._handleChannelEvent` / `channel._callChannelListeners`
 
-Both still take `Event` — the union shape of `Event` itself changed (now `WSEvent | LocalEvent | keyof CustomEventTypes`), but the parameter type name did not.
+Both still take `Event` — the union shape of `Event` itself changed (now `WSEvent | LocalEvent | CustomEventTypeUnion`), but the parameter type name did not.
 
 ---
 
