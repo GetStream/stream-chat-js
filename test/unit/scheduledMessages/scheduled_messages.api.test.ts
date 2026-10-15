@@ -164,6 +164,29 @@ describe('scheduled messages API', () => {
       expect(client.scheduledMessages.scheduledMessages.size).toBe(0);
     });
 
+    it('sendMessage drops a scheduled response that arrives after the user disconnected', async () => {
+      const client = setup();
+      const channel = client.channel('messaging', 'general');
+      let resolve!: (value: unknown) => void;
+      vi.spyOn(client, 'post').mockReturnValue(
+        new Promise((r) => (resolve = r)) as never,
+      );
+      vi.spyOn(client, 'closeConnection').mockResolvedValue(undefined);
+
+      const sending = channel.sendMessage(
+        { text: 'see you tomorrow' },
+        { scheduled_at: '2030-01-01T00:00:00Z' },
+      );
+      await client.disconnectUser();
+      resolve({
+        message: { id: 'sm-1', text: 'see you tomorrow' },
+        scheduled_message: scheduledMessage,
+      });
+      await sending;
+
+      expect(client.scheduledMessages.scheduledMessages.size).toBe(0);
+    });
+
     it('query passes include_scheduled_messages and hydrates the store', async () => {
       const client = setup();
       const { cid, id, type } = mockChannelQueryResponse.channel;

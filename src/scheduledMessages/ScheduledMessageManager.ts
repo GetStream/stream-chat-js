@@ -41,6 +41,16 @@ export type ScheduledMessageManagerOptions = {
   client: StreamChat;
 };
 
+/**
+ * Taken before a request whose response replaces part of the store (see
+ * `snapshotToken`), so the response cannot undo what happened while it was in flight.
+ */
+export type ScheduledMessageSnapshotToken = { epoch: number; seq: number };
+
+/** Whether `a` is a later version of the same scheduled message than `b`. */
+const isNewer = (a: ScheduledMessageResponse, b: ScheduledMessageResponse) =>
+  new Date(a.updated_at).getTime() > new Date(b.updated_at).getTime();
+
 const byScheduledAt = (a: ScheduledMessageResponse, b: ScheduledMessageResponse) =>
   new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime() ||
   (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -58,6 +68,11 @@ const byScheduledAt = (a: ScheduledMessageResponse, b: ScheduledMessageResponse)
  *
  * After a connection recovery, a loaded store is reloaded, because events may have
  * been missed while the connection was down.
+ *
+ * Events and responses can arrive out of order, so an update older (by `updated_at`)
+ * than the stored version is ignored, and a list (`load`, a channel query) does not
+ * undo changes that arrived while it was being fetched. Responses to requests made
+ * before `disconnectUser` are dropped.
  */
 export class ScheduledMessageManager extends WithSubscriptions {
   private client: StreamChat;
@@ -68,6 +83,11 @@ export class ScheduledMessageManager extends WithSubscriptions {
    * `scheduled_message.sent` event) and must not bring the message back.
    */
   private removedIds = new Set<ScheduledMessageId>();
+  /** Bumped by `resetState`: responses to requests made before then are dropped. */
+  private epoch = 0;
+  /** Bumped on every store change; `touchedAt` records the value per ID. */
+  private seq = 0;
+  private touchedAt = new Map<ScheduledMessageId, number>();
   state: StateStore<ScheduledMessageManagerState>;
 
   constructor({ client }: ScheduledMessageManagerOptions) {
@@ -97,18 +117,72 @@ export class ScheduledMessageManager extends WithSubscriptions {
   }
 
   /**
-   * Returns the known scheduled messages of a channel (or, with `parentId`, of a thread),
-   * ordered by `scheduled_at`.
+   * Returns the known scheduled messages of a channel, ordered by `scheduled_at`.
+   * `parentId` narrows the list: a message ID returns the replies of that thread,
+   * `null` returns only the messages that are not thread replies, and leaving it out
+   * returns both.
    */
-  getForChannel = (cid: string, { parentId }: { parentId?: string } = {}) =>
+  getForChannel = (cid: string, { parentId }: { parentId?: string | null } = {}) =>
     Array.from(this.scheduledMessages.values())
       .filter(
         (sm) =>
           sm.cid === cid &&
-          (parentId === undefined || (sm.message.parent_id ?? undefined) === parentId),
+          (parentId === undefined || (sm.message.parent_id ?? null) === parentId),
       )
       .sort(byScheduledAt);
 
+  /**
+   * Call before a request whose response is passed to `hydrateChannelState`. The
+   * response is then not applied over changes made while it was in flight, and not
+   * at all after `resetState` (the user disconnected).
+   */
+  snapshotToken = (): ScheduledMessageSnapshotToken => ({
+    epoch: this.epoch,
+    seq: this.seq,
+  });
+
+  private touch = (id: ScheduledMessageId) => {
+    this.touchedAt.set(id, ++this.seq);
+  };
+
+  /**
+   * Replaces the entries `inScope` selects with `snapshot`, keeping the entries that
+   * changed after `token` was taken where the snapshot is not newer.
+   */
+  private applySnapshot = (
+    snapshot: ScheduledMessageResponse[],
+    inScope: (sm: ScheduledMessageResponse) => boolean,
+    token: ScheduledMessageSnapshotToken,
+  ) => {
+    const changedSince = (id: ScheduledMessageId) =>
+      (this.touchedAt.get(id) ?? 0) > token.seq;
+    const next = new Map(this.scheduledMessages);
+    for (const [id, sm] of next) {
+      if (inScope(sm) && !changedSince(id)) next.delete(id);
+    }
+    for (const sm of snapshot) {
+      if (this.removedIds.has(sm.id)) continue;
+      const current = next.get(sm.id);
+      if (current && isNewer(current, sm)) continue;
+      next.set(sm.id, sm);
+    }
+    this.state.partialNext({ scheduledMessages: next });
+  };
+
+  /**
+   * Stores a scheduled message from an API response, like `upsertToState`. `token`
+   * comes from `snapshotToken`, taken before the request was sent: a response that
+   * arrives after the user disconnected belongs to the previous user and is dropped.
+   */
+  upsertResponseToState = (
+    scheduledMessage: ScheduledMessageResponse,
+    token: ScheduledMessageSnapshotToken,
+  ) => {
+    if (token.epoch !== this.epoch) return;
+    this.upsertToState(scheduledMessage);
+  };
+
+  /** Stores a scheduled message, unless a newer version of it is already stored. */
   upsertToState = (scheduledMessage: ScheduledMessageResponse) => {
     if (!this.client._cacheEnabled()) return;
     // Terminal states are reported by the delete endpoint and by the sent event;
@@ -118,6 +192,12 @@ export class ScheduledMessageManager extends WithSubscriptions {
       return;
     }
     if (this.removedIds.has(scheduledMessage.id)) return;
+    // Why: responses and events can arrive out of order, e.g. the send-now response
+    // or its `scheduled_message.updated` event after `scheduled_message.failed`
+    // (the send is queued before the response is written).
+    const current = this.scheduledMessages.get(scheduledMessage.id);
+    if (current && isNewer(current, scheduledMessage)) return;
+    this.touch(scheduledMessage.id);
     const scheduledMessages = new Map(this.scheduledMessages);
     scheduledMessages.set(scheduledMessage.id, scheduledMessage);
     this.state.partialNext({ scheduledMessages });
@@ -125,6 +205,7 @@ export class ScheduledMessageManager extends WithSubscriptions {
 
   removeFromState = (id: ScheduledMessageId) => {
     this.removedIds.add(id);
+    this.touch(id);
     if (!this.scheduledMessages.has(id)) return;
     const scheduledMessages = new Map(this.scheduledMessages);
     scheduledMessages.delete(id);
@@ -134,24 +215,22 @@ export class ScheduledMessageManager extends WithSubscriptions {
   /**
    * Replaces the known scheduled messages of a channel with the authoritative list a
    * channel query returned (`include_scheduled_messages: true`). Nothing happens when
-   * the list is absent, which means the server did not know it.
+   * the list is absent, which means the server did not know it. `token` comes from
+   * `snapshotToken`, taken before the query was sent.
    */
   hydrateChannelState = (
     cid: string,
     scheduledMessages: ScheduledMessageResponse[] | undefined,
+    token: ScheduledMessageSnapshotToken = this.snapshotToken(),
   ) => {
     if (!this.client._cacheEnabled() || !Array.isArray(scheduledMessages)) return;
-    const next = new Map(this.scheduledMessages);
-    for (const [id, sm] of next) {
-      if (sm.cid === cid) next.delete(id);
-    }
-    for (const sm of scheduledMessages) {
-      if (!this.removedIds.has(sm.id)) next.set(sm.id, sm);
-    }
-    this.state.partialNext({ scheduledMessages: next });
+    if (token.epoch !== this.epoch) return;
+    this.applySnapshot(scheduledMessages, (sm) => sm.cid === cid, token);
   };
 
   resetState = () => {
+    this.epoch++;
+    this.touchedAt.clear();
     this.removedIds.clear();
     this.state.next(this.initialState);
   };
@@ -216,18 +295,18 @@ export class ScheduledMessageManager extends WithSubscriptions {
    * them. Call it once the user is connected.
    */
   load = async () => {
+    const token = this.snapshotToken();
     this.state.partialNext({ isLoading: true });
     try {
       const response = await this.client.queryScheduledMessages({
         limit: SCHEDULED_MESSAGES_LOAD_LIMIT,
       });
-      const scheduledMessages = new Map(
-        response.scheduled_messages
-          .filter((sm) => !this.removedIds.has(sm.id))
-          .map((sm) => [sm.id, sm] as const),
-      );
+      // The user disconnected meanwhile: the response belongs to the previous user.
+      if (token.epoch !== this.epoch) return response;
+      if (this.client._cacheEnabled()) {
+        this.applySnapshot(response.scheduled_messages, () => true, token);
+      }
       this.state.partialNext({
-        scheduledMessages: this.client._cacheEnabled() ? scheduledMessages : new Map(),
         hasMore: !!response.next,
         isLoaded: true,
         lastQueryError: undefined,
@@ -235,10 +314,12 @@ export class ScheduledMessageManager extends WithSubscriptions {
       });
       return response;
     } catch (error) {
-      this.state.partialNext({ lastQueryError: error as Error });
+      if (token.epoch === this.epoch) {
+        this.state.partialNext({ lastQueryError: error as Error });
+      }
       throw error;
     } finally {
-      this.state.partialNext({ isLoading: false });
+      if (token.epoch === this.epoch) this.state.partialNext({ isLoading: false });
     }
   };
 
@@ -248,12 +329,14 @@ export class ScheduledMessageManager extends WithSubscriptions {
   loadMore = async (): Promise<QueryScheduledMessagesResponse | undefined> => {
     const { next, isLoading } = this.state.getLatestValue();
     if (!next || isLoading) return;
+    const { epoch } = this;
     this.state.partialNext({ isLoading: true });
     try {
       const response = await this.client.queryScheduledMessages({
         limit: SCHEDULED_MESSAGES_LOAD_LIMIT,
         next,
       });
+      if (epoch !== this.epoch) return response;
       response.scheduled_messages.forEach(this.upsertToState);
       this.state.partialNext({
         hasMore: !!response.next,
@@ -262,10 +345,11 @@ export class ScheduledMessageManager extends WithSubscriptions {
       });
       return response;
     } catch (error) {
-      this.state.partialNext({ lastQueryError: error as Error });
+      if (epoch === this.epoch)
+        this.state.partialNext({ lastQueryError: error as Error });
       throw error;
     } finally {
-      this.state.partialNext({ isLoading: false });
+      if (epoch === this.epoch) this.state.partialNext({ isLoading: false });
     }
   };
 
@@ -273,20 +357,23 @@ export class ScheduledMessageManager extends WithSubscriptions {
     id: ScheduledMessageId,
     options: UpdateScheduledMessageOptions,
   ) => {
+    const token = this.snapshotToken();
     const { scheduled_message } = await this.client.updateScheduledMessage(id, options);
-    this.upsertToState(scheduled_message);
+    this.upsertResponseToState(scheduled_message, token);
     return scheduled_message;
   };
 
   deleteScheduledMessage = async (id: ScheduledMessageId) => {
+    const { epoch } = this;
     const { scheduled_message } = await this.client.deleteScheduledMessage(id);
-    this.removeFromState(id);
+    if (epoch === this.epoch) this.removeFromState(id);
     return scheduled_message;
   };
 
   sendScheduledMessageNow = async (id: ScheduledMessageId) => {
+    const token = this.snapshotToken();
     const { scheduled_message } = await this.client.sendScheduledMessageNow(id);
-    this.upsertToState(scheduled_message);
+    this.upsertResponseToState(scheduled_message, token);
     return scheduled_message;
   };
   // API calls END //

@@ -223,6 +223,7 @@ export class Channel {
       message: rawMessage,
     });
 
+    const scheduledMessagesToken = client.scheduledMessages.snapshotToken();
     const response = await client.post<SendMessageAPIResponse>(
       this._channelURL() + '/message',
       {
@@ -231,7 +232,10 @@ export class Channel {
       },
     );
     if (response.scheduled_message) {
-      client.scheduledMessages.upsertToState(response.scheduled_message);
+      client.scheduledMessages.upsertResponseToState(
+        response.scheduled_message,
+        scheduledMessagesToken,
+      );
     }
     return response;
   }
@@ -1599,6 +1603,7 @@ export class Channel {
       );
     }
 
+    const scheduledMessagesToken = this.getClient().scheduledMessages.snapshotToken();
     let queryURL = `${this.getClient().baseURL}/channels/${encodeURIComponent(
       this.type,
     )}`;
@@ -1674,6 +1679,7 @@ export class Channel {
     this.getClient().scheduledMessages.hydrateChannelState(
       this.cid,
       state.scheduled_messages,
+      scheduledMessagesToken,
     );
 
     this.messageComposer.initStateFromChannelResponse(state);

@@ -40,6 +40,14 @@ const generateEvent = (
   ...extra,
 });
 
+const at = (second: number) => new Date(Date.UTC(2030, 0, 1, 0, 0, second)).toISOString();
+
+const deferred = <T>() => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => (resolve = r));
+  return { promise, resolve };
+};
+
 const setup = () => {
   const client = getClientWithUser({ id: 'user1' }) as StreamChat;
   const manager = client.scheduledMessages;
@@ -122,6 +130,7 @@ describe('ScheduledMessageManager', () => {
 
       expect(manager.getForChannel(cid)).toEqual([sooner, later, reply]);
       expect(manager.getForChannel(cid, { parentId: 'parent' })).toEqual([reply]);
+      expect(manager.getForChannel(cid, { parentId: null })).toEqual([sooner, later]);
       expect(manager.getForChannel(otherCid)).toEqual([elsewhere]);
     });
 
@@ -378,6 +387,163 @@ describe('ScheduledMessageManager', () => {
       await manager.sendScheduledMessageNow(sm.id);
 
       expect(manager.getFromState(sm.id)).toBe(due);
+    });
+  });
+
+  describe('ordering', () => {
+    it('keeps a failed message failed when the send-now response arrives after the failed event', async () => {
+      const { client, manager } = setup();
+      manager.registerSubscriptions();
+      const sm = generateScheduledMessage({ updated_at: at(0) });
+      manager.upsertToState(sm);
+      const response = deferred<unknown>();
+      vi.spyOn(client, 'post').mockReturnValue(response.promise as never);
+
+      const sending = manager.sendScheduledMessageNow(sm.id);
+      client.dispatchEvent(
+        generateEvent('scheduled_message.failed', {
+          ...sm,
+          status: 'failed',
+          failure_reason: 'channel_frozen',
+          updated_at: at(20),
+        }),
+      );
+      response.resolve({
+        scheduled_message: { ...sm, scheduled_at: at(10), updated_at: at(10) },
+      });
+      await sending;
+
+      expect(manager.getFromState(sm.id)?.status).toBe('failed');
+    });
+
+    it('ignores an updated event older than the stored version', () => {
+      const { client, manager } = setup();
+      manager.registerSubscriptions();
+      const sm = generateScheduledMessage({ updated_at: at(0) });
+      client.dispatchEvent(
+        generateEvent('scheduled_message.failed', {
+          ...sm,
+          status: 'failed',
+          updated_at: at(20),
+        }),
+      );
+      client.dispatchEvent(
+        generateEvent('scheduled_message.updated', { ...sm, updated_at: at(10) }),
+      );
+
+      expect(manager.getFromState(sm.id)?.status).toBe('failed');
+    });
+
+    it('applies an update with the same updated_at', () => {
+      const { manager } = setup();
+      const sm = generateScheduledMessage({ updated_at: at(0) });
+      manager.upsertToState(sm);
+      manager.upsertToState({ ...sm, status: 'sending' });
+
+      expect(manager.getFromState(sm.id)?.status).toBe('sending');
+    });
+
+    it('keeps a message scheduled while load is in flight', async () => {
+      const { client, manager } = setup();
+      const response = deferred<unknown>();
+      vi.spyOn(client, 'post').mockReturnValue(response.promise as never);
+      const existing = generateScheduledMessage();
+      const scheduledMeanwhile = generateScheduledMessage();
+
+      const loading = manager.load();
+      manager.upsertToState(scheduledMeanwhile);
+      response.resolve({ scheduled_messages: [existing] });
+      await loading;
+
+      expect(manager.getFromState(existing.id)).toEqual(existing);
+      expect(manager.getFromState(scheduledMeanwhile.id)).toEqual(scheduledMeanwhile);
+    });
+
+    it('keeps a failure received while load is in flight', async () => {
+      const { client, manager } = setup();
+      manager.registerSubscriptions();
+      const sm = generateScheduledMessage({ status: 'sending', updated_at: at(5) });
+      manager.upsertToState(sm);
+      const response = deferred<unknown>();
+      vi.spyOn(client, 'post').mockReturnValue(response.promise as never);
+
+      const loading = manager.load();
+      client.dispatchEvent(
+        generateEvent('scheduled_message.failed', {
+          ...sm,
+          status: 'failed',
+          updated_at: at(20),
+        }),
+      );
+      response.resolve({ scheduled_messages: [sm] });
+      await loading;
+
+      expect(manager.getFromState(sm.id)?.status).toBe('failed');
+    });
+
+    it('still drops a message missing from the load when it did not change meanwhile', async () => {
+      const { client, manager } = setup();
+      const gone = generateScheduledMessage();
+      manager.upsertToState(gone);
+      vi.spyOn(client, 'post').mockResolvedValue({ scheduled_messages: [] });
+
+      await manager.load();
+
+      expect(manager.getFromState(gone.id)).toBeUndefined();
+    });
+
+    it('keeps a message scheduled while a channel query is in flight', async () => {
+      const { manager } = setup();
+      const token = manager.snapshotToken();
+      const scheduledMeanwhile = generateScheduledMessage();
+      manager.upsertToState(scheduledMeanwhile);
+
+      manager.hydrateChannelState(cid, [], token);
+
+      expect(manager.getFromState(scheduledMeanwhile.id)).toEqual(scheduledMeanwhile);
+    });
+  });
+
+  describe('user switch', () => {
+    it('drops a load response that arrives after the user disconnected', async () => {
+      const { client, manager } = setup();
+      const response = deferred<unknown>();
+      vi.spyOn(client, 'post').mockReturnValue(response.promise as never);
+      vi.spyOn(client, 'closeConnection').mockResolvedValue(undefined);
+
+      const loading = manager.load();
+      await client.disconnectUser();
+      response.resolve({ scheduled_messages: [generateScheduledMessage()] });
+      await loading;
+
+      expect(manager.scheduledMessages.size).toBe(0);
+      expect(manager.state.getLatestValue().isLoaded).toBe(false);
+    });
+
+    it('drops a send-now response that arrives after the user disconnected', async () => {
+      const { client, manager } = setup();
+      const sm = generateScheduledMessage();
+      const response = deferred<unknown>();
+      vi.spyOn(client, 'post').mockReturnValue(response.promise as never);
+      vi.spyOn(client, 'closeConnection').mockResolvedValue(undefined);
+
+      const sending = manager.sendScheduledMessageNow(sm.id);
+      await client.disconnectUser();
+      response.resolve({ scheduled_message: sm });
+      await sending;
+
+      expect(manager.scheduledMessages.size).toBe(0);
+    });
+
+    it('drops a channel query response that arrives after the user disconnected', async () => {
+      const { client, manager } = setup();
+      const token = manager.snapshotToken();
+      vi.spyOn(client, 'closeConnection').mockResolvedValue(undefined);
+      await client.disconnectUser();
+
+      manager.hydrateChannelState(cid, [generateScheduledMessage()], token);
+
+      expect(manager.scheduledMessages.size).toBe(0);
     });
   });
 });
