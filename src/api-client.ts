@@ -147,11 +147,12 @@ export class ApiClient {
     additonalConfig: AxiosRequestConfig,
   ): AxiosRequestConfig {
     const token = this._getToken();
+    const axiosRequestConfig = this.client.config.getConfig('client')?.axiosRequestConfig;
 
     return {
       ...additonalConfig,
       headers: {
-        ...this.client.options.axiosRequestConfig?.headers,
+        ...axiosRequestConfig?.headers,
         ...additonalConfig.headers,
         Authorization: token,
         'stream-auth-type': this.client.getAuthType(),
@@ -162,9 +163,8 @@ export class ApiClient {
       params: {
         user_id: this.client.userId,
         api_key: this.client.key,
-        // TODO: figure out whether this is needed, setting these at a later time (client.options.axiosRequestConfig = {...}) should probably be a setter
-        // that updates existing axios instance options instead
-        ...this.client.options.axiosRequestConfig?.params,
+        // Read per request, unlike the rest of `axiosRequestConfig`, which the axios instance took at construction.
+        ...axiosRequestConfig?.params,
         ...additonalConfig.params,
       },
     } satisfies AxiosRequestConfig;

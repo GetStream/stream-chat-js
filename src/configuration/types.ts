@@ -1,3 +1,4 @@
+import type { AxiosRequestConfig } from 'axios';
 import type { StreamChat } from '../client';
 import type {
   LiveLocationManager,
@@ -12,6 +13,7 @@ import type { MessageComposerConfig } from '../messageComposer/configuration/typ
 import type { Channel, ChannelConfig } from '../channel';
 import type { Thread, ThreadConfig } from '../thread';
 import type { ReminderManagerConfig } from '../reminders/ReminderManager';
+import type { NotificationManager } from '../notifications/NotificationManager';
 import type { NotificationManagerConfig } from '../notifications/types';
 import type { MessageDeliveryReporterConfig } from '../messageDelivery/MessageDeliveryReporter';
 import type { ThreadManagerConfig } from '../thread_manager';
@@ -137,6 +139,35 @@ export type ThreadDeclarativeConfig = {
 };
 
 export type ClientDeclarativeConfig = {
+  /**
+   * Silences the warning `connectUser` / `connectAnonymousUser` log when called server-side, where a
+   * connection counts towards MAU and concurrent-connection billing. Read on every connect.
+   */
+  allowServerSideConnect?: boolean;
+  /**
+   * Axios-level request configuration — `timeout`, `headers`, `httpsAgent` and so on. Built into the
+   * client's axios instance once, at construction; `headers` and `params` are additionally read on every
+   * request. Copied when registered, so changing the object you passed afterwards has no effect — register
+   * a new value instead.
+   */
+  axiosRequestConfig?: AxiosRequestConfig;
+  /** Base URL of the API, such as `https://chat-proxy-dublin.stream-io-api.com`. Read once, at construction. */
+  baseURL?: string;
+  /** Enforces browser (`true`) or Node (`false`) mode; detected from the global `window` when absent. Read live, through `client.browser` and `client.node`. */
+  browser?: boolean;
+  /**
+   * A pre-built {@link NotificationManager} for the client to use instead of constructing its own — to
+   * share one between clients, or to hand over one that already holds notifications. Read once, at
+   * construction. The client still applies the `notifications` slice below to it, on top of any
+   * configuration the manager was constructed with.
+   */
+  notificationManager?: NotificationManager;
+  /**
+   * When true, the user stays on the client if `connectUser` fails, so a chat application working offline
+   * keeps `client.user` and does not have to call `connectUser` again to retry. Read when a connect fails,
+   * so it can be changed at any time.
+   */
+  persistUserOnConnectionFailure?: boolean;
   /**
    * Nested rather than top-level keys: each of these managers has exactly one parent — the client — so
    * there is nothing to say once and reuse, which is what a top-level key buys (**DEC-25**).

@@ -546,6 +546,30 @@ const WS_CONNECTION_FIELDS: Record<keyof WSConnectionConfig, ConfigNode> = {
 };
 
 const CLIENT_FIELDS: Record<keyof ClientDeclarativeConfig, ConfigNode> = {
+  allowServerSideConnect: {
+    description:
+      'Silences the warning logged when `connectUser` is called server-side, where a connection counts towards MAU and concurrent-connection billing. Was `StreamChatOptions.allowServerSideConnect`.',
+    kind: 'value',
+    type: 'boolean',
+  },
+  axiosRequestConfig: {
+    description:
+      "Axios-level request configuration — `timeout`, `headers`, `httpsAgent` and so on. Built into the client's axios instance at construction; `headers` and `params` are also read on every request. Was `StreamChatOptions.axiosRequestConfig`.",
+    kind: 'value',
+    type: 'object',
+  },
+  baseURL: {
+    description:
+      'Base URL of the API, such as `https://chat-proxy-dublin.stream-io-api.com`. Read at construction. Was `StreamChatOptions.baseURL`.',
+    kind: 'value',
+    type: 'string',
+  },
+  browser: {
+    description:
+      'Enforces browser (`true`) or Node (`false`) mode; detected from the global `window` when absent. Read live, through `client.browser` and `client.node`. Was `StreamChatOptions.browser`.',
+    kind: 'value',
+    type: 'boolean',
+  },
   connectionRecovery: {
     description:
       'Bringing the channels, lists and threads you are reading back in line after a reconnect.',
@@ -563,10 +587,22 @@ const CLIENT_FIELDS: Record<keyof ClientDeclarativeConfig, ConfigNode> = {
     fields: NETWORK_CONNECTION_FIELDS,
     kind: 'group',
   },
+  notificationManager: {
+    description:
+      'A pre-built `NotificationManager` to use instead of the client constructing its own, to share one between clients or hand over one that already holds notifications. Read at construction. Was `StreamChatOptions.notifications`.',
+    kind: 'value',
+    type: 'object',
+  },
   notifications: {
     description: 'The client-wide notification (toast) manager.',
     fields: NOTIFICATION_FIELDS,
     kind: 'group',
+  },
+  persistUserOnConnectionFailure: {
+    description:
+      'Keeps the user on the client when `connectUser` fails, so an application working offline keeps `client.user` and need not call `connectUser` again to retry. Read when a connect fails. Was `StreamChatOptions.persistUserOnConnectionFailure`.',
+    kind: 'value',
+    type: 'boolean',
   },
   reminders: {
     description: 'Message reminders and their scheduling offsets.',

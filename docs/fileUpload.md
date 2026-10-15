@@ -139,7 +139,7 @@ The multipart transport applies `timeout: 0` and unbounded `maxContentLength` / 
 automatically, and these are not caller-overridable — an upload must never inherit the axios
 instance's 3s default timeout. The `Content-Type` is set to `multipart/form-data` without a
 boundary; the boundary is filled in from the `FormData` body by the browser, React Native, or
-axios' node adapter. A `Content-Type` in `StreamChatOptions.axiosRequestConfig.headers` does not
+axios' node adapter. A `Content-Type` in `client.axiosRequestConfig.headers` (in the client configuration) does not
 override it — headers the SDK sets for a request always win over that global config.
 
 `client.createAbortControllerForNextRequest()` is removed — it armed one controller that whichever
