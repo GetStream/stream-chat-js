@@ -941,12 +941,15 @@ channel.truncate(request?: TruncateChannelRequest);
 channel.acceptInvite(options?: UpdateChannelOptions);
 channel.rejectInvite(options?: UpdateChannelOptions);
 
-// v10 — options type renamed
-channel.acceptInvite(options?: ChannelUpdateOptions);
-channel.rejectInvite(options?: ChannelUpdateOptions);
+// v10 — options typed as the generated request
+channel.acceptInvite(options?: UpdateChannelRequest, requestOptions?);
+channel.rejectInvite(options?: UpdateChannelRequest, requestOptions?);
 ```
 
-`ChannelUpdateOptions` = `Omit<Gen_UpdateChannelRequest, 'message' | 'members'>`.
+`options` is the full generated `UpdateChannelRequest`, so it still carries `message` (the system message
+sent with the accept / reject), as v9's `UpdateChannelOptions` did. The other membership helpers
+(`addMembers`, `inviteMembers`, …) take `ChannelUpdateOptions` (`Omit<UpdateChannelRequest, 'message'>`),
+because they take `message` as a separate positional argument.
 
 #### `channel.mute` / `channel.unmute`
 
