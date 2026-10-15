@@ -34,7 +34,7 @@ setup.ts                                    # .env loading, per-file leak check 
 custom-types.d.ts                           # Custom*Data augmentations for the custom fields the docs use
 sync/                                       # `yarn test-docs-sync` (docs fence <-> test region check)
 maintenance/                                # `yarn test-docs-sweep`
-docs-snippets-todo.md                       # pages to cover and their status, open generator and API issues
+docs-snippets-todo.md                       # pages to cover and their status, open generator fixes
 AGENTS.md                                   # test conventions and API quirks, read before working on a page
 ```
 

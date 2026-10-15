@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { StreamChat } from '../../../../../src';
+import type { ChannelFilters, StreamChat } from '../../../../../src';
 import {
   disconnectClients,
   getClientSideClient,
@@ -261,5 +261,94 @@ describe(DOCS, () => {
     // #endregion snippet
 
     expect(channels.map((c) => c.cid)).toEqual(newestFirst);
+  });
+
+  // Own user and channels: hiding or muting the shared ones would change the other tests' results.
+  describe('hidden and muted channels', () => {
+    const memberId = uniqueId('member');
+    // The docs' placeholder value.
+    const userID = memberId;
+    const visibleCid = `messaging:${uniqueId('visible')}`;
+    const hiddenCid = `messaging:${uniqueId('hidden')}`;
+    const mutedCid = `messaging:${uniqueId('muted')}`;
+    let memberClient: StreamChat;
+
+    const queryCids = async (filter_conditions: ChannelFilters) => {
+      const channels = await memberClient.queryChannelsAndHydrate({
+        filter_conditions,
+        limit: 30,
+      });
+      return channels.map((c) => c.cid).sort();
+    };
+
+    beforeAll(async () => {
+      cleanup.users.push(memberId);
+      cleanup.channels.push(visibleCid, hiddenCid, mutedCid);
+      memberClient = await getClientSideClient({ id: memberId });
+      for (const cid of [visibleCid, hiddenCid, mutedCid]) {
+        const [type, id] = cid.split(':');
+        await serverClient.chat.channel(type, id).getOrCreate({
+          data: { members: [{ user_id: memberId }], created_by_id: other },
+        });
+      }
+      const [hiddenType, hiddenId] = hiddenCid.split(':');
+      await serverClient.chat.channel(hiddenType, hiddenId).hide({ user_id: memberId });
+      await serverClient.chat.muteChannel({
+        channel_cids: [mutedCid],
+        user_id: memberId,
+      });
+    });
+
+    afterAll(async () => {
+      await disconnectClients(memberClient);
+    });
+
+    it.skip("BLOCKED: lists a user's hidden and visible channels (the test app leaves the hidden channel out of a `$or: [{ hidden: true }, { hidden: false }]` filter unless it has a top-level `cid: { $in }`)", async () => {
+      // #region snippet docs="chat/_default/03-channels/02-query_channels.md" heading="Listing a User's Channels" tab="JavaScript" index=1
+      const filter = {
+        type: 'messaging',
+        members: { $in: [userID] },
+        $or: [{ hidden: true }, { hidden: false }],
+      };
+      // #endregion snippet
+
+      expect(await queryCids(filter)).toEqual([visibleCid, hiddenCid, mutedCid].sort());
+      // Without the `hidden` condition, the hidden channel is left out.
+      expect(await queryCids({ type: 'messaging', members: { $in: [userID] } })).toEqual(
+        [visibleCid, mutedCid].sort(),
+      );
+    });
+
+    it('queries channels by id together with membership', async () => {
+      // The channels where the user has the member-level setting, kept in your backend.
+      const cids = [visibleCid, hiddenCid];
+
+      // #region snippet docs="chat/_default/03-channels/02-query_channels.md" heading="Filtering by Member Data" tab="JavaScript" index=1
+      const filter = {
+        cid: { $in: cids },
+        members: { $in: [userID] },
+        $or: [{ hidden: true }, { hidden: false }],
+      };
+      // #endregion snippet
+
+      expect(await queryCids(filter)).toEqual([visibleCid, hiddenCid].sort());
+    });
+
+    it.skip('BLOCKED: combines the ids with muted channels (the test app leaves the hidden channel out: the `hidden` $or does not include hidden channels without a top-level `cid: { $in }`)', async () => {
+      const cids = [hiddenCid];
+
+      // #region snippet docs="chat/_default/03-channels/02-query_channels.md" heading="Filtering by Member Data" tab="JavaScript" index=2
+      const filter = {
+        members: { $in: [userID] },
+        $and: [
+          { $or: [{ cid: { $in: cids } }, { muted: true }] },
+          { $or: [{ hidden: true }, { hidden: false }] },
+        ],
+      };
+      // #endregion snippet
+
+      // The hidden channel by id, the muted one by `muted`; the visible one matches neither.
+      expect(await queryCids(filter)).toEqual([hiddenCid, mutedCid].sort());
+    });
   });
 });

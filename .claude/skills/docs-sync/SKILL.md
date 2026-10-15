@@ -136,7 +136,7 @@ Run `yarn test-docs` only on the test files you changed: pages may change app se
 - Never write the API key or secret to any file except `test/docs-snippets/.env`.
 - Don't edit `test/docs-snippets/AGENTS.md`, the helpers or the configs. Propose changes in the report instead.
 - Change docs snippets as little as possible, and only when they don't work.
-- Backend behavior issues that don't block the test (misleading error, inconsistent behavior) go to "Possible API issues" in `test/docs-snippets/docs-snippets-todo.md`, with the page and the exact error.
+- API and API spec issues (misleading error, inconsistent behavior, a backend that doesn't match the docs) go in the report only, with the page and the exact error. Don't write them to `test/docs-snippets/docs-snippets-todo.md` or any other file.
 
 ## Report
 
@@ -147,5 +147,6 @@ End with:
 3. **New and removed tests**: snippets added, regions removed with their fences, renamed markers.
 4. **Docs changes**: every fence changed in `$DOCS_DIR` (fixes, labels, removed server-only code), each with before/after, reason and evidence. These need human review.
 5. **`src/` fixes**: each change as a diff, with the snippet that needed it.
-6. **Open questions**: failing or blocked snippets you couldn't resolve, other-product fences to exclude, API issues added to the TODO.
-7. **Proposed additions to `test/docs-snippets/AGENTS.md`**: short, reusable lessons. Skip page-specific details.
+6. **Open questions**: failing or blocked snippets you couldn't resolve, other-product fences to exclude.
+7. **API issues**: API and API spec issues found while testing, each with the page and the exact error.
+8. **Proposed additions to `test/docs-snippets/AGENTS.md`**: short, reusable lessons. Skip page-specific details.
