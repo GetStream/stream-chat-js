@@ -4656,10 +4656,10 @@ export class StreamChat {
     }
     if (
       typeof options.conversations !== 'undefined' &&
-      !['soft', 'hard'].includes(options.conversations)
+      !['soft', 'hard', 'keep'].includes(options.conversations)
     ) {
       throw new Error(
-        'Invalid delete user options. conversations must be one of [soft hard]',
+        'Invalid delete user options. conversations must be one of [soft hard keep]',
       );
     }
     if (
