@@ -57,8 +57,15 @@ export const JS_TAB = 'JavaScript';
  * implementations without an SDK (raw HTTP, AWS SDK, ...). Neither tested nor changed.
  */
 export const NODE_TAB = 'Node.js';
+/**
+ * Out of scope too: the stream-chat-js@9 versions shown next to `JavaScript` (client-side)
+ * and `Node.js` (server-side). Neither tested nor changed.
+ */
+export const V9_TABS = ['JavaScript (stream-chat-js@9)', 'Node.js (stream-chat-js@9)'];
+/** Fences with these labels are never tested. */
+export const OUT_OF_SCOPE_TABS = [NODE_TAB, ...V9_TABS];
 /** Every JS fence must carry one of these labels. */
-export const ALLOWED_JS_LABELS = [JS_TAB, NODE_TAB];
+export const ALLOWED_JS_LABELS = [JS_TAB, ...OUT_OF_SCOPE_TABS];
 
 /**
  * Sidebars whose pages' `JavaScript` fences are tested: sidebar file in
@@ -139,7 +146,7 @@ export const isCommentOnly = (code: string) =>
 
 /**
  * All JS fences (`js`/`javascript`/`ts`/`typescript`) of a docs page, keyed the same way
- * as the test markers. Includes `Node.js` and unlabelled fences (for the label check);
+ * as the test markers. Includes out-of-scope and unlabelled fences (for the label check);
  * only `JavaScript` fences are tested.
  */
 export const parseDocsFences = (docs: string, markdown: string): DocsFence[] => {
