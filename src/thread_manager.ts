@@ -187,6 +187,23 @@ export class ThreadManager extends WithSubscriptions {
   };
 
   /**
+   * The registered instance for a thread a query just built, or the query's own instance when none
+   * is registered, so `queryThreadsAndHydrate` / `getThreadAndHydrate` hand out the one instance
+   * events reach: a second one would be left unmanaged by `activate()`. A stale registered thread
+   * is refreshed from the query, unless it's open (active), in which case it reloads itself.
+   *
+   * @internal
+   */
+  public resolveQueried = (incoming: Thread): Thread => {
+    const stored = this.threadStore.get(incoming.id);
+    if (!stored) return incoming;
+    if (stored.hasStaleState && !stored.state.getLatestValue().active) {
+      stored.hydrateState(incoming);
+    }
+    return stored;
+  };
+
+  /**
    * Every registered thread — the list's plus the opened ones.
    *
    * @internal

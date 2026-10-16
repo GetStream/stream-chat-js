@@ -15,6 +15,8 @@ import type {
   MarkReadRequest,
   MarkReadResponse,
   MarkUnreadRequest,
+  QueryChannelBansRequest,
+  QueryChannelBansResponse,
   Response,
   SendEventRequest,
   SendMessageRequest,
@@ -115,6 +117,23 @@ export class ChannelApi {
     }
 
     return this.chatApi.updateChannel(
+      { id: this.id, type: this.type },
+      request,
+      requestOptions,
+    );
+  }
+
+  queryChannelBans(
+    request?: QueryChannelBansRequest,
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<QueryChannelBansResponse>> {
+    if (!this.id) {
+      throw new Error(
+        `Channel isn't yet created, call getOrCreateDistinctChannel() before this operation`,
+      );
+    }
+
+    return this.chatApi.queryChannelBans(
       { id: this.id, type: this.type },
       request,
       requestOptions,

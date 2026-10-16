@@ -1,7 +1,6 @@
 import { StreamClient } from '@stream-io/node-sdk';
 import type { UserRequest } from '@stream-io/node-sdk';
 import { StreamChat } from '../../../src';
-import type { UserResponse } from '../../../src';
 
 const apiKey = () => process.env.STREAM_API_KEY as string;
 const apiSecret = () => process.env.STREAM_API_SECRET as string;
@@ -16,9 +15,12 @@ export const getServerClient = () => new StreamClient(apiKey(), apiSecret());
 export const createUserToken = (userId: string) =>
   getServerClient().generateUserToken({ user_id: userId });
 
+/** The user `connectUser` takes: only `id` is required, custom data under `custom`. */
+export type TestUser = Parameters<StreamChat['connectUser']>[0];
+
 /** node-sdk requires `enabled` on each privacy setting; unset means enabled. */
 const toPrivacySettings = (
-  settings: UserResponse['privacy_settings'],
+  settings: TestUser['privacy_settings'],
 ): UserRequest['privacy_settings'] =>
   settings &&
   Object.fromEntries(
@@ -28,57 +30,44 @@ const toPrivacySettings = (
     ]),
   );
 
-/**
- * Converts a stream-chat-js user (custom fields at the top level) to a node-sdk
- * `UserRequest` (custom fields under `custom`).
- */
-export const toUserRequest = (user: UserResponse & { id: string }): UserRequest => {
-  const {
-    id,
-    image,
-    invisible,
-    language,
-    name,
-    privacy_settings,
-    role,
-    teams,
-    teams_role,
-    ...rest
-  } = user;
-  const custom = Object.fromEntries(
-    Object.entries(rest).filter(([, value]) => value !== undefined),
-  );
-  return {
-    id,
-    image,
-    invisible,
-    language,
-    name,
-    privacy_settings: toPrivacySettings(privacy_settings),
-    role,
-    teams,
-    teams_role: teams_role ?? undefined,
-    ...(Object.keys(custom).length ? { custom } : {}),
-  };
-};
+/** Converts a stream-chat-js user to a node-sdk `UserRequest`. */
+export const toUserRequest = ({
+  custom,
+  id,
+  image,
+  invisible,
+  language,
+  name,
+  privacy_settings,
+  role,
+  teams,
+  teams_role,
+}: TestUser): UserRequest => ({
+  id,
+  image,
+  invisible,
+  language,
+  name,
+  privacy_settings: toPrivacySettings(privacy_settings),
+  role,
+  teams,
+  teams_role,
+  ...(custom && Object.keys(custom).length ? { custom } : {}),
+});
 
-/** Creates or replaces users (stream-chat-js shape, custom fields at the top level). */
-export const upsertUsers = (
-  serverClient: StreamClient,
-  users: Array<UserResponse & { id: string }>,
-) => serverClient.upsertUsers(users.map(toUserRequest));
+/** Creates or replaces users (stream-chat-js shape). */
+export const upsertUsers = (serverClient: StreamClient, users: TestUser[]) =>
+  serverClient.upsertUsers(users.map(toUserRequest));
 
 /**
  * Client-side client connected as `user` with a user token, the way an app would.
  * The user is upserted first server-side.
  * Remember to call `disconnectClients` in `afterAll`.
  */
-export const getClientSideClient = async (
-  user: UserResponse & { id: string },
-): Promise<StreamChat> => {
+export const getClientSideClient = async (user: TestUser): Promise<StreamChat> => {
   await upsertUsers(getServerClient(), [user]);
   // `new StreamChat` instead of `getInstance` so several users can be connected in one file.
-  const client = new StreamChat(apiKey(), { allowServerSideConnect: true });
+  const client = new StreamChat(apiKey(), { client: { allowServerSideConnect: true } });
   await client.connectUser(user, createUserToken(user.id));
   return client;
 };

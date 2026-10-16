@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { StreamChat } from '../../../../../src';
-import type { Event } from '../../../../../src';
+import type { EventPayload } from '../../../../../src';
 import {
   createUserToken,
   disconnectClients,
@@ -30,7 +30,7 @@ describe('_default/05-features/05-presence_format.md', () => {
 
   // Records the presence events of `userId` the client receives.
   const recordPresence = (userId: string) => {
-    const events: Event[] = [];
+    const events: EventPayload<'user.presence.changed'>[] = [];
     const { unsubscribe } = client.on('user.presence.changed', (event) => {
       if (event.user?.id === userId) events.push(event);
     });
@@ -56,19 +56,19 @@ describe('_default/05-features/05-presence_format.md', () => {
     // If you pass presence: true to channel.watch it will watch the list of user presence changes.
     // Note that you can listen to at most 10 users using this API call
     const channel = client.channel('messaging', channelId, {
-      members: [johnId, jackId],
-      color: 'green',
+      members: [{ user_id: johnId }, { user_id: jackId }],
+      custom: { color: 'green' },
     });
 
     const state = await channel.watch({ presence: true });
 
-    // queryChannels allows you to listen to the members of the channels that are returned
+    // queryChannelsAndHydrate allows you to listen to the members of the channels that are returned
     // so this does the same thing as above and listens to online status changes for john and jack
-    const channels = await client.queryChannels(
-      { color: 'green' },
-      { last_message_at: -1 },
-      { presence: true },
-    );
+    const channels = await client.queryChannelsAndHydrate({
+      filter_conditions: { 'custom.color': 'green' },
+      sort: [{ field: 'last_message_at', direction: -1 }],
+      presence: true,
+    });
     // #endregion snippet
 
     expect(state.members.map((m) => m.user_id).sort()).toEqual([johnId, jackId].sort());
@@ -95,15 +95,15 @@ describe('_default/05-features/05-presence_format.md', () => {
     const id = uniqueId('channel');
     cleanup.channels.push(`messaging:${id}`);
     await client
-      .channel('messaging', id, { members: [johnId, userId] })
+      .channel('messaging', id, { members: [{ user_id: johnId }, { user_id: userId }] })
       .watch({ presence: true });
     const { events, unsubscribe } = recordPresence(userId);
 
     try {
-      const original = userClient.partialUpdateUser.bind(userClient);
+      const original = userClient.updateUsersPartial.bind(userClient);
       const responses: Awaited<ReturnType<typeof original>>[] = [];
-      userClient.partialUpdateUser = async (update) => {
-        const response = await original(update);
+      vi.spyOn(userClient, 'updateUsersPartial').mockImplementation(async (request) => {
+        const response = await original(request);
         responses.push(response);
         if (responses.length === 1) {
           // after "become invisible": the user is invisible and appears offline
@@ -116,21 +116,19 @@ describe('_default/05-features/05-presence_format.md', () => {
           });
         }
         return response;
-      };
+      });
       const client = userClient;
 
       // #region snippet docs="chat/_default/05-features/05-presence_format.md" heading="Invisible" tab="JavaScript" index=1
       // COPY: userId="unique_user_id"
       // become invisible
-      await client.partialUpdateUser({
-        id: userId,
-        set: { invisible: true },
+      await client.updateUsersPartial({
+        users: [{ id: userId, set: { invisible: true } }],
       });
 
       // become visible
-      await client.partialUpdateUser({
-        id: userId,
-        set: { invisible: false },
+      await client.updateUsersPartial({
+        users: [{ id: userId, set: { invisible: false } }],
       });
       // #endregion snippet
 
@@ -156,7 +154,7 @@ describe('_default/05-features/05-presence_format.md', () => {
     await serverClient.upsertUsers([{ id: userId }]);
     const token = createUserToken(userId);
     const client = new StreamChat(process.env.STREAM_API_KEY as string, {
-      allowServerSideConnect: true,
+      client: { allowServerSideConnect: true },
     });
     extraClients.push(client);
     const connectSpy: { reply?: Awaited<ReturnType<typeof client.connectUser>> } = {};
@@ -212,7 +210,8 @@ describe('_default/05-features/05-presence_format.md', () => {
       console.log(member.user?.last_active);
       // #endregion snippet
 
-      expect(logSpy.mock.calls).toEqual([[true], [expect.any(String)]]);
+      // `last_active` is in unix nanoseconds
+      expect(logSpy.mock.calls).toEqual([[true], [expect.any(Number)]]);
     } finally {
       logSpy.mockRestore();
     }

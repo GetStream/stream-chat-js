@@ -187,6 +187,9 @@ function getRandomBytes(length: number): Uint8Array {
   return bytes;
 }
 
+const isScalarParam = (value: unknown) =>
+  typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
+
 export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (params) => {
   const newParams = [];
   for (const k in params) {
@@ -194,7 +197,11 @@ export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (pa
     // So, we need to skip the undefined values.
     if (params[k] === undefined) continue;
 
-    if (Array.isArray(params[k]) || typeof params[k] === 'object') {
+    // Arrays of scalars go comma-separated (`ids=a,b`), the form the API parses for list query
+    // params; a JSON array there is read as one malformed id and silently matches nothing.
+    if (Array.isArray(params[k]) && params[k].every(isScalarParam)) {
+      newParams.push(`${k}=${encodeURIComponent(params[k].join(','))}`);
+    } else if (Array.isArray(params[k]) || typeof params[k] === 'object') {
       newParams.push(`${k}=${encodeURIComponent(JSON.stringify(params[k]))}`);
     } else {
       newParams.push(`${k}=${encodeURIComponent(params[k])}`);

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { Channel, QueryReactionsAPIResponse, StreamChat } from '../../../../../src';
+import type { Channel, QueryReactionsResponse, StreamChat } from '../../../../../src';
 import {
   disconnectClients,
   getClientSideClient,
@@ -18,7 +18,7 @@ describe('_default/04-messages/04-send_reaction.md', () => {
   let channel: Channel;
 
   const newMessageId = async (text: string) => {
-    const { message } = await channel.sendMessage({ text });
+    const { message } = await channel.sendMessage({ message: { text } });
     return message.id;
   };
 
@@ -43,7 +43,9 @@ describe('_default/04-messages/04-send_reaction.md', () => {
     cleanup.users.push(userId, otherId);
     await serverClient.upsertUsers([{ id: otherId }]);
     client = await getClientSideClient({ id: userId });
-    channel = client.channel('messaging', channelId, { members: [userId, otherId] });
+    channel = client.channel('messaging', channelId, {
+      members: [{ user_id: userId }, { user_id: otherId }],
+    });
     cleanup.channels.push(`messaging:${channelId}`);
     await channel.watch();
   });
@@ -56,31 +58,31 @@ describe('_default/04-messages/04-send_reaction.md', () => {
   it('sends a reaction', async () => {
     const messageID = await newMessageId('React to me');
     // A reaction of another type, which `enforce_unique` should replace.
-    await channel.sendReaction(messageID, { type: 'fire' });
+    await channel.sendReaction({ id: messageID }, { reaction: { type: 'fire' } });
 
     // #region snippet docs="chat/_default/04-messages/04-send_reaction.md" heading="Sending a Reaction" tab="JavaScript" index=1
     // Add a reaction
-    const reaction = await channel.sendReaction(messageID, {
-      type: 'love',
-    });
+    const reaction = await channel.sendReaction(
+      { id: messageID },
+      { reaction: { type: 'love' } },
+    );
 
     // Add a reaction with custom data
-    const customReaction = await channel.sendReaction(messageID, {
-      type: 'love',
-      customField: 'value',
-    });
+    const customReaction = await channel.sendReaction(
+      { id: messageID },
+      { reaction: { type: 'love', custom: { customField: 'value' } } },
+    );
 
     // Replace all existing reactions from this user with the new one
     const uniqueReaction = await channel.sendReaction(
-      messageID,
-      { type: 'love' },
-      { enforce_unique: true },
+      { id: messageID },
+      { reaction: { type: 'love' }, enforce_unique: true },
     );
     // #endregion snippet
 
     expect(reaction.reaction.type).toBe('love');
     expect(reaction.reaction.user_id).toBe(userId);
-    expect(customReaction.reaction.customField).toBe('value');
+    expect(customReaction.reaction.custom.customField).toBe('value');
     expect(uniqueReaction.reaction.type).toBe('love');
 
     const message = await getServerMessage(messageID);
@@ -89,11 +91,11 @@ describe('_default/04-messages/04-send_reaction.md', () => {
 
   it('removes a reaction', async () => {
     const messageID = await newMessageId('Remove my reaction');
-    await channel.sendReaction(messageID, { type: 'love' });
+    await channel.sendReaction({ id: messageID }, { reaction: { type: 'love' } });
     expect((await getServerMessage(messageID)).reaction_counts).toEqual({ love: 1 });
 
     // #region snippet docs="chat/_default/04-messages/04-send_reaction.md" heading="Removing a Reaction" tab="JavaScript" index=1
-    await channel.deleteReaction(messageID, 'love');
+    await channel.deleteReaction({ id: messageID, type: 'love' });
     // #endregion snippet
 
     const message = await getServerMessage(messageID);
@@ -108,13 +110,13 @@ describe('_default/04-messages/04-send_reaction.md', () => {
 
     // #region snippet docs="chat/_default/04-messages/04-send_reaction.md" heading="Paginating Reactions" tab="JavaScript" index=1
     // Get the first 10 reactions
-    const response = await channel.getReactions(messageID, { limit: 10 });
+    const response = await client.getReactions({ id: messageID }, { limit: 10 });
 
     // Get reactions 11-13
-    const nextResponse = await channel.getReactions(messageID, {
-      limit: 3,
-      offset: 10,
-    });
+    const nextResponse = await client.getReactions(
+      { id: messageID },
+      { limit: 3, offset: 10 },
+    );
     // #endregion snippet
 
     expect(response.reactions).toHaveLength(10);
@@ -127,7 +129,7 @@ describe('_default/04-messages/04-send_reaction.md', () => {
 
   it('queries reactions', async () => {
     const messageId = await newMessageId('Query my reactions');
-    await channel.sendReaction(messageId, { type: 'like' });
+    await channel.sendReaction({ id: messageId }, { reaction: { type: 'like' } });
     // Enough reactions from another user for `firstPage` to have a `next` cursor.
     const otherTypes = Array.from({ length: 30 }, (_, i) => `t${i + 1}`);
     await sendServerReactions(messageId, otherTypes, otherId);
@@ -136,22 +138,20 @@ describe('_default/04-messages/04-send_reaction.md', () => {
 
     // #region snippet docs="chat/_default/04-messages/04-send_reaction.md" heading="Querying Reactions" tab="JavaScript" index=1
     // Query reactions by type
-    await client.queryReactions(message.id, { type: 'like' });
+    await client.queryReactions({ id: message.id }, { filter: { type: 'like' } });
 
     // Query reactions by user
-    await client.queryReactions(message.id, { user_id: userId });
+    await client.queryReactions({ id: message.id }, { filter: { user_id: userId } });
 
     // Paginate results
-    const firstPage = await client.queryReactions(message.id, {});
+    const firstPage = await client.queryReactions({ id: message.id });
     const secondPage = await client.queryReactions(
-      message.id,
-      {},
-      {},
+      { id: message.id },
       { limit: 5, next: firstPage.next },
     );
     // #endregion snippet
 
-    const [byType, byUser]: QueryReactionsAPIResponse[] = await Promise.all(
+    const [byType, byUser]: QueryReactionsResponse[] = await Promise.all(
       spy.mock.results.slice(0, 2).map((r) => r.value),
     );
     spy.mockRestore();
@@ -169,16 +169,16 @@ describe('_default/04-messages/04-send_reaction.md', () => {
 
     // #region snippet docs="chat/_default/04-messages/04-send_reaction.md" heading="Cumulative Reactions" tab="JavaScript" index=1
     // User claps 5 times
-    await channel.sendReaction(messageID, {
-      type: 'clap',
-      score: 5,
-    });
+    await channel.sendReaction(
+      { id: messageID },
+      { reaction: { type: 'clap', score: 5 } },
+    );
 
     // Same user claps 20 more times (total becomes 25)
-    await channel.sendReaction(messageID, {
-      type: 'clap',
-      score: 25,
-    });
+    await channel.sendReaction(
+      { id: messageID },
+      { reaction: { type: 'clap', score: 25 } },
+    );
     // #endregion snippet
 
     const message = await getServerMessage(messageID);

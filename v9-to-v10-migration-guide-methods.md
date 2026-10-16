@@ -68,7 +68,7 @@ Two things to know when rewriting call sites:
 
 The following `StreamChat` methods no longer exist. All were server-side or admin-only. Rewrites should either delete the call site or move it to the server SDK:
 
-`updateAppSettings`, `revokeUserToken`, `revokeUsersToken`, `testPushSettings`, `testSQSSettings`, `testSNSSettings`, `createToken`, `devToken`, user-groups mutations (`createUserGroup` / `getUserGroup` / `searchUserGroups` / `updateUserGroup` / `deleteUserGroup` / `addUserGroupMembers` / `removeUserGroupMembers`) — the read path is renamed, see below, `upsertPushProvider`, `deletePushProvider`, `listPushProviders`, `setPushPreferences`, `_queryFlags`, `_queryFlagReports`, `_reviewFlagReport`, `queryFutureChannelBans`-write paths, `getHookEvents`, `partialUpdateUser`, `deleteUser`, `restoreUsers`, `reactivateUser`, `reactivateUsers`, `deactivateUser`, `deactivateUsers`, `exportUser`, `getSharedLocations`, `translate`, `translateMessage`, `updateFlags`, `queryCampaigns`, `_createImportURL`, `_createImport`, `_getImport`, `_listImports`, `commitMessage`, `queryTeamUsageStats`, `updateLocation`, `updateChannelsBatch`, `deletePredefinedFilter`, `setRetentionPolicy`, `deleteRetentionPolicy`, `getRetentionPolicy`, `getRetentionPolicyRuns`, hand-rolled reminder client methods (`createReminder`/`updateReminder`/`deleteReminder` — see note under `Reminder` handling; the inherited `queryReminders` from `ChatApi` remains but with the generated request shape, not the v9 `QueryRemindersOptions`), `createCommand`/`getCommand`/`updateCommand`/`deleteCommand`/`listCommands`/`createChannelType`/`getChannelType`/`updateChannelType`/`deleteChannelType`/`listChannelTypes`/`exportChannel`/`exportChannels`/`exportUsers`/`getExportChannelStatus`/`getTask`/`enrichURL`/`sendUserCustomEvent`, `deleteChannels`, `deleteUsers`, `createRole`/`listRoles`/`deleteRole` (only `searchRoles` remains, inherited), `getPermission`/`createPermission`/`updatePermission`/`deletePermission`/`listPermissions`, `getBlockList` (only `listBlockLists`/`createBlockList`/`updateBlockList`/`deleteBlockList` remain, inherited), `verifyWebhook`, `verifyAndParseWebhook`, `parseSqs`, `parseSns` (removed outright — see below), `campaign`, `segment`, `channelBatchUpdater`, `validateServerSideAuth`, `createSegment`, `createUserSegment`, `createChannelSegment`, `getSegment`, `updateSegment`, `addSegmentTargets`, `querySegmentTargets`, `removeSegmentTargets`, `querySegments`, `deleteSegment`, `segmentTargetExists`, `createCampaign`, `getCampaign`, `startCampaign`, `updateCampaign`, `deleteCampaign`, `stopCampaign`, `_normalizeDate`. Note: `queryDrafts`, `queryPolls`, `queryPollVotes`, `queryMessageFlags`, and `markChannelsDelivered` — all of which were hand-rolled in v9 — now come from `ChatApi` inheritance with generated request shapes; they still exist on `client`.
+`updateAppSettings`, `revokeUserToken`, `revokeUsersToken`, `testPushSettings`, `testSQSSettings`, `testSNSSettings`, `createToken`, user-groups mutations (`createUserGroup` / `getUserGroup` / `searchUserGroups` / `updateUserGroup` / `deleteUserGroup` / `addUserGroupMembers` / `removeUserGroupMembers`) — the read path is renamed, see below, `upsertPushProvider`, `deletePushProvider`, `listPushProviders`, `setPushPreferences`, `_queryFlags`, `_queryFlagReports`, `_reviewFlagReport`, `queryFutureChannelBans`-write paths, `getHookEvents`, `partialUpdateUser`, `deleteUser`, `restoreUsers`, `reactivateUser`, `reactivateUsers`, `deactivateUser`, `deactivateUsers`, `exportUser`, `getSharedLocations`, `translate`, `translateMessage`, `updateFlags`, `queryCampaigns`, `_createImportURL`, `_createImport`, `_getImport`, `_listImports`, `commitMessage`, `queryTeamUsageStats`, `updateLocation`, `updateChannelsBatch`, `deletePredefinedFilter`, `setRetentionPolicy`, `deleteRetentionPolicy`, `getRetentionPolicy`, `getRetentionPolicyRuns`, hand-rolled reminder client methods (`createReminder`/`updateReminder`/`deleteReminder` — see note under `Reminder` handling; the inherited `queryReminders` from `ChatApi` remains but with the generated request shape, not the v9 `QueryRemindersOptions`), `createCommand`/`getCommand`/`updateCommand`/`deleteCommand`/`listCommands`/`createChannelType`/`getChannelType`/`updateChannelType`/`deleteChannelType`/`listChannelTypes`/`exportChannel`/`exportChannels`/`exportUsers`/`getExportChannelStatus`/`getTask`/`enrichURL`/`sendUserCustomEvent`, `deleteChannels`, `deleteUsers`, `createRole`/`listRoles`/`deleteRole` (only `searchRoles` remains, inherited), `getPermission`/`createPermission`/`updatePermission`/`deletePermission`/`listPermissions`, `getBlockList` (only `listBlockLists`/`createBlockList`/`updateBlockList`/`deleteBlockList` remain, inherited), `verifyWebhook`, `verifyAndParseWebhook`, `parseSqs`, `parseSns` (removed outright — see below), `campaign`, `segment`, `channelBatchUpdater`, `validateServerSideAuth`, `createSegment`, `createUserSegment`, `createChannelSegment`, `getSegment`, `updateSegment`, `addSegmentTargets`, `querySegmentTargets`, `removeSegmentTargets`, `querySegments`, `deleteSegment`, `segmentTargetExists`, `createCampaign`, `getCampaign`, `startCampaign`, `updateCampaign`, `deleteCampaign`, `stopCampaign`, `_normalizeDate`. Note: `queryDrafts`, `queryPolls`, `queryPollVotes`, `queryMessageFlags`, and `markChannelsDelivered` — all of which were hand-rolled in v9 — now come from `ChatApi` inheritance with generated request shapes; they still exist on `client`.
 
 ### Renamed / signature-changed
 
@@ -453,6 +453,20 @@ The SDK itself gets channels through `client.channelManager.ensure()`, so a spy 
 sees only your own calls; spy on `client.channelManager.ensure` (called with `{ type, id, data }`) to
 see every channel the client gets.
 
+#### `client.setGuestUser`
+
+```ts
+// v9
+client.setGuestUser(user: UserResponse);
+
+// v10
+client.setGuestUser(user: UserRequest, requestOptions?);
+```
+
+`user` is the generated `UserRequest` (`id`, plus optional `name`, `image`, `language`, `invisible`,
+`privacy_settings` and `custom`), the shape `createGuest` sends. App custom fields go under `custom`
+rather than at the root.
+
 #### `client.setAnonymousUser` alias
 
 ```ts
@@ -474,7 +488,7 @@ client.sendFile(url, uri, name?, contentType?, user?, axiosRequestConfig?);
 
 // v10
 client.api.doAxiosRequest(type, url, data?, options?);
-client.dispatchEvent(event: Event);                     // Event union expanded to WSEvent | LocalEvent | keyof CustomEventTypes
+client.dispatchEvent(event: Event);                     // Event union is now WSEvent | LocalEvent | CustomEventTypeUnion
 client.api.errorFromResponse(response);                 // moved to ApiClient
 // client.sendFile — REMOVED, and there is no `client.api.sendFile` either. Multipart encoding
 // now lives in `ApiClient.sendRequest`; use the upload methods below.
@@ -746,7 +760,7 @@ import { verifySignature, verifyAndParseWebhook, parseSqs, parseSns } from 'stre
 // v10 — nothing to import. Move the handler to @stream-io/node-sdk.
 ```
 
-Also gone from `stream-chat`, from the same module: `verifySignature`, `CheckSignature`, `gunzipPayload`, `decodeSqsPayload`, `decodeSnsPayload`, `parseEvent`, `InvalidWebhookError`, and `InvalidWebhookErrorMessages`. `signing.ts` now exports exactly one function, `UserFromToken` — the client-side JWT payload decoder. The JWT minting helpers (`JWTUserToken`, `JWTServerToken`, `DevToken`) are gone too.
+Also gone from `stream-chat`, from the same module: `verifySignature`, `CheckSignature`, `gunzipPayload`, `decodeSqsPayload`, `decodeSnsPayload`, `parseEvent`, `InvalidWebhookError`, and `InvalidWebhookErrorMessages`. `signing.ts` now exports `UserFromToken` (the client-side JWT payload decoder) and `DevToken` (the unsigned development token, also `client.devToken(userId)`; it needs no secret). The secret-signing JWT helpers (`JWTUserToken`, `JWTServerToken`) are gone.
 
 Webhook verification is inherently server-side work: it needs the API secret, which v10 refuses to hold. Port the handler to [`@stream-io/node-sdk`](https://github.com/GetStream/stream-node), which keeps the v9 method names on the client (`client.verifyWebhook`, `client.verifyAndParseWebhook`, `client.parseSqs`, `client.parseSns`) and takes the secret from construction. See [`v9-to-v10-migration-guide-server-side.md`](./v9-to-v10-migration-guide-server-side.md#webhook--sns--sqs) for the mapping table.
 
@@ -783,7 +797,7 @@ Both are `@internal`. The consumer-visible effects:
 - `channel._update(payload)` — REMOVED. Use `channel.update(request)` (inherited from `ChannelApi`).
 - `channel.updateMemberPartial(updates, options?: { userId? })` — REMOVED (v9 wrapper). Use the inherited `channel.updateMemberPartial(request?)` — same name, generated shape.
 - `channel.partialUpdateMember(user_id, updates)` — REMOVED. Use `channel.updateMemberPartial({ user_id, ...updates })`.
-- `channel.sendEvent(event)` — replaced by `channel.sendEvent(request: { event })` (override).
+- `channel.sendEvent(event)` — replaced by `channel.sendEvent(request: { event })`, the generated request (`event: { type, parent_id?, custom? }`).
 - `channel.getConfig()` — **REMOVED**. Use the `channel.serverConfig` **getter**, which returns the same value: this channel's server configuration (`ChannelConfigWithInfo`) — mostly type-level, but narrowed by the channel's own `config_overrides` where it has any. It is a property now, not a call — `channel.getConfig()?.uploads` becomes `channel.serverConfig?.uploads`. If you mock it in tests, note that `vi.fn()` cannot stand in for a getter.
   - **Not** to be confused with `channel.config`, which is new and different: the channel's _resolved_ configuration, where a handful of server flags have been combined with what you registered through `client.config`. See the table under "Composer & attachment shape" for which fields live where.
 
@@ -821,9 +835,14 @@ local state. `channel.messageOperations.send` is the full send — see
 channel.sendEvent(event: Event);
 
 // v10
-channel.sendEvent(request: { event: Event });
-// Event now unions the generated WSEvent, the SDK-only LocalEvent, and keyof CustomEventTypes.
+channel.sendEvent(request: { event: EventRequest }, requestOptions?);
+// EventRequest = { type: string; parent_id?: string; custom?: CustomEventData }
 ```
+
+Event data goes under `custom` (`{ event: { type: 'friendship_request', custom: { text } } }`): top-level
+fields other than `type` and `parent_id` are dropped by the API. The server stamps `created_at` and `user`.
+It is the generated method, so on a channel without an id it throws synchronously (`isn't yet created`)
+rather than returning a rejected promise.
 
 #### `channel.search`
 
@@ -936,12 +955,15 @@ channel.truncate(request?: TruncateChannelRequest);
 channel.acceptInvite(options?: UpdateChannelOptions);
 channel.rejectInvite(options?: UpdateChannelOptions);
 
-// v10 — options type renamed
-channel.acceptInvite(options?: ChannelUpdateOptions);
-channel.rejectInvite(options?: ChannelUpdateOptions);
+// v10 — options typed as the generated request
+channel.acceptInvite(options?: UpdateChannelRequest, requestOptions?);
+channel.rejectInvite(options?: UpdateChannelRequest, requestOptions?);
 ```
 
-`ChannelUpdateOptions` = `Omit<Gen_UpdateChannelRequest, 'message' | 'members'>`.
+`options` is the full generated `UpdateChannelRequest`, so it still carries `message` (the system message
+sent with the accept / reject), as v9's `UpdateChannelOptions` did. The other membership helpers
+(`addMembers`, `inviteMembers`, …) take `ChannelUpdateOptions` (`Omit<UpdateChannelRequest, 'message'>`),
+because they take `message` as a separate positional argument.
 
 #### `channel.mute` / `channel.unmute`
 
@@ -985,12 +1007,15 @@ channel.sendAction(messageID, formData);
 channel.keystroke(parent_id?, options?: { user_id });
 channel.stopTyping(parent_id?, options?: { user_id });
 
-// v10 — same shape; positional rename to `messageId` / `parentId`
+// v10 — positional rename to `messageId` / `parentId`; keystroke / stopTyping drop `options`
 channel.muteStatus();                               // same return shape
 channel.sendAction(messageId, formData);
-channel.keystroke(parentId?, options?);
-channel.stopTyping(parentId?, options?);
+channel.keystroke(parentId?, requestOptions?);
+channel.stopTyping(parentId?, requestOptions?);
 ```
+
+`keystroke` and `stopTyping` lost their `options?: { user_id }` parameter: sending typing events on behalf of
+another user is server-side only. The second argument is now `requestOptions`.
 
 #### `channel.markRead` / `channel.markAsReadRequest`
 
@@ -1247,7 +1272,7 @@ Signatures unchanged.
 
 #### `channel._handleChannelEvent` / `channel._callChannelListeners`
 
-Both still take `Event` — the union shape of `Event` itself changed (now `WSEvent | LocalEvent | keyof CustomEventTypes`), but the parameter type name did not.
+Both still take `Event` — the union shape of `Event` itself changed (now `WSEvent | LocalEvent | CustomEventTypeUnion`), but the parameter type name did not.
 
 ---
 

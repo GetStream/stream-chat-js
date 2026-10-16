@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { Message, StreamChat } from '../../../../../../src';
+import type { MessageRequest, StreamChat } from '../../../../../../src';
 import {
   disconnectClients,
   getClientSideClient,
@@ -31,7 +31,9 @@ describe('_default/05-features/10-advanced/11-slow_mode_and_throttling.md', () =
 
   it('enables and disables slow mode', async () => {
     const channelId = uniqueId('channel');
-    const channel = client.channel('messaging', channelId, { members: [userId] });
+    const channel = client.channel('messaging', channelId, {
+      members: [{ user_id: userId }],
+    });
     cleanup.channels.push(`messaging:${channelId}`);
     await channel.create();
     // Only admins and moderators can change the cooldown (a channel creator gets 403 code 17).
@@ -52,7 +54,7 @@ describe('_default/05-features/10-advanced/11-slow_mode_and_throttling.md', () =
     // #endregion snippet
 
     const results = await Promise.all(enableSpy.mock.results.map((r) => r.value));
-    expect(results.map((r) => r.channel.cooldown)).toEqual([1, 30]);
+    expect(results.map((r) => r.channel?.cooldown)).toEqual([1, 30]);
     expect(channel.data?.cooldown ?? 0).toBe(0);
     const serverChannel = await getServerChannel(serverClient, channel.cid);
     expect(serverChannel.channel?.cooldown ?? 0).toBe(0);
@@ -73,13 +75,13 @@ describe('_default/05-features/10-advanced/11-slow_mode_and_throttling.md', () =
     // A regular member, so the cooldown applies.
     const channel = memberClient.channel('messaging', channelId);
     await channel.watch();
-    const msg: Message = { text: 'Hello' };
+    const message: MessageRequest = { text: 'Hello' };
     const calls: Array<[string, number]> = [];
     const disableSendMessageUI = () => calls.push(['disable', Date.now()]);
     const enableSendMessageUI = () => calls.push(['enable', Date.now()]);
 
     // #region snippet docs="chat/_default/05-features/10-advanced/11-slow_mode_and_throttling.md" heading="Channel Slow Mode" tab="JavaScript" index=2
-    const p = channel.sendMessage(msg);
+    const p = channel.sendMessage({ message });
     const cooldown = channel.data?.cooldown;
 
     if (cooldown != null && cooldown > 0) {
@@ -95,7 +97,9 @@ describe('_default/05-features/10-advanced/11-slow_mode_and_throttling.md', () =
     // #endregion snippet
 
     // The API rejects a second message during the cooldown.
-    await expect(channel.sendMessage({ text: 'Too soon' })).rejects.toThrow();
+    await expect(
+      channel.sendMessage({ message: { text: 'Too soon' } }),
+    ).rejects.toThrow();
 
     await retry(() => {
       expect(calls.map(([name]) => name)).toEqual(['disable', 'enable']);

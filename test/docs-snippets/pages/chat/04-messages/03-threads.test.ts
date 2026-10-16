@@ -34,7 +34,7 @@ describe('_default/04-messages/03-threads.md', () => {
   const ownThreadIds: string[] = [];
 
   const threadUnreadCount = async (id: string) => {
-    const { threads } = await client.getUnreadCount();
+    const { threads } = await client.unreadCounts();
     return threads.find((thread) => thread.parent_message_id === id)?.unread_count ?? 0;
   };
 
@@ -42,11 +42,15 @@ describe('_default/04-messages/03-threads.md', () => {
     cleanup.users.push(userId, otherId);
     await serverClient.upsertUsers([{ id: otherId }]);
     client = await getClientSideClient({ id: userId });
-    channel = client.channel('messaging', channelId, { members: [userId, otherId] });
+    channel = client.channel('messaging', channelId, {
+      members: [{ user_id: userId }, { user_id: otherId }],
+    });
     cleanup.channels.push(`messaging:${channelId}`);
     await channel.watch();
 
-    const { message } = await channel.sendMessage({ text: 'Parent message' });
+    const { message } = await channel.sendMessage({
+      message: { text: 'Parent message' },
+    });
     parentMessageId = message.id;
     threadIds.push(parentMessageId);
 
@@ -84,9 +88,11 @@ describe('_default/04-messages/03-threads.md', () => {
   it('starts a thread', async () => {
     // #region snippet docs="chat/_default/04-messages/03-threads.md" heading="Starting a Thread" tab="JavaScript" index=1
     const reply = await channel.sendMessage({
-      text: 'This is a reply in a thread',
-      parent_id: parentMessageId,
-      show_in_channel: false,
+      message: {
+        text: 'This is a reply in a thread',
+        parent_id: parentMessageId,
+        show_in_channel: false,
+      },
     });
     // #endregion snippet
 
@@ -100,18 +106,22 @@ describe('_default/04-messages/03-threads.md', () => {
     // #region snippet docs="chat/_default/04-messages/03-threads.md" heading="Paginating Thread Replies" tab="JavaScript" index=1
     // COPY: olderReplyId="42"
     // Get the latest 20 replies
-    const replies = await channel.getReplies(parentMessageId, { limit: 20 });
+    const replies = await client.getReplies(
+      { parent_id: parentMessageId },
+      { limit: 20 },
+    );
 
     // Get older replies (before message with ID "42")
-    const olderReplies = await channel.getReplies(parentMessageId, {
-      limit: 20,
-      id_lte: olderReplyId,
-    });
+    const olderReplies = await client.getReplies(
+      { parent_id: parentMessageId },
+      { limit: 20, id_lte: olderReplyId },
+    );
 
     // Get oldest replies first
-    const oldestFirst = await channel.getReplies(parentMessageId, { limit: 20 }, [
-      { created_at: 1 },
-    ]);
+    const oldestFirst = await client.getReplies(
+      { parent_id: parentMessageId },
+      { limit: 20, sort: [{ field: 'created_at', direction: 1 }] },
+    );
     // #endregion snippet
 
     const replyMessageIds = replies.messages.map((m) => m.id);
@@ -125,8 +135,10 @@ describe('_default/04-messages/03-threads.md', () => {
 
     // #region snippet docs="chat/_default/04-messages/03-threads.md" heading="Inline Replies" tab="JavaScript" index=1
     const message = await channel.sendMessage({
-      text: 'I agree with this point',
-      quoted_message_id: originalMessageId,
+      message: {
+        text: 'I agree with this point',
+        quoted_message_id: originalMessageId,
+      },
     });
     // #endregion snippet
 
@@ -136,12 +148,12 @@ describe('_default/04-messages/03-threads.md', () => {
 
   it('queries threads', async () => {
     // #region snippet docs="chat/_default/04-messages/03-threads.md" heading="Querying Threads" tab="JavaScript" index=1
-    const { threads } = await client.queryThreads();
+    const { threads } = await client.queryThreadsAndHydrate();
 
     for (const thread of threads) {
       const state = thread.state.getLatestValue();
       console.log(state.parentMessage.text);
-      console.log(state.replies);
+      console.log(thread.messagePaginator.items); // the latest replies
       console.log(state.participants);
       console.log(state.read);
     }
@@ -157,22 +169,22 @@ describe('_default/04-messages/03-threads.md', () => {
     // #region snippet docs="chat/_default/04-messages/03-threads.md" heading="Supported Sort Fields" tab="JavaScript" index=1
     // COPY: createdByUserId="user-1"
     // Get threads created by a specific user, sorted by creation date
-    const { threads, next } = await client.queryThreads({
+    const { threads, next } = await client.queryThreadsAndHydrate({
       filter: {
         created_by_user_id: { $eq: createdByUserId },
         updated_at: { $gte: '2024-01-01T00:00:00Z' },
       },
-      sort: [{ created_at: -1 }],
+      sort: [{ field: 'created_at', direction: -1 }],
       limit: 10,
     });
 
     // Get next page
-    const { threads: page2 } = await client.queryThreads({
+    const { threads: page2 } = await client.queryThreadsAndHydrate({
       filter: {
         created_by_user_id: { $eq: createdByUserId },
         updated_at: { $gte: '2024-01-01T00:00:00Z' },
       },
-      sort: [{ created_at: -1 }],
+      sort: [{ field: 'created_at', direction: -1 }],
       limit: 10,
       next,
     });
@@ -187,7 +199,7 @@ describe('_default/04-messages/03-threads.md', () => {
 
   it('gets a thread by id', async () => {
     // #region snippet docs="chat/_default/04-messages/03-threads.md" heading="Getting a Thread by ID" tab="JavaScript" index=1
-    const thread = await client.getThread(parentMessageId, {
+    const thread = await client.getThreadAndHydrate(parentMessageId, {
       watch: true,
       reply_limit: 10,
       participant_limit: 25,
@@ -195,7 +207,8 @@ describe('_default/04-messages/03-threads.md', () => {
     // #endregion snippet
 
     expect(thread.id).toBe(parentMessageId);
-    const { replies, participants } = thread.state.getLatestValue();
+    const { participants } = thread.state.getLatestValue();
+    const replies = thread.messagePaginator.items ?? [];
     expect(replies.length).toBeGreaterThan(0);
     expect(replies.length).toBeLessThanOrEqual(10);
     expect(participants?.map((p) => p.user_id)).toEqual(
@@ -208,24 +221,23 @@ describe('_default/04-messages/03-threads.md', () => {
 
     // #region snippet docs="chat/_default/04-messages/03-threads.md" heading="Updating Thread Title and Custom Data" tab="JavaScript" index=1
     // Set properties
-    const { thread } = await client.partialUpdateThread(threadId, {
-      set: {
-        title: 'Project Discussion',
-        priority: 'high',
+    const { thread } = await client.updateThreadPartial(
+      { message_id: threadId },
+      {
+        set: {
+          title: 'Project Discussion',
+          priority: 'high',
+        },
       },
-    });
+    );
 
     // Remove properties
-    await client.partialUpdateThread(threadId, {
-      unset: ['priority'],
-    });
+    await client.updateThreadPartial({ message_id: threadId }, { unset: ['priority'] });
     // #endregion snippet
 
     expect(thread.title).toBe('Project Discussion');
-    expect(thread).toMatchObject({ priority: 'high' });
-    const updated = (
-      await client.getThread(threadId, { watch: false })
-    ).state.getLatestValue();
+    expect(thread.custom).toMatchObject({ priority: 'high' });
+    const { thread: updated } = await client.getThread({ message_id: threadId });
     expect(updated.title).toBe('Project Discussion');
     expect(updated.custom).not.toHaveProperty('priority');
   });
@@ -240,7 +252,7 @@ describe('_default/04-messages/03-threads.md', () => {
     const readerId = otherId;
     const token = createUserToken(readerId);
     const client = new StreamChat(process.env.STREAM_API_KEY as string, {
-      allowServerSideConnect: true,
+      client: { allowServerSideConnect: true },
     });
 
     try {
@@ -303,7 +315,7 @@ describe('_default/04-messages/03-threads.md', () => {
 
   it('gets the unread count per thread', async () => {
     // #region snippet docs="chat/_default/04-messages/03-threads.md" heading="Unread Count Per Thread" tab="JavaScript" index=1
-    const response = await client.getUnreadCount();
+    const response = await client.unreadCounts();
 
     console.log(response.total_unread_threads_count);
 
@@ -325,34 +337,43 @@ describe('_default/04-messages/03-threads.md', () => {
 
     // Subscribe to state updates
     const unsubscribe = threadManager.state.subscribe((state) => {
-      console.log(state.threads);
       console.log(state.unreadThreadCount);
+    });
+
+    // Subscribe to the thread list
+    const unsubscribeList = threadManager.paginator.state.subscribe((state) => {
+      console.log(state.items);
     });
 
     // Load threads
     await threadManager.reload();
 
     // Load more threads
-    await threadManager.loadNextPage();
+    await threadManager.paginator.toTail();
 
     // Access current state
-    const { threads } = threadManager.state.getLatestValue();
+    const { items: threads = [] } = threadManager.paginator.state.getLatestValue();
     // #endregion snippet
 
     unsubscribe();
+    unsubscribeList();
+    expect(threadManager.paginator.lastQueryError).toBeUndefined();
     expect(threads.map((thread) => thread.id).sort()).toEqual([...threadIds].sort());
   });
 
   it('handles events for a single thread', async () => {
     // #region snippet docs="chat/_default/04-messages/03-threads.md" heading="Event Handling" tab="JavaScript" index=1
-    const { threads } = await client.queryThreads({ watch: true, limit: 10 });
+    const { threads } = await client.queryThreadsAndHydrate({ watch: true, limit: 10 });
     const [thread] = threads;
 
-    // Register event handlers for a single thread
-    thread.registerSubscriptions();
+    // Threads receive events through the client's thread manager
+    client.threads.registerSubscriptions();
 
-    const unsubscribe = thread.state.subscribe((state) => {
-      console.log(state.replies);
+    // Open the thread: the thread manager keeps it up to date from now on
+    const release = thread.activate();
+
+    const unsubscribe = thread.messagePaginator.state.subscribe((state) => {
+      console.log(state.items);
     });
     // #endregion snippet
 
@@ -363,14 +384,15 @@ describe('_default/04-messages/03-threads.md', () => {
         parent_id: thread.id,
       });
       await retry(() => {
-        expect(thread.state.getLatestValue().replies.map((r) => r.id)).toContain(
+        expect((thread.messagePaginator.items ?? []).map((r) => r.id)).toContain(
           reply.id,
         );
         return Promise.resolve();
       });
     } finally {
       unsubscribe();
-      thread.unregisterSubscriptions();
+      release();
+      client.threads.unregisterSubscriptions();
     }
   });
 
@@ -385,19 +407,19 @@ describe('_default/04-messages/03-threads.md', () => {
 
       await threadManager.reload();
 
-      // All threads are now listening to channel events
-      const { threads } = threadManager.state.getLatestValue();
+      // All loaded threads now receive their events
+      const { items: threads = [] } = threadManager.paginator.state.getLatestValue();
       // #endregion snippet
 
       expect(threads.map((thread) => thread.id)).toContain(parentMessageId);
-      const thread = threadManager.threadsById[parentMessageId];
+      const thread = threadManager.get(parentMessageId);
       const reply = await sendServerMessage(serverClient, cid, {
         text: 'Managed reply',
         user_id: otherId,
         parent_id: parentMessageId,
       });
       await retry(() => {
-        expect(thread?.state.getLatestValue().replies.map((r) => r.id)).toContain(
+        expect((thread?.messagePaginator.items ?? []).map((r) => r.id)).toContain(
           reply.id,
         );
         return Promise.resolve();

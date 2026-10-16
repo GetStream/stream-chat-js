@@ -1,4 +1,4 @@
-import { UserFromToken } from '../../src';
+import { DevToken, StreamChat, UserFromToken } from '../../src';
 
 import { describe, expect, it } from 'vitest';
 
@@ -20,6 +20,24 @@ describe('Signing', () => {
 			// payload: {"foo":"bar"}
 			const token = 'eyJhbGciOiJIUzI1NiJ9.eyJmb28iOiJiYXIifQ.sig';
 			expect(UserFromToken(token)).to.be.undefined;
+		});
+	});
+
+	describe('DevToken', () => {
+		it('builds the same unsigned token as v9', () => {
+			expect(DevToken('amin')).to.equal(
+				'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYW1pbiJ9.devtoken',
+			);
+		});
+
+		it('round-trips through UserFromToken, including non-Latin-1 ids', () => {
+			expect(UserFromToken(DevToken('amin'))).to.equal('amin');
+			expect(() => DevToken('ünicode-✓')).not.to.throw();
+		});
+
+		it('is exposed as client.devToken', () => {
+			const client = new StreamChat('key');
+			expect(client.devToken('amin')).to.equal(DevToken('amin'));
 		});
 	});
 });

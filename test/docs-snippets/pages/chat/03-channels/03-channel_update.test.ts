@@ -33,9 +33,11 @@ describe('_default/03-channels/03-channel_update.md', () => {
     // #region snippet docs="chat/_default/03-channels/03-channel_update.md" heading="Partial Update" tab="JavaScript" index=1
     // Here's a channel with some custom field data that might be useful
     const channel = client.channel(type, id, {
-      source: 'user',
-      source_detail: { user_id: 123 },
-      channel_detail: { topic: 'Plants and Animals', rating: 'pg' },
+      custom: {
+        source: 'user',
+        source_detail: { user_id: 123 },
+        channel_detail: { topic: 'Plants and Animals', rating: 'pg' },
+      },
     });
     await channel.create();
 
@@ -60,20 +62,22 @@ describe('_default/03-channels/03-channel_update.md', () => {
 
   it('fully updates a channel', async () => {
     const channel = client.channel('messaging', uniqueId('channel'), {
-      source: 'user',
+      custom: { source: 'user' },
     });
     await channel.create();
     if (channel.cid) cleanup.channels.push(channel.cid);
 
     // #region snippet docs="chat/_default/03-channels/03-channel_update.md" heading="Full Update" tab="JavaScript" index=1
     const update = await channel.update({
-      name: 'myspecialchannel',
-      color: 'green',
+      data: { custom: { name: 'myspecialchannel', color: 'green' } },
     });
     // #endregion snippet
 
-    expect(update.channel).toMatchObject({ name: 'myspecialchannel', color: 'green' });
+    expect(update.channel?.custom).toMatchObject({
+      name: 'myspecialchannel',
+      color: 'green',
+    });
     // Fields not included in a full update are removed.
-    expect(update.channel.source).toBeUndefined();
+    expect(update.channel?.custom.source).toBeUndefined();
   });
 });

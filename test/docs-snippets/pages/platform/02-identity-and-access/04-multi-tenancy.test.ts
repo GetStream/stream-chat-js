@@ -79,18 +79,20 @@ describe('platform/02-identity-and-access/04-multi-tenancy.md', () => {
 
   it('queries channels by team', async () => {
     const client = globalClient;
-    const spy = vi.spyOn(client, 'queryChannels');
+    const spy = vi.spyOn(client, 'queryChannelsAndHydrate');
     let results: Channel[][];
     try {
       // #region snippet docs="platform/02-identity-and-access/04-multi-tenancy.md" heading="Querying chat channels" tab="JavaScript" index=1
       // query all channels from teams that user is a part of
-      await client.queryChannels({});
+      await client.queryChannelsAndHydrate({ filter_conditions: {} });
 
       // query all channels from all teams
-      await client.queryChannels({ team: {} });
+      await client.queryChannelsAndHydrate({ filter_conditions: { team: {} } });
 
       // query all channels with no teams
-      await client.queryChannels({ team: { $eq: null } });
+      await client.queryChannelsAndHydrate({
+        filter_conditions: { team: { $eq: null } },
+      });
       // #endregion snippet
       results = await Promise.all(spy.mock.results.map((result) => result.value));
     } finally {

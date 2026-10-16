@@ -19,6 +19,10 @@ yarn eslint test/docs-snippets && npx prettier --check test/docs-snippets   # li
 
 These tests hit the network and are not part of `yarn test`.
 
+## How to add tests?
+
+Run the `docs-sync` Claude Code skill (`.claude/skills/docs-sync/SKILL.md`): `/docs-sync [path to the getstream.io checkout]`. It runs `yarn test-docs-sync` against that checkout, adds tests for new `JavaScript` snippets, updates existing tests to docs changes (the docs win), and writes fixes for snippets that don't work back to the docs.
+
 ## Layout
 
 ```
@@ -30,9 +34,8 @@ setup.ts                                    # .env loading, per-file leak check 
 custom-types.d.ts                           # Custom*Data augmentations for the custom fields the docs use
 sync/                                       # `yarn test-docs-sync` (docs fence <-> test region check)
 maintenance/                                # `yarn test-docs-sweep`
-docs-snippets-todo.md                       # pages to cover, their status, blockers and setup notes
-docs-snippets-agent-prompt.md               # prompt for an agent that covers one page
-learnings.md                                # lessons from earlier agent runs, read before working on a page
+docs-snippets-todo.md                       # pages to cover and their status, open generator fixes
+AGENTS.md                                   # test conventions and API quirks, read before working on a page
 ```
 
 The path mirrors the docs path relative to `content/docs/`, without `_default/`:
@@ -42,22 +45,7 @@ The path mirrors the docs path relative to `content/docs/`, without `_default/`:
 
 ## Conventions
 
-- Import the SDK from `../../../src` (relative depth varies) and test helpers from `helpers/`. Use `import type` for types.
-- `stream-chat` is aliased to `src/index.ts` (`resolve.alias` in `vitest.config.mts`, `paths` in `tsconfig.json`), so a docs fence that starts with `import ... from "stream-chat"` can be a region at module level: declare the values it uses (e.g. `apiKey`) above it. Both import paths load the same module, so `StreamChat.getInstance` returns the same singleton.
-- Custom data the docs use (e.g. channel `name`) is declared once in `custom-types.d.ts` by augmenting the `Custom*Data` interfaces of `stream-chat`, the way the docs tell apps to. Add fields there rather than casting in tests.
-- **Isolation**: the id or name of everything a test creates comes from `uniqueId('name')`: users, channels, channel types, roles, commands, blocklists, segments, campaigns (name), user groups, moderation config keys, predefined filters, push providers. Polls are matched by their creator, so create them as a `uniqueId` user. Never use fixed ids like `"john"` or `"general"`.
-- **Cleanup**: register everything you create on a `Cleanup` instance and call `cleanup.run()` in `afterAll`. App-level settings changed by a test must be restored with `cleanup.add(...)`.
-- Tests in one file may share data created in `beforeAll`. Nothing may leak across files.
-- `cleanup.run()` attempts every step and then throws if anything failed, so leftovers show up as a failed `afterAll` instead of piling up in the app. Server-side hard channel deletion is a background task: `Cleanup` waits for it (`waitForTask`) and retries deleting channel types until their channels are gone.
-- **Leak check** (`setup.ts`, runs automatically after each file's own `afterAll`): looks up everything minted by `uniqueId` in that file (users, channels, channel types, commands, roles, custom permissions, blocklists, segments, campaigns, user groups, moderation configs, predefined filters, push providers, polls). Anything still there fails the file with a `LEAK` error listing it, and is then removed. Per-user data (reminders, devices, drafts, ...) goes away with the user. It also snapshots app settings, pre-existing channel types and retention policies before the file and fails with `DRIFT` if anything changed and wasn't restored.
-- Anything created under a non-`uniqueId` name can't be found by the leak check or the sweep. Don't do that.
-- **Eventual consistency**: channel type changes (`createChannelType` / `updateChannelType`) take ~30s to reach every API node. A `create()` can succeed and the next call still fail with `<type>: channel type does not exist`. Call `await waitForChannelTypePropagation()` (from `helpers/wait.ts`) right after creating or updating a channel type. Timeouts are 90s per test and 180s per hook to leave room for this. Use `retry(fn, { retryIf })` for other eventually-consistent reads (e.g. search).
-- **App settings**: pages are run one at a time, so tests may change app settings and built-in channel types, but must restore them (`cleanup.add`). The check after each file fails with `DRIFT` otherwise.
-- **Guest users** get their id rewritten to `guest-<uuid>-<requested id>`: register `client.userID` for cleanup.
-- One `it` per docs snippet (or per closely related group of snippets in the same tab group).
-- `getClientSideClient(user)` returns a connected client. Disconnect it with `disconnectClients` in `afterAll`. Use `getServerClient()` only for setup, cleanup and assertions that a client can't do (server calls need `user_id` / `created_by_id` where a client call would infer the user).
-- The server client is `@stream-io/node-sdk` (`StreamClient`), not stream-chat-js: request objects (`chat.getMessage({ id })`), chat endpoints on `serverClient.chat`, custom data under `custom`, timestamps as `Date` objects. `upsertUsers(serverClient, users)` takes stream-chat-js-shaped users, `createUserToken(userId)` signs tokens, and `updateChannelType(serverClient, name, patch)` (`helpers/channel-types.ts`) fills in the fields node-sdk requires. `helpers/server.ts` has the repeated server-side steps: `sendServerMessage`, `getServerUser` / `getServerMember` / `getServerChannel` (throw unless exactly one result matches), `deletePollsCreatedBy` and `waitForAppSetting`.
-- Add basic `expect`s after each snippet to prove it did what the docs claim.
+The test conventions and the API quirks found so far are in [`AGENTS.md`](AGENTS.md). Read it before working on a page.
 
 ## Snippet markers and docs sync
 

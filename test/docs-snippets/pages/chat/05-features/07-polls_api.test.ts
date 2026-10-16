@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { Channel, CreatePollData, PollAnswer, StreamChat } from '../../../../../src';
+import type { Channel, CreatePollRequest, StreamChat } from '../../../../../src';
 import {
   disconnectClients,
   getClientSideClient,
@@ -23,13 +23,15 @@ describe(DOCS, () => {
   let channel: Channel;
 
   /** Creates a poll as the connected user and sends it in a message. */
-  const sendPoll = async (data: Partial<CreatePollData> = {}) => {
+  const sendPoll = async (data: Partial<CreatePollRequest> = {}) => {
     const { poll } = await client.createPoll({
       name: uniqueId('poll'),
       options: [{ text: 'A' }, { text: 'B' }, { text: 'C' }],
       ...data,
     });
-    const { message } = await channel.sendMessage({ text: 'Vote!', poll_id: poll.id });
+    const { message } = await channel.sendMessage({
+      message: { text: 'Vote!', poll_id: poll.id },
+    });
     return {
       poll,
       pollId: poll.id,
@@ -54,7 +56,7 @@ describe(DOCS, () => {
     cleanup.channelTypes.push(channelType);
     await waitForChannelTypePropagation();
     client = await getClientSideClient({ id: userId });
-    channel = client.channel(channelType, channelId, { members: [userId] });
+    channel = client.channel(channelType, channelId, { members: [{ user_id: userId }] });
     cleanup.channels.push(`${channelType}:${channelId}`);
     await channel.watch();
   });
@@ -76,13 +78,16 @@ describe(DOCS, () => {
         name: 'Where should we host our next event?',
         options: [{ text: 'Amsterdam' }, { text: 'Boulder' }],
       });
-      await channel.sendMessage({ text: 'Vote now!', poll_id: poll.id });
+      await channel.sendMessage({ message: { text: 'Vote now!', poll_id: poll.id } });
 
       // Vote on a poll
-      await client.castPollVote(messageId, pollId, { option_id: firstOptionId });
+      await client.castPollVote(
+        { message_id: messageId, poll_id: pollId },
+        { vote: { option_id: firstOptionId } },
+      );
 
       // Retrieve poll results
-      const { poll: retrievedPoll } = await client.getPoll(pollId);
+      const { poll: retrievedPoll } = await client.getPoll({ poll_id: pollId });
       console.log(retrievedPoll.vote_counts_by_option); // { 'option-id': 5 }
       // #endregion snippet
 
@@ -125,8 +130,10 @@ describe(DOCS, () => {
     });
 
     const { message } = await channel.sendMessage({
-      text: 'We want to know your opinion!',
-      poll_id: poll.id,
+      message: {
+        text: 'We want to know your opinion!',
+        poll_id: poll.id,
+      },
     });
 
     // message.poll contains all relevant poll data
@@ -146,20 +153,20 @@ describe(DOCS, () => {
       options: [
         {
           text: 'Amsterdam, The Netherlands',
-          foo: 'bar',
+          custom: { foo: 'bar' },
         },
         {
           text: 'Boulder, CO',
-          foo: 'baz',
+          custom: { foo: 'baz' },
         },
       ],
-      foo: 'bar',
+      custom: { foo: 'bar' },
     });
     // #endregion snippet
 
-    expect(poll.poll).toMatchObject({ foo: 'bar' });
-    expect(poll.poll.options[0]).toMatchObject({ foo: 'bar' });
-    expect(poll.poll.options[1]).toMatchObject({ foo: 'baz' });
+    expect(poll.poll.custom).toMatchObject({ foo: 'bar' });
+    expect(poll.poll.options[0].custom).toMatchObject({ foo: 'bar' });
+    expect(poll.poll.options[1].custom).toMatchObject({ foo: 'baz' });
   });
 
   it('casts votes on options', async () => {
@@ -171,17 +178,18 @@ describe(DOCS, () => {
 
     // #region snippet docs="chat/_default/05-features/07-polls_api.md" heading="Send vote on option" tab="JavaScript" index=1
     // COPY: firstOptionId="some-option-id-328904342"
-    const { vote } = await chatClient.castPollVote(messageId, pollId, {
-      option_id: firstOptionId,
-    });
+    const { vote } = await chatClient.castPollVote(
+      { message_id: messageId, poll_id: pollId },
+      { vote: { option_id: firstOptionId } },
+    );
 
     // or if you're using the reactive poll instance
     const pollInstance = chatClient.polls.fromState(pollId);
     const response = await pollInstance?.castVote(optionId, messageId);
     // #endregion snippet
 
-    expect(vote.option_id).toBe(firstOptionId);
-    expect(response?.vote.option_id).toBe(optionId);
+    expect(vote?.option_id).toBe(firstOptionId);
+    expect(response?.vote?.option_id).toBe(optionId);
     const serverPoll = await getServerPoll(pollId);
     expect(serverPoll.vote_counts_by_option).toEqual({
       [firstOptionId]: 1,
@@ -196,17 +204,18 @@ describe(DOCS, () => {
     const answerText = 'Somewhere sunny';
 
     // #region snippet docs="chat/_default/05-features/07-polls_api.md" heading="Send an answer (if answers are configured to be allowed)" tab="JavaScript" index=1
-    const { vote } = await chatClient.castPollVote(messageId, pollId, {
-      answer_text: 'some-option-id-328904342',
-    });
+    const { vote } = await chatClient.castPollVote(
+      { message_id: messageId, poll_id: pollId },
+      { vote: { answer_text: 'some-option-id-328904342' } },
+    );
 
     // or if you're using the reactive poll instance
     const pollInstance = chatClient.polls.fromState(pollId);
     const response = await pollInstance?.addAnswer(answerText, messageId);
     // #endregion snippet
 
-    expect((vote as PollAnswer).answer_text).toBe('some-option-id-328904342');
-    expect((response?.vote as PollAnswer | undefined)?.answer_text).toBe(answerText);
+    expect(vote?.answer_text).toBe('some-option-id-328904342');
+    expect(response?.vote?.answer_text).toBe(answerText);
     // Adding an answer replaces the previous one.
     const serverPoll = await getServerPoll(pollId);
     expect(serverPoll.answers_count).toBe(1);
@@ -218,23 +227,31 @@ describe(DOCS, () => {
   it('removes votes', async () => {
     const { messageId, pollId, optionIds } = await sendPoll();
     const chatClient = client;
-    const {
-      vote: { id: voteId },
-    } = await chatClient.castPollVote(messageId, pollId, { option_id: optionIds[0] });
-    const {
-      vote: { id: anotherVoteId },
-    } = await chatClient.castPollVote(messageId, pollId, { option_id: optionIds[1] });
+    const castVote = async (option_id: string) => {
+      const { vote } = await chatClient.castPollVote(
+        { message_id: messageId, poll_id: pollId },
+        { vote: { option_id } },
+      );
+      if (!vote) throw new Error('castPollVote returned no vote');
+      return vote.id;
+    };
+    const voteId = await castVote(optionIds[0]);
+    const anotherVoteId = await castVote(optionIds[1]);
     await chatClient.polls.getPoll(pollId);
 
     // #region snippet docs="chat/_default/05-features/07-polls_api.md" heading="Removing a vote" tab="JavaScript" index=1
-    const { vote } = await chatClient.removePollVote(messageId, pollId, voteId);
+    const { vote } = await chatClient.deletePollVote({
+      message_id: messageId,
+      poll_id: pollId,
+      vote_id: voteId,
+    });
 
     // or if you're using the reactive poll instance
     const pollInstance = chatClient.polls.fromState(pollId);
     const response = await pollInstance?.removeVote(anotherVoteId, messageId);
     // #endregion snippet
 
-    expect(vote.id).toBe(voteId);
+    expect(vote?.id).toBe(voteId);
     expect(response).toBeDefined();
     const serverPoll = await getServerPoll(pollId);
     expect(serverPoll.vote_count).toBe(0);
@@ -244,22 +261,28 @@ describe(DOCS, () => {
     const { pollId } = await sendPoll();
     const chatClient = client;
     await chatClient.polls.getPoll(pollId);
-    const closePoll = vi.spyOn(chatClient, 'closePoll');
+    const updatePollPartial = vi.spyOn(chatClient, 'updatePollPartial');
 
     try {
       // #region snippet docs="chat/_default/05-features/07-polls_api.md" heading="Closing a poll" tab="JavaScript" index=1
-      await chatClient.closePoll(pollId);
+      await chatClient.updatePollPartial(
+        { poll_id: pollId },
+        { set: { is_closed: true } },
+      );
 
       // or if you're using the reactive poll instance
       const pollInstance = chatClient.polls.fromState(pollId);
       await pollInstance?.close();
       // #endregion snippet
 
-      expect(closePoll).toHaveBeenCalled();
+      expect(updatePollPartial).toHaveBeenCalledWith(
+        { poll_id: pollId },
+        { set: { is_closed: true } },
+      );
       expect(pollInstance?.data.is_closed).toBe(true);
       expect((await getServerPoll(pollId)).is_closed).toBe(true);
     } finally {
-      closePoll.mockRestore();
+      updatePollPartial.mockRestore();
     }
   });
 
@@ -268,7 +291,7 @@ describe(DOCS, () => {
     const chatClient = client;
 
     // #region snippet docs="chat/_default/05-features/07-polls_api.md" heading="Retrieving a poll" tab="JavaScript" index=1
-    const poll = await chatClient.getPoll(pollId);
+    const poll = await chatClient.getPoll({ poll_id: pollId });
 
     // or if you're using PollManager
     await chatClient.polls.getPoll(pollId);
@@ -295,12 +318,12 @@ describe(DOCS, () => {
         {
           id: option1Id,
           text: 'Amsterdam, The Netherlands',
-          foo: 'bar',
+          custom: { foo: 'bar' },
         },
         {
           id: option2Id,
           text: 'Boulder, CO',
-          foo: 'baz',
+          custom: { foo: 'baz' },
         },
       ],
     });
@@ -308,24 +331,27 @@ describe(DOCS, () => {
 
     expect(updatedPoll.poll.name).toBe('Where should we not go to?');
     expect(updatedPoll.poll.options).toMatchObject([
-      { id: option1Id, text: 'Amsterdam, The Netherlands', foo: 'bar' },
-      { id: option2Id, text: 'Boulder, CO', foo: 'baz' },
+      { id: option1Id, text: 'Amsterdam, The Netherlands', custom: { foo: 'bar' } },
+      { id: option2Id, text: 'Boulder, CO', custom: { foo: 'baz' } },
     ]);
   });
 
   it('partially updates a poll', async () => {
-    const { pollId } = await sendPoll({ custom_property: 'value' });
+    const { pollId } = await sendPoll({ custom: { custom_property: 'value' } });
     const chatClient = client;
 
     // #region snippet docs="chat/_default/05-features/07-polls_api.md" heading="Partial update" tab="JavaScript" index=1
-    const updatedPoll = await chatClient.partialUpdatePoll(pollId, {
-      set: { name: 'Where should we not go to?' },
-      unset: ['custom_property'],
-    });
+    const updatedPoll = await chatClient.updatePollPartial(
+      { poll_id: pollId },
+      {
+        set: { name: 'Where should we not go to?' },
+        unset: ['custom_property'],
+      },
+    );
     // #endregion snippet
 
     expect(updatedPoll.poll.name).toBe('Where should we not go to?');
-    expect(updatedPoll.poll).not.toHaveProperty('custom_property');
+    expect(updatedPoll.poll.custom).not.toHaveProperty('custom_property');
   });
 
   it('deletes polls', async () => {
@@ -335,7 +361,7 @@ describe(DOCS, () => {
     await chatClient.polls.getPoll(anotherPollId);
 
     // #region snippet docs="chat/_default/05-features/07-polls_api.md" heading="Deleting a poll" tab="JavaScript" index=1
-    await chatClient.deletePoll(pollId);
+    await chatClient.deletePoll({ poll_id: pollId });
 
     // or if you're using the reactive poll instance
     const pollInstance = chatClient.polls.fromState(anotherPollId);
@@ -353,9 +379,10 @@ describe(DOCS, () => {
     await chatClient.polls.getPoll(pollId);
 
     // #region snippet docs="chat/_default/05-features/07-polls_api.md" heading="**Add poll option**" tab="JavaScript" index=1
-    const pollOption = await chatClient.createPollOption(pollId, {
-      text: 'Another option',
-    });
+    const pollOption = await chatClient.createPollOption(
+      { poll_id: pollId },
+      { text: 'Another option' },
+    );
 
     // or if you're using the reactive poll instance
     const pollInstance = chatClient.polls.fromState(pollId);
@@ -379,11 +406,14 @@ describe(DOCS, () => {
     await chatClient.polls.getPoll(pollId);
 
     // #region snippet docs="chat/_default/05-features/07-polls_api.md" heading="Update poll option" tab="JavaScript" index=1
-    const updatedPollOption = await chatClient.updatePollOption(pollId, {
-      id: optionId,
-      text: 'Updated option',
-      my_custom_property: 'my_custom_value',
-    });
+    const updatedPollOption = await chatClient.updatePollOption(
+      { poll_id: pollId },
+      {
+        id: optionId,
+        text: 'Updated option',
+        custom: { my_custom_property: 'my_custom_value' },
+      },
+    );
 
     // or if you're using the reactive poll instance
     const pollInstance = chatClient.polls.fromState(pollId);
@@ -396,7 +426,7 @@ describe(DOCS, () => {
     expect(updatedPollOption.poll_option).toMatchObject({
       id: optionId,
       text: 'Updated option',
-      my_custom_property: 'my_custom_value',
+      custom: { my_custom_property: 'my_custom_value' },
     });
     expect(pollOption?.poll_option).toMatchObject({
       id: optionId,
@@ -413,7 +443,7 @@ describe(DOCS, () => {
     await chatClient.polls.getPoll(pollId);
 
     // #region snippet docs="chat/_default/05-features/07-polls_api.md" heading="Delete poll option" tab="JavaScript" index=1
-    await chatClient.deletePollOption(pollId, optionId);
+    await chatClient.deletePollOption({ poll_id: pollId, option_id: optionId });
 
     // or if you're using the reactive poll instance
     const pollInstance = chatClient.polls.fromState(pollId);
@@ -432,15 +462,18 @@ describe(DOCS, () => {
     const [option1Id, option2Id, option3Id] = optionIds;
     const chatClient = client;
     for (const option_id of [option1Id, option2Id, option3Id]) {
-      await chatClient.castPollVote(messageId, poll.id, { option_id });
+      await chatClient.castPollVote(
+        { message_id: messageId, poll_id: poll.id },
+        { vote: { option_id } },
+      );
     }
 
     // #region snippet docs="chat/_default/05-features/07-polls_api.md" heading="Querying votes" tab="JavaScript" index=1
     // retrieve all votes on either option1Id or option2Id
-    const filter = {
-      option_id: { $in: [option1Id, option2Id] },
-    };
-    const { votes } = await chatClient.queryPollVotes(poll.id, filter);
+    const { votes } = await chatClient.queryPollVotes(
+      { poll_id: poll.id },
+      { filter: { option_id: { $in: [option1Id, option2Id] } } },
+    );
     // #endregion snippet
 
     expect(votes.map((vote) => vote.option_id).sort()).toEqual(
@@ -451,19 +484,23 @@ describe(DOCS, () => {
   it('queries polls', async () => {
     const { pollId: closedPollId } = await sendPoll();
     const { pollId: openPollId } = await sendPoll();
-    await client.closePoll(closedPollId);
+    await client.updatePollPartial(
+      { poll_id: closedPollId },
+      { set: { is_closed: true } },
+    );
     const chatClient = client;
 
     // #region snippet docs="chat/_default/05-features/07-polls_api.md" heading="Querying polls" tab="JavaScript" index=1
     // retrieve all polls that are closed for voting sorted by created_at
-    const { polls } = await chatClient.queryPolls({ is_closed: true }, [
-      { created_at: -1 },
-    ]);
+    const { polls } = await chatClient.queryPolls({
+      filter: { is_closed: true },
+      sort: [{ field: 'created_at', direction: -1 }],
+    });
 
     // or if you're using PollManager
     const { polls: pollInstances } = await chatClient.polls.queryPolls(
       { is_closed: true },
-      [{ created_at: -1 }],
+      [{ field: 'created_at', direction: -1 }],
     );
     // the returned polls will be ones with reactive state
     // #endregion snippet

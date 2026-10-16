@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { StreamChat } from '../../../../../src';
-import type { UpsertPushPreferencesResponse } from '../../../../../src';
+import { nsToMs, StreamChat } from '../../../../../src';
+import type { TimestampNS, UpsertPushPreferencesResponse } from '../../../../../src';
 import {
   createUserToken,
   disconnectClients,
@@ -12,7 +12,7 @@ import { uniqueId } from '../../../helpers/ids';
 
 // Push delivery isn't checked: reading the saved preferences back is enough. User-level
 // preferences come back in the connect response (`me.push_preferences`), channel-member
-// preferences on `channel.push_preferences` after `queryChannels`.
+// preferences on `channel.push_preferences` after `queryChannelsAndHydrate`.
 describe('platform/03-events-and-notifications/05-push-preferences.md', () => {
   const serverClient = getServerClient();
   const cleanup = new Cleanup(serverClient);
@@ -26,7 +26,7 @@ describe('platform/03-events-and-notifications/05-push-preferences.md', () => {
   /** The user's own push preferences, as a fresh connection of the same user sees them. */
   const getUserPreferences = async () => {
     const reader = new StreamChat(process.env.STREAM_API_KEY as string, {
-      allowServerSideConnect: true,
+      client: { allowServerSideConnect: true },
     });
     try {
       const response = await reader.connectUser({ id: userId }, createUserToken(userId));
@@ -38,17 +38,19 @@ describe('platform/03-events-and-notifications/05-push-preferences.md', () => {
 
   /** Channel-member push preferences of the connected user, by cid. */
   const getChannelPreferences = async () => {
-    const channels = await client.queryChannels({
-      cid: { $in: [general, announcements, urgentAlerts, socialChat] },
+    const channels = await client.queryChannelsAndHydrate({
+      filter_conditions: {
+        cid: { $in: [general, announcements, urgentAlerts, socialChat] },
+      },
     });
     return Object.fromEntries(
       channels.map((channel) => [channel.cid, channel.push_preferences]),
     );
   };
 
-  const isAbout = (actual: string | undefined, expected: Date) =>
-    actual !== undefined &&
-    Math.abs(new Date(actual).getTime() - expected.getTime()) < 1000;
+  /** `disabled_until` comes back as a unix-nanosecond timestamp. */
+  const isAbout = (actual: TimestampNS | undefined, expected: Date) =>
+    actual !== undefined && Math.abs(nsToMs(actual) - expected.getTime()) < 1000;
 
   beforeAll(async () => {
     cleanup.users.push(userId);
@@ -71,11 +73,13 @@ describe('platform/03-events-and-notifications/05-push-preferences.md', () => {
   it('sets user-level preferences', async () => {
     // #region snippet docs="platform/03-events-and-notifications/05-push-preferences.md" heading="User-Level Preferences" tab="JavaScript" index=1
     // Set user-level push preferences for the current user
-    await client.setPushPreferences([
-      {
-        chat_level: 'mentions',
-      },
-    ]);
+    await client.updatePushNotificationPreferences({
+      preferences: [
+        {
+          chat_level: 'mentions',
+        },
+      ],
+    });
     // #endregion snippet
 
     expect((await getUserPreferences())?.chat_level).toBe('mentions');
@@ -85,16 +89,18 @@ describe('platform/03-events-and-notifications/05-push-preferences.md', () => {
     // #region snippet docs="platform/03-events-and-notifications/05-push-preferences.md" heading="Channel-Member Preferences" tab="JavaScript" index=1
     // COPY: general="messaging:general", announcements="messaging:announcements"
     // Set per-channel preferences for the current user
-    await client.setPushPreferences([
-      {
-        channel_cid: general,
-        chat_level: 'none',
-      },
-      {
-        channel_cid: announcements,
-        chat_level: 'all',
-      },
-    ]);
+    await client.updatePushNotificationPreferences({
+      preferences: [
+        {
+          channel_cid: general,
+          chat_level: 'none',
+        },
+        {
+          channel_cid: announcements,
+          chat_level: 'all',
+        },
+      ],
+    });
     // #endregion snippet
 
     const preferences = await getChannelPreferences();
@@ -106,17 +112,19 @@ describe('platform/03-events-and-notifications/05-push-preferences.md', () => {
     // #region snippet docs="platform/03-events-and-notifications/05-push-preferences.md" heading="Client-Side Usage" tab="JavaScript" index=1
     // COPY: general="messaging:general"
     // Client-side - can only update current user's preferences
-    await client.setPushPreferences([
-      {
-        // user_id is optional and will be automatically set to current user
-        chat_level: 'mentions',
-      },
-      {
-        // Set preferences for a specific channel
-        channel_cid: general,
-        chat_level: 'all',
-      },
-    ]);
+    await client.updatePushNotificationPreferences({
+      preferences: [
+        {
+          // user_id is optional and will be automatically set to current user
+          chat_level: 'mentions',
+        },
+        {
+          // Set preferences for a specific channel
+          channel_cid: general,
+          chat_level: 'all',
+        },
+      ],
+    });
     // #endregion snippet
 
     expect((await getUserPreferences())?.chat_level).toBe('mentions');
@@ -124,23 +132,27 @@ describe('platform/03-events-and-notifications/05-push-preferences.md', () => {
   });
 
   it('creates a "Do Not Disturb" mode', async () => {
-    const spy = vi.spyOn(client, 'setPushPreferences');
+    const spy = vi.spyOn(client, 'updatePushNotificationPreferences');
     let responses: UpsertPushPreferencesResponse[];
     try {
       // #region snippet docs="platform/03-events-and-notifications/05-push-preferences.md" heading="1: Creating a \"Do Not Disturb\" Mode" tab="JavaScript" index=1
       // Disable all push notifications
-      await client.setPushPreferences([
-        {
-          chat_level: 'none',
-        },
-      ]);
+      await client.updatePushNotificationPreferences({
+        preferences: [
+          {
+            chat_level: 'none',
+          },
+        ],
+      });
 
       // Later, re-enable all push notifications
-      await client.setPushPreferences([
-        {
-          chat_level: 'all',
-        },
-      ]);
+      await client.updatePushNotificationPreferences({
+        preferences: [
+          {
+            chat_level: 'all',
+          },
+        ],
+      });
       // #endregion snippet
       responses = await Promise.all(spy.mock.results.map((result) => result.value));
     } finally {
@@ -157,20 +169,22 @@ describe('platform/03-events-and-notifications/05-push-preferences.md', () => {
     // #region snippet docs="platform/03-events-and-notifications/05-push-preferences.md" heading="2: Channel-Specific Notification Settings" tab="JavaScript" index=1
     // COPY: general="messaging:general", urgentAlerts="messaging:urgent-alerts", socialChat="messaging:social-chat"
     // Set different preferences for different channels
-    await client.setPushPreferences([
-      {
-        channel_cid: general,
-        chat_level: 'mentions', // Default: mentions only
-      },
-      {
-        channel_cid: urgentAlerts,
-        chat_level: 'all', // Always notify for urgent alerts
-      },
-      {
-        channel_cid: socialChat,
-        chat_level: 'none', // Never notify for social chat
-      },
-    ]);
+    await client.updatePushNotificationPreferences({
+      preferences: [
+        {
+          channel_cid: general,
+          chat_level: 'mentions', // Default: mentions only
+        },
+        {
+          channel_cid: urgentAlerts,
+          chat_level: 'all', // Always notify for urgent alerts
+        },
+        {
+          channel_cid: socialChat,
+          chat_level: 'none', // Never notify for social chat
+        },
+      ],
+    });
     // #endregion snippet
 
     const preferences = await getChannelPreferences();
@@ -185,25 +199,29 @@ describe('platform/03-events-and-notifications/05-push-preferences.md', () => {
     // Disable push notifications for 2 hours for the current user
     const twoHoursFromNow = new Date(Date.now() + 2 * 60 * 60 * 1000);
 
-    await client.setPushPreferences([
-      {
-        chat_level: 'all',
-        disabled_until: twoHoursFromNow.toISOString(),
-      },
-    ]);
+    await client.updatePushNotificationPreferences({
+      preferences: [
+        {
+          chat_level: 'all',
+          disabled_until: twoHoursFromNow,
+        },
+      ],
+    });
 
     // Disable push notifications for a specific channel until tomorrow
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     tomorrow.setHours(9, 0, 0, 0); // 9 AM tomorrow
 
-    await client.setPushPreferences([
-      {
-        channel_cid: general,
-        chat_level: 'all',
-        disabled_until: tomorrow.toISOString(),
-      },
-    ]);
+    await client.updatePushNotificationPreferences({
+      preferences: [
+        {
+          channel_cid: general,
+          chat_level: 'all',
+          disabled_until: tomorrow,
+        },
+      ],
+    });
     // #endregion snippet
 
     const userPreferences = await getUserPreferences();
@@ -218,27 +236,31 @@ describe('platform/03-events-and-notifications/05-push-preferences.md', () => {
     // #region snippet docs="platform/03-events-and-notifications/05-push-preferences.md" heading="Setting granular preferences" tab="JavaScript" index=1
     // COPY: general="messaging:general"
     // User-level: only receive pushes for direct mentions and thread replies
-    await client.setPushPreferences([
-      {
-        chat_preferences: {
-          default_preference: 'none',
-          direct_mentions: 'all',
-          thread_replies: 'all',
+    await client.updatePushNotificationPreferences({
+      preferences: [
+        {
+          chat_preferences: {
+            default_preference: 'none',
+            direct_mentions: 'all',
+            thread_replies: 'all',
+          },
         },
-      },
-    ]);
+      ],
+    });
 
     // Channel-member level: mute @channel and @here in a noisy channel
-    await client.setPushPreferences([
-      {
-        channel_cid: general,
-        chat_preferences: {
-          default_preference: 'all',
-          channel_mentions: 'none',
-          here_mentions: 'none',
+    await client.updatePushNotificationPreferences({
+      preferences: [
+        {
+          channel_cid: general,
+          chat_preferences: {
+            default_preference: 'all',
+            channel_mentions: 'none',
+            here_mentions: 'none',
+          },
         },
-      },
-    ]);
+      ],
+    });
     // #endregion snippet
 
     const userPreferences = await getUserPreferences();
@@ -257,17 +279,19 @@ describe('platform/03-events-and-notifications/05-push-preferences.md', () => {
   });
 
   it('switches from chat_preferences back to chat_level', async () => {
-    await client.setPushPreferences([
-      { chat_preferences: { default_preference: 'none' } },
-    ]);
+    await client.updatePushNotificationPreferences({
+      preferences: [{ chat_preferences: { default_preference: 'none' } }],
+    });
 
     // #region snippet docs="platform/03-events-and-notifications/05-push-preferences.md" heading="Switching between chat_level and chat_preferences" tab="JavaScript" index=1
     // Switch from granular preferences back to a simple level
-    await client.setPushPreferences([
-      {
-        chat_level: 'all_mentions',
-      },
-    ]);
+    await client.updatePushNotificationPreferences({
+      preferences: [
+        {
+          chat_level: 'all_mentions',
+        },
+      ],
+    });
     // #endregion snippet
 
     const userPreferences = await getUserPreferences();
@@ -281,13 +305,15 @@ describe('platform/03-events-and-notifications/05-push-preferences.md', () => {
     // Set call-level preferences with temporary disabling
     const oneHourFromNow = new Date(Date.now() + 60 * 60 * 1000);
 
-    await client.setPushPreferences([
-      {
-        user_id: userId,
-        call_level: 'all',
-        disabled_until: oneHourFromNow.toISOString(),
-      },
-    ]);
+    await client.updatePushNotificationPreferences({
+      preferences: [
+        {
+          user_id: userId,
+          call_level: 'all',
+          disabled_until: oneHourFromNow,
+        },
+      ],
+    });
     // #endregion snippet
 
     const userPreferences = await getUserPreferences();

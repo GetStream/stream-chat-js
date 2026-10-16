@@ -1629,6 +1629,33 @@ describe('StreamChat.queryThreads', () => {
 
 		sinon.restore();
 	});
+
+	it('returns the registered instance of a thread, so activating it keeps it managed', async () => {
+		const client = await getClientWithUser();
+		const parentMessage = generateMsg();
+		const rawThread = generateThreadResponse(
+			mockChannelQueryResponse.channel,
+			parentMessage,
+		);
+		sinon.stub(client, 'queryThreads').resolves({ threads: [rawThread] });
+		sinon.stub(client, 'getThread').resolves({ thread: rawThread });
+
+		const {
+			threads: [registered],
+		} = await client.queryThreadsAndHydrate();
+		registered.activate();
+
+		const {
+			threads: [requeried],
+		} = await client.queryThreadsAndHydrate();
+		const fetched = await client.getThreadAndHydrate(parentMessage.id);
+
+		expect(requeried).to.equal(registered);
+		expect(fetched).to.equal(registered);
+		expect(client.threads.get(parentMessage.id)).to.equal(registered);
+
+		sinon.restore();
+	});
 });
 
 describe('StreamChat.queryReactions', () => {

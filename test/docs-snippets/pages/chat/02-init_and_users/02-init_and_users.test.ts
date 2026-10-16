@@ -12,7 +12,7 @@ const apiKey = process.env.STREAM_API_KEY as string;
 import { StreamChat } from 'stream-chat';
 
 const chatClient = StreamChat.getInstance(apiKey, {
-  timeout: 6000,
+  client: { axiosRequestConfig: { timeout: 6000 } },
 });
 // #endregion snippet
 
@@ -33,7 +33,7 @@ describe('_default/02-init_and_users/02-init_and_users.md', () => {
 
   it('initializes the client as a singleton', () => {
     expect(chatClient.key).toBe(apiKey);
-    expect(chatClient.options.timeout).toBe(6000);
+    expect(chatClient.axiosInstance.defaults.timeout).toBe(6000);
     expect(StreamChat.getInstance(apiKey)).toBe(chatClient);
   });
 
@@ -54,7 +54,7 @@ describe('_default/02-init_and_users/02-init_and_users.md', () => {
     // #endregion snippet
 
     expect(chatClient.userID).toBe(userId);
-    expect(chatClient.wsConnection?.isHealthy).toBe(true);
+    expect(chatClient.wsConnection.isHealthy).toBe(true);
     const user = await getServerUser(serverClient, userId);
     expect(user.name).toBe('John Doe');
     expect(user.image).toBe('https://getstream.io/random_svg/?name=John');
@@ -64,7 +64,7 @@ describe('_default/02-init_and_users/02-init_and_users.md', () => {
     // #endregion snippet
 
     expect(chatClient.userID).toBeUndefined();
-    expect(chatClient.wsConnection?.isHealthy).toBe(false);
+    expect(chatClient.wsConnection.isHealthy).toBe(false);
   });
 
   it('connects a user with privacy settings', async () => {
@@ -111,12 +111,13 @@ describe('_default/02-init_and_users/02-init_and_users.md', () => {
 
     // #region snippet docs="chat/_default/02-init_and_users/02-init_and_users.md" heading="XHR Fallback" tab="JavaScript" index=1
     // COPY: apiKey="apiKey"
-    const chatClient = StreamChat.getInstance(apiKey, { enableWSFallback: true });
+    const chatClient = StreamChat.getInstance(apiKey);
+    chatClient.config.set({ client: { wsConnection: { enableWSFallback: true } } });
     // #endregion snippet
 
     clients.push(chatClient);
     expect(chatClient).not.toBe(previousClient);
-    expect(chatClient.options.enableWSFallback).toBe(true);
+    expect(chatClient.wsConnection.config.enableWSFallback).toBe(true);
 
     await chatClient.connectUser({ id: fallbackUserId }, createUserToken(fallbackUserId));
     expect(chatClient.userID).toBe(fallbackUserId);

@@ -40,7 +40,14 @@ describe('axiosParamsSerializer', () => {
 				},
 				b: [1, 2, 3],
 			},
-			output: 'a=%7B%22b%22%3A1%2C%22c%22%3A2%2C%22d%22%3Anull%7D&b=%5B1%2C2%2C3%5D',
+			output: 'a=%7B%22b%22%3A1%2C%22c%22%3A2%2C%22d%22%3Anull%7D&b=1%2C2%2C3',
+		},
+		{
+			input: {
+				ids: ['a', 'b'],
+				objects: [{ a: 1 }],
+			},
+			output: 'ids=a%2Cb&objects=%5B%7B%22a%22%3A1%7D%5D',
 		},
 	];
 	it('should serialize params', () => {

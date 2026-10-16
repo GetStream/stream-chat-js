@@ -4916,10 +4916,8 @@ describe('Channel provisional (created from members, without an id)', () => {
 		it('refuses any other request before it is sent', async () => {
 			const channel = fromMembers();
 
-			await expect(channel.sendEvent({ event: { type: 'custom' } })).rejects.toThrow(
-				NO_ID,
-			);
-			// a generated endpoint: it throws as it is called
+			// generated endpoints: they throw as they are called
+			expect(() => channel.sendEvent({ event: { type: 'custom' } })).toThrow(NO_ID);
 			expect(() => channel.truncate()).toThrow(NO_ID);
 			await expect(channel.queryMembers()).rejects.toThrow(NO_ID);
 			await expect(
@@ -5008,5 +5006,30 @@ describe('Channel query on a disposed instance', () => {
 		await expect(channel.query({})).rejects.toThrow(/pending disposal/);
 		await expect(channel.watch()).rejects.toThrow(/pending disposal/);
 		expect(sendRequest).not.toHaveBeenCalled();
+	});
+});
+
+describe('Channel.updateAIState', () => {
+	it('sends the AI indicator fields under custom, where the API reads them', async () => {
+		const client = await getClientWithUser();
+		const channel = client.channel('messaging', 'ai-channel');
+		const sendEvent = vi.spyOn(client, 'sendEvent').mockResolvedValue({});
+
+		await channel.updateAIState('message-1', 'AI_STATE_THINKING', { ai_message: 'hi' });
+
+		expect(sendEvent).toHaveBeenCalledWith(
+			{ id: 'ai-channel', type: 'messaging' },
+			{
+				event: {
+					type: 'ai_indicator.update',
+					custom: {
+						ai_message: 'hi',
+						ai_state: 'AI_STATE_THINKING',
+						message_id: 'message-1',
+					},
+				},
+			},
+			undefined,
+		);
 	});
 });

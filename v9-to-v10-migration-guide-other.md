@@ -37,11 +37,11 @@
   managers warn rather than fail. But 18 and 20 are no longer tested. See the note below on what this
   means if you deploy the WebSocket client on Node 18 or 20.
 - **Server-side is gone.** If you construct with a `secret` or call server-only admin endpoints, switch to `@stream-io/node-sdk`. The construction guide has the full list — every feature module below that was server-only is dropped for the same reason.
-- Two barrels removed from the package root, one added: **`./events` and `./base64` are gone; `./logger` is new.** `./signing` survives with exactly one export left, `UserFromToken`. The `./campaign`, `./channel_batch_updater`, and `./segment` barrels are still exported but the modules are emptied (they contain only a comment pointing at the server SDK) — importing anything by name from them will fail.
+- Two barrels removed from the package root, one added: **`./events` and `./base64` are gone; `./logger` is new.** `./signing` survives with two exports left, `UserFromToken` and `DevToken`. The `./campaign`, `./channel_batch_updater`, and `./segment` barrels are still exported but the modules are emptied (they contain only a comment pointing at the server SDK) — importing anything by name from them will fail.
 - **`connection.changed` is removed.** Connectivity is published as two reactive stores, `client.wsConnection.state` for this client's socket (or its long-poll, once `enableWSFallback` has switched to it) and `client.networkConnection.state` for the device's network. A handler for the event simply stops firing, with no compile error in plain JavaScript, and a "connection lost" banner has to hold a drop itself where the event used to. The socket's own `isHealthy` is unchanged; what moved is where you read it. See below.
 - **Watching waits instead of degrading.** A request that watches a channel or subscribes to presence is held until the WebSocket handshake produces the connection id the server keys that subscription by, rather than being sent without one and silently registering nothing. It throws only when no socket is open and none is being opened. An explicit `watch: false` is never held. See below.
 - **The WebSocket connect endpoint moved to `/api/v2/connect`.** The hello event is now `connection.ok` rather than `health.check`. The long-poll fallback works as in v9, against `/api/v2/longpoll`, with `enableWSFallback` moved into the `wsConnection` configuration and `client.defaultWSTimeoutWithFallback` gone.
-- `Event` (type name) is kept, but its shape widened: `Event = (WSEvent & { received_at?: TimestampNS }) | LocalEvent | keyof CustomEventTypes`. `EventPayload<'<type>'>` narrows to a specific event.
+- `Event` (type name) is kept, but its shape changed: `Event = (WSEvent & { received_at?: TimestampNS }) | LocalEvent | CustomEventTypeUnion`, where each key augmented into `CustomEventTypes` becomes an event object whose data sits under `custom` (typed by `CustomEventData`) instead of at the root. `EventPayload<'<type>'>` narrows to a specific event.
 - `EventTypes` (plural) renamed to `EventType` (singular). `CustomEventTypes` interface is unchanged — augment it to add custom event-type keys, same as v9.
 - Filter payloads now carry **per-endpoint operator constraints** (inline `Filters<{ … }>` on each request type) — previously-permissive filter objects may stop type-checking. Only one operator per field is allowed, and `null` is no longer a valid `$in` element. `QueryPollsFilters`, `QueryVotesFilters`, and `ReminderFilters` were the last hand-written holdouts and now derive from their request types too.
 - `ChannelState.membership` initializes to `undefined` (was `{}`); `ChannelState.typing` values are now `EventPayload<'typing.start' | 'typing.stop'>` (were `Event`); read receipts merged with the generated `ReadStateResponse`.
@@ -120,7 +120,7 @@ Any consumer doing `import { Campaign, Segment, ChannelBatchUpdater, EVENT_MAP, 
 
 ### `./signing` is down to one export
 
-The barrel is still there, but it holds a **single** function: `UserFromToken`. Everything else it used to carry — `JWTUserToken`, `JWTServerToken`, `DevToken`, `verifySignature`, `CheckSignature`, `verifyAndParseWebhook`, `parseSqs`, `parseSns`, `gunzipPayload`, `decodeSqsPayload`, `decodeSnsPayload`, `parseEvent`, `InvalidWebhookError`, `InvalidWebhookErrorMessages` — needed the API secret or a Node builtin, and went out with the server-side surface. See [`v9-to-v10-migration-guide-server-side.md`](./v9-to-v10-migration-guide-server-side.md).
+The barrel is still there, but it holds only `UserFromToken` and `DevToken` (also exposed as `client.devToken(userId)`). Everything else it used to carry — `JWTUserToken`, `JWTServerToken`, `verifySignature`, `CheckSignature`, `verifyAndParseWebhook`, `parseSqs`, `parseSns`, `gunzipPayload`, `decodeSqsPayload`, `decodeSnsPayload`, `parseEvent`, `InvalidWebhookError`, `InvalidWebhookErrorMessages` — needed the API secret or a Node builtin, and went out with the server-side surface. See [`v9-to-v10-migration-guide-server-side.md`](./v9-to-v10-migration-guide-server-side.md).
 
 `UserFromToken` itself changed implementation: it decodes the JWT payload with the global `atob` instead of the removed `base64-js` helpers. It runs on the `connectUser` path, so older React Native / Hermes targets — Hermes only gained `atob` / `btoa` around React Native 0.74 — must install a base64 polyfill before the first `connectUser`, or connecting throws `ReferenceError: atob is not defined`. Verify with `typeof atob` on the target rather than by version number; browsers, Node 16+, Bun, and Deno all have it natively.
 
@@ -241,7 +241,14 @@ type LocalEvent = (
 export type Event =
   | (WSEvent & { received_at?: number })
   | LocalEvent
-  | keyof CustomEventTypes;
+  | CustomEventTypeUnion;
+
+// One event object per key augmented into `CustomEventTypes`; `never` when none are declared.
+type CustomEventTypeUnion = {
+  [K in keyof CustomEventTypes]: { type: K } & Omit<CustomEvent, 'type'> & {
+      received_at?: TimestampNS;
+    };
+}[keyof CustomEventTypes];
 export type EventType = Event['type'] | 'all';
 export type EventHandler<T = string> = (event: Extract<Event, { type: T }>) => void;
 
@@ -255,7 +262,7 @@ export type EventPayload<T extends Event['type'] | (string & {})> = Extract<
 
 | v9                                                                                                                                                                                                                                   | v10                                                                                                                                                                                                  |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `import { Event } from 'stream-chat'`                                                                                                                                                                                                | still `import { Event } from 'stream-chat'` — the alias is retained; the union it resolves to widened to `WSEvent \| LocalEvent \| keyof CustomEventTypes`.                                          |
+| `import { Event } from 'stream-chat'`                                                                                                                                                                                                | still `import { Event } from 'stream-chat'` — the alias is retained; the union it resolves to is now `WSEvent \| LocalEvent \| CustomEventTypeUnion`.                                                |
 | `Event` as a callback argument type                                                                                                                                                                                                  | `Event` still works; prefer `EventPayload<'message.new'>` for narrowed events.                                                                                                                       |
 | `import { EventTypes } from 'stream-chat'`                                                                                                                                                                                           | `import { EventType } from 'stream-chat'` — singular; same shape (`Event['type'] \| 'all'`)                                                                                                          |
 | `import { EVENT_MAP } from 'stream-chat'`                                                                                                                                                                                            | removed — no runtime table. Match on `event.type` directly.                                                                                                                                          |
@@ -293,6 +300,32 @@ declare module 'stream-chat' {
 ```
 
 Because the v10 generic on `channel.on<T extends EventType | string>` accepts any `string`, unknown listener keys still type-check without augmentation, but the event payload will not be narrowed. Augmenting `CustomEventTypes` adds the custom key to `Event['type']`, which flows through `EventType` and `EventHandler` narrowing.
+
+What changed is where a custom event's data lives. v9's `Event` spread `CustomEventData` over its root;
+in v10 a custom event is the generated `CustomEvent` shape (`type`, `created_at`, `custom`), and its data
+is under `custom`, typed by `CustomEventData`. That is also where the API reads it when you send one —
+top-level fields other than `type` and `parent_id` are dropped:
+
+```ts
+declare module 'stream-chat' {
+  interface CustomEventTypes {
+    friendship_request: true;
+  }
+  interface CustomEventData {
+    text?: string;
+  }
+}
+
+// v9
+await channel.sendEvent({ type: 'friendship_request', text: 'hi' });
+client.on('friendship_request', (event) => event.text);
+
+// v10
+await channel.sendEvent({
+  event: { type: 'friendship_request', custom: { text: 'hi' } },
+});
+client.on('friendship_request', (event) => event.custom.text);
+```
 
 > **Larger topic** — the event system rewrite (removed hand-rolled event types across `poll`, `poll_manager`, `thread`, `reminders`, live-location, and the client itself; the shift from a hand-maintained `EVENT_MAP` to generated decoders) touches enough call sites that it may warrant a dedicated guide. Flag me if you want one written.
 
@@ -967,7 +1000,9 @@ query that lands before `activate()` reuses it rather than creating a second one
 has only its parent message, so it starts stale and loads its thread data once, when it is first
 activated.
 `client.threads.get(id)` only looks a thread up, and `client.threads.paginator.getItem(id)` answers
-whether the list holds it.
+whether the list holds it. `client.queryThreadsAndHydrate()` and `client.getThreadAndHydrate()` also
+return the registered instance for a thread `client.threads` already holds, rather than a second
+`Thread` for the same id, so the instance you get is the one that receives events.
 
 A thread no longer listens to the client itself: `client.threads` hands each thread event to the
 threads it holds, the way `client.polls` does for polls. A thread therefore gets events only once
@@ -1487,7 +1522,7 @@ For any of these that survive as a generated shape, the replacement is the gener
 
 For each source file that touches the SDK:
 
-1. **Delete removed imports.** `EVENT_MAP`, `Campaign*`, `Segment*`, `ChannelBatchUpdater`, `encodeBase64`, `decodeBase64`, the webhook / JWT helpers from `./signing` (`verifyAndParseWebhook`, `parseSqs`, `parseSns`, `verifySignature`, `CheckSignature`, `InvalidWebhookError`, `JWTUserToken`, `JWTServerToken`, `DevToken`), `Role` (rename), `MessageResponseBase`, `FormatMessageResponse`, `PredefinedFilterSort(Param)`, and any of the removed type utilities. `Event`, `CustomEventTypes`, and `UserFromToken` are kept — do not delete them.
+1. **Delete removed imports.** `EVENT_MAP`, `Campaign*`, `Segment*`, `ChannelBatchUpdater`, `encodeBase64`, `decodeBase64`, the webhook / JWT helpers from `./signing` (`verifyAndParseWebhook`, `parseSqs`, `parseSns`, `verifySignature`, `CheckSignature`, `InvalidWebhookError`, `JWTUserToken`, `JWTServerToken`), `Role` (rename), `MessageResponseBase`, `FormatMessageResponse`, `PredefinedFilterSort(Param)`, and any of the removed type utilities. `Event`, `CustomEventTypes`, `UserFromToken` and `DevToken` are kept — do not delete them.
 2. **Rename `Role` → `RoleName`** at every import + annotation site.
 3. **Rewrite event-handler callback types where needed.** `Event` is still valid (its union widened) — prefer `EventPayload<'…'>` for narrowed access. Custom event-type augmentation still goes on `CustomEventTypes`, unchanged from v9. Rename any imports of the plural `EventTypes` to the singular `EventType`.
 4. **Guard `channel.state.membership` reads** with `?.` — it's `undefined` on freshly constructed channels.

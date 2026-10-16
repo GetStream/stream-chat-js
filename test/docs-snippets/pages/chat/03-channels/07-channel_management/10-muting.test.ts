@@ -1,10 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { StreamChat } from '../../../../../../src';
+import type { Channel } from '../../../../../../src';
 import {
   createUserToken,
   disconnectClients,
   getServerClient,
 } from '../../../../helpers/clients';
+import type { TestUser } from '../../../../helpers/clients';
 import { Cleanup } from '../../../../helpers/cleanup';
 import { uniqueId } from '../../../../helpers/ids';
 import { retry } from '../../../../helpers/wait';
@@ -16,10 +18,10 @@ describe('_default/03-channels/07-channel_management/10-muting.md', () => {
   const channelId = uniqueId('channel');
   const otherChannelId = uniqueId('other');
   const premutedChannelId = uniqueId('premuted');
-  const user = { id: userId };
+  const user: TestUser = { id: userId };
   const token = createUserToken(userId);
   const client = new StreamChat(process.env.STREAM_API_KEY as string, {
-    allowServerSideConnect: true,
+    client: { allowServerSideConnect: true },
   });
 
   beforeAll(async () => {
@@ -68,7 +70,8 @@ describe('_default/03-channels/07-channel_management/10-muting.md', () => {
     await channel.mute({ expiration: 10000 });
 
     // check if channel is muted
-    // { muted: true | false, createdAt: Date | null, expiresAt: Date | null}
+    // { muted: true | false, createdAt: number | null, expiresAt: number | null }
+    // (timestamps in unix nanoseconds)
     channel.muteStatus();
     // #endregion snippet
 
@@ -82,28 +85,30 @@ describe('_default/03-channels/07-channel_management/10-muting.md', () => {
       return Promise.resolve(s);
     });
     expect(status.muted).toBe(true);
-    expect(status.expiresAt).toBeInstanceOf(Date);
+    expect(typeof status.expiresAt).toBe('number');
   });
 
   it('queries muted and not muted channels', async () => {
     // make sure the mute doesn't expire during the query
     await client.channel('messaging', channelId).mute();
-    const spy = vi.spyOn(client, 'queryChannels');
+    const spy = vi.spyOn(client, 'queryChannelsAndHydrate');
 
     // #region snippet docs="chat/_default/03-channels/07-channel_management/10-muting.md" heading="Query Muted Channels" tab="JavaScript" index=1
     // retrieve all channels excluding muted ones
-    await client.queryChannels({ members: { $in: [userId] }, muted: false });
+    await client.queryChannelsAndHydrate({
+      filter_conditions: { members: { $in: [userId] }, muted: false },
+    });
 
     // retrieve all muted channels
-    await client.queryChannels({ muted: true });
+    await client.queryChannelsAndHydrate({ filter_conditions: { muted: true } });
     // #endregion snippet
 
-    const [notMuted, muted] = await Promise.all(spy.mock.results.map((r) => r.value));
+    const [notMuted, muted]: Channel[][] = await Promise.all(
+      spy.mock.results.map((r) => r.value),
+    );
     spy.mockRestore();
-    expect(notMuted.map((c: { cid: string }) => c.cid)).toEqual([
-      `messaging:${otherChannelId}`,
-    ]);
-    expect(muted.map((c: { cid: string }) => c.cid).sort()).toEqual(
+    expect(notMuted.map((c) => c.cid)).toEqual([`messaging:${otherChannelId}`]);
+    expect(muted.map((c) => c.cid).sort()).toEqual(
       [`messaging:${channelId}`, `messaging:${premutedChannelId}`].sort(),
     );
   });
@@ -116,7 +121,9 @@ describe('_default/03-channels/07-channel_management/10-muting.md', () => {
     await channel.unmute();
     // #endregion snippet
 
-    const muted = await client.queryChannels({ muted: true });
+    const muted = await client.queryChannelsAndHydrate({
+      filter_conditions: { muted: true },
+    });
     expect(muted.map((c) => c.cid)).toEqual([`messaging:${premutedChannelId}`]);
   });
 });

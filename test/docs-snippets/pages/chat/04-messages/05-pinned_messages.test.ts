@@ -1,5 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { Channel, StreamChat, UpdateMessageAPIResponse } from '../../../../../src';
+import { nsToDate } from '../../../../../src';
+import type {
+  Channel,
+  StreamChat,
+  TimestampNS,
+  UpdateMessagePartialResponse,
+} from '../../../../../src';
 import {
   disconnectClients,
   getClientSideClient,
@@ -7,6 +13,10 @@ import {
 } from '../../../helpers/clients';
 import { Cleanup } from '../../../helpers/cleanup';
 import { uniqueId } from '../../../helpers/ids';
+
+/** Server timestamps are unix nanoseconds; '' when unset. */
+const isoString = (timestamp: TimestampNS | undefined) =>
+  timestamp === undefined ? '' : nsToDate(timestamp).toISOString();
 
 describe('_default/04-messages/05-pinned_messages.md', () => {
   const serverClient = getServerClient();
@@ -23,16 +33,20 @@ describe('_default/04-messages/05-pinned_messages.md', () => {
   beforeAll(async () => {
     cleanup.users.push(userId);
     client = await getClientSideClient({ id: userId });
-    channel = client.channel('messaging', channelId, { members: [userId] });
+    channel = client.channel('messaging', channelId, { members: [{ user_id: userId }] });
     cleanup.channels.push(`messaging:${channelId}`);
     await channel.watch();
 
-    pagingChannel = client.channel('messaging', pagingChannelId, { members: [userId] });
+    pagingChannel = client.channel('messaging', pagingChannelId, {
+      members: [{ user_id: userId }],
+    });
     cleanup.channels.push(`messaging:${pagingChannelId}`);
     await pagingChannel.create();
     // 12 pinned messages, pinned one at a time so `pinned_at` follows this order.
     for (let i = 0; i < 12; i++) {
-      const { message } = await pagingChannel.sendMessage({ text: `Pinned ${i}` });
+      const { message } = await pagingChannel.sendMessage({
+        message: { text: `Pinned ${i}` },
+      });
       await client.pinMessage(message);
       pinnedIds.push(message.id);
     }
@@ -51,9 +65,11 @@ describe('_default/04-messages/05-pinned_messages.md', () => {
     // #region snippet docs="chat/_default/04-messages/05-pinned_messages.md" heading="Pinning and Unpinning Messages" tab="JavaScript" index=1
     // Create a pinned message
     const { message } = await channel.sendMessage({
-      text: 'Important announcement',
-      pinned: true,
-      pin_expires: '2077-01-01T00:00:00Z',
+      message: {
+        text: 'Important announcement',
+        pinned: true,
+        pin_expires: new Date('2077-01-01T00:00:00Z'),
+      },
     });
 
     // Pin an existing message for 120 seconds
@@ -70,37 +86,36 @@ describe('_default/04-messages/05-pinned_messages.md', () => {
     // #endregion snippet
 
     expect(message.pinned).toBe(true);
-    expect(message.pin_expires).toMatch(/^2077-01-01T00:00:00/);
+    expect(isoString(message.pin_expires)).toMatch(/^2077-01-01T00:00:00/);
     expect(message.pinned_by?.id).toBe(userId);
 
-    const [timed, dated, indefinite]: UpdateMessageAPIResponse[] = await Promise.all(
+    const [timed, dated, indefinite]: UpdateMessagePartialResponse[] = await Promise.all(
       pinSpy.mock.results.map((r) => r.value),
     );
     pinSpy.mockRestore();
-    expect(timed.message.pinned).toBe(true);
-    const timedExpires = new Date(timed.message.pin_expires ?? 0).getTime();
+    expect(timed.message?.pinned).toBe(true);
+    const timedExpires = new Date(isoString(timed.message?.pin_expires)).getTime();
     expect(timedExpires).toBeGreaterThanOrEqual(before + 110_000);
     expect(timedExpires).toBeLessThanOrEqual(Date.now() + 130_000);
-    expect(dated.message.pinned).toBe(true);
-    expect(dated.message.pin_expires).toMatch(/^2077-01-01T00:00:00/);
-    expect(indefinite.message.pinned).toBe(true);
-    expect(indefinite.message.pin_expires ?? null).toBeNull();
+    expect(dated.message?.pinned).toBe(true);
+    expect(isoString(dated.message?.pin_expires)).toMatch(/^2077-01-01T00:00:00/);
+    expect(indefinite.message?.pinned).toBe(true);
+    expect(indefinite.message?.pin_expires ?? null).toBeNull();
 
-    const [unpinned]: UpdateMessageAPIResponse[] = await Promise.all(
+    const [unpinned]: UpdateMessagePartialResponse[] = await Promise.all(
       unpinSpy.mock.results.map((r) => r.value),
     );
     unpinSpy.mockRestore();
-    expect(unpinned.message.pinned).toBe(false);
+    expect(unpinned.message?.pinned).toBe(false);
     const { message: stored } = await serverClient.chat.getMessage({ id: message.id });
     expect(stored.pinned).toBe(false);
   });
 
   it('retrieves pinned messages with the channel state', async () => {
     const { message: pinned } = await channel.sendMessage({
-      text: 'Pinned for query',
-      pinned: true,
+      message: { text: 'Pinned for query', pinned: true },
     });
-    await channel.sendMessage({ text: 'Not pinned' });
+    await channel.sendMessage({ message: { text: 'Not pinned' } });
 
     // #region snippet docs="chat/_default/04-messages/05-pinned_messages.md" heading="Retrieving Pinned Messages" tab="JavaScript" index=1
     const channelState = await client.channel('messaging', channelId).query();
@@ -117,14 +132,18 @@ describe('_default/04-messages/05-pinned_messages.md', () => {
 
     // #region snippet docs="chat/_default/04-messages/05-pinned_messages.md" heading="Paginating Pinned Messages" tab="JavaScript" index=1
     // First page, newest first
-    const page1 = await channel.getPinnedMessages({ limit: 10 }, { pinned_at: -1 });
+    const page1 = await channel.getPinnedMessages({
+      limit: 10,
+      sort: [{ field: 'pinned_at', direction: -1 }],
+    });
 
     // Next page
     const lastMsg = page1.messages[page1.messages.length - 1];
-    const page2 = await channel.getPinnedMessages(
-      { limit: 10, id_lt: lastMsg.id },
-      { pinned_at: -1 },
-    );
+    const page2 = await channel.getPinnedMessages({
+      limit: 10,
+      id_lt: lastMsg.id,
+      sort: [{ field: 'pinned_at', direction: -1 }],
+    });
 
     // Oldest first
     const ascPage = await channel.getPinnedMessages({ limit: 10 });

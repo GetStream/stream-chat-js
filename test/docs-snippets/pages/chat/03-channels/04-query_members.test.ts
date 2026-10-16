@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { Channel, ChannelMemberAPIResponse, StreamChat } from '../../../../../src';
+import type { Channel, MembersResponse, StreamChat } from '../../../../../src';
+import { nsToDate } from '../../../../../src';
 import {
   disconnectClients,
   getClientSideClient,
@@ -12,7 +13,7 @@ const DOCS = '_default/03-channels/04-query_members.md';
 
 /** Awaits every call recorded by a `queryMembers` spy (the docs don't keep the results). */
 const spiedResults = async (spy: { mock: { results: Array<{ value: unknown }> } }) =>
-  (await Promise.all(spy.mock.results.map((r) => r.value))) as ChannelMemberAPIResponse[];
+  (await Promise.all(spy.mock.results.map((r) => r.value))) as MembersResponse[];
 
 describe(DOCS, () => {
   const serverClient = getServerClient();
@@ -32,7 +33,9 @@ describe(DOCS, () => {
       { id: bob, name: 'bob' },
     ]);
     client = await getClientSideClient({ id: owner });
-    channel = client.channel('messaging', uniqueId('channel'), { members: [owner] });
+    channel = client.channel('messaging', uniqueId('channel'), {
+      members: [{ user_id: owner }],
+    });
     await channel.create();
     if (channel.cid) cleanup.channels.push(channel.cid);
     // Added one by one so the members have distinct created_at values.
@@ -51,13 +54,15 @@ describe(DOCS, () => {
 
     // #region snippet docs="chat/_default/03-channels/04-query_members.md" heading="" tab="JavaScript" index=1
     // Query members by user name
-    channel.queryMembers({ name: 'tommaso' });
+    await channel.queryMembers({ payload: { filter_conditions: { name: 'tommaso' } } });
 
     // Autocomplete members by user name
-    channel.queryMembers({ name: { $autocomplete: 'tom' } });
+    await channel.queryMembers({
+      payload: { filter_conditions: { name: { $autocomplete: 'tom' } } },
+    });
 
     // Query all members
-    channel.queryMembers({});
+    await channel.queryMembers();
     // #endregion snippet
 
     const [byName, autocomplete, all] = await spiedResults(spy);
@@ -71,39 +76,50 @@ describe(DOCS, () => {
 
   it('paginates channel members', async () => {
     // The docs' placeholder: the last member of a previous page (here the newest member).
-    const { members: newestFirst } = await channel.queryMembers(
-      {},
-      { created_at: -1 },
-      {},
-    );
+    const { members: newestFirst } = await channel.queryMembers({
+      payload: { sort: [{ field: 'created_at', direction: -1 }] },
+    });
     const lastMember = newestFirst[0];
     const spy = vi.spyOn(channel, 'queryMembers');
 
     // #region snippet docs="chat/_default/03-channels/04-query_members.md" heading="Paginating Channel Members" tab="JavaScript" index=1
     // Returns up to 100 members ordered by created_at descending
-    await channel.queryMembers({}, { created_at: -1 }, {});
+    await channel.queryMembers({
+      payload: { sort: [{ field: 'created_at', direction: -1 }] },
+    });
 
     // Returns up to 100 members ordered by user_id descending
-    await channel.queryMembers({}, { user_id: -1 }, {});
+    await channel.queryMembers({
+      payload: { sort: [{ field: 'user_id', direction: -1 }] },
+    });
 
     // Paginate by user_id in ascending order
-    await channel.queryMembers({}, { user_id: 1 }, { user_id_lt: lastMember.user_id });
+    await channel.queryMembers({
+      payload: {
+        sort: [{ field: 'user_id', direction: 1 }],
+        user_id_lt: lastMember.user_id,
+      },
+    });
 
     // Paginate by created_at in descending order
-    await channel.queryMembers(
-      {},
-      { created_at: -1 },
-      { created_at_before: lastMember.created_at },
-    );
+    // (created_at is a unix-nanosecond number: nsToDate from "stream-chat" converts it back to a Date)
+    await channel.queryMembers({
+      payload: {
+        sort: [{ field: 'created_at', direction: -1 }],
+        created_at_before: nsToDate(lastMember.created_at),
+      },
+    });
 
     // Paginate using offset
-    await channel.queryMembers({}, { created_at: -1 }, { offset: 20 });
+    await channel.queryMembers({
+      payload: { sort: [{ field: 'created_at', direction: -1 }], offset: 20 },
+    });
     // #endregion snippet
 
     const [byCreatedAt, byUserIdDesc, userIdPage, createdAtPage, offsetPage] =
       await spiedResults(spy);
     spy.mockRestore();
-    const ids = (r: ChannelMemberAPIResponse) => r.members.map((m) => m.user_id ?? '');
+    const ids = (r: MembersResponse) => r.members.map((m) => m.user_id ?? '');
     const all = [owner, tommaso, jane, bob];
 
     expect(ids(byCreatedAt)).toEqual([bob, jane, tommaso, owner]);

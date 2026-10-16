@@ -13,7 +13,7 @@ describe('_default/02-init_and_users/05-authless_users.md', () => {
 
   // A fresh client without a user, the way a front end creates it before anyone logs in.
   const newClient = () => {
-    const client = new StreamChat(apiKey, { allowServerSideConnect: true });
+    const client = new StreamChat(apiKey, { client: { allowServerSideConnect: true } });
     clients.push(client);
     return client;
   };
