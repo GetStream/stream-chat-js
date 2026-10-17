@@ -28,4 +28,4 @@ method that emitted them.
 
 For the full surface — per-scope configuration, the `Sink` / `LogLevel` / `ConfigureLoggersOptions`
 types, and the mapping from every v9 logging API to its v10 replacement — see
-[`v9-to-v10-migration-guide-logging.md`](../v9-to-v10-migration-guide-logging.md).
+[`ai-docs/v10-breaking-changes.md`](../ai-docs/v10-breaking-changes.md#logging).
