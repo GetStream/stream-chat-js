@@ -1061,7 +1061,7 @@ space was generalized:
 | `MessageComposerSetupState`       | `InstanceSetupState<'messageComposer'>`    |
 | `MessageComposerTearDownFunction` | `InstanceSetupTearDownFunction`            |
 
-Also listed in `v9-to-v10-migration-guide-type-renames.md`, so that table stays a complete record of
+Also listed in `ai-docs/v10-breaking-changes.md#type-rename-table`, so that table stays a complete record of
 removed type names.
 
 **No supported import path breaks.** They lived in `src/configuration/types.ts` and were never exported

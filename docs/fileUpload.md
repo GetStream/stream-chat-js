@@ -143,7 +143,7 @@ axios' node adapter. A `Content-Type` in `client.axiosRequestConfig.headers` (in
 override it — headers the SDK sets for a request always win over that global config.
 
 `client.createAbortControllerForNextRequest()` is removed — it armed one controller that whichever
-request went out next would consume. See `v9-to-v10-migration-guide-methods.md` for the
+request went out next would consume. See `ai-docs/v10-breaking-changes.md#client-uploads` for the
 before/after.
 
 ### Upload progress (`onUploadProgress`)
