@@ -5,6 +5,7 @@ import type {
   Attachment,
   BanRequest,
   ChannelConfigWithInfo,
+  ChannelMemberRequest,
   ChannelOwnCapability,
   ChannelStateResponseFields,
   CreateDeviceRequest,
@@ -13,6 +14,7 @@ import type {
   DraftPayloadResponse,
   FlagRequest,
   Images,
+  MessageRequest,
   MessageResponse,
   OwnUserResponse,
   QueryChannelsRequest,
@@ -69,6 +71,33 @@ export type APIResponse = {
 
 export type ChannelUpdateOptions = Omit<UpdateChannelRequest, 'message'>;
 
+/**
+ * A channel update that adds or removes items (members, invitees, filter tags): the items, a message
+ * notifying the channel members, and any other `update()` option.
+ */
+type ChannelItemsUpdate<Key extends string, Item> = Record<Key, Item[]> & {
+  /** Message object for channel members notification (optional). */
+  message?: MessageRequest;
+} & ChannelUpdateOptions;
+
+/** Request of `channel.addMembers`: user ids, or member requests with a role or custom data. */
+export type AddMembersRequest = ChannelItemsUpdate<
+  'members',
+  string | ChannelMemberRequest
+>;
+
+/** Request of `channel.inviteMembers`. */
+export type InviteMembersRequest = ChannelItemsUpdate<
+  'members',
+  string | Required<Omit<ChannelMemberRequest, 'channel_role'>>
+>;
+
+/** Request of `channel.removeMembers`: the user ids to remove. */
+export type RemoveMembersRequest = ChannelItemsUpdate<'members', string>;
+
+/** Request of `channel.addFilterTags` and `channel.removeFilterTags`. */
+export type FilterTagsRequest = ChannelItemsUpdate<'tags', string>;
+
 export type ConnectAPIResponse = Promise<void | ConnectionOpen>;
 
 export type LocalMessage = MessageResponse & {
@@ -78,6 +107,14 @@ export type LocalMessage = MessageResponse & {
 };
 
 export type GetThreadOptions = NonNullable<Parameters<ChatApi['getThread']>[1]>;
+
+/** Options of `client.pinMessage`. */
+export type PinMessageOptions = {
+  /** When the pin expires; `null` or leaving it out pins without expiry. */
+  pin_expires?: Date | string | null;
+  /** The pin time, which orders the pinned messages (defaults to now). */
+  pinned_at?: Date | string;
+};
 
 /**
  * The fields that exist on the connected user (`OwnUserResponse`) but not on a plain

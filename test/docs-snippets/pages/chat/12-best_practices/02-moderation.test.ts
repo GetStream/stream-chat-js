@@ -76,9 +76,9 @@ describe(DOCS, () => {
     // #region snippet docs="chat/_default/12-best_practices/02-moderation.md" heading="Giving moderators more permissions" tab="JavaScript" index=1
     // COPY: jamesBondId="james_bond"
     // Add a member with moderator role
-    await channel.addMembers([
-      { user_id: jamesBondId, channel_role: 'channel_moderator' },
-    ]);
+    await channel.addMembers({
+      members: [{ user_id: jamesBondId, channel_role: 'channel_moderator' }],
+    });
     // #endregion snippet
 
     const member = await getServerMember(serverClient, `messaging:${id}`, jamesBondId);
@@ -120,10 +120,12 @@ describe(DOCS, () => {
     // #region snippet docs="chat/_default/12-best_practices/02-moderation.md" heading="Flag" tab="JavaScript" index=1
     // A user's flag on a message is recorded once: flagging it again doesn't update the reason or custom data
     // Flag a message
-    const flag = await client.moderation.flagMessage(messageId);
+    const flag = await client.moderation.flagMessage({ message_id: messageId });
 
     // Flag with a reason and custom data
-    const flagWithReason = await client.moderation.flagMessage(messageId, 'spammy_user', {
+    const flagWithReason = await client.moderation.flagMessage({
+      message_id: messageId,
+      reason: 'spammy_user',
       custom: {
         user_comment: 'This user is spamming.',
       },
@@ -148,10 +150,15 @@ describe(DOCS, () => {
     // #region snippet docs="chat/_default/12-best_practices/02-moderation.md" heading="Reasons & custom data" tab="JavaScript" index=1
     // A user's flag on a message is recorded once: flagging it again doesn't update the reason or custom data
     // flag with a reason
-    let flag = await client.moderation.flagMessage(messageID, 'spammy_user');
+    let flag = await client.moderation.flagMessage({
+      message_id: messageID,
+      reason: 'spammy_user',
+    });
 
     // flag with a reason and additional custom data
-    flag = await client.moderation.flagMessage(messageID, 'spammy_user', {
+    flag = await client.moderation.flagMessage({
+      message_id: messageID,
+      reason: 'spammy_user',
       custom: {
         user_comment: 'This user is spamming the homepage.',
         page: 'homepage',
@@ -159,7 +166,8 @@ describe(DOCS, () => {
     });
 
     // flag with only custom data
-    flag = await client.moderation.flagMessage(messageID, undefined, {
+    flag = await client.moderation.flagMessage({
+      message_id: messageID,
       custom: {
         page: 'homepage',
       },

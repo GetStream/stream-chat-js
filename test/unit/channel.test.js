@@ -5073,3 +5073,68 @@ describe('Channel.updateAIState', () => {
 		);
 	});
 });
+
+describe('Channel member, filter-tag and upload-delete requests', () => {
+	let channel;
+	let update;
+
+	beforeEach(async () => {
+		const client = await getClientWithUser({ id: 'user' });
+		channel = client.channel('messaging', 'requests');
+		update = vi.spyOn(channel, 'update').mockResolvedValue({});
+	});
+
+	it('addMembers turns user ids into member requests and passes the options through', async () => {
+		await channel.addMembers({
+			members: ['u1', { user_id: 'u2', channel_role: 'channel_moderator' }],
+			message: { text: 'welcome' },
+			hide_history: true,
+		});
+
+		expect(update).toHaveBeenCalledWith(
+			{
+				add_members: [
+					{ user_id: 'u1' },
+					{ user_id: 'u2', channel_role: 'channel_moderator' },
+				],
+				message: { text: 'welcome' },
+				hide_history: true,
+			},
+			undefined,
+		);
+	});
+
+	it('inviteMembers turns user ids into member requests', async () => {
+		await channel.inviteMembers({ members: ['u1'] });
+
+		expect(update).toHaveBeenCalledWith({ invites: [{ user_id: 'u1' }] }, undefined);
+	});
+
+	it('removeMembers sends the user ids', async () => {
+		await channel.removeMembers({ members: ['u1'], message: { text: 'bye' } });
+
+		expect(update).toHaveBeenCalledWith(
+			{ remove_members: ['u1'], message: { text: 'bye' } },
+			undefined,
+		);
+	});
+
+	it('addFilterTags / removeFilterTags send the tags', async () => {
+		await channel.addFilterTags({ tags: ['a'] });
+		await channel.removeFilterTags({ tags: ['b'] });
+
+		expect(update).toHaveBeenNthCalledWith(1, { add_filter_tags: ['a'] }, undefined);
+		expect(update).toHaveBeenNthCalledWith(2, { remove_filter_tags: ['b'] }, undefined);
+	});
+
+	it('deleteImage / deleteFile take the url in a request object', async () => {
+		const deleteImage = vi.spyOn(channel, 'deleteChannelImage').mockResolvedValue({});
+		const deleteFile = vi.spyOn(channel, 'deleteChannelFile').mockResolvedValue({});
+
+		await channel.deleteImage({ url: 'https://cdn/image.png' });
+		await channel.deleteFile({ url: 'https://cdn/file.pdf' });
+
+		expect(deleteImage).toHaveBeenCalledWith({ url: 'https://cdn/image.png' }, undefined);
+		expect(deleteFile).toHaveBeenCalledWith({ url: 'https://cdn/file.pdf' }, undefined);
+	});
+});

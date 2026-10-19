@@ -40,7 +40,7 @@ describe(DOCS, () => {
     if (channel.cid) cleanup.channels.push(channel.cid);
     // Added one by one so the members have distinct created_at values.
     for (const id of [tommaso, jane, bob]) {
-      await channel.addMembers([id]);
+      await channel.addMembers({ members: [id] });
     }
   });
 

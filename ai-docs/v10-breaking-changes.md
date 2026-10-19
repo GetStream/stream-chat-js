@@ -431,8 +431,8 @@ Common rules for every generated or rewritten `StreamChat` method: path paramete
 **Kind:** signature · **Impact:** medium
 
 - **v9:** `queryThreads(options?)` -> `{ threads: Thread[], next }` (defaults `limit 10, participant_limit 10, reply_limit 3, watch true`, poll cache hydrated); `getThread(messageId, options?)` -> `Thread` (defaults `participant_limit 100, reply_limit 3, watch true`); `queryReactions(messageID, filter, sort?, options?)` read the offline DB first and dispatched `offline_reactions.queried`.
-- **v10:** `queryThreads(request?)`, `getThread({ message_id }, request?)`, `queryReactions({ id }, request?)` are raw generated calls with no defaults and no state. Hydrating versions: `queryThreadsAndHydrate(options?, requestOptions?)`, `getThreadAndHydrate(messageId, options?, requestOptions?)` (thread instances resolved through `client.threads`), `queryReactionsAndHydrate({ id }, request?)`.
-- **Migrate:** switch calls that need `Thread` instances or offline reactions to the `*AndHydrate` variants; when calling the raw ones pass `watch: true` yourself if needed.
+- **v10:** `queryThreads(request?)`, `getThread({ message_id }, request?)`, `queryReactions({ id }, request?)` are raw generated calls with no defaults and no state. Hydrating versions: `queryThreadsAndHydrate(options?, requestOptions?)`, `getThreadAndHydrate({ message_id }, options?, requestOptions?)` (path params like `getThread`; thread instances resolved through `client.threads`), `queryReactionsAndHydrate({ id }, request?)`.
+- **Migrate:** switch calls that need `Thread` instances or offline reactions to the `*AndHydrate` variants (`getThread(id)` -> `getThreadAndHydrate({ message_id: id })`); when calling the raw ones pass `watch: true` yourself if needed.
 - **Source:** `src/client.ts:1643-1670,2059-2142` (v10); `src/client.ts:2307-2349,3725-3808` (v9)
 
 <a id="update-delete-message-raw"></a>
@@ -464,9 +464,9 @@ Common rules for every generated or rewritten `StreamChat` method: path paramete
 **Kind:** signature · **Impact:** low
 
 - **v9:** `pinMessage(msg, timeoutOrExpirationDate?, pinnedBy?, pinnedAt?)`, `unpinMessage(msg, userId?)`.
-- **v10:** `pinMessage(msg, timeoutOrExpirationDate?, pinnedAt?, requestOptions?)`, `unpinMessage(msg, requestOptions?)`. `pinnedBy` (3rd) removed, so `pinnedAt` moves to 3rd. A numeric argument is a relative offset in seconds; a server `TimestampNS` is rejected at compile time; non-representable offsets now throw.
-- **Migrate:** drop the 3rd `pinnedBy` argument (`pinMessage(m, null, 'user', date)` -> `pinMessage(m, null, date)`); drop `unpinMessage`'s user argument.
-- **Source:** `src/client.ts:1908-2010` (v10); `src/client.ts:3405-3445` (v9)
+- **v10:** `pinMessage({ id }, { pin_expires?, pinned_at? }?, requestOptions?)` (`PinMessageOptions`), `unpinMessage({ id }, requestOptions?)`. Both take the message (or `{ id }`), not a bare id string. `pin_expires` is a `Date`, an RFC3339 string or `null` (no expiry, the default); `pinned_at` is a `Date` or an RFC3339 string (defaults to now). There is no relative offset in seconds any more and no `pinnedBy`; a server `TimestampNS` is rejected at compile time. The internal `_normalizeExpiration` / `_validateAndGetMessageId` helpers are removed.
+- **Migrate:** `pinMessage(m, 120)` -> `pinMessage(m, { pin_expires: new Date(Date.now() + 120 * 1000) })`; `pinMessage(m, date)` -> `pinMessage(m, { pin_expires: date })`; `pinMessage(m, null, 'user', date)` -> `pinMessage(m, { pinned_at: date })`; `pinMessage('id')` -> `pinMessage({ id: 'id' })`; drop `unpinMessage`'s user argument and pass `{ id }` for a bare id.
+- **Source:** `src/client.ts:1876-1920`, `src/types.ts` (`PinMessageOptions`) (v10); `src/client.ts:3405-3445` (v9)
 
 <a id="revoke-tokens"></a>
 
@@ -583,8 +583,8 @@ Common rules for every generated or rewritten `StreamChat` method: path paramete
   | `client.removeShadowBan(id, options?)`                                                         | `client.unbanUser(id, { shadow: true, ...options })` (still v1 `DELETE /moderation/ban`)                                                                                                                                            |
   | `client.muteUser(targetID, userID?, options?)`                                                 | `client.moderation.mute({ target_ids: [id], timeout? })`; response `MuteResponse` (`mutes`, no single `mute`)                                                                                                                       |
   | `client.unmuteUser(targetID, currentUserID?)`                                                  | `client.moderation.unmuteUser(id)` or `client.moderation.unmute({ target_ids: [id] })`                                                                                                                                              |
-  | `client.flagMessage(targetMessageID, { reason, custom, user_id }?)`                            | `client.moderation.flagMessage(messageId, reason?, { custom, ... }?)`; V2 `/api/v2/moderation/flag`, response `FlagItemResponse`                                                                                                    |
-  | `client.flagUser(targetID, { reason, user_id }?)`                                              | `client.moderation.flagUser(userId, reason?, options?)`                                                                                                                                                                             |
+  | `client.flagMessage(targetMessageID, { reason, custom, user_id }?)`                            | `client.moderation.flagMessage({ message_id, reason?, custom, ... })`; V2 `/api/v2/moderation/flag`, response `FlagItemResponse`                                                                                                    |
+  | `client.flagUser(targetID, { reason, user_id }?)`                                              | `client.moderation.flagUser({ user_id, reason?, ...options })`                                                                                                                                                                      |
   | `client.unflagMessage`, `client.unflagUser`, `client.unblockMessage`, `client._unblockMessage` | removed, no replacement in this package (review via `client.moderation.submitAction` or the dashboard)                                                                                                                              |
 
 - **Migrate:** per table; `user_id` overrides are gone (the connected user acts).
@@ -1270,8 +1270,8 @@ Common pattern for every generated or overridden `Channel` method: the trailing 
 **Kind:** renamed · **Impact:** medium · **PR:** #1832
 
 - **v9:** `sendFile(uri, name?, contentType?, user?, axiosRequestConfig?)`, `sendImage(...)` (accepted `Buffer` / streams); `deleteFile(url)`, `deleteImage(url)`.
-- **v10:** `uploadFile({ file, user? }, requestOptions?)` / `uploadImage({ file, upload_sizes?, user? }, requestOptions?)` (aliases of `uploadChannelFile` / `uploadChannelImage`; `file` is `File` / `Blob` / RN `{ uri, name?, type }` / URI `string`, no Node streams or Buffers); routes `/api/v2/chat/channels/{type}/{id}/file|image`. `deleteFile(url, requestOptions?)` / `deleteImage(url, requestOptions?)` (also `deleteChannelFile({ url })` / `deleteChannelImage({ url })`).
-- **Migrate:** `channel.sendImage(file, name, type, user, { onUploadProgress, signal })` -> `channel.uploadImage({ file, user }, { onUploadProgress, signal })`.
+- **v10:** `uploadFile({ file, user? }, requestOptions?)` / `uploadImage({ file, upload_sizes?, user? }, requestOptions?)` (aliases of `uploadChannelFile` / `uploadChannelImage`; `file` is `File` / `Blob` / RN `{ uri, name?, type }` / URI `string`, no Node streams or Buffers); routes `/api/v2/chat/channels/{type}/{id}/file|image`. `deleteFile({ url }, requestOptions?)` / `deleteImage({ url }, requestOptions?)`, the same request shape as `client.deleteFile` / `deleteImage` (aliases of `deleteChannelFile` / `deleteChannelImage`).
+- **Migrate:** `channel.sendImage(file, name, type, user, { onUploadProgress, signal })` -> `channel.uploadImage({ file, user }, { onUploadProgress, signal })`; `channel.deleteImage(url)` -> `channel.deleteImage({ url })`.
 - **Source:** `src/channel.ts:597-640` (v10); `src/channel.ts:266-316` (v9)
 
 <a id="channel-search-removed"></a>
@@ -1392,8 +1392,8 @@ Common pattern for every generated or overridden `Channel` method: the trailing 
 **Kind:** removed · **Impact:** medium · **PR:** #1849
 
 - **v9:** `addMembers(members, message?, options?)`, `addFilterTags`, `removeFilterTags`, `inviteMembers`, `removeMembers`, `acceptInvite(options?)`, `rejectInvite(options?)`, `addModerators(members, message?, options?)`, `demoteModerators(...)`, `assignRoles(roles, message?, options?)`; `message: Message`, `options: { hide_history?, hide_history_before?, skip_push? }`.
-- **v10:** helpers keep their positional shape plus `requestOptions?`; `message` is `MessageRequest`, `options` is `ChannelUpdateOptions = Omit<UpdateChannelRequest, 'message'>`; `addMembers` / `inviteMembers` map string ids to `{ user_id }`. `acceptInvite` / `rejectInvite(options?: UpdateChannelRequest, requestOptions?)`. `addModerators`, `demoteModerators`, `assignRoles` removed (the client-side `UpdateChannelRequest` has no `add_moderators` / `demote_moderators` / `assign_roles`).
-- **Migrate:** moderator promotion and role assignment move to the server-side node SDK; at insert time use `channel.addMembers([{ user_id, channel_role: 'channel_moderator' }])`.
+- **v10:** `addMembers({ members, message?, ...options }, requestOptions?)`, and likewise `inviteMembers` / `removeMembers` (`members`) and `addFilterTags` / `removeFilterTags` (`tags`): one request object holding the items, the notification `message` (`MessageRequest`) and any other `ChannelUpdateOptions` (`Omit<UpdateChannelRequest, 'message'>`) field, typed `AddMembersRequest`, `InviteMembersRequest`, `RemoveMembersRequest`, `FilterTagsRequest`. `addMembers` / `inviteMembers` map string ids to `{ user_id }`. `acceptInvite` / `rejectInvite(options?: UpdateChannelRequest, requestOptions?)`. `addModerators`, `demoteModerators`, `assignRoles` removed (the client-side `UpdateChannelRequest` has no `add_moderators` / `demote_moderators` / `assign_roles`).
+- **Migrate:** `addMembers(ids, message, { hide_history: true })` -> `addMembers({ members: ids, message, hide_history: true })`, the same for the other four (`addFilterTags(tags)` -> `addFilterTags({ tags })`). Moderator promotion and role assignment move to the server-side node SDK; at insert time use `channel.addMembers({ members: [{ user_id, channel_role: 'channel_moderator' }] })`.
 - **Source:** `src/channel.ts:816-958` (v10); `src/channel.ts:787-935` (v9)
 
 <a id="channel-update-member-partial"></a>
@@ -1923,7 +1923,7 @@ Client-level `queryThreads` / `getThread` becoming raw: [threads and reactions](
 
 - **v9:** `new Thread({ client, threadData: ThreadResponse })` (required); apps used `client.threads.threadsById[id] ?? new Thread(...)`.
 - **v10:** constructor `new Thread({ client, threadData?: ThreadStateResponse, channel?, parentMessage?, draft? })`. Without `threadData`, `channel` and `parentMessage` (with an `id`) are required, else it throws. A thread built from a parent message starts with `isStateStale: true` when the parent has replies or the channel is not watched, and loads once when activated. With `threadData`, `threadData.channel` and `threadData.parent_message` are required (throws otherwise) and the channel comes from `client.channelManager.ensure` (seeded with `channel.custom`, not `{ name }`). `ThreadResponse` -> `ThreadStateResponse` ([same-name changes](#same-name-meaning-changes)).
-- **Migrate:** `const thread = client.threads.ensure({ channel, parentMessage })`. Use `client.getThreadAndHydrate(id)` / `client.queryThreadsAndHydrate()` for fetched threads; both return the already-registered instance when one exists.
+- **Migrate:** `const thread = client.threads.ensure({ channel, parentMessage })`. Use `client.getThreadAndHydrate({ message_id: id })` / `client.queryThreadsAndHydrate()` for fetched threads; both return the already-registered instance when one exists.
 - **Source:** `src/thread.ts:133-231`, `src/thread_manager.ts:174-204`, `src/client.ts:2059-2142` (v10); `src/thread.ts:123-196` (v9)
 
 <a id="thread-state-derivation"></a>
@@ -1955,7 +1955,7 @@ Client-level `queryThreads` / `getThread` becoming raw: [threads and reactions](
 **Kind:** behavior · **Impact:** low
 
 - **v9:** `client.getThread(id, { watch: true })` (server default reply limit), replaced `state.replies` (plus failed replies), rethrew every error.
-- **v10:** `client.getThreadAndHydrate(id, { watch: true, reply_limit: max(loaded replies, pageSize) })`, merges into the reply paginator in place and re-ingests failed replies. A not-found error (Stream code or HTTP 404) resolves silently when `replyCount === 0`; other errors rethrow.
+- **v10:** `client.getThreadAndHydrate({ message_id: id }, { watch: true, reply_limit: max(loaded replies, pageSize) })`, merges into the reply paginator in place and re-ingests failed replies. A not-found error (Stream code or HTTP 404) resolves silently when `replyCount === 0`; other errors rethrow.
 - **Migrate:** none.
 - **Source:** `src/thread.ts:413-466` (v10); `src/thread.ts:213-226` (v9)
 
@@ -2106,8 +2106,8 @@ Poll data types and `PollResponse` renaming: [poll types](#poll-types). State ti
 **Kind:** signature · **Impact:** low
 
 - **v9:** `createPoll(poll: CreatePollData)`; `queryPolls(filter, sort: PollSort = [], options: Pager = {})`.
-- **v10:** `createPoll(poll: CreatePollRequest)`; `queryPolls(filter, sort: SortParamRequest[] = [], options: QueryPollsOptions = {})`, still positional (unlike `client.queryPolls`). New: `registerSubscriptions()` also listens to `user.updated` and replaces that user in every cached poll's votes, answers and `created_by` (and writes the offline DB).
-- **Migrate:** rename the type; sort as `SortParamRequest[]`.
+- **v10:** `createPoll(poll: CreatePollRequest)`; `queryPolls(request?: QueryPollsRequest, requestOptions?)`, the same request as `client.queryPolls` (`{ filter, sort, limit, next, prev }`). New: `registerSubscriptions()` also listens to `user.updated` and replaces that user in every cached poll's votes, answers and `created_by` (and writes the offline DB).
+- **Migrate:** rename the type; `client.polls.queryPolls(filter, sort, { limit })` -> `client.polls.queryPolls({ filter, sort, limit })`, with sort as `SortParamRequest[]`.
 - **Source:** `src/poll_manager.ts:40-60,80-100,165-170` (v10); `src/poll_manager.ts:49,77-90` (v9)
 
 <a id="poll-reminder-cache"></a>
@@ -2497,8 +2497,8 @@ Poll data types and `PollResponse` renaming: [poll types](#poll-types). State ti
 **Kind:** signature · **Impact:** low
 
 - **v9:** `flagUser(flaggedUserID, reason: string, options?: ModerationFlagOptions)` and `flagMessage(messageID, reason, options?)`; options `{ custom?, moderation_payload?, user_id? }`; always sent `entity_creator_id: ''`; returned `{ item_id } & APIResponse`.
-- **v10:** `flagUser(flaggedUserId, reason?, options?, requestOptions?)` / `flagMessage(messageId, reason?, options?, requestOptions?)`; `reason` is optional; options `Omit<FlagRequest, 'entity_id' | 'entity_type' | 'reason'>` (no `user_id`; `entity_creator_id` settable and omitted unless given); returns `StreamResponse<FlagItemResponse>`.
-- **Migrate:** drop `user_id`; positional order is unchanged.
+- **v10:** `flagUser({ user_id, reason?, ...options }, requestOptions?)` / `flagMessage({ message_id, reason?, ...options }, requestOptions?)`, one request object; `reason` is optional; options `Omit<FlagRequest, 'entity_id' | 'entity_type' | 'reason'>` (no `user_id`; `entity_creator_id` settable and omitted unless given); returns `StreamResponse<FlagItemResponse>`.
+- **Migrate:** `flagMessage(id, reason, { custom })` -> `flagMessage({ message_id: id, reason, custom })`, `flagUser(id, reason)` -> `flagUser({ user_id: id, reason })`; drop the v9 acting `user_id` option.
 - **Source:** `src/moderation.ts:34-81`, `src/types.ts:349-352` (v10); `src/moderation.ts:60-76` (v9)
 
 <a id="moderation-entity-types"></a>

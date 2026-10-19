@@ -4,10 +4,9 @@ import type {
   LocalMessage,
   MessageResponse,
   PollResponseData,
-  QueryPollsFilters,
-  QueryPollsOptions,
-  SortParamRequest,
+  StreamRequestOptions,
 } from './types';
+import type { QueryPollsRequest } from './gen/models';
 import { Poll } from './poll';
 import { formatMessage } from './utils';
 import { WithSubscriptions } from './utils/WithSubscriptions';
@@ -77,16 +76,19 @@ export class PollManager extends WithSubscriptions {
     return this.fromState(id);
   };
 
+  /**
+   * Queries polls and caches them as `Poll` instances. Takes the same request as `client.queryPolls`.
+   *
+   * @param request - The filter, sort and pagination of the query (optional).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The `Poll` instances and the cursor of the next page.
+   */
   public queryPolls = async (
-    filter: QueryPollsFilters,
-    sort: SortParamRequest[] = [],
-    options: QueryPollsOptions = {},
+    request: QueryPollsRequest = {},
+    requestOptions?: StreamRequestOptions,
   ) => {
-    const { polls, next } = await this.client.queryPolls({
-      filter,
-      sort,
-      ...options,
-    });
+    const { polls, next } = await this.client.queryPolls(request, requestOptions);
 
     const pollInstances = polls.map((poll) => {
       this.setOrOverwriteInCache(poll, true);

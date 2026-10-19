@@ -168,8 +168,8 @@ describe('_default/04-messages/02-file_uploads.md', () => {
 
     // #region snippet docs="chat/_default/04-messages/02-file_uploads.md" heading="Deleting Files" tab="JavaScript" index=1
     // Delete from channel
-    await channel.deleteFile(fileURL);
-    await channel.deleteImage(imageURL);
+    await channel.deleteFile({ url: fileURL });
+    await channel.deleteImage({ url: imageURL });
     // #endregion snippet
 
     // The CDN may keep serving a cached copy for a while, so check the API responses instead.

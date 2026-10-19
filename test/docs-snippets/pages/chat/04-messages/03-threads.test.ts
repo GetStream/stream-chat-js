@@ -199,11 +199,14 @@ describe('_default/04-messages/03-threads.md', () => {
 
   it('gets a thread by id', async () => {
     // #region snippet docs="chat/_default/04-messages/03-threads.md" heading="Getting a Thread by ID" tab="JavaScript" index=1
-    const thread = await client.getThreadAndHydrate(parentMessageId, {
-      watch: true,
-      reply_limit: 10,
-      participant_limit: 25,
-    });
+    const thread = await client.getThreadAndHydrate(
+      { message_id: parentMessageId },
+      {
+        watch: true,
+        reply_limit: 10,
+        participant_limit: 25,
+      },
+    );
     // #endregion snippet
 
     expect(thread.id).toBe(parentMessageId);

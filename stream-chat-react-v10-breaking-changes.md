@@ -34,3 +34,37 @@ Tests that seed the composer copy need to seed `channel.state` instead (`channel
 
 - `src/components/TypingIndicator/__tests__/TypingIndicator.test.tsx:23-71,116` (builds a fake `textComposer.state` store for thread mode and assigns `channel.messageComposer.textComposer.typing`)
 - `src/components/Thread/__tests__/ThreadHeader.test.tsx`
+
+### 14. Positional client and channel methods take one request object
+
+`pinMessage` / `unpinMessage`, `getThreadAndHydrate`, the channel member and filter-tag helpers, `channel.deleteImage` / `deleteFile`, `client.polls.queryPolls` and `moderation.flagMessage` / `flagUser` now take the same object shapes as the generated methods. `requestOptions` stays the last argument.
+
+| Method                                                   | Before                                           | After                                                                                                            |
+| -------------------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `client.pinMessage`                                      | `(messageOrId, timeoutOrExpiration?, pinnedAt?)` | `({ id }, { pin_expires?, pinned_at? }?)`, `pin_expires` a `Date` / RFC3339 string / `null`, no relative seconds |
+| `client.unpinMessage`                                    | `(messageOrId)`                                  | `({ id })`                                                                                                       |
+| `client.getThreadAndHydrate`                             | `(messageId, options?)`                          | `({ message_id }, options?)`                                                                                     |
+| `channel.addMembers` / `inviteMembers` / `removeMembers` | `(members, message?, options?)`                  | `({ members, message?, ...options })`                                                                            |
+| `channel.addFilterTags` / `removeFilterTags`             | `(tags, message?, options?)`                     | `({ tags, message?, ...options })`                                                                               |
+| `channel.deleteImage` / `deleteFile`                     | `(url)`                                          | `({ url })`                                                                                                      |
+| `client.polls.queryPolls`                                | `(filter, sort?, options?)`                      | `({ filter, sort?, ...options })`                                                                                |
+| `client.moderation.flagMessage` / `flagUser`             | `(id, reason?, options?)`                        | `({ message_id, reason?, ...options })` / `({ user_id, reason?, ...options })`                                   |
+
+React call sites that change:
+
+- `src/plugins/ChannelDetail/Views/ChannelMembersView/ChannelMembersAddView.tsx:240`: `channel.addMembers(selectedUserIds)` -> `channel.addMembers({ members: selectedUserIds })`
+- `src/plugins/ChannelDetail/Views/ChannelMemberDetailView/ChannelMemberActions.defaults.tsx:603`: `channel.removeMembers([targetUserId])` -> `channel.removeMembers({ members: [targetUserId] })`
+- `src/plugins/ChannelDetail/Views/ChannelManagementView/ChannelManagementActions.defaults.tsx:644`: `channel.removeMembers([client.userID])` -> `channel.removeMembers({ members: [client.userID] })`
+- `src/components/ChannelListItem/ChannelListItemActionButtons.defaults.tsx:270`: `channel.removeMembers([client.userID!])` -> `channel.removeMembers({ members: [client.userID!] })`
+- `src/components/Message/hooks/useFlagHandler.ts:22`: `client.moderation.flagMessage(message.id)` -> `client.moderation.flagMessage({ message_id: message.id })`
+- `src/components/Message/hooks/useMessageAlsoSentInChannelNavigation.ts:78`: `client.getThreadAndHydrate(parentId, { watch: true })` -> `client.getThreadAndHydrate({ message_id: parentId }, { watch: true })`
+
+`client.pinMessage(message)` / `client.unpinMessage(message)` in `src/components/Message/hooks/usePinHandler.ts:69,94` pass the message object, which still compiles.
+
+Test assertions on the old argument shapes:
+
+- `src/plugins/ChannelDetail/Views/ChannelMembersView/__tests__/ChannelMembersAddView.test.tsx:161,214` (`addMembers`)
+- `src/plugins/ChannelDetail/__tests__/ChannelManagementActions.defaults.test.tsx:448` (`removeMembers`)
+- `src/components/ChannelListItem/__tests__/ChannelListItemActionButtons.defaults.test.tsx:464` (`removeMembers`)
+- `src/components/Message/__tests__/Message.test.tsx:557,577` (`flagMessage`)
+- `src/components/Message/__tests__/MessageUI.test.tsx:787` and `src/components/Message/hooks/__tests__/useMessageAlsoSentInChannelNavigation.test.tsx:171` (`getThreadAndHydrate`)

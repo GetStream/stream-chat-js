@@ -63,7 +63,7 @@ describe('_default/03-channels/07-channel_management/16-channel_invites.md', () 
 
     // #region snippet docs="chat/_default/03-channels/07-channel_management/16-channel_invites.md" heading="Invite Users" tab="JavaScript" index=1
     // COPY: nickId="nick"
-    await channel.inviteMembers([nickId]);
+    await channel.inviteMembers({ members: [nickId] });
     // #endregion snippet
 
     const member = await getServerMember(serverClient, `messaging:${id}`, nickId);

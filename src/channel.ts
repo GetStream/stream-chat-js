@@ -36,6 +36,7 @@ import {
   toDeclarativePaginatorConfig,
 } from './configuration/utils/declarativeSlices';
 import type {
+  AddMembersRequest,
   AIState,
   BanUserOptions,
   ChannelGetOrCreateRequest,
@@ -43,21 +44,22 @@ import type {
   ChannelMemberResponse,
   ChannelResponse,
   ChannelStateResponseFields,
-  ChannelUpdateOptions,
   Command,
   Event,
   EventHandler,
   EventPayload,
   EventType,
   FileUploadInput,
+  FilterTagsRequest,
+  InviteMembersRequest,
   LocalMessage,
   MarkReadRequest,
   MarkReadResponse,
   MessagePaginationParams,
-  MessageRequest,
   MessageResponse,
   MessageSetType,
   QueryMembersPayload,
+  RemoveMembersRequest,
   SharedLocation,
   StreamRequestOptions,
   StreamResponse,
@@ -71,7 +73,6 @@ import { AIStates } from './types';
 import type { StateStore } from '@stream-io/state-store';
 import type { Unsubscribe } from '@stream-io/state-store';
 import type {
-  ChannelMemberRequest as Gen_ChannelMemberRequest,
   ChannelPushPreferencesResponse as Gen_ChannelPushPreferencesResponse,
   MuteChannelRequest as Gen_MuteChannelRequest,
   UnmuteChannelRequest as Gen_UnmuteChannelRequest,
@@ -631,12 +632,14 @@ export class Channel extends ChannelApi {
   uploadImage = (...args: Parameters<Channel['uploadChannelImage']>) =>
     this.uploadChannelImage(...args);
 
-  deleteFile(url: string, requestOptions?: StreamRequestOptions) {
-    return this.deleteChannelFile({ url }, requestOptions);
+  /** Deletes a file uploaded to this channel, the same request shape as `client.deleteFile`. */
+  deleteFile(request: { url: string }, requestOptions?: StreamRequestOptions) {
+    return this.deleteChannelFile(request, requestOptions);
   }
 
-  deleteImage(url: string, requestOptions?: StreamRequestOptions) {
-    return this.deleteChannelImage({ url }, requestOptions);
+  /** Deletes an image uploaded to this channel, the same request shape as `client.deleteImage`. */
+  deleteImage(request: { url: string }, requestOptions?: StreamRequestOptions) {
+    return this.deleteChannelImage(request, requestOptions);
   }
 
   /**
@@ -838,17 +841,15 @@ export class Channel extends ChannelApi {
   /**
    * Adds members to the channel.
    *
-   * @param members - An array of members to add to the channel.
-   * @param message - Message object for channel members notification (optional).
-   * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
+   * @param request - The members to add, and any other channel update option.
+   * @param request.members - User ids, or member requests (`{ user_id, channel_role?, custom? }`).
+   * @param request.message - Message object for channel members notification (optional).
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The server response.
    */
   async addMembers(
-    members: string[] | Array<Gen_ChannelMemberRequest>,
-    message?: MessageRequest,
-    options: ChannelUpdateOptions = {},
+    { members, ...options }: AddMembersRequest,
     requestOptions?: StreamRequestOptions,
   ) {
     return await this.update(
@@ -856,7 +857,6 @@ export class Channel extends ChannelApi {
         add_members: members.map((member) =>
           typeof member === 'string' ? { user_id: member } : member,
         ),
-        message,
         ...options,
       },
       requestOptions,
@@ -866,61 +866,49 @@ export class Channel extends ChannelApi {
   /**
    * Adds filter tags to the channel.
    *
-   * @param tags - An array of tags to add to the channel.
-   * @param message - Message object for channel members notification (optional).
-   * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
+   * @param request - The tags to add, and any other channel update option.
+   * @param request.tags - The tags to add.
+   * @param request.message - Message object for channel members notification (optional).
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The server response.
    */
   async addFilterTags(
-    tags: string[],
-    message?: MessageRequest,
-    options: ChannelUpdateOptions = {},
+    { tags, ...options }: FilterTagsRequest,
     requestOptions?: StreamRequestOptions,
   ) {
-    return await this.update(
-      { add_filter_tags: tags, message, ...options },
-      requestOptions,
-    );
+    return await this.update({ add_filter_tags: tags, ...options }, requestOptions);
   }
 
   /**
    * Removes filter tags from the channel.
    *
-   * @param tags - An array of tags to remove from the channel.
-   * @param message - Message object for channel members notification (optional).
-   * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
+   * @param request - The tags to remove, and any other channel update option.
+   * @param request.tags - The tags to remove.
+   * @param request.message - Message object for channel members notification (optional).
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The server response.
    */
   async removeFilterTags(
-    tags: string[],
-    message?: MessageRequest,
-    options: ChannelUpdateOptions = {},
+    { tags, ...options }: FilterTagsRequest,
     requestOptions?: StreamRequestOptions,
   ) {
-    return await this.update(
-      { remove_filter_tags: tags, message, ...options },
-      requestOptions,
-    );
+    return await this.update({ remove_filter_tags: tags, ...options }, requestOptions);
   }
 
   /**
    * Invite members to the channel.
    *
-   * @param members - An array of members to invite to the channel.
-   * @param message - Message object for channel members notification (optional).
-   * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
+   * @param request - The members to invite, and any other channel update option.
+   * @param request.members - User ids, or member requests (`{ user_id, custom }`).
+   * @param request.message - Message object for channel members notification (optional).
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The server response.
    */
   async inviteMembers(
-    members: string[] | Required<Omit<Gen_ChannelMemberRequest, 'channel_role'>>[],
-    message?: MessageRequest,
-    options: ChannelUpdateOptions = {},
+    { members, ...options }: InviteMembersRequest,
     requestOptions?: StreamRequestOptions,
   ) {
     return await this.update(
@@ -928,7 +916,6 @@ export class Channel extends ChannelApi {
         invites: members.map((member) =>
           typeof member === 'string' ? { user_id: member } : member,
         ),
-        message,
         ...options,
       },
       requestOptions,
@@ -938,23 +925,18 @@ export class Channel extends ChannelApi {
   /**
    * Removes members from the channel.
    *
-   * @param members - An array of member identifiers.
-   * @param message - Message object for channel members notification (optional).
-   * @param options - Configuration to control the behavior while updating (optional, defaults to `{}`).
+   * @param request - The members to remove, and any other channel update option.
+   * @param request.members - The user ids to remove.
+   * @param request.message - Message object for channel members notification (optional).
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The server response.
    */
   async removeMembers(
-    members: string[],
-    message?: MessageRequest,
-    options: ChannelUpdateOptions = {},
+    { members, ...options }: RemoveMembersRequest,
     requestOptions?: StreamRequestOptions,
   ) {
-    return await this.update(
-      { remove_members: members, message, ...options },
-      requestOptions,
-    );
+    return await this.update({ remove_members: members, ...options }, requestOptions);
   }
 
   /**

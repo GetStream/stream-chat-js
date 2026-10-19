@@ -1648,7 +1648,7 @@ describe('StreamChat.queryThreads', () => {
 		const {
 			threads: [requeried],
 		} = await client.queryThreadsAndHydrate();
-		const fetched = await client.getThreadAndHydrate(parentMessage.id);
+		const fetched = await client.getThreadAndHydrate({ message_id: parentMessage.id });
 
 		expect(requeried).to.equal(registered);
 		expect(fetched).to.equal(registered);
@@ -2681,39 +2681,111 @@ describe('channel store eviction when the current user is removed (#2599)', () =
 	});
 });
 
-describe('_normalizeExpiration', () => {
+describe('Client pinMessage / unpinMessage', () => {
 	let client;
+	let updateMessagePartial;
 
 	beforeEach(async () => {
 		client = await getClientWithUser({ id: 'user' });
+		updateMessagePartial = vi.spyOn(client, 'updateMessagePartial').mockResolvedValue({});
 	});
 
-	it('reads a number as an offset in seconds', () => {
-		const before = Date.now();
-		const iso = client._normalizeExpiration(3600);
-		const offsetMs = new Date(iso).getTime() - before;
-		expect(offsetMs).toBeGreaterThanOrEqual(3600 * 1000 - 1000);
-		expect(offsetMs).toBeLessThanOrEqual(3600 * 1000 + 1000);
-	});
+	it('pins without expiry at the current time by default', async () => {
+		await client.pinMessage({ id: 'm1' });
 
-	it.each([
-		['a Date', new Date('2026-12-25T00:00:00.000Z'), '2026-12-25T00:00:00.000Z'],
-		['a string', '2026-12-25T00:00:00.000Z', '2026-12-25T00:00:00.000Z'],
-		['null', null, null],
-		['undefined', undefined, null],
-	])('passes %s through', (_label, input, expected) => {
-		expect(client._normalizeExpiration(input)).toBe(expected);
-	});
-
-	// A wire timestamp (~1.79e18) added as seconds leaves `Date`'s range. That used to throw an
-	// opaque `RangeError` from `toISOString()`, as an unhandled rejection inside `pinMessage`.
-	it.each([
-		['a wire nanosecond timestamp', 1798156800000000000],
-		['NaN', Number.NaN],
-	])('throws an actionable error for %s', (_label, input) => {
-		expect(() => client._normalizeExpiration(input)).toThrow(
-			/does not resolve to a valid date/,
+		expect(updateMessagePartial).toHaveBeenCalledWith(
+			{ id: 'm1' },
+			{ set: { pinned: true, pin_expires: null, pinned_at: null } },
+			undefined,
 		);
+	});
+
+	it('sends the given expiry and pin time', async () => {
+		const pinExpires = new Date('2077-01-01T00:00:00.000Z');
+
+		await client.pinMessage(
+			{ id: 'm1' },
+			{ pin_expires: pinExpires, pinned_at: '2026-01-01T00:00:00Z' },
+		);
+
+		expect(updateMessagePartial).toHaveBeenCalledWith(
+			{ id: 'm1' },
+			{
+				set: { pinned: true, pin_expires: pinExpires, pinned_at: '2026-01-01T00:00:00Z' },
+			},
+			undefined,
+		);
+	});
+
+	it('unpins', async () => {
+		await client.unpinMessage({ id: 'm1' });
+
+		expect(updateMessagePartial).toHaveBeenCalledWith(
+			{ id: 'm1' },
+			{ set: { pinned: false } },
+			undefined,
+		);
+	});
+
+	it('rejects a message without an id', () => {
+		expect(() => client.pinMessage({})).toThrow(/specify the message id/);
+		expect(() => client.unpinMessage({})).toThrow(/specify the message id/);
+	});
+});
+
+describe('Client moderation flagMessage / flagUser', () => {
+	let client;
+	let flag;
+
+	beforeEach(async () => {
+		client = await getClientWithUser({ id: 'user' });
+		flag = vi.spyOn(client.moderation, 'flag').mockResolvedValue({});
+	});
+
+	it('flags a message by id, with the reason and options', async () => {
+		await client.moderation.flagMessage({
+			message_id: 'm1',
+			reason: 'spam',
+			custom: { note: 'x' },
+		});
+
+		expect(flag).toHaveBeenCalledWith(
+			{
+				entity_type: 'stream:chat:v1:message',
+				entity_id: 'm1',
+				reason: 'spam',
+				custom: { note: 'x' },
+			},
+			undefined,
+		);
+	});
+
+	it('flags a user by id', async () => {
+		await client.moderation.flagUser({ user_id: 'u1' });
+
+		expect(flag).toHaveBeenCalledWith(
+			{ entity_type: 'stream:user', entity_id: 'u1', reason: undefined },
+			undefined,
+		);
+	});
+});
+
+describe('Client polls.queryPolls', () => {
+	it('sends the request as client.queryPolls does', async () => {
+		const client = await getClientWithUser({ id: 'user' });
+		const queryPolls = vi
+			.spyOn(client, 'queryPolls')
+			.mockResolvedValue({ polls: [], next: 'next-page' });
+		const request = {
+			filter: { is_closed: true },
+			sort: [{ field: 'created_at', direction: -1 }],
+			limit: 5,
+		};
+
+		const { next } = await client.polls.queryPolls(request);
+
+		expect(queryPolls).toHaveBeenCalledWith(request, undefined);
+		expect(next).toBe('next-page');
 	});
 });
 
