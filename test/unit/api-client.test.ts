@@ -290,6 +290,22 @@ describe('ApiClient error wrapping', () => {
     expect(error).toMatchObject({ code: 9, message: rateLimited.message, status: 429 });
   });
 
+  it('does not retry TOKEN_EXPIRED for a static token', async () => {
+    const tokenExpired = { code: 40, message: 'Token has expired', StatusCode: 401 };
+    client.tokenManager.type = 'static';
+    const loadTokenSpy = vi.spyOn(client.tokenManager, 'loadToken');
+    requestSpy.mockRejectedValue(foreignAxiosError(401, tokenExpired));
+
+    const error = await client.api
+      .sendRequest('GET', '/api/v2/chat/channels')
+      .catch((e: unknown) => e);
+
+    expect(requestSpy).toHaveBeenCalledTimes(1);
+    expect(loadTokenSpy).not.toHaveBeenCalled();
+    expect(error).toBeInstanceOf(StreamAPIError);
+    expect(error).toMatchObject({ code: 40, message: tokenExpired.message, status: 401 });
+  });
+
   describe('when TOKEN_EXPIRED retries run out', () => {
     const tokenExpired = { code: 40, message: 'Token has expired', StatusCode: 401 };
 
