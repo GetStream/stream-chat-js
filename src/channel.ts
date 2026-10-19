@@ -2680,7 +2680,13 @@ export class Channel extends ChannelApi {
         if (event.message) {
           this._extendEventWithOwnReactions(event);
           const formattedMessage = formatMessage(event.message);
-          if (!event.message.parent_id) {
+          const { parent_id: parentId, show_in_channel: shownInChannel } = event.message;
+          const isThreadReply = !!parentId && !shownInChannel;
+          const { threads } = this.getClient();
+          // to avoid double state publish
+          const isAppliedByThread =
+            !!parentId && threads.hasSubscriptions && !!threads.get(parentId);
+          if (!isThreadReply && !isAppliedByThread) {
             this.messagePaginator.ingestItem(formattedMessage);
             this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
             // ingestItem auto-adds on pin / auto-removes on unpin (matchesFilter { pinned: true }).

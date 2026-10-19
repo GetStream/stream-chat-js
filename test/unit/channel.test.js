@@ -1392,6 +1392,26 @@ describe('Channel _handleChannelEvent', function () {
 			expect(channel.messagePaginator.getItem(threadReply.id)).to.be.undefined;
 		});
 
+		it('message.updated applies an edit of a reply shown in the channel', function () {
+			const parentMessage = generateMsg({ id: 'shown-reply-parent-id' });
+			const shownReply = generateMsg({
+				id: 'shown-reply-id',
+				parent_id: parentMessage.id,
+				show_in_channel: true,
+				text: 'before update',
+			});
+			seedLatestWindow(channel, [parentMessage, shownReply]);
+
+			channel._handleChannelEvent({
+				type: 'message.updated',
+				message: { ...shownReply, text: 'after update' },
+			});
+
+			expect(channel.messagePaginator.getItem(shownReply.id)?.text).to.equal(
+				'after update',
+			);
+		});
+
 		it('message.updated syncs quoted_message references in messagePaginator', function () {
 			const quotedMessage = generateMsg({
 				id: 'quoted-message-id',
@@ -1499,6 +1519,26 @@ describe('Channel _handleChannelEvent', function () {
 			});
 
 			expect(channel.messagePaginator.getItem(threadReply.id)).to.be.undefined;
+		});
+
+		it('message.undeleted restores a reply shown in the channel', function () {
+			const parentMessage = generateMsg({ id: 'shown-reply-parent-id-2' });
+			const shownReply = generateMsg({
+				id: 'shown-reply-id-2',
+				parent_id: parentMessage.id,
+				show_in_channel: true,
+				text: 'restored reply',
+			});
+			seedLatestWindow(channel, [
+				parentMessage,
+				{ ...shownReply, type: 'deleted', text: '' },
+			]);
+
+			channel._handleChannelEvent({ type: 'message.undeleted', message: shownReply });
+
+			const stored = channel.messagePaginator.getItem(shownReply.id);
+			expect(stored?.type).to.equal(shownReply.type);
+			expect(stored?.text).to.equal('restored reply');
 		});
 
 		it('message.undeleted syncs quoted_message references in messagePaginator', function () {
