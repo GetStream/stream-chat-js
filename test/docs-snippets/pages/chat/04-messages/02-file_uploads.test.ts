@@ -178,8 +178,8 @@ describe('_default/04-messages/02-file_uploads.md', () => {
         spy.mock.results.map((r) => r.value),
       ),
     );
-    expect(deleteFileSpy).toHaveBeenCalledWith(fileURL);
-    expect(deleteImageSpy).toHaveBeenCalledWith(imageURL);
+    expect(deleteFileSpy).toHaveBeenCalledWith({ url: fileURL });
+    expect(deleteImageSpy).toHaveBeenCalledWith({ url: imageURL });
     expect(responses).toHaveLength(2);
     responses.forEach((response) => expect(response.duration).toBeDefined());
   });
