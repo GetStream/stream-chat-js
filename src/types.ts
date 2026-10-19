@@ -206,7 +206,14 @@ type CustomEventTypeUnion = {
 }[keyof CustomEventTypes];
 export type EventType = Event['type'] | 'all';
 
-export type EventHandler<T = string> = (event: Extract<Event, { type: T }>) => void;
+/**
+ * A listener for events of type `T`. `'all'` (the default) receives every event, any other type the
+ * event members declaring it. Custom event types have to be declared by augmenting
+ * `CustomEventTypes`; an undeclared name is not an `EventType`.
+ */
+export type EventHandler<T extends EventType = 'all'> = (
+  event: T extends 'all' ? Event : Extract<Event, { type: T }>,
+) => void;
 
 /**
  * Filter Types

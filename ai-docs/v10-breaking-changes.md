@@ -856,7 +856,7 @@ const p = message.custom.priority;
 - **v10:** same 13 interfaces, same names, same root re-export. They now type the `custom` object only. Differences:
   - `CustomAttachmentData` ships two declared members, `mime_type?: string` and `file_size?: number` ([attachment metadata](#attachment-metadata-custom)); augmentations merge with them.
   - `CustomCommandData` is no longer referenced anywhere (`Command.name` / `set` are plain `string`), so augmenting it has no effect.
-  - `CustomEventData` types `event.custom`; event names come from `CustomEventTypes` keys, and undeclared custom names are typed `never` ([custom events](#custom-events)).
+  - `CustomEventData` types `event.custom`; event names come from `CustomEventTypes` keys, and `on()` / `off()` reject an undeclared custom name ([custom events](#custom-events)).
   - poll options use `CustomPollOptionData` (v9 `PollOptionResponse` used `CustomPollData`).
   - filters reach custom fields through `custom.<field>` keys derived from the augmentation ([filters](#filter-types)); sort keys are untyped strings ([sort](#sort-shape)).
   - required members declared in an augmentation become required in every `custom` object, including test fixtures of response types.
@@ -1047,8 +1047,9 @@ const p = message.custom.priority;
 
 - **v9:** `EventTypes = 'all' | keyof typeof EVENT_MAP | keyof CustomEventTypes`; `Event['type']` was `EventTypes`, so it included `'all'`. `EVENT_MAP` runtime object exported from `src/events.ts` (70 names).
 - **v10:** `EventType = Event['type'] | 'all'`; `EVENT_MAP` and `src/events.ts` deleted (no runtime list of names). `'all'` is no longer an `Event['type']` literal but remains in `EventType`, and `client.on(cb)` / `channel.on(cb)` without a name still register under `'all'` and receive every event. `'*'` is a new `Event['type']` literal (spec placeholder member `{ type: '*' } & CustomEvent`). Names no longer in the union: `connection.changed`, `transport.changed` ([removed](#connection-changed-removed)), `channel.muted`, `channel.unmuted`, `user.unread_message_reminder` (not in the v2 event spec; the v9 SDK never handled them). Added: `app.updated`, `channel.frozen`, `channel.unfrozen`, `channel.max_streak_changed`, `connection.ok`, `connection.error`, `connection.fallback_activated`, `message.pending`, `moderation.custom_action`, `moderation.flagged`, `moderation.mark_reviewed`, `poll.deleted`, `scheduled_message.created` / `deleted` / `failed` / `sent` / `updated`, `user.deactivated`, `user.reactivated`, `user.muted`, `user_group.created` / `deleted` / `updated` / `member_added` / `member_removed`.
-- **Current v10 typing quirks (tracked in v10-followups.md):** `client.on('all', cb)` / `channel.on('all', cb)` type the event as `never` (`EventHandler<'all'>` extracts no member, TS2339 on any property) even though the listener receives every event at runtime; `client.on('*', cb)` type-checks with a `CustomEvent` payload but never fires, because dispatch keys listeners by the real `event.type` and nothing is dispatched under `'*'`.
-- **Migrate:** `import type { EventType }`; replace `Object.keys(EVENT_MAP)` with your own list; use `client.on(cb)` (no name) for all events; listen to `notification.channel_mutes_updated` instead of `channel.muted` / `unmuted`.
+- **Listener names:** `on()` / `off()` on the client and on a channel accept only an `EventType` (v9 also accepted any string). A typo, a name removed in v10 such as `connection.changed`, or a custom event not declared in `CustomEventTypes` is a compile error at the call site. `'all'` types the event as the full `Event` union.
+- **Current v10 typing quirk (tracked in v10-followups.md):** `client.on('*', cb)` type-checks with a `CustomEvent` payload but never fires, because dispatch keys listeners by the real `event.type` and nothing is dispatched under `'*'`.
+- **Migrate:** `import type { EventType }`; replace `Object.keys(EVENT_MAP)` with your own list; use `client.on(cb)` or `client.on('all', cb)` for all events; declare custom event names in `CustomEventTypes`; drop listeners for removed names; listen to `notification.channel_mutes_updated` instead of `channel.muted` / `unmuted`.
 - **Source:** `src/types.ts:196-209`, `src/client.ts:987-1040,1386-1396`, `src/channel.ts:2234-2297,2877`, `src/gen/models/index.ts:11854,11939` (v10); `src/events.ts:1-75`, `src/types.ts:1783`, `src/index.ts:10` (v9)
 
 <a id="connection-changed-removed"></a>
@@ -1058,7 +1059,7 @@ const p = message.custom.priority;
 **Kind:** behavior · **Impact:** high
 
 - **v9:** `StableWSConnection` / `WSConnectionFallback` dispatched `connection.changed` (`{ online }`) on health changes (drop announcement delayed about 5 s); switching to long-poll dispatched `transport.changed` (`{ mode: 'longpoll' }`); `ConnectionChangeEvent` type exported.
-- **v10:** neither is emitted and `ConnectionChangeEvent` is removed. `client.on('connection.changed', fn)` still compiles through the string overload but never fires and `e` is `never`. Socket health: `client.wsConnection.state` (`isHealthy`, `lastHealthyAt`, `lastUnhealthyAt`, see [wsConnection](#ws-connection)); device network: `client.networkConnection.state` (`isOnline`, ...); fallback switch: local `connection.fallback_activated` (`{ mode }`, see [long-poll](#long-poll-fallback)); recovery: `connection.recovered`. The stores publish every transition immediately (no 5 s debounce). Offline sync no longer listens to it ([offline sync](#offline-sync-manager)); threads no longer read it ([thread manager](#thread-manager-behaviour)).
+- **v10:** neither is emitted and `ConnectionChangeEvent` is removed. `client.on('connection.changed', fn)` no longer compiles: the name is not an `EventType`. Socket health: `client.wsConnection.state` (`isHealthy`, `lastHealthyAt`, `lastUnhealthyAt`, see [wsConnection](#ws-connection)); device network: `client.networkConnection.state` (`isOnline`, ...); fallback switch: local `connection.fallback_activated` (`{ mode }`, see [long-poll](#long-poll-fallback)); recovery: `connection.recovered`. The stores publish every transition immediately (no 5 s debounce). Offline sync no longer listens to it ([offline sync](#offline-sync-manager)); threads no longer read it ([thread manager](#thread-manager-behaviour)).
 - **Migrate:** `client.wsConnection.state.subscribeWithSelector(({ isHealthy }) => ({ isHealthy }), ({ isHealthy }) => ...)` (fires once immediately); delay banners yourself.
 - **Source:** `src/connection/wsConnection/WSConnection.ts:289`, `src/connection/ConnectionRecoveryManager.ts:353` (v10); `src/connection.ts:569,576`, `src/connection_fallback.ts:51-55`, `src/client.ts:1878`, `src/types.ts:1707` (v9)
 
@@ -1069,7 +1070,7 @@ const p = message.custom.priority;
 **Kind:** type-shape · **Impact:** medium
 
 - **v9:** custom events were `Event` with `CustomEventData` spread at the top level (`e.text`); any string was a valid listener name; `UserCustomEvent = CustomEventData & { type: string }` for `client.sendUserCustomEvent`.
-- **v10:** custom events arrive as `CustomEvent { type; custom: CustomEventData; created_at: TimestampNS; received_at? }`; `CustomEventTypes` keys become union members `{ type: K } & Omit<CustomEvent, 'type'>`. An undeclared name yields `never`: `client.on('my_custom', (e) => e.type)` fails with TS2339. `UserCustomEvent` is removed with `sendUserCustomEvent`. Sending: `channel.sendEvent({ event: { type, custom: {...} } })` ([sendEvent](#channel-send-event)).
+- **v10:** custom events arrive as `CustomEvent { type; custom: CustomEventData; created_at: TimestampNS; received_at? }`; `CustomEventTypes` keys become union members `{ type: K } & Omit<CustomEvent, 'type'>`. An undeclared name is not an `EventType`, so `client.on('my_custom', cb)` and `client.off('my_custom', cb)` do not compile. `UserCustomEvent` is removed with `sendUserCustomEvent`. Sending: `channel.sendEvent({ event: { type, custom: {...} } })` ([sendEvent](#channel-send-event)).
 - **Migrate:** declare names in `interface CustomEventTypes { my_custom: true }` via module augmentation; read `e.custom.text`.
 - **Source:** `src/types.ts:196-206`, `src/gen/models/index.ts:2663-2668` (v10); `src/types.ts:1712,1777-1783` (v9)
 
@@ -1080,8 +1081,8 @@ const p = message.custom.priority;
 **Kind:** signature · **Impact:** low
 
 - **v9:** `EventHandler = (event: Event) => void`.
-- **v10:** `EventHandler<T = string> = (event: Extract<Event, { type: T }>) => void`. Unparameterised `EventHandler` still receives the full union. With `T = 'all'` the event is typed `never` ([quirk](#event-type-names)).
-- **Migrate:** use `client.on(cb)` without a name for all events; annotate handlers as `EventHandler<'message.new'>` or `(e: EventPayload<'message.new'>) => void`.
+- **v10:** `EventHandler<T extends EventType = 'all'>`: the event is the full `Event` union for `'all'` (the default, so unparameterised `EventHandler` still receives every event) and `Extract<Event, { type: T }>` for any other type. `off(type, handler)` takes `EventHandler<T>` as well, so the handler passed to `on(type, handler)` can be removed with the same type. `EventHandler<string>` no longer compiles ([listener names](#event-type-names)).
+- **Migrate:** use `client.on(cb)` without a name for all events; annotate handlers as `EventHandler<'message.new'>` or `(e: EventPayload<'message.new'>) => void`; replace `EventHandler<string>` with `EventHandler`.
 - **Source:** `src/types.ts:209`, `src/client.ts:987-1016`, `src/channel.ts:2234-2243` (v10); `src/types.ts:1781` (v9)
 
 <a id="connection-open"></a>

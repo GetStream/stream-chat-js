@@ -985,12 +985,12 @@ export class StreamChat extends ChatApi {
    * @returns An object with an `unsubscribe()` method.
    */
   on(callback: EventHandler): { unsubscribe: () => void };
-  on<T extends EventType | string>(
+  on<T extends EventType>(
     eventType: T,
     callback: EventHandler<T>,
   ): { unsubscribe: () => void };
   on(
-    callbackOrString: EventHandler | string,
+    callbackOrString: EventHandler | EventType,
     callbackOrNothing?: EventHandler,
   ): { unsubscribe: () => void } {
     const key = callbackOrNothing ? (callbackOrString as EventType) : 'all';
@@ -1025,8 +1025,8 @@ export class StreamChat extends ChatApi {
    * @param callbackOrNothing - The callback to remove when an event type was provided (optional).
    */
   off(callback: EventHandler): void;
-  off(eventType: string, callback: EventHandler): void;
-  off(callbackOrString: EventHandler | string, callbackOrNothing?: EventHandler) {
+  off<T extends EventType>(eventType: T, callback: EventHandler<T>): void;
+  off(callbackOrString: EventHandler | EventType, callbackOrNothing?: EventHandler) {
     const key = callbackOrNothing ? (callbackOrString as EventType) : 'all';
     const callback = callbackOrNothing
       ? callbackOrNothing

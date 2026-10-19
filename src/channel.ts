@@ -2231,13 +2231,13 @@ export class Channel extends ChannelApi {
    * @param callbackOrNothing - The callback to call when an event type was provided (optional).
    * @returns An object with an `unsubscribe()` method.
    */
-  on<T extends EventType | string>(
+  on<T extends EventType>(
     eventType: T,
     callback: EventHandler<T>,
   ): { unsubscribe: () => void };
   on(callback: EventHandler): { unsubscribe: () => void };
   on(
-    callbackOrString: EventHandler | string,
+    callbackOrString: EventHandler | EventType,
     callbackOrNothing?: EventHandler,
   ): { unsubscribe: () => void } {
     const key = callbackOrNothing ? (callbackOrString as EventType) : 'all';
@@ -2275,9 +2275,12 @@ export class Channel extends ChannelApi {
    * @param callbackOrString - The event type, or the callback when removing an all-events listener.
    * @param callbackOrNothing - The callback to remove when an event type was provided (optional).
    */
-  off<T extends EventType | string>(eventType: T, callback: EventHandler): void;
+  off<T extends EventType>(eventType: T, callback: EventHandler<T>): void;
   off(callback: EventHandler): void;
-  off(callbackOrString: EventHandler | string, callbackOrNothing?: EventHandler): void {
+  off(
+    callbackOrString: EventHandler | EventType,
+    callbackOrNothing?: EventHandler,
+  ): void {
     const key = callbackOrNothing ? (callbackOrString as EventType) : 'all';
     const callback = callbackOrNothing
       ? callbackOrNothing
