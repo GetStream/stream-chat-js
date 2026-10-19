@@ -2885,9 +2885,20 @@ Poll data types and `PollResponse` renaming: [poll types](#poll-types). State ti
 **Kind:** type-shape · **Impact:** medium · **PR:** #1830
 
 - **v9:** `PollComposerFieldErrors` values were English strings (`'Question is required'`, ...), keyed on `CreatePollData`; validators returned strings.
-- **v10:** values are `{ code: PollComposerValidationCode; message: string; metadata? }` keyed on `CreatePollRequest` (`allow_answers`, `allow_user_suggested_options`, `description`, `enforce_unique_vote`, `id`, `is_closed`, `max_votes_allowed`, `name`, `options`, `voting_visibility`, plus new `custom`, `team`; no `user_id`). Codes in `POLL_COMPOSER_VALIDATION_CODE` (`validation:poll:maxVotes:notNumeric|outOfRange|uniqueVoteEnforced`, `validation:poll:name:required`, `validation:poll:option:duplicate|empty`). Applies to `PollComposerState.errors`, `PollComposerSnapshot`, `PollComposerStateChangeMiddlewareValue`, `PollComposerCompositionMiddlewareValueState`, `PollStateValidationOutput`, the default validator maps (`defaultPollFieldBlurEventValidators`, `defaultPollFieldChangeEventValidators`, `pollStateChangeValidators`), and `updateFields(data, injectedFieldErrors)`.
+- **v10:** values are `{ code: PollComposerValidationCode; message: string; metadata? }` keyed on `CreatePollRequest` (`allow_answers`, `allow_user_suggested_options`, `description`, `enforce_unique_vote`, `id`, `is_closed`, `max_votes_allowed`, `name`, `options`, `voting_visibility`, plus new `custom`, `team`; no `user_id`). Codes in `POLL_COMPOSER_VALIDATION_CODE` (`validation:poll:maxVotes:notNumeric|outOfRange|uniqueVoteEnforced`, `validation:poll:name:required`, `validation:poll:option:duplicate|empty`). Applies to `PollComposerState.errors`, `PollComposerSnapshot`, `PollComposerStateChangeMiddlewareValue`, `PollComposerCompositionMiddlewareValueState`, `PollStateValidationOutput`, the default validator maps (`defaultPollFieldBlurEventValidators`, `defaultPollFieldChangeEventValidators`, `pollStateChangeValidators`), and the `injectedFieldErrors` of [`updateFields`](#poll-composer-update-fields).
 - **Migrate:** render `errors.name?.message` or translate by `.code`; custom validators and injected errors must return `pollComposerValidationError(code, metadata?)` objects.
 - **Source:** `src/messageComposer/middleware/pollComposer/types.ts:29`, `src/messageComposer/middleware/pollComposer/state.ts:22-120`, `src/messageComposer/middleware/pollComposer/validation.ts:12-76` (v10); `src/messageComposer/middleware/pollComposer/types.ts:24`, `src/messageComposer/middleware/pollComposer/state.ts:16-90` (v9)
+
+<a id="poll-composer-update-fields"></a>
+
+### `PollComposer.updateFields` takes one object
+
+**Kind:** signature · **Impact:** low
+
+- **v9:** `updateFields(data, injectedFieldErrors?)`.
+- **v10:** `updateFields({ data, injectedFieldErrors? })`.
+- **Migrate:** `updateFields({ name })` -> `updateFields({ data: { name } })`; `updateFields(data, errors)` -> `updateFields({ data, injectedFieldErrors: errors })`.
+- **Source:** `src/messageComposer/pollComposer.ts:122-146` (v10); `src/messageComposer/pollComposer.ts:124-127` (v9)
 
 <a id="text-composer-typing"></a>
 

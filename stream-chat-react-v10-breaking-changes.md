@@ -68,3 +68,14 @@ Test assertions on the old argument shapes:
 - `src/components/ChannelListItem/__tests__/ChannelListItemActionButtons.defaults.test.tsx:464` (`removeMembers`)
 - `src/components/Message/__tests__/Message.test.tsx:557,577` (`flagMessage`)
 - `src/components/Message/__tests__/MessageUI.test.tsx:787` and `src/components/Message/hooks/__tests__/useMessageAlsoSentInChannelNavigation.test.tsx:171` (`getThreadAndHydrate`)
+
+### 17. `PollComposer.updateFields` takes one object
+
+`updateFields(data, injectedFieldErrors?)` -> `updateFields({ data, injectedFieldErrors? })`. 11 React call sites, all in `src/components/Poll/PollCreationDialog/`:
+
+- `NameField.tsx:53`
+- `OptionFieldSet.tsx:84,101,166,260`
+- `MultipleAnswersField.tsx:62,75,120`; `:120` also passes injected errors, so it becomes `updateFields({ data: { max_votes_allowed: ... }, injectedFieldErrors: nativeFieldValidation })`
+- `PollCreationDialog.tsx:62,76,90`
+
+The rest are one-argument calls: wrap the argument, `updateFields({ name: e.target.value })` -> `updateFields({ data: { name: e.target.value } })`. No React test asserts on `updateFields`.

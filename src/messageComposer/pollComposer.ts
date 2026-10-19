@@ -122,15 +122,18 @@ export class PollComposer {
   /**
    * Updates specified fields and generates relevant errors.
    *
-   * @param data - Partial poll data with the fields to update.
-   * @param injectedFieldErrors - Errors produced externally that will take precedence over the
-   *   errors generated in the middleware chain.
+   * @param params - The fields to update and any externally produced errors.
+   * @param params.data - Partial poll data with the fields to update.
+   * @param params.injectedFieldErrors - Errors produced externally that will take precedence over
+   *   the errors generated in the middleware chain (optional).
    */
-  // FIXME: change method params to a single object with the next major release
-  updateFields = async (
-    data: UpdateFieldsData,
-    injectedFieldErrors?: PollComposerFieldErrors,
-  ) => {
+  updateFields = async ({
+    data,
+    injectedFieldErrors,
+  }: {
+    data: UpdateFieldsData;
+    injectedFieldErrors?: PollComposerFieldErrors;
+  }) => {
     const { state, status } = await this.stateMiddlewareExecutor.execute({
       eventName: 'handleFieldChange',
       initialValue: {
