@@ -508,20 +508,42 @@ describe('ConnectionRecoveryManager', () => {
   });
 
   describe('connectionRecovery.enabled: false', () => {
-    it('recovers nothing', async () => {
-      // The kill switch is declarative configuration now, read when a recovery actually runs — so it
-      // is honoured from the next reconnect without the manager being re-wired.
+    // The kill switch is declarative configuration, read on every reconnect — so it is honoured from
+    // the next one without the manager being re-wired.
+    const disableRecovery = () =>
       client.config.set({ client: { connectionRecovery: { enabled: false } } });
+
+    it('recovers nothing on a reconnect and dispatches no connection.recovered', async () => {
+      disableRecovery();
       const { reload } = activeChannel('active');
       const recoverLists = vi
         .spyOn(client.channelManager, 'recover')
         .mockResolvedValue([]);
+      const recovered = vi.fn();
+      client.on('connection.recovered', recovered);
 
       online();
-      await client.connectionRecovery.recover();
+      await new Promise((resolve) => setTimeout(resolve, 20));
 
       expect(reload).not.toHaveBeenCalled();
       expect(recoverLists).not.toHaveBeenCalled();
+      expect(recovered).not.toHaveBeenCalled();
+    });
+
+    it('runs a full recovery when recover() is called, and dispatches connection.recovered', async () => {
+      disableRecovery();
+      const { reload } = activeChannel('active');
+      const recoverLists = vi
+        .spyOn(client.channelManager, 'recover')
+        .mockResolvedValue([]);
+      const recovered = vi.fn();
+      client.on('connection.recovered', recovered);
+
+      await client.connectionRecovery.recover();
+
+      expect(reload).toHaveBeenCalledTimes(1);
+      expect(recoverLists).toHaveBeenCalledTimes(1);
+      expect(recovered).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -565,6 +587,22 @@ describe('ConnectionRecoveryManager', () => {
 
       await vi.waitFor(() => expect(order).to.contain('reload'));
       expect(order).to.deep.equal(['executePendingTasks', 'sync', 'reload']);
+    });
+
+    it('stops reloading off the sync edge once recovery is switched off', async () => {
+      // The edge subscription is bound by the first reconnect and outlives it, so the switch has to
+      // be honoured there too, not only on the socket edge.
+      await attachDb();
+      const { reload } = activeChannel('active');
+
+      online();
+      await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+
+      client.config.set({ client: { connectionRecovery: { enabled: false } } });
+      online();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(reload).toHaveBeenCalledTimes(1);
     });
 
     it('still reloads when the sync fails', async () => {

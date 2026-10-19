@@ -158,6 +158,8 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
             // reconnect still qualifies.
             if (!lastUnhealthyAt) return;
 
+            if (!this.config.enabled) return;
+
             // The lists always recover off this edge; their own deferral handles offline ordering.
             runDetached(this.recoverChannelLists(), { context: 'recoverChannelLists' });
 
@@ -209,8 +211,7 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
     if (!offlineDb?.state.getLatestValue().initialized) return false;
 
     const { unsubscribe } = offlineDb.syncManager.onSyncStatusChange((status) => {
-      // `false` is only published when going offline; there is nothing to recover then.
-      if (!status) return;
+      if (!status || !this.config.enabled) return;
       runDetached(this.recoverActiveChannels(), { context: 'recoverActiveChannels' });
     });
     this.unsubscribeSyncStatus = unsubscribe;
@@ -271,13 +272,10 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
   }
 
   private recoverChannelLists = async () => {
-    if (!this.config.enabled) return;
     await this.client.channelManager.recover();
   };
 
   private recoverActiveChannels = async ({ isRetry = false } = {}): Promise<void> => {
-    if (!this.config.enabled) return;
-
     if (this.isRecovering) {
       this.recoveryRequestedAgain = true;
       return;
