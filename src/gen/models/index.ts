@@ -6812,10 +6812,10 @@ export interface QueryBannedUsersPayload {
       operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
   }>;
-  created_at_after?: TimestampNS;
-  created_at_after_or_equal?: TimestampNS;
-  created_at_before?: TimestampNS;
-  created_at_before_or_equal?: TimestampNS;
+  created_at_after?: Date | string;
+  created_at_after_or_equal?: Date | string;
+  created_at_before?: Date | string;
+  created_at_before_or_equal?: Date | string;
   /**
    * Whether to exclude expired bans or not
    */
@@ -7177,10 +7177,10 @@ export interface QueryDraftsResponse {
 }
 
 export interface QueryFutureChannelBansPayload {
-  created_at_after?: TimestampNS;
-  created_at_after_or_equal?: TimestampNS;
-  created_at_before?: TimestampNS;
-  created_at_before_or_equal?: TimestampNS;
+  created_at_after?: Date | string;
+  created_at_after_or_equal?: Date | string;
+  created_at_before?: Date | string;
+  created_at_before_or_equal?: Date | string;
   /**
    * Whether to exclude expired bans or not
    */
@@ -7220,10 +7220,10 @@ export interface QueryFutureChannelBansResponse {
 
 export interface QueryMembersPayload {
   type: string;
-  created_at_after?: TimestampNS;
-  created_at_after_or_equal?: TimestampNS;
-  created_at_before?: TimestampNS;
-  created_at_before_or_equal?: TimestampNS;
+  created_at_after?: Date | string;
+  created_at_after_or_equal?: Date | string;
+  created_at_before?: Date | string;
+  created_at_before_or_equal?: Date | string;
   id?: string;
   limit?: number;
   offset?: number;

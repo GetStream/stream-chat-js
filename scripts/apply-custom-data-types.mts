@@ -207,6 +207,18 @@ const CUSTOM_ENTRY_TYPE_RE = /^(\s*)type:\s*Record<string,\s*any>;\s*$/;
 // the member is dropped instead of letting `'*'` into `Event['type']`, where `client.on('*', ...)`
 // would type-check and never fire.
 const WILDCARD_EVENT_MEMBER_RE = /^\s*\|\s*\(\{ type: '\*' \} & CustomEvent\)\s*$/;
+// Request payloads whose `created_at_*` filters come out as response timestamps (`TimestampNS`):
+// the spec declares them `date-time` strings, like every other request date, but they are only
+// reachable through the JSON `payload` query param. The API rejects a nanosecond number there
+// ("Time.UnmarshalJSON: input is not a JSON string") and takes RFC3339, so they are typed the way
+// every other request date is: a `Date` (serialized as RFC3339) or an RFC3339 string.
+const REQUEST_DATE_FILTER_INTERFACES = new Set([
+  'QueryBannedUsersPayload',
+  'QueryFutureChannelBansPayload',
+  'QueryMembersPayload',
+]);
+const REQUEST_DATE_FILTER_RE =
+  /^(\s*)(created_at_(?:after|before)(?:_or_equal)?)(\??):\s*TimestampNS;\s*$/;
 
 const lines = source.split('\n');
 const rewritten: string[] = [];
@@ -219,6 +231,7 @@ let rewrittenCustomCount = 0;
 let rewrittenChannelCustomCount = 0;
 let rewrittenFilterCustomCount = 0;
 let droppedWildcardEventMemberCount = 0;
+let retypedRequestDateFilterCount = 0;
 const skippedInterfaces = new Set<string>();
 const skippedFilterKeys = new Set<string>();
 
@@ -321,6 +334,17 @@ for (const line of lines) {
     continue;
   }
 
+  const requestDateFilterMatch =
+    currentInterface && REQUEST_DATE_FILTER_INTERFACES.has(currentInterface)
+      ? line.match(REQUEST_DATE_FILTER_RE)
+      : null;
+  if (requestDateFilterMatch) {
+    const [, indent, field, optional] = requestDateFilterMatch;
+    rewritten.push(`${indent}${field}${optional}: Date | string;`);
+    retypedRequestDateFilterCount += 1;
+    continue;
+  }
+
   const channelCustomMatch = line.match(CHANNEL_CUSTOM_FIELD_RE);
   if (channelCustomMatch) {
     const [, indent, optional] = channelCustomMatch;
@@ -369,7 +393,8 @@ console.log(
   `Rewrote ${rewrittenCustomCount} custom + ${rewrittenChannelCustomCount} channel_custom` +
     ` + ${rewrittenFilterCustomCount} filter custom fields; ` +
     `skipped ${skippedInterfaces.size} interfaces and ${skippedFilterKeys.size} filter blocks; ` +
-    `dropped ${droppedWildcardEventMemberCount} '*' event union members.`,
+    `dropped ${droppedWildcardEventMemberCount} '*' event union members; ` +
+    `retyped ${retypedRequestDateFilterCount} request date filters.`,
 );
 
 /**
