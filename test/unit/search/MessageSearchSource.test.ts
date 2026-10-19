@@ -270,10 +270,7 @@ describe('MessageSearchSource', () => {
           },
           limit: searchSource.pageSize,
           next: 'next-token-old',
-          sort: [
-            { field: 'created_at', direction: -1 },
-            { field: 'created_at', direction: 1 },
-          ],
+          sort: [{ field: 'created_at', direction: 1 }],
         }),
       },
       withoutSignal,
@@ -322,14 +319,42 @@ describe('MessageSearchSource', () => {
           },
           limit: searchSource.pageSize,
           next: 'next-token-old',
-          sort: [
-            { field: 'created_at', direction: -1 },
-            { field: 'created_at', direction: 1 },
-          ],
+          sort: [{ field: 'created_at', direction: 1 }],
         }),
       },
       withoutSignal,
     );
+  });
+
+  describe('messageSearchSort', () => {
+    const sentSort = () => searchMock.mock.calls.at(-1)?.[0].payload.sort;
+
+    it('keeps created_at descending as the primary order under a secondary key', async () => {
+      searchSource.messageSearchSort = [{ field: 'reply_count', direction: -1 }];
+
+      // @ts-expect-error protected access
+      await searchSource.query('hello');
+
+      expect(sentSort()).toEqual([
+        { field: 'created_at', direction: -1 },
+        { field: 'reply_count', direction: -1 },
+      ]);
+    });
+
+    it('takes the direction of a created_at entry and keeps it primary', async () => {
+      searchSource.messageSearchSort = [
+        { field: 'reply_count', direction: -1 },
+        { field: 'created_at', direction: 1 },
+      ];
+
+      // @ts-expect-error protected access
+      await searchSource.query('hello');
+
+      expect(sentSort()).toEqual([
+        { field: 'created_at', direction: 1 },
+        { field: 'reply_count', direction: -1 },
+      ]);
+    });
   });
 
   it('overrides the message type', async () => {

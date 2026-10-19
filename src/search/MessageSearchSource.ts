@@ -232,6 +232,13 @@ export class MessageSearchSource<
       >,
     });
 
+    const customSort = this.messageSearchSort ?? [];
+    const createdAtSort = customSort.find(({ field }) => field === 'created_at');
+    const sort: SortParamRequest[] = [
+      { field: 'created_at', direction: createdAtSort?.direction ?? -1 },
+      ...customSort.filter(({ field }) => field !== 'created_at'),
+    ];
+
     const { next, results } = await this.client.search(
       {
         payload: {
@@ -239,13 +246,7 @@ export class MessageSearchSource<
           message_filter_conditions: messageFilters,
           limit: this.pageSize,
           next: this.next,
-          sort: [
-            {
-              field: 'created_at',
-              direction: -1,
-            },
-            ...(this.messageSearchSort ?? []),
-          ],
+          sort,
         },
       },
       queryOptions,

@@ -2344,17 +2344,6 @@ Poll data types and `PollResponse` renaming: [poll types](#poll-types). State ti
 - **Migrate:** pass `channelQueryOptions: { watch: true }` if result channels must receive events before being opened; do not rely on `channelQuerySort`.
 - **Source:** `src/search/MessageSearchSource.ts:58-72,165-208,255-305` (v10); `src/search/MessageSearchSource.ts:202,221-229` (v9)
 
-<a id="message-search-sort"></a>
-
-### `MessageSearchSource.messageSearchSort` no longer overrides the default order
-
-**Kind:** behavior · **Impact:** low
-
-- **v9:** request sort `{ created_at: -1, ...messageSearchSort }`; `messageSearchSort: { created_at: 1 }` flipped the order.
-- **v10:** request sort `[{ field: 'created_at', direction: -1 }, ...(messageSearchSort ?? [])]`; the caller's entries are secondary keys only.
-- **Migrate:** the primary order cannot be changed through the source; subclass and override `query` if ascending order is needed.
-- **Source:** `src/search/MessageSearchSource.ts:235-250` (v10); `src/search/MessageSearchSource.ts:185-195` (v9)
-
 <a id="search-source-sort"></a>
 
 ### Search source sort options take `SortParamRequest[]`
@@ -2362,7 +2351,7 @@ Poll data types and `PollResponse` renaming: [poll types](#poll-types). State ti
 **Kind:** type-shape · **Impact:** medium · **PR:** #1836
 
 - **v9:** `ChannelSearchSourceOptions.sort: ChannelSort`, `UserSearchSourceOptions.sort: UserSort`, `ChannelMemberSearchSourceOptions.sort: MemberSort`, `MessageSearchSourceOptions.messageSearchSort: SearchMessageSort`, `.channelQuerySort: ChannelSort` (object or array form); same-named instance fields.
-- **v10:** all `SortParamRequest[]` (`[{ field, direction }]`), forwarded as-is. `UserSearchSource` appends `{ field: 'id', direction: 1 }` last unless an `id` entry exists (v9 object form made `id` the primary key). A non-array sort is no longer normalized: `UserSearchSource` fails inside `query` (`baseSort.some is not a function`), `MessageSearchSource` fails with `... is not iterable`, and `ChannelSearchSource` / `ChannelMemberSearchSource` send the object to the API; client-side failures land in `lastQueryError`. `searchOptions` / `channelQueryOptions` and `filters` types follow the generated request types ([filters](#filter-types)).
+- **v10:** all `SortParamRequest[]` (`[{ field, direction }]`), forwarded as-is except `messageSearchSort`, which is merged under the `created_at` primary order as in v9 (a `created_at` entry sets its direction). `UserSearchSource` appends `{ field: 'id', direction: 1 }` last unless an `id` entry exists (v9 object form made `id` the primary key). A non-array sort is no longer normalized: `UserSearchSource` fails inside `query` (`baseSort.some is not a function`), `MessageSearchSource` fails with `... is not iterable`, and `ChannelSearchSource` / `ChannelMemberSearchSource` send the object to the API; client-side failures land in `lastQueryError`. `searchOptions` / `channelQueryOptions` and `filters` types follow the generated request types ([filters](#filter-types)).
 - **Migrate:** `{ created_at: -1 }` -> `[{ field: 'created_at', direction: -1 }]` ([sort](#sort-shape)).
 - **Source:** `src/search/ChannelSearchSource.ts:18,32`, `src/search/UserSearchSource.ts:16,26,74-78`, `src/search/ChannelMemberSearchSource.ts:21,31`, `src/search/MessageSearchSource.ts:62,65,82,85,247`, `src/search/ChannelSearchSource.ts:112-123`, `src/search/ChannelMemberSearchSource.ts:82-88` (v10); `src/search/UserSearchSource.ts:74-80`, `src/search/MessageSearchSource.ts:62-65` (v9)
 
@@ -3491,7 +3480,6 @@ Changes where code written for v9 can type-check (or run untyped) against v10 an
 | Delivery          | `throttledMarkRead` leading edge, errors swallowed                                                                                              | [throttled-mark-read](#throttled-mark-read)                                       |
 | Search            | channel search results are unwatched                                                                                                            | [channel-search-source-unwatched](#channel-search-source-unwatched)               |
 | Search            | message search channels unwatched; `channelQuerySort` ignored                                                                                   | [message-search-source-hydration](#message-search-source-hydration)               |
-| Search            | `messageSearchSort` is secondary only                                                                                                           | [message-search-sort](#message-search-sort)                                       |
 | Pagination        | items deduped and comparator-ordered                                                                                                            | [paginator-items](#paginator-items)                                               |
 | Notifications     | client re-derives the manager config on any `client.*` change and on reconnect, replacing `updateConfig` patches                                | [notification-manager-config](#notification-manager-config)                       |
 | Offline           | channel guard writes first                                                                                                                      | [offline-channel-guard](#offline-channel-guard)                                   |
