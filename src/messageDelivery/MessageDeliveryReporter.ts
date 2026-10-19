@@ -442,21 +442,37 @@ export class MessageDeliveryReporter {
    * Builds the throttled `markRead`. A factory rather than an inline `throttle(...)` so the interval can
    * be swapped later — see {@link setMarkAsReadThrottleOptions}.
    *
-   * @param intervalMs - minimum gap between automatic `markRead` calls
+   * @param intervalMs - minimum gap between automatic `markRead` calls for the same collection
    */
   // Auto mark-read is throttled and fire-and-forget: it's triggered by state changes / WS events,
   // not by an awaiting caller, so a rejection here has nowhere to propagate and would otherwise
   // surface as an unhandled rejection (e.g. `channel.markRead` throwing when read events are
   // disabled, or a transient network error). Swallow it — the auto path retries on the next
   // trigger, and explicit `markRead()` callers still receive the error.
-  private buildThrottledMarkRead = (intervalMs: number) =>
-    throttle(
-      (collection: Channel | Thread, options?: MarkReadRequest) => {
-        void this.markRead(collection, options).catch(() => undefined);
-      },
-      intervalMs,
-      { leading: true, trailing: true },
-    ).throttledFn;
+  //
+  // One throttle per collection instance. A shared one keeps only the latest call for its trailing
+  // edge, so marking a channel inside the window dropped a pending mark-read of a thread or of another
+  // channel, and nothing retried it until the next unread message.
+  private buildThrottledMarkRead = (intervalMs: number) => {
+    const throttled = new WeakMap<
+      Channel | Thread,
+      (options?: MarkReadRequest) => void
+    >();
+    return (collection: Channel | Thread, options?: MarkReadRequest) => {
+      let markRead = throttled.get(collection);
+      if (!markRead) {
+        markRead = throttle(
+          (markReadOptions?: MarkReadRequest) => {
+            void this.markRead(collection, markReadOptions).catch(() => undefined);
+          },
+          intervalMs,
+          { leading: true, trailing: true },
+        ).throttledFn;
+        throttled.set(collection, markRead);
+      }
+      markRead(options);
+    };
+  };
 
   public throttledMarkRead = this.buildThrottledMarkRead(
     DEFAULT_MESSAGE_DELIVERY_REPORTER_CONFIG.markAsReadThrottleTimeoutMs,
