@@ -267,13 +267,7 @@ export class ApiClient {
         {
           delayBetweenRetries: (attemptNumber) => retryInterval(attemptNumber + 1),
           retryAttempts: 10,
-          isRetryable: (error) => {
-            if (!isAxiosError(error)) return false;
-
-            if (error.status === 429 || isTokenExpiredError(error)) return true;
-
-            return false;
-          },
+          isRetryable: isTokenExpiredError,
         },
       )();
 

@@ -747,14 +747,14 @@ The removal of the `connection.changed` / `transport.changed` events is owned by
 
 <a id="automatic-retries"></a>
 
-### Automatic retries on 429 and `TOKEN_EXPIRED`
+### Automatic retries on `TOKEN_EXPIRED`
 
 **Kind:** behavior · **Impact:** medium · **PR:** #1828
 
 - **v9:** only `TOKEN_EXPIRED` with a token provider was retried (reload token, back off after the first failure); 429 was thrown at once; static tokens were not retried.
-- **v10:** every request runs through `runWithRetry` with up to 10 retries (11 requests) and `retryInterval` backoff (delays of 0.25 to 20.5 s, about 100 s in total) on HTTP 429 and on `TOKEN_EXPIRED` (static tokens included). When retries run out the rejection is `RetryError('Reached maximum amount of retry attempts')` (`name: 'RetryError'`, not root-exported), not `StreamAPIError`. The static-token retry and the error class are tracked in v10-followups.md.
-- **Migrate:** expect long waits on persistent 429s; set `requestOptions.signal` / `timeout` to bound them; handle `RetryError` (no `code` / `status`; match on `error.name`).
-- **Source:** `src/api-client.ts:226-278`, `src/utils/retryable.ts:64-135`, `src/utils.ts:128-133` (v10); `src/client.ts:1384-1404` (v9)
+- **v10:** every request runs through `runWithRetry`, which retries `TOKEN_EXPIRED` up to 10 times (11 requests) with `retryInterval` backoff (delays of 0.25 to 20.5 s, about 100 s in total), reloading the token before each retry; v9 retried without a limit. A 429 is not retried, as in v9. When the retries run out the rejection is the `StreamAPIError` of the last attempt (`code: 40`, `status: 401`), which `isEphemeral` treats as definitive, so offline-aware operations fail it instead of queueing it. Static tokens are still retried (tracked in v10-followups.md).
+- **Migrate:** none for 429s. Treat a `StreamAPIError` with `code: 40` as "the token provider keeps returning expired tokens"; set `requestOptions.signal` / `timeout` to bound the retries.
+- **Source:** `src/api-client.ts:226-275`, `src/utils/retryable.ts:64-136`, `src/utils.ts:128-133` (v10); `src/client.ts:1384-1404` (v9)
 
 <a id="logging"></a>
 
@@ -3445,7 +3445,7 @@ Changes where code written for v9 can type-check (or run untyped) against v10 an
 | Connection        | WS handshake path and auth frame changed (proxies)                                                                                              | [ws-handshake](#ws-handshake)                                                     |
 | Errors            | non-Stream failures are raw axios errors; message text has no prefix                                                                            | [stream-api-error](#stream-api-error)                                             |
 | Errors            | `error.client_request_id` is `undefined`                                                                                                        | [stream-api-error](#stream-api-error)                                             |
-| Errors            | 429 and `TOKEN_EXPIRED` retried 10 times (about 100 s); `RetryError` at the end                                                                 | [automatic-retries](#automatic-retries)                                           |
+| Errors            | `TOKEN_EXPIRED` retried up to 10 times (about 100 s)                                                                                            | [automatic-retries](#automatic-retries)                                           |
 | Logging           | default console output at `info` (v9 was silent)                                                                                                | [logging](#logging)                                                               |
 | Tokens            | dev tokens with non-ASCII user ids fail                                                                                                         | [dev-token-encoding](#dev-token-encoding)                                         |
 | Events            | `connection.changed` / `transport.changed` listeners never fire (untyped code; TypeScript rejects the names)                                    | [connection-changed-removed](#connection-changed-removed)                         |
