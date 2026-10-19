@@ -240,4 +240,53 @@ describe(DOCS, () => {
       releaseThread();
     }
   });
+
+  it('configures the page size', async () => {
+    const channel = watchedChannel;
+    const messageAt = (index: number) => {
+      const message = channel.messagePaginator.getItem(messageIds[index]);
+      if (!message) throw new Error('message not loaded');
+      return message;
+    };
+    const parentMessage = messageAt(1);
+    // The defaults
+    expect(channel.messagePaginator.pageSize).toBe(100);
+    expect(channel.pinnedMessagesPaginator.pageSize).toBe(100);
+    expect(
+      client.threads.ensure({ channel, parentMessage: messageAt(2) }).messagePaginator
+        .pageSize,
+    ).toBe(50);
+
+    try {
+      // #region snippet docs="chat/javascript/06-state/02-messages.md" heading="Configure the query" tab="JavaScript" index=1
+      client.config.set({
+        // Every channel message list and thread reply list
+        messagePaginator: { pageSize: 50 },
+        // Overrides for thread replies and pinned messages
+        thread: { messagePaginator: { pageSize: 25 } },
+        channel: { pinnedMessagesPaginator: { pageSize: 20 } },
+      });
+      // #endregion snippet
+
+      const thread = client.threads.ensure({ channel, parentMessage });
+      expect(channel.messagePaginator.pageSize).toBe(50);
+      expect(thread.messagePaginator.pageSize).toBe(25);
+      expect(channel.pinnedMessagesPaginator.pageSize).toBe(20);
+
+      // The first page `watch()` loads has the same size
+      const otherClient = await getClientSideClient({ id: userId });
+      try {
+        otherClient.config.set({ messagePaginator: { pageSize: 15 } });
+        const otherChannel = otherClient.channel('messaging', channelId);
+        await otherChannel.watch();
+        expect(otherChannel.messagePaginator.items).toHaveLength(15);
+        expect(otherChannel.messagePaginator.hasMoreTail).toBe(true);
+      } finally {
+        await disconnectClients(otherClient);
+      }
+    } finally {
+      client.config.reset();
+    }
+    expect(channel.messagePaginator.pageSize).toBe(100);
+  });
 });

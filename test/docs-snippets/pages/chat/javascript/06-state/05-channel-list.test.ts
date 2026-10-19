@@ -228,4 +228,58 @@ describe(DOCS, () => {
       toTailSpy.mockRestore();
     }
   });
+
+  it('configures the query', async () => {
+    const querySpy = vi.spyOn(client, 'queryChannelsAndHydrate');
+
+    // #region snippet docs="chat/javascript/06-state/05-channel-list.md" heading="Configure the query" tab="JavaScript" index=1
+    const channelPaginator = new ChannelPaginator({
+      client,
+      filters: { type: 'messaging', members: { $in: [userId] } },
+      sort: [{ field: 'last_message_at', direction: -1 }],
+      requestOptions: { message_limit: 25, member_limit: 10, presence: true },
+      paginatorOptions: { pageSize: 20 },
+    });
+    // #endregion snippet
+
+    await channelPaginator.toTail();
+    expect(querySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filter_conditions: { type: 'messaging', members: { $in: [userId] } },
+        limit: 20,
+        member_limit: 10,
+        message_limit: 25,
+        presence: true,
+      }),
+      expect.anything(),
+    );
+    // Every channel fits on one page of 20
+    expect(channelPaginator.items).toHaveLength(CHANNEL_COUNT);
+    expect(channelPaginator.hasMoreTail).toBe(false);
+  });
+
+  it('changes the query of a loaded list', async () => {
+    const archivedId = channelIds[0];
+    await client.channel('messaging', archivedId).archive();
+    const channelPaginator = new ChannelPaginator({
+      client,
+      filters: { type: 'messaging', members: { $in: [userId] } },
+      sort: [{ field: 'last_message_at', direction: -1 }],
+    });
+    await channelPaginator.toTail();
+    expect(channelPaginator.items).toHaveLength(10);
+
+    // #region snippet docs="chat/javascript/06-state/05-channel-list.md" heading="Configure the query" tab="JavaScript" index=2
+    channelPaginator.staticFilters = {
+      type: 'messaging',
+      members: { $in: [userId] },
+      archived: true,
+    };
+    channelPaginator.sort = [{ field: 'created_at', direction: -1 }];
+
+    await channelPaginator.reload();
+    // #endregion snippet
+
+    expect(channelPaginator.items?.map((channel) => channel.id)).toEqual([archivedId]);
+  });
 });

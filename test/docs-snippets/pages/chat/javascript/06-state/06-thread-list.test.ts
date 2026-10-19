@@ -253,4 +253,32 @@ describe(`${DOCS} (pagination)`, () => {
     expect(client.threads.paginator.items).toHaveLength(THREAD_COUNT);
     expect(client.threads.paginator.state.getLatestValue().hasMoreTail).toBe(false);
   });
+
+  it('configures the page size', async () => {
+    // A client whose thread list hasn't loaded yet
+    const client = await getClientSideClient({ id: userId });
+    const querySpy = vi.spyOn(client, 'queryThreadsAndHydrate');
+    try {
+      expect(client.threads.paginator.pageSize).toBe(25);
+
+      // #region snippet docs="chat/javascript/06-state/06-thread-list.md" heading="Configure the query" tab="JavaScript" index=1
+      client.threads.paginator.updateConfig({ pageSize: 10 });
+      // #endregion snippet
+
+      client.threads.registerSubscriptions();
+      client.threads.activate();
+      await retry(() => {
+        expect(client.threads.paginator.items).toHaveLength(10);
+        return Promise.resolve();
+      });
+      expect(client.threads.paginator.hasMoreTail).toBe(true);
+      expect(querySpy).toHaveBeenCalledWith(
+        expect.objectContaining({ limit: 10, participant_limit: 10, reply_limit: 10 }),
+      );
+    } finally {
+      client.threads.deactivate();
+      client.threads.unregisterSubscriptions();
+      await disconnectClients(client);
+    }
+  });
 });

@@ -147,4 +147,43 @@ describe(DOCS, () => {
       logSpy.mockRestore();
     }
   });
+
+  it('configures the query', async () => {
+    const otherChannelId = uniqueId('reminders');
+    const otherChannel = client.channel('messaging', otherChannelId, {
+      members: [{ user_id: userId }],
+    });
+    cleanup.channels.push(`messaging:${otherChannelId}`);
+    await otherChannel.create();
+    await serverClient.chat.channel('messaging', otherChannelId).updateChannelPartial({
+      set: { config_overrides: { user_message_reminders: true } },
+    });
+    const { message: otherChannelMessage } = await otherChannel.sendMessage({
+      message: { text: 'elsewhere' },
+    });
+    await client.createReminder({ message_id: otherChannelMessage.id });
+    const channel = client.channel('messaging', channelId);
+    const querySpy = vi.spyOn(client, 'queryReminders');
+
+    // #region snippet docs="chat/javascript/06-state/11-reminders.md" heading="Configure the query" tab="JavaScript" index=1
+    client.reminders.paginator.filters = { channel_cid: { $eq: channel.cid } };
+    client.reminders.paginator.sort = [{ field: 'remind_at', direction: 1 }];
+    client.reminders.paginator.updateConfig({ pageSize: 25 });
+
+    await client.reminders.queryNextReminders();
+    // #endregion snippet
+
+    expect(client.reminders.paginator.lastQueryError).toBeUndefined();
+    expect(querySpy).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        filter: { channel_cid: { $eq: channel.cid } },
+        limit: 25,
+        sort: [{ field: 'remind_at', direction: 1 }],
+      }),
+    );
+    // Only this channel's reminders, the other channel's is filtered out
+    const listed = client.reminders.paginator.items?.map((r) => r.message_id) ?? [];
+    expect(listed.length).toBeGreaterThan(0);
+    expect(listed).not.toContain(otherChannelMessage.id);
+  });
 });

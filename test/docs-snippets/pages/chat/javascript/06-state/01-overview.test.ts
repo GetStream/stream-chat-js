@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { Channel, StreamChat } from '../../../../../../src';
+import { ChannelPaginator } from '../../../../../../src';
 import {
   disconnectClients,
   getClientSideClient,
@@ -73,5 +74,71 @@ describe('javascript/06-state/01-overview.md', () => {
     channel.state.partialNext({ typing: {} });
     expect(renderChannel).toHaveBeenCalledTimes(1);
     expect(renderHeader).toHaveBeenCalledTimes(1);
+  });
+
+  it('paginates a list', async () => {
+    const pagedChannelId = uniqueId('state');
+    const pagedChannel = client.channel('messaging', pagedChannelId);
+    cleanup.channels.push(`messaging:${pagedChannelId}`);
+    await pagedChannel.create();
+    for (let i = 0; i < 3; i++) {
+      await pagedChannel.sendMessage({ message: { text: `message ${i}` } });
+    }
+    // Two messages per page, so there is an older page to load
+    pagedChannel.messagePaginator.updateConfig({ pageSize: 2 });
+    await pagedChannel.watch();
+    const channel = pagedChannel;
+    const toTailSpy = vi.spyOn(channel.messagePaginator, 'toTail');
+
+    // #region snippet docs="chat/javascript/06-state/01-overview.md" heading="Pagination" tab="JavaScript" index=1
+    const paginator = channel.messagePaginator;
+
+    const { items, isLoading, hasMoreTail, lastQueryError } =
+      paginator.state.getLatestValue();
+
+    // Load the next page
+    if (paginator.hasMoreTail) {
+      await paginator.toTail();
+    }
+
+    // Load the first page again
+    await paginator.reload();
+    // #endregion snippet
+
+    expect(items).toHaveLength(2);
+    expect(isLoading).toBe(false);
+    expect(hasMoreTail).toBe(true);
+    expect(lastQueryError).toBeUndefined();
+    // `toTail()` loaded the older page, `reload()` (itself a `toTail`) the first page again
+    expect(toTailSpy).toHaveBeenCalledTimes(2);
+    expect(paginator.items?.map((message) => message.text)).toEqual([
+      'message 1',
+      'message 2',
+    ]);
+    expect(paginator.hasMoreTail).toBe(true);
+  });
+
+  it('reports a failed page in lastQueryError', async () => {
+    const paginator = new ChannelPaginator({
+      client,
+      filters: { members: { $in: [userId] } },
+      paginatorOptions: { retryCount: 0 },
+    });
+    const error = new Error('network down');
+    const querySpy = vi
+      .spyOn(client, 'queryChannelsAndHydrate')
+      .mockRejectedValueOnce(error);
+    try {
+      // Resolves rather than rejects
+      await paginator.toTail();
+      expect(paginator.lastQueryError).toBe(error);
+
+      // Calling it again retries, and clears the error
+      await paginator.toTail();
+      expect(paginator.lastQueryError).toBeUndefined();
+      expect(querySpy).toHaveBeenCalledTimes(2);
+    } finally {
+      querySpy.mockRestore();
+    }
   });
 });
