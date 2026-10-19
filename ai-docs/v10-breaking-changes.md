@@ -1564,9 +1564,9 @@ Common pattern for every generated or overridden `Channel` method: the trailing 
 **Kind:** behavior · **Impact:** medium
 
 - **v9:** hard and soft delete both kept the user's messages, converted to `type: 'deleted'` (hard also stripped content), across all message sets, `state.threads` and `pinnedMessages`.
-- **v10:** hard delete removes the messages from `messagePaginator` and `pinnedMessagesPaginator`; soft delete tombstones; only the loaded active window (`paginator.items`) is processed; thread replies are handled by `Thread.handleUserMessagesDeleted`. `message.deleted` with `hard_delete` keeps removing (as in v9). `messageOperations.delete({ localMessage, options: { hard: true } })` removes optimistically. `channel.delete({ hard_delete })` is unchanged.
+- **v10:** hard delete removes the messages from `messagePaginator` and `pinnedMessagesPaginator`; soft delete tombstones; every loaded message is processed, in all loaded intervals and not only the active window; thread replies are handled by `Thread.handleUserMessagesDeleted`. `message.deleted` with `hard_delete` keeps removing (as in v9). `messageOperations.delete({ localMessage, options: { hard: true } })` removes optimistically. `channel.delete({ hard_delete })` is unchanged.
 - **Migrate:** UIs must not expect a "deleted" placeholder after a hard user-messages delete.
-- **Source:** `src/channel.ts:2547-2577`, `src/pagination/paginators/MessageIntervalPaginator.ts:1405-1452` (v10); `src/channel.ts:2096-2120`, `src/channel_state.ts:776-800` (v9)
+- **Source:** `src/channel.ts:2547-2577`, `src/pagination/paginators/MessageIntervalPaginator.ts:1405-1457` (v10); `src/channel.ts:2096-2120`, `src/channel_state.ts:776-800` (v9)
 
 <a id="channel-state"></a>
 
