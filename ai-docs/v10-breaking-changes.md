@@ -1799,9 +1799,9 @@ await paginator.toTail();
 **Kind:** behavior · **Impact:** medium
 
 - **v9:** after 3 failed retries `state.error = new Error('Maximum number of retries reached in queryChannels. Last error message is: ...')` plus `console.warn`; `setChannels` upserted every loaded cid into the offline DB; `disconnectUser` left an integrator-created manager's channels intact.
-- **v10:** `paginator.state.lastQueryError` holds the raw error, set on each failed attempt (not set when offline support is enabled and the list already holds items) and cleared on success (no wrapping, no console warn); the offline cid cache stores only the first `pageSize` cids; `client.disconnectUser()` calls `channelManager.resetPaginatorStates()` (every list back to `items: undefined`, registrations kept) and `clearChannels()`.
+- **v10:** `paginator.state.lastQueryError` holds the raw error of the last attempt, set once the retries are used up as in v9 (not set when offline support is enabled and the list already holds items) and cleared on success (no wrapping, no console warn); the offline cid cache stores only the first `pageSize` cids; `client.disconnectUser()` calls `channelManager.resetPaginatorStates()` (every list back to `items: undefined`, registrations kept) and `clearChannels()`.
 - **Migrate:** read `lastQueryError` (check `error.message` of the raw error); re-query whenever `items` is `undefined`, not only on mount.
-- **Source:** `src/ChannelManager.ts:1077-1082`, `src/client.ts:851-856`, `src/pagination/paginators/ChannelPaginator.ts:610-646`, `src/pagination/paginators/BasePaginator.ts:3098-3124` (v10); `src/channel_manager.ts:288-412` (v9)
+- **Source:** `src/ChannelManager.ts:1077-1082`, `src/client.ts:851-856`, `src/pagination/paginators/ChannelPaginator.ts:610-646`, `src/pagination/paginators/BasePaginator.ts:3098-3127` (v10); `src/channel_manager.ts:288-412` (v9)
 
 <a id="channel-batch-updater"></a>
 
