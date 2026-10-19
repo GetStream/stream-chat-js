@@ -6,7 +6,14 @@
  * the unused directive. `friendship_request` is the custom event declared in `custom-events.ts`; the
  * `CustomEventTypes` augmentation there is global to this program.
  */
-import type { Channel, Event, EventHandler, EventPayload, StreamChat } from 'stream-chat';
+import type {
+  Channel,
+  Event,
+  EventHandler,
+  EventPayload,
+  EventType,
+  StreamChat,
+} from 'stream-chat';
 
 declare const client: StreamChat;
 declare const channel: Channel;
@@ -44,6 +51,12 @@ client.on('connection.changed', () => undefined);
 channel.on('message.nwe', () => undefined);
 // @ts-expect-error -- a custom event has to be declared through `CustomEventTypes`
 client.on('undeclared_custom', () => undefined);
+// @ts-expect-error -- the spec's custom-event placeholder; nothing is dispatched under `'*'`
+client.on('*', () => undefined);
+// @ts-expect-error -- the spec's custom-event placeholder; nothing is dispatched under `'*'`
+channel.on('*', () => undefined);
+// @ts-expect-error -- `'*'` is not an event type
+export const wildcardType: EventType = '*';
 
 // --- off() takes the handler that was registered -------------------------------------------------
 

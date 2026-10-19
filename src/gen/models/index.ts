@@ -11851,7 +11851,6 @@ export interface WSAuthMessage {
 }
 
 export type WSClientEvent =
-  | ({ type: '*' } & CustomEvent)
   | ({ type: 'ai_indicator.clear' } & AIIndicatorClearEvent)
   | ({ type: 'ai_indicator.stop' } & AIIndicatorStopEvent)
   | ({ type: 'ai_indicator.update' } & AIIndicatorUpdateEvent)
@@ -11936,7 +11935,6 @@ export type WSClientEvent =
   | ({ type: 'user_group.updated' } & UserGroupUpdatedEvent);
 
 export type WSEvent =
-  | ({ type: '*' } & CustomEvent)
   | ({ type: 'ai_indicator.clear' } & AIIndicatorClearEvent)
   | ({ type: 'ai_indicator.stop' } & AIIndicatorStopEvent)
   | ({ type: 'ai_indicator.update' } & AIIndicatorUpdateEvent)

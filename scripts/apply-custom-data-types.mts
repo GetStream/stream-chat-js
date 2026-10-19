@@ -202,6 +202,11 @@ const INTERFACE_CLOSE_RE = /^\}\s*$/;
 const FILTER_OPEN_RE = /^\s*(\w+)\??:\s*Filters<\{\s*$/;
 const CUSTOM_ENTRY_OPEN_RE = /^\s*custom:\s*\{\s*$/;
 const CUSTOM_ENTRY_TYPE_RE = /^(\s*)type:\s*Record<string,\s*any>;\s*$/;
+// The spec's custom-event placeholder, a member of every WS event union. No event is ever dispatched
+// with type `'*'` (a custom event arrives under its own name, typed through `CustomEventTypes`), so
+// the member is dropped instead of letting `'*'` into `Event['type']`, where `client.on('*', ...)`
+// would type-check and never fire.
+const WILDCARD_EVENT_MEMBER_RE = /^\s*\|\s*\(\{ type: '\*' \} & CustomEvent\)\s*$/;
 
 const lines = source.split('\n');
 const rewritten: string[] = [];
@@ -213,6 +218,7 @@ let currentInterfaceHadMappedCustom = false;
 let rewrittenCustomCount = 0;
 let rewrittenChannelCustomCount = 0;
 let rewrittenFilterCustomCount = 0;
+let droppedWildcardEventMemberCount = 0;
 const skippedInterfaces = new Set<string>();
 const skippedFilterKeys = new Set<string>();
 
@@ -236,6 +242,11 @@ const countBraces = (line: string) => {
 };
 
 for (const line of lines) {
+  if (WILDCARD_EVENT_MEMBER_RE.test(line)) {
+    droppedWildcardEventMemberCount += 1;
+    continue;
+  }
+
   const openMatch = line.match(INTERFACE_OPEN_RE);
   if (openMatch) {
     currentInterface = openMatch[1];
@@ -357,7 +368,8 @@ for (const key of [...skippedFilterKeys].sort()) {
 console.log(
   `Rewrote ${rewrittenCustomCount} custom + ${rewrittenChannelCustomCount} channel_custom` +
     ` + ${rewrittenFilterCustomCount} filter custom fields; ` +
-    `skipped ${skippedInterfaces.size} interfaces and ${skippedFilterKeys.size} filter blocks.`,
+    `skipped ${skippedInterfaces.size} interfaces and ${skippedFilterKeys.size} filter blocks; ` +
+    `dropped ${droppedWildcardEventMemberCount} '*' event union members.`,
 );
 
 /**
