@@ -74,6 +74,34 @@ describe('ReminderPaginator', () => {
     expect(paginator.cursor?.tailward).toBeNull();
   });
 
+  it('keeps the loaded reminders while the next page loads', async () => {
+    const paginator = new ReminderPaginator(client, { pageSize: 2 });
+    const spy = vi.spyOn(client, 'queryReminders');
+    spy.mockResolvedValueOnce(
+      response(
+        [
+          makeReminder('m1', '2020-01-01T00:00:00.000Z'),
+          makeReminder('m2', '2020-01-02T00:00:00.000Z'),
+        ],
+        { next: 'c1' },
+      ),
+    );
+    await paginator.executeQuery({});
+
+    const published: Array<string[] | undefined> = [];
+    const unsubscribe = paginator.state.subscribeWithSelector(
+      ({ items }) => ({ items }),
+      ({ items }) => published.push(items?.map((r) => r.message_id)),
+    );
+    spy.mockResolvedValueOnce(response([makeReminder('m3', '2020-01-03T00:00:00.000Z')]));
+    await paginator.toTail();
+    unsubscribe();
+
+    // A next page is not a new query: the list must never be blanked while it loads.
+    expect(published).not.toContain(undefined);
+    expect(published.at(-1)).toEqual(['m1', 'm2', 'm3']);
+  });
+
   it('sends the tailward cursor as the request `next`', async () => {
     const paginator = new ReminderPaginator(client, { pageSize: 2 });
     const spy = vi.spyOn(client, 'queryReminders');
