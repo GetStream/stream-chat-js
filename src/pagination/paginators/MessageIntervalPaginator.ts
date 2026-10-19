@@ -3,11 +3,14 @@ import type {
   BasePaginatorConfig,
   CursorDerivator,
   CursorDeriveResult,
+  DoRequestResponse,
+  ExecuteQueryReturnValue,
   Interval,
   PaginationDirection,
   PaginationQueryParams,
   PaginatorCursor,
   PaginatorState,
+  QueryPagePlacement,
 } from './BasePaginator';
 import {
   BasePaginator,
@@ -18,10 +21,13 @@ import {
   ZERO_PAGE_CURSOR,
 } from './BasePaginator';
 import type {
+  ChannelStateResponse,
+  GetRepliesResponse,
   LocalMessage,
   MessagePaginationParams,
   PinnedMessagePaginationOptions,
   SortParamRequest,
+  StreamResponse,
   TimestampNS,
   UserResponse,
 } from '../../types';
@@ -158,21 +164,21 @@ export type MessagePaginatorOptions = {
 };
 
 /**
- * Options for {@link MessageIntervalPaginator.mergeNewestPage} that enable destructive
- * reconciliation — removing messages that were hard-deleted (by anyone) while the client received no
- * events (a dropped socket, a backgrounded app). A hard delete reaches only the clients connected at
- * that moment, and the merge is otherwise additive, so without this such a message lingers as a
+ * Options for the destructive part of {@link MessageIntervalPaginator.reconcileNewestMessages} —
+ * removing messages that were hard-deleted (by anyone) while the client received no events (a
+ * dropped socket, a backgrounded app). A hard delete reaches only the clients connected at that
+ * moment, and merging a page is otherwise additive, so without this such a message lingers as a
  * ghost after reconnect.
  *
- * Throughout, `page` is the newest window the server returned for `mergeNewestPage`, and "`page`'s
- * newest / oldest message" are its bounds by `created_at`. With NO options, `mergeNewestPage` prunes
- * any loaded message that falls WITHIN `page`'s `created_at` span but is absent from it —
- * unconditionally safe (a message that arrived live during the caller's fetch is always strictly
- * newer than `page`'s newest message, so it can never fall in that span). `headIntervalItemIdsAtRequest` widens the
- * reconcilable window at the TOP edge; `requestedLimit` only tunes the `hasMoreTail` affordance and
- * can never remove a message:
+ * Throughout, `page` is the newest window the server returned for `reconcileNewestMessages`, and
+ * "`page`'s newest / oldest message" are its bounds by `created_at`. With NO options,
+ * `reconcileNewestMessages` prunes any loaded message that falls WITHIN `page`'s `created_at` span
+ * but is absent from it — unconditionally safe (a message that arrived live during the caller's
+ * fetch is always strictly newer than `page`'s newest message, so it can never fall in that span).
+ * `headIntervalItemIdsAtRequest` widens the reconcilable window at the TOP edge; `requestedLimit`
+ * only tunes the `hasMoreTail` affordance and can never remove a message:
  */
-export type MergeNewestPageOptions = {
+export type ReconcileNewestMessagesOptions = {
   /**
    * The `limit` the caller passed to the query that produced `page`. Used ONLY to derive
    * `hasMoreTail` — whether `page` reached the channel's own oldest message — by comparing it to
@@ -197,35 +203,35 @@ export type MergeNewestPageOptions = {
   headIntervalItemIdsAtRequest?: ReadonlySet<string>;
 };
 
-/**
- * Options for {@link MessageIntervalPaginator.placePageSync}, the synchronous channel-open seed.
- */
-/** See {@link MessageIntervalPaginator.preparePagePlacement}. */
-export type MessagePagePlacement = {
+/** An external query prepared by {@link MessageIntervalPaginator.prepareExternalQuery}. */
+export type PreparedExternalQuery = {
   messagePaginationParams: MessagePaginationParams;
   isNewestPage: boolean;
-  place: (page: LocalMessage[]) => void;
+  placePage: (page: LocalMessage[]) => boolean;
 };
 
-export type PlacePageOptions = {
-  /**
-   * When true and messages are loaded, the newest page is merged into the newest window via
-   * {@link MessageIntervalPaginator.mergeNewestPage} — merged in place, messages hard-deleted while
-   * no events were received removed, the tail cursor re-derived, rebuilt when separated by a gap,
-   * and merged into the head window even while another window is active — instead of ingested as a
-   * first page. Lets callers (`channel.reload`, the channel-list hydrate, connection recovery)
-   * share one reconciling path. Left false for the differently-sorted pinned list. Has no effect on
-   * a page at a cursor or around a message, nor when nothing is loaded.
-   */
-  reconcile?: boolean;
-  /**
-   * The ids of the head interval's items when the request went out, forwarded to
-   * {@link MergeNewestPageOptions.headIntervalItemIdsAtRequest} so a hard-deleted NEWEST message is
-   * reconciled without mistaking a message that arrived live during the request for a delete. Only
-   * consulted when {@link reconcile} is set and a window is already loaded.
-   */
-  headIntervalItemIdsAtRequest?: ReadonlySet<string>;
-};
+/**
+ * What one of the message paginator's own queries got back, before its page is extracted (see
+ * {@link MessageIntervalPaginator.fetchQueryResponse}), by where it came from.
+ */
+export type MessageQueryResponse =
+  | {
+      /** what a custom `doRequest` returned: the page, used as is */
+      doRequestResponse: DoRequestResponse<LocalMessage>;
+      source: 'doRequest';
+    }
+  | {
+      /** the replies endpoint's response for a thread's reply list */
+      repliesResponse: GetRepliesResponse;
+      source: 'replies';
+    }
+  | {
+      /** the response of a channel query: its messages, and the rest, applied once they are placed */
+      channelResponse: StreamResponse<ChannelStateResponse>;
+      source: 'channel';
+      /** whether the query watched the channel, which applying the response records */
+      watch: boolean;
+    };
 
 /**
  * MessageIntervalPaginator allows configuring backend request sort, while keeping internal item ordering stable.
@@ -233,7 +239,8 @@ export type PlacePageOptions = {
  */
 export class MessageIntervalPaginator extends BasePaginator<
   LocalMessage,
-  MessageQueryShape
+  MessageQueryShape,
+  MessageQueryResponse
 > {
   /**
    * The name this list's index goes by as a holder in the message store. A prototype getter, so it
@@ -254,7 +261,6 @@ export class MessageIntervalPaginator extends BasePaginator<
   private messageFocusSignalToken = 0;
   protected _requestSort = DEFAULT_BACKEND_SORT;
   protected _itemOrder: MessagePaginatorSort = DEFAULT_BACKEND_SORT;
-  protected _nextQueryShape: MessageQueryShape | undefined;
   /** Pending below-window reached-start probe (exposed for deterministic test awaiting). */
   private _belowWindowReconcile?: Promise<void>;
   sortComparator: (a: LocalMessage, b: LocalMessage) => number;
@@ -522,154 +528,243 @@ export class MessageIntervalPaginator extends BasePaginator<
   };
 
   /**
-   * Reads `requestOptions.watch`: `true` also watches the channel with the request. Ignored for a
-   * thread's reply list and with `doRequest`.
+   * Runs the query pipeline (see `BasePaginator.executeQuery`). A query that goes to the channel —
+   * not a thread's reply list, not a custom `doRequest` — runs as a tracked query of the channel
+   * (`Channel.runTrackedQuery`), so the channel store keeps the channel until the query ends. A
+   * disposed channel's query is not tracked: its fetch step is refused, and fails as any failed
+   * request does.
    */
-  query = async ({
+  override executeQuery(
+    params: PaginationQueryParams<MessageQueryShape> = {},
+  ): Promise<ExecuteQueryReturnValue<LocalMessage> | void> {
+    const queriesChannel =
+      !this.parentMessageId && !this.config.doRequest && !this.channel.pendingDisposal;
+    if (!queriesChannel) return super.executeQuery(params);
+    return this.channel.runTrackedQuery(() => super.executeQuery(params));
+  }
+
+  /**
+   * The fetching step of the query pipeline: requests a page through a custom `doRequest`, the
+   * replies endpoint for a thread's reply list, or the channel query otherwise, which takes in what
+   * the response says about the channel itself and leaves the rest for the last step (see
+   * `Channel.requestChannelState`). Reads `requestOptions.watch`: `true` also watches the channel
+   * with the request. Ignored for a thread's reply list and with `doRequest`.
+   */
+  protected override fetchQueryResponse = async ({
     direction,
+    queryShape,
     requestOptions,
-  }: PaginationQueryParams<MessageQueryShape>): Promise<
-    PaginationQueryReturnValue<LocalMessage>
-  > => {
-    // get the params only if they were not generated previously
-    if (!this._nextQueryShape) {
-      this._nextQueryShape = this.getNextQueryShape({ direction });
-    }
+  }: PaginationQueryParams<MessageQueryShape>): Promise<MessageQueryResponse> => {
+    const options = queryShape ?? this.getNextQueryShape({ direction });
 
-    const options = this._nextQueryShape;
-    let items: LocalMessage[];
-    let tailward: string | null | undefined;
-    let headward: string | null | undefined;
     if (this.config.doRequest) {
-      const result = await this.config.doRequest(options);
-      items = this.getCanonicalQueryItems(result?.items ?? []);
-      // if there is no direction, then we are jumping, and we want to set both directions in the cursor
-      tailward =
-        !direction || direction === 'tailward' ? result.cursor?.tailward : undefined;
-      headward =
-        !direction || direction === 'headward' ? result.cursor?.headward : undefined;
-    } else {
-      const { messages } = this.parentMessageId
-        ? await this.channel
-            .getClient()
-            .getReplies(
-              { parent_id: this.parentMessageId },
-              { ...options, sort: this.requestSort },
-            )
-        : await this.channel.query({
-            messages: options as MessagePaginationParams,
-            ...(requestOptions?.watch === true && { watch: true }),
-            // todo: why do we query for watchers?
-            // watchers: { limit: this.pageSize },
-          });
-      items = this.getCanonicalQueryItems(messages.map(formatMessage));
-      const cursor = this.getCursorFromQueryResults({ direction, items });
-      tailward = cursor.tailward;
-      headward = cursor.headward;
+      return {
+        doRequestResponse: await this.config.doRequest(options),
+        source: 'doRequest',
+      };
     }
-
-    return { items, headward, tailward };
+    if (this.parentMessageId) {
+      const repliesResponse = await this.channel
+        .getClient()
+        .getReplies(
+          { parent_id: this.parentMessageId },
+          { ...options, sort: this.requestSort },
+        );
+      return { repliesResponse, source: 'replies' };
+    }
+    const watch = requestOptions?.watch === true;
+    const channelResponse = await this.channel.requestChannelState(
+      {
+        messages: options as MessagePaginationParams,
+        ...(watch && { watch: true }),
+        // todo: why do we query for watchers?
+        // watchers: { limit: this.pageSize },
+      },
+      undefined,
+    );
+    return { channelResponse, source: 'channel', watch };
   };
 
   /**
-   * Places a page that was fetched outside this paginator's own queries — by a channel query
-   * (`watch()` / `create()`, through {@link preparePagePlacement}), by `client.hydrateChannels`, or as
-   * the pinned list's first page in `Channel._initializeState`. `messagePaginationOptions` are the
-   * options the page was queried with; they decide how it is placed:
-   *
-   * - The newest page, with `options.reconcile`, into a loaded list: merged into the newest window
-   *   by {@link mergeNewestPage}, which also removes messages hard-deleted meanwhile.
-   * - The newest page otherwise (nothing loaded, or no reconcile asked): ingested as a first page,
-   *   continuing the active window only when that window is the head window.
-   * - A page at a cursor or around a message: stored as a separate interval, as a jump is; a first
-   *   page only when nothing is loaded yet.
-   *
-   * It runs synchronously, unlike {@link executeQuery}. The callers apply the response's read state
-   * right after, and `MessageReceiptsTracker` resolves read/delivered cursors against the messages
-   * loaded at that moment (`findItemByTimestamp`), so the page has to be in place first. A first page
-   * also takes the unread snapshot.
+   * The extracting step of the query pipeline: the messages in item order and their cursors, which
+   * a custom `doRequest` reports and which are derived from the messages otherwise.
    */
-  placePageSync(
-    messages: LocalMessage[],
-    requestedPageSize: number,
-    messagePaginationOptions?: MessagePaginationParams,
-    options?: PlacePageOptions,
+  protected override extractQueryPage(
+    response: MessageQueryResponse,
+    { direction }: PaginationQueryParams<MessageQueryShape>,
+  ): PaginationQueryReturnValue<LocalMessage> {
+    if (response.source === 'doRequest') {
+      const { cursor, items } = response.doRequestResponse;
+      // if there is no direction, then we are jumping, and we want to set both directions in the cursor
+      return {
+        headward: !direction || direction === 'headward' ? cursor?.headward : undefined,
+        items: this.getCanonicalQueryItems(items),
+        tailward: !direction || direction === 'tailward' ? cursor?.tailward : undefined,
+      };
+    }
+    const messages =
+      response.source === 'replies'
+        ? response.repliesResponse.messages
+        : (response.channelResponse.messages ?? []);
+    const items = this.getCanonicalQueryItems(messages.map(formatMessage));
+    return { items, ...this.getCursorFromQueryResults({ direction, items }) };
+  }
+
+  /**
+   * The last step of the query pipeline: the rest of a channel query's response, applied once its
+   * page is placed (see `Channel.applyChannelStateFromResponse`). The other sources return nothing
+   * else.
+   */
+  protected override applyQueryResponseRest(
+    response: MessageQueryResponse,
+    _placeParams: QueryPagePlacement<MessageQueryShape>,
   ) {
+    if (response.source === 'channel') {
+      // Not the latest message set the offline database stores: `watch()` and the channel list
+      // store that.
+      this.channel.applyChannelStateFromResponse(response.channelResponse, {
+        isLatestMessageSet: false,
+        watch: response.watch,
+      });
+    }
+  }
+
+  /**
+   * Places a page from an external query — one this paginator did not run, whose page the caller
+   * chose — in the windows it belongs to, never removing anything loaded. Bringing the loaded
+   * newest messages up to date with a fresh newest page, removals included, is
+   * {@link reconcileNewestMessages}'s job instead.
+   *
+   * External queries are a channel query (`watch()`, see {@link prepareExternalQuery}), the
+   * channel list's query (`client.hydrateChannels`), and the channel state the pinned list's first
+   * page comes with. `messagePaginationParams` are the
+   * options the page was queried with; they decide where it goes:
+   *
+   * - The newest page: when no window is active yet (nothing loaded, or only live messages), its
+   *   window becomes the active one, as the channel's first page. When the active window is the
+   *   newest window, the page lands in it.
+   * - Any other page — a page at a cursor or around a message, or the newest page while an older
+   *   window is active — is only stored, as a separate interval merged only with an interval it
+   *   overlaps.
+   *
+   * The reader stays on the window they are on: moving them is this paginator's own methods' job
+   * (`jumpToMessage()` and the like). When a page lands in the active window, overlaps it, or takes
+   * in an active window of live messages only, that window is shown again with the page. The
+   * paginator's own queries are left alone too: a running one keeps its loading flag, and its last
+   * query error and query shape stay.
+   *
+   * It runs synchronously, so a caller can apply the rest of the response right after with the page
+   * in place, as it has to: read and delivery positions that come without a message id are looked
+   * up among the loaded messages.
+   *
+   * Returns whether it showed the page as a first page.
+   */
+  placeExternalQueryPage(
+    page: LocalMessage[],
+    requestedPageSize: number,
+    messagePaginationParams?: MessagePaginationParams,
+  ): boolean {
     const queryShape: MessageQueryShape = {
-      ...messagePaginationOptions,
+      ...messagePaginationParams,
       limit: requestedPageSize,
     };
     const isJump = this.isJumpQueryShape(queryShape);
     const isNewestPage = this.isHeadPageQueryShape(queryShape);
-    const isLoaded = typeof this.items !== 'undefined';
-
-    // A re-seed of the newest page reconciles against the loaded windows. A list loaded empty has
-    // none (no interval, not even live messages in a logical head), so the page seeds it as a first
-    // open would; the merge would find nothing to merge into and drop the page.
-    if (options?.reconcile && isNewestPage && isLoaded && this.itemIntervals.length > 0) {
-      // The page came back, so whatever the last query failure was, it is no longer the truth. The
-      // branch below inherits this from `postQueryReconcile`, which this one deliberately skips —
-      // without it a failed "load older" would keep a UI's error surface latched through an
-      // otherwise successful reconnect refresh.
-      if (this.state.getLatestValue().lastQueryError) {
-        this.state.partialNext({ lastQueryError: undefined });
-      }
-      this.mergeNewestPage(messages, {
-        headIntervalItemIdsAtRequest: options.headIntervalItemIdsAtRequest,
-        requestedLimit: requestedPageSize,
-      });
-      return;
-    }
-
-    // In item order, as `query()` hands its pages over, so the page's edges are its first and last item.
-    const items = this.getCanonicalQueryItems(messages);
+    // In item order, as `extractQueryPage()` hands its pages over, so the page's edges are its
+    // first and last item.
+    const items = this.getCanonicalQueryItems(page);
     const { head: headItem, tail: tailItem } = this.getPagePaginationEdges(items);
-    this.postQueryReconcile({
-      // The newest page continues the active window only when that window is the head window; any
-      // other page has no known place relative to the active window, so it is stored as a separate
-      // interval, as a jump is.
-      continuesActiveWindow: isNewestPage && this.isActiveIntervalAtHead,
-      // A jump/around page spans both directions; a page at a cursor pages the way its cursor points,
-      // and a plain latest page paginates tailward (older).
-      direction: isJump ? undefined : (getLinearQueryDirection(queryShape) ?? 'tailward'),
-      // the first page of a list not loaded yet, or the newest page
-      isFirstPage: !isLoaded || isNewestPage,
-      queryShape,
-      requestedPageSize,
-      results: {
-        items,
-        headward: isJump ? headItem?.id : undefined,
-        tailward: tailItem?.id,
+    // the first page of a list not loaded yet, or the newest page
+    const isFirstPage = typeof this.items === 'undefined' || isNewestPage;
+    const activeWindow = this.itemIntervals.find((interval) =>
+      this.isActiveInterval(interval),
+    );
+    // only live messages, with no page loaded yet, count as no active window
+    const hasActiveWindow = !!activeWindow && !isLogicalInterval(activeWindow);
+    // The newest page lands in the active window when that is the newest window; any other page has
+    // no known place relative to the active window, so it is stored as a separate interval.
+    const landsInActiveWindow = isNewestPage && this.isActiveIntervalAtHead;
+    const showsPage = isNewestPage && (!hasActiveWindow || landsInActiveWindow);
+    const placed = this.placePage(
+      {
+        continuesActiveWindow: landsInActiveWindow,
+        // A jump/around page spans both directions; a page at a cursor pages the way its cursor
+        // points, and a plain latest page paginates tailward (older).
+        direction: isJump
+          ? undefined
+          : (getLinearQueryDirection(queryShape) ?? 'tailward'),
+        isFirstPage,
+        queryShape,
+        requestedPageSize,
+        results: {
+          items,
+          headward: isJump ? headItem?.id : undefined,
+          tailward: tailItem?.id,
+        },
+        updateState: showsPage,
       },
-    });
+      { endsQuery: false },
+    );
+    // A stored page that took in a live-only active window (only live messages, no page) carries
+    // on as the active window: its live messages are still shown, with what the page added.
+    const tookInActiveWindow =
+      !!activeWindow &&
+      !!placed.targetInterval &&
+      !this.itemIntervals.some((interval) => this.isActiveInterval(interval));
+    if (tookInActiveWindow && placed.targetInterval) {
+      this.setActiveInterval(placed.targetInterval, { updateState: false });
+    }
+    if (showsPage) {
+      // shown without a query of this paginator, so its next query has to continue this window
+      this.recordLoadedWindowQueryShape();
+    } else if (placed.targetInterval && this.isActiveInterval(placed.targetInterval)) {
+      // a stored page that overlaps the active window, or took it in, grew it
+      const { cursor, hasMoreHead, hasMoreTail } = placed.stateCandidate;
+      this.state.partialNext({
+        cursor,
+        hasMoreHead,
+        hasMoreTail,
+        items: this.intervalToItems(placed.targetInterval),
+      });
+    }
+    return showsPage && isFirstPage;
   }
 
   /**
-   * Prepares placing the page that a channel query sent with `messagePaginationOptions` returns, as
-   * `channel.watch()` and `channel.create()` do. Call it before sending the query, and `place` the
-   * returned page before the response's read state is applied: the read state is resolved against
-   * the loaded messages.
+   * Whether messages are loaded for {@link reconcileNewestMessages} to bring up to date. A list
+   * loaded empty has none (no interval, not even live messages), so a fresh newest page is placed
+   * as a first page instead ({@link placeExternalQueryPage}); reconciling would find nothing to
+   * merge it into and drop it.
+   */
+  get canReconcileNewestMessages(): boolean {
+    return typeof this.items !== 'undefined' && this.itemIntervals.length > 0;
+  }
+
+  /**
+   * Prepares an external query for a page of these messages: the channel query `channel.watch()`
+   * sends with the `messages` options its caller gave. Call it before
+   * sending the query, and place the returned page with `placePage` before the response's read
+   * state is applied: the read state is resolved against the loaded messages.
    *
    * - `messagePaginationParams`: the options to send as the query's `messages`, with `limit` set to
    *   the page size when not given.
    * - `isNewestPage`: whether the query asks for the newest page — no cursor, not around a message,
    *   and some messages.
-   * - `place`: places the returned page. The newest page reconciles against the loaded newest
-   *   window, using the messages loaded when the query was prepared; any other page is stored as a
-   *   separate interval, merged only with an interval it overlaps. A query for no messages
-   *   (`limit: 0`) places nothing.
+   * - `placePage`: places the returned page. The newest page reconciles the loaded newest messages
+   *   ({@link reconcileNewestMessages}), against the messages loaded when the query was prepared,
+   *   or is placed as a first page when none are loaded; any other page is placed by
+   *   {@link placeExternalQueryPage}. A query for no messages (`limit: 0`) places nothing. Returns
+   *   whether it showed a first page.
    */
-  preparePagePlacement(
-    messagePaginationOptions?: MessagePaginationParams,
-  ): MessagePagePlacement {
+  prepareExternalQuery(messages?: MessagePaginationParams): PreparedExternalQuery {
     const messagePaginationParams: MessagePaginationParams = {
-      ...messagePaginationOptions,
-      limit: messagePaginationOptions?.limit ?? this.pageSize,
+      ...messages,
+      limit: messages?.limit ?? this.pageSize,
     };
     const limit = messagePaginationParams.limit ?? this.pageSize;
     // A page of no messages says nothing about the channel, so it must not be read as an empty one.
     if (limit === 0) {
-      return { messagePaginationParams, isNewestPage: false, place: () => undefined };
+      return { messagePaginationParams, isNewestPage: false, placePage: () => false };
     }
 
     const isNewestPage = this.isHeadPageQueryShape(messagePaginationParams);
@@ -688,13 +783,16 @@ export class MessageIntervalPaginator extends BasePaginator<
     return {
       messagePaginationParams,
       isNewestPage,
-      place: (page) =>
-        this.placePageSync(
-          page,
-          limit,
-          messagePaginationParams,
-          isNewestPage ? { headIntervalItemIdsAtRequest, reconcile: true } : undefined,
-        ),
+      placePage: (page) => {
+        if (isNewestPage && this.canReconcileNewestMessages) {
+          this.reconcileNewestMessages(page, {
+            headIntervalItemIdsAtRequest,
+            requestedLimit: limit,
+          });
+          return false;
+        }
+        return this.placeExternalQueryPage(page, limit, messagePaginationParams);
+      },
     };
   }
 
@@ -793,7 +891,7 @@ export class MessageIntervalPaginator extends BasePaginator<
             ...result.stateCandidate,
             hasMoreHead: interval.hasMoreHead,
             hasMoreTail: interval.hasMoreTail,
-            // Prefer the cursor derived during postQueryReconcile, but fall back to
+            // Prefer the cursor derived during placeQueryPage, but fall back to
             // interval-derived cursor to keep jumps consistent if the stateCandidate
             // is partial.
             cursor: result.stateCandidate.cursor ?? this.getCursorFromInterval(interval),
@@ -805,6 +903,9 @@ export class MessageIntervalPaginator extends BasePaginator<
       this.setActiveInterval(interval, { updateState: false });
     }
     if (state) this.state.partialNext(state);
+    // A window an external query stored is shown without a query of this paginator: record the
+    // shape its next query continues from.
+    this.recordLoadedWindowQueryShape();
     if (!suppressFocusSignal) {
       this.emitMessageFocusSignal({
         messageId,
@@ -847,10 +948,11 @@ export class MessageIntervalPaginator extends BasePaginator<
   };
 
   /**
-   * Merges an already fetched newest page into the loaded windows without issuing a query. The
-   * caller supplies a page it obtained on its own (a reload, a channel-list query, connection
-   * recovery) and this reconciles it against what is loaded, so the loaded windows are updated in
-   * place rather than blanked and reloaded. What happens depends on which window is being read.
+   * Reconciles the loaded newest messages with a fresh newest page, without issuing a query: they
+   * are brought up to date in place — messages added and updated, those the page proves were
+   * hard-deleted removed — rather than blanked and reloaded. The page comes from an external query
+   * (a reload, a channel-list query, connection recovery). What happens depends on which window is
+   * being read.
    *
    * When the head window is the one being read, two cases, decided by whether the incoming page
    * overlaps or is contiguous with it:
@@ -865,7 +967,7 @@ export class MessageIntervalPaginator extends BasePaginator<
    *    cursor re-anchors to the true loaded oldest (which also clears a stale offline-DB cursor).
    *    Then destructive reconciliation ({@link reconcileHeadAgainstPage}) removes any loaded
    *    message that the authoritative page proves was hard-deleted while no events were received
-   *    (see that method + the {@link MergeNewestPageOptions} for the exact, safe window).
+   *    (see that method + the {@link ReconcileNewestMessagesOptions} for the exact, safe window).
    *
    * 2. SEPARATED BY A GAP - the incoming page shares no id with the loaded head, which is entirely
    *    older: the messages between them are not loaded (at least a full page is new). Merging would
@@ -879,7 +981,7 @@ export class MessageIntervalPaginator extends BasePaginator<
    * When another window is being read (the reader jumped to an older one), the reader stays there.
    * Messages the page proves were hard-deleted are removed from the head window, then the page is
    * merged into it when they overlap or are contiguous, or becomes the head window when they are
-   * separated by a gap (see {@link mergeNewestPageIntoInactiveHead}). If the page also overlaps the
+   * separated by a gap (see {@link mergePageIntoInactiveHead}). If the page also overlaps the
    * window being read, that window grows into the head window.
    *
    * When no window is marked as the head (only live messages arrived, only a window the reader
@@ -889,7 +991,7 @@ export class MessageIntervalPaginator extends BasePaginator<
    * it becomes the window being read; if it merged into the window being read, that window grows.
    *
    * It never blanks the loaded windows, and with nothing loaded it does nothing: placing a first
-   * page is {@link postQueryReconcile}'s job. An empty page changes nothing on its own but, given a
+   * page is {@link placeQueryPage}'s job. An empty page changes nothing on its own but, given a
    * pre-fetch snapshot (`options.headIntervalItemIdsAtRequest`), is reconciled as "the channel has
    * no messages": every server-confirmed message of the head window is removed.
    *
@@ -898,15 +1000,27 @@ export class MessageIntervalPaginator extends BasePaginator<
    *
    * @param page - The fetched newest window (may be empty). `created_at` order is normalized on
    *   ingest.
-   * @param options - See {@link MergeNewestPageOptions}. Omit to prune only within the page's own
-   *   span.
+   * @param options - See {@link ReconcileNewestMessagesOptions}. Omit to prune only within the
+   *   page's own span.
    */
-  mergeNewestPage = (page: LocalMessage[], options?: MergeNewestPageOptions) => {
-    this._mergeNewestPage(page, options);
+  reconcileNewestMessages = (
+    page: LocalMessage[],
+    options?: ReconcileNewestMessagesOptions,
+  ) => {
+    // The page came back, so whatever the last query failure was, it is no longer the truth: a
+    // failed "load older" would otherwise keep a UI's error surface latched through a successful
+    // refresh. Placing a page clears it in `placeQueryPage`.
+    if (this.state.getLatestValue().lastQueryError) {
+      this.state.partialNext({ lastQueryError: undefined });
+    }
+    this._reconcileNewestMessages(page, options);
     this.recordLoadedWindowQueryShape();
   };
 
-  private _mergeNewestPage = (page: LocalMessage[], options?: MergeNewestPageOptions) => {
+  private _reconcileNewestMessages = (
+    page: LocalMessage[],
+    options?: ReconcileNewestMessagesOptions,
+  ) => {
     const headInterval = this.itemIntervals[0] as Interval | undefined;
     if (!headInterval?.isHead) {
       // The newest messages are not loaded as a window: only live content arrived (the first query
@@ -916,7 +1030,7 @@ export class MessageIntervalPaginator extends BasePaginator<
       // messages could never be reached. We mark it as the head window, and `ingestPage` merges
       // into it the windows it overlaps, live messages included.
       //
-      // Nothing loaded at all stays a no-op: placing a first page is `postQueryReconcile`'s job.
+      // Nothing loaded at all stays a no-op: placing a first page is `placeQueryPage`'s job.
       const logicalHead = this.liveHeadLogical;
       const hasAnchoredHead = this.itemIntervals.some(
         (interval) => !isLogicalInterval(interval) && interval.isHead,
@@ -971,7 +1085,7 @@ export class MessageIntervalPaginator extends BasePaginator<
     // stale newest window. The active window stays: the reader stays where they jumped to.
     if (!this.isActiveInterval(headInterval)) {
       this.reconcileHeadAgainstPage(page, options);
-      this.mergeNewestPageIntoInactiveHead(page);
+      this.mergePageIntoInactiveHead(page);
       return;
     }
 
@@ -1132,7 +1246,7 @@ export class MessageIntervalPaginator extends BasePaginator<
    *   result:           m8  m9 (no longer the head)    m20 … m24 (head window)
    * ```
    */
-  private mergeNewestPageIntoInactiveHead(page: LocalMessage[]) {
+  private mergePageIntoInactiveHead(page: LocalMessage[]) {
     if (!page.length) return;
     const head = this.anchoredHeadInterval;
     const headIds = new Set(head?.itemIds ?? []);
@@ -1178,7 +1292,7 @@ export class MessageIntervalPaginator extends BasePaginator<
    */
   private pageReachedChannelStart(
     page: LocalMessage[],
-    options?: MergeNewestPageOptions,
+    options?: ReconcileNewestMessagesOptions,
   ): boolean {
     const requestedLimit = options?.requestedLimit;
     return (
@@ -1244,10 +1358,10 @@ export class MessageIntervalPaginator extends BasePaginator<
   }
 
   /**
-   * Destructive half of {@link mergeNewestPage}: remove messages in the loaded head interval that
-   * `page` proves were hard-deleted while the client received no events (a hard delete reaches only
-   * the clients connected at that moment, and the merge is additive, so they would otherwise linger
-   * forever).
+   * Destructive half of {@link reconcileNewestMessages}: remove messages in the loaded head
+   * interval that `page` proves were hard-deleted while the client received no events (a hard
+   * delete reaches only the clients connected at that moment, and the merge is additive, so they
+   * would otherwise linger forever).
    *
    * Here `page` is the freshly-fetched newest window the server returned for the query that produced
    * it. Its two bounds are its NEWEST message (`page`'s last item by `created_at`) and its OLDEST
@@ -1278,7 +1392,7 @@ export class MessageIntervalPaginator extends BasePaginator<
    */
   protected reconcileHeadAgainstPage(
     page: LocalMessage[],
-    options?: MergeNewestPageOptions,
+    options?: ReconcileNewestMessagesOptions,
   ): string[] {
     const headInterval = this.itemIntervals[0] as Interval | undefined;
     if (!headInterval?.isHead) return [];
@@ -1758,8 +1872,9 @@ export class MessageIntervalPaginator extends BasePaginator<
     return foundTimestamp === timestamp ? found : null;
   }
 
-  filterQueryResults = (items: LocalMessage[]) =>
-    items.filter(this.shouldIncludeMessageInInterval.bind(this));
+  override filterQueryResults(items: LocalMessage[]) {
+    return items.filter(this.shouldIncludeMessageInInterval.bind(this));
+  }
 
   private getCanonicalQueryItems(items: LocalMessage[]): LocalMessage[] {
     return [...items].sort(this.itemOrderComparator);

@@ -632,7 +632,7 @@ export class ChannelManager extends WithSubscriptions {
    *
    * - the server's response, as a `queryChannels` result for a stored channel is applied: its data
    *   and members, and its messages merged into the loaded ones (a local message, such as a failed
-   *   one, is never removed; an open channel's or a scrolled-back one's window isn't re-seeded);
+   *   one, is never removed; an open channel's or a scrolled-back one's window gets no page);
    * - `previous`'s local messages (sending or failed), added by id; a message `successor` already has
    *   keeps `successor`'s copy;
    * - `previous`'s composer, when `previous` is open and `successor` isn't: the user is typing in
@@ -686,12 +686,12 @@ export class ChannelManager extends WithSubscriptions {
    * still refer to the instance keep it, finished.
    *
    * Then removes, and disconnects, every stored channel that is neither watched nor held. A watched
-   * channel (`watching`,
-   * or `wasWatching` until its watch is restored) stays, because its events keep it current; so does
-   * an active one ({@link Channel.activate}), one being loaded (`watch()`, `query()` or `create()` in flight), and
-   * one a holder holds in {@link ChannelManager.channelStore}: a channel list links each of its
-   * channels, while threads, the composer cache and an active channel search hold theirs through
-   * claims ({@link EntityStore.addClaim}).
+   * channel (`watching`, or `wasWatching` until its watch is restored) stays, because its events
+   * keep it current; so does an active one ({@link Channel.activate}), one being queried
+   * (`watch()`, `query()`, `create()` or a query of its message list in flight, see
+   * `Channel.isQueryingChannel`), and one a holder holds in {@link ChannelManager.channelStore}: a
+   * channel list links each of its channels, while threads, the composer cache and an active
+   * channel search hold theirs through claims ({@link EntityStore.addClaim}).
    *
    * What remains is an unwatched snapshot nothing shows, which saves no request: using it again
    * needs a query, which stores it again.
@@ -934,10 +934,10 @@ export class ChannelManager extends WithSubscriptions {
    *   re-routed it — the exact duplication the resolver exists to prevent.
    *
    * Wrapping (rather than subclassing or a constructor hook) is what lets the manager inject this
-   * into paginators it does not construct: `filterQueryResults` is an instance property, so the
-   * original is captured here and handed back by `unwrapPaginatorFiltering` when the paginator is
-   * detached. The paginator's own filtering runs first and stays authoritative — ownership only ever
-   * removes further items, never adds any back.
+   * into paginators it does not construct: `filterQueryResults` is replaced on the paginator
+   * instance, so the original is captured here and handed back by `unwrapPaginatorFiltering` when
+   * the paginator is detached. The paginator's own filtering runs first and stays authoritative —
+   * ownership only ever removes further items, never adds any back.
    *
    * Idempotent: the `WeakMap` guard keeps a re-inserted paginator from being wrapped twice, which
    * would filter the same page repeatedly and, worse, lose the reference to the true original.

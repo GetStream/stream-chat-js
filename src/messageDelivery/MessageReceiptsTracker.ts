@@ -149,9 +149,9 @@ export type OwnMessageReceiptsTrackerOptions = {
  * Construction
  * ------------
  * `new MessageReceiptsTracker({ channel, locateMessage? })`
- * - By default, message references are read through `channel.state.findMessageByTimestamp`.
- * - `locateMessage` can override this lookup strategy.
- *   If a message cannot be resolved locally, the event is ignored.
+ * - By default, a position's message is looked up by timestamp through
+ *   `channel.messagePaginator.findItemByTimestamp`; `locateMessage` can override this lookup.
+ *   If an event's message cannot be found locally, the event is ignored.
  *
  * Event ingestion
  * ---------------

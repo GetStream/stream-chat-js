@@ -101,7 +101,7 @@ export class ThreadPaginator extends BasePaginator<Thread, QueryThreadsRequest> 
     };
   }
 
-  query = async ({
+  protected override fetchQueryResponse = async ({
     queryShape,
   }: PaginationQueryParams<QueryThreadsRequest>): Promise<
     PaginationQueryReturnValue<Thread>
@@ -109,6 +109,14 @@ export class ThreadPaginator extends BasePaginator<Thread, QueryThreadsRequest> 
     const { threads, next } = await this.client.queryThreadsAndHydrate(queryShape);
     return { items: threads.map(this.toStoredInstance), tailward: next };
   };
+
+  /** The extracting step of the query pipeline: the response is the page. */
+  protected override extractQueryPage(
+    response: PaginationQueryReturnValue<Thread>,
+    _params: PaginationQueryParams<QueryThreadsRequest>,
+  ) {
+    return response;
+  }
 
   /**
    * The stored instance for a queried thread, so there's one per id. The index upserts, so a second
@@ -124,8 +132,6 @@ export class ThreadPaginator extends BasePaginator<Thread, QueryThreadsRequest> 
     return stored;
   };
 
-  filterQueryResults = (threads: Thread[]) => threads;
-
   /**
    * Re-queries the first page and swaps the list in place, in server order; also the first load. The
    * current threads stay until the response lands, and a failed query leaves them untouched and
@@ -137,11 +143,15 @@ export class ThreadPaginator extends BasePaginator<Thread, QueryThreadsRequest> 
     if (isFirstLoad) this.state.partialNext({ isLoading: true });
     let replaced = false;
     try {
-      const results = await this.runQueryRetryable({
+      const fetchParams = {
         queryShape: { ...DEFAULT_THREAD_QUERY, limit },
         retryCount: this.config.retryCount,
-      });
-      if (!results) return;
+      };
+      const response = await this.fetchQueryResponseWithRetries(fetchParams);
+      if (!response) return;
+      // The query pipeline's steps (see `executeQuery`) with a placing step of its own, below. A
+      // thread list's response is its page, so nothing else is left to apply.
+      const results = this.extractQueryPage(response, fetchParams);
 
       // We have to replace here as we can't hold then, since the sorting is server driven
       // and stale ids get replaced (and subsequently evicted from the entity index if no holders

@@ -25,7 +25,7 @@ import type { MessageOperations } from './messageOperations';
 import { nowNs } from './utils/time';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 import { MessagePaginator } from './pagination';
-import type { MergeNewestPageOptions, PaginatorCursor } from './pagination';
+import type { PaginatorCursor, ReconcileNewestMessagesOptions } from './pagination';
 import { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
 import { ConfigController } from './configuration/ConfigController';
 import { deepFreezeConfig } from './configuration/utils/deepFreezeConfig';
@@ -422,7 +422,7 @@ export class Thread extends WithSubscriptions {
       const loadedReplyCount = loadedReplies.length;
       const requestedReplyLimit =
         Math.max(loadedReplyCount, this.messagePaginator.pageSize ?? 0) || undefined;
-      // the head interval's replies when the request goes out (see MergeNewestPageOptions)
+      // the head interval's replies when the request goes out (see ReconcileNewestMessagesOptions)
       const headIntervalItemIdsAtRequest = new Set(
         this.messagePaginator.anchoredHeadItems.map((reply) => reply.id),
       );
@@ -470,7 +470,7 @@ export class Thread extends WithSubscriptions {
 
   public hydrateState = (
     thread: Thread,
-    options?: { reconcile?: MergeNewestPageOptions },
+    options?: { reconcile?: ReconcileNewestMessagesOptions },
   ) => {
     if (thread === this) {
       // skip if the instances are the same
@@ -527,10 +527,10 @@ export class Thread extends WithSubscriptions {
     );
     if (typeof this.messagePaginator.items === 'undefined') {
       // Nothing loaded yet — the common case for a thread opened from a message, whose paginator
-      // has never held a window. `mergeNewestPage` deliberately no-ops there (it merges into an
-      // anchored head and leaves seeding to the query path), so hydrating through it would drop the
-      // replies this request just fetched and leave the panel empty until something else queried
-      // them. Seed instead, exactly as the constructor does for a thread response's `latest_replies`.
+      // has never held a window. `reconcileNewestMessages` deliberately no-ops there (it has no
+      // loaded window to reconcile), so hydrating through it would drop the replies this request
+      // just fetched and leave the panel empty until something else queried them. Set them instead,
+      // exactly as the constructor does for a thread response's `latest_replies`.
       const isLastPage = incomingReplies.length === replyCount;
       this.messagePaginator.setItems({
         valueOrFactory: incomingReplies,
@@ -539,7 +539,7 @@ export class Thread extends WithSubscriptions {
         isLastPage,
       });
     } else {
-      this.messagePaginator.mergeNewestPage(incomingReplies, options?.reconcile);
+      this.messagePaginator.reconcileNewestMessages(incomingReplies, options?.reconcile);
     }
     pendingReplies.forEach((reply) => this.messagePaginator.ingestItem(reply));
   };

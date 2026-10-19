@@ -1574,7 +1574,7 @@ export class StreamChat extends ChatApi {
     requestOptions?: StreamRequestOptions,
   ): Promise<Channel[] | QueryChannelsResponseWithChannels> {
     // TODO(perf/cleanup): prefer an id snapshot over `anchoredHeadItems.map` here too — see the
-    // matching TODO in MessageIntervalPaginator.preparePagePlacement for the full rationale.
+    // matching TODO in MessageIntervalPaginator.prepareExternalQuery for the full rationale.
     const headIntervalItemIdsAtRequestByCid = new Map<string, ReadonlySet<string>>();
     for (const channel of this.channelManager.values()) {
       const { cid } = channel;
@@ -1701,48 +1701,54 @@ export class StreamChat extends ChatApi {
         queryChannelsOptions?.message_limit ??
         DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE;
 
-      // Seed the paginator BEFORE _initializeState, which hydrates read state and (via
-      // MessageReceiptsTracker) resolves read/delivered cursors against this paginator. Seeding
-      // first guarantees the tracker sees a populated timeline; a later async seed would run after
-      // the reconcile and mislabel delivery status.
+      // Place the page before _initializeState applies the read state, which reads the loaded
+      // messages: read and delivery positions that come without a message id are looked up among
+      // them (see `Channel.runChannelQuery`).
       //
-      // Skip the re-seed when this (shared) channel's paginator is already loaded AND the user has
-      // jumped to an older window (active interval is not the head): a first-page re-seed forces the
-      // newest page to merge into that jumped interval across the gap (missing messages in the
-      // middle). A cold paginator, or one still at the head (offline/at-latest), re-seeds normally so
-      // cursors/hasMoreTail get (re)derived and pagination keeps working.
-      // Also skip the re-seed for an ACTIVE (on-screen) channel: its own `channel.reload()` owns the
-      // loaded window (up to 100 msgs), so a 25-msg list re-seed here is a redundant second update
-      // that could perturb the fuller window. (Inert until a UI SDK calls `channel.activate()`.)
+      // Skip the newest page when this (shared) channel's paginator is already loaded AND the user
+      // has jumped to an older window (active interval is not the head): it would merge into that
+      // jumped interval across the gap (missing messages in the middle). A cold paginator, or one
+      // still at the head (offline/at-latest), takes the page so cursors/hasMoreTail get
+      // (re)derived and pagination keeps working.
+      // Also skip it for an ACTIVE (on-screen) channel: its own `channel.reload()` owns the loaded
+      // window (up to 100 msgs), so a 25-msg list page here is a redundant second update that could
+      // perturb the fuller window. (Inert until a UI SDK calls `channel.activate()`.)
       const placesNewestPage =
         willInitialize &&
         !c.active &&
         (!c.messagePaginator.isInitialized || c.messagePaginator.isActiveIntervalAtHead);
+      let placedFirstPage = false;
       if (placesNewestPage) {
         // The response's `last_message_at` first, so the paginator can tell whether the page
         // reaches it.
         c.messagePaginator.setQueriedLatestMessageAt(
           channelState.channel?.last_message_at,
         );
-        c.messagePaginator.placePageSync(
-          channelState.messages.map(formatMessage),
-          requestedPageSize,
-          undefined,
-          {
-            reconcile: true,
+        const messages = channelState.messages.map(formatMessage);
+        if (c.messagePaginator.canReconcileNewestMessages) {
+          c.messagePaginator.reconcileNewestMessages(messages, {
             headIntervalItemIdsAtRequest: headIntervalItemIdsAtRequestByCid?.get(c.cid),
-          },
-        );
+            requestedLimit: requestedPageSize,
+          });
+        } else {
+          placedFirstPage = c.messagePaginator.placeExternalQueryPage(
+            messages,
+            requestedPageSize,
+          );
+        }
       }
 
       if (skipInitialization === undefined) {
         c._initializeState(channelState);
       } else if (!skipInitialization.includes(channelState.channel.id)) {
-        // The paginators are (re)seeded above and via _initializeState → placePageSync.
+        // The message list's page is placed above; the pinned list's comes with _initializeState.
         c._initializeState(channelState);
       }
-      // Placing the newest page brought the window up to date; an on-screen channel is left to its
-      // own `channel.reload()`, as above.
+      // from the read state the response brought, as `channel.watch()` does
+      if (placedFirstPage) c.messagePaginator.seedUnreadSnapshot();
+      // Unless the newest page was placed, which brings the window up to date, the head window is
+      // checked against this response's `last_message_at`, as `Channel.requestChannelState` does
+      // for a channel query; an on-screen channel is left to its own `channel.reload()`, as above.
       if (
         willInitialize &&
         !c.active &&

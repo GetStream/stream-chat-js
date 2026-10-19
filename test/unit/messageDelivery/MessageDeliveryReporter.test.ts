@@ -1,12 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getClientWithUser } from '../test-utils/getClient';
 import { generateChannel } from '../test-utils/generateChannel';
+import { generateMsg } from '../test-utils/generateMessage';
 import { generateThreadResponse } from '../test-utils/generateThreadResponse';
 import {
   type APIError,
   Channel,
   type CustomMarkReadRequestFn,
   Event,
+  formatMessage,
   MarkDeliveredResponse,
   MarkReadResponse,
   StreamAPIError,
@@ -72,6 +74,49 @@ describe('MessageDeliveryReporter', () => {
     vi.runOnlyPendingTimers();
     vi.useRealTimers();
     vi.restoreAllMocks();
+  });
+
+  it('makes the newest message of the page a jump loads the delivery candidate', async () => {
+    const at = (minute: number) => new Date(Date.UTC(2020, 0, 1, 0, minute));
+    const msg = (minute: number) =>
+      generateMsg({
+        cid: channel.cid,
+        date: at(minute),
+        id: `m${minute}`,
+        user: otherUser,
+      });
+    // an older window is loaded, not the newest messages
+    channel.messagePaginator.ingestPage({
+      page: [msg(1), msg(2)].map(formatMessage),
+      setActive: true,
+    });
+    vi.spyOn(channel, 'getOrCreate').mockResolvedValue(
+      generateChannel({
+        channel: {
+          id: channelId,
+          last_message_at: convertDateToTimestamp(at(9)),
+          type: channelType,
+        },
+        config: { delivery_events: true } as never,
+        messages: [msg(8), msg(9)],
+        // the user has read up to m1
+        read: [
+          {
+            last_read: convertDateToTimestamp(at(1)),
+            unread_messages: 3,
+            user: ownUser,
+          },
+        ],
+      }) as never,
+    );
+
+    // the paginator places the page, then the channel applies the rest of the response
+    await channel.messagePaginator.jumpToMessage('m9');
+
+    // @ts-expect-error accessing protected property deliveryReportCandidates
+    expect(client.messageDeliveryReporter.deliveryReportCandidates.get(channel.cid)).toBe(
+      'm9',
+    );
   });
 
   it('announces delivery after the buffer window', async () => {

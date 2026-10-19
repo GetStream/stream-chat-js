@@ -1271,7 +1271,14 @@ channel.query(options?, messageSetToAddToIfDoesNotExist?: 'latest' | 'current' |
 channel.query(options?: ChannelGetOrCreateRequest, requestOptions?: StreamRequestOptions);
 ```
 
-The second parameter is gone, and the `MessageSetType` type with it. In v9 it picked which of the channel's message sets the response went into. In v10 the messages live in `channel.messagePaginator`, which loads its own pages, so `channel.query()` returns the response without adding its messages anywhere. To open a channel and load its latest messages, call `channel.watch()` (or `channel.create()`).
+The second parameter is gone, and the `MessageSetType` type with it. In v9 it picked which of the channel's message sets the response went into. In v10 the messages live in `channel.messagePaginator`, which loads its own pages, so `channel.query()` returns the response without adding its messages anywhere. To open a channel and load its latest messages, call `channel.watch()`.
+
+`channel.watch({ messages })` stores the page it gets in `channel.messagePaginator`, but only the paginator's own methods move the list being shown:
+
+- The newest page is shown when nothing is shown yet, and otherwise brings the newest messages up to date.
+- A page at a cursor or around a message (`id_lt`, `id_around`, …) is stored where it belongs and not shown; the messages shown stay as they are. v9's `watch()` put any page in the latest message set. To show a message with its surroundings, call `channel.messagePaginator.jumpToMessage(id)`, which uses a stored page without another request.
+
+`channel.create()` places no messages: it asks for no channel state.
 
 In JavaScript a leftover second argument is not an error: the string lands in the `requestOptions` slot and is ignored. Search for `query(` calls with two arguments when migrating.
 
@@ -1488,34 +1495,91 @@ v9's `BasePaginator`, and the `ReminderPaginator` and `UserGroupPaginator` built
 directions `next` and `prev`. v10 names them by the end of the list they move towards: the tail (where
 `next()` went) and the head. The old names are removed, not deprecated:
 
-| v9                                                      | v10                                                 |
-| ------------------------------------------------------- | --------------------------------------------------- |
-| `paginator.hasNext` / `state.hasNext`                   | `paginator.hasMoreTail` / `state.hasMoreTail`       |
-| `paginator.hasPrev` / `state.hasPrev`                   | `paginator.hasMoreHead` / `state.hasMoreHead`       |
-| `state.cursor`: `{ next, prev }`                        | `{ tailward, headward }`                            |
-| `paginator.next()` / `paginator.prev()`                 | `paginator.toTail()` / `paginator.toHead()`         |
-| `paginator.nextDebounced()` / `prevDebounced()`         | `paginator.toTailDebounced()` / `toHeadDebounced()` |
-| direction `'next'` / `'prev'` (`executeQuery`, `query`) | `'tailward'` / `'headward'`                         |
-| `paginator.canExecuteQuery(direction)`                  | protected; `executeQuery()` checks it               |
-| `query()` returns `{ items, next, prev }`               | `{ items, tailward, headward }`                     |
+| v9                                                      | v10                                                                |
+| ------------------------------------------------------- | ------------------------------------------------------------------ |
+| `paginator.hasNext` / `state.hasNext`                   | `paginator.hasMoreTail` / `state.hasMoreTail`                      |
+| `paginator.hasPrev` / `state.hasPrev`                   | `paginator.hasMoreHead` / `state.hasMoreHead`                      |
+| `state.cursor`: `{ next, prev }`                        | `{ tailward, headward }`                                           |
+| `paginator.next()` / `paginator.prev()`                 | `paginator.toTail()` / `paginator.toHead()`                        |
+| `paginator.nextDebounced()` / `prevDebounced()`         | `paginator.toTailDebounced()` / `toHeadDebounced()`                |
+| direction `'next'` / `'prev'` (`executeQuery`, `query`) | `'tailward'` / `'headward'` (`executeQuery`, `fetchQueryResponse`) |
+| `paginator.canExecuteQuery(direction)`                  | protected; `executeQuery()` checks it                              |
+| `query()` returns `{ items, next, prev }`               | `fetchQueryResponse()` returns `{ items, tailward, headward }`     |
 
-For a `BasePaginator` subclass, the cursors returned from `query()`:
-
-```ts
-// v9
-return { items, next: nextCursor, prev: prevCursor };
-
-// v10
-return { items, tailward: nextCursor, headward: prevCursor };
-```
+A subclass returns its cursors under the new names (see
+[Subclassing `BasePaginator`](#subclassing-basepaginator)):
 
 - `null` on a side means the page reaches that end of the list. An omitted side means there is no next
   page that way, as in v9, for a paginator that takes its cursors from the query.
-- v10 does not read `next` / `prev`. A `query()` still returning them gets no cursors, so the paginator
-  stops after the first page. Depending on how the return type is declared, TypeScript may not flag the
-  old names, so search custom `query()` implementations for them.
+- v10 does not read `next` / `prev`. A `fetchQueryResponse()` still returning them gets no cursors, so
+  the paginator stops after the first page. Depending on how the return type is declared, TypeScript may
+  not flag the old names, so search your v9 `query()` implementations for `next` and `prev` while
+  renaming them.
 
 Search sources (`BaseSearchSource` and its subclasses) are not paginators and keep `hasNext`.
+
+### Subclassing `BasePaginator`
+
+v9's `BasePaginator<T>` is `BasePaginator<T, Q, R>` in v10:
+
+- `T` is the item, as in v9.
+- `Q` is the query shape: the data that define a query (filters, sort, …), built by
+  `getNextQueryShape()`. v9 had none, and it has no default.
+- `R` is what the request returns. It defaults to the page, `PaginationQueryReturnValue<T>`; declare it
+  when the response holds more than the page.
+
+`executeQuery()` runs every query through the same steps: it prepares the query, fetches the response,
+extracts its page, places the page and then applies the rest of the response. A subclass implements
+the required methods and overrides the optional ones it needs:
+
+| v9                                                                  | v10                                                                                                                             |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `query(params)`, public                                             | `fetchQueryResponse(params)`, protected, required: sends the request and returns the response                                   |
+| —                                                                   | `extractQueryPage(response, params)`, protected, required: the page in the response, or the response itself when it is the page |
+| —                                                                   | `applyQueryResponseRest(response, placeParams)`, protected, optional: applies the rest of the response once the page is placed  |
+| —                                                                   | `getNextQueryShape()`, protected, required: the query shape of the next query                                                   |
+| `filterQueryResults(items)`, required, returns `T[]` or a `Promise` | optional: keeps every item by default; returns `T[]`, synchronously: a returned `Promise` is not awaited                        |
+
+```ts
+// v9
+class ItemPaginator extends BasePaginator<Item> {
+  query = async (params) => {
+    // …
+    return { items, next: nextCursor, prev: prevCursor };
+  };
+}
+
+// v10
+class ItemPaginator extends BasePaginator<Item, ItemQueryShape> {
+  protected fetchQueryResponse = async ({
+    queryShape,
+  }: PaginationQueryParams<ItemQueryShape>) => {
+    // … send `queryShape`
+    return { items, tailward: nextCursor, headward: prevCursor };
+  };
+
+  protected extractQueryPage(response: PaginationQueryReturnValue<Item>) {
+    return response;
+  }
+
+  protected getNextQueryShape(): ItemQueryShape {
+    // …
+    return queryShape;
+  }
+}
+```
+
+`getNextQueryShape()` is not abstract: TypeScript accepts a subclass without it, and the first query
+throws `Paginator.getNextQueryShape() is not implemented`.
+
+`fetchQueryResponse()` gets the query shape to send in `params.queryShape`, where v9's `query()` got
+only `{ direction }`. `executeQuery()` prepares it, from `getNextQueryShape()` or from the shape passed
+to `executeQuery()`, and sends it again on a retry. Send that shape rather than building one from the
+paginator's state, which may have moved on by then.
+
+An error thrown while extracting, placing or applying is recorded as `lastQueryError`, as v9 recorded
+every error of a query, and is not retried. `executeQuery()` rejects with it only when the paginator's
+`throwErrors` option, new in v10, is set.
 
 ---
 

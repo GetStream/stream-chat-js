@@ -1015,7 +1015,8 @@ An unwatched channel stays while it is used:
 
 - a channel list (`ChannelPaginator`) has it in its loaded pages;
 - it is active: `channel.activate()` was called and its release function not yet;
-- a `watch()`, `query()` or `create()` for it is in flight;
+- a `watch()`, `query()` or `create()` for it, or a query of its message list (scrolling, jumping),
+  is in flight;
 - it is the channel of a thread in `client.threads`, or of a composer in
   `client.messageComposerCache` (such as a message edit's);
 - an active channel search shows it.

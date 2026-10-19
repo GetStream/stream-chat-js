@@ -5,7 +5,7 @@ import type {
   PaginationQueryShapeChangeIdentifier,
   PaginatorOptions,
   PaginatorState,
-  PostQueryReconcileParams,
+  PlaceQueryPageParams,
   SetPaginatorItemsParams,
 } from './BasePaginator';
 import { BasePaginator } from './BasePaginator';
@@ -296,12 +296,11 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   protected _sort: SortParamRequest[] | undefined;
   protected _options: ChannelPaginatorRequestOptions | undefined;
   protected _channelStateOptions: ChannelStateOptions | undefined;
-  protected _nextQueryShape: ChannelQueryShape | undefined;
   /** Backend-reported metadata of the last `predefined_filter` query (see `predefinedFilter`). */
   protected _predefinedFilter: ParsedPredefinedFilterResponse | undefined;
   /**
    * Predefined-filter metadata from the response of the query currently in flight. Held until
-   * `postQueryReconcile` decides whether it should be committed (first page only).
+   * `placeQueryPage` decides whether it should be committed (first page only).
    */
   private _pendingPredefinedFilter: ParsedPredefinedFilterResponse | undefined;
   /**
@@ -546,7 +545,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
    * Committing before `super` matters: the base implementation filters and ingests the page using
    * `matchesFilter` and the comparators this metadata feeds.
    */
-  postQueryReconcile(params: PostQueryReconcileParams<Channel, ChannelQueryShape>) {
+  override placeQueryPage(params: PlaceQueryPageParams<Channel, ChannelQueryShape>) {
     const pendingPredefinedFilter = this._pendingPredefinedFilter;
     this._pendingPredefinedFilter = undefined;
     if (params.isFirstPage && params.results) {
@@ -559,9 +558,9 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       // the server no longer returns (hidden, deleted, left). The seed stays on screen until now, then the
       // page replaces it.
       this.clearItemStorage();
-      return super.postQueryReconcile({ ...params, keepPreviousItems: false });
+      return super.placeQueryPage({ ...params, keepPreviousItems: false });
     }
-    return super.postQueryReconcile(params);
+    return super.placeQueryPage(params);
   }
 
   // invoked inside BasePaginator.executeQuery() to keep it as a query descriptor;
@@ -777,18 +776,19 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     });
   }
 
-  query = async (): Promise<PaginationQueryReturnValue<Channel>> => {
+  protected override fetchQueryResponse = async ({
+    queryShape: preparedQueryShape,
+  }: PaginationQueryParams<ChannelQueryShape> = {}): Promise<
+    PaginationQueryReturnValue<Channel>
+  > => {
     if (this._itemsLoadedFromOfflineDB) this._replaceOfflineSeedOnResponse = true;
     // A query is going out, so whatever it returns the items are no longer cache-only.
     this._itemsLoadedFromOfflineDB = false;
-    // get the params only if they were not generated previously
-    if (!this._nextQueryShape) {
-      this._nextQueryShape = this.getNextQueryShape();
-    }
-    const { stateOptions, ...request } = this._nextQueryShape;
+    const queryShape = preparedQueryShape ?? this.getNextQueryShape();
+    const { stateOptions, ...request } = queryShape;
     let items: Channel[];
     if (this.config.doRequest) {
-      items = (await this.config.doRequest(this._nextQueryShape)).items;
+      items = (await this.config.doRequest(queryShape)).items;
     } else {
       // withResponse gives access to response-level metadata (`predefined_filter`) which a
       // predefined-filter list needs to know what the backend actually filtered and sorted by.
@@ -802,7 +802,13 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     return { items };
   };
 
-  filterQueryResults = (items: Channel[]) => items;
+  /** The extracting step of the query pipeline: the response is the page. */
+  protected override extractQueryPage(
+    response: PaginationQueryReturnValue<Channel>,
+    _params: PaginationQueryParams<ChannelQueryShape>,
+  ) {
+    return response;
+  }
 
   setItems(params: SetPaginatorItemsParams<Channel>) {
     super.setItems(params);

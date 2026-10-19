@@ -174,8 +174,8 @@ export type ChannelActivationState = {
    * `channel.activate()` and the release function it returns (refcounted, as a single `Channel`
    * instance can be held by several consumers at once). It carries no rendering semantics; it tells the client
    * that the channel's own state is being consumed and takes precedence over bulk state writes —
-   * channel-list hydration does not re-seed the message list of an `active` channel (the channel's
-   * own `channel.reload()` owns that window).
+   * channel-list hydration places no page in the message list of an `active` channel (the
+   * channel's own `channel.reload()` owns that window).
    */
   active: boolean;
 };

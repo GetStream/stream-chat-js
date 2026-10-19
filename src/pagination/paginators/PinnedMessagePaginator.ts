@@ -1,6 +1,6 @@
 import type {
   BasePaginatorConfig,
-  PaginatorCursor,
+  DoRequestResponse,
   PaginatorOptions,
 } from './BasePaginator';
 import {
@@ -42,7 +42,7 @@ const PINNED_AT_SORT: SortParamRequest[] = [{ field: 'pinned_at', direction: 1 }
  *
  * Differences from the main list:
  * - fetches from the `/pinned_messages` endpoint (`channel.getPinnedMessages`) rather than
- *   `channel.query({ messages })`;
+ *   the channel query (`channel.requestChannelState`);
  * - includes only pinned, non-shadowed messages (`shouldIncludeMessageInInterval`), and filters on
  *   `{ cid, pinned: true }` so `ingestItem` auto-adds on pin and auto-removes on unpin;
  * - orders by `pinned_at` ascending (oldest-pinned first), matching the legacy
@@ -93,12 +93,12 @@ export class PinnedMessagePaginator extends MessageIntervalPaginator {
           tiebreaker: this.pinnedTiebreaker,
         }),
 
-        // Fetch from the pinned-messages endpoint. The base `query` feeds the resolved query shape
-        // (including `id_around` jumps) here as `options`; we return both cursors and let the base gate
-        // them by direction.
+        // Fetch from the pinned-messages endpoint. The base `fetchQueryResponse` feeds the resolved
+        // query shape (including `id_around` jumps) here as `options`; we return both cursors and
+        // let the base `extractQueryPage` gate them by direction.
         doRequest: async (
           options: MessageQueryShape,
-        ): Promise<{ cursor?: PaginatorCursor; items: LocalMessage[] }> => {
+        ): Promise<DoRequestResponse<LocalMessage>> => {
           const { messages } = await this.channel.getPinnedMessages({
             ...(options as PinnedMessagePaginationOptions),
             sort: PINNED_AT_SORT,

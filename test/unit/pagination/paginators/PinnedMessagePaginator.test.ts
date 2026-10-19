@@ -55,10 +55,10 @@ describe('PinnedMessagePaginator', () => {
     expect(paginator.items?.map((m) => m.id)).toEqual(['a', 'b', 'c']);
   });
 
-  it('re-seeds the first page into the newest window, not into an older window being shown', () => {
+  it('places the first page in the newest window, keeping an older window shown', () => {
     const paginator = new PinnedMessagePaginator({ channel: makeChannel() });
     const pinned = (id: string, at: number) => formatMessage(makePinned(id, at));
-    paginator.placePageSync(
+    paginator.placeExternalQueryPage(
       [pinned('p8', 8000), pinned('p9', 9000), pinned('p10', 10000)],
       3,
     );
@@ -69,7 +69,7 @@ describe('PinnedMessagePaginator', () => {
     });
 
     // a channel response carries the pinned first page again, with a newly pinned message
-    paginator.placePageSync(
+    paginator.placeExternalQueryPage(
       [pinned('p9', 9000), pinned('p10', 10000), pinned('p11', 11000)],
       3,
     );
@@ -78,6 +78,7 @@ describe('PinnedMessagePaginator', () => {
       paginator as unknown as { itemIntervals: { itemIds: string[] }[] }
     ).itemIntervals.map((interval) => interval.itemIds);
     expect(intervals).toContainEqual(['p1', 'p2', 'p3']);
+    expect(paginator.items?.map((m) => m.id)).toEqual(['p1', 'p2', 'p3']);
     expect(intervals).toContainEqual(['p8', 'p9', 'p10', 'p11']);
   });
 

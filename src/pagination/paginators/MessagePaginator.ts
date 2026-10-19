@@ -1,14 +1,10 @@
-import type {
-  BasePaginatorConfig,
-  ExecuteQueryReturnValue,
-  Interval,
-  PostQueryReconcileParams,
-} from './BasePaginator';
+import type { BasePaginatorConfig, Interval, QueryPagePlacement } from './BasePaginator';
 import {
   type MessagePaginatorOptions as BaseMessagePaginatorOptions,
   getMessageCreatedAtTimestamp,
   type JumpToMessageOptions,
   MessageIntervalPaginator,
+  type MessageQueryResponse,
   type MessageQueryShape,
 } from './MessageIntervalPaginator';
 import type { LocalMessage, TimestampNS, UserResponse } from '../../types';
@@ -18,16 +14,15 @@ import { StateStore } from '@stream-io/state-store';
 
 export type {
   JumpToMessageOptions,
-  MergeNewestPageOptions,
   MessageFocusReason,
   MessageFocusSignal,
   MessageFocusSignalState,
-  MessagePagePlacement,
   MessagePaginatorFilter,
   MessagePaginatorSort,
   MessagePaginatorState,
   MessageQueryShape,
-  PlacePageOptions,
+  PreparedExternalQuery,
+  ReconcileNewestMessagesOptions,
 } from './MessageIntervalPaginator';
 export { MessageIntervalPaginator } from './MessageIntervalPaginator';
 
@@ -296,8 +291,9 @@ export class MessagePaginator extends MessageIntervalPaginator {
    * query returns m25's time: the window can now load m21–m25, and m26 from an event does not land
    * right after m20.
    *
-   * Call it only after a response that did not place the newest page (placing it brings the window
-   * up to date), and only when the channel was not watched before the response. While it is
+   * Call it with each response that does not bring the newest messages up to date, before any page
+   * the response carries is placed: a page that reaches the newest message marks its own window as
+   * the head. Call it only when the channel was not watched before the response: while it is
    * watched, events are arriving, and a message the window lacks is still on its way.
    */
   unmarkStaleHead() {
@@ -514,21 +510,21 @@ export class MessagePaginator extends MessageIntervalPaginator {
   /**
    * (Re)seed the unread state snapshot from the current own read state.
    *
-   * Called after the first-page query, and can be called again by the SDK whenever a channel is
-   * (re)opened from a cached paginator — where no fresh first-page query runs — so the snapshot
-   * reflects the CURRENT read boundary rather than one frozen at the very first open. Without a
-   * re-seed the separator position, unread count and "jump to first unread" target all go stale
-   * across reopens.
+   * Called once a first page and the rest of its response are in: after the paginator's own
+   * first-page queries, after `watch()`, and after the channel-list hydrate, when
+   * these place one. It can be called again by the SDK whenever a channel is (re)opened from a
+   * cached paginator — where no fresh first-page query runs — so the snapshot reflects the CURRENT
+   * read boundary rather than one frozen at the very first open. Without a re-seed the separator
+   * position, unread count and "jump to first unread" target all go stale across reopens.
    *
    * `firstUnreadMessageId` is intentionally reset to `null`: it represents an EXPLICIT mark-unread
    * (set by `notification.mark_unread`), not a live/computed boundary. Persisting a computed value
    * here would make the channel look explicitly marked-unread and suppress auto-mark-read.
    */
   seedUnreadSnapshot = () => {
-    // A paginator query (BasePaginator.executeQuery) awaits the network before running its
-    // synchronous postQueryReconcile, which calls this on the first page. If the channel was
-    // disconnected (`disconnect()`) while that request was in flight, reading the client below
-    // throws, so guard against that.
+    // A first page's query awaits the network before this runs. If the channel was disconnected
+    // (`disconnect()`) while that request was in flight, reading the client below throws, so
+    // guard against that.
     if (this.channel.pendingDisposal) return;
     const ownUserId = this.channel.getClient().user?.id;
     const ownReadState = ownUserId ? this.channel.state.read[ownUserId] : undefined;
@@ -542,19 +538,16 @@ export class MessagePaginator extends MessageIntervalPaginator {
   };
 
   /**
-   * Invokes super.postQueryReconcile() and takes an unread state snapshot on the first-page query.
-   * The snapshot has to be taken immediately after the query as the viewed channel is marked read
-   * immediately after opening it. The snapshot can be used to display unread UI indicators.
+   * Applies the rest of the response, then takes the unread snapshot after a first-page query, from
+   * the read state the response brought. A viewed channel is marked read right after it opens, so
+   * the snapshot keeps the unread state from before, for unread UI indicators.
    */
-  postQueryReconcile(
-    params: PostQueryReconcileParams<LocalMessage, MessageQueryShape>,
-  ): ExecuteQueryReturnValue<LocalMessage> {
-    const result = super.postQueryReconcile(params);
-
-    if (params.isFirstPage) {
-      this.seedUnreadSnapshot();
-    }
-    return result;
+  protected override applyQueryResponseRest(
+    response: MessageQueryResponse,
+    placeParams: QueryPagePlacement<MessageQueryShape>,
+  ) {
+    super.applyQueryResponseRest(response, placeParams);
+    if (placeParams.isFirstPage) this.seedUnreadSnapshot();
   }
 
   /**

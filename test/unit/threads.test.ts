@@ -423,10 +423,9 @@ describe('Threads 2.0', () => {
 
         it('seeds the reply window when the thread has never loaded one', () => {
           // A thread opened from a message (channel + parentMessage, no server payload) has never
-          // held a reply window. `mergeNewestPage` deliberately no-ops in that state — it merges
-          // into an anchored head and leaves seeding to the query path — so hydrating through it
-          // dropped the replies `Thread.reload()` had just fetched, and the panel stayed empty
-          // until something else queried them separately.
+          // held a reply window. `reconcileNewestMessages` has nothing loaded to reconcile there
+          // and does nothing, so hydrating through it would drop the replies `Thread.reload()`
+          // just fetched, and the panel would stay empty until something else queried them.
           const thread = createMinimalThread();
           expect(thread.messagePaginator.state.getLatestValue().items).to.be.undefined;
 
@@ -538,8 +537,8 @@ describe('Threads 2.0', () => {
           });
           expect(thread.messagePaginator.state.getLatestValue().hasMoreTail).to.be.false;
 
-          // Reconnect hydrate (Thread.reload → hydrateState → mergeNewestPage) must RE-DERIVE the cursor
-          // from the merged reply window so pagination works again.
+          // Reconnect hydrate (Thread.reload → hydrateState → reconcileNewestMessages) must
+          // RE-DERIVE the cursor from the merged reply window so pagination works again.
           const hydrationThread = createTestThread({
             latest_replies: [existingReply],
             reply_count: 10,
@@ -743,9 +742,9 @@ describe('Threads 2.0', () => {
 
         it('merges the fetched page into a thread whose only reply was ingested live', async () => {
           // A thread created this session has an EMPTY first reply page, so nothing anchors its
-          // window and the sent reply lands in a LOGICAL head. `mergeNewestPage` used to require an
-          // ANCHORED head, silently discarding every reply the server returned on reconnect — and
-          // re-entering never healed it, since the instance is reused with `items` already defined.
+          // window and the sent reply lands in a LOGICAL head. Reconciling on reconnect must still
+          // take in every reply the server returns: re-entering the thread would not heal a dropped
+          // page, since the instance is reused with `items` already defined.
           const thread = createMinimalThread();
           expect(thread.messagePaginator.state.getLatestValue().items).to.be.undefined;
 
@@ -2405,9 +2404,12 @@ describe('Threads 2.0', () => {
     };
     /** Replaces a loaded list through a real reload. */
     const replaceList = async (manager: ThreadManager, threads: Thread[]) => {
-      const query = sinon.stub(manager.paginator, 'query').resolves({ items: threads });
+      const fetchQueryResponse = sinon
+        // @ts-expect-error stubbing the protected fetching step
+        .stub(manager.paginator, 'fetchQueryResponse')
+        .resolves({ items: threads });
       await manager.paginator.reload();
-      query.restore();
+      fetchQueryResponse.restore();
     };
     /** The unsubscribe of every disposal listener the manager opens on `channel`. */
     const trackDisposalListeners = (channel: Channel) => {

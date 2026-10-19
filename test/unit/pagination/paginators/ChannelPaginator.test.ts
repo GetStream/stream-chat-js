@@ -1955,7 +1955,7 @@ describe('ChannelPaginator', () => {
     });
   });
 
-  describe('query', () => {
+  describe('fetchQueryResponse', () => {
     it('is called with correct parameters', async () => {
       const queryChannelsSpy = vi.spyOn(client, 'queryChannels').mockResolvedValue([]);
       const filters: ChannelFilters = { name: 'A' };
@@ -1980,7 +1980,8 @@ describe('ChannelPaginator', () => {
         paginatorOptions: { pageSize: 22 },
       });
 
-      await paginator.query();
+      // @ts-expect-error calling the protected fetching step
+      await paginator.fetchQueryResponse();
       expect(queryChannelsSpy).toHaveBeenCalledWith(
         {
           filter_conditions: {

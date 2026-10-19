@@ -101,7 +101,7 @@ export class UserGroupPaginator extends BasePaginator<
 
   // The query shape must stay stable across pages: the paginator resets its
   // accumulated list when the query shape changes ('auto' reset policy), so the
-  // forward cursor is NOT part of the shape — it is applied per request in `query`.
+  // forward cursor is NOT part of the shape — it is applied per request in `fetchQueryResponse`.
   protected getNextQueryShape(): ListUserGroupsOptions {
     return {
       limit: this.pageSize,
@@ -109,7 +109,7 @@ export class UserGroupPaginator extends BasePaginator<
     };
   }
 
-  query = async ({
+  protected override fetchQueryResponse = async ({
     direction,
     queryShape,
   }: PaginationQueryParams<ListUserGroupsOptions>): Promise<
@@ -130,5 +130,11 @@ export class UserGroupPaginator extends BasePaginator<
     return { items, tailward: this.buildNextCursor(items) };
   };
 
-  filterQueryResults = (items: UserGroupResponse[]) => items;
+  /** The extracting step of the query pipeline: the response is the page. */
+  protected override extractQueryPage(
+    response: PaginationQueryReturnValue<UserGroupResponse>,
+    _params: PaginationQueryParams<ListUserGroupsOptions>,
+  ) {
+    return response;
+  }
 }

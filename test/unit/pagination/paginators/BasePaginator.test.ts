@@ -66,7 +66,7 @@ class IncompletePaginator extends BasePaginator<TestItem, QueryShape> {
     super(options);
   }
 
-  query(
+  protected override fetchQueryResponse(
     params: PaginationQueryParams<QueryShape>,
   ): Promise<PaginationQueryReturnValue<TestItem>> {
     const promise = new Promise<PaginationQueryReturnValue<TestItem>>(
@@ -80,8 +80,11 @@ class IncompletePaginator extends BasePaginator<TestItem, QueryShape> {
     return promise;
   }
 
-  filterQueryResults(items: TestItem[]) {
-    return items;
+  protected override extractQueryPage(
+    response: PaginationQueryReturnValue<TestItem>,
+    _params: PaginationQueryParams<QueryShape>,
+  ) {
+    return response;
   }
 }
 
@@ -260,6 +263,134 @@ describe('BasePaginator', () => {
           paginator.shouldResetStateBeforeQuery(prevQueryShape, prevQueryShape),
         ).toBe(true);
         expect(options.hasPaginationQueryShapeChanged).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    describe('query pipeline', () => {
+      type QueryStep = 'applyQueryResponseRest' | 'extractQueryPage';
+      // the steps are protected
+      const spyOnStep = (paginator: Paginator, step: QueryStep) =>
+        vi.spyOn(
+          paginator as unknown as Record<QueryStep, (...args: unknown[]) => unknown>,
+          step,
+        );
+      const failPlacingThePage = (paginator: Paginator) =>
+        // only the placing of a page: ending the query without one still works
+        vi.spyOn(paginator, 'placeQueryPage').mockImplementationOnce(() => {
+          throw new Error('placing failed');
+        });
+      const answerFirstPage = async (paginator: Paginator) => {
+        const promise = paginator.toTail();
+        // wait for the DB data first page load
+        await sleep(0);
+        paginator.queryResolve({ items: [{ id: 'id1' }], tailward: 'next1' });
+        return promise;
+      };
+
+      it('applies the rest of a response once, after its page is placed', async () => {
+        const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+        const itemsWhenApplied: unknown[] = [];
+        spyOnStep(paginator, 'applyQueryResponseRest').mockImplementation(() => {
+          itemsWhenApplied.push(paginator.items);
+        });
+
+        await answerFirstPage(paginator);
+
+        expect(itemsWhenApplied).toEqual([[{ id: 'id1' }]]);
+      });
+
+      it('applies nothing when fetching fails, and ends the query', async () => {
+        const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+        const applyRest = spyOnStep(paginator, 'applyQueryResponseRest');
+        const promise = paginator.toTail();
+        await sleep(0);
+
+        paginator.queryReject(new Error('offline'));
+        await promise;
+
+        expect(applyRest).not.toHaveBeenCalled();
+        expect(paginator.isLoading).toBe(false);
+      });
+
+      it('still applies the rest when placing the page fails, ends the query and records the error', async () => {
+        const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+        const applyRest = spyOnStep(paginator, 'applyQueryResponseRest');
+        failPlacingThePage(paginator);
+
+        await answerFirstPage(paginator);
+
+        expect(applyRest).toHaveBeenCalledTimes(1);
+        expect(paginator.isLoading).toBe(false);
+        expect(paginator.lastQueryError?.message).toBe('placing failed');
+      });
+
+      it('still applies the rest when the page cannot be extracted, ends the query and records the error', async () => {
+        const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+        const applyRest = spyOnStep(paginator, 'applyQueryResponseRest');
+        spyOnStep(paginator, 'extractQueryPage').mockImplementation(() => {
+          throw new Error('no page');
+        });
+
+        await answerFirstPage(paginator);
+
+        expect(applyRest).toHaveBeenCalledTimes(1);
+        expect(paginator.isLoading).toBe(false);
+        expect(paginator.items).toBeUndefined();
+        expect(paginator.lastQueryError?.message).toBe('no page');
+      });
+
+      it('still applies the rest and ends the query when ending it without a page fails too', async () => {
+        const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+        const applyRest = spyOnStep(paginator, 'applyQueryResponseRest');
+        vi.spyOn(paginator, 'placeQueryPage').mockImplementation(() => {
+          throw new Error('placing failed');
+        });
+
+        await answerFirstPage(paginator);
+
+        expect(applyRest).toHaveBeenCalledTimes(1);
+        expect(paginator.isLoading).toBe(false);
+        expect(paginator.lastQueryError?.message).toBe('placing failed');
+      });
+
+      it('keeps the placed page when applying the rest fails, and records the error', async () => {
+        const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+        spyOnStep(paginator, 'applyQueryResponseRest').mockImplementation(() => {
+          throw new Error('apply failed');
+        });
+
+        await answerFirstPage(paginator);
+
+        expect(paginator.items).toEqual([{ id: 'id1' }]);
+        expect(paginator.isLoading).toBe(false);
+        expect(paginator.lastQueryError?.message).toBe('apply failed');
+      });
+
+      it('reports the first error of the steps after the fetch', async () => {
+        const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR });
+        failPlacingThePage(paginator);
+        spyOnStep(paginator, 'applyQueryResponseRest').mockImplementation(() => {
+          throw new Error('apply failed');
+        });
+
+        await answerFirstPage(paginator);
+
+        expect(paginator.lastQueryError?.message).toBe('placing failed');
+      });
+
+      it('rejects with the error of a step after the fetch only with throwErrors set, after running every step', async () => {
+        const paginator = new Paginator({
+          initialCursor: ZERO_PAGE_CURSOR,
+          throwErrors: true,
+        });
+        const applyRest = spyOnStep(paginator, 'applyQueryResponseRest');
+        failPlacingThePage(paginator);
+
+        await expect(answerFirstPage(paginator)).rejects.toThrow('placing failed');
+
+        expect(applyRest).toHaveBeenCalledTimes(1);
+        expect(paginator.isLoading).toBe(false);
+        expect(paginator.lastQueryError?.message).toBe('placing failed');
       });
     });
 
@@ -1403,7 +1534,7 @@ describe('BasePaginator', () => {
         });
       });
 
-      it('postQueryReconcile treats jump query as non-directional (direction undefined)', async () => {
+      it('placeQueryPage treats jump query as non-directional (direction undefined)', async () => {
         class JumpAwarePaginator extends Paginator {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           isJumpQueryShape(_queryShape: QueryShape): boolean {
@@ -1416,7 +1547,7 @@ describe('BasePaginator', () => {
 
         const ingestSpy = vi.spyOn(jumpPaginator, 'ingestPage');
 
-        await jumpPaginator.postQueryReconcile({
+        await jumpPaginator.placeQueryPage({
           direction: undefined,
           isFirstPage: true,
           queryShape: defaultNextQueryShape,
@@ -1992,7 +2123,7 @@ describe('BasePaginator', () => {
             sort: [{ field: 'age', direction: -1 }],
           });
 
-          freshPaginator.postQueryReconcile({
+          freshPaginator.placeQueryPage({
             direction: 'tailward',
             isFirstPage: true,
             queryShape: defaultNextQueryShape,

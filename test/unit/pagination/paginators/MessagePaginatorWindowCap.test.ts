@@ -6,6 +6,7 @@ import { EntityStore } from '../../../../src/entityStore/EntityStore';
 import { formatMessage } from '../../../../src';
 import { generateMsg } from '../../test-utils/generateMessage';
 import { convertDateToTimestamp } from '../../test-utils/time';
+import { fakeChannelQuery } from '../../test-utils/fakeChannelQuery';
 import type { Channel } from '../../../../src/channel';
 import type { StreamChat } from '../../../../src/client';
 import type { LocalMessage, MessageResponse } from '../../../../src/types';
@@ -57,9 +58,8 @@ describe('MessagePaginator — window cap (pruning)', () => {
       cid: 'channel-id',
       getReplies: vi.fn(),
       query: vi.fn(),
+      ...fakeChannelQuery,
       getClient: () => client,
-      // postQueryReconcile seeds the unread snapshot from the own-user read state.
-      state: { read: {} },
     } as unknown as Channel;
   });
 
@@ -74,6 +74,7 @@ describe('MessagePaginator — window cap (pruning)', () => {
       cid: 'channel-id',
       getReplies: vi.fn(),
       query: vi.fn(),
+      ...fakeChannelQuery,
       getClient: () => isolatedClient,
       state: { read: {} },
     } as unknown as Channel;
