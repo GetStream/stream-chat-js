@@ -160,7 +160,16 @@ Ordered by severity. The breaking dead-code removals and leftover decisions are 
 - **Where:** `src/search/MessageSearchSource.ts:242-249`; pinned by `test/unit/search/MessageSearchSource.test.ts:272-276`
 - **What:** The custom sort is appended after a fixed `created_at: -1`.
 - **Evidence / scenario:** `messageSearchSort: [{ field: 'created_at', direction: 1 }]` sends `[created_at -1, created_at 1]`, a contradictory duplicate key. v9 let `{ created_at: 1 }` flip the order.
-- **Suggested change:** `this.messageSearchSort?.length ? this.messageSearchSort : [{ field: 'created_at', direction: -1 }]`, and update the test.
+- **Suggested change:** Merge the way v9's `{ created_at: -1, ...messageSearchSort }` did: `created_at` stays the primary key and takes the caller's direction when the caller passes a `created_at` entry, and the caller's other entries follow as secondary keys. Replacing the sort outright would drop the `created_at` primary order for anyone passing only a secondary key. Update the test (non-breaking: it only removes the duplicate key).
+
+  ```ts
+  const custom = this.messageSearchSort ?? [];
+  const createdAt = custom.find(({ field }) => field === 'created_at');
+  const sort = [
+    { field: 'created_at', direction: createdAt?.direction ?? -1 },
+    ...custom.filter(({ field }) => field !== 'created_at'),
+  ];
+  ```
 
 <a id="query-date-filters-ns"></a>
 
@@ -323,7 +332,7 @@ These are full items in [Dead code and leftovers](#dead-code); listed here so th
 
 - **Where:** `src/channel.ts:1783`, `:1090-1093`
 - **What:** Calls `this.muteStatus()`, which now runs `_checkHasId()`; v9 read `client._muteStatus(cid)` directly to avoid such a guard (v9 `src/channel.ts:1501-1503`).
-- **Evidence / scenario:** `countUnread(ts)` / `countUnreadMentions()` on a provisional (members-only, unqueried) channel holding another user's message (e.g. seeded from the offline DB) throws "Channel isn't yet created". Rare: WS events carry the real cid.
+- **Evidence / scenario:** `countUnread(ts)` / `countUnreadMentions()` throws "Channel isn't yet created" only on a provisional (members-only, unqueried) channel that holds another user's message. No known path puts one there: messages arrive through queries and WS events, which carry the real cid, and offline DB rows are keyed by the real cid too. It is a latent guard mismatch rather than a reachable bug.
 - **Suggested change:** `this.getClient()._muteStatus(this.cid).muted` or read `this.state.getLatestValue().muteStatus`.
 
 <a id="query-members-no-id"></a>
@@ -385,17 +394,6 @@ These are full items in [Dead code and leftovers](#dead-code); listed here so th
 
 ### Offline support
 
-<a id="offline-v9-tasks"></a>
-
-#### v9 offline pending tasks replay as poison tasks
-
-`bug` · confidence: medium · pre-release: no · offline support
-
-- **Where:** `src/offline-support/queueableOperations.ts:83-147`, `src/api-client.ts:119-131` (`resolveUrl`), `src/client.ts:2016-2024` (`updateMessage` override), `src/errors.ts:84-88` (`isEphemeral`), `src/offline-support/offline_support_api.ts:1563-1590` (`executePendingTasks`); RN `V10:package/src/store/SqliteClient.ts:54, 275-284, 329-333`
-- **What:** Task payloads persisted by v9 are spread into v10 methods with different signatures. There is no payload versioning or migration. This affects only custom `AbstractOfflineDB` implementations that keep pending tasks across the upgrade. The React Native SDK's store is not affected: RN V10 bumps `SqliteClient.dbVersion` from 16 (RN `develop`, stream-chat 9.x) to 18, and `initializeDatabase` drops every table on a version mismatch, `pendingTasks` included, before `executePendingTasks` runs, so RN loses v9 pending tasks instead of replaying them.
-- **Evidence / scenario:** A custom offline DB persisted a v9 `delete-message` task (payload `['m1', { hard: false }]`); the app updates to v10 and reconnects. Replay calls `client.deleteMessage('m1', { hard: false })`; `resolveUrl` iterates the string as path params and throws `"0" is not a path parameter ...` (probe). That local error has no `response`, so `isEphemeral` returns `true` and the task is kept and fails again on every sync, forever. `send-reaction` and `delete-reaction` fail the same way in `resolveUrl`. `update-message` (`[message, userId?, opts?]`) never reaches `resolveUrl`: the `client.updateMessage` override reads `request.message` first and throws `TypeError: Cannot read properties of undefined (reading 'message')` (or `(reading 'attachments')` when `userId` was set), which also has no `response`, so the outcome is the same; `send-message` / `create-draft` send the bare message as the body (server outcome unverified).
-- **Suggested change:** Keep the RN schema bump (16 to 18) in RN V10: it is what keeps RN out of this, and if it is ever dropped, migrate the tasks there instead. For custom implementations, version task payloads (store a `payloadVersion`, or detect v9 shapes such as `typeof payload[0] === 'string'` or a missing `payload[0].message`) and migrate or drop them in `AbstractOfflineDB.init`, and document it in the breaking-changes doc (`#pending-task-payloads`). Fix [isEphemeral](#is-ephemeral) in the same change.
-
 <a id="is-ephemeral"></a>
 
 #### `isEphemeral` treats local programming errors as transient
@@ -404,8 +402,8 @@ These are full items in [Dead code and leftovers](#dead-code); listed here so th
 
 - **Where:** `src/errors.ts:84-88`; `src/offline-support/offline_support_api.ts:1451, 1579`
 - **What:** Any error without `response` counts as ephemeral, including `TypeError`, `resolveUrl` validation errors and "Channel isn't yet created" from generated channel methods.
-- **Evidence / scenario:** Such a task is queued by `queueTask` and never deleted by `executePendingTasks`; it fails on every sync. This is what makes [v9 task replay](#offline-v9-tasks) permanent.
-- **Suggested change:** Treat as ephemeral only axios network errors (`isAxiosError(e) && !e.response`) and `OfflineError`; everything else is non-ephemeral. Ship with the v9 task fix.
+- **Evidence / scenario:** Such a task is queued by `queueTask` and never deleted by `executePendingTasks`; it fails on every sync.
+- **Suggested change:** Treat as ephemeral only axios network errors (`isAxiosError(e) && !e.response`) and `OfflineError`; everything else is non-ephemeral.
 
 ### Search, pagination, notifications
 
