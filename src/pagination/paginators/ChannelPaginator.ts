@@ -59,6 +59,11 @@ export type ChannelQueryShape = QueryChannelsRequest & {
 
 export type ChannelPaginatorState = PaginatorState<Channel>;
 
+/**
+ * Request options sent with every page query (`state`, `watch`, `presence`, `message_limit`, …).
+ * `limit` and `offset` are owned by the paginator: set the page size with
+ * `paginatorOptions.pageSize` (the v9 `ChannelManager` `options.limit`).
+ */
 export type ChannelPaginatorRequestOptions = Partial<
   Omit<ChannelOptions, 'offset' | 'limit'>
 >;
