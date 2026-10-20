@@ -104,7 +104,7 @@ export class EntityStore<T> {
 
   private transactionDepth = 0;
   private pendingChanged = new Map<EntityStoreSubscriber, Set<string>>();
-  /** Ids whose {@link EntityStore.flushSubscribers} was requested while a transaction was open. */
+  /** IDs whose {@link EntityStore.flushSubscribers} was requested while a transaction was open. */
   private pendingFlushIds?: Set<string>;
 
   constructor({
@@ -117,26 +117,55 @@ export class EntityStore<T> {
     this.releaseOnLastUnlink = releaseOnLastUnlink;
   }
 
+  /**
+   * Reads the canonical copy stored under an ID.
+   *
+   * @param id - The ID to read. `undefined` reads nothing.
+   * @returns The stored entity, or `undefined` when none is stored under `id`.
+   */
   get(id: string | undefined): T | undefined {
     return typeof id === 'string' ? this.byId.get(id) : undefined;
   }
 
+  /**
+   * Checks whether an entity is stored under an ID.
+   *
+   * @param id - The ID to look up.
+   * @returns Whether an entity is stored under `id`.
+   */
   has(id: string): boolean {
     return this.byId.has(id);
   }
 
+  /**
+   * Checks whether a subscriber is linked to an ID.
+   *
+   * @param id - The ID to look up.
+   * @param subscriber - The subscriber to look for.
+   * @returns Whether `subscriber` is linked to `id`.
+   */
   isHeldBy(id: string, subscriber: EntityStoreSubscriber): boolean {
     return this.subscribers.get(id)?.has(subscriber) ?? false;
   }
 
-  /** Whether a subscriber linked to `id`, or a claim listing its entity, holds it. */
+  /**
+   * Checks whether anything holds the entity stored under an ID.
+   *
+   * @param id - The ID to look up.
+   * @returns Whether a subscriber linked to `id`, or a claim listing its entity, holds it.
+   */
   isHeld(id: string): boolean {
     if (this.subscribers.has(id)) return true;
     const entity = this.byId.get(id);
     return entity !== undefined && this.claimsByEntity().has(entity);
   }
 
-  /** The names of the subscribers linked to `id` and claims listing its entity, for debugging. */
+  /**
+   * Lists what holds the entity stored under an ID, for debugging.
+   *
+   * @param id - The ID to look up.
+   * @returns The names of the subscribers linked to `id` and the claims listing its entity.
+   */
   holderNames(id: string): string[] {
     const names: string[] = [];
     for (const subscriber of this.subscribers.get(id) ?? []) {
@@ -151,8 +180,10 @@ export class EntityStore<T> {
   }
 
   /**
-   * Every stored entity that neither a linked subscriber nor a claim holds, with the ID it is stored
-   * under. Each claim is asked once for the whole list.
+   * Lists the stored entities nothing holds. Each claim is asked once for the whole list.
+   *
+   * @returns Every stored entity that neither a linked subscriber nor a claim holds, with the ID it
+   *   is stored under.
    */
   unheldEntries(): [string, T][] {
     const claimed = this.claimsByEntity();
@@ -162,8 +193,11 @@ export class EntityStore<T> {
   }
 
   /**
-   * Adds `claim` until the returned function removes it. Entities are matched by identity, so one
-   * stored under an ID other than its own (a temporary ID) is still found.
+   * Adds a claim. Entities are matched by identity, so one stored under an ID other than its own (a
+   * temporary ID) is still found.
+   *
+   * @param claim - The claim to add.
+   * @returns A function that removes the claim.
    */
   addClaim(claim: EntityStoreClaim<T>): () => void {
     this.claims.add(claim);
@@ -185,18 +219,29 @@ export class EntityStore<T> {
     return claimed;
   }
 
+  /**
+   * Lists the stored entities.
+   *
+   * @returns Every stored entity.
+   */
   values(): T[] {
     return Array.from(this.byId.values());
   }
 
-  /** Every stored entity with the ID it is stored under, which can differ from its own ID. */
+  /**
+   * Lists the stored entities with their keys.
+   *
+   * @returns Every stored entity with the ID it is stored under, which can differ from its own ID.
+   */
   entries(): [string, T][] {
     return Array.from(this.byId.entries());
   }
 
   /**
-   * Replaces the canonical copy of `entity` and notifies the subscribers watching its ID, except
-   * `subscriber`: the writer, which updates itself.
+   * Replaces the canonical copy of `entity` and notifies the subscribers watching its ID.
+   *
+   * @param entity - The new canonical copy, stored under its own ID.
+   * @param subscriber - The writer, which updates itself and is not notified.
    */
   upsert(entity: T, subscriber?: EntityStoreSubscriber): void {
     const id = this.getEntityId(entity);
@@ -209,10 +254,15 @@ export class EntityStore<T> {
   }
 
   /**
-   * Returns the entity stored under `id` (after passing it to `hydrate`), or stores and returns
-   * `create()`. A stored entity is never replaced, so every caller gets the same instance and fresh
-   * data goes in through `hydrate`. Storing a new entity notifies the subscribers already linked to
-   * `id`; hydrating does not, since the reference is unchanged.
+   * Returns the entity stored under `id`, or stores a new one. A stored entity is never replaced, so
+   * every caller gets the same instance and fresh data goes in through `hydrate`. Storing a new
+   * entity notifies the subscribers already linked to `id`; hydrating does not, since the reference
+   * is unchanged.
+   *
+   * @param id - The ID to read or store under.
+   * @param create - Builds the entity when none is stored under `id`.
+   * @param hydrate - Receives an already stored entity, to update it in place.
+   * @returns The stored entity, or the new one from `create()`.
    */
   getOrCreate(id: string, create: () => T, hydrate?: (stored: T) => void): T {
     if (this.byId.has(id)) {
@@ -230,13 +280,17 @@ export class EntityStore<T> {
   /**
    * Moves an entity and its holders from `oldId` to `newId`, for IDs assigned after storing. Moved
    * holders get {@link EntityStoreSubscriber.onIdChanged}, then holders of both IDs are notified.
-   * Returns `false` without changes when `oldId` is not stored or the IDs are equal.
    *
    * When `newId` holds another entity, nothing changes unless `replace` is set. With `replace`, the
    * moved entity takes its place: the holders of `newId` stay linked and hold the moved one, and
    * the replaced entity goes to `onRelease`. Its holders are not told it was removed, so a list can
    * swap the item in place.
    *
+   * @param oldId - The ID the entity is stored under.
+   * @param newId - The ID to move it to.
+   * @param options.replace - Take the place of an entity already stored under `newId`.
+   * @returns Whether the entry moved: `false`, with nothing changed, when `oldId` is not stored, the
+   *   IDs are equal, or `newId` is taken and `replace` is not set.
    * @example
    * // A channel created from members has no id until the server creates it, so it is stored under a
    * // temporary cid built from its member ids.
@@ -282,6 +336,8 @@ export class EntityStore<T> {
    * and hold `entity`; they are notified of a change, not a removal, so a list can swap the item
    * in place. The replaced entity goes to `onRelease`. With nothing under the ID it stores like
    * {@link EntityStore.upsert}.
+   *
+   * @param entity - The entity to store under its own ID.
    */
   replace(entity: T): void {
     const id = this.getEntityId(entity);
@@ -298,6 +354,8 @@ export class EntityStore<T> {
    * Each holder gets {@link EntityStoreSubscriber.onEntityRemoved} and a change notification for
    * `id`. Does nothing when `id` is not stored. A throwing holder or `onRelease` does not stop the
    * removal: the first error is rethrown at the end.
+   *
+   * @param id - The ID to remove.
    */
   remove(id: string): void {
     this.dropEntry(id, { release: true });
@@ -306,6 +364,8 @@ export class EntityStore<T> {
   /**
    * Like {@link EntityStore.remove}, but the entity is not passed to `onRelease`: it is still in use
    * elsewhere, so whoever detaches it decides when it is released.
+   *
+   * @param id - The ID to remove.
    */
   detach(id: string): void {
     this.dropEntry(id, { release: false });
@@ -355,7 +415,12 @@ export class EntityStore<T> {
     runner.rethrowFirst();
   }
 
-  /** Registers `subscriber` as a holder of `id` (notification target and refcount). */
+  /**
+   * Registers a subscriber as a holder of an ID (notification target and refcount).
+   *
+   * @param id - The ID to hold.
+   * @param subscriber - The holder.
+   */
   link(id: string, subscriber: EntityStoreSubscriber): void {
     let subscribers = this.subscribers.get(id);
     if (!subscribers) {
@@ -368,6 +433,9 @@ export class EntityStore<T> {
   /**
    * Drops `subscriber` from `id`. When none remain, the canonical copy is dropped and passed to
    * `onRelease`, unless `releaseOnLastUnlink` is `false`. Does nothing if it is not linked.
+   *
+   * @param id - The ID to release.
+   * @param subscriber - The holder to drop.
    */
   unlink(id: string, subscriber: EntityStoreSubscriber): void {
     const subscribers = this.subscribers.get(id);
@@ -384,6 +452,10 @@ export class EntityStore<T> {
   /**
    * Watches a single ID. Fires `handler` immediately with the current value (like
    * {@link StateStore.subscribe}) and on every change.
+   *
+   * @param id - The ID to watch.
+   * @param handler - Called with the entity stored under `id`, or `undefined`.
+   * @returns A function that stops watching.
    */
   subscribe(id: string, handler: (entity: T | undefined) => void): Unsubscribe {
     const subscriber: EntityStoreSubscriber = {
@@ -397,6 +469,9 @@ export class EntityStore<T> {
   /**
    * Runs `fn`, coalescing the notifications of writes inside it into a single flush on exit. Nested
    * transactions flush only when the outermost exits.
+   *
+   * @param fn - The writes to batch.
+   * @returns What `fn` returns.
    */
   transaction<R>(fn: () => R): R {
     this.transactionDepth += 1;
@@ -419,6 +494,8 @@ export class EntityStore<T> {
    * the subscribers of `id`, so an optimistic (local-user) write renders without the throttle delay.
    * Inside a transaction it is deferred to the outermost exit, since inline it would be a no-op
    * (nobody has been notified yet).
+   *
+   * @param id - The ID whose subscribers flush.
    */
   flushSubscribers(id: string): void {
     if (this.transactionDepth > 0) {

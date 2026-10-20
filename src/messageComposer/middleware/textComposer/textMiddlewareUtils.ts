@@ -2,9 +2,15 @@ import type { TextSelection } from './types';
 import { escapeCommandRegExp } from './commandUtils';
 
 /**
- * The trigger-prefixed token that ends `text`, if any (with `acceptTrailingSpaces` it may span one
- * space). With `isCommand` the trigger must start the text and the token must not contain
- * whitespace.
+ * Finds the trigger-prefixed token that ends `text`.
+ *
+ * @param params.trigger - The trigger character, e.g. `@` or `/`.
+ * @param params.text - The text to search.
+ * @param params.isCommand - Require the trigger to start the text and the token to contain no
+ *   whitespace. Defaults to `false`.
+ * @param params.acceptTrailingSpaces - Let the token span one whitespace character. Ignored with
+ *   `isCommand`. Defaults to `true`.
+ * @returns The trimmed token with its trigger, or `null`.
  */
 export const getTriggerCharWithToken = ({
   trigger,

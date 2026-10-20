@@ -406,6 +406,10 @@ export class Poll {
    * Removes a vote right away; a failed request restores it. Vote requests are sent in order, so a
    * vote whose cast is not confirmed yet is removed by the ID from the cast's response (if that
    * cast failed, there is nothing to remove).
+   *
+   * @param voteId - The ID of the vote to remove.
+   * @param messageId - The ID of the poll's message.
+   * @returns The delete response, or `undefined` when there was nothing to remove.
    */
   removeVote = async (voteId: string, messageId: string) =>
     await this.optimisticVotes.removeVote(voteId, messageId);

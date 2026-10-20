@@ -96,10 +96,20 @@ export class WSConnection extends WithSubscriptions {
     return clamped;
   }
 
+  /**
+   * Merges a partial configuration into the resolved config.
+   *
+   * @param config - Fields to merge into the resolved config.
+   */
   public updateConfig(config: Partial<WSConnectionConfig>) {
     this.configController.patch(config);
   }
 
+  /**
+   * Re-derives the configuration from the declarative slice.
+   *
+   * @param config - The declarative slice. Leave it out to rebuild from the defaults.
+   */
   public initializeConfig(config?: Partial<WSConnectionConfig>) {
     this.configController.initialize(config);
   }
@@ -156,6 +166,11 @@ export class WSConnection extends WithSubscriptions {
    * opens it, closing any previous one. A socket injected through `config.connection` (Node only) is
    * reused as is. With `enableWSFallback`, a network failure switches to the long-poll
    * ({@link fallback}), which every later call connects instead.
+   *
+   * @param timeout - Connect timeout for a new socket, in milliseconds; the long-poll ignores it.
+   *   Defaults to `config.connectTimeoutMs`.
+   * @returns The server's `connection.ok` event, or `undefined` when the long-poll is already
+   *   connecting or connected.
    */
   async connect(timeout?: number): ConnectAPIResponse {
     // Once switched, stay on the long-poll.
@@ -231,8 +246,10 @@ export class WSConnection extends WithSubscriptions {
 
   /**
    * Closes the socket and, after an `enableWSFallback` switch, the long-poll too, telling the server
-   * to close its connection ID. `timeout` (ms) bounds the socket's close frame and the long-poll's
-   * close request. Defaults to 1s and 2s respectively.
+   * to close its connection ID.
+   *
+   * @param timeout - Bounds the socket's close frame and the long-poll's close request, in
+   *   milliseconds. Defaults to 1s and 2s respectively.
    */
   async disconnect(timeout?: number): Promise<void> {
     // Read before the socket's `disconnect()` drops it: the long-poll's close request must carry it.

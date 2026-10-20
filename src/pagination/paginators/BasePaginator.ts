@@ -554,8 +554,8 @@ export abstract class BasePaginator<T, Q> {
   }
 
   /**
-   * True once a query has run or a non-empty window was loaded without one (`setItems`,
-   * `mergeNewestPage`). Cleared by `resetState`.
+   * True once a query has run or a non-empty window was loaded without one (`setItems`, or a
+   * subclass calling `recordLoadedWindowQueryShape`). Cleared by `resetState`.
    */
   get isInitialized() {
     return typeof this._lastQueryShape !== 'undefined';
@@ -613,6 +613,11 @@ export abstract class BasePaginator<T, Q> {
     return this.configState.getLatestValue();
   }
 
+  /**
+   * Merges a partial configuration into the resolved config.
+   *
+   * @param config - The fields to merge.
+   */
   updateConfig(config: Partial<BasePaginatorConfig<T, Q>>) {
     this.configController.patch(config);
   }
@@ -1200,8 +1205,8 @@ export abstract class BasePaginator<T, Q> {
    * interval boundaries.
    *
    * @param itemId - ID of the item to boost.
-   * @param opts - Boost options: `ttlMs` / `until` control expiry (defaults to 15s from now) and
-   *   `seq` orders concurrent boosts.
+   * @param opts - Boost options: `until` (or `ttlMs` from now) sets the expiry and `seq` orders
+   *   concurrent boosts. Expiry defaults to 15s from now; `seq` defaults to 0.
    */
   boost(itemId: string, opts?: { ttlMs?: number; until?: number; seq?: number }) {
     const now = Date.now();
@@ -2451,6 +2456,11 @@ export abstract class BasePaginator<T, Q> {
     );
   }
 
+  /**
+   * Re-derives the configuration from the declarative slice.
+   *
+   * @param declarativeConfig - The declarative slice. Leave it out to rebuild without one.
+   */
   initializeConfig(declarativeConfig?: DeclarativePaginatorConfig): void {
     this.configController.initialize(
       declarativeConfig as Partial<BasePaginatorConfig<T, Q>> | undefined,
@@ -2588,10 +2598,11 @@ export abstract class BasePaginator<T, Q> {
    * @param params.requestOptions - Request options outside the query shape.
    * @param params.reset - 'yes' forces a first page, 'no' continues, else the query shape decides.
    * @param params.retryCount - Number of retries after a failure.
-   * @param params.silent - Skip the `isLoading: true` publish of a non-first-page query.
+   * @param params.silent - Skip the `isLoading: true` publish of a non-first-page or
+   *   `keepPreviousItems` query.
    * @param params.updateState - Whether to write the query results back to state.
-   * @returns The reconciled result (`targetInterval: null` after a failed request), or nothing when
-   *   the query did not run.
+   * @returns The reconciled result (`targetInterval` is `null` when nothing was ingested, e.g. a
+   *   failed request or an empty page), or nothing when the query did not run.
    */
   async executeQuery({
     direction,

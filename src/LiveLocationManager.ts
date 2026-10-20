@@ -153,10 +153,20 @@ export class LiveLocationManager extends WithSubscriptions {
     return this.configState.getLatestValue();
   }
 
+  /**
+   * Merges a partial configuration into the resolved config.
+   *
+   * @param config - Fields to merge into the resolved config.
+   */
   updateConfig(config: Partial<LiveLocationManagerConfig>) {
     this.configController.patch(config);
   }
 
+  /**
+   * Re-derives the configuration from the declarative slice.
+   *
+   * @param config - The declarative slice. Leave it out to rebuild from the defaults.
+   */
   initializeConfig(config?: Partial<LiveLocationManagerConfig>) {
     this.configController.initialize(config);
   }
@@ -179,8 +189,8 @@ export class LiveLocationManager extends WithSubscriptions {
   };
 
   /**
-   * Ref-counted event subscriptions only. Configuration is subscribed for the instance's lifetime,
-   * from construction, so only {@link dispose} releases it.
+   * Releases the event subscriptions once the last caller unregisters (ref-counted). The
+   * configuration subscription is in effect from construction and stays until {@link dispose}.
    */
   public unregisterSubscriptions = () => super.unregisterSubscriptions();
 

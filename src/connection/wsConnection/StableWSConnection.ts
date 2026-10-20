@@ -674,6 +674,11 @@ export class StableWSConnection {
     });
   };
 
+  /**
+   * Schedules the next health-check ping `pingIntervalMs` from now, replacing a pending one.
+   *
+   * @internal
+   */
   scheduleNextPing = () => {
     if (this.healthCheckTimeoutRef) {
       clearTimeout(this.healthCheckTimeoutRef);

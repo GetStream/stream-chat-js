@@ -46,7 +46,12 @@ export const pollComposerValidationError = (
   ...(metadata ? { metadata } : {}),
 });
 
-/** Distinguishes a single failure from the per-option-ID record that `options` errors use. */
+/**
+ * Distinguishes a single failure from the per-option-ID record that `options` errors use.
+ *
+ * @param value - A field error entry.
+ * @returns Whether `value` is a single `PollComposerValidationError`.
+ */
 export const isPollComposerValidationError = (
   value: unknown,
 ): value is PollComposerValidationError =>

@@ -302,6 +302,11 @@ export class Thread extends WithSubscriptions {
     return this.configController.value;
   }
 
+  /**
+   * Merges a partial configuration into the resolved config.
+   *
+   * @param config - The fields to change.
+   */
   updateConfig(config: Partial<ThreadConfig>): void {
     this.configController.patch(config);
   }

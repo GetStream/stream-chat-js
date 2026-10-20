@@ -84,7 +84,8 @@ export class EventHandlerPipeline<CTX extends Record<string, unknown> = {}> {
    * @param payload.index - Target index, clamped to the pipeline size. Defaults to appending.
    * @param payload.replace - Whether to replace the handler at `index` instead of inserting.
    * @param payload.revertOnUnsubscribe - Whether unsubscribing restores the replaced handler.
-   * @returns An unsubscribe function that removes (and optionally restores) the handler.
+   * @returns An unsubscribe function that removes the handler and, with `revertOnUnsubscribe`, puts
+   *   back the one it replaced.
    */
   insert({
     handle,

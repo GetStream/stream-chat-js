@@ -113,10 +113,20 @@ export class ThreadManager extends WithSubscriptions {
     return this.configState.getLatestValue();
   }
 
+  /**
+   * Merges a partial configuration into the resolved config.
+   *
+   * @param config - The fields to change.
+   */
   public updateConfig(config: Partial<ThreadManagerConfig>) {
     this.configController.patch(config);
   }
 
+  /**
+   * Re-derives the configuration from the declarative slice.
+   *
+   * @param config - The declarative slice (optional).
+   */
   public initializeConfig(config?: Partial<ThreadManagerConfig>) {
     this.configController.initialize(config);
   }
@@ -134,6 +144,10 @@ export class ThreadManager extends WithSubscriptions {
    * replies in a watched channel (nothing to load: `getThread` would 404, the first reply arrives
    * as an event). In an unwatched channel the parent's `reply_count` may miss newer replies, so it
    * always loads.
+   *
+   * @param params.channel - The channel of the parent message.
+   * @param params.parentMessage - The thread's parent message.
+   * @returns The registered thread.
    */
   public ensure = ({
     channel,

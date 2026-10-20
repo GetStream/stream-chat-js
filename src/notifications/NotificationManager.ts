@@ -35,6 +35,11 @@ export class NotificationManager {
     return this.configState.getLatestValue();
   }
 
+  /**
+   * Merges a partial configuration into the resolved config.
+   *
+   * @param config - Fields to merge into the resolved config.
+   */
   updateConfig(config: Partial<NotificationManagerConfig>) {
     // Compares the merged result, so a patch naming one severity is not a change to the others.
     this.configState.next((current) => {
@@ -46,6 +51,8 @@ export class NotificationManager {
   /**
    * Rebuilds the config from the defaults, `config` and the constructor options instead of merging
    * into the current value, so a `sortComparator` set through `updateConfig` is dropped.
+   *
+   * @param config - The declarative slice. Defaults to `{}`.
    */
   initializeConfig(config: DeepPartial<NotificationManagerConfig> = {}) {
     this.configController.initialize(config as Partial<NotificationManagerConfig>);

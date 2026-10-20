@@ -121,8 +121,8 @@ export const QUEUEABLE_OPERATIONS: {
  * Runs the task through `offlineDb.queueTask` (queued for replay on an ephemeral failure), or
  * directly when there is no offline DB, `queue` is `false` or the task is not replayable.
  *
- * If `queueTask` rejects, the failure is logged and the request runs again directly, so a request
- * that reached the server can repeat.
+ * If `queueTask` rejects, the failure is logged and the request runs directly. It may already have
+ * reached the server or been stored for replay, so it can repeat.
  *
  * @internal
  *

@@ -19,6 +19,12 @@ export const asTimestampNS = (ns: number): TimestampNS => ns as TimestampNS;
 /** Nanoseconds as milliseconds. Takes a plain `number` so it also converts nanosecond durations. */
 export const nsToMs = (ns: number): number => Math.floor(ns / NS_PER_MS);
 
+/**
+ * Converts milliseconds to a wire timestamp.
+ *
+ * @param ms - Unix milliseconds.
+ * @returns The same instant in unix nanoseconds.
+ */
 export const msToNs = (ms: number): TimestampNS => asTimestampNS(ms * NS_PER_MS);
 
 /**
@@ -37,6 +43,12 @@ export const nsToRfc3339 = (ns: TimestampNS): string => {
   return new Date(ms).toISOString().replace(/\.(\d{3})Z$/, `.$1${subMs}Z`);
 };
 
+/**
+ * Converts a `Date` to a wire timestamp, at millisecond resolution.
+ *
+ * @param date - The date to convert.
+ * @returns The same instant in unix nanoseconds.
+ */
 export const dateToNs = (date: Date): TimestampNS => msToNs(date.getTime());
 
 /**

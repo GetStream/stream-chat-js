@@ -94,10 +94,20 @@ export class SearchController {
     return this.configState.getLatestValue();
   }
 
+  /**
+   * Merges a partial configuration into the resolved config.
+   *
+   * @param config - Fields to merge into the resolved config.
+   */
   updateConfig(config: Partial<SearchControllerConfig>) {
     this.configController.patch(config);
   }
 
+  /**
+   * Re-derives the configuration from the declarative slice.
+   *
+   * @param config - The declarative slice. Leave it out to rebuild from the defaults.
+   */
   initializeConfig(config?: Partial<SearchControllerConfig>) {
     this.configController.initialize(config);
   }

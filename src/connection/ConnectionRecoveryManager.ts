@@ -55,10 +55,20 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
     return this.configState.getLatestValue();
   }
 
+  /**
+   * Merges a partial configuration into the resolved config.
+   *
+   * @param config - Fields to merge into the resolved config.
+   */
   public updateConfig(config: Partial<ConnectionRecoveryManagerConfig>) {
     this.configController.patch(config);
   }
 
+  /**
+   * Re-derives the configuration from the declarative slice.
+   *
+   * @param config - The declarative slice. Leave it out to rebuild from the defaults.
+   */
   public initializeConfig(config?: Partial<ConnectionRecoveryManagerConfig>) {
     this.configController.initialize(config);
   }

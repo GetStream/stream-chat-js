@@ -472,8 +472,8 @@ export class StreamChat extends ChatApi {
   /**
    * Sets the current user and opens the WebSocket connection.
    *
-   * @param user - Data about this user, e.g. `{ name: 'john' }`.
-   * @param userTokenOrProvider - A token string, or a provider that returns one or a promise of one.
+   * @param user - The user, with its required `id`, e.g. `{ id: 'john', name: 'John' }`.
+   * @param userTokenOrProvider - A token string, or an async provider that resolves to one.
    * @returns A promise that resolves when the connection is set up.
    * @throws For a different user, unless `disconnectUser()` ran first.
    */
@@ -541,8 +541,8 @@ export class StreamChat extends ChatApi {
    *
    * @deprecated Use {@link StreamChat.connectUser} instead.
    *
-   * @param user - Data about this user, e.g. `{ name: 'john' }`.
-   * @param userTokenOrProvider - A token string, or a provider that returns one or a promise of one.
+   * @param user - The user, with its required `id`, e.g. `{ id: 'john', name: 'John' }`.
+   * @param userTokenOrProvider - A token string, or an async provider that resolves to one.
    * @returns A promise that resolves when the connection is set up.
    */
   setUser = this.connectUser;
@@ -833,7 +833,7 @@ export class StreamChat extends ChatApi {
   /**
    * Creates a temporary guest user and connects as it.
    *
-   * @param user - Data about this user, e.g. `{ name: 'john' }`.
+   * @param user - The guest user, with its required `id`, e.g. `{ id: 'john', name: 'John' }`.
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns A promise that resolves when the connection is set up.
@@ -865,12 +865,17 @@ export class StreamChat extends ChatApi {
    *   console.log(event.type);
    * });
    *
-   * @param callbackOrString - The event type to listen for, or the callback when listening to all
-   *   events.
-   * @param callbackOrNothing - The callback when an event type was provided (optional).
+   * @param callback - Called with every event.
    * @returns An object with an `unsubscribe()` method.
    */
   on(callback: EventHandler): { unsubscribe: () => void };
+  /**
+   * Listens to one event type on all channels and users you're watching.
+   *
+   * @param eventType - The event type to listen for.
+   * @param callback - Called with each event of that type.
+   * @returns An object with an `unsubscribe()` method.
+   */
   on<T extends EventType>(
     eventType: T,
     callback: EventHandler<T>,
@@ -905,12 +910,17 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Removes the event handler.
+   * Removes a listener for all events.
    *
-   * @param callbackOrString - The event type, or the callback when removing an all-events listener.
-   * @param callbackOrNothing - The callback to remove when an event type was provided (optional).
+   * @param callback - The listener to remove.
    */
   off(callback: EventHandler): void;
+  /**
+   * Removes a listener for one event type.
+   *
+   * @param eventType - The event type it listens to.
+   * @param callback - The listener to remove.
+   */
   off<T extends EventType>(eventType: T, callback: EventHandler<T>): void;
   off(callbackOrString: EventHandler | EventType, callbackOrNothing?: EventHandler) {
     const key = callbackOrNothing ? (callbackOrString as EventType) : 'all';
@@ -1608,10 +1618,10 @@ export class StreamChat extends ChatApi {
   /**
    * Searches messages.
    *
-   * @param ...args - `[request, requestOptions]`. The optional `request.payload` accepts
-   *   MongoDB-style filter conditions, a search query, and options such as `user_id`.
-   *   `requestOptions` carries per-request options such as an abort `signal` and is never
-   *   serialized into the request.
+   * @param ...args - `[request, requestOptions]`. The optional `request.payload` accepts channel
+   *   `filter_conditions`, `message_filter_conditions`, a `query`, and options such as `limit`,
+   *   `offset`, `next` and `sort`. `requestOptions` carries per-request options such as an abort
+   *   `signal` and is never serialized into the request.
    * @returns The search messages response.
    * @throws When both `offset` and `next` are given.
    */
@@ -1750,6 +1760,11 @@ export class StreamChat extends ChatApi {
   /**
    * Updates a message over HTTP only: no offline queueing and no local state.
    * `messageOperations.update` on a channel or thread is the full edit.
+   *
+   * @param ...args - `[pathParams, request, requestOptions]`. `pathParams.id` is the message ID;
+   *   `request.message` is the updated message; `requestOptions` carries per-request options such
+   *   as an abort `signal` and is never serialized into the request.
+   * @returns The update message response.
    */
   override async updateMessage(...args: Parameters<ChatApi['updateMessage']>) {
     const [pathParams, request, requestOptions] = args;
@@ -1765,6 +1780,12 @@ export class StreamChat extends ChatApi {
   /**
    * Deletes a message over HTTP only: no offline queueing and no local state.
    * `messageOperations.delete` on a channel or thread is the full delete.
+   *
+   * @param ...args - `[pathParams, request, requestOptions]`. `pathParams.id` is the message ID;
+   *   `request.hard` deletes it permanently and `request.delete_for_me` deletes it for the current
+   *   user only; `requestOptions` carries per-request options such as an abort `signal` and is
+   *   never serialized into the request.
+   * @returns The delete message response.
    */
   override async deleteMessage(...args: Parameters<ChatApi['deleteMessage']>) {
     const [, request] = args;
@@ -1841,9 +1862,9 @@ export class StreamChat extends ChatApi {
    * @param pathParams.message_id - The parent message ID.
    * @param options - Options object for pagination and limiting the participants and replies.
    *   Defaults to `{}`.
-   * @param options.watch - Subscribes the user to the channel of the thread (optional).
-   * @param options.participant_limit - Limits the number of participants returned per thread (optional).
-   * @param options.reply_limit - Limits the number of replies returned per thread (optional).
+   * @param options.watch - Subscribes the user to the channel of the thread. Defaults to `true`.
+   * @param options.participant_limit - Limits the participants returned. Defaults to 100.
+   * @param options.reply_limit - Limits the replies returned. Defaults to 3.
    * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The thread.
@@ -1977,8 +1998,8 @@ export class StreamChat extends ChatApi {
    *
    * @param ...args - `[pathParams, request, requestOptions]`. `pathParams.poll_id` is the poll ID;
    *   `request` carries optional vote filter conditions, sort directions, and pagination options
-   *   (`limit`, `offset`); `requestOptions` carries per-request options such as an abort `signal`
-   *   and is never serialized into the request.
+   *   (`limit`, `next`, `prev`); `requestOptions` carries per-request options such as an abort
+   *   `signal` and is never serialized into the request.
    * @returns The poll answers.
    */
   async queryPollAnswers(...args: Parameters<ChatApi['queryPollVotes']>) {

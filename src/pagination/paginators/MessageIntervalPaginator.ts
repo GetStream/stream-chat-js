@@ -208,10 +208,24 @@ export class MessageIntervalPaginator extends BasePaginator<
     return !message.shadowed;
   }
 
+  /**
+   * Reconciles the held messages that changed in the entity store.
+   *
+   * @internal
+   * @param batch - The change batch from the store.
+   * @param batch.changedIds - IDs of the watched messages that changed.
+   */
   onEntitiesChanged({ changedIds }: EntityStoreChangeBatch): void {
     this.reconcileChangedIds(changedIds);
   }
 
+  /**
+   * Drops a message the entity store removed from this paginator's windows.
+   *
+   * @internal
+   * @param id - ID of the removed message.
+   * @param message - The removed message.
+   */
   onEntityRemoved(id: string, message: unknown): void {
     this.removeItem({ id, item: message as LocalMessage });
   }

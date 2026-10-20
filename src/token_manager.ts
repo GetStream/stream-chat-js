@@ -27,7 +27,7 @@ export class TokenManager {
   /**
    * Sets a static token or a token provider, then loads the token.
    *
-   * @param tokenOrProvider - A token string, or a provider that returns one or a promise of one.
+   * @param tokenOrProvider - A token string, or an async provider that resolves to one.
    * @param user - The user the token belongs to.
    * @throws When the token is not a string or function, or a string token does not match `user.id`.
    */
@@ -52,6 +52,12 @@ export class TokenManager {
     await this.loadToken();
   };
 
+  /**
+   * Clears the token, the provider and the user. Called by the client on `disconnectUser()` and
+   * after an anonymous `createGuest()`.
+   *
+   * @internal
+   */
   reset = () => {
     this._isAnonymous = false;
     this.token = undefined;

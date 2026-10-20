@@ -56,8 +56,8 @@ export class OfflineDBSyncManager {
 
       this.connectionChangedListener?.();
 
-      // Follows the socket, not the device network status: sync runs over the socket, so a network
-      // with no socket has nothing to sync over.
+      // Follows the socket, not the device's network status: the sync catches up the events the
+      // socket missed, so it runs once the socket is back and delivering new ones.
       let wasHealthy: boolean | undefined;
       this.connectionChangedListener =
         this.client.wsConnection.state.subscribeWithSelector(
@@ -102,7 +102,8 @@ export class OfflineDBSyncManager {
   };
 
   /**
-   * Runs a callback once after the next successful sync.
+   * Runs a callback once, the next time the sync status turns `true` (after the next sync attempt,
+   * even a failed one).
    *
    * @param tag - A unique key to identify and manage the callback. Scheduling the same tag replaces
    *   it.

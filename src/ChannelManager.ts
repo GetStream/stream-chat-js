@@ -410,6 +410,12 @@ export class ChannelManager extends WithSubscriptions {
     return this.state.getLatestValue().paginators;
   }
 
+  /**
+   * Returns the stored channel for a cid.
+   *
+   * @param cid - The channel's cid.
+   * @returns The stored channel, or `undefined` when none is stored.
+   */
   get(cid: string): Channel | undefined {
     return this.channelStore.get(cid);
   }
@@ -436,6 +442,11 @@ export class ChannelManager extends WithSubscriptions {
     return resolved;
   }
 
+  /**
+   * Returns every stored channel.
+   *
+   * @returns The stored channels.
+   */
   values(): Channel[] {
     return this.channelStore.values();
   }
@@ -568,7 +579,7 @@ export class ChannelManager extends WithSubscriptions {
    * `previous`, created without an ID, was answered with a cid `successor` already holds (stored by
    * an event or a list meanwhile). `successor` stays the one instance and takes over: the response
    * is applied to it like a `queryChannels` result (local messages are never removed),
-   * `previous`'s local messages (sending or failed) are added by id (`successor`'s copy wins), and
+   * `previous`'s local messages (sending or failed) are added by ID (`successor`'s copy wins), and
    * `previous`'s composer moves over when `previous` is open and `successor` is not.
    *
    * `successor` is marked watched only when the query asked to watch. `previous` is dropped from
@@ -885,7 +896,8 @@ export class ChannelManager extends WithSubscriptions {
   }
 
   /**
-   * Inserts a paginator, or moves it when one with the same ID is already held.
+   * Inserts a paginator. One already held with the same ID is removed first, so this moves it, or
+   * replaces it when it is another instance.
    *
    * @param params.paginator - The paginator to insert or move.
    * @param params.index - Target index, clamped to the list. Defaults to appending.
@@ -907,7 +919,7 @@ export class ChannelManager extends WithSubscriptions {
   /**
    * Removes a paginator: it leaves `state.paginators`, stops receiving WS-driven updates and gets
    * its own `filterQueryResults` back. Its loaded items stay, and a query scheduled through
-   * `nextDebounced` is canceled.
+   * `nextDebounced` is cancelled.
    *
    * @param paginatorOrId - The paginator to remove, or its ID.
    * @returns The removed paginator, or `undefined` when this manager did not hold it.
@@ -925,7 +937,7 @@ export class ChannelManager extends WithSubscriptions {
 
   /**
    * Discards the loaded data of every registered list but keeps the registrations: each paginator
-   * returns to "never queried" (`items: undefined`) with its debounced query canceled.
+   * returns to "never queried" (`items: undefined`) with its debounced query cancelled.
    */
   resetPaginatorStates() {
     this.paginators.forEach((paginator) => {

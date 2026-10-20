@@ -77,11 +77,12 @@ export class ConnectionIdManager {
   };
 
   /**
-   * The current ID, or a promise for one while the handshake is in flight. Throws when no socket is
-   * open or being opened.
+   * Returns the connection ID, waiting for the handshake when one is in flight.
    *
    * @param signal - Abandons the wait. Only the waiting path honours it; an ID already in hand is
    *   returned either way.
+   * @returns The current connection ID, or a promise for it while the handshake is in flight.
+   * @throws When no socket is open or being opened.
    */
   getConnectionId = (signal?: AbortSignal): string | Promise<string> => {
     if (this.connectionId) return this.connectionId;

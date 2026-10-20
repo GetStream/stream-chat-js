@@ -250,8 +250,9 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    * @param options.execute - Whether to immediately execute the queries. Defaults to `true`.
    * @param options.forceUpdate - Whether to upsert the channel data even when it is stored.
    *   Defaults to `false`.
-   * @param createQueries - A callback that creates the queries to execute.
-   * @returns The prepared queries (executed when `execute` is `true`).
+   * @param createQueries - Builds the queries. It receives the effective `execute` flag and must run
+   *   its queries when that is `true`, because the fast path relies on that write throwing.
+   * @returns The prepared queries.
    */
   public queriesWithChannelGuard = async (
     {
@@ -526,7 +527,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   /**
    * Upserts a message and writes its channel row when that row is missing (the first optimistic
    * write in a new channel can precede the channel's persistence). Upserts because an UPDATE no-ops
-   * on a missing row.
+   * on a missing row. When the row is missing and the channel is not loaded in memory, or the
+   * message has no `cid`, nothing is written.
    *
    * @param payload.message - The message to persist. Its `cid` decides the guarded channel row.
    * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.

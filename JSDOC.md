@@ -43,6 +43,8 @@ The format is enforced by `eslint-plugin-jsdoc`. Run `yarn lint` to validate loc
 - **Public API** (exported functions, and public members of exported classes): a summary sentence, `@param` for the parameters, and `@returns` iff the function returns something other than `void` / `Promise<void>`. These docs ship in `dist/types` and are what integrators read.
 - **Internals** (names starting with `_`, `private` / `protected` members, `@internal` symbols, non-exported helpers): prose only. Tags are optional; document only what the code does not already say.
 
+Lint does not enforce the public-API rule yet, and many existing members do not meet it. Apply it to every doc you add or edit.
+
 ## Content
 
 - Describe the code as it is now. No history ("used to", "previously", "no longer", "now"), no issue or PR numbers, no review ids.

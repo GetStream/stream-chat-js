@@ -21,13 +21,16 @@ export type MessageDeliveryReporterConfig = {
   /** How long delivery reports are buffered before being sent as one batch. Defaults to 1000ms. */
   markAsDeliveredBufferTimeoutMs: number;
   /**
-   * Minimum gap between automatic `markRead` calls. Changes rebuild the throttle. Defaults to
-   * 1000ms.
+   * Minimum gap between automatic `markRead` calls for the same channel or thread. Changes rebuild
+   * the throttles. Defaults to 1000ms.
    */
   markAsReadThrottleTimeoutMs: number;
   /** Most delivery receipts sent in one request; the rest go in the next. Defaults to 100. */
   maxDeliveredMessageCountInPayload: number;
-  /** Consecutive timeouts before the buffer window is widened. Defaults to 3. */
+  /**
+   * Most times consecutive retryable failures double the buffer window. A success resets it.
+   * Defaults to 3.
+   */
   retryCountLimitForTimeoutIncrease: number;
 };
 
@@ -94,10 +97,20 @@ export class MessageDeliveryReporter {
     return this.configState.getLatestValue();
   }
 
+  /**
+   * Merges a partial configuration into the resolved config.
+   *
+   * @param config - Fields to merge into the resolved config.
+   */
   updateConfig(config: Partial<MessageDeliveryReporterConfig>) {
     this.configController.patch(config);
   }
 
+  /**
+   * Re-derives the configuration from the declarative slice.
+   *
+   * @param config - The declarative slice. Leave it out to rebuild from the defaults.
+   */
   initializeConfig(config?: Partial<MessageDeliveryReporterConfig>) {
     this.configController.initialize(config);
   }

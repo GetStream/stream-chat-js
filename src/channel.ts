@@ -357,6 +357,12 @@ export class Channel extends ChannelApi {
     };
   }
 
+  /**
+   * Re-derives the configuration from the declarative slice, the sub-objects' included. Called by
+   * the constructor and by `client.config.reset()`.
+   *
+   * @param declarativeConfig - The channel's declarative slice (optional).
+   */
   initializeConfig(declarativeConfig?: ChannelDeclarativeConfig): void {
     this.declarativeConfig = declarativeConfig as Partial<ChannelConfig> | undefined;
 
@@ -494,12 +500,26 @@ export class Channel extends ChannelApi {
   uploadImage = (...args: Parameters<Channel['uploadChannelImage']>) =>
     this.uploadChannelImage(...args);
 
-  /** Deletes a file uploaded to this channel, the same request shape as `client.deleteFile`. */
+  /**
+   * Deletes a file uploaded to this channel, the same request shape as `client.deleteFile`.
+   *
+   * @param request - The file to delete. `request.url` is its URL.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The server response.
+   */
   deleteFile(request: { url: string }, requestOptions?: StreamRequestOptions) {
     return this.deleteChannelFile(request, requestOptions);
   }
 
-  /** Deletes an image uploaded to this channel, the same request shape as `client.deleteImage`. */
+  /**
+   * Deletes an image uploaded to this channel, the same request shape as `client.deleteImage`.
+   *
+   * @param request - The image to delete. `request.url` is its URL.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The server response.
+   */
   deleteImage(request: { url: string }, requestOptions?: StreamRequestOptions) {
     return this.deleteChannelImage(request, requestOptions);
   }
@@ -549,8 +569,8 @@ export class Channel extends ChannelApi {
    * Updates the channel and stores the returned channel in `this.data`.
    *
    * @param ...args - `[request, requestOptions]`. `request` is the channel update payload, e.g.
-   *   `{ data: { name: 'foo' }, message }`; `requestOptions` carries per-request options such as an
-   *   abort `signal` and is never serialized into the request.
+   *   `{ data: { custom: { name: 'foo' } }, message }`; `requestOptions` carries per-request options
+   *   such as an abort `signal` and is never serialized into the request.
    * @returns The server response.
    */
   override async update(...args: Parameters<ChannelApi['update']>) {
@@ -1304,6 +1324,12 @@ export class Channel extends ChannelApi {
     return event;
   }
 
+  /**
+   * Sends `typing.stop` after a second without a keystroke, drops stale typing users, and resets a
+   * stuck AI indicator while the connection is unhealthy. Run by the client's cleaning interval.
+   *
+   * @internal
+   */
   clean() {
     if (this.lastKeyStroke) {
       const now = new Date();
@@ -1910,15 +1936,20 @@ export class Channel extends ChannelApi {
    *   console.log(event.type);
    * });
    *
-   * @param callbackOrString - The event type to listen for, or the callback when listening to all
-   *   events.
-   * @param callbackOrNothing - The callback when an event type was provided (optional).
+   * @param eventType - The event type to listen for.
+   * @param callback - Called with each event of that type.
    * @returns An object with an `unsubscribe()` method.
    */
   on<T extends EventType>(
     eventType: T,
     callback: EventHandler<T>,
   ): { unsubscribe: () => void };
+  /**
+   * Listens to all events on this channel.
+   *
+   * @param callback - Called with every event.
+   * @returns An object with an `unsubscribe()` method.
+   */
   on(callback: EventHandler): { unsubscribe: () => void };
   on(
     callbackOrString: EventHandler | EventType,
@@ -1954,12 +1985,17 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Removes the event handler.
+   * Removes a listener for one event type.
    *
-   * @param callbackOrString - The event type, or the callback when removing an all-events listener.
-   * @param callbackOrNothing - The callback to remove when an event type was provided (optional).
+   * @param eventType - The event type it listens to.
+   * @param callback - The listener to remove.
    */
   off<T extends EventType>(eventType: T, callback: EventHandler<T>): void;
+  /**
+   * Removes a listener for all events.
+   *
+   * @param callback - The listener to remove.
+   */
   off(callback: EventHandler): void;
   off(
     callbackOrString: EventHandler | EventType,
@@ -2711,7 +2747,8 @@ export class Channel extends ChannelApi {
    *
    * The SDK calls it when a channel ends (deleted, current user removed, logout, released as unused).
    * It does not remove the channel from the channel store. The SDK's own ends remove it; after a
-   * direct call it stays until `client.channelManager.releaseUnusedChannels()`.
+   * direct call it stays until `client.channelManager.releaseUnusedChannels()`, or until `ensure()`
+   * for the same cid replaces it.
    */
   disconnect() {
     // Once only: a second run would drop subscription counts other consumers hold.

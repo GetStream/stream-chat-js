@@ -188,7 +188,8 @@ export class MessageOperationStatePolicy {
         serverNewer ||
         (existingIsOurOptimisticSend && serverSameOrNewer);
 
-      // Declined only when a fresher copy already landed, whose own path replaced the `failed` row.
+      // Declined only when a copy at least as fresh already landed (for example the same message
+      // from a WS event), whose own write replaced the `failed` row.
       if (!applyServerCopy) return;
 
       this.ctx.ingest(formatted);

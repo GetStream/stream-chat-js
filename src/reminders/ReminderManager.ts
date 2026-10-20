@@ -85,10 +85,20 @@ export class ReminderManager extends WithSubscriptions {
     return this.configState.getLatestValue();
   }
 
+  /**
+   * Merges a partial configuration into the resolved config.
+   *
+   * @param config - Fields to merge into the resolved config.
+   */
   updateConfig(config: Partial<ReminderManagerConfig>) {
     this.configController.patch(config);
   }
 
+  /**
+   * Re-derives the configuration from the declarative slice.
+   *
+   * @param config - The declarative slice. Leave it out to rebuild from the defaults.
+   */
   initializeConfig(config?: Partial<ReminderManagerConfig>) {
     this.configController.initialize(config);
   }
