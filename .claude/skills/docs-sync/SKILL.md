@@ -67,7 +67,7 @@ Work one docs page at a time.
 
 ### Mislabelled fence
 
-Label it `JavaScript` for client code, `Node.js` for server-side code (with or without `@stream-io/node-sdk`). `Node.js` fences are out of scope: never test, add or change them otherwise.
+Label it `JavaScript` for client code, `Node.js` for server-side code (with or without `@stream-io/node-sdk`). `Node.js` fences are out of scope: never test, add or change them otherwise. The same goes for the stream-chat-js@9 versions next to them, `JavaScript (stream-chat-js@9)` and `Node.js (stream-chat-js@9)`: valid labels, never tested, added or changed.
 
 ### Region differs from its fence (docs changed)
 
@@ -94,7 +94,7 @@ Write a test for it in the page's test file (create the file if the page is new)
 - Comment-only fences (e.g. "This is a server-side only feature...") need no region.
 - A fence that isn't code (e.g. a bare data shape) is a docs bug: rewrite it as code that runs (e.g. reading and logging the fields), and report it. Never remove a `JavaScript` fence just because it is a fragment or can't be tested: wrap it, or put it in `it.skip`.
 - A snippet the test app can't run goes in `it.skip('BLOCKED: <reason>', ...)` so it is still typechecked; report the exact API error.
-- **Server-only code in a `JavaScript` fence** (fails with a user token, e.g. 403 code 17 or "only allowed when using server side auth"): remove that fence, or just the server-only part, from the docs. Don't add a `Node.js` tab for it. To decide whether an endpoint or an acting-user field (`user_id`, `created_by_id`, ...) is client-side, check the client-side OpenAPI spec (`chat-clientside-api.json` in https://github.com/GetStream/protocol/tree/main/openapi/v2): an endpoint or field missing from it is server-only. Report every removal with the error.
+- **Server-only code in a `JavaScript` fence** (fails with a user token, e.g. 403 code 17 or "only allowed when using server side auth"): remove that fence, or just the server-only part, from the docs. Don't add a `Node.js` tab for it. When you remove the whole fence, remove its `JavaScript (stream-chat-js@9)` partner in the same tab group too: a v9 tab never stands without its v10 one. When you remove only part of it, leave the v9 fence as it is. To decide whether an endpoint or an acting-user field (`user_id`, `created_by_id`, ...) is client-side, check the client-side OpenAPI spec (`chat-clientside-api.json` in https://github.com/GetStream/protocol/tree/main/openapi/v2): an endpoint or field missing from it is server-only. Report every removal with the error.
 - A fence from another product (Feeds, `@stream-io/feeds-client`, React / React Native tabs on platform pages) isn't tested: report the page and heading so it can be added to `EXCLUDED_SECTIONS` in `test/docs-snippets/sync/parse.ts`. Don't edit `parse.ts` without asking the user.
 
 ### Broken docs snippet
