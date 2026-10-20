@@ -684,6 +684,28 @@ describe('MentionsSearchSource', () => {
     expect(params.options).toEqual(expect.objectContaining({ limit: 10, offset: 5 }));
   });
 
+  it('should default the members sort and keep only its first term', () => {
+    const source = new MentionsSearchSource(channel);
+
+    source.memberSort = undefined;
+    expect(source.prepareQueryMembersParams('john').sort).toEqual([
+      { field: 'user_id', direction: 1 },
+    ]);
+
+    source.memberSort = [];
+    expect(source.prepareQueryMembersParams('john').sort).toEqual([
+      { field: 'user_id', direction: 1 },
+    ]);
+
+    source.memberSort = [
+      { field: 'created_at', direction: -1 },
+      { field: 'name', direction: 1 },
+    ];
+    expect(source.prepareQueryMembersParams('john').sort).toEqual([
+      { field: 'created_at', direction: -1 },
+    ]);
+  });
+
   it('should handle empty or invalid user names in local search', () => {
     const source = new MentionsSearchSource(channel);
     source.config.textComposerText = '@user';

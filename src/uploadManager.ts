@@ -164,9 +164,9 @@ export class UploadManager {
     this.inFlightUploads.set(id, { promise, abortController });
 
     void (async () => {
-      const attachmentManager = this.resolveAttachmentManager(channelCid);
-      const trackProgress = attachmentManager.config.trackUploadProgress;
       try {
+        const attachmentManager = this.resolveAttachmentManager(channelCid);
+        const trackProgress = attachmentManager.config.trackUploadProgress;
         this.upsertUpload({
           uploadConfirmationPending: false,
           id,

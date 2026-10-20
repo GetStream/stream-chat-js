@@ -351,6 +351,21 @@ describe('UploadManager', () => {
     });
   });
 
+  it('rejects and clears the in-flight entry for an invalid channelCid', async () => {
+    const { manager, doUploadRequest } = createManager();
+    const file = new File([], 'x');
+
+    await expect(
+      manager.upload({ id: 'u1', channelCid: 'no-colon', file }),
+    ).rejects.toThrow('Invalid channelCid: no-colon');
+    expect(manager.getUpload('u1')).toBeUndefined();
+    expect(doUploadRequest).not.toHaveBeenCalled();
+
+    // A retry with a valid cid starts a new upload instead of reusing the failed promise.
+    await manager.upload({ id: 'u1', channelCid: TEST_CID, file });
+    expect(doUploadRequest).toHaveBeenCalledTimes(1);
+  });
+
   describe('deleteUploadRecord', () => {
     it('removes matching in-flight record and leaves others', async () => {
       const { manager, doUploadRequest } = createManager(

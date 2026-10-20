@@ -253,6 +253,22 @@ describe('connection', function () {
 			);
 		});
 
+		it('does not republish the hello id after it was invalidated during the handshake', async () => {
+			const client = newStreamChat();
+			// Drops the id synchronously the moment the socket reports healthy, before `connect()` resumes.
+			const unsubscribe = client.wsConnection.state.subscribeWithSelector(
+				({ isHealthy }) => ({ isHealthy }),
+				({ isHealthy }) => {
+					if (isHealthy) client.connectionIdManager.invalidate();
+				},
+			);
+
+			await connectAndGetFrame(client);
+			unsubscribe();
+
+			expect(client.connectionIdManager.connectionId).to.be.undefined;
+		});
+
 		it('should send exactly one auth frame with the token, user and products', async () => {
 			const { socket, frame } = await connectAndGetFrame(newStreamChat());
 

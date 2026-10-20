@@ -820,10 +820,6 @@ export class Channel extends ChannelApi {
    * // with expiration (two weeks)
    * await channel.mute({ expiration: 14 * 24 * 60 * 60 * 1000 });
    *
-   * @example
-   * // server side
-   * await channel.mute({ user_id: userId });
-   *
    * @param options - Mute options (optional).
    * @param options.expiration - Mute duration in milliseconds (optional).
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
@@ -846,8 +842,7 @@ export class Channel extends ChannelApi {
    * Unmutes the channel.
    *
    * @example
-   * // server side
-   * await channel.unmute({ user_id: userId });
+   * await channel.unmute();
    *
    * @param options - Unmute options (optional).
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
@@ -2150,7 +2145,7 @@ export class Channel extends ChannelApi {
         ) {
           const eventUser = event.user;
           const readAt = event.created_at;
-          const userReadState = this._upsertReadState(
+          this._upsertReadState(
             eventUser.id,
             (currentUserReadState) => {
               const currentDeliveredAt = currentUserReadState?.last_delivered_at;
@@ -2175,7 +2170,6 @@ export class Channel extends ChannelApi {
             },
             { changedUserIds: [eventUser.id] },
           );
-          void userReadState;
 
           const client = this.getClient();
           const isOwnEvent = event.user?.id === client.user?.id;
@@ -2204,7 +2198,7 @@ export class Channel extends ChannelApi {
           const resolvedDeliveredAt = Number.isFinite(parsedDeliveredAt)
             ? msToNs(parsedDeliveredAt)
             : createdAt;
-          const userReadState = this._upsertReadState(
+          this._upsertReadState(
             eventUser.id,
             (currentUserReadState) => {
               const currentDeliveredAt = currentUserReadState?.last_delivered_at;
@@ -2228,7 +2222,6 @@ export class Channel extends ChannelApi {
             },
             { changedUserIds: [eventUser.id] },
           );
-          void userReadState;
 
           const client = this.getClient();
           const isOwnEvent = event.user?.id === client.user?.id;
@@ -2732,7 +2725,7 @@ export class Channel extends ChannelApi {
 
     if (overrideCurrentState) {
       this.state.members = newMembersById;
-    } else if (!overrideCurrentState && members.length) {
+    } else if (members.length) {
       this.state.members = {
         ...this.state.members,
         ...newMembersById,

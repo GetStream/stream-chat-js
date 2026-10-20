@@ -221,10 +221,10 @@ export class StableWSConnection {
 
     // Stop the ping and connection-check timers.
     if (this.healthCheckTimeoutRef) {
-      clearInterval(this.healthCheckTimeoutRef);
+      clearTimeout(this.healthCheckTimeoutRef);
     }
     if (this.connectionCheckTimeoutRef) {
-      clearInterval(this.connectionCheckTimeoutRef);
+      clearTimeout(this.connectionCheckTimeoutRef);
     }
 
     // Through `_applyHealth` so the store records a deliberate close as a transition too.
@@ -316,8 +316,7 @@ export class StableWSConnection {
       this.isConnecting = false;
 
       if (response) {
-        // The ID lives only in the ConnectionIdManager, so no stale copy outlives this socket.
-        this.client.connectionIdManager.resolveConnectionId(response.connection_id);
+        // `onmessage` already published the ID; publishing it again could revive an invalidated one.
         return response;
       }
     } catch (error: any) {

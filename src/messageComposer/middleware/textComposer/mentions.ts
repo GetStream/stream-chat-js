@@ -567,12 +567,10 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
 
   prepareQueryMembersParams = (searchQuery: string, offset = 0) => {
     // QueryMembers accepts at most one sort item.
-    let sort: SortParamRequest[] = [{ field: 'user_id', direction: 1 }];
-    if (!this.memberSort || !this.memberSort.length) {
-      sort = [{ field: 'user_id', direction: 1 }];
-    } else {
-      sort = this.memberSort.slice(0, 1);
-    } // todo: document the change - the sort is overridden, not merged
+    // todo: document the change - the sort is overridden, not merged
+    const sort: SortParamRequest[] = this.memberSort?.length
+      ? this.memberSort.slice(0, 1)
+      : [{ field: 'user_id', direction: 1 }];
     return {
       // todo: document the change - the filter is overridden, not merged
       filters:

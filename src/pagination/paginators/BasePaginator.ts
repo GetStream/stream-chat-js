@@ -652,7 +652,7 @@ export abstract class BasePaginator<T, Q> {
     return (a: AnyInterval, b: AnyInterval) => {
       const aEdges = this.getIntervalPaginationEdges(a);
       const bEdges = this.getIntervalPaginationEdges(b);
-      if (!aEdges || !bEdges) return 0;
+      if (!aEdges && !bEdges) return 0;
       if (!aEdges) return 1;
       if (!bEdges) return -1;
       return this.compareIntervalHeadEdges(aEdges.head, bEdges.head);

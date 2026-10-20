@@ -27,17 +27,13 @@ export class FixedSizeQueueCache<K, T> {
     const index = this.keys.indexOf(key);
 
     if (index > -1) {
-      this.keys.splice(this.keys.indexOf(key), 1);
+      this.keys.splice(index, 1);
     } else if (this.keys.length >= this.size) {
       const itemKey = this.keys.shift();
 
-      if (itemKey) {
-        const item = this.peek(itemKey);
-
-        if (item) {
-          this.dispose?.(itemKey, item);
-        }
-
+      // Compared with `undefined` and checked with `has`, so falsy keys and values are evicted too.
+      if (itemKey !== undefined && this.map.has(itemKey)) {
+        this.dispose?.(itemKey, this.map.get(itemKey) as T);
         this.map.delete(itemKey);
       }
     }
@@ -66,9 +62,10 @@ export class FixedSizeQueueCache<K, T> {
    */
   get(key: K) {
     const foundItem = this.peek(key);
+    const index = this.keys.indexOf(key);
 
-    if (foundItem && this.keys.indexOf(key) !== this.size - 1) {
-      this.keys.splice(this.keys.indexOf(key), 1);
+    if (index > -1 && index !== this.keys.length - 1) {
+      this.keys.splice(index, 1);
       this.keys.push(key);
     }
 
