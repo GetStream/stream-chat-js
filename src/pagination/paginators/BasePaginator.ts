@@ -116,6 +116,9 @@ type MergeIntervalsResult = {
   logicalTail: LogicalInterval | null;
 };
 
+/** The ids of the anchored intervals marked as reaching the head (`isHead`) and the tail (`isTail`). */
+type EndIntervalIds = { head: string[]; tail: string[] };
+
 /**
  * headward - going from page  X -> X-Y -> 0
  * tailward - goring from page 0 -> X -> X + Y ...
@@ -1033,6 +1036,36 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       else this.clearHeadMark(other);
     }
     if (keptOtherHead) this.publishAsAnchoredHead(this.anchoredHeadInterval);
+  }
+
+  /** The ids of the anchored intervals marked as reaching the head and the tail of the dataset. */
+  private getEndIntervalIds(): EndIntervalIds {
+    const ids: EndIntervalIds = { head: [], tail: [] };
+    for (const interval of this._itemIntervals.values()) {
+      if (isLogicalInterval(interval)) continue;
+      if (interval.isHead) ids.head.push(interval.id);
+      if (interval.isTail) ids.tail.push(interval.id);
+    }
+    return ids;
+  }
+
+  /**
+   * The ends of the dataset `interval` reaches because it took in an interval marked as reaching
+   * that end (`endIntervalIds`, read before a page was placed): merged it, or is it. An interval
+   * that takes in the head interval reaches the head, and one that takes in the tail interval
+   * reaches the tail, whatever the page placed in it says alone: the page only adds items to an
+   * interval that already reached that end.
+   */
+  private getEndsTakenIn(
+    interval: Interval,
+    endIntervalIds: EndIntervalIds,
+  ): { head: boolean; tail: boolean } {
+    // an interval merged into another one is dropped
+    const tookIn = (id: string) => id === interval.id || !this._itemIntervals.has(id);
+    return {
+      head: endIntervalIds.head.some(tookIn),
+      tail: endIntervalIds.tail.some(tookIn),
+    };
   }
 
   /** Whether `a`'s head edge (see {@link getServerKnownEdges}) is further headward than `b`'s. */
@@ -3593,7 +3626,9 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
    * With `updateState` (the default), its window becomes the shown one and the state is published.
    * Without it, the page is only stored, and published only if it landed in the active interval,
    * so the shown items never go stale. A page proven to reach the head of the dataset makes its
-   * interval the only head (see {@link makeOnlyHead}).
+   * interval the only head (see {@link makeOnlyHead}). An interval that takes in the interval
+   * marked as the head or the tail reaches that end, whatever the page says (see
+   * {@link getEndsTakenIn}).
    *
    * `endsQuery` says the page comes from the paginator's own query, which placing it ends: the
    * loading flag goes off, the last query error is cleared, and a first page goes to the offline
@@ -3636,6 +3671,8 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       isFirstPage && keepPreviousItems && !this.isCursorPagination && this.items?.length
         ? new Set(this.items.map((item) => this.getItemId(item)))
         : undefined;
+    // Read before the ingest, which may merge them into the page's interval.
+    const endIntervalIds = this.getEndIntervalIds();
     const interval = this.ingestPage({
       page: stateUpdate.items,
       policy: isSeparateInterval ? 'strict-overlap-only' : 'auto',
@@ -3657,6 +3694,11 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
             : undefined,
       targetIntervalId: isSeparateInterval ? undefined : this._activeIntervalId,
     });
+    const takenInEnds = interval
+      ? this.getEndsTakenIn(interval, endIntervalIds)
+      : { head: false, tail: false };
+    const intervalReachesHead = reachesHead || takenInEnds.head;
+    const intervalReachesTail = reachesTail || takenInEnds.tail;
     if (interval && updateState) {
       this.setActiveInterval(interval, { updateState: false });
       stateUpdate.items = this.intervalToItems(interval);
@@ -3738,15 +3780,16 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
         stateUpdate.hasMoreTail = !!tailward;
         stateUpdate.hasMoreHead = !!headward;
       }
-      if (interval && (reachesHead || reachesTail)) {
-        // The page reaches an end of the dataset, whatever the derivation guessed from its shape and size.
+      if (interval && (intervalReachesHead || intervalReachesTail)) {
+        // The interval reaches an end of the dataset, whatever the derivation guessed from the
+        // page's shape and size.
         const cursor = stateUpdate.cursor ?? this.cursor;
         stateUpdate.cursor = {
-          headward: reachesHead ? null : (cursor?.headward ?? null),
-          tailward: reachesTail ? null : (cursor?.tailward ?? null),
+          headward: intervalReachesHead ? null : (cursor?.headward ?? null),
+          tailward: intervalReachesTail ? null : (cursor?.tailward ?? null),
         };
-        if (reachesHead) stateUpdate.hasMoreHead = false;
-        if (reachesTail) stateUpdate.hasMoreTail = false;
+        if (intervalReachesHead) stateUpdate.hasMoreHead = false;
+        if (intervalReachesTail) stateUpdate.hasMoreTail = false;
       }
     } else {
       // todo: we could keep the offset in two directions (initial tailward offset would be taken from config.initialOffset)
@@ -3772,6 +3815,9 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       // Anchor a first page's hasMoreHead from the start offset, as getStateBeforeFirstQuery() does: a
       // keepPreviousItems first page never publishes that state, and would keep a stale `true`.
       if (isFirstPage) stateUpdate.hasMoreHead = (this.config.initialOffset ?? 0) > 0;
+      // the interval reaches an end by taking in the interval that did (see getEndsTakenIn)
+      if (takenInEnds.head) stateUpdate.hasMoreHead = false;
+      if (takenInEnds.tail) stateUpdate.hasMoreTail = false;
     }
 
     if (interval) {

@@ -5614,6 +5614,55 @@ describe('A newest page from a query the message list did not run', () => {
 		expect(ids(paginator.anchoredHeadItems)).toEqual(['m8', 'm9', 'm10']);
 	});
 
+	it('makes the reader window the head window once a newer page joins it to the head window', async () => {
+		const paginator = channel.messagePaginator;
+		channel.activate();
+		respond([1, 2, 3]);
+		await channel.watch();
+		// m4 and m5 arrived while offline: a gap separates m1–m3 from the head window m6–m8
+		respond([6, 7, 8]);
+		await channel.reload();
+		expect(ids(paginator.items)).toEqual(['m1', 'm2', 'm3']);
+		// a full page of newer messages that does not reach the newest message, but overlaps the head window
+		respond([4, 5, 6]);
+
+		await paginator.toHead();
+
+		expect(ids(paginator.items)).toEqual([
+			'm1',
+			'm2',
+			'm3',
+			'm4',
+			'm5',
+			'm6',
+			'm7',
+			'm8',
+		]);
+		expect(paginator.itemIntervals).toHaveLength(1);
+		expect(paginator.itemIntervals[0].isHead).toBe(true);
+		expect(paginator.hasMoreHead).toBe(false);
+		expect(paginator.cursor?.headward).toBeNull();
+		expect(ids(paginator.anchoredHeadItems)).toEqual(ids(paginator.items));
+
+		// a live message joins the shown window rather than starting a head window of its own
+		paginator.ingestItem(
+			formatMessage(generateMsg({ id: 'm9', cid: channel.cid, date: at(9) })),
+		);
+
+		expect(ids(paginator.items)).toEqual([
+			'm1',
+			'm2',
+			'm3',
+			'm4',
+			'm5',
+			'm6',
+			'm7',
+			'm8',
+			'm9',
+		]);
+		expect(paginator.itemIntervals).toHaveLength(1);
+	});
+
 	it('shows the newest window of a channel left on an older window', async () => {
 		const paginator = channel.messagePaginator;
 		const release = channel.activate();
