@@ -400,13 +400,8 @@ export class Thread extends WithSubscriptions {
    * thread analogue of {@link Channel.reload}, and what connection recovery calls for every active
    * thread.
    *
-   * Preserves failed (unsent) replies. They are read out of the reply paginator rather than out of
-   * `failedRepliesMap`, because that map is only written by `upsertReplyLocally`, whose callers are
-   * this thread's own subscriptions and the offline-DB path resolved through `client.threads.get` —
-   * neither of which covers a thread that was never activated or listed. Reading the paginator is
-   * true for registered and unregistered threads alike. An overlap merge keeps them anyway (the
-   * reconcile's provenance guard never prunes a non-server message); only the rebuild for a page
-   * separated by a gap can drop them, so any that actually fell out are re-ingested below.
+   * Preserves failed (unsent) replies: reconciling never removes a reply the server has not
+   * confirmed.
    *
    * Rethrows, except for a not-found answer on a thread that never had replies (see the catch).
    */
@@ -426,7 +421,6 @@ export class Thread extends WithSubscriptions {
       const headIntervalItemIdsAtRequest = new Set(
         this.messagePaginator.anchoredHeadItems.map((reply) => reply.id),
       );
-      const failedBefore = loadedReplies.filter((reply) => reply.status === 'failed');
       const thread = await this.client.getThreadAndHydrate(this.id, {
         watch: true,
         reply_limit: requestedReplyLimit,
@@ -437,21 +431,6 @@ export class Thread extends WithSubscriptions {
           headIntervalItemIdsAtRequest,
         },
       });
-
-      if (failedBefore.length) {
-        // Membership is checked against the visible window, NOT `getItem`: that reads the item
-        // index, which can still hold a message the rebuild dropped from the loaded window — so an
-        // index-based guard skips the re-ingest on exactly the path that needs it.
-        const visible = new Set((this.messagePaginator.items ?? []).map((r) => r.id));
-        this.messagePaginator.batch(
-          () => {
-            for (const failed of failedBefore) {
-              if (!visible.has(failed.id)) this.messagePaginator.ingestItem(failed);
-            }
-          },
-          { coalesce: true },
-        );
-      }
     } catch (error) {
       const notFound =
         isDoesNotExistError(error as Error) ||

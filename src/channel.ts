@@ -1497,6 +1497,8 @@ export class Channel extends ChannelApi {
    *
    * While active, the channel's own state takes precedence over bulk state writes: channel-list
    * hydration places no page in its message list (its own `channel.reload()` owns that window).
+   * Its message list keeps the reader on their window only while active: otherwise a fresh newest
+   * page from a query the list did not run (`watch()`, a reload, the channel list) is shown.
    *
    * An active channel also stays in the channel store. Once the last consumer releases it, it is
    * kept only while something else uses it (a watch, a channel list, a claim). A superseded channel
@@ -1704,13 +1706,9 @@ export class Channel extends ChannelApi {
    * recovery do), driven by the loaded-id snapshot that query captures before its await. Owning
    * that single path is what lets the SDK stop passing the reconciliation window/snapshot itself.
    *
-   * Preserves failed (unsent) messages: an overlap merge keeps them (the reconcile's provenance
-   * guard never prunes a non-server message); only the rebuild for a page separated by a gap can
-   * drop them, so any that actually fell out are re-ingested below. The offline DB is consulted
-   * alongside the in-memory window, because a failed message can be absent from memory and still be
-   * the user's unsent work — a cold boot starts with an empty paginator, and an eviction can drop
-   * it mid-session. v9 got this from a second, lagging copy of the list (the React SDK's own
-   * state); with one reactive source of truth the persisted row is that buffer.
+   * Preserves failed (unsent) messages: reconciling never removes one an interval holds, and those
+   * the offline DB holds but no interval does (after a cold boot, an eviction, or landing between
+   * two loaded windows) are ingested again.
    */
   async reload() {
     if (this._reloading || (!this.initialized && !this.offlineMode)) return;
@@ -1722,36 +1720,21 @@ export class Channel extends ChannelApi {
         Math.max(paginator.anchoredHeadItems.length, paginator.pageSize ?? 0) ||
         undefined;
       const offlineDb = this.getClient().offlineDb;
-      // Unsent messages are newest-side: in the newest window, or among the live items received while
-      // that window was not loaded.
-      const failedInMemory = [
-        ...paginator.anchoredHeadItems,
-        ...paginator.logicalHeadItems,
-      ].filter((message) => message.status === 'failed');
-      // Read before the await, so this cannot pick up a message that failed DURING the reload — that
-      // one is already in the paginator and does not need re-ingesting.
       const failedInDb = offlineDb
         ? await offlineDb.getFailedMessages({ cid: this.cid })
         : [];
-      const failedById = new Map<string, LocalMessage>();
-      for (const message of [...failedInDb, ...failedInMemory]) {
-        // In-memory wins on a collision: it is at least as fresh as the row it was mirrored from.
-        failedById.set(message.id, message);
-      }
-      const failedBefore = [...failedById.values()];
 
       await this.watch({ messages: { limit: requestedLimit } });
       this.offlineMode = false;
 
-      if (failedBefore.length) {
-        // Make sure the messages that failed to be sent before the watch() request are
-        // reingested after the watch() query.
-        const visible = new Set((paginator.items ?? []).map((message) => message.id));
+      // the user's unsent work no interval holds
+      const lostFailed = failedInDb.filter(
+        (message) => !paginator.isInLoadedInterval(message),
+      );
+      if (lostFailed.length) {
         paginator.batch(
           () => {
-            for (const failed of failedBefore) {
-              if (!visible.has(failed.id)) paginator.ingestItem(failed);
-            }
+            for (const failed of lostFailed) paginator.ingestItem(failed);
           },
           { coalesce: true },
         );

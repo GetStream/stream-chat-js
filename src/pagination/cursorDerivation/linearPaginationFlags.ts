@@ -51,6 +51,10 @@ export const getLinearQueryDirection = (
   return undefined;
 };
 
+/**
+ * Flags for a page queried from a cursor, or the newest page. `intervalEdges` are the outermost
+ * items of the page's interval that a page can hold (see `BasePaginator.getServerKnownEdges`).
+ */
 export const deriveLinearPaginationFlags = <
   T extends { id: string; created_at: TimestampNS },
   Q extends LinearPaginationQueryShape,
@@ -58,16 +62,18 @@ export const deriveLinearPaginationFlags = <
   direction,
   hasMoreHead,
   hasMoreTail,
-  interval,
+  intervalEdges,
   page,
   queryShape,
   requestedPageSize,
-}: CursorDeriveContext<T, Q>): PaginationFlags => {
+}: CursorDeriveContext<T, Q> & {
+  intervalEdges: { head: T | undefined; tail: T | undefined };
+}): PaginationFlags => {
   const flags: PaginationFlags = { hasMoreHead, hasMoreTail };
   const [firstPageMsg, lastPageMsg] = [page[0], page.slice(-1)[0]];
   const [firstPageMsgIsFirstInSet, lastPageMsgIsLastInSet] = [
-    firstPageMsg?.id && firstPageMsg.id === interval.itemIds[0],
-    lastPageMsg?.id && lastPageMsg.id === interval.itemIds.slice(-1)[0],
+    firstPageMsg?.id && firstPageMsg.id === intervalEdges.tail?.id,
+    lastPageMsg?.id && lastPageMsg.id === intervalEdges.head?.id,
   ];
 
   const containsCursorPaginationProperties = hasAnyOf(

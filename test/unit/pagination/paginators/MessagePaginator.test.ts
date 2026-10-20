@@ -414,6 +414,7 @@ describe('MessagePaginator', () => {
       const result = await paginator.jumpToMessage('target-message', { pageSize: 13 });
 
       expect(executeQuerySpy).toHaveBeenCalledWith({
+        claimsActiveInterval: true,
         queryShape: { id_around: 'target-message', limit: 13 },
         updateState: false,
       });
@@ -970,6 +971,7 @@ describe('MessagePaginator', () => {
 
       expect(ok).toBe(true);
       expect(executeQuerySpy).toHaveBeenCalledWith({
+        claimsActiveInterval: true,
         queryShape: { created_at_around: nsToDate(0), limit: 25 },
         updateState: false,
       });
@@ -1067,6 +1069,7 @@ describe('MessagePaginator', () => {
 
       expect(ok).toBe(true);
       expect(executeQuerySpy).toHaveBeenCalledWith({
+        claimsActiveInterval: true,
         // `created_at_around` is a request field, so the paginator converts back to a `Date`.
         queryShape: { created_at_around: nsToDate(lastReadAt), limit: 25 },
         updateState: false,
@@ -3015,33 +3018,33 @@ describe('MessagePaginator', () => {
       expect(paginator.getItem('m3')?.text).toBe('edited');
     });
 
-    it('resets to the fetched window when it is DISJOINT from the loaded head (>= a page arrived while away)', () => {
+    it('stores a newest page separated by a gap as the newest window, keeping the shown window', () => {
       const { paginator } = setupLoadedHead({ isTail: false });
-      // A newest window that shares NO id with the loaded [m1,m2,m3]: more than a page arrived while
-      // offline, so there is a gap between the loaded set and this window. Merging would silently
-      // weld across the gap (dropping the in-between messages); instead we reset to this window.
-      const m10 = m('m10', '10');
-      const m11 = m('m11', '11');
-      const m12 = m('m12', '12');
-
-      paginator.reconcileNewestMessages([m10, m11, m12]);
+      // shares no id with the loaded [m1,m2,m3]: messages may be missing between them
+      paginator.reconcileNewestMessages([m('m10', '10'), m('m11', '11'), m('m12', '12')]);
 
       const state = paginator.state.getLatestValue();
-      // The list is the fresh contiguous window — no silent gap, stale older items dropped from view.
-      expect(state.items?.map((message) => message.id)).toEqual(['m10', 'm11', 'm12']);
-      // A single interval (no gap-weld), at the newest, with older still loadable...
-      expect(paginator.itemIntervals).toHaveLength(1);
-      expect(state.hasMoreHead).toBe(false);
-      expect(state.hasMoreTail).toBe(true);
-      // ...and the cursor is re-anchored to this window's oldest item, so "load older" continues
-      // contiguously from here (id_lt m10) and refills the gap instead of skipping it.
-      expect(state.cursor?.tailward).toBe('m10');
+      // the window being read stays shown, and can load newer messages up to the page
+      expect(state.items?.map((message) => message.id)).toEqual(['m1', 'm2', 'm3']);
+      expect(state.hasMoreHead).toBe(true);
+      expect(state.cursor?.headward).toBe('m3');
+      // the page is the newest window, which can load older messages, the gap
+      expect(paginator.anchoredHeadItems.map((message) => message.id)).toEqual([
+        'm10',
+        'm11',
+        'm12',
+      ]);
+      expect(paginator.itemIntervals).toHaveLength(2);
+      const newest = paginator.itemIntervals.find((interval) =>
+        (interval as Interval).itemIds.includes('m10'),
+      ) as Interval;
+      expect(newest.hasMoreTail).toBe(true);
     });
 
     it('sets hasMoreHead false after merging the head window', () => {
       const { paginator } = setupLoadedHead({ isTail: false });
 
-      paginator.reconcileNewestMessages([m('m4', '04')]);
+      paginator.reconcileNewestMessages([m('m3', '03'), m('m4', '04')]);
 
       expect(paginator.state.getLatestValue().hasMoreHead).toBe(false);
     });
@@ -3229,7 +3232,7 @@ describe('MessagePaginator', () => {
       ]);
     });
 
-    it('discards ALL intervals including a separate stale one on a disjoint reset (head active)', () => {
+    it('keeps every window when a newest page separated by a gap arrives (head active)', () => {
       const paginator = new MessagePaginator({
         channel,
         itemIndex,
@@ -3251,16 +3254,17 @@ describe('MessagePaginator', () => {
       });
       expect(paginator.itemIntervals).toHaveLength(2);
 
-      // A newest window disjoint from the head (shares no id). The reset clears every interval, so
-      // the stale older one is dropped too; only the fetched window remains.
+      // shares no id with the head window: stored as the newest window, the loaded windows stay
       paginator.reconcileNewestMessages([m('m20', '20'), m('m21', '21'), m('m22', '22')]);
 
       const state = paginator.state.getLatestValue();
-      expect(paginator.itemIntervals).toHaveLength(1);
-      expect(state.items?.map((message) => message.id)).toEqual(['m20', 'm21', 'm22']);
-      // The previously loaded items (head + older) are no longer part of the visible set.
-      expect(state.items?.some((message) => message.id === 'm1')).toBe(false);
-      expect(state.items?.some((message) => message.id === 'm8')).toBe(false);
+      expect(paginator.itemIntervals).toHaveLength(3);
+      expect(state.items?.map((message) => message.id)).toEqual(['m8', 'm9', 'm10']);
+      expect(paginator.anchoredHeadItems.map((message) => message.id)).toEqual([
+        'm20',
+        'm21',
+        'm22',
+      ]);
     });
   });
 
@@ -3600,12 +3604,12 @@ describe('MessagePaginator', () => {
 
     // ── Structural guards preserved ──────────────────────────────────────────────────────────────
 
-    it('does not reconcile on a disjoint reset (the rebuilt window is already authoritative)', () => {
+    it('removes nothing from the shown window when the newest page is separated by a gap', () => {
       const loaded = [msg('m1', 1), msg('m2', 2), msg('m3', 3)];
       const paginator = loadHead(loaded);
       const headIntervalItemIdsAtRequest = new Set(loaded.map((message) => message.id));
 
-      // A fully-disjoint newest window (100+ arrived). Rebuild replaces the loaded set; no extra prune.
+      // The page covers none of the shown window, so it proves no message there was deleted.
       paginator.reconcileNewestMessages(
         [msg('m10', 10), msg('m11', 11), msg('m12', 12)],
         {
@@ -3613,7 +3617,283 @@ describe('MessagePaginator', () => {
         },
       );
 
-      expect(ids(paginator)).toEqual(['m10', 'm11', 'm12']);
+      expect(ids(paginator)).toEqual(['m1', 'm2', 'm3']);
+    });
+
+    it('moves unsent messages to the newest window when the newest page is separated by a gap', () => {
+      const paginator = loadHead([
+        msg('m1', 1),
+        msg('m2', 2),
+        msg('m3', 3),
+        msg('failed', 10, { status: 'failed' }),
+      ]);
+
+      paginator.reconcileNewestMessages([msg('m9', 9), msg('m11', 11), msg('m12', 12)]);
+
+      // the shown window keeps what is older than the page, and can load newer messages up to it
+      expect(ids(paginator)).toEqual(['m1', 'm2', 'm3']);
+      expect(paginator.hasMoreHead).toBe(true);
+      // the unsent message carries the device's clock, and belongs with the newest messages
+      expect(paginator.anchoredHeadItems.map((message) => message.id)).toEqual([
+        'm9',
+        'failed',
+        'm11',
+        'm12',
+      ]);
+      expect(
+        paginator.intervalViews
+          .getLatestValue()
+          .anchoredHead.map((message) => message.id),
+      ).toEqual(['m9', 'failed', 'm11', 'm12']);
+      expect(paginator.itemIntervals).toHaveLength(2);
+    });
+
+    it.each([
+      {
+        case: 'a message arrived during the request',
+        newestLoaded: msg('m13', 13),
+        page: [msg('m9', 9), msg('m10', 10), msg('m11', 11)],
+        newestWindow: ['m9', 'm10', 'm11', 'm13'],
+      },
+      {
+        case: 'the page proves a hard delete',
+        newestLoaded: msg('m10', 10),
+        page: [msg('m9', 9), msg('m11', 11), msg('m12', 12)],
+        newestWindow: ['m9', 'm11', 'm12'],
+      },
+    ])(
+      'publishes the shown window across a gap once, with the newest window in place ($case)',
+      ({ newestLoaded, page, newestWindow }) => {
+        const paginator = loadHead([
+          msg('m1', 1),
+          msg('m2', 2),
+          msg('m3', 3),
+          newestLoaded,
+        ]);
+        const publishes: unknown[] = [];
+        const unsubscribe = paginator.state.subscribe(({ cursor, hasMoreHead, items }) =>
+          publishes.push({
+            cursor,
+            hasMoreHead,
+            items: items?.map((message) => message.id),
+            newestWindow: paginator.anchoredHeadItems.map((message) => message.id),
+          }),
+        );
+        publishes.length = 0; // the call on subscribing
+
+        paginator.reconcileNewestMessages(page);
+        unsubscribe();
+
+        expect(publishes).toEqual([
+          {
+            cursor: { headward: 'm3', tailward: 'm1' },
+            hasMoreHead: true,
+            items: ['m1', 'm2', 'm3'],
+            newestWindow,
+          },
+        ]);
+      },
+    );
+
+    it('moves messages that arrived during the request to the newest window across a gap', () => {
+      const paginator = loadHead([
+        msg('m1', 1),
+        msg('m2', 2),
+        msg('m3', 3),
+        msg('m13', 13),
+      ]);
+
+      paginator.reconcileNewestMessages([msg('m9', 9), msg('m10', 10), msg('m11', 11)]);
+
+      expect(ids(paginator)).toEqual(['m1', 'm2', 'm3']);
+      expect(paginator.anchoredHeadItems.map((message) => message.id)).toEqual([
+        'm9',
+        'm10',
+        'm11',
+        'm13',
+      ]);
+      expect(paginator.itemIntervals).toHaveLength(2);
+    });
+
+    it('moves unsent messages to the newest window across a gap while the reader is elsewhere', () => {
+      const paginator = loadHead([
+        msg('m30', 30),
+        msg('m31', 31),
+        msg('failed', 40, { status: 'failed' }),
+      ]);
+      // the reader jumped to an older window
+      paginator.ingestPage({
+        page: [msg('m1', 1), msg('m2', 2), msg('m3', 3)],
+        isHead: false,
+        isTail: false,
+        setActive: true,
+      });
+
+      paginator.reconcileNewestMessages([msg('m38', 38), msg('m39', 39), msg('m41', 41)]);
+
+      expect(ids(paginator)).toEqual(['m1', 'm2', 'm3']);
+      expect(paginator.anchoredHeadItems.map((message) => message.id)).toEqual([
+        'm38',
+        'm39',
+        'failed',
+        'm41',
+      ]);
+      expect(paginator.itemIntervals).toHaveLength(3);
+    });
+
+    it('merges a short newest page that reached the channel start into the shown window', () => {
+      const paginator = loadHead([msg('m1', 1), msg('m2', 2), msg('m3', 3)]);
+
+      // fewer than the 3 requested: no message older than m4 exists, so nothing is missing between
+      paginator.reconcileNewestMessages([msg('m4', 4)], { requestedLimit: 3 });
+
+      expect(ids(paginator)).toEqual(['m1', 'm2', 'm3', 'm4']);
+      expect(paginator.hasMoreHead).toBe(false);
+      expect(paginator.hasMoreTail).toBe(false);
+      expect(paginator.itemIntervals).toHaveLength(1);
+    });
+
+    it('loads newer messages across a gap from the newest sent message, never an unsent one', async () => {
+      const paginator = loadHead([
+        msg('m1', 1),
+        msg('m2', 2),
+        msg('m3', 3),
+        // older than the page, so it stays in the shown window, as its newest item
+        msg('failed', 8, { status: 'failed' }),
+      ]);
+      paginator.pageSize = 3;
+      paginator.reconcileNewestMessages([msg('m10', 10), msg('m11', 11), msg('m12', 12)]);
+      expect(ids(paginator)).toEqual(['m1', 'm2', 'm3', 'failed']);
+      expect(paginator.cursor?.headward).toBe('m3');
+
+      const query = channel.query as unknown as ReturnType<typeof vi.fn>;
+      query.mockResolvedValue({ messages: [msg('m4', 4), msg('m5', 5), msg('m6', 6)] });
+      await paginator.toHead();
+
+      expect(query).toHaveBeenCalledWith(
+        expect.objectContaining({
+          messages: expect.objectContaining({ id_gt: 'm3' }),
+        }),
+      );
+      expect(ids(paginator)).toEqual(['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'failed']);
+      expect(paginator.cursor?.headward).toBe('m6');
+    });
+
+    it('joins the newest window holding an unsent message when loading newer messages reaches it', async () => {
+      const paginator = loadHead([
+        msg('m1', 1),
+        msg('m2', 2),
+        msg('m3', 3),
+        // newer than the page, so it moves to the newest window
+        msg('failed', 20, { status: 'failed' }),
+      ]);
+      paginator.pageSize = 3;
+      paginator.reconcileNewestMessages([msg('m10', 10), msg('m11', 11), msg('m12', 12)]);
+      expect(ids(paginator)).toEqual(['m1', 'm2', 'm3']);
+
+      const query = channel.query as unknown as ReturnType<typeof vi.fn>;
+      for (const minutes of [
+        [4, 5, 6],
+        [7, 8, 9],
+        [10, 11, 12],
+      ]) {
+        query.mockResolvedValueOnce({
+          messages: minutes.map((minute) => msg(`m${minute}`, minute)),
+        });
+        await paginator.toHead();
+      }
+
+      const joined = [...Array.from({ length: 12 }, (_, i) => `m${i + 1}`), 'failed'];
+      expect(ids(paginator)).toEqual(joined);
+      // the joined window reaches the newest message
+      expect(paginator.hasMoreHead).toBe(false);
+      expect(paginator.anchoredHeadItems.map((message) => message.id)).toEqual(joined);
+      expect(paginator.itemIntervals).toHaveLength(1);
+
+      // a new message joins the shown window
+      paginator.ingestItem(msg('m30', 30));
+      expect(ids(paginator)).toEqual([...joined, 'm30']);
+    });
+
+    it('joins the newest window holding an unsent message when a short page reaches its newest sent message', async () => {
+      const paginator = loadHead([
+        msg('m1', 1),
+        msg('m2', 2),
+        msg('m3', 3),
+        msg('failed', 20, { status: 'failed' }),
+      ]);
+      paginator.pageSize = 10;
+      paginator.reconcileNewestMessages([msg('m10', 10), msg('m11', 11), msg('m12', 12)]);
+      // a newer message was reported, and hard-deleted since
+      paginator.setQueriedLatestMessageAt(msg('m13', 13).created_at);
+
+      const query = channel.query as unknown as ReturnType<typeof vi.fn>;
+      // fewer than the 10 requested: nothing newer than m12 exists
+      query.mockResolvedValueOnce({
+        messages: [4, 5, 6, 7, 8, 9, 10, 11, 12].map((minute) =>
+          msg(`m${minute}`, minute),
+        ),
+      });
+      await paginator.toHead();
+
+      expect(paginator.hasMoreHead).toBe(false);
+      expect(paginator.anchoredHeadItems.map((message) => message.id)).toEqual(
+        ids(paginator),
+      );
+    });
+
+    it('keeps the head mark of a window holding newer messages than a page claiming the newest', async () => {
+      const doRequest = vi.fn().mockResolvedValue({
+        items: [msg('m19', 19), msg('m20', 20), msg('m21', 21)],
+        cursor: { headward: null, tailward: 'm19' },
+      });
+      const paginator = new MessagePaginator({
+        channel,
+        itemIndex: new StoreBackedItemIndex<LocalMessage>({
+          getEntityId: (message) => message.id,
+        }),
+        paginatorOptions: { doRequest },
+      });
+      paginator.ingestPage({
+        page: [msg('m50', 50), msg('m51', 51), msg('m52', 52)],
+        isHead: true,
+        isTail: false,
+        setActive: true,
+      });
+
+      // the server reports the page as reaching the newest message; the newer window contradicts it
+      await paginator.jumpToMessage('m20');
+
+      const newer = paginator.itemIntervals.find((interval) =>
+        (interval as Interval).itemIds.includes('m50'),
+      ) as Interval;
+      expect(newer.isHead).toBe(true);
+      // the view shows the newest window the getter reads
+      expect(
+        paginator.intervalViews
+          .getLatestValue()
+          .anchoredHead.map((message) => message.id),
+      ).toEqual(['m50', 'm51', 'm52']);
+    });
+
+    it('loads older messages without a cursor key when the window holds no message the server knows', async () => {
+      const paginator = loadHead([msg('m30', 30), msg('m31', 31)]);
+      // a window of only unsent messages, older than the newest one
+      paginator.ingestPage({
+        page: [msg('sending', 20, { status: 'sending' })],
+        isHead: false,
+        isTail: false,
+        policy: 'strict-overlap-only',
+      });
+      await paginator.jumpToMessage('sending');
+      expect(paginator.cursor?.tailward).toBeNull();
+
+      const query = channel.query as unknown as ReturnType<typeof vi.fn>;
+      query.mockResolvedValue({ messages: [] });
+      await paginator.toTail();
+
+      const { messages } = query.mock.calls[query.mock.calls.length - 1][0];
+      expect(messages).not.toHaveProperty('id_lt');
     });
 
     it('reconciles the inactive head but preserves the view when the caller jumped to a separate older window', () => {
@@ -4176,9 +4456,9 @@ describe('MessagePaginator', () => {
 
   // A page from an external query (watch() / create() / hydrateChannels) is either placed
   // (placeExternalQueryPage) or, as the newest page into loaded messages, reconciles them
-  // (reconcileNewestMessages: merge + destructive reconcile + disjoint rebuild), whose internals
-  // are covered above. The routing tests below pin which of the two runs; the rest pin reconnect
-  // flows.
+  // (reconcileNewestMessages: merged and reconciled, or a newest window of its own across a gap),
+  // whose internals are covered above. The routing tests below pin which of the two runs; the rest
+  // pin reconnect flows.
   describe('external query pages: placing or reconciling', () => {
     const msg = (id: string, minute: number, overrides: Partial<MessageResponse> = {}) =>
       createMessage({
@@ -4346,13 +4626,15 @@ describe('MessagePaginator', () => {
       expect(paginator.items?.map((m) => m.id)).toEqual(before); // unchanged — no weld
     });
 
-    it('AUDIT: disjoint reconnect rebuilds to the fresh page instead of welding across the gap', () => {
+    it('AUDIT: a reconnect page separated by a gap is not welded to the shown window', () => {
       const paginator = loadHead([msg('m01', 1), msg('m02', 2), msg('m03', 3)]);
       // 100+ new arrived while offline → the fetched newest page shares NO id with the loaded window.
       hydrateNewestPage(paginator, [msg('m10', 10), msg('m11', 11), msg('m12', 12)], 3);
-      // Must NOT weld m10..m12 across the gap into m01..m03 (which hides m04..m09 with no way to reach
-      // them). Rebuild to the fresh page so scrolling up reloads the gap contiguously.
-      expect(paginator.items?.map((m) => m.id)).toEqual(['m10', 'm11', 'm12']);
+      // Must NOT weld m10..m12 across the gap into m01..m03 (which hides m04..m09 with no way to
+      // reach them): the page is the newest window, and the shown one loads newer up to it.
+      expect(paginator.items?.map((m) => m.id)).toEqual(['m01', 'm02', 'm03']);
+      expect(paginator.hasMoreHead).toBe(true);
+      expect(paginator.anchoredHeadItems.map((m) => m.id)).toEqual(['m10', 'm11', 'm12']);
     });
 
     it('AUDIT: an empty reconnect page (no snapshot) does not blank the loaded window', () => {
@@ -4362,11 +4644,11 @@ describe('MessagePaginator', () => {
       expect(paginator.items?.map((m) => m.id)).toEqual(['m01', 'm02', 'm03']);
     });
 
-    it('AUDIT e2e: after a disjoint rebuild, "load older" reloads the gap, not the discarded stale window', async () => {
-      const gap = [msg('m175', 175), msg('m176', 176), msg('m177', 177)];
+    it('AUDIT e2e: after a newest page stored past a gap, "load newer" joins the shown window to it', async () => {
+      // the next newer page from the shown window reaches the newest window stored meanwhile
       const doRequest = vi.fn().mockResolvedValue({
-        items: gap,
-        cursor: { tailward: 'm175', headward: 'm177' },
+        items: [msg('m081', 81), msg('m082', 82), msg('m083', 83)],
+        cursor: { tailward: 'm081', headward: null },
       });
       const paginator = new MessagePaginator({
         channel: reconcileChannel,
@@ -4380,18 +4662,26 @@ describe('MessagePaginator', () => {
         isTail: false,
         setActive: true,
       });
-      // Reconnect: 100+ new arrived, so the fetched newest page is DISJOINT from the loaded window.
+      // Reconnect: the fetched newest page shares no id with the loaded window.
       hydrateNewestPage(
         paginator,
-        [msg('m178', 178), msg('m179', 179), msg('m180', 180)],
+        [msg('m081', 81), msg('m082', 82), msg('m083', 83)],
         3,
       );
-      // Scroll up: the rebuilt window must reload the gap contiguously — the stale m078..m080 are gone,
-      // not welded in with the in-between messages hidden.
-      await paginator.executeQuery({ direction: 'tailward' });
-      const ids = paginator.items?.map((m) => m.id);
-      expect(ids).not.toContain('m078');
-      expect(ids).toEqual(['m175', 'm176', 'm177', 'm178', 'm179', 'm180']);
+      expect(paginator.items?.map((m) => m.id)).toEqual(['m078', 'm079', 'm080']);
+
+      await paginator.executeQuery({ direction: 'headward' });
+
+      expect(paginator.items?.map((m) => m.id)).toEqual([
+        'm078',
+        'm079',
+        'm080',
+        'm081',
+        'm082',
+        'm083',
+      ]);
+      expect(paginator.hasMoreHead).toBe(false);
+      expect(paginator.itemIntervals).toHaveLength(1);
     });
 
     it('a jump to a far disjoint message stays SEPARATE from the latest, even through a refresh', async () => {

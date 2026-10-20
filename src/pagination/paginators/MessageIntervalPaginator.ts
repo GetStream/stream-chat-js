@@ -1,14 +1,13 @@
 import type {
   AnyInterval,
   BasePaginatorConfig,
-  CursorDerivator,
+  CursorDeriveContext,
   CursorDeriveResult,
   DoRequestResponse,
   ExecuteQueryReturnValue,
   Interval,
   PaginationDirection,
   PaginationQueryParams,
-  PaginatorCursor,
   PaginatorState,
   QueryPagePlacement,
 } from './BasePaginator';
@@ -176,19 +175,18 @@ export type MessagePaginatorOptions = {
  * but is absent from it — unconditionally safe (a message that arrived live during the caller's
  * fetch is always strictly newer than `page`'s newest message, so it can never fall in that span).
  * `headIntervalItemIdsAtRequest` widens the reconcilable window at the TOP edge; `requestedLimit`
- * only tunes the `hasMoreTail` affordance and can never remove a message:
+ * says whether the page reached the channel start:
  */
 export type ReconcileNewestMessagesOptions = {
   /**
-   * The `limit` the caller passed to the query that produced `page`. Used ONLY to derive
-   * `hasMoreTail` — whether `page` reached the channel's own oldest message — by comparing it to
-   * `page.length`. It NEVER removes a message (reconciliation stays window-only regardless), so the
-   * worst a wrong value can do is show/hide the "load older" affordance for one settle. Trusted only
-   * when no larger than the paginator's own `pageSize` (see
-   * {@link MessageIntervalPaginator.pageReachedChannelStart}); a larger over-request — e.g.
-   * `channel.reload` re-fetching the whole loaded window to reconcile as much as possible — may have
-   * been silently server-capped, so its short page is ignored rather than mistaken for reaching the
-   * start.
+   * The `limit` the caller passed to the query that produced `page`. Compared to `page.length`, it
+   * says whether `page` reached the channel start (see
+   * {@link MessageIntervalPaginator.pageReachedChannelStart}, which ignores a limit above
+   * `pageSize`), deciding `hasMoreTail`, whether `page` can be separated from the head window by
+   * a gap, and whether a reload probes for messages deleted below the page (see
+   * {@link MessageIntervalPaginator.pruneBelowWindowIfReachedStart}). On its own it never removes a
+   * message. Pass the limit actually sent: a larger one makes a short page look like the channel
+   * start, welding it to the head window across a real gap.
    */
   requestedLimit?: number;
   /**
@@ -428,7 +426,7 @@ export class MessageIntervalPaginator extends BasePaginator<
   > {
     if (!this.intervalBehaviour) {
       this.intervalBehaviour = {
-        deriveCursor: makeDeriveCursor(this),
+        deriveCursor: (ctx) => this.deriveCursorFromPage(ctx),
         itemOrderComparator: makeComparator<LocalMessage>({
           sort: this._itemOrder,
           resolvePathValue: resolveDotPathValue,
@@ -497,10 +495,11 @@ export class MessageIntervalPaginator extends BasePaginator<
     PaginationQueryParams<MessageQueryShape>,
     'isFirstPageQuery'
   >): MessageQueryShape {
+    // no server-known message at that edge: no cursor, so the query returns the newest page
+    const cursorId = direction ? this.cursor?.[direction] : undefined;
     return {
       limit: this.pageSize,
-      [direction === 'tailward' ? 'id_lt' : 'id_gt']:
-        direction && this.cursor?.[direction],
+      ...(cursorId && { [direction === 'tailward' ? 'id_lt' : 'id_gt']: cursorId }),
     };
   }
 
@@ -630,6 +629,20 @@ export class MessageIntervalPaginator extends BasePaginator<
   }
 
   /**
+   * Whether someone reads this list, so a page from a query this paginator did not run leaves them
+   * on the window they are on. When nobody does, a fresh newest page is shown instead. The
+   * channel's own message list is read while the channel is active (see `Channel.activate()`).
+   * Any other list, such as a thread's replies, always counts as read: the channel being active
+   * says nothing about it.
+   */
+  private isBeingRead(): boolean {
+    // widened: TypeScript does not compare the polymorphic `this` with a subclass
+    const isChannelMessageList =
+      this.channel.messagePaginator === (this as MessageIntervalPaginator);
+    return !isChannelMessageList || this.channel.active;
+  }
+
+  /**
    * Places a page from an external query — one this paginator did not run, whose page the caller
    * chose — in the windows it belongs to, never removing anything loaded. Bringing the loaded
    * newest messages up to date with a fresh newest page, removals included, is
@@ -648,10 +661,11 @@ export class MessageIntervalPaginator extends BasePaginator<
    *   overlaps.
    *
    * The reader stays on the window they are on: moving them is this paginator's own methods' job
-   * (`jumpToMessage()` and the like). When a page lands in the active window, overlaps it, or takes
-   * in an active window of live messages only, that window is shown again with the page. The
-   * paginator's own queries are left alone too: a running one keeps its loading flag, and its last
-   * query error and query shape stay.
+   * (`jumpToMessage()` and the like). The exception is a list nobody reads (see
+   * {@link isBeingRead}), where the newest page is shown as when no window is active. When a page
+   * lands in the active window, overlaps it, or takes in an active window of live messages only,
+   * that window is shown again with the page. The paginator's own queries are left alone too: a
+   * running one keeps its loading flag, and its last query error and query shape stay.
    *
    * It runs synchronously, so a caller can apply the rest of the response right after with the page
    * in place, as it has to: read and delivery positions that come without a message id are looked
@@ -676,18 +690,20 @@ export class MessageIntervalPaginator extends BasePaginator<
     const { head: headItem, tail: tailItem } = this.getPagePaginationEdges(items);
     // the first page of a list not loaded yet, or the newest page
     const isFirstPage = typeof this.items === 'undefined' || isNewestPage;
-    const activeWindow = this.itemIntervals.find((interval) =>
+    const activeInterval = this.itemIntervals.find((interval) =>
       this.isActiveInterval(interval),
     );
-    // only live messages, with no page loaded yet, count as no active window
-    const hasActiveWindow = !!activeWindow && !isLogicalInterval(activeWindow);
+    // only live messages, with no page loaded yet, count as no active window, as does a window
+    // nobody reads
+    const hasActiveInterval =
+      !!activeInterval && !isLogicalInterval(activeInterval) && this.isBeingRead();
     // The newest page lands in the active window when that is the newest window; any other page has
     // no known place relative to the active window, so it is stored as a separate interval.
-    const landsInActiveWindow = isNewestPage && this.isActiveIntervalAtHead;
-    const showsPage = isNewestPage && (!hasActiveWindow || landsInActiveWindow);
+    const landsInActiveInterval = isNewestPage && this.isActiveIntervalAtHead;
+    const showsPage = isNewestPage && (!hasActiveInterval || landsInActiveInterval);
     const placed = this.placePage(
       {
-        continuesActiveWindow: landsInActiveWindow,
+        startsSeparateInterval: !landsInActiveInterval,
         // A jump/around page spans both directions; a page at a cursor pages the way its cursor
         // points, and a plain latest page paginates tailward (older).
         direction: isJump
@@ -707,25 +723,19 @@ export class MessageIntervalPaginator extends BasePaginator<
     );
     // A stored page that took in a live-only active window (only live messages, no page) carries
     // on as the active window: its live messages are still shown, with what the page added.
-    const tookInActiveWindow =
-      !!activeWindow &&
-      !!placed.targetInterval &&
+    const tookInActiveInterval =
+      !!activeInterval &&
       !this.itemIntervals.some((interval) => this.isActiveInterval(interval));
-    if (tookInActiveWindow && placed.targetInterval) {
-      this.setActiveInterval(placed.targetInterval, { updateState: false });
+    const intervalTakingOver = tookInActiveInterval ? placed.targetInterval : null;
+    if (intervalTakingOver) {
+      this.setActiveInterval(intervalTakingOver, { updateState: false });
+      // placing did not publish it: the window it took in becomes the active one only here
+      const { cursor, hasMoreHead, hasMoreTail } = placed.stateCandidate;
+      this.publishActiveInterval({ cursor, hasMoreHead, hasMoreTail });
     }
     if (showsPage) {
       // shown without a query of this paginator, so its next query has to continue this window
       this.recordLoadedWindowQueryShape();
-    } else if (placed.targetInterval && this.isActiveInterval(placed.targetInterval)) {
-      // a stored page that overlaps the active window, or took it in, grew it
-      const { cursor, hasMoreHead, hasMoreTail } = placed.stateCandidate;
-      this.state.partialNext({
-        cursor,
-        hasMoreHead,
-        hasMoreTail,
-        items: this.intervalToItems(placed.targetInterval),
-      });
     }
     return showsPage && isFirstPage;
   }
@@ -822,6 +832,11 @@ export class MessageIntervalPaginator extends BasePaginator<
       : this.pageSize;
   }
 
+  /**
+   * Makes the interval holding the message the active one, querying the page around it when it is
+   * not loaded. Resolves `false` when the message cannot be shown, or when a later claim on the
+   * active interval (see `claimActiveInterval`) was made before the page arrived.
+   */
   jumpToMessage = async (
     messageId: string,
     {
@@ -861,6 +876,8 @@ export class MessageIntervalPaginator extends BasePaginator<
 
     // a loaded message needs no request, unless the jump is also to watch the channel
     if (!watch && localMessage && interval && !isLogicalInterval(interval)) {
+      // showing a loaded interval claims the active interval, as a query for one does
+      this.claimActiveInterval();
       state = {
         hasMoreHead: interval.hasMoreHead,
         hasMoreTail: interval.hasMoreTail,
@@ -869,12 +886,15 @@ export class MessageIntervalPaginator extends BasePaginator<
       };
     } else {
       const result = await this.executeQuery({
+        claimsActiveInterval: true,
         // Always send a limit, since the replies endpoint ignores `id_around` without one and returns the
         // newest replies instead.
         queryShape: { id_around: messageId, limit: pageSize ?? this.pageSize },
         ...(watch && { requestOptions: { watch: true } }),
         updateState: false,
       });
+      // a later claim decides the active interval, and the page stays stored
+      if (result?.isSuperseded) return false;
       localMessage = this.getItem(messageId);
       if (!localMessage || !result || !result.targetInterval) {
         this.channel.getClient().notifications.addError({
@@ -921,7 +941,13 @@ export class MessageIntervalPaginator extends BasePaginator<
     if (!(this.itemIntervals[0] as Interval)?.isHead) {
       // load the newest page in case pagination is currently on an older window (an empty/partial
       // headward response marks the interval as the head)
-      await this.executeQuery({ direction: 'headward', updateState: false });
+      const result = await this.executeQuery({
+        claimsActiveInterval: true,
+        direction: 'headward',
+        updateState: false,
+      });
+      // a later claim decides the active interval, and the page stays stored
+      if (result?.isSuperseded) return false;
     }
 
     // Re-read itemIntervals AFTER the query: the getter returns a fresh array each call, so a
@@ -951,44 +977,25 @@ export class MessageIntervalPaginator extends BasePaginator<
    * Reconciles the loaded newest messages with a fresh newest page, without issuing a query: they
    * are brought up to date in place — messages added and updated, those the page proves were
    * hard-deleted removed — rather than blanked and reloaded. The page comes from an external query
-   * (a reload, a channel-list query, connection recovery). What happens depends on which window is
-   * being read.
+   * (a reload, a channel-list query, connection recovery). The reader stays on their window;
+   * moving them is `jumpToTheLatestMessage()`'s job. In a list nobody reads (see
+   * {@link isBeingRead}), the head window is shown instead.
    *
-   * When the head window is the one being read, two cases, decided by whether the incoming page
-   * overlaps or is contiguous with it:
+   * Where the page goes depends on the head window, the loaded window reaching the newest message:
    *
-   * 1. OVERLAP - the incoming page shares at least one id with the loaded head (fewer than a full
-   *    page is new), or the head holds only messages newer than the page, which arrived after the
-   *    page was produced (contiguous). Merge in place: existing items are reconciled by id (edits,
-   *    soft deletes), new items are appended and every already loaded item (including older pages
-   *    already paged in) is kept. The tail boundary (`hasMoreTail`/`cursor.tailward`) is set from
-   *    whether the page reached the channel start ({@link pageReachedChannelStart}): a bounded page
-   *    that came back short means no more older, otherwise "load older" stays enabled and the
-   *    cursor re-anchors to the true loaded oldest (which also clears a stale offline-DB cursor).
-   *    Then destructive reconciliation ({@link reconcileHeadAgainstPage}) removes any loaded
-   *    message that the authoritative page proves was hard-deleted while no events were received
-   *    (see that method + the {@link ReconcileNewestMessagesOptions} for the exact, safe window).
+   * 1. NO HEAD WINDOW (only live messages, a jumped-to window, or a cleared head mark, see
+   *    {@link unmarkHead}) - the page becomes the head window, merging with the windows it
+   *    overlaps, live messages included, minus what it proves was hard-deleted. It is shown if the
+   *    reader was on the live messages it absorbed; a window being read that it overlaps grows.
    *
-   * 2. SEPARATED BY A GAP - the incoming page shares no id with the loaded head, which is entirely
-   *    older: the messages between them are not loaded (at least a full page is new). Merging would
-   *    weld the two across the gap (the interval merge treats two head intervals as overlapping
-   *    when one reaches further headward), hiding the items in between with no way to reach them.
-   *    Instead the loaded set is discarded and rebuilt from the incoming page as a fresh contiguous
-   *    head (`hasMoreTail: true`, cursor reanchored to the page's oldest item) so the gap and older
-   *    history load again when paginating older. No separate reconciliation is needed: the rebuilt
-   *    window IS the server truth, so any hard-deleted message is simply absent from it.
+   * 2. SEPARATED BY A GAP (see {@link isSeparatedFromHeadByGap}) - merging would weld the two
+   *    across the gap, hiding the messages in between, so the page becomes a head window of its
+   *    own (see {@link placeNewestPageAcrossGap}).
    *
-   * When another window is being read (the reader jumped to an older one), the reader stays there.
-   * Messages the page proves were hard-deleted are removed from the head window, then the page is
-   * merged into it when they overlap or are contiguous, or becomes the head window when they are
-   * separated by a gap (see {@link mergePageIntoInactiveHead}). If the page also overlaps the
-   * window being read, that window grows into the head window.
-   *
-   * When no window is marked as the head (only live messages arrived, only a window the reader
-   * jumped to is loaded, or the head mark was cleared, see {@link unmarkHead}), the page becomes
-   * the head window. It merges with the windows it overlaps, live messages included, and removes
-   * from them what it proves was hard-deleted. If the reader was on the live messages it absorbed,
-   * it becomes the window being read; if it merged into the window being read, that window grows.
+   * 3. OTHERWISE - the page merges into the head window, which keeps every loaded message and drops
+   *    what the page proves was hard-deleted (see {@link reconcileHeadAgainstPage}). A head window
+   *    being read gets its tail boundary from the page (see {@link showHeadInterval}); otherwise
+   *    the reader stays, and a window being read that the page overlaps grows into the head window.
    *
    * It never blanks the loaded windows, and with nothing loaded it does nothing: placing a first
    * page is {@link placeQueryPage}'s job. An empty page changes nothing on its own but, given a
@@ -1037,10 +1044,11 @@ export class MessageIntervalPaginator extends BasePaginator<
       );
       if (!this.itemIntervals.length || hasAnchoredHead || !page?.length) return;
 
-      // Take over the view only if the reader is on the live content being absorbed, so if they jumped
-      // to another interval, anchor for their return and leave them there (the rule the jumped away
-      // branch below enforces).
-      const takeOverView = !!logicalHead && this.isActiveInterval(logicalHead);
+      // Take over the view if the reader is on the live content being absorbed, or nobody reads the
+      // list. A reader who jumped to another interval stays there, with the page anchored for their
+      // return (the rule the jumped away branch below enforces).
+      const takeOverView =
+        !this.isBeingRead() || (!!logicalHead && this.isActiveInterval(logicalHead));
 
       const anchored = this.ingestPage({ page, isHead: true, setActive: false });
       if (!anchored) return;
@@ -1050,44 +1058,17 @@ export class MessageIntervalPaginator extends BasePaginator<
       if (!takeOverView) {
         // The page merged into the window being read, which now reaches the head: show what it gained.
         if (this.isActiveInterval(anchored)) {
-          this.state.partialNext({
-            items: this.intervalToItems(anchored),
-            hasMoreHead: false,
-            cursor: { headward: null, tailward: this.cursor?.tailward ?? null },
-          });
+          this.publishActiveIntervalGrownIntoHead();
         }
         return;
       }
-
-      const hasMoreTail = !this.pageReachedChannelStart(page, options);
-      anchored.hasMoreTail = hasMoreTail;
-      anchored.isTail = !hasMoreTail;
-
-      this.setActiveInterval(anchored, { updateState: false });
-      this.state.partialNext({
-        items: this.intervalToItems(anchored),
-        hasMoreHead: false,
-        hasMoreTail,
-        cursor: {
-          headward: null,
-          tailward: hasMoreTail ? (anchored.itemIds[0] ?? null) : null,
-        },
-      });
+      this.showHeadInterval(page, options);
       return;
     }
     // Captured BEFORE the merge overwrites state — inputs for the below-window reached-start probe
     // (overlap branch only): did we believe we were at the channel start, and how much was loaded.
     const wasAtChannelStart = !this.state.getLatestValue().hasMoreTail;
     const preMergeLoadedCount = headInterval.itemIds.length;
-    // If the caller jumped to a separate (older) window, that window is active and the head is not.
-    // Prune messages hard-deleted while no events were received out of the inactive head, then merge
-    // the fresh page into it, so returning to it later (scroll-to-latest) shows neither ghosts nor a
-    // stale newest window. The active window stays: the reader stays where they jumped to.
-    if (!this.isActiveInterval(headInterval)) {
-      this.reconcileHeadAgainstPage(page, options);
-      this.mergePageIntoInactiveHead(page);
-      return;
-    }
 
     if (!page?.length) {
       // Empty page: never blanks the list by itself. Only when the caller supplied a pre-fetch
@@ -1097,41 +1078,20 @@ export class MessageIntervalPaginator extends BasePaginator<
       return;
     }
 
-    const loadedIds = new Set(headInterval.itemIds);
-    // A head made only of messages newer than the page arrived after the page was produced, so the two
-    // are contiguous and merge like an overlapping page.
-    const overlapsLoadedHead =
-      page.some((item) => loadedIds.has(this.getItemId(item))) ||
-      this.isEntirelyHeadwardOf(headInterval, page);
-
-    if (!overlapsLoadedHead) {
-      // Separated by a gap: rebuild from the fetched page as a fresh newest slice. Clearing
-      // the stale intervals first ensures `ingestPage` builds a single head interval instead of
-      // merging across the gap so reanchoring the cursor to this page's oldest item keeps the next
-      // "load older" contiguous.
-      this.setIntervals([]);
-      this.setActiveInterval(undefined);
-      const resetInterval = this.ingestPage({
-        page,
-        isHead: true,
-        // Separated by a gap, the previously loaded head was entirely OLDER than this newest
-        // window, so there is always older data to load (the gap + the prior history) - keep
-        // hasMoreTail true.
-        isTail: false,
-        setActive: false,
-      });
-      if (!resetInterval) return;
-      this.setActiveInterval(resetInterval, { updateState: false });
-      this.state.partialNext({
-        items: this.intervalToItems(resetInterval),
-        cursor: this.getCursorFromInterval(resetInterval),
-        hasMoreHead: resetInterval.hasMoreHead,
-        hasMoreTail: resetInterval.hasMoreTail,
-      });
+    if (this.isSeparatedFromHeadByGap(headInterval, page, options)) {
+      this.placeNewestPageAcrossGap(headInterval, page, options);
       return;
     }
 
-    // Overlapping window: merge in place, keeping every already-loaded (incl. older) item.
+    // Another window is shown; the head window is still reconciled, so returning to it
+    // (scroll-to-latest) shows neither ghosts nor stale newest messages.
+    if (!this.isActiveInterval(headInterval)) {
+      this.reconcileHeadAgainstPage(page, options);
+      this.mergePageIntoInactiveHead(page, options);
+      return;
+    }
+
+    // the head window is being read: merge in place, keeping every loaded message
     const interval = this.ingestPage({
       page,
       isHead: true,
@@ -1139,32 +1099,7 @@ export class MessageIntervalPaginator extends BasePaginator<
       targetIntervalId: headInterval.id,
     });
     if (!interval) return;
-
-    // hasMoreTail: does the fetched page prove it reached the channel's own oldest message? Only a
-    // request bounded by our OWN pageSize gives that proof (a short page); an over-request may have
-    // been server-capped, so it biases to `true` — never asserting "no more older" from a page that
-    // may be truncated. See {@link pageReachedChannelStart} (no hardcoded max page size, per-paginator).
-    // This decides only the "load older" AFFORDANCE — it never removes a message (reconciliation stays
-    // window-only below). isTail mirrors it: `true` only when we RELIABLY reached the start, which also
-    // clears a stale offline-DB `isTail:true` and stops `intervalsOverlap` welding a far page across a
-    // gap. The tail cursor anchors to the oldest loaded id so "load older" stays contiguous.
-    const hasMoreTail = !this.pageReachedChannelStart(page, options);
-    interval.hasMoreTail = hasMoreTail;
-    interval.isTail = !hasMoreTail;
-
-    this.setActiveInterval(interval, { updateState: false });
-    this.state.partialNext({
-      items: this.intervalToItems(interval),
-      // The newest slice is loaded (head anchored), so there is nothing newer to load.
-      hasMoreHead: false,
-      hasMoreTail,
-      // Tailward = the oldest loaded id (interval item ids are created_at asc), null once we reached
-      // the channel start.
-      cursor: {
-        headward: null,
-        tailward: hasMoreTail ? (interval.itemIds[0] ?? null) : null,
-      },
-    });
+    this.showHeadInterval(page, options);
 
     // With the newest page merged in, drop any loaded message the page proves was hard-deleted, and
     // collect the below-window leftovers it cannot decide from the page alone.
@@ -1188,92 +1123,155 @@ export class MessageIntervalPaginator extends BasePaginator<
   };
 
   /**
-   * Whether every item of `interval` is newer (more headward) than every item of `page`. For a page
-   * holding the newest messages when it was produced, such an interval holds messages that arrived
-   * afterwards, so the two are contiguous.
-   *
-   * In time: the page is produced before the newer messages arrive as events, and reaches the
-   * client after them.
-   *
-   * ```text
-   * t1  the page is produced            page = m15 … m19  (m19 is the newest message)
-   * t2  m20 is sent, arrives as event   head window = [ m20 ]
-   * t3  the page reaches the client     page m15 … m19, head window m20
-   * ```
-   *
-   * In message order: nothing can be missing between the two, since every message newer than m19
-   * was sent after t1 and arrived as an event, in order, into the head window.
-   *
-   * ```text
-   * oldest ──────────────────────────────────────────────▶ newest
-   *   … m14 │ m15  m16  m17  m18  m19 │ m20  m21
-   *         │◀──────── page ─────────▶│◀ interval ▶│
-   * ```
-   *
-   * This assumes no event was missed between t1 and t3. A message sent while the socket was down is
-   * in neither; connection recovery fetches the newest page again, which overlaps the window and
-   * brings it in.
+   * Shows the head window a fresh newest page merged into, with no newer messages to load. It has
+   * older ones unless the page reached the channel start (see {@link pageReachedChannelStart});
+   * `isTail` follows, which also clears a stale offline-DB `isTail: true` that would let
+   * `intervalsOverlap` weld a far page across a gap.
    */
-  private isEntirelyHeadwardOf(interval: Interval, page: LocalMessage[]): boolean {
-    const intervalTail = this.getIntervalPaginationEdges(interval)?.tail;
-    const pageHead = this.getPagePaginationEdges(this.getCanonicalQueryItems(page)).head;
-    return (
-      !!intervalTail && !!pageHead && this.aIsMoreHeadwardThanB(intervalTail, pageHead)
+  private showHeadInterval(
+    page: LocalMessage[],
+    options?: ReconcileNewestMessagesOptions,
+  ) {
+    // read here, as reconciling replaces the interval object a caller holds
+    const interval = this.anchoredHeadInterval;
+    if (!interval) return;
+    const hasMoreTail = !this.pageReachedChannelStart(page, options);
+    interval.hasMoreTail = hasMoreTail;
+    interval.isTail = !hasMoreTail;
+    this.setActiveInterval(interval, { updateState: false });
+    const flags = { hasMoreHead: false, hasMoreTail };
+    this.publishActiveInterval({
+      ...flags,
+      cursor: this.getCursorFromInterval(interval, flags),
+    });
+  }
+
+  /**
+   * Whether a fresh newest page and the head window are separated by a gap, with messages between
+   * them possibly not loaded. They are not when:
+   *
+   * - they share a message;
+   * - the head window holds no server message older than the page: the rest is within the page's
+   *   span, newer (sent after the page was produced, so it arrived as an event), or unsent (it
+   *   carries the device's clock);
+   * - the page reached the channel start (see {@link pageReachedChannelStart}).
+   *
+   * A message missed while the socket was down comes with connection recovery's newest page.
+   */
+  private isSeparatedFromHeadByGap(
+    head: Interval,
+    page: LocalMessage[],
+    options?: ReconcileNewestMessagesOptions,
+  ): boolean {
+    const headIds = new Set(head.itemIds);
+    const sharesMessage = page.some((message) => headIds.has(this.getItemId(message)));
+    if (sharesMessage) return false;
+    if (!this.holdsServerMessageOlderThan(head, page)) return false;
+    if (this.pageReachedChannelStart(page, options)) return false;
+    return true;
+  }
+
+  /** Whether the interval holds a server-confirmed message older than every message of `page`. */
+  private holdsServerMessageOlderThan(interval: Interval, page: LocalMessage[]): boolean {
+    const pageOldest = this.getPageOldestMessage(page);
+    if (!pageOldest) return false;
+    return interval.itemIds.some((id) => {
+      const message = this.getItem(id);
+      return (
+        !!message &&
+        this.isServerConfirmedMessage(message) &&
+        this.aIsMoreTailwardThanB(message, pageOldest)
+      );
+    });
+  }
+
+  private getPageOldestMessage(page: LocalMessage[]): LocalMessage | undefined {
+    return this.getPagePaginationEdges(this.getCanonicalQueryItems(page)).tail;
+  }
+
+  /**
+   * Places a fresh newest page separated from the head window by a gap (see
+   * {@link isSeparatedFromHeadByGap}) as a head window of its own, with older messages to load:
+   *
+   * - The old head window keeps the messages older than the page and stops being the head: it can
+   *   load newer messages up to the page, then merges with it. It stays shown if being read; in a
+   *   list nobody reads (see {@link isBeingRead}), the page's window is shown instead.
+   * - Its messages from the page's oldest on (arrivals during the request, unsent messages and ones
+   *   the page proves were hard-deleted) move to the page's window, so the two never overlap and
+   *   are never welded across the gap. Reconciling then removes the hard-deleted ones.
+   */
+  private placeNewestPageAcrossGap(
+    head: Interval,
+    page: LocalMessage[],
+    options?: ReconcileNewestMessagesOptions,
+  ) {
+    const pageOldest = this.getPageOldestMessage(page);
+    const isOlderThanPage = (id: string) => {
+      const message = this.getItem(id);
+      return !!message && !!pageOldest && this.aIsMoreTailwardThanB(message, pageOldest);
+    };
+    const keptHead: Interval = {
+      ...head,
+      hasMoreHead: true,
+      isHead: false,
+      itemIds: head.itemIds.filter(isOlderThanPage),
+    };
+    const movedMessages = head.itemIds
+      .filter((id) => !isOlderThanPage(id))
+      .map((id) => this.getItem(id))
+      .filter((message): message is LocalMessage => !!message);
+
+    // one publish, once the head window is in place and reconciled, so subscribers read it whole
+    this.batch(
+      () => {
+        this.commitInterval(keptHead);
+        const newHead = this.ingestPage({
+          page: [...page, ...movedMessages],
+          isHead: true,
+          isTail: false,
+          setActive: false,
+        });
+        this.reconcileHeadAgainstPage(page, options);
+        if (newHead && !this.isBeingRead()) {
+          this.showHeadInterval(page, options);
+        } else if (this.isActiveInterval(keptHead)) {
+          this.publishActiveInterval({
+            cursor: this.getCursorFromInterval(keptHead),
+            hasMoreHead: true,
+          });
+        } else if (newHead && this.isActiveInterval(newHead)) {
+          // The page overlaps the window being read, which grew into the head window.
+          this.publishActiveIntervalGrownIntoHead();
+        }
+      },
+      { coalesce: true },
     );
   }
 
   /**
-   * Merges a fetched newest page into the head window while another window is active, which stays
-   * active. The page joins the head window when they overlap or are contiguous; separated by a gap,
-   * it becomes the head window, and the old one no longer reaches the newest message.
-   *
-   * ```text
-   * oldest ──────────────────────────────────────────────▶ newest
-   *
-   * overlap: they share messages → merged
-   *   head window:      m8  m9  m10
-   *   page:                 m9  m10  m11
-   *   result:           m8  m9  m10  m11
-   *
-   * contiguous: the head window is newer than the page → merged (see isEntirelyHeadwardOf)
-   *   page:             m15 … m19
-   *   head window:                   m20  m21
-   *   result:           m15 … m19    m20  m21
-   *
-   * gap: the head window is older than the page → the page replaces it as the head window
-   *   head window:      m8  m9
-   *   page:                        … (not loaded) …   m20 … m24
-   *   result:           m8  m9 (no longer the head)    m20 … m24 (head window)
-   * ```
+   * Merges a fresh newest page, not separated by a gap, into the head window while another window
+   * is shown. A reader stays on that window, which grows into the head window if the page overlaps
+   * it. In a list nobody reads (see {@link isBeingRead}), the head window is shown instead.
    */
-  private mergePageIntoInactiveHead(page: LocalMessage[]) {
-    if (!page.length) return;
-    const head = this.anchoredHeadInterval;
-    const headIds = new Set(head?.itemIds ?? []);
-    const overlapsHead = page.some((item) => headIds.has(this.getItemId(item)));
-    // Sharing no message with the head window, the page is either contiguous with it or separated
-    // from it by a gap.
-    const sharesNoMessage = !!head && !overlapsHead;
-    const contiguous = sharesNoMessage && this.isEntirelyHeadwardOf(head, page);
-    const separatedByGap = sharesNoMessage && !contiguous;
-    if (separatedByGap) this.unmarkHead(head);
-    const interval = this.ingestPage({
-      page,
-      isHead: true,
-      // separated by a gap, there are older messages to load (the gap); otherwise the window keeps
-      // its flag
-      isTail: separatedByGap ? false : undefined,
-      setActive: false,
-      targetIntervalId: contiguous ? head?.id : undefined,
-    });
-    // The page may also overlap the window being read, which then grows into the newest window.
-    if (interval && this.isActiveInterval(interval)) {
-      this.state.partialNext({
-        items: this.intervalToItems(interval),
-        hasMoreHead: false,
-        cursor: { headward: null, tailward: this.cursor?.tailward ?? null },
-      });
+  private mergePageIntoInactiveHead(
+    page: LocalMessage[],
+    options?: ReconcileNewestMessagesOptions,
+  ) {
+    const interval = this.ingestPage({ page, isHead: true, setActive: false });
+    if (!interval) return;
+    if (!this.isBeingRead()) {
+      this.showHeadInterval(page, options);
+    } else if (this.isActiveInterval(interval)) {
+      this.publishActiveIntervalGrownIntoHead();
     }
+  }
+
+  /** Publishes the window being read once a newest page grew it into the head window. */
+  private publishActiveIntervalGrownIntoHead() {
+    this.publishActiveInterval({
+      hasMoreHead: false,
+      cursor: { headward: null, tailward: this.cursor?.tailward ?? null },
+    });
   }
 
   /**
@@ -1287,8 +1285,8 @@ export class MessageIntervalPaginator extends BasePaginator<
    *
    * An OVER-request (larger than `pageSize`, e.g. `channel.reload` re-fetching the whole loaded window
    * to reconcile as much as possible) may have been silently capped by the server, so a short page
-   * there is NOT proof of reaching the start — return `false` and stay conservative. This only ever
-   * gates the `hasMoreTail` affordance; it never removes a message.
+   * there is NOT proof of reaching the start — return `false` and stay conservative. It gates
+   * `hasMoreTail` and the gap rule ({@link isSeparatedFromHeadByGap}), never removing a message.
    */
   private pageReachedChannelStart(
     page: LocalMessage[],
@@ -1879,24 +1877,26 @@ export class MessageIntervalPaginator extends BasePaginator<
   private getCanonicalQueryItems(items: LocalMessage[]): LocalMessage[] {
     return [...items].sort(this.itemOrderComparator);
   }
-}
 
-const makeDeriveCursor =
-  (
-    paginator: MessageIntervalPaginator,
-  ): CursorDerivator<LocalMessage, MessageQueryShape> =>
-  (ctx) => {
+  /**
+   * The cursor and more-messages flags after a page is placed (`deriveCursor`), comparing the page
+   * with the interval's outermost server-known messages (see {@link getServerKnownEdges}): a page
+   * never holds an unsent message, so one at an edge must not hide that the page reached the edge.
+   */
+  private deriveCursorFromPage(
+    ctx: CursorDeriveContext<LocalMessage, MessageQueryShape>,
+  ): CursorDeriveResult {
     // Not included in the interval (filtered out by MessageIntervalPaginator.filterQueryResults).
     //
     // IMPORTANT: We must keep cursor derivation consistent with the ingested interval.
     // The interval is built from the filtered page, but ctx.page contains the raw response.
-    // Around/linear derivators compare page edges and lengths against interval.itemIds. If we
-    // pass a page that includes locally filtered messages (e.g. shadowed), those comparisons
-    // can incorrectly conclude that the page is not at the dataset bounds.
+    // The derivators compare the page's length with the requested size, and the linear one its
+    // edges with the interval's server-known edges. A page that includes locally filtered
+    // messages (e.g. shadowed) would make them conclude the page is not at the dataset bounds.
     const pageWithPermittedMessages: LocalMessage[] = [];
     let filteredLocallyCount = 0;
     for (const message of ctx.page) {
-      if (!paginator.shouldIncludeMessageInInterval(message)) {
+      if (!this.shouldIncludeMessageInInterval(message)) {
         filteredLocallyCount++;
       } else {
         pageWithPermittedMessages.push(message);
@@ -1907,11 +1907,7 @@ const makeDeriveCursor =
       0,
       ctx.requestedPageSize - filteredLocallyCount,
     );
-
-    if (
-      ctx.interval &&
-      ctx.interval.itemIds.length + filteredLocallyCount < ctx.page.length
-    ) {
+    if (ctx.interval.itemIds.length + filteredLocallyCount < ctx.page.length) {
       console.error(
         'error',
         'Corrupted message set state: parent set size < returned page size',
@@ -1923,43 +1919,19 @@ const makeDeriveCursor =
       };
     }
 
-    const injectCursor = ({
-      hasMoreHead,
-      hasMoreTail,
-    }: {
-      hasMoreHead: boolean;
-      hasMoreTail: boolean;
-    }): CursorDeriveResult => {
-      const cursor: PaginatorCursor = {
-        headward: !hasMoreHead ? null : (ctx.interval?.itemIds.slice(-1)[0] ?? null),
-        tailward: !hasMoreTail ? null : (ctx.interval?.itemIds[0] ?? null),
-      };
-      return { cursor, hasMoreHead, hasMoreTail };
+    const derivationCtx = {
+      ...ctx,
+      intervalEdges: this.getServerKnownEdges(ctx.interval),
+      page: pageWithPermittedMessages,
+      requestedPageSize: requestedPageSizeAfterAdjustment,
     };
-
-    if ((ctx.queryShape as MessagePaginationParams)?.created_at_around) {
-      return injectCursor(
-        deriveCreatedAtAroundPaginationFlags<LocalMessage, MessagePaginationParams>({
-          ...ctx,
-          page: pageWithPermittedMessages,
-          requestedPageSize: requestedPageSizeAfterAdjustment,
-        }),
-      );
-    } else if (ctx.queryShape?.id_around) {
-      return injectCursor(
-        deriveIdAroundPaginationFlags({
-          ...ctx,
-          page: pageWithPermittedMessages,
-          requestedPageSize: requestedPageSizeAfterAdjustment,
-        }),
-      );
-    } else {
-      return injectCursor(
-        deriveLinearPaginationFlags({
-          ...ctx,
-          page: pageWithPermittedMessages,
-          requestedPageSize: requestedPageSizeAfterAdjustment,
-        }),
-      );
-    }
-  };
+    const flags = (ctx.queryShape as MessagePaginationParams)?.created_at_around
+      ? deriveCreatedAtAroundPaginationFlags<LocalMessage, MessagePaginationParams>(
+          derivationCtx,
+        )
+      : ctx.queryShape?.id_around
+        ? deriveIdAroundPaginationFlags(derivationCtx)
+        : deriveLinearPaginationFlags(derivationCtx);
+    return { ...flags, cursor: this.getCursorFromInterval(ctx.interval, flags) };
+  }
+}

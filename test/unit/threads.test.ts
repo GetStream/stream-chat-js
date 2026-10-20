@@ -977,13 +977,9 @@ describe('Threads 2.0', () => {
           expect(repliesOf(thread).map((reply) => reply.id)).to.eql(['r1', 'r2', 'r4']);
         });
 
-        it('preserves a failed (unsent) reply across a rebuild', async () => {
-          // The failed reply is read out of the reply PAGINATOR, not out of `failedRepliesMap`. That
-          // map is only written by `upsertReplyLocally`, whose callers are this thread's own
-          // subscriptions and the offline-DB path keyed on `ThreadManager.threadsById` — so for a
-          // thread constructed directly and never registered (what the React Native SDK does via
-          // `threadsById[id] ?? new Thread(...)`) it is always empty, and relying on it would drop the
-          // user's unsent reply on every reconnect.
+        it('keeps a failed (unsent) reply with the newest replies when the reloaded page is past a gap', async () => {
+          // A thread constructed directly and never registered, as the React Native SDK does: its
+          // failed reply lives only in the reply paginator.
           const r1 = makeReply({
             id: 'r1',
             created_at: convertDateToTimestamp('2020-01-01T00:00:01.000Z'),
@@ -1003,8 +999,8 @@ describe('Threads 2.0', () => {
           thread.messagePaginator.ingestItem(failed);
           expect(repliesOf(thread).map((reply) => reply.id)).to.contain('failed-1');
 
-          // Server page is disjoint from the loaded window, which forces a rebuild — the one case the
-          // reconcile's provenance guard does not cover.
+          // a full page of 2 does not prove the thread start: sharing no reply, it is past a gap
+          thread.messagePaginator.pageSize = 2;
           const far1 = makeReply({
             id: 'far1',
             created_at: convertDateToTimestamp('2021-06-01T00:00:01.000Z'),
@@ -1021,7 +1017,11 @@ describe('Threads 2.0', () => {
 
           await thread.reload();
 
-          expect(repliesOf(thread).map((reply) => reply.id)).to.contain('failed-1');
+          // the shown window keeps the older reply; the failed one moved with the newest replies
+          expect(repliesOf(thread).map((reply) => reply.id)).to.eql(['r1']);
+          expect(
+            thread.messagePaginator.anchoredHeadItems.map((reply) => reply.id),
+          ).to.eql(['far1', 'far2', 'failed-1']);
         });
 
         it('rethrows a reload failure and releases isLoading', async () => {

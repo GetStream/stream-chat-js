@@ -179,9 +179,27 @@ export class MessagePaginator extends MessageIntervalPaginator {
    * cannot drift from {@link latestMessage}. `null` until a query sets it or a message is ingested.
    */
   get latestMessageAt(): TimestampNS | null {
-    const { latestMessage, queriedLatestMessageAt } =
-      this.aggregateState.getLatestValue();
-    const fromMessage = getMessageCreatedAtTimestamp(latestMessage);
+    return this.latestMessageAtIncluding(this.latestMessage);
+  }
+
+  /**
+   * {@link latestMessageAt} as the server knows it (see {@link pageReachesHead}): an unsent latest
+   * message carries the device's clock, so the latest server-known message counts in its place.
+   */
+  private get latestServerMessageAt(): TimestampNS | null {
+    const { latestMessage } = this.aggregateState.getLatestValue();
+    const isUnsent = !!latestMessage && !this.isServerConfirmedMessage(latestMessage);
+    return this.latestMessageAtIncluding(
+      isUnsent
+        ? this.recomputeLatestMessage({ serverConfirmedOnly: true })
+        : latestMessage,
+    );
+  }
+
+  /** The later of `message`'s `created_at` and the queried `last_message_at`. */
+  private latestMessageAtIncluding(message: LocalMessage | null): TimestampNS | null {
+    const { queriedLatestMessageAt } = this.aggregateState.getLatestValue();
+    const fromMessage = getMessageCreatedAtTimestamp(message);
     if (fromMessage !== null && queriedLatestMessageAt !== null) {
       return asTimestampNS(Math.max(fromMessage, queriedLatestMessageAt));
     }
@@ -313,19 +331,19 @@ export class MessagePaginator extends MessageIntervalPaginator {
 
   /**
    * A page reaches the newest message when its newest message is at or after
-   * {@link latestMessageAt}, as known before the page is ingested; one older than that is not the
-   * newest. That value comes from the latest response (`ChannelResponse` for a channel,
+   * {@link latestServerMessageAt}, as known before the page is ingested; one older than that is not
+   * the newest. That value comes from the latest response (`ChannelResponse` for a channel,
    * `ThreadStateResponse` for a reply list, through {@link setQueriedLatestMessageAt}) and from the
    * messages ingested since, such as new ones from events. `undefined` while it is not known.
    */
   protected override pageReachesHead(page: LocalMessage[]): boolean | undefined {
-    const latestMessageAt = this.latestMessageAt;
-    if (latestMessageAt === null) return undefined;
+    const latestServerMessageAt = this.latestServerMessageAt;
+    if (latestServerMessageAt === null) return undefined;
     // the page's newest message is at its head edge
     const createdAt = getMessageCreatedAtTimestamp(
       this.getPagePaginationEdges(page).head,
     );
-    return createdAt !== null && createdAt >= latestMessageAt;
+    return createdAt !== null && createdAt >= latestServerMessageAt;
   }
 
   ingestItem(item: LocalMessage): boolean {
@@ -333,7 +351,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
     // of items that no longer match). The advance writes the separate `aggregateState` store, so it
     // is independent of `super`'s `state`/index mutations.
     if (this.matchesFilter(item)) {
-      if (this.isNewNewestMessage(item)) return this.ingestAsNewestWindow(item);
+      if (this.isNewNewestMessage(item)) return this.ingestAsNewestInterval(item);
       this.trackLatestMessage(item);
     }
     return super.ingestItem(item);
@@ -375,7 +393,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
    * the window are not loaded, so it can still load older ones. It becomes the active window only
    * when no window was active, or the logical head it takes items from was.
    */
-  private ingestAsNewestWindow(message: LocalMessage): boolean {
+  private ingestAsNewestInterval(message: LocalMessage): boolean {
     const liveHead = this.liveHeadLogical;
     const interval = this.ingestPage({
       page: [...this.logicalHeadItemsSinceQueriedLatestMessageAt, message],
@@ -485,13 +503,15 @@ export class MessagePaginator extends MessageIntervalPaginator {
    * that reaches the newest message and the {@link logicalHeadItemsSinceQueriedLatestMessageAt}.
    * A window reached by a jump is not searched, nor an out-of-order older message: neither is the
    * channel's previous message. Used to recompute the tracked latest after the current one is
-   * removed. `null` when nothing loaded qualifies.
+   * removed; `serverConfirmedOnly` skips unsent messages. `null` when nothing loaded qualifies.
    *
    * "Latest" is defined by `created_at` (matching {@link trackLatestMessage}), NOT by the
    * paginator's display order — so this compares timestamps rather than assuming a position, and
    * stays correct whatever `itemOrder` / `requestSort` are configured to.
    */
-  private recomputeLatestMessage(): LocalMessage | null {
+  private recomputeLatestMessage({
+    serverConfirmedOnly = false,
+  }: { serverConfirmedOnly?: boolean } = {}): LocalMessage | null {
     let latest: LocalMessage | null = null;
     let latestTimestamp = -Infinity;
     for (const item of [
@@ -499,6 +519,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
       ...this.logicalHeadItemsSinceQueriedLatestMessageAt,
     ]) {
       if (!this.shouldAdvanceLatestMessage(item)) continue;
+      if (serverConfirmedOnly && !this.isServerConfirmedMessage(item)) continue;
       const timestamp = getMessageCreatedAtTimestamp(item);
       if (timestamp === null || timestamp <= latestTimestamp) continue;
       latest = item;
@@ -628,6 +649,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
 
       if (!inferredLastReadMessageId) {
         const result = await this.executeQuery({
+          claimsActiveInterval: true,
           queryShape: {
             // `created_at_around` is a request field and still takes a `Date`.
             created_at_around: nsToDate(lastReadBoundary),
@@ -635,6 +657,8 @@ export class MessagePaginator extends MessageIntervalPaginator {
           },
           updateState: false,
         });
+        // a later claim decides the active interval, and the page stays stored
+        if (result?.isSuperseded) return false;
         if (result) {
           ({
             firstUnreadMessageId: inferredFirstUnreadMessageId,

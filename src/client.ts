@@ -1703,20 +1703,9 @@ export class StreamChat extends ChatApi {
 
       // Place the page before _initializeState applies the read state, which reads the loaded
       // messages: read and delivery positions that come without a message id are looked up among
-      // them (see `Channel.runChannelQuery`).
-      //
-      // Skip the newest page when this (shared) channel's paginator is already loaded AND the user
-      // has jumped to an older window (active interval is not the head): it would merge into that
-      // jumped interval across the gap (missing messages in the middle). A cold paginator, or one
-      // still at the head (offline/at-latest), takes the page so cursors/hasMoreTail get
-      // (re)derived and pagination keeps working.
-      // Also skip it for an ACTIVE (on-screen) channel: its own `channel.reload()` owns the loaded
-      // window (up to 100 msgs), so a 25-msg list page here is a redundant second update that could
-      // perturb the fuller window. (Inert until a UI SDK calls `channel.activate()`.)
-      const placesNewestPage =
-        willInitialize &&
-        !c.active &&
-        (!c.messagePaginator.isInitialized || c.messagePaginator.isActiveIntervalAtHead);
+      // them (see `Channel.runChannelQuery`). Not for an active channel, whose own
+      // `channel.reload()` owns its message list (see `Channel.activate()`).
+      const placesNewestPage = willInitialize && !c.active;
       let placedFirstPage = false;
       if (placesNewestPage) {
         // The response's `last_message_at` first, so the paginator can tell whether the page

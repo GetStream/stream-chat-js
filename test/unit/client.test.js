@@ -1510,14 +1510,16 @@ describe('StreamChat.queryChannels', async () => {
 		expect(activeBefore).to.eql(['m1', 'm2']);
 
 		// A channel-list re-query on reconnect re-hydrates the SAME channel instance with the newest
-		// window (disjoint from the jumped one). It must NOT weld them (which would drop m3/m4 in the
-		// middle) nor yank the user off the jumped window.
+		// window (disjoint from the jumped one). Nobody reads the channel, so the newest window is
+		// shown; it must NOT be welded to the jumped one (which would drop m3/m4 in the middle).
 		await client.queryChannelsAndHydrate({ message_limit: 3 });
 
 		const activeAfter = channel.messagePaginator.state
 			.getLatestValue()
 			.items?.map((m) => m.id);
-		expect(activeAfter).to.eql(['m1', 'm2']);
+		expect(activeAfter).to.eql(['m5', 'm6', 'm7']);
+		await channel.messagePaginator.jumpToMessage('m1');
+		expect(channel.messagePaginator.items?.map((m) => m.id)).to.eql(['m1', 'm2']);
 
 		stub.restore();
 	});
@@ -1588,7 +1590,7 @@ describe('StreamChat.queryChannels', async () => {
 			return channel;
 		};
 
-		it('stops treating the newest window as such when the reader jumped away from it', async () => {
+		it('shows the newest page to a channel nobody reads, left on another window', async () => {
 			const client = await getClientWithUser();
 			const channel = await loadJumpedAwayChannel(client);
 			expect(channel.messagePaginator.anchoredHeadItem?.id).toBe('m6');
@@ -1598,8 +1600,8 @@ describe('StreamChat.queryChannels', async () => {
 			await client.queryChannelsAndHydrate({ message_limit: 2 });
 			stub.restore();
 
-			expect(channel.messagePaginator.anchoredHeadItem).toBeUndefined();
-			expect(channel.messagePaginator.items.map((m) => m.id)).toEqual(['m1']);
+			expect(channel.messagePaginator.anchoredHeadItem?.id).toBe('m9');
+			expect(channel.messagePaginator.items.map((m) => m.id)).toEqual(['m8', 'm9']);
 		});
 
 		it('leaves an on-screen channel to its own reload', async () => {
