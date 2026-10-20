@@ -10,10 +10,8 @@ import type { APIError } from '../errors';
 import { isAPIError, isErrorRetryable } from '../errors';
 
 /**
- * Passed to a search source's `query()`. Carries a cancellation handle and makes no
- * claim that the query performs a request: a source may resolve from local data and
- * ignore the signal. Where a source does issue requests, forward this straight through
- * as the request options.
+ * Passed to a search source's `query()`. A source that issues requests forwards it as the request
+ * options; one that resolves from local data may ignore the signal.
  */
 export type SearchQueryOptions = {
   /** Aborted once a newer query supersedes this one. */
@@ -35,10 +33,7 @@ interface ISearchSource<T = any> {
 
   deactivate(): void;
 
-  /**
-   * Releases what the source holds outside itself. Optional; a source that holds nothing outside
-   * itself leaves it out.
-   */
+  /** Releases what the source holds outside itself. */
   dispose?(): void;
 
   readonly hasNext: boolean;
@@ -51,7 +46,7 @@ interface ISearchSource<T = any> {
   readonly next: string | undefined | null;
   readonly offset: number | undefined;
 
-  /** Takes again what {@link ISearchSource.dispose} released. Optional, like `dispose`. */
+  /** Takes again what {@link ISearchSource.dispose} released. */
   registerSubscriptions?(): void;
 
   resetState(): void;
@@ -83,11 +78,7 @@ const DEFAULT_SEARCH_SOURCE_OPTIONS: Required<
   resetOnNewSearchQuery: true,
 } as const;
 
-/**
- * An explicit `debounceMs` applies to both buckets, so integrators who already tuned it
- * keep exactly their configured interval. Only when it is absent do the 500/300 defaults
- * kick in.
- */
+/** An explicit `debounceMs` applies to both buckets. The 500/300 defaults apply only without it. */
 const resolveDebounceOptions = ({
   debounceMs,
   shortQueryDebounceMs,
@@ -123,8 +114,7 @@ abstract class BaseSearchSourceBase<
     this.allowEmptySearchString = allowEmptySearchString;
     this.resetOnNewSearchQuery = resetOnNewSearchQuery;
     this.state = new StateStore<SearchSourceState<T>>(this.initialState);
-    // Field initializers run before this body, so setDebounceOptions is already
-    // assigned; it only captures getDebounceMs lazily.
+    // `setDebounceOptions` is a field initializer, so it is already assigned here.
     this.setDebounceOptions(options ?? {});
   }
 
@@ -142,7 +132,7 @@ abstract class BaseSearchSourceBase<
 
   /**
    * Short queries match too much and are slow server-side, so they get a longer debounce.
-   * Resolved per call, which is what lets the interval switch as the user keeps typing.
+   * Resolved per call, so the interval switches as the user keeps typing.
    */
   protected getDebounceMs = (searchString?: string) => {
     const { length } = searchString ?? this.searchQuery;
@@ -250,7 +240,7 @@ abstract class BaseSearchSourceBase<
     const current = this.state.getLatestValue();
     return {
       ...current,
-      lastQueryError: undefined, // reset lastQueryError that can be overridden by the stateUpdate
+      lastQueryError: undefined, // cleared unless `stateUpdate` sets it
       ...stateUpdate,
       isLoading: false,
       items: isFirstPage
@@ -301,7 +291,7 @@ export abstract class BaseSearchSource<T>
   extends BaseSearchSourceBase<T, Promise<void>>
   implements SearchSource<T>
 {
-  /** Aborts the in-flight request, if any, once a newer query is dispatched. */
+  /** Aborted when a newer query is dispatched. */
   protected queryAbortController: AbortController | null = null;
 
   protected abstract query(
@@ -311,7 +301,7 @@ export abstract class BaseSearchSource<T>
 
   protected abstract filterQueryResults(items: T[]): T[] | Promise<T[]>;
 
-  /** Aborts the in-flight request, if any. Returns true when one was aborted. */
+  /** Returns true when a request was aborted. */
   protected abortInFlightQuery() {
     if (!this.queryAbortController) return false;
     this.queryAbortController.abort();
@@ -326,11 +316,9 @@ export abstract class BaseSearchSource<T>
   }
 
   async executeQuery(newSearchString?: string) {
-    // Checked before anything is dispatched, so that the abort below always has a
-    // successor that will clear isLoading.
+    // Checked first, so the abort below always has a successor that clears `isLoading`.
     if (!this.canExecuteQuery(newSearchString)) return;
 
-    // cancel the previous request before dispatching the new one
     this.abortInFlightQuery();
     const { signal } = (this.queryAbortController = new AbortController());
 
@@ -351,8 +339,7 @@ export abstract class BaseSearchSource<T>
         stateUpdate.hasNext = false;
       }
     } finally {
-      // A newer query owns the state now - publishing here would clobber it with a
-      // stale result (and with the abort error).
+      // A newer query owns the state: publishing here would overwrite it with a stale result.
       if (!signal.aborted) {
         this.state.next(this.getStateAfterQuery(stateUpdate, hasNewSearchQuery));
       }
@@ -361,16 +348,14 @@ export abstract class BaseSearchSource<T>
 
   cancelScheduledQuery() {
     this.searchDebounced.cancel();
-    // Nothing will dispatch a successor query, so release the loading state the
-    // aborted query owned - its own finally block skips the state write.
+    // No successor will clear `isLoading`, and the aborted query's `finally` skips the write.
     if (this.abortInFlightQuery() && this.isLoading) {
       this.state.partialNext({ isLoading: false });
     }
   }
 }
 
-// Queries are resolved locally, so there is nothing to cancel here - only the
-// dynamic debounce applies.
+// Queries resolve locally: nothing to cancel, only the debounce applies.
 export abstract class BaseSearchSourceSync<T>
   extends BaseSearchSourceBase<T, void>
   implements SearchSourceSync<T>

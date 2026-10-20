@@ -49,10 +49,7 @@ const getCursorFromReplies = (
 };
 
 export type ThreadState = {
-  /**
-   * Determines if the thread is currently opened and on-screen. When the thread is active,
-   * all new messages are immediately marked as read.
-   */
+  /** Whether the thread is open and on-screen. While active, new messages are marked read. */
   active: boolean;
   channel: Channel;
   /** Unix nanoseconds, as the API sends it. */
@@ -62,10 +59,7 @@ export type ThreadState = {
   deletedAt: TimestampNS | null;
   isLoading: boolean;
   isStateStale: boolean;
-  /**
-   * Thread is identified by and has a one-to-one relation with its parent message.
-   * We use parent message id as a thread id.
-   */
+  /** A thread maps one-to-one to its parent message, whose ID is the thread ID. */
   parentMessage: LocalMessage;
   participants: ThreadStateResponse['thread_participants'];
   read: ThreadReadState;
@@ -107,15 +101,10 @@ export type ThreadConfig = {
   };
 };
 
-/**
- * Empty because every field of `ThreadConfig` is optional — a thread's own configuration is one handler
- * wide. Declared and frozen anyway, so the entity carries the same defaults layer as every other
- * configurable class rather than a special case.
- */
+/** Empty: every field of `ThreadConfig` is optional. */
 export const DEFAULT_THREAD_CONFIG: ThreadConfig = deepFreezeConfig({});
 
 export class Thread extends WithSubscriptions {
-  /** The shared configuration machinery — see {@link ConfigController}. */
   private readonly configController = new ConfigController<ThreadConfig>({
     defaults: DEFAULT_THREAD_CONFIG,
   });
@@ -127,7 +116,6 @@ export class Thread extends WithSubscriptions {
 
   private client: StreamChat;
   private failedRepliesMap: Map<string, LocalMessage> = new Map();
-  /** How many activations (`activate()` calls) have not been released yet. */
   private _activeRefCount = 0;
 
   constructor({
@@ -162,14 +150,11 @@ export class Thread extends WithSubscriptions {
       });
 
       this.state = new StateStore<ThreadState>({
-        // local only
         active: false,
         isLoading: false,
         isStateStale: false,
-        // 99.9% should never change
         channel: threadChannel,
         createdAt: threadData.created_at,
-        // rest
         deletedAt: threadData.deleted_at ?? null,
         parentMessage: formatMessage(threadData.parent_message),
         participants: threadData.thread_participants,
@@ -178,11 +163,8 @@ export class Thread extends WithSubscriptions {
             ? getPlaceholderReadResponse(client.userId)
             : threadData.read,
         ),
-        // Use the parent message's reply_count, not the top-level threadData.reply_count. The
-        // thread endpoints (getThread/queryThreads) return a top level reply_count that EXCLUDES
-        // soft-deleted replies, while parent_message.reply_count (and the channel's own copy)
-        // INCLUDE them so the top level value renders fewer replies than the channel badge shows.
-        // parent_message.reply_count is the authoritative, channel consistent count.
+        // From the parent message: the top-level `threadData.reply_count` excludes soft-deleted
+        // replies, the parent's (like the channel's) includes them.
         replyCount: threadData.parent_message.reply_count ?? 0,
         updatedAt: threadData.updated_at ?? null,
         title: threadData.title,
@@ -212,11 +194,9 @@ export class Thread extends WithSubscriptions {
         custom: {},
         deletedAt: formattedParentMessage.deleted_at ?? null,
         isLoading: false,
-        // Only the parent message is known, so the thread loads its data once when opened if it may
-        // have any: when the parent has replies, and when its channel isn't watched, as the parent's
-        // `reply_count` then misses the replies sent since the channel was loaded. A parent without
-        // replies in a watched channel has nothing on the server yet (`getThread` would answer 404):
-        // its first reply arrives as an event.
+        // Loads its data once when opened. A parent without replies in a watched channel has nothing
+        // on the server yet (`getThread` would answer 404); in an unwatched channel `reply_count` may
+        // miss newer replies, so it loads.
         isStateStale:
           replyCount > 0 || channel.watchStatus !== ChannelWatchStatus.Watching,
         parentMessage: formattedParentMessage,
@@ -232,11 +212,9 @@ export class Thread extends WithSubscriptions {
 
     this.client = client;
 
-    // Read the declarative configuration before the sub-objects exist, so it can go in as constructor
-    // options — the reply paginator's `unreadReferencePolicy` and initial cursor are read once.
+    // Read up front: the reply paginator takes `unreadReferencePolicy` as a constructor argument.
     const declarativeConfig = client.config.getConfig('thread') ?? undefined;
-    // Thread replies are backed by a MessagePaginator too, so the general key applies here as well;
-    // the per-parent slice overrides it (thread replies default to a smaller page than a channel).
+    // The general `messagePaginator` key applies to replies; the thread's own slice overrides it.
     const messagePaginatorConfig = mergeDeclarativePaginatorConfig(
       client.config.getConfig('messagePaginator') ?? undefined,
       declarativeConfig?.messagePaginator,
@@ -248,24 +226,19 @@ export class Thread extends WithSubscriptions {
         parentMessageId: this.id,
         requestSort: DEFAULT_SORT,
         itemOrder: DEFAULT_ITEM_ORDER,
-        // Split as in `Channel`: the policy is a constructor argument, not paginator configuration.
+        // A constructor argument, not paginator configuration.
         unreadReferencePolicy: messagePaginatorConfig?.unreadReferencePolicy,
         paginatorOptions: {
           declarativeConfig: toDeclarativePaginatorConfig(messagePaginatorConfig),
         },
       },
-      // Thread replies default to a smaller page than a channel list. Supplied by the SDK, not by the
-      // integrator, so it sits at stage 1 — `client.config.set({ messagePaginator: { pageSize } })`
-      // overrides it, which would not be true of a construction argument.
+      // SDK default page size. Overridable through `client.config.set`
+      // (`messagePaginator.pageSize`).
       { pageSize: DEFAULT_PAGE_LIMIT },
     );
 
-    // Seed the reply paginator from the thread's `latest_replies` so a thread we already hold
-    // data for (queried via the ThreadManager or hydrated from a ThreadResponse) renders its
-    // first reply page instantly, without a network fetch on open. `latest_replies` is the most
-    // recent window of replies, so it reaches the head (nothing newer to load); it reaches the
-    // tail only when it already contains every reply. Threads built from a bare parent message
-    // carry no replies to seed and fall back to a paginator fetch on first open.
+    // Seeds the first reply page without a fetch. `latest_replies` is the newest window: it reaches
+    // the head, and the tail only if it holds every reply.
     if (threadData?.latest_replies?.length) {
       const replies = threadData.latest_replies.map(formatMessage);
       const isLastPage = replies.length === (threadData.reply_count ?? 0);
@@ -277,9 +250,7 @@ export class Thread extends WithSubscriptions {
       });
     }
 
-    // Set the reply paginator's queried latestMessageAt from the thread's `last_message_at` (as
-    // Channel._initializeState does for a channel), so a thread whose newest reply is not among
-    // `latest_replies` still reports the correct latest-activity timestamp.
+    // Floor for `latestMessageAt`, for when the newest reply is not among `latest_replies`.
     this.messagePaginator.setQueriedLatestMessageAt(threadData?.last_message_at);
 
     this.messageComposer = new MessageComposer({
@@ -290,24 +261,17 @@ export class Thread extends WithSubscriptions {
 
     this.messageOperations = createMessageOperations(this);
 
-    // Share one derivation path with `config.reset()`. Idempotent — the paginator was already
-    // configured through its constructor above; this re-applies the mutable half the way a reset does.
+    // Same derivation path as `config.reset()`. Idempotent: re-applies what the constructors set.
     this.initializeConfig(declarativeConfig);
   }
 
   /**
-   * Derives this thread's configuration — and its reply paginator's — from the declarative slice.
-   *
-   * Called by the constructor and by `client.config.reset()`. The thread owns only its own
-   * `requestHandlers`; the paginator derives its own configuration.
+   * Derives this thread's configuration, and its reply paginator's, from the declarative slice.
+   * Called by the constructor and by `client.config.reset()`.
    */
   initializeConfig(declarativeConfig?: ThreadDeclarativeConfig): void {
-    // Only the thread's own slice goes in. The paginator and the operations keys are handed to those
-    // objects below, so putting them here too would publish them on `thread.config` as well.
-    //
-    // Replaces rather than merges: a handler dropped from the declarative tree must disappear. The
-    // controller skips a write that changes nothing, which matters because `alsoWatch` re-runs this for
-    // any of three keys and `useThreadRequestHandlers` subscribes to the store.
+    // Only the thread's own slice: the paginator and operations keys go to those objects below.
+    // Replaces rather than merges, so a handler dropped from the declarative tree disappears.
     this.configController.initialize({
       requestHandlers: declarativeConfig?.requestHandlers,
     });
@@ -321,8 +285,7 @@ export class Thread extends WithSubscriptions {
       ),
     );
 
-    // A thread sends messages too, so it owns a `MessageOperations` of its own and takes the same shared
-    // key the channel does, with its own per-parent override.
+    // Takes the shared `messageOperations` key like the channel does, with its own override.
     this.messageOperations.initializeConfig(
       mergeDeclarativeMessageOperationsConfig(
         this.client.config.getConfig('messageOperations') ?? undefined,
@@ -331,23 +294,19 @@ export class Thread extends WithSubscriptions {
     );
   }
 
-  /**
-   * Resolved configuration as a store, so consumers can react to it — the shape every configurable class
-   * exposes.
-   */
   get configState(): StateStore<ThreadConfig> {
     return this.configController.state;
   }
 
-  /**
-   * This thread's resolved configuration. `Readonly` because the value is the store's live object —
-   * assigning to a field of it would change state without notifying anyone. Use {@link updateConfig}.
-   */
   get config(): Readonly<ThreadConfig> {
     return this.configController.value;
   }
 
-  /** Merges a partial configuration into the resolved config and notifies subscribers. */
+  /**
+   * Merges a partial configuration into the resolved config.
+   *
+   * @param config - The fields to change.
+   */
   updateConfig(config: Partial<ThreadConfig>): void {
     this.configController.patch(config);
   }
@@ -365,17 +324,12 @@ export class Thread extends WithSubscriptions {
   }
 
   /**
-   * Declares that a consumer is displaying this thread, and returns the function that ends it, as
-   * `channel.activate()` does. Refcounted, as one `Thread` can be held by several consumers at once,
-   * so it stays active until the last one releases. Each call gets its own release, and calling a
-   * release again does nothing, so a consumer can't end another one's activation.
+   * Declares that a consumer is displaying this thread and returns the function that ends it (as
+   * `channel.activate()`). Refcounted: the thread stays active until the last release, and each
+   * release is idempotent. `active` selects the threads reloaded on reconnect, so release it.
    *
-   * `active` is also what {@link ConnectionRecoveryManager} filters on to decide which threads to
-   * reload on reconnect, so an activation that is never released costs more than a missed auto-read.
-   *
-   * The first activation also keeps the thread in `client.threads` for the rest of the session:
-   * it stays subscribed and resolvable through `client.threads.get(id)` after it is released,
-   * whether or not the thread list holds it. Reopening it therefore needs no fetch unless it went stale.
+   * The first activation keeps the thread in `client.threads` for the session, subscribed and
+   * resolvable through `client.threads.get(id)` after release.
    */
   public activate = (): (() => void) => {
     this._activeRefCount += 1;
@@ -396,14 +350,10 @@ export class Thread extends WithSubscriptions {
   };
 
   /**
-   * Re-queries this thread's replies, sized to the loaded window, and reconciles them in place — the
-   * thread analogue of {@link Channel.reload}, and what connection recovery calls for every active
-   * thread.
-   *
-   * Preserves failed (unsent) replies: reconciling never removes a reply the server has not
-   * confirmed.
-   *
-   * Rethrows, except for a not-found answer on a thread that never had replies (see the catch).
+   * Re-queries the replies, sized to the loaded window, and reconciles them in place (the thread
+   * analogue of {@link Channel.reload}; recovery calls it for active threads). Failed replies are
+   * kept, as reconciling never removes a reply the server has not confirmed. Rethrows, except for
+   * a not-found answer on a thread that never had replies.
    */
   public reload = async () => {
     if (this.state.getLatestValue().isLoading) {
@@ -421,10 +371,13 @@ export class Thread extends WithSubscriptions {
       const headIntervalItemIdsAtRequest = new Set(
         this.messagePaginator.anchoredHeadItems.map((reply) => reply.id),
       );
-      const thread = await this.client.getThreadAndHydrate(this.id, {
-        watch: true,
-        reply_limit: requestedReplyLimit,
-      });
+      const thread = await this.client.getThreadAndHydrate(
+        { message_id: this.id },
+        {
+          watch: true,
+          reply_limit: requestedReplyLimit,
+        },
+      );
       this.hydrateState(thread, {
         reconcile: {
           requestedLimit: requestedReplyLimit,
@@ -436,9 +389,7 @@ export class Thread extends WithSubscriptions {
         isDoesNotExistError(error as Error) ||
         (error as { status?: number })?.status === 404;
       const neverExisted = notFound && this.state.getLatestValue().replyCount === 0;
-      // Do not throw an error if we haven't created the thread yet, the tiebreaker
-      // being whether the parent message has any replies or not. A thread with all hard
-      // deleted replies will simply not throw.
+      // Not found while the parent has no replies: the thread was never created, not an error.
       if (neverExisted) return;
 
       throw error;
@@ -452,7 +403,6 @@ export class Thread extends WithSubscriptions {
     options?: { reconcile?: ReconcileNewestMessagesOptions },
   ) => {
     if (thread === this) {
-      // skip if the instances are the same
       return;
     }
 
@@ -474,9 +424,7 @@ export class Thread extends WithSubscriptions {
       updatedAt,
     } = thread.state.getLatestValue();
 
-    // Preserve pending (failed) replies so they survive the hydrate. The messagePaginator is now
-    // the sole reply source, so we merge the incoming newest page into it and re-ingest the
-    // pending replies (mirrors the previous state.replies concat behavior).
+    // Failed replies survive the hydrate: they are re-ingested after the incoming page is merged.
     const pendingReplies = Array.from(this.failedRepliesMap.values());
 
     this.state.partialNext({
@@ -505,11 +453,9 @@ export class Thread extends WithSubscriptions {
       thread.messagePaginator.latestMessageAt,
     );
     if (typeof this.messagePaginator.items === 'undefined') {
-      // Nothing loaded yet — the common case for a thread opened from a message, whose paginator
-      // has never held a window. `reconcileNewestMessages` deliberately no-ops there (it has no
-      // loaded window to reconcile), so hydrating through it would drop the replies this request
-      // just fetched and leave the panel empty until something else queried them. Set them instead,
-      // exactly as the constructor does for a thread response's `latest_replies`.
+      // Nothing loaded yet (e.g. a thread opened from a message): `reconcileNewestMessages` no-ops
+      // without a loaded window and would drop the fetched replies, so set them as the constructor
+      // does.
       const isLastPage = incomingReplies.length === replyCount;
       this.messagePaginator.setItems({
         valueOrFactory: incomingReplies,
@@ -525,7 +471,6 @@ export class Thread extends WithSubscriptions {
 
   public registerSubscriptions = () => {
     if (this.hasSubscriptions) {
-      // Thread is already listening for events and changes
       return;
     }
 
@@ -537,27 +482,11 @@ export class Thread extends WithSubscriptions {
   };
 
   /**
-   * Subscribes this thread to the `'thread'` configuration key. Registered through
-   * `WithSubscriptions`, so `unregisterSubscriptions()` runs the setup function's teardown.
-   *
-   * **This is where `Thread` differs from `Channel`,** which subscribes from its constructor. Everything
-   * below follows from that, and applies to a thread that never calls `registerSubscriptions()`:
-   *
-   * - no *setup function* runs for it — matching how `MessageComposer` already behaves;
-   * - it sees the declarative slice **as it stood when the thread was constructed**, because the
-   *   constructor applies it directly, but no *later* `client.config.set({ thread: … })` or
-   *   `set({ messagePaginator: … })` reaches it;
-   * - it is absent from the registry's `liveInstances`, so `client.config.reset()` skips it, and
-   *   `hasLiveInstances('thread')` does not count it when deciding whether to warn about a
-   *   construction-only path registered too late.
-   *
-   * So read "declarative configuration is unaffected" as *at construction only*. A thread registered
-   * with a `ThreadManager` that has itself registered is covered — the manager calls
-   * `registerSubscriptions()` on every thread the list holds or that is active — so the common path
-   * is fine. A thread that is neither, or held by an unregistered manager, is not.
-   *
-   * The alternative — applying the setup function at construction — would break the teardown symmetry
-   * `WithSubscriptions` provides, which is why the asymmetry stands.
+   * Subscribes to the `'thread'` configuration key. Unlike `Channel`, which subscribes in its
+   * constructor, a thread that never registers sees the declarative slice only as of construction:
+   * no setup function runs, later `client.config.set` calls miss it and `client.config.reset()`
+   * skips it. `ThreadManager` registers the threads it holds (listed, `ensure()`d or active) while
+   * its own subscriptions are registered.
    */
   private subscribeThreadSetupStateChange = () =>
     applyInstanceConfiguration({
@@ -568,8 +497,8 @@ export class Thread extends WithSubscriptions {
       // Read fresh: by the time reset calls this, the declarative store has been cleared.
       reinitializeConfig: () =>
         this.initializeConfig(this.client.config.getConfig('thread') ?? undefined),
-      // The reply paginator also derives from the shared `messagePaginator` key — run the full cycle
-      // on a change there, so the setup function's overrides survive.
+      // Also rerun on the shared keys the reply paginator and operations derive from, so the setup
+      // function's overrides survive.
       alsoWatch: ['messagePaginator', 'messageOperations'],
     });
 
@@ -660,8 +589,6 @@ export class Thread extends WithSubscriptions {
 
     this.upsertReplyLocally({
       message: event.message,
-      // MessageRequest from current user could have been added optimistically,
-      // so the actual timestamp might differ in the event
       timestampChanged: isOwnMessage,
     });
 
@@ -678,8 +605,7 @@ export class Thread extends WithSubscriptions {
         let nextUserRead: ThreadUserReadState = userRead;
 
         if (userId === event.user?.id) {
-          // The user who just sent a message to the thread has no unread messages
-          // in that thread
+          // The sender has no unread messages.
           nextUserRead = {
             ...nextUserRead,
             lastReadAt: timestampOr(event.created_at, nowNs()),
@@ -689,7 +615,6 @@ export class Thread extends WithSubscriptions {
         } else if (active && userId === this.client.userId) {
           // Do not increment unread count for the current user in an active thread
         } else {
-          // Increment unread count for all users except the author of the new message
           nextUserRead = {
             ...nextUserRead,
             unreadMessageCount: userRead.unreadMessageCount + 1,
@@ -729,17 +654,14 @@ export class Thread extends WithSubscriptions {
     if (!event.message) return;
     const formattedMessage = formatMessage(event.message);
 
-    // Deleted message is a reply of this thread
     if (event.message.parent_id === this.id) {
       if (event.hard_delete) {
         this.deleteReplyLocally({ message: event.message });
       } else {
-        // Handle soft delete (updates deleted_at timestamp)
         this.upsertReplyLocally({ message: event.message });
       }
     }
 
-    // Deleted message is parent message of this thread
     if (event.message.id === this.id) {
       this.updateParentMessageLocally({ message: event.message });
     }
@@ -749,10 +671,8 @@ export class Thread extends WithSubscriptions {
 
   public handleMessageUpdated = (event: PipelineEvent) => {
     if (!event.message) return;
-    // A `message.updated` WS event carries `own_reactions: []`; upserting it verbatim would
-    // wipe the current user's reactions on an edit. Preserve them off the copy we already hold
-    // — the reply paginator for a reply, `state.parentMessage` for the parent (the parent is
-    // not held in any paginator, so it needs the same treatment directly).
+    // A `message.updated` event carries `own_reactions: []`, which would wipe the current user's
+    // reactions: keep them from the held copy (the reply paginator, or `state.parentMessage`).
     const message =
       event.message.parent_id === this.id
         ? {
@@ -779,9 +699,7 @@ export class Thread extends WithSubscriptions {
     this.messagePaginator.reflectQuotedMessageUpdate(formatMessage(message));
   };
 
-  // Apply a user ban / deletion to this thread's own reply list. Previously
-  // channel.state.deleteUserMessages marked banned-user replies deleted in the (now removed)
-  // channel.state.threads shadow; the reply paginator is the thread's source of truth now.
+  // Applies a user ban or deletion to this thread's replies.
   public handleUserMessagesDeleted = (event: PipelineEvent) => {
     if (!event.user) return;
     // user.deleted carries the deletion time on the user; user.messages.deleted on the event.
@@ -794,12 +712,9 @@ export class Thread extends WithSubscriptions {
     });
   };
 
-  // The parent message lives in the client-global message store (one canonical POJO per id);
-  // `state.parentMessage` and the fields derived from it are a projection of that copy. Every update
-  // to the parent — optimistic reaction, WS reaction/edit/delete, reply-count bump — writes the
-  // store, which reflects it here through this single subscription (one per thread, not one per
-  // message). Seeds the store on first subscribe when no other collection holds the parent yet
-  // (e.g. a thread opened from a notification, its parent not in the channel window).
+  // `state.parentMessage` and its derived fields project the parent in the client-global message
+  // store, so every update to the parent reaches them through this one subscription. Seeds the
+  // store when no other collection holds the parent yet (e.g. a thread opened from a notification).
   private subscribeParentMessageFromStore = () => {
     const store = this.client.messageStore;
     const parent = this.state.getLatestValue().parentMessage;
@@ -821,11 +736,9 @@ export class Thread extends WithSubscriptions {
 
   public unregisterSubscriptions = () => {
     const symbol = super.unregisterSubscriptions();
-    // Release the reply paginator's hold on the shared message store. The parent subscription is
-    // torn down by `super.unregisterSubscriptions()` (it was added as an unsubscribe function), but
-    // the reply paginator's per-id links live in its item index, not in the subscription list — so a
-    // removed thread would otherwise stay pinned by `messageStore.subscribers` and keep its replies
-    // alive. `getThread` builds a fresh instance if this thread is re-opened, so this is a discard.
+    // Releases the reply paginator's per-ID links on the shared message store (they are not in the
+    // subscription list), which would otherwise pin a removed thread and its replies. `getThread`
+    // builds a fresh instance if the thread is re-opened.
     this.messagePaginator.dispose();
     this.state.partialNext({ isStateStale: true });
     return symbol;
@@ -833,8 +746,7 @@ export class Thread extends WithSubscriptions {
 
   // todo: can be removed with the next breaking change and use MessagePaginator only
   public deleteReplyLocally = ({ message }: { message: MessageResponse }) => {
-    // The reply messagePaginator is the reply list source. removeItem is a no-op when the reply
-    // isn't loaded, so it's safe to run unconditionally.
+    // A no-op when the reply is not loaded.
     this.messagePaginator.removeItem({ id: message.id });
   };
 
@@ -843,8 +755,7 @@ export class Thread extends WithSubscriptions {
     message,
   }: {
     message: MessageResponse | LocalMessage;
-    // Accepted for backward compatibility but no longer used — the messagePaginator repositions
-    // by created_at on ingest, so a changed timestamp is handled without an explicit flag.
+    // Unused: the reply paginator repositions by `created_at` on ingest.
     timestampChanged?: boolean;
   }) => {
     if (message.parent_id !== this.id) {
@@ -855,20 +766,18 @@ export class Thread extends WithSubscriptions {
 
     // todo: do we really need to keep the failedRepliesMap?
     if (formattedMessage.status === 'failed') {
-      // store failed reply so that it's not lost when reloading or hydrating
+      // Kept so a failed reply survives a reload or hydrate.
       this.failedRepliesMap.set(formattedMessage.id, formattedMessage);
     } else if (this.failedRepliesMap.has(message.id)) {
       this.failedRepliesMap.delete(message.id);
     }
 
-    // Already showing this exact snapshot because a holder sharing the store wrote it first and the
-    // fanout reprojected us. Ingesting would re-emit an identical window for nothing.
+    // Already showing this snapshot (a holder sharing the store wrote it first): skip the ingest.
     // TODO: This can probably be generalized as a safeguard up in ingestItem or maybe even EntityStore
     //       (so if a collection exists that holds this referential entity already, just use that or maybe
     //       even skip ingestion sometimes when it makes sense). But leaving that for a separate change.
     if (this.messagePaginator.getItem(formattedMessage.id) === formattedMessage) return;
 
-    // The reply messagePaginator is the reply list source.
     this.messagePaginator.ingestItem(formattedMessage);
   };
 
@@ -878,9 +787,7 @@ export class Thread extends WithSubscriptions {
       throw new Error('Message does not belong to this thread');
     }
 
-    // The parent's content lives in the client-global message store; `state.parentMessage` (and the
-    // fields derived from it) is a projection kept in sync by `subscribeParentMessageFromStore`.
-    // Writing the store fans the change out to every collection holding this id and reflects it here.
+    // Written to the message store; `subscribeParentMessageFromStore` projects it into the state.
     if (this.client.messageStore.has(message.id)) {
       this.client.messageStore.upsert(formatMessage(message));
     }

@@ -1021,4 +1021,62 @@ describe('MessageDeliveryReporter', () => {
     vi.advanceTimersByTime(1000);
     expect(spy).toHaveBeenCalledTimes(1); // no extra trailing for a solitary call
   });
+
+  describe('throttles each collection separately', () => {
+    const markedCollections = (spy: { mock: { calls: unknown[][] } }) =>
+      spy.mock.calls.map(([collection]) => collection);
+
+    it('marks a thread read when its channel is marked inside the same window', () => {
+      const reporter = client.messageDeliveryReporter;
+      const spy = vi.spyOn(reporter, 'markRead').mockResolvedValue(null);
+      const thread = new Thread({
+        client,
+        threadData: generateThreadResponse(
+          { type: channelType, id: channelId, cid: channel.cid },
+          mkMsg('parent', 1000),
+        ),
+      });
+
+      reporter.throttledMarkRead(channel);
+      reporter.throttledMarkRead(thread);
+      reporter.throttledMarkRead(channel);
+      vi.advanceTimersByTime(1000);
+
+      expect(markedCollections(spy)).toEqual([channel, thread, channel]);
+    });
+
+    it('marks another channel read when the first is marked again inside the same window', () => {
+      const reporter = client.messageDeliveryReporter;
+      const spy = vi.spyOn(reporter, 'markRead').mockResolvedValue(null);
+      const otherChannel = client.channelManager.ensure({
+        type: channelType,
+        id: 'other-channel',
+      });
+
+      reporter.throttledMarkRead(channel);
+      reporter.throttledMarkRead(otherChannel);
+      reporter.throttledMarkRead(channel);
+      vi.advanceTimersByTime(1000);
+
+      expect(markedCollections(spy)).toEqual([channel, otherChannel, channel]);
+    });
+
+    it('still throttles repeated calls for one collection', () => {
+      const reporter = client.messageDeliveryReporter;
+      const spy = vi.spyOn(reporter, 'markRead').mockResolvedValue(null);
+      const otherChannel = client.channelManager.ensure({
+        type: channelType,
+        id: 'other-channel',
+      });
+
+      reporter.throttledMarkRead(channel);
+      reporter.throttledMarkRead(otherChannel);
+      reporter.throttledMarkRead(channel);
+      reporter.throttledMarkRead(channel);
+
+      expect(markedCollections(spy)).toEqual([channel, otherChannel]);
+      vi.advanceTimersByTime(1000);
+      expect(markedCollections(spy)).toEqual([channel, otherChannel, channel]);
+    });
+  });
 });

@@ -95,10 +95,13 @@ export const calculateLevenshtein = (query: string, name: string) => {
 };
 
 export type MentionsSearchSourceOptions = SearchSourceOptions & {
-  /** Static base filters for the app-wide user query (mentionAllAppUsers). */
+  /** Base filters for the app-wide user query (`mentionAllAppUsers`). */
   userFilters?: UserFilters;
   userSort?: SortParamRequest[];
-  /** Static base filters for the channel member query. */
+  /**
+   * Replaces the default `name` autocomplete filter of the channel member query, so the typed text
+   * is not applied.
+   */
   memberFilters?: MemberFilters;
   memberSort?: SortParamRequest[];
   searchOptions?: Omit<UserOptions, 'limit' | 'offset'>;
@@ -283,10 +286,7 @@ const DEFAULT_SUGGESTION_FACTORY_MAPPERS: {
     return {
       description: userGroup.description,
       id: userGroup.id,
-      /*
-      Currently, all members of the group are always returned. Groups are limited to 100 members.
-      The memberCount == len(members) will always be true unless we add pagination here in the future
-       */
+      // All members are returned (groups hold at most 100), so `members.length` is the full count.
       memberCount: userGroup.members?.length,
       mentionType: 'user_group',
       name: userGroup.name,
@@ -328,7 +328,7 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
       userSort,
       ...restOptions
     } = options || {};
-    // suggestions are shown for a bare trigger, so the empty query must be allowed
+    // A bare trigger shows suggestions, so the empty query must be allowed.
     super({ ...restOptions, allowEmptySearchString: true });
     this.client = channel.getClient();
     this.channel = channel;
@@ -445,7 +445,7 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
     const { items } = this.state.getLatestValue();
     return {
       ...newState,
-      items, // preserve items to avoid flickering
+      items, // kept to avoid flickering
     };
   }
 
@@ -534,7 +534,7 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
       .sort((a, b) => {
         if (!this.memberSort) return (a.name || '').localeCompare(b.name || '');
 
-        // Apply each sort criteria in order
+        // Criteria apply in order.
         for (const { field, direction } of this.memberSort) {
           const aValue = a[field as keyof UserResponse];
           const bValue = b[field as keyof UserResponse];
@@ -566,13 +566,11 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
   });
 
   prepareQueryMembersParams = (searchQuery: string, offset = 0) => {
-    // QueryMembers failed with error: \"sort must contain at maximum 1 item\"
-    let sort: SortParamRequest[] = [{ field: 'user_id', direction: 1 }];
-    if (!this.memberSort || !this.memberSort.length) {
-      sort = [{ field: 'user_id', direction: 1 }];
-    } else {
-      sort = this.memberSort.slice(0, 1);
-    } // todo: document the change - the sort is overridden, not merged
+    // QueryMembers accepts at most one sort item.
+    // todo: document the change - the sort is overridden, not merged
+    const sort: SortParamRequest[] = this.memberSort?.length
+      ? this.memberSort.slice(0, 1)
+      : [{ field: 'user_id', direction: 1 }];
     return {
       // todo: document the change - the filter is overridden, not merged
       filters:
@@ -733,8 +731,7 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
           : Promise.resolve([] as RoleMentionSuggestion[]),
       ]);
 
-    // On abort the requests above reject and the fallback branches below would write
-    // empty results into the pagination cursors, corrupting them for the newer query.
+    // On abort the requests reject, and the fallbacks below would overwrite the newer query's cursors.
     if (queryOptions.signal?.aborted) return { items: [] };
 
     const userResults =
@@ -812,30 +809,19 @@ export class MentionsSearchSource extends BaseSearchSource<MentionSuggestion> {
 
 const DEFAULT_OPTIONS: TextComposerMiddlewareOptions = { minChars: 1, trigger: '@' };
 
-/**
- * TextComposer middleware for mentions
- * Usage:
- *
- *  const textComposer = new TextComposer(options);
- *
- *  textComposer.use(createMentionsMiddleware(channel, {
- *   trigger: '$',
- *   minChars: 2
- *  }));
- *
- * @param channel
- * @param {{
- *     minChars: number;
- *     trigger: string;
- *   }} options
- * @returns
- */
-
 export type MentionsMiddleware = Middleware<
   TextComposerMiddlewareExecutorState<MentionSuggestion>,
   'onChange' | 'onSuggestionItemSelect'
 >;
 
+/**
+ * Suggests and inserts mentions.
+ *
+ * @param channel - The channel to search mentions in.
+ * @param options - Middleware options. Defaults to `trigger: '@'` and `minChars: 1`.
+ * @param options.searchSource - A search source to use instead of a new one. Its state is reset.
+ * @returns The mentions middleware.
+ */
 export const createMentionsMiddleware = (
   channel: Channel,
   options?: Partial<TextComposerMiddlewareOptions> & {
@@ -851,12 +837,8 @@ export const createMentionsMiddleware = (
     searchSource = new MentionsSearchSource(channel, { trigger: finalOptions.trigger });
   }
   searchSource.activate();
-  // Tracks the cursor position of the most recently inserted mention so the
-  // VERY NEXT change (typically a controlled value echo on some platforms)
-  // can suppress the dropdown even when the text shape heuristic in `onChange`
-  // would otherwise let it reopen (which is wrong). Consumed on the first
-  // `onChange` after it's set, so any user driven event that triggers it would
-  // clear it.
+  // Cursor end of the last inserted mention. The next `onChange` (e.g. a controlled value echo) uses
+  // it to keep the dropdown closed, then clears it.
   let lastInsertedMentionEndOffset: number | undefined;
   return {
     id: 'stream-io/text-composer/mentions-middleware',
@@ -867,12 +849,8 @@ export const createMentionsMiddleware = (
           lastInsertedMentionEndOffset !== undefined &&
           state.selection.end === lastInsertedMentionEndOffset;
         lastInsertedMentionEndOffset = undefined;
-        // Only prune stale mentions during normal text editing. Entering command mode
-        // clears text/mentions through the `command.activate` effect, which first
-        // snapshots the previous TextComposer state so it can be restored on
-        // `clearCommand()`. Custom middleware is allowed to remove that effect,
-        // though, and in that opt-out case we must not silently drop mentions
-        // here just because the user typed a raw command like `/ban`.
+        // Prune stale mentions only outside command mode: a raw `/ban` typed without the
+        // `command.activate` effect (custom middleware may remove it) must not drop them.
         const currentMentions =
           state.command || state.text.trimStart().startsWith('/')
             ? state.mentionedUsers
@@ -903,23 +881,9 @@ export const createMentionsMiddleware = (
           searchSource.resetStateAndActivate();
         }
 
-        // The trigger detection regex above also accepts `@<token><trailing-space>`
-        // as "active" so users can keep refining a partial mention they typed by
-        // hand. That falsely reopens the dropdown when the cursor sits at the
-        // trailing space boundary of a mention the user has already committed
-        // (post suggestion select or manual cursor placement back into that slot).
-        //
-        // Discriminate that case by checking, for each entity in
-        // `state.mentions`, whether the text immediately before the cursor
-        // ends with the entity's actual inserted textual form (`@<name|id> `)
-        // AND that form appears exactly once in the prefix. This:
-        //   - avoids false positives when an entity's `id` happens to match a
-        //     different `@<token>` the user just typed (e.g. user "John Doe"
-        //     whose id is "john" and the user types a fresh `@ivan ` later);
-        //   - avoids false positives when the user is refining a brand new
-        //     mention whose query equals an already committed mention name
-        //     (text has two `@<name> ` occurrences; only one is committed, the
-        //     cursor is most likely on the new one being typed).
+        // The trigger regex also accepts `@<token><trailing-space>`, which would reopen the dropdown
+        // after a committed mention. Detect that case: the text before the cursor ends with an entity's
+        // inserted form (`@<name|id> `) that occurs exactly once (twice means a new one is being typed).
         const triggerMatchesCommittedMention =
           !!triggerWithToken &&
           /\s$/.test(textBeforeCursor) &&
@@ -980,10 +944,8 @@ export const createMentionsMiddleware = (
           text: state.text,
           trigger: finalOptions.trigger,
         });
-        // Hand off the just inserted cursor position to the next `onChange`
-        // so it can suppress the dropdown even when the text shape heuristic
-        // doesn't catch a reselection of the same entity (multiple
-        // occurrences of `@<name> ` in the text for exammple).
+        // Lets the next `onChange` keep the dropdown closed when the text heuristic cannot tell (e.g.
+        // repeated `@<name> ` occurrences).
         lastInsertedMentionEndOffset = insertResult.selection.end;
         return complete({
           ...state,

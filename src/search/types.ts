@@ -10,25 +10,21 @@ export type SearchSourceState<T = any> = {
 };
 
 export type SearchSourceOptions = {
-  /**
-   * Legacy single debounce interval. When set, it applies to both short and long queries,
-   * unless overridden by `shortQueryDebounceMs` / `longQueryDebounceMs`.
-   */
+  /** Debounce interval for short and long queries, unless overridden by the options below. */
   debounceMs?: number;
   /**
-   * Debounce interval for queries no longer than `shortQueryMaxLength`. Such queries have
-   * low selectivity and are expensive server-side, so they are debounced harder.
-   * Defaults to 500ms.
+   * Debounce interval for queries no longer than `shortQueryMaxLength` (low selectivity, expensive
+   * server-side). Defaults to `debounceMs`, else 500ms.
    */
   shortQueryDebounceMs?: number;
-  /** Debounce interval for queries longer than `shortQueryMaxLength`. Defaults to 300ms. */
+  /** Debounce interval for longer queries. Defaults to `debounceMs`, else 300ms. */
   longQueryDebounceMs?: number;
   /** Query length (inclusive) that still counts as short. Defaults to 2. */
   shortQueryMaxLength?: number;
   pageSize?: number;
-  /** When `true`, the source can execute queries with an empty search string (defaults to `false`). */
+  /** Allows queries with an empty search string. Defaults to `false`. */
   allowEmptySearchString?: boolean;
-  /** When `true`, previously loaded items are cleared at the start of a new search query (defaults to `true`). */
+  /** Clears loaded items when a new search query starts. Defaults to `true`. */
   resetOnNewSearchQuery?: boolean;
 };
 

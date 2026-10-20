@@ -59,7 +59,9 @@ describe('StreamChat getInstance', () => {
 	});
 
 	it('should throw error if connectUser called twice on an instance', async () => {
-		const client1 = StreamChat.getInstance('key2', { allowServerSideConnect: true });
+		const client1 = StreamChat.getInstance('key2', {
+			client: { allowServerSideConnect: true },
+		});
 		client1.openConnection = () => Promise.resolve();
 		client1._setToken = () => Promise.resolve();
 
@@ -72,7 +74,9 @@ describe('StreamChat getInstance', () => {
 	});
 
 	it('should not throw error if connectUser called twice with the same user', async () => {
-		const client1 = StreamChat.getInstance('key2', { allowServerSideConnect: true });
+		const client1 = StreamChat.getInstance('key2', {
+			client: { allowServerSideConnect: true },
+		});
 		client1.openConnection = () => Promise.resolve('openConnection');
 		client1._setToken = () => Promise.resolve();
 
@@ -84,17 +88,19 @@ describe('StreamChat getInstance', () => {
 
 	it('should set base url correctly', async () => {
 		const baseURL = 'http://example.com';
-		const client = StreamChat.getInstance('key3', { baseURL });
+		const client = StreamChat.getInstance('key3', { client: { baseURL } });
 
 		expect(client.baseURL).to.equal(baseURL);
 	});
 
 	it('should set axios request config correctly', async () => {
 		const client = StreamChat.getInstance('key', {
-			axiosRequestConfig: {
-				headers: {
-					'Cache-Control': 'no-cache',
-					Pragma: 'no-cache',
+			client: {
+				axiosRequestConfig: {
+					headers: {
+						'Cache-Control': 'no-cache',
+						Pragma: 'no-cache',
+					},
 				},
 			},
 		});
@@ -116,7 +122,7 @@ describe('StreamChat getInstance', () => {
 
 	// `getApp` has no request, so `requestOptions` comes after an unused `_request` slot; nothing
 	// from it may reach the query string.
-	it('getAppSettings forwards requestOptions passed after the empty request slot', async () => {
+	it('getAppSettings forwards its requestOptions', async () => {
 		const client = new StreamChat('key');
 		client.tokenManager.getToken = () => 'mock-token';
 		const controller = new AbortController();
@@ -125,7 +131,7 @@ describe('StreamChat getInstance', () => {
 			.spyOn(client.axiosInstance, 'request')
 			.mockResolvedValueOnce({ data: {}, status: 200 });
 
-		await client.getAppSettings(undefined, { signal: controller.signal, timeout: 1234 });
+		await client.getAppSettings({ signal: controller.signal, timeout: 1234 });
 
 		expect(requestSpy).toHaveBeenCalledTimes(1);
 		const config = requestSpy.mock.calls[0][0];
@@ -231,7 +237,7 @@ describe('Client userMuteStatus', function () {
 
 describe('Client anonymous auth type', () => {
 	it('should stay anonymous after the hello event replaces client.user', async () => {
-		const client = new StreamChat('key', { allowServerSideConnect: true });
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 		await client.tokenManager.setTokenOrProvider('', { id: 'local-anon-id', anon: true });
 		client._setUser({ id: 'local-anon-id', anon: true });
 
@@ -254,14 +260,14 @@ describe('Client anonymous auth type', () => {
 	});
 
 	it('should send an empty token rather than omitting it for anonymous sessions', async () => {
-		const client = new StreamChat('key', { allowServerSideConnect: true });
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 		await client.tokenManager.setTokenOrProvider('', { id: 'local-anon-id', anon: true });
 
 		expect(client.api._getToken()).to.equal('');
 	});
 
 	it('should report jwt for a regular user', async () => {
-		const client = new StreamChat('key', { allowServerSideConnect: true });
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 		const token =
 			'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYW1pbiJ9.1R88K_f1CC2yrR6j1_OzMEbasfS_dxRSNbundEDBlJI';
 		await client.tokenManager.setTokenOrProvider(token, { id: 'amin' });
@@ -272,7 +278,7 @@ describe('Client anonymous auth type', () => {
 	});
 
 	it('should reset the anonymous flag on disconnect', async () => {
-		const client = new StreamChat('key', { allowServerSideConnect: true });
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 		await client.tokenManager.setTokenOrProvider('', { id: 'local-anon-id', anon: true });
 		expect(client.anonymous).to.be.true;
 
@@ -293,7 +299,7 @@ describe('Client createGuest', () => {
 	afterEach(() => sinon.restore());
 
 	it('should send the request as anonymous when the client has no token', async () => {
-		const client = new StreamChat('key', { allowServerSideConnect: true });
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 		let authTypeDuringRequest;
 		let tokenDuringRequest;
 		sinon.stub(ChatApi.prototype, 'createGuest').callsFake(async () => {
@@ -312,7 +318,7 @@ describe('Client createGuest', () => {
 	});
 
 	it('should restore the un-authenticated state afterwards', async () => {
-		const client = new StreamChat('key', { allowServerSideConnect: true });
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 		sinon.stub(ChatApi.prototype, 'createGuest').resolves(guestResponse);
 
 		await client.createGuest({ user: { id: 'guest-1' } });
@@ -322,7 +328,7 @@ describe('Client createGuest', () => {
 	});
 
 	it('should restore state even when the request fails', async () => {
-		const client = new StreamChat('key', { allowServerSideConnect: true });
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 		sinon.stub(ChatApi.prototype, 'createGuest').rejects(new Error('boom'));
 
 		await expect(client.createGuest({ user: { id: 'guest-1' } })).rejects.toThrow(/boom/);
@@ -332,7 +338,7 @@ describe('Client createGuest', () => {
 	});
 
 	it('should not touch the auth mode of an already authenticated client', async () => {
-		const client = new StreamChat('key', { allowServerSideConnect: true });
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 		const token = 'xyz.eyJ1c2VyX2lkIjoiYW1pbiJ9.xyz';
 		await client.tokenManager.setTokenOrProvider(token, { id: 'amin' });
 
@@ -511,7 +517,7 @@ describe('Client openConnection', () => {
 			});
 		});
 
-		client = new StreamChat('', { allowServerSideConnect: true });
+		client = new StreamChat('', { client: { allowServerSideConnect: true } });
 	});
 
 	afterEach(() => {
@@ -572,9 +578,7 @@ describe('Client watching requests across close/reopen', () => {
 
 	const setup = () => {
 		HeldWebSocket.instances = [];
-		const client = new StreamChat('key', {
-			allowServerSideConnect: true,
-		});
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 		client.wsConnection.updateConfig({ webSocketImpl: HeldWebSocket });
 		client.tokenManager.getToken = () => 'mock-token';
 		client.tokenManager.tokenReady = () => Promise.resolve();
@@ -685,7 +689,7 @@ describe('Client connection id after a failed initial connect', () => {
 		);
 
 	const openConnectionFailingWith = async (error) => {
-		const client = new StreamChat('key', { allowServerSideConnect: true });
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 		client._setUser({ id: 'user' });
 
 		vi.spyOn(StableWSConnection.prototype, 'connect').mockImplementation(
@@ -735,7 +739,7 @@ describe('Client wsPromise close/reopen race', () => {
 		const connectResolvers = [];
 		let failNext = false;
 
-		const client = new StreamChat('key', { allowServerSideConnect: true });
+		const client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 
 		const wsConnection = {
 			isConnecting: false,
@@ -924,7 +928,7 @@ describe('Client wsPromise close/reopen race', () => {
 describe('Client connectUser', () => {
 	let client;
 	beforeEach(() => {
-		client = new StreamChat('', { allowServerSideConnect: true });
+		client = new StreamChat('', { client: { allowServerSideConnect: true } });
 		client.openConnection = () => Promise.resolve('openConnection');
 		client._setToken = () => Promise.resolve('_setToken');
 	});
@@ -1037,7 +1041,7 @@ describe('Client disconnectUser', () => {
 		let resolveClose;
 
 		beforeEach(() => {
-			client = new StreamChat('key', { allowServerSideConnect: true });
+			client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 			// the real connectUser, without a socket
 			client.openConnection = () => Promise.resolve();
 			const { resolve, promise } = Promise.withResolvers();
@@ -1680,6 +1684,33 @@ describe('StreamChat.queryThreads', () => {
 		expect(result.next).to.be.undefined;
 		expect(hydratePollCacheSpy.calledOnce).to.be.true;
 		expect(hydratePollCacheSpy.calledWith([parentMessage])).to.be.true;
+
+		sinon.restore();
+	});
+
+	it('returns the registered instance of a thread, so activating it keeps it managed', async () => {
+		const client = await getClientWithUser();
+		const parentMessage = generateMsg();
+		const rawThread = generateThreadResponse(
+			mockChannelQueryResponse.channel,
+			parentMessage,
+		);
+		sinon.stub(client, 'queryThreads').resolves({ threads: [rawThread] });
+		sinon.stub(client, 'getThread').resolves({ thread: rawThread });
+
+		const {
+			threads: [registered],
+		} = await client.queryThreadsAndHydrate();
+		registered.activate();
+
+		const {
+			threads: [requeried],
+		} = await client.queryThreadsAndHydrate();
+		const fetched = await client.getThreadAndHydrate({ message_id: parentMessage.id });
+
+		expect(requeried).to.equal(registered);
+		expect(fetched).to.equal(registered);
+		expect(client.threads.get(parentMessage.id)).to.equal(registered);
 
 		sinon.restore();
 	});
@@ -2494,7 +2525,7 @@ describe('X-Stream-Client header', () => {
 	});
 
 	it('client-side integration', () => {
-		client.node = false;
+		client.config.setConfig('client', { browser: true });
 		const userAgent = client.getUserAgent();
 
 		expect(userAgent).toMatchInlineSnapshot(
@@ -2708,39 +2739,111 @@ describe('channel store eviction when the current user is removed (#2599)', () =
 	});
 });
 
-describe('_normalizeExpiration', () => {
+describe('Client pinMessage / unpinMessage', () => {
 	let client;
+	let updateMessagePartial;
 
 	beforeEach(async () => {
 		client = await getClientWithUser({ id: 'user' });
+		updateMessagePartial = vi.spyOn(client, 'updateMessagePartial').mockResolvedValue({});
 	});
 
-	it('reads a number as an offset in seconds', () => {
-		const before = Date.now();
-		const iso = client._normalizeExpiration(3600);
-		const offsetMs = new Date(iso).getTime() - before;
-		expect(offsetMs).toBeGreaterThanOrEqual(3600 * 1000 - 1000);
-		expect(offsetMs).toBeLessThanOrEqual(3600 * 1000 + 1000);
-	});
+	it('pins without expiry at the current time by default', async () => {
+		await client.pinMessage({ id: 'm1' });
 
-	it.each([
-		['a Date', new Date('2026-12-25T00:00:00.000Z'), '2026-12-25T00:00:00.000Z'],
-		['a string', '2026-12-25T00:00:00.000Z', '2026-12-25T00:00:00.000Z'],
-		['null', null, null],
-		['undefined', undefined, null],
-	])('passes %s through', (_label, input, expected) => {
-		expect(client._normalizeExpiration(input)).toBe(expected);
-	});
-
-	// A wire timestamp (~1.79e18) added as seconds leaves `Date`'s range. That used to throw an
-	// opaque `RangeError` from `toISOString()`, as an unhandled rejection inside `pinMessage`.
-	it.each([
-		['a wire nanosecond timestamp', 1798156800000000000],
-		['NaN', Number.NaN],
-	])('throws an actionable error for %s', (_label, input) => {
-		expect(() => client._normalizeExpiration(input)).toThrow(
-			/does not resolve to a valid date/,
+		expect(updateMessagePartial).toHaveBeenCalledWith(
+			{ id: 'm1' },
+			{ set: { pinned: true, pin_expires: null, pinned_at: null } },
+			undefined,
 		);
+	});
+
+	it('sends the given expiry and pin time', async () => {
+		const pinExpires = new Date('2077-01-01T00:00:00.000Z');
+
+		await client.pinMessage(
+			{ id: 'm1' },
+			{ pin_expires: pinExpires, pinned_at: '2026-01-01T00:00:00Z' },
+		);
+
+		expect(updateMessagePartial).toHaveBeenCalledWith(
+			{ id: 'm1' },
+			{
+				set: { pinned: true, pin_expires: pinExpires, pinned_at: '2026-01-01T00:00:00Z' },
+			},
+			undefined,
+		);
+	});
+
+	it('unpins', async () => {
+		await client.unpinMessage({ id: 'm1' });
+
+		expect(updateMessagePartial).toHaveBeenCalledWith(
+			{ id: 'm1' },
+			{ set: { pinned: false } },
+			undefined,
+		);
+	});
+
+	it('rejects a message without an id', () => {
+		expect(() => client.pinMessage({})).toThrow(/specify the message id/);
+		expect(() => client.unpinMessage({})).toThrow(/specify the message id/);
+	});
+});
+
+describe('Client moderation flagMessage / flagUser', () => {
+	let client;
+	let flag;
+
+	beforeEach(async () => {
+		client = await getClientWithUser({ id: 'user' });
+		flag = vi.spyOn(client.moderation, 'flag').mockResolvedValue({});
+	});
+
+	it('flags a message by id, with the reason and options', async () => {
+		await client.moderation.flagMessage({
+			message_id: 'm1',
+			reason: 'spam',
+			custom: { note: 'x' },
+		});
+
+		expect(flag).toHaveBeenCalledWith(
+			{
+				entity_type: 'stream:chat:v1:message',
+				entity_id: 'm1',
+				reason: 'spam',
+				custom: { note: 'x' },
+			},
+			undefined,
+		);
+	});
+
+	it('flags a user by id', async () => {
+		await client.moderation.flagUser({ user_id: 'u1' });
+
+		expect(flag).toHaveBeenCalledWith(
+			{ entity_type: 'stream:user', entity_id: 'u1', reason: undefined },
+			undefined,
+		);
+	});
+});
+
+describe('Client polls.queryPolls', () => {
+	it('sends the request as client.queryPolls does', async () => {
+		const client = await getClientWithUser({ id: 'user' });
+		const queryPolls = vi
+			.spyOn(client, 'queryPolls')
+			.mockResolvedValue({ polls: [], next: 'next-page' });
+		const request = {
+			filter: { is_closed: true },
+			sort: [{ field: 'created_at', direction: -1 }],
+			limit: 5,
+		};
+
+		const { next } = await client.polls.queryPolls(request);
+
+		expect(queryPolls).toHaveBeenCalledWith(request, undefined);
+		expect(next).toBe('next-page');
 	});
 });
 
@@ -2782,7 +2885,7 @@ describe('Client WSFallback', () => {
 	};
 
 	beforeEach(() => {
-		client = new StreamChat('key', { allowServerSideConnect: true });
+		client = new StreamChat('key', { client: { allowServerSideConnect: true } });
 		client.config.set({ client: { wsConnection: { enableWSFallback: true } } });
 		// As the real socket does: arms the connection id before failing.
 		socketConnect = vi

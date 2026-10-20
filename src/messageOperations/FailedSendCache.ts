@@ -10,9 +10,9 @@ type FailedSendCacheEntry = {
 };
 
 /**
- * The payloads of sends that failed, kept so a retry sends exactly what failed. An entry expires after
- * `failedSendCacheTtlMs`, and past `failedSendCacheMaxSize` the oldest one is dropped. Both limits are
- * read from the owner's current configuration on every call, so a config change applies at once.
+ * Payloads of failed sends, kept so a retry sends exactly what failed. Entries expire after
+ * `failedSendCacheTtlMs`, and past `failedSendCacheMaxSize` the oldest is dropped. Both limits are read
+ * from the owner's config on every call.
  */
 export class FailedSendCache {
   private readonly entries = new Map<string, FailedSendCacheEntry>();
@@ -59,12 +59,7 @@ export class FailedSendCache {
     this.entries.delete(messageId);
   }
 
-  /**
-   * Folds an edit into the payload cached for this message's failed send, so a retry resends what the
-   * message contains now rather than what it contained when the send failed.
-   *
-   * This exists so a retry while offline for example is also persisted, rather than just disappearing.
-   */
+  /** Folds an edit into the cached payload, so a retry resends the message as it is now. */
   rewriteWithEdit(localMessage: LocalMessage) {
     const cached = this.get(localMessage.id);
     if (!cached) return;

@@ -17,8 +17,8 @@ export type ChannelSearchSourceOptions = SearchSourceOptions & {
   filters?: ChannelFilters;
   sort?: SortParamRequest[];
   /**
-   * Query options. Results are not watched unless `watch: true` is passed: not watched channels serve as a preview,
-   * and opening one is what watches it.
+   * Query options. Results are not watched unless `watch: true`: they are previews, and opening
+   * one watches it.
    */
   searchOptions?: Omit<ChannelOptions, 'limit' | 'offset'>;
 };
@@ -67,7 +67,7 @@ export class ChannelSearchSource<
       },
     });
 
-    // A subscription to the source's own state, so it lives and goes with the source itself.
+    // Subscribed to the source's own state, so it goes away with the source.
     this.state.subscribeWithSelector(
       ({ isActive }) => ({ isActive }),
       () => this.registerSubscriptions(),
@@ -75,9 +75,9 @@ export class ChannelSearchSource<
   }
 
   /**
-   * While the search is active its results are on screen, so they count as used in the channel store
-   * (see `EntityStore.addClaim`). Follows `isActive`; also called by
-   * `SearchController.registerSubscriptions()` to take the registration again after `dispose()`.
+   * While active, the results count as used in the channel store (see `EntityStore.addClaim`).
+   * Follows `isActive`; `SearchController.registerSubscriptions()` also calls it to re-register
+   * after `dispose()`.
    */
   registerSubscriptions() {
     if (!this.isActive) {
@@ -91,8 +91,8 @@ export class ChannelSearchSource<
   }
 
   /**
-   * Removes the registration that keeps the results in the channel store, so a source that is
-   * dropped while active doesn't keep them, or itself, alive. A later activation registers again.
+   * Removes the channel-store claim, so the results' channels are no longer held and a dropped
+   * source can be collected.
    */
   dispose() {
     this.removeClaim?.();

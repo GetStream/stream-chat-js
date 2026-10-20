@@ -1,11 +1,13 @@
 import type { AxiosRequestConfig } from 'axios';
 import { AxiosError } from 'axios';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { requiresConnectionId } from '../../src/api-client';
+import { isAlreadyExistsError, parseError } from '../../src/errors';
 import { getClientWithUser } from './test-utils/getClient';
 
 import { StreamChat } from '../../src/client';
+import { StreamAPIError } from '../../src/types';
 import type { StreamRequestOptions } from '../../src/types';
 
 describe('ApiClient request options', () => {
@@ -95,8 +97,17 @@ describe('ApiClient request options', () => {
 
   it('keeps the same signal across retries', async () => {
     const controller = new AbortController();
+    client.tokenManager.tokenProvider = async () => 'fresh-token';
+    client.tokenManager.type = 'provider';
     requestSpy.mockRejectedValueOnce(
-      Object.assign(new AxiosError('rate limited'), { status: 429 }),
+      Object.assign(new AxiosError('token expired'), {
+        response: {
+          data: { code: 40, message: 'token expired' },
+          headers: {},
+          status: 401,
+        },
+        status: 401,
+      }),
     );
 
     await sendRequest({ signal: controller.signal });
@@ -209,6 +220,162 @@ describe('ApiClient response shape', () => {
   });
 });
 
+describe('ApiClient error wrapping', () => {
+  let client: StreamChat;
+  let requestSpy: ReturnType<typeof vi.spyOn>;
+
+  // What a second copy of axios throws - e.g. through an adapter installed from another package's
+  // copy: flagged like any axios error, but not an instance of this copy's `AxiosError`.
+  const foreignAxiosError = (status: number, data: unknown) => {
+    const error = Object.assign(new Error(`Request failed with status code ${status}`), {
+      isAxiosError: true,
+      name: 'AxiosError',
+      response: { data, headers: {}, status },
+      status,
+    });
+    expect(error).not.toBeInstanceOf(AxiosError);
+    return error;
+  };
+
+  const alreadyExists = {
+    code: 4,
+    message: 'SendMessage failed with error: "a message with ID abc already exists"',
+    StatusCode: 400,
+  };
+
+  beforeEach(() => {
+    client = getClientWithUser();
+    requestSpy = vi.spyOn(client.axiosInstance, 'request');
+  });
+
+  it('wraps an API error from this axios copy in a StreamAPIError', async () => {
+    requestSpy.mockRejectedValueOnce(
+      Object.assign(new AxiosError('Request failed with status code 400'), {
+        response: { data: alreadyExists, headers: {}, status: 400 },
+        status: 400,
+      }),
+    );
+
+    const error = await client.api
+      .sendRequest('POST', '/api/v2/chat/channels')
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(StreamAPIError);
+    expect(error).toMatchObject({ code: 4, message: alreadyExists.message, status: 400 });
+  });
+
+  it('wraps an API error from another axios copy in a StreamAPIError', async () => {
+    requestSpy.mockRejectedValueOnce(foreignAxiosError(400, alreadyExists));
+
+    const error = await client.api
+      .sendRequest('POST', '/api/v2/chat/channels')
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(StreamAPIError);
+    expect(error).toMatchObject({ code: 4, message: alreadyExists.message, status: 400 });
+    // What the message-operations failure policy keys "already exists" on.
+    expect(isAlreadyExistsError(error, parseError(error))).toBe(true);
+  });
+
+  it('does not retry a rate-limited request and rejects with the API error', async () => {
+    const rateLimited = { code: 9, message: 'Too many requests', StatusCode: 429 };
+    requestSpy.mockRejectedValue(foreignAxiosError(429, rateLimited));
+
+    const error = await client.api
+      .sendRequest('GET', '/api/v2/chat/channels')
+      .catch((e: unknown) => e);
+
+    expect(requestSpy).toHaveBeenCalledTimes(1);
+    expect(error).toBeInstanceOf(StreamAPIError);
+    expect(error).toMatchObject({ code: 9, message: rateLimited.message, status: 429 });
+  });
+
+  it('does not retry TOKEN_EXPIRED for a static token', async () => {
+    const tokenExpired = { code: 40, message: 'Token has expired', StatusCode: 401 };
+    client.tokenManager.type = 'static';
+    const loadTokenSpy = vi.spyOn(client.tokenManager, 'loadToken');
+    requestSpy.mockRejectedValue(foreignAxiosError(401, tokenExpired));
+
+    const error = await client.api
+      .sendRequest('GET', '/api/v2/chat/channels')
+      .catch((e: unknown) => e);
+
+    expect(requestSpy).toHaveBeenCalledTimes(1);
+    expect(loadTokenSpy).not.toHaveBeenCalled();
+    expect(error).toBeInstanceOf(StreamAPIError);
+    expect(error).toMatchObject({ code: 40, message: tokenExpired.message, status: 401 });
+  });
+
+  describe('when TOKEN_EXPIRED retries run out', () => {
+    const tokenExpired = { code: 40, message: 'Token has expired', StatusCode: 401 };
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      client.tokenManager.tokenProvider = async () => 'fresh-token';
+      client.tokenManager.type = 'provider';
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('rejects with the API error of the last attempt', async () => {
+      requestSpy.mockRejectedValue(foreignAxiosError(401, tokenExpired));
+
+      const settled = client.api
+        .sendRequest('GET', '/api/v2/chat/channels')
+        .catch((e: unknown) => e);
+      await vi.runAllTimersAsync();
+      const error = await settled;
+
+      // the first request plus 10 retries
+      expect(requestSpy).toHaveBeenCalledTimes(11);
+      expect(error).toBeInstanceOf(StreamAPIError);
+      expect(error).toMatchObject({
+        code: 40,
+        message: tokenExpired.message,
+        status: 401,
+      });
+      expect((error as StreamAPIError).response?.status).toBe(401);
+    });
+
+    it('rejects with the error of the last attempt when the failure changes', async () => {
+      requestSpy.mockRejectedValue(foreignAxiosError(401, tokenExpired));
+      requestSpy.mockRejectedValueOnce(
+        foreignAxiosError(401, { ...tokenExpired, message: 'first attempt' }),
+      );
+
+      const settled = client.api
+        .sendRequest('GET', '/api/v2/chat/channels')
+        .catch((e: unknown) => e);
+      await vi.runAllTimersAsync();
+
+      expect(await settled).toMatchObject({ code: 40, message: tokenExpired.message });
+    });
+
+    it('resolves when a retry succeeds', async () => {
+      requestSpy
+        .mockRejectedValueOnce(foreignAxiosError(401, tokenExpired))
+        .mockResolvedValueOnce({ data: { ok: true }, status: 200, headers: {} });
+
+      const settled = client.api.sendRequest('GET', '/api/v2/chat/channels');
+      await vi.runAllTimersAsync();
+
+      expect(await settled).toMatchObject({ ok: true });
+      expect(requestSpy).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('rethrows an axios error with no Stream error body unwrapped', async () => {
+    const error = foreignAxiosError(502, '<html>Bad Gateway</html>');
+    requestSpy.mockRejectedValueOnce(error);
+
+    await expect(client.api.sendRequest('GET', '/api/v2/chat/channels')).rejects.toBe(
+      error,
+    );
+  });
+});
+
 describe('ApiClient path params', () => {
   let client: StreamChat;
   let requestSpy: ReturnType<typeof vi.spyOn>;
@@ -264,14 +431,16 @@ describe('ApiClient header precedence', () => {
 
   beforeEach(() => {
     client = getClientWithUser();
-    client.options.axiosRequestConfig = {
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'integrator-token',
-        'x-stream-client': 'integrator-agent',
-        'x-custom': 'kept',
+    client.config.setConfig('client', {
+      axiosRequestConfig: {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'integrator-token',
+          'x-stream-client': 'integrator-agent',
+          'x-custom': 'kept',
+        },
       },
-    };
+    });
     requestSpy = vi
       .spyOn(client.axiosInstance, 'request')
       .mockResolvedValue({ data: {}, status: 200, headers: {} });
@@ -440,9 +609,9 @@ describe('ApiClient multipart encoding', () => {
   // `JSON.stringify(formDataToJSON(form))` - the file disappears and the request still returns
   // 2xx, so assert on the resolved header rather than on the eventual body.
   it('keeps the multipart Content-Type over a client-level application/json', async () => {
-    client.options.axiosRequestConfig = {
-      headers: { 'Content-Type': 'application/json' },
-    };
+    client.config.setConfig('client', {
+      axiosRequestConfig: { headers: { 'Content-Type': 'application/json' } },
+    });
 
     await sendMultipart({ file: new File(['x'], 'a.jpg', { type: 'image/jpeg' }) });
 

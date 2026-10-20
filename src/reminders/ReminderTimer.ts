@@ -60,8 +60,7 @@ export class ReminderTimer {
     const timeoutLength = this.getRefreshIntervalLength();
     if (timeoutLength === null) return null;
 
-    // `stopRefreshBoundaryMs` is a duration in milliseconds, so it is applied after the wire
-    // timestamp has been converted rather than added to it.
+    // Stops refreshing once the deadline is more than `stopRefreshBoundaryMs` in the past.
     const timeLeftToBoundary =
       timeLeftMs(this.reminder.remindAt) + this.stopRefreshBoundaryMs;
 

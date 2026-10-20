@@ -20,11 +20,10 @@ import { nowNs, nsToDate } from './utils/time';
 const logger = chatLoggerSystem.getLogger('utils');
 
 /**
- * Logs the execution of a promise. Use this when you want to run the promise and handle errors by
- * logging a warning.
+ * Runs a promise fire-and-forget and logs an error when it rejects.
  *
- * @param promise - The promise you want to run and log.
- * @param name - A descriptive name of what the promise does for log output.
+ * @param promise - The promise to run.
+ * @param name - What the promise does, for the log output.
  */
 export function logChatPromiseExecution<T>(promise: Promise<T>, name: string) {
   promise.then().catch((error) => {
@@ -40,12 +39,8 @@ const logListenerError = <T>(scopedLogger: ScopedLogger, error: unknown, event: 
     .error('Unhandled error in event listener', { error, event });
 
 /**
- * Invokes a single event listener in isolation, so that a faulty listener cannot
- * abort the dispatch loop or the bookkeeping that follows it.
- *
- * Reports two failure modes: a synchronous throw, and a rejected promise from an `async`
- * listener — async handlers are assignable to the void-returning `EventHandler` type, so
- * without this they would be silent unhandled rejections.
+ * Invokes one event listener in isolation: a synchronous throw or a rejected promise (from an
+ * `async` listener) is logged and cannot abort the dispatch loop.
  */
 export const invokeEventListener = <T>(
   listener: (event: T) => unknown,
@@ -106,27 +101,19 @@ export function isOwnUserBaseProperty(property: string) {
   return ownUserBaseProperties[property as keyof OwnUserBase];
 }
 
-/**
- * channelHasReadEvents - Whether read events are enabled for the current user on a channel.
- */
+/** Whether `read-events` is among the own capabilities (true while they are not loaded). */
 export const channelHasReadEvents = (channel?: Channel) => {
   const ownCapabilities = channel?.data?.own_capabilities;
   return !(Array.isArray(ownCapabilities) && !ownCapabilities.includes('read-events'));
 };
 
-/**
- * channelTracksReadLocally - Whether a channel maintains a client local unread count.
- */
+/** Whether read events are off and the channel keeps a client-local unread count. */
 export const channelTracksReadLocally = (channel?: Channel) =>
   !channelHasReadEvents(channel) && !!channel?.config.readEvents.localUnreadCountEnabled;
 
-/**
- * retryInterval - A retry interval which increases acc to number of failures
- *
- * @returns Duration to wait in milliseconds
- */
+/** A random retry delay in milliseconds that grows with `numberOfFailures`. */
 export function retryInterval(numberOfFailures: number) {
-  // try to reconnect in 0.25-25 seconds (random to spread out the load from failures)
+  // 0.25 to 25 seconds, random to spread out the load from failures
   const max = Math.min(500 + numberOfFailures * 2000, 25000);
   const min = Math.min(Math.max(250, (numberOfFailures - 1) * 2000), 25000);
   return Math.floor(Math.random() * (max - min) + min);
@@ -187,14 +174,20 @@ function getRandomBytes(length: number): Uint8Array {
   return bytes;
 }
 
+const isScalarParam = (value: unknown) =>
+  typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
+
 export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (params) => {
   const newParams = [];
   for (const k in params) {
-    // Stream backend doesn't treat "undefined" value same as value not being present.
-    // So, we need to skip the undefined values.
+    // The backend does not treat an "undefined" value as absent, so skip it.
     if (params[k] === undefined) continue;
 
-    if (Array.isArray(params[k]) || typeof params[k] === 'object') {
+    // Scalar arrays are comma-separated (`ids=a,b`), as the API parses list params; a JSON array
+    // there silently matches nothing.
+    if (Array.isArray(params[k]) && params[k].every(isScalarParam)) {
+      newParams.push(`${k}=${encodeURIComponent(params[k].join(','))}`);
+    } else if (Array.isArray(params[k]) || typeof params[k] === 'object') {
       newParams.push(`${k}=${encodeURIComponent(JSON.stringify(params[k]))}`);
     } else {
       newParams.push(`${k}=${encodeURIComponent(params[k])}`);
@@ -205,14 +198,14 @@ export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (pa
 };
 
 /**
- * Takes the message object, adds SDK-specific fields (status, error),
- * and returns a new LocalMessage object.
+ * Adds the SDK-specific fields (`status`, `error`) to a message. Memoized per source object: callers
+ * share the result, so do not mutate it.
  *
- * @param message - message object
+ * @param message - The message from the API, or a local one.
+ * @returns The `LocalMessage`.
  */
 export function formatMessage(message: MessageResponse | LocalMessage): LocalMessage {
-  // Every consumer of one source object gets the same `LocalMessage`, so the message store's
-  // reference bail fires and siblings are not re-projected once per consumer.
+  // Memoized per source object: every consumer gets the same `LocalMessage`.
   const memoized = getMemoizedFormat(message);
   if (memoized) return memoized;
 
@@ -222,9 +215,8 @@ export function formatMessage(message: MessageResponse | LocalMessage): LocalMes
     if (!msg) return null;
     return {
       ...msg,
-      // Timestamps are the wire's unix-nanosecond numbers and stay that way — there is no
-      // conversion left to do here. `created_at` / `updated_at` still default, because a locally
-      // composed message has none until the server answers.
+      // Timestamps stay unix nanoseconds. A locally composed message has no `created_at` /
+      // `updated_at` until the server answers.
       created_at: msg.created_at ?? nowNs(),
       deleted_at: msg.deleted_at ?? undefined,
       pinned_at: msg.pinned_at ?? undefined,
@@ -250,18 +242,15 @@ export function formatMessage(message: MessageResponse | LocalMessage): LocalMes
 }
 
 /**
- * Computes the current user's `own_reactions` after applying a single reaction change, off a
- * `current` base. A WS reaction/edit event carries `own_reactions: []` (or stale), so consumers
- * must recompute from the copy they already hold rather than trusting the event — this is the
- * shared core used by both the message paginator (`reflectReaction`) and the thread's parent
- * message (which is not held in any paginator, so it needs the same logic directly).
+ * Computes the current user's `own_reactions` after one reaction change, from the `current` copy. A
+ * WS reaction event carries `own_reactions: []` (or stale), so it cannot be trusted. Used by
+ * `applyReactionLocally` and `reflectReactionEvent`.
  *
  * - `removed`: drop the current user's reaction of this type.
- * - `enforceUnique`: replace any existing own reaction with the incoming one (used by
- *   `reaction.updated`, where a user's reaction supersedes their previous one).
+ * - `enforceUnique`: replace any own reaction with the incoming one (`reaction.updated`).
  * - otherwise: add the reaction, de-duped by type.
  *
- * A reaction by another user never changes the current user's `own_reactions`.
+ * A reaction by another user never changes `own_reactions`.
  */
 export function computeOwnReactions({
   current,
@@ -286,10 +275,7 @@ export function computeOwnReactions({
 
 /**
  * Returns a copy of `message` with `reaction` folded into its `reaction_groups` /
- * `latest_reactions`. Does not touch `own_reactions` — the reaction entry points
- * ({@link MessageIntervalPaginator.reflectReaction} / `Thread.applyParentReactionLocally`) own that
- * via {@link computeOwnReactions}. Shared so both the paginator and the (paginator-less) thread
- * parent compute counts identically.
+ * `latest_reactions`. `own_reactions` is left to {@link computeOwnReactions}.
  */
 export function messageWithReactionAdded(
   message: LocalMessage,
@@ -301,7 +287,7 @@ export function messageWithReactionAdded(
     ...(message.reaction_groups ?? {}),
   };
 
-  // When enforcing uniqueness, first back the current user's existing reactions out of the groups
+  // With `enforceUnique`, first back the current user's existing reactions out of the groups.
   if (enforceUnique) {
     for (const ownReaction of message.own_reactions ?? []) {
       const group = reactionGroups[ownReaction.type];
@@ -380,12 +366,9 @@ export function messageWithReactionRemoved(
 }
 
 /**
- * Wire timestamps into the `Date` objects `MessageRequest` declares. Sub-millisecond precision is
- * lost, which is inherent to the declared request type.
- *
- * `shared_location` is listed field by field so only what `SharedLocation` declares can reach the
- * API — a location read off a message also carries `channel_cid`, `user_id`, `created_at`,
- * `updated_at` and `message_id`.
+ * Converts wire timestamps into the `Date` objects `MessageRequest` declares (sub-millisecond
+ * precision is lost). `shared_location` is copied field by field so only what `SharedLocation`
+ * declares reaches the API.
  */
 const toRequestDateFields = ({
   pinned_at,
@@ -411,21 +394,14 @@ const toRequestDateFields = ({
     : {}),
 });
 
-/**
- * Whether a URL points at something the API and other devices can actually fetch.
- */
+/** Whether a URL is HTTP(S), so the API and other devices can fetch it. */
 const isRemoteUrl = (url?: string) => !!url && /^https?:\/\//i.test(url.trim());
 
 /**
- * Strips composer-internal state from a message's attachments, and drops any whose upload never
- * resolved.
- *
- * `localMetadata` is how `AttachmentManager` tracks an upload (its id, the `File`, the local
- * preview); it must never reach the API. An attachment that still carries it and has no remote
- * URL was never settled, which means something bypassed the send path that awaits those uploads.
- * Sending it would store an attachment pointing at nothing, so it is dropped and logged instead.
- *
- * Returns the same message object when there was nothing to change.
+ * Strips `localMetadata` (`AttachmentManager`'s upload state, never sent to the API) from a
+ * message's attachments. Of those that carried it, drops with a warning the ones with no remote URL:
+ * their upload never settled, so something bypassed the send path that awaits uploads. Returns the
+ * same message object when nothing changed.
  */
 export const sanitizeOutgoingAttachments = <T extends { attachments?: Attachment[] }>(
   message: T,
@@ -448,8 +424,7 @@ export const sanitizeOutgoingAttachments = <T extends { attachments?: Attachment
 
     changed = true;
 
-    // Any of these pointing at a remote URL means the attachment resolved to something the API
-    // can store and other devices can load.
+    // A remote URL in any of these means the upload resolved.
     const hasRemoteSource =
       isRemoteUrl(rest.asset_url) ||
       isRemoteUrl(rest.image_url) ||
@@ -481,8 +456,7 @@ export const localMessageToNewMessagePayload = (
   localMessage: LocalMessage,
 ): MessageRequest => {
   const {
-    // Remove all timestamp fields and client-specific fields.
-    // Field pinned_at can therefore be earlier than created_at as new message payload can hold it.
+    // Timestamp and client-specific fields are removed, so `pinned_at` can precede `created_at`.
     created_at: _created_at,
     updated_at: _updated_at,
     deleted_at: _deleted_at,
@@ -490,30 +464,27 @@ export const localMessageToNewMessagePayload = (
     pinned_at,
     pin_expires,
     shared_location,
-    // Client-specific fields
     error: _error,
     status: _status,
-    // Reaction related fields
     latest_reactions: _latest_reactions,
     own_reactions: _own_reactions,
     reaction_counts: _reaction_counts,
     reaction_scores: _reaction_scores,
     reply_count: _reply_count,
-    // MessageRequest text related fields that shouldn't be in update
+    // Text-related fields that are not sent as-is (`mentioned_users` goes out as IDs)
     command: _command,
     html: _html,
     i18n: _i18n,
     mentioned_groups: _mentioned_groups,
     quoted_message: _quoted_message,
     mentioned_users,
-    // MessageRequest content related fields
     ...messageFields
   } = localMessage;
 
   const requestDates = toRequestDateFields({ pinned_at, pin_expires, shared_location });
 
-  // `messageFields` still carries LocalMessage-only fields (cid, deleted_reply_count, mentioned_*,
-  // pinned, shadowed, …) that the stricter OpenAPI `MessageRequest` omits; the server ignores them.
+  // `messageFields` carries LocalMessage-only fields (cid, pinned, shadowed, ...) that
+  // `MessageRequest` omits; the server ignores them.
   return {
     ...(messageFields as MessageRequest),
     mentioned_users: mentioned_users?.map((user) => user.id),
@@ -560,8 +531,8 @@ export const toDeletedMessage = ({
 }) => {
   if (hardDelete) {
     /**
-     * In case of hard delete, we need to strip down all text, html, attachments and all the custom properties on message
-     * The hard-deleted message is kept in the UI until the messages are re-queried
+     * On hard delete, strip text, html, attachments and custom properties. The message stays in the
+     * UI until messages are re-queried.
      * FIXME: we are returning an object that does not match LocalMessage
      */
     return {
@@ -601,9 +572,8 @@ export const findIndexInSortedArray = <T, L>({
   needle: T;
   sortedArray: readonly T[];
   /**
-   * In an array of objects (like messages), pick a unique property identifying
-   * an element. It will be used to find a direct match for the needle element
-   * in case compare values are not unique.
+   * Picks a unique property identifying an element, used to find a direct match for the needle when
+   * compare values are not unique.
    *
    * @example
    * ```ts
@@ -612,8 +582,7 @@ export const findIndexInSortedArray = <T, L>({
    */
   selectKey?: (arrayElement: T) => string;
   /**
-   * In an array of objects (like messages), pick a specific
-   * property to compare the needle value to.
+   * Picks the property to compare the needle to.
    *
    * @example
    * ```ts
@@ -621,14 +590,7 @@ export const findIndexInSortedArray = <T, L>({
    * ```
    */
   selectValueToCompare?: (arrayElement: T) => L | T;
-  /**
-   * @default ascending
-   * @description
-   * ```md
-   * ascending  - [1,2,3,4,5...]
-   * descending - [...5,4,3,2,1]
-   * ```
-   */
+  /** @default 'ascending' */
   sortDirection?: 'ascending' | 'descending';
 }) => {
   if (!sortedArray.length) return 0;
@@ -658,9 +620,8 @@ export const findIndexInSortedArray = <T, L>({
     }
   }
 
-  // In case there are several array elements with the same comparable value, search around the insertion
-  // point to possibly find an element with the same key. If found, prefer it.
-  // This, for example, prevents duplication of messages with the same creation date.
+  // With several elements of the same comparable value, search around the insertion point for one
+  // with the same key and prefer it (prevents duplicating messages with the same creation date).
   if (selectKey) {
     const needleKey = selectKey(needle);
     const step = sortDirection === 'ascending' ? -1 : +1;
@@ -693,8 +654,8 @@ function maybeGetReactionGroupsFallback(
     const fallback: { [key: string]: ReactionGroupResponse } = {};
 
     for (const type of Object.keys(counts)) {
-      // Best-effort fallback derived from counts/scores; the richer OpenAPI `ReactionGroupResponse`
-      // fields (first/last_reaction_at, latest_reactions_by) are not available here.
+      // Best effort: `first_reaction_at`, `last_reaction_at` and `latest_reactions_by` cannot be
+      // derived.
       fallback[type] = {
         count: counts[type],
         sum_scores: scores[type],
@@ -709,34 +670,22 @@ function maybeGetReactionGroupsFallback(
 
 export interface DebouncedFunc<T extends (...args: any[]) => any> {
   /**
-   * Call the original function, but applying the debounce rules.
-   *
-   * If the debounced function can be run immediately, this calls it and returns its return
-   * value.
-   *
-   * Otherwise, it returns the return value of the last invocation, or undefined if the debounced
-   * function was not invoked yet.
+   * Calls the function under the debounce rules. Returns its value when it runs immediately, else
+   * the last invocation's value (`undefined` before the first).
    */
   (...args: Parameters<T>): ReturnType<T> | undefined;
 
-  /**
-   * Throw away any pending invocation of the debounced function.
-   */
   cancel(): void;
 
   /**
-   * If there is a pending invocation of the debounced function, invoke it immediately and return
-   * its return value.
-   *
-   * Otherwise, return the value from the last invocation, or undefined if the debounced function
-   * was never invoked.
+   * Runs the pending invocation immediately and returns its value; otherwise returns the last
+   * invocation's value (`undefined` if never invoked).
    */
   flush(): ReturnType<T> | undefined;
 }
 
-// works exactly the same as lodash.debounce, except that the timeout can also be
-// a function of the call arguments, resolved on every call (e.g. to debounce short,
-// low-selectivity search queries harder than long ones)
+// Like lodash.debounce, except `timeout` can be a function of the call arguments, resolved on every
+// call.
 export const debounce = <T extends (...args: any[]) => any>(
   fn: T,
   timeout: number | ((...args: Parameters<T>) => number) = 0,
@@ -784,8 +733,6 @@ export const debounce = <T extends (...args: any[]) => any>(
   return debouncedFn;
 };
 
-// The single throttle implementation lives in ./utils/throttling/throttle; re-exported here so
-// `import { throttle } from './utils'` keeps working (lodash.throttle-style leading/trailing).
 export { throttle } from './utils/throttling/throttle';
 export type {
   Throttled,
@@ -801,7 +748,7 @@ const get = <T>(obj: T, path: string): unknown =>
     return undefined;
   }, obj);
 
-// works exactly the same as lodash.uniqBy
+// Like lodash.uniqBy.
 export const uniqBy = <T>(
   array: T[] | unknown,
   iteratee: ((item: T) => unknown) | keyof T,
@@ -819,19 +766,19 @@ export const uniqBy = <T>(
 };
 
 /**
- * The user id of a member as `ChannelInput.members` lists it: a user id, `{ user_id }` or
- * `{ user: { id } }`.
+ * Reads the user ID of a member.
+ *
+ * @param member - A user ID, a member request or a member response.
+ * @returns The user ID, or `''` if there is none.
  */
 export const getMemberUserId = (
   member: string | { user_id?: string; user?: { id?: string } },
 ) => (typeof member === 'string' ? member : member.user_id || member.user?.id || '');
 
 /**
- * The id a channel created from members, without an id, has until the server answers: the sorted
- * member user ids joined by `,`, after `!members-`. It is the same for the same members whatever
- * their order. `undefined` when there are no members.
- *
- * @param memberIds - The member user ids.
+ * The temporary ID of a channel created from members without an ID, until the server answers:
+ * `!members-` plus the sorted member IDs joined by `,`, so it is order-independent. `undefined`
+ * when there are no members.
  */
 export const generateChannelTempId = (memberIds: string[]) => {
   const membersStr = [...memberIds].filter(Boolean).sort().join(',');
@@ -840,12 +787,9 @@ export const generateChannelTempId = (memberIds: string[]) => {
 };
 
 /**
- * The cid a channel created from members, without an id, has until the server answers: its
- * {@link generateChannelTempId} under its type. It stands in for the cid the server assigns, so the
- * channel is stored once under it. `undefined` when there are no members.
- *
- * @param channelType - The channel type.
- * @param memberIds - The member user ids.
+ * The temporary cid of a channel created from members without an ID: its
+ * {@link generateChannelTempId} under its type, so the channel is stored once under it until the
+ * server assigns the real cid. `undefined` when there are no members.
  */
 export const generateChannelTempCid = (channelType: string, memberIds: string[]) => {
   const tempId = generateChannelTempId(memberIds);

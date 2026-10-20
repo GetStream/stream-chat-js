@@ -3,20 +3,12 @@ import type { StreamChat } from '../client';
 import type { LocalMessage, MessageResponse, ReactionResponse } from '../types';
 
 /**
- * Applies a `reaction.new` / `reaction.updated` / `reaction.deleted` event to the canonical copy of
- * the message, addressed by id — the server-event counterpart of `applyReactionLocally`.
+ * Applies a `reaction.new` / `reaction.updated` / `reaction.deleted` event to the canonical copy of the
+ * message, by ID. The event's counts are taken as they are; `own_reactions` is derived from what the
+ * store holds, because the event omits the current user's reactions or reports another user's.
  *
- * The event carries the server's updated counts, so those are taken as they are; only `own_reactions`
- * is derived, because the event either omits the current user's reactions or reports another user's.
- * The base for that derivation is whatever the store already holds, so a reaction by someone else
- * cannot wipe yours.
- *
- * One write reaches every collection holding the message — main list, pinned list, thread replies,
- * and a thread's subscribed parent, which lives in no paginator at all. Calling it once per
- * collection instead is what produced 9 publishes for a single reaction: each call minted a fresh
- * object, so the store's reference bail never fired and every write re-projected the others.
- *
- * No-op when nothing holds the message — there is no view to update.
+ * One write reaches every collection holding the message (main list, pinned list, thread replies, a
+ * thread's parent). No-op when nothing holds the message.
  */
 export const reflectReactionEvent = (
   client: StreamChat,

@@ -30,41 +30,32 @@ type ChannelReadStatus = Record<
 >;
 
 /**
- * Whether this client holds a server-side watch on the channel — i.e. whether channel events are
- * being delivered to it.
- *
- * Three values rather than a boolean, because "not watching" alone cannot say whether a re-watch is
- * wanted: a watch lost to a dead socket should be restored on reconnect, one the consumer stopped
- * deliberately must not be. The server keys watches by connection ID, so a dropped socket ends every
- * watch this client held — even if it reconnects moments later with a fresh ID.
+ * Whether this client holds a server-side watch on the channel (channel events are delivered to it).
+ * Three values because a watch lost to a dropped socket should be restored on reconnect, while one the
+ * consumer stopped must not be. The server keys watches by connection ID, so a dropped socket ends
+ * every watch this client held.
  */
 export const ChannelWatchStatus = {
-  /** Never watched, or the consumer stopped watching on purpose — do NOT re-watch. */
+  /** Never watched, or the consumer stopped watching: do NOT re-watch. */
   NotWatching: 'notWatching',
-  /** Was watching until the connection dropped — the watch is gone and SHOULD be restored. */
+  /** Was watching until the connection dropped: the watch is gone and SHOULD be restored. */
   WasWatching: 'wasWatching',
-  /** Holding a live watch: events are flowing. */
+  /** Holds a live watch. */
   Watching: 'watching',
 } as const;
 
 export type ChannelWatchStatus =
   (typeof ChannelWatchStatus)[keyof typeof ChannelWatchStatus];
 
-/**
- * Everything about watching this channel: who else is watching it, and whether *we* are.
- */
+/** Who is watching the channel, and whether this client is. */
 export type ChannelWatchState = {
   watcherCount: number;
   watchers: Record<string, UserResponse>;
   /**
-   * See {@link ChannelWatchStatus}. Goes to `Watching` when a query carrying `watch: true` succeeds
-   * (`channel.watch()`, `channel.query({ watch: true })`, `client.queryChannels()`); to
-   * `WasWatching` when the WS connection is lost (only from `Watching` — a deliberate stop is never
-   * resurrected); and to `NotWatching` on `channel.stopWatching()` or `channel.disconnect()`.
-   *
-   * It is truthful by construction: `channel.watch()` and `client.queryChannels()` wait for a live
-   * socket rather than degrading, so a query carrying `watch: true` can only succeed against a
-   * connection ID that is actually current.
+   * See {@link ChannelWatchStatus}. Becomes `Watching` when a query with `watch: true` succeeds
+   * (`channel.watch()`, `channel.query({ watch: true })`, `client.queryChannelsAndHydrate()`, a
+   * thread query with `watch: true`), `WasWatching` when the connection is lost (only from
+   * `Watching`), and `NotWatching` on `channel.stopWatching()` or `channel.disconnect()`.
    */
   watchStatus: ChannelWatchStatus;
 };
@@ -80,16 +71,13 @@ export type ReadState = {
 export type MembersState = {
   members: Record<string, ChannelMemberResponse>;
   /**
-   * Total member count, sourced from `channel.data.member_count`. Set on query / watch / hydration
-   * (incl. offline-DB rehydration) and on `channel.updated` — deliberately NOT on `member.added` /
-   * `member.removed`. `channel.updated` fires on every member change and is the authoritative count;
-   * incrementing per member event double-counted when several members changed at once.
-   * See https://github.com/GetStream/stream-chat-js/pull/1761.
+   * From `channel.data.member_count`. Set on query, watch and hydration (including the offline DB) and
+   * on `channel.updated`, not on `member.added` / `member.removed`: `channel.updated` fires on every
+   * member change and is authoritative, while counting per member event double-counts.
    */
   memberCount: number;
 };
 
-/** The current user's own membership in this channel (role, pinned_at, archived_at, …). */
 export type MembershipState = {
   membership: ChannelMemberResponse;
 };
@@ -98,16 +86,11 @@ export type OwnCapabilitiesState = {
   ownCapabilities: string[];
 };
 
-/**
- * The channel's server-provided `data` (name, image, frozen, hidden, blocked, config,
- * `member_count`, `own_capabilities`, …), mirrored reactively so consumers can subscribe to
- * channel-level changes via `useStateStore(channel.state, (s) => ({ data: s.data }))`.
- */
 export type ChannelDataState = {
   data: Channel['data'];
 };
 
-/** Whether THIS channel is muted for the current user, mirrored from `client.mutedChannels`. */
+/** Whether this channel is muted for the current user, mirrored from `client.mutedChannels`. */
 export type ChannelMuteStatus = {
   muted: boolean;
   /** Unix nanoseconds, as the API sends it. */
@@ -117,85 +100,63 @@ export type ChannelMuteStatus = {
 };
 
 /**
- * Reactive channel-mute state — is this channel muted for the current user. Mirrors the client-owned
- * `client.mutedChannels` (updated on `notification.channel_mutes_updated` + `health.check`) and is
- * subscribable via `useStateStore(channel.state, (s) => ({ muteStatus: s.muteStatus }))`. Muted
- * USERS remain client-global on `client.mutedUsersStore` and are NOT part of channel state.
+ * Kept in sync with `client.mutedChannels` (`notification.channel_mutes_updated`, `health.check`).
+ * Muted users are client-global (`client.mutedUsersStore`), not part of channel state.
  */
 export type MuteStatusState = {
   muteStatus: ChannelMuteStatus;
 };
 
 /**
- * Connection / initialization lifecycle flags for the channel. Previously plain fields on `Channel`;
- * now store-backed so consumers can react to them via `useStateStore(channel.state, selector)`.
- * Read through the `channel.initialized` / `channel.offlineMode` / `channel.pendingDisposal`
- * getters, which proxy this slice; `initialized` and `offlineMode` have setters too, while
- * `pendingDisposal` is set only by `channel.disconnect()`.
+ * Read through the `channel.initialized` / `offlineMode` / `pendingDisposal` / `supersededBy`
+ * getters. Only `channel.disconnect()` sets `pendingDisposal`.
  */
 export type ChannelLifecycleState = {
   /**
-   * Whether a live server response was applied to this instance since it was created: a query
-   * (`channel.query()`, and `watch()` and `create()`, which use it) or a `queryChannels` result.
-   * Its data was current when it arrived; `watchStatus` tells whether it is kept current since.
-   * `false` means nothing confirmed it yet: the channel may or may not exist on the server.
-   * Data restored from the offline database doesn't count (see `offlineMode`). Never reset.
+   * Whether a live server response (a query or a `queryChannels` result) was applied to this instance
+   * since it was created. `false`: nothing confirmed the channel yet, so it may or may not exist on
+   * the server. Data restored from the offline database does not count (see `offlineMode`).
+   * `watchStatus` tells whether the data is kept current. Never reset.
    */
   initialized: boolean;
   /**
-   * Whether the channel was initialized by manually populating its state (e.g. offline hydration)
-   * rather than a live watch. Such static state means the channel exists on the backend but is not
-   * being watched yet.
+   * Whether the state was populated manually (e.g. offline hydration) rather than by a live query: the
+   * channel exists on the backend but is not watched yet.
    */
   offlineMode: boolean;
   /**
    * Whether `channel.disconnect()` has run: the channel was deleted, the current user removed from
-   * it, the client disconnected, or nothing used it any more. One-way and terminal — see
-   * {@link Channel.pendingDisposal}: the instance is never revived.
+   * it, the client disconnected, or nothing uses it. Terminal, see {@link Channel.pendingDisposal}.
    */
   pendingDisposal: boolean;
   /**
-   * The stored instance that replaced this one: this instance was created without an id, and when
-   * the server answered with the real cid, another instance was already stored under it (put there by
-   * an event or a channel list meanwhile). The stored instance took this one's server data, local
-   * messages and, when this one was open and it wasn't, its composer. Anything still holding this
-   * instance should switch to it. Set once.
+   * The stored instance that replaced this one: this one was created without an ID and, when the server
+   * answered with the cid, another instance was already stored under it. That instance took this one's
+   * server data, local messages and (if this one was open and it was not) its composer. Set once.
    */
   supersededBy: Channel | undefined;
 };
 
-/**
- * Whether the channel is currently being consumed — consumer-declared, never returned by the API.
- * Mirrors `thread.state.active`.
- */
+/** Consumer-declared, never returned by the API. */
 export type ChannelActivationState = {
   /**
-   * Whether a consumer has declared this channel as the one it is currently reading, via
-   * `channel.activate()` and the release function it returns (refcounted, as a single `Channel`
-   * instance can be held by several consumers at once). It carries no rendering semantics; it tells the client
-   * that the channel's own state is being consumed and takes precedence over bulk state writes —
-   * channel-list hydration places no page in the message list of an `active` channel (the
-   * channel's own `channel.reload()` owns that window).
+   * Whether a consumer declared this channel as the one it is reading, via `channel.activate()`. Its
+   * own state then takes precedence over bulk writes: channel-list hydration places no page in the
+   * message list of an `active` channel (`channel.reload()` owns that window).
    */
   active: boolean;
 };
 
 /**
- * Reactive AI-indicator state — driven by the `ai_indicator.update` / `.clear` / `.stop` events (see
- * `Channel._handleChannelEvent`). Seeded to `AIStates.Idle` and subscribable via
- * `useStateStore(channel.state, (s) => ({ aiState: s.aiState }))`. Reset to `Idle` on unwatch /
- * disconnect (a live server sends `ai_indicator.clear` when the AI response starts streaming).
+ * Driven by the `ai_indicator.update` / `.clear` / `.stop` events. Reset to `Idle` when the connection
+ * closes or goes unhealthy, as the `clear`/`stop` that ends a response is missed and not replayed.
  */
 export type AIIndicatorState = {
   aiState: AIState;
 };
 
 /**
- * The single, unified reactive state for a channel. All per-channel reactive state is published
- * through this one `StateStore` and subscribed to with `useStateStore(channel.state, selector)`
- * (mirroring `thread.state`).
- *
- * The shape is FLAT — subscribe to any slice via a selector, e.g.
+ * All per-channel reactive state, in one flat `StateStore`. Subscribe with a selector, e.g.
  * `useStateStore(channel.state, (s) => ({ read: s.read }))`.
  */
 export type ChannelStateData = ChannelWatchState &
@@ -211,11 +172,8 @@ export type ChannelStateData = ChannelWatchState &
   AIIndicatorState;
 
 /**
- * ChannelState - the container for a channel's reactive state.
- *
- * It IS a `StateStore<ChannelStateData>` (so `useStateStore(channel.state, selector)` works,
- * mirroring `thread.state`) while additionally exposing convenience getters/setters
- * (`members`, `read`, `typing`, `watchers`, …) that read/write the same unified store.
+ * A `StateStore<ChannelStateData>` that also exposes getters/setters (`members`, `read`, `typing`,
+ * `watchers`, ...) over the same store.
  */
 export class ChannelState extends StateStore<ChannelStateData> {
   _channel: Channel;
@@ -247,20 +205,16 @@ export class ChannelState extends StateStore<ChannelStateData> {
   }
 
   /**
-   * The current user's unread message count, derived from the `read` slice
-   * (`read[ownUserId].unread_messages`) rather than stored a second time — there is exactly one
-   * place holding this value, so the count the unread badge reads can never drift from the count
-   * `channel.countUnread()` returns. Written through `Channel._setOwnUnreadCount`.
+   * The current user's unread count, derived from `read[ownUserId].unread_messages` so it cannot drift
+   * from `channel.countUnread()`. Written through `Channel._setOwnUnreadCount`.
    */
   get unreadCount() {
-    // read `_client` directly: `getClient()` throws on a channel pending disposal, and reading a
-    // count off a dead instance should yield 0, not blow up.
+    // `_client` is read directly: `getClient()` throws on a channel pending disposal, which reads 0.
     const userId = this._channel?._client?.userId;
     if (!userId) return 0;
     return this.getLatestValue().read[userId]?.unread_messages ?? 0;
   }
 
-  /** The current user's own membership; store-backed so `useStateStore` can subscribe to it. */
   get membership() {
     return this.getLatestValue().membership;
   }
@@ -294,17 +248,11 @@ export class ChannelState extends StateStore<ChannelStateData> {
   }
 
   get typing() {
-    return (
-      this._channel?.messageComposer?.textComposer.typing ?? this.getLatestValue().typing
-    );
+    return this.getLatestValue().typing;
   }
 
   set typing(typing: Record<string, Event>) {
     this.partialNext({ typing });
-
-    if (this._channel?.messageComposer) {
-      this._channel.messageComposer.textComposer.setTyping(typing);
-    }
   }
 
   setTypingEvent(userID: string, event: Event) {
@@ -336,19 +284,17 @@ export class ChannelState extends StateStore<ChannelStateData> {
   }
 
   /**
-   * Takes the message object, adds SDK-specific fields (status, error),
-   * and returns a new message object.
+   * Adds the SDK-specific fields (`status`, `error`) to a message. Memoized per source object:
+   * callers share the result, so do not mutate it.
    *
-   * @param message - `MessageResponse` object
+   * @param message - The message from the API, or a local one.
+   * @returns The `LocalMessage`.
    */
   formatMessage = (message: MessageResponse | LocalMessage) => formatMessage(message);
 
-  /**
-   * clean - Remove stale data such as users that stayed in typing state for more than 5 seconds
-   */
+  /** Removes users typing for more than 7 seconds without a new event, dispatching `typing.stop`. */
   clean() {
     const now = nowNs();
-    // prevent old users from showing up as typing
     for (const [userID, lastEvent] of Object.entries(this.typing)) {
       const receivedAt = lastEvent.received_at ?? now;
       if (nsToMs(now - receivedAt) > 7000) {
@@ -363,9 +309,8 @@ export class ChannelState extends StateStore<ChannelStateData> {
   }
 
   /**
-   * Resets the AI indicator to `Idle`. Called when the connection drops, as while the connection is
-   * severed we miss the `ai_indicator.clear`/`.stop` that ends a response and it isn't replayed on
-   * reconnect, so the indicator would otherwise stay stuck on "Generating". Noop when already `Idle`.
+   * Resets the AI indicator to `Idle`. Called when the connection closes or goes unhealthy: the
+   * `ai_indicator.clear`/`.stop` that ends a response is missed then and not replayed on reconnect.
    */
   resetAIState() {
     if (this.getLatestValue().aiState === AIStates.Idle) return;

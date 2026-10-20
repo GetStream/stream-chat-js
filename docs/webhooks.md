@@ -38,7 +38,7 @@ available on the same client with their v9 shapes, and
 `InvalidWebhookError` is re-exported for `instanceof` checks.
 
 Migration details, including the full v9 → node-sdk mapping table:
-[`v9-to-v10-migration-guide-server-side.md`](../v9-to-v10-migration-guide-server-side.md#webhook--sns--sqs).
+[`ai-docs/v10-breaking-changes.md`](../ai-docs/v10-breaking-changes.md#webhook-helpers-removed).
 
 Product documentation for configuring webhooks, SQS, and SNS:
 <https://getstream.io/chat/docs/javascript/webhooks_overview/>.

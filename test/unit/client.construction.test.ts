@@ -53,15 +53,15 @@ describe('StreamChat construction', () => {
 
     it('accepts (key, options)', () => {
       const client = new StreamChat(API_KEY, {
-        axiosRequestConfig: { timeout: 5000 },
+        client: { axiosRequestConfig: { timeout: 5000 } },
       });
       expect(client.key).to.equal(API_KEY);
       expect(client.axiosInstance.defaults.timeout).to.equal(5000);
     });
 
-    it('treats an omitted options argument as an empty options object', () => {
+    it('treats an omitted config argument as no configuration', () => {
       const client = new StreamChat(API_KEY);
-      expect(client.options).to.deep.equal({});
+      expect(client.config.getTree()).to.deep.equal({});
     });
   });
 
@@ -108,7 +108,7 @@ describe('StreamChat construction', () => {
       expect(a.channelManager.channelStore).to.not.equal(b.channelManager.channelStore);
       expect(a.channelServerConfigs).to.not.equal(b.channelServerConfigs);
       expect(a.blockedUsers).to.not.equal(b.blockedUsers);
-      expect(a.options).to.not.equal(b.options);
+      expect(a.config).to.not.equal(b.config);
       expect(a.axiosInstance).to.not.equal(b.axiosInstance);
     });
   });
@@ -129,21 +129,24 @@ describe('StreamChat construction', () => {
 
     it('honors user-provided overrides', () => {
       const client = new StreamChat(API_KEY, {
-        config: { client: { connectionRecovery: { enabled: false } } },
+        client: { connectionRecovery: { enabled: false } },
       });
 
-      // Seeded from `options.config` before the managers are wired, so it applies from construction.
+      // Seeded from the constructor's config before the managers are wired, so it applies from construction.
       expect(client.connectionRecovery.config.enabled).to.equal(false);
     });
 
-    it('passes persistUserOnConnectionFailure through to the client', () => {
+    it('reads persistUserOnConnectionFailure from the client configuration', () => {
       const defaultClient = new StreamChat(API_KEY);
-      expect(defaultClient.persistUserOnConnectionFailure).to.be.undefined;
+      expect(defaultClient.config.getConfig('client')?.persistUserOnConnectionFailure).to
+        .be.undefined;
 
       const customClient = new StreamChat(API_KEY, {
-        persistUserOnConnectionFailure: true,
+        client: { persistUserOnConnectionFailure: true },
       });
-      expect(customClient.persistUserOnConnectionFailure).to.equal(true);
+      expect(
+        customClient.config.getConfig('client')?.persistUserOnConnectionFailure,
+      ).to.equal(true);
     });
   });
 
@@ -164,7 +167,7 @@ describe('StreamChat construction', () => {
     });
 
     it('passes baked-in defaults (timeout, withCredentials, paramsSerializer) into axios.create', () => {
-      new StreamChat(API_KEY, { browser: true });
+      new StreamChat(API_KEY, { client: { browser: true } });
       const config = createSpy.firstCall.args[0]!;
       expect(config.timeout).to.equal(3000);
       expect(config.withCredentials).to.equal(false);
@@ -186,7 +189,7 @@ describe('StreamChat construction', () => {
         withCredentials: true,
         headers: { 'Cache-Control': 'no-cache' },
       };
-      const client = new StreamChat(API_KEY, { axiosRequestConfig });
+      const client = new StreamChat(API_KEY, { client: { axiosRequestConfig } });
       expect(client.axiosInstance.defaults.timeout).to.equal(9999);
       expect(client.axiosInstance.defaults.withCredentials).to.equal(true);
       expect(client.axiosInstance.defaults.headers).to.include({
@@ -197,7 +200,7 @@ describe('StreamChat construction', () => {
     it('keeps paramsSerializer fixed even when axiosRequestConfig tries to override it', () => {
       const customSerializer = () => 'overridden';
       const client = new StreamChat(API_KEY, {
-        axiosRequestConfig: { paramsSerializer: customSerializer },
+        client: { axiosRequestConfig: { paramsSerializer: customSerializer } },
       });
       expect(client.axiosInstance.defaults.paramsSerializer).to.equal(
         axiosParamsSerializer,
@@ -207,10 +210,13 @@ describe('StreamChat construction', () => {
       );
     });
 
-    it('preserves axiosRequestConfig on the client options', () => {
+    it('registers axiosRequestConfig in the client configuration, as a copy', () => {
       const axiosRequestConfig = { headers: { 'Cache-Control': 'no-cache' } };
-      const client = new StreamChat(API_KEY, { axiosRequestConfig });
-      expect(client.options.axiosRequestConfig).to.equal(axiosRequestConfig);
+      const client = new StreamChat(API_KEY, { client: { axiosRequestConfig } });
+      const registered = client.config.getConfig('client')?.axiosRequestConfig;
+      expect(registered).to.deep.equal(axiosRequestConfig);
+      // Copied at the boundary, so changing what the caller passed does not reach the client.
+      expect(registered).to.not.equal(axiosRequestConfig);
     });
 
     it('produces a paramsSerializer that matches axiosParamsSerializer behavior', () => {
@@ -224,21 +230,20 @@ describe('StreamChat construction', () => {
 
     describe('httpsAgent', () => {
       it('does not auto-create an httpsAgent in node mode', () => {
-        const client = new StreamChat(API_KEY, { browser: false });
+        const client = new StreamChat(API_KEY, { client: { browser: false } });
         expect(client.axiosInstance.defaults.httpsAgent).to.be.undefined;
       });
 
       it('honors an axiosRequestConfig.httpsAgent supplied by the caller', () => {
         const customAgent = vi.fn();
         const client = new StreamChat(API_KEY, {
-          browser: false,
-          axiosRequestConfig: { httpsAgent: customAgent },
+          client: { browser: false, axiosRequestConfig: { httpsAgent: customAgent } },
         });
         expect(client.axiosInstance.defaults.httpsAgent).to.equal(customAgent);
       });
 
       it('does not auto-create an httpsAgent in browser mode', () => {
-        const client = new StreamChat(API_KEY, { browser: true });
+        const client = new StreamChat(API_KEY, { client: { browser: true } });
         expect(client.axiosInstance.defaults.httpsAgent).to.be.undefined;
       });
     });
@@ -260,7 +265,9 @@ describe('StreamChat construction', () => {
     });
 
     it('uses a custom baseURL when provided', () => {
-      const client = new StreamChat(API_KEY, { baseURL: 'http://example.com:3030' });
+      const client = new StreamChat(API_KEY, {
+        client: { baseURL: 'http://example.com:3030' },
+      });
       expect(client.baseURL).to.equal('http://example.com:3030');
       // http -> ws, :3030 -> :8800
       expect(client.wsBaseURL).to.equal('ws://example.com:8800');
@@ -302,13 +309,20 @@ describe('StreamChat construction', () => {
     });
 
     it('honors an explicit browser:true override', () => {
-      const client = new StreamChat(API_KEY, { browser: true });
+      const client = new StreamChat(API_KEY, { client: { browser: true } });
+      expect(client.browser).to.equal(true);
+      expect(client.node).to.equal(false);
+    });
+
+    it('follows a browser value registered after construction', () => {
+      const client = new StreamChat(API_KEY, { client: { browser: false } });
+      client.config.setConfig('client', { browser: true });
       expect(client.browser).to.equal(true);
       expect(client.node).to.equal(false);
     });
 
     it('honors an explicit browser:false override', () => {
-      const client = new StreamChat(API_KEY, { browser: false });
+      const client = new StreamChat(API_KEY, { client: { browser: false } });
       expect(client.browser).to.equal(false);
       expect(client.node).to.equal(true);
     });
@@ -330,10 +344,43 @@ describe('StreamChat construction', () => {
       expect(client.messageComposerCache).to.be.instanceOf(FixedSizeQueueCache);
     });
 
+    it('warns when a read-once client field is registered after construction', () => {
+      const warned: string[] = [];
+      const spy = vi.spyOn(console, 'warn').mockImplementation((...args) => {
+        warned.push(args.map(String).join(' '));
+      });
+      const client = new StreamChat(API_KEY);
+      warned.length = 0;
+
+      client.config.setConfig('client', { baseURL: 'http://example.com:3030' });
+
+      // `allowServerSideConnect` is read on every connect, so it is not on the list.
+      client.config.setConfig('client', { allowServerSideConnect: true });
+      spy.mockRestore();
+
+      const lateWarnings = warned.filter((m) => /read once during construction/.test(m));
+      expect(lateWarnings).to.have.length(1);
+      expect(lateWarnings[0]).to.contain('baseURL');
+    });
+
+    it('keeps the configuration a supplied NotificationManager was built with', () => {
+      const notificationManager = new NotificationManager({ durations: { error: 111 } });
+      const client = new StreamChat(API_KEY, {
+        client: {
+          notificationManager,
+          notifications: { durations: { error: 222, info: 333 } },
+        },
+      });
+
+      // The constructor's value wins per field; the tree fills the rest.
+      expect(client.notifications.config.durations.error).to.equal(111);
+      expect(client.notifications.config.durations.info).to.equal(333);
+    });
+
     it('reuses an externally supplied NotificationManager instead of wrapping it', () => {
-      const notifications = new NotificationManager();
-      const client = new StreamChat(API_KEY, { notifications });
-      expect(client.notifications).to.equal(notifications);
+      const notificationManager = new NotificationManager();
+      const client = new StreamChat(API_KEY, { client: { notificationManager } });
+      expect(client.notifications).to.equal(notificationManager);
     });
 
     it('constructs the TokenManager with no token', () => {
@@ -388,10 +435,10 @@ describe('StreamChat construction', () => {
 
     it('ignores subsequent key and options after the first call', () => {
       const first = StreamChat.getInstance(API_KEY, {
-        axiosRequestConfig: { timeout: 1111 },
+        client: { axiosRequestConfig: { timeout: 1111 } },
       });
       const second = StreamChat.getInstance('different-key', {
-        axiosRequestConfig: { timeout: 9999 },
+        client: { axiosRequestConfig: { timeout: 9999 } },
       });
 
       expect(second).to.equal(first);
@@ -401,7 +448,7 @@ describe('StreamChat construction', () => {
 
     it('routes options through the constructor on first call', () => {
       const client = StreamChat.getInstance(API_KEY, {
-        axiosRequestConfig: { timeout: 5000 },
+        client: { axiosRequestConfig: { timeout: 5000 } },
       });
       expect(client.axiosInstance.defaults.timeout).to.equal(5000);
     });

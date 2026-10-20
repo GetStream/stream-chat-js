@@ -29,34 +29,24 @@ const applyUploadResult = (
     (enriched as LocalNotImageAttachment).thumb_url = response.thumb_url;
   }
 
-  // The message has owned this preview since the composition was handed over — see
-  // `createPostUploadAttachmentEnrichmentMiddleware`, which stops revoking once the composer
-  // no longer holds the attachment.
+  // The message owns this preview once the composition is handed over.
   const { previewUri } = attachment.localMetadata;
   if (previewUri?.startsWith('blob:')) URL.revokeObjectURL?.(previewUri);
 
-  // `localMetadata` is dropped, not read - the attachment leaves here as a plain server payload.
+  // `localMetadata` is dropped: the attachment leaves as a plain server payload.
   const { localMetadata: _localMetadata, ...rest } = enriched;
   return rest;
 };
 
 /**
- * Settles the uploads of any attachment that is still in flight, and reports the outcome.
+ * Settles the uploads of attachments still in flight and reports the outcome. Unresolved attachments
+ * only reach the send path when {@link AttachmentManagerConfig.pendingUploadsEnabled} is on.
+ * {@link UploadManager.upload} is idempotent by `localMetadata.id`, so this awaits the composer's
+ * request rather than starting a second one; an upload that never started (a retry, an offline replay)
+ * starts here. A `failed` upload is retried, while `blocked` is left alone since no retry can settle it.
  *
- * A message only ever reaches the send path with an unresolved attachment when
- * {@link AttachmentManagerConfig.pendingUploadsEnabled} is on — otherwise the composition
- * middleware discards such a composition instead. {@link UploadManager.upload} is idempotent by
- * `localMetadata.id`, so this awaits the request the composer already started rather than
- * starting a second one; an attachment whose upload never started (a retry, an offline replay)
- * is uploaded here for the first time.
- *
- * An upload that already `failed` is retried here rather than dropped — offline is the case that
- * needs it, where the first attempt could not have succeeded. `blocked` is left alone: the
- * server's upload configuration refused it, so no retry can settle it.
- *
- * Resolved attachments come back carrying their URL and **without** `localMetadata`, and their
- * local preview is revoked. Failed ones are returned untouched, `localMetadata` and all, so a
- * retry re-uploads only what is still missing.
+ * Resolved attachments come back with their URL, without `localMetadata`, and with their local preview
+ * revoked. Failed ones come back untouched, so a retry re-uploads only what is missing.
  */
 export const settlePendingAttachmentUploads = async ({
   attachments,
@@ -96,8 +86,7 @@ export const settlePendingAttachmentUploads = async ({
       return;
     }
 
-    // Deliberately `allSettled`, and the resolved URLs above are kept even though the message as
-    // a whole now fails: a retry then only re-uploads what did not make it.
+    // Resolved URLs above are kept even when the message fails: a retry re-uploads only the rest.
     if (!failureReason) {
       failureReason =
         result.status === 'rejected'

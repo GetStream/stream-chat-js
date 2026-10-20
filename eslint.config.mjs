@@ -13,7 +13,7 @@ export default tseslint.config(
   {
     name: 'default',
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
-    files: ['src/**/*.{js,ts}', 'scripts/**/*.mts'],
+    files: ['src/**/*.{js,ts}', 'scripts/**/*.mts', 'test/docs-snippets/**/*.{ts,mts}'],
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,
@@ -118,6 +118,13 @@ export default tseslint.config(
       'jsdoc/no-multi-asterisks': 'error',
       'jsdoc/empty-tags': 'error',
       'jsdoc/no-bad-blocks': 'error',
+    },
+  },
+  {
+    name: 'docs-snippets',
+    files: ['test/docs-snippets/**/*.{ts,mts}'],
+    languageOptions: {
+      globals: globals.node,
     },
   },
 );

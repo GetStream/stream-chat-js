@@ -27,6 +27,7 @@ import type {
   DeleteMessageResponse,
   DeleteReactionResponse,
   DeleteReminderResponse,
+  DeleteScheduledMessageResponse,
   EventResponse,
   FileUploadRequest,
   FileUploadResponse,
@@ -69,6 +70,8 @@ import type {
   PollVotesResponse,
   QueryBannedUsersPayload,
   QueryBannedUsersResponse,
+  QueryChannelBansRequest,
+  QueryChannelBansResponse,
   QueryChannelsRequest,
   QueryChannelsResponse,
   QueryDraftsRequest,
@@ -85,6 +88,8 @@ import type {
   QueryReactionsResponse,
   QueryRemindersRequest,
   QueryRemindersResponse,
+  QueryScheduledMessagesRequest,
+  QueryScheduledMessagesResponse,
   QueryThreadsRequest,
   QueryThreadsResponse,
   QueryUsersPayload,
@@ -101,6 +106,8 @@ import type {
   SendMessageResponse,
   SendReactionRequest,
   SendReactionResponse,
+  SendScheduledMessageNowRequest,
+  SendScheduledMessageNowResponse,
   SharedLocationResponse,
   SharedLocationsResponse,
   ShowChannelRequest,
@@ -134,6 +141,8 @@ import type {
   UpdatePollRequest,
   UpdateReminderRequest,
   UpdateReminderResponse,
+  UpdateScheduledMessageRequest,
+  UpdateScheduledMessageResponse,
   UpdateThreadPartialRequest,
   UpdateThreadPartialResponse,
   UpdateUserGroupRequest,
@@ -155,7 +164,6 @@ export class ChatApi {
   constructor(public readonly apiClient: ApiClient) {}
 
   getApp(
-    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<GetApplicationResponse>> {
     return this.apiClient.sendRequest<GetApplicationResponse>(
@@ -413,6 +421,22 @@ export class ChatApi {
     return this.apiClient.sendRequest<UpdateChannelResponse>(
       'POST',
       '/api/v2/chat/channels/{type}/{id}',
+      pathParams,
+      undefined,
+      request ?? {},
+      'application/json',
+      requestOptions,
+    );
+  }
+
+  queryChannelBans(
+    pathParams: { type: string; id: string },
+    request?: QueryChannelBansRequest,
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<QueryChannelBansResponse>> {
+    return this.apiClient.sendRequest<QueryChannelBansResponse>(
+      'POST',
+      '/api/v2/chat/channels/{type}/{id}/bans/query',
       pathParams,
       undefined,
       request ?? {},
@@ -794,7 +818,6 @@ export class ChatApi {
 
   getMessage(
     pathParams: { id: string },
-    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<GetMessageResponse>> {
     return this.apiClient.sendRequest<GetMessageResponse>(
@@ -874,7 +897,6 @@ export class ChatApi {
 
   deleteReaction(
     pathParams: { id: string; type: string },
-    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<DeleteReactionResponse>> {
     return this.apiClient.sendRequest<DeleteReactionResponse>(
@@ -954,7 +976,6 @@ export class ChatApi {
 
   deletePollVote(
     pathParams: { message_id: string; poll_id: string; vote_id: string },
-    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<PollVoteResponse>> {
     return this.apiClient.sendRequest<PollVoteResponse>(
@@ -970,7 +991,6 @@ export class ChatApi {
 
   deleteReminder(
     pathParams: { message_id: string },
-    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<DeleteReminderResponse>> {
     return this.apiClient.sendRequest<DeleteReminderResponse>(
@@ -1131,6 +1151,68 @@ export class ChatApi {
     );
   }
 
+  queryScheduledMessages(
+    request?: QueryScheduledMessagesRequest,
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<QueryScheduledMessagesResponse>> {
+    return this.apiClient.sendRequest<QueryScheduledMessagesResponse>(
+      'POST',
+      '/api/v2/chat/scheduled_messages/query',
+      undefined,
+      undefined,
+      request ?? {},
+      'application/json',
+      requestOptions,
+    );
+  }
+
+  deleteScheduledMessage(
+    pathParams: { id: string },
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<DeleteScheduledMessageResponse>> {
+    return this.apiClient.sendRequest<DeleteScheduledMessageResponse>(
+      'DELETE',
+      '/api/v2/chat/scheduled_messages/{id}',
+      pathParams,
+      undefined,
+      undefined,
+      undefined,
+      requestOptions,
+    );
+  }
+
+  updateScheduledMessage(
+    pathParams: { id: string },
+    request?: UpdateScheduledMessageRequest,
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<UpdateScheduledMessageResponse>> {
+    return this.apiClient.sendRequest<UpdateScheduledMessageResponse>(
+      'PATCH',
+      '/api/v2/chat/scheduled_messages/{id}',
+      pathParams,
+      undefined,
+      request ?? {},
+      'application/json',
+      requestOptions,
+    );
+  }
+
+  sendScheduledMessageNow(
+    pathParams: { id: string },
+    request?: SendScheduledMessageNowRequest,
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<SendScheduledMessageNowResponse>> {
+    return this.apiClient.sendRequest<SendScheduledMessageNowResponse>(
+      'POST',
+      '/api/v2/chat/scheduled_messages/{id}/send_now',
+      pathParams,
+      undefined,
+      request ?? {},
+      'application/json',
+      requestOptions,
+    );
+  }
+
   search(
     request?: { payload?: SearchPayload },
     requestOptions?: StreamRequestOptions,
@@ -1225,7 +1307,6 @@ export class ChatApi {
   }
 
   unreadCounts(
-    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<WrappedUnreadCountsResponse>> {
     return this.apiClient.sendRequest<WrappedUnreadCountsResponse>(
@@ -1255,7 +1336,6 @@ export class ChatApi {
   }
 
   listDevices(
-    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<ListDevicesResponse>> {
     return this.apiClient.sendRequest<ListDevicesResponse>(
@@ -1376,7 +1456,6 @@ export class ChatApi {
 
   deletePoll(
     pathParams: { poll_id: string },
-    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<Response>> {
     return this.apiClient.sendRequest<Response>(
@@ -1392,7 +1471,6 @@ export class ChatApi {
 
   getPoll(
     pathParams: { poll_id: string },
-    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<PollResponse>> {
     return this.apiClient.sendRequest<PollResponse>(
@@ -1456,7 +1534,6 @@ export class ChatApi {
 
   deletePollOption(
     pathParams: { poll_id: string; option_id: string },
-    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<Response>> {
     return this.apiClient.sendRequest<Response>(
@@ -1472,7 +1549,6 @@ export class ChatApi {
 
   getPollOption(
     pathParams: { poll_id: string; option_id: string },
-    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<PollOptionResponse>> {
     return this.apiClient.sendRequest<PollOptionResponse>(
@@ -1780,7 +1856,6 @@ export class ChatApi {
   }
 
   getBlockedUsers(
-    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<GetBlockedUsersResponse>> {
     return this.apiClient.sendRequest<GetBlockedUsersResponse>(
@@ -1810,7 +1885,6 @@ export class ChatApi {
   }
 
   getUserLiveLocations(
-    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<SharedLocationsResponse>> {
     return this.apiClient.sendRequest<SharedLocationsResponse>(

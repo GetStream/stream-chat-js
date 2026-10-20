@@ -4,45 +4,28 @@ import type { Channel } from '../channel';
 import type { StreamChat } from '../client';
 import type { PendingTask, PendingTaskOf, QueueableResult, QueueableType } from './types';
 
+const logger = chatLoggerSystem.getLogger('offline-db');
+
 /**
- * How one queued operation is replayed, and what a replay does beyond the request itself.
- *
- * `run` is typed from {@link QueueableOperationSignatures}, so an entry cannot resolve to the wrong
- * method or spread the wrong payload into it.
+ * How one queued operation runs, on a first attempt and on a replay.
  *
  * @internal
  */
-const logger = chatLoggerSystem.getLogger('offline-db');
-
 export type QueueableOperation<T extends QueueableType> = {
-  /**
-   * How a failed QUEUEING attempt is logged. Declared per operation rather than passed in per call,
-   * because the wording is a property of the operation, not of the caller — and the caller is then left
-   * saying only which operation it wants.
-   */
+  /** How a rejected `queueTask` attempt is logged. */
   logFailureAs: { message: string; method: string };
-  /**
-   * Whether a replay has to look the channel up from the task. Such a task is only queued when it
-   * carries `channelId` and `channelType`, because without them it could never be replayed.
-   */
+  /** Whether a replay needs the channel. Such a task is only queued with a channel type and ID. */
   needsChannel: boolean;
   /**
-   * Performs the request. Used both for a first attempt and for a replay.
-   *
-   * `channel` is the instance the CALLER already holds, when there is one. A first attempt comes from a
-   * channel's or thread's `messageOperations`, or a `Channel` method such as `createDraft`, and must run
-   * on that exact channel; only a replay has to look one up.
+   * Performs the request. `channel` is the instance the caller already holds (a first attempt); a
+   * replay has none and resolves it from the task.
    */
   run: (params: {
     channel?: Channel;
     client: StreamChat;
     task: PendingTaskOf<T>;
   }) => Promise<QueueableResult<T>>;
-  /**
-   * Local state to settle AFTER a replay, and only after a replay — a first attempt has an optimistic
-   * layer above it that already owns this. Declared per operation rather than hidden in a branch,
-   * because "a replay does more than a first attempt" is the kind of asymmetry that goes unnoticed.
-   */
+  /** Settles local state after a replay only: a first attempt has an optimistic layer for it. */
   onReplay?: (params: {
     client: StreamChat;
     result: QueueableResult<T>;
@@ -51,16 +34,9 @@ export type QueueableOperation<T extends QueueableType> = {
 };
 
 /**
- * The channel an operation runs on: the caller's own instance when it has one, and otherwise resolved
- * from the task.
- *
- * Preferring the caller's instance is not an optimisation. `client.channelManager.ensure()` returns the stored
- * instance only while it is in the channel store and not `pendingDisposal` — otherwise it CONSTRUCTS a
- * new `Channel`, which builds paginators and a composer and registers subscriptions. A first attempt
- * always has the real instance in hand, so it should never risk that.
- *
- * A replay has no instance, so it resolves from the task. Every channel-scoped operation carries
- * `channelType`/`channelId`; a task that reached the queue without them cannot be replayed at all.
+ * The caller's channel when it has one, else the one resolved from the task. The caller's instance
+ * is preferred because `channelManager.ensure` constructs a new `Channel` when none is stored (or
+ * it is `pendingDisposal`).
  */
 const channelOf = (client: StreamChat, task: PendingTask, channel?: Channel): Channel => {
   if (channel) return channel;
@@ -75,8 +51,7 @@ const channelOf = (client: StreamChat, task: PendingTask, channel?: Channel): Ch
 };
 
 /**
- * The registry: one entry per queueable operation, and the mapped type means a missing entry does not
- * compile.
+ * One entry per queueable operation.
  *
  * @internal
  */
@@ -114,11 +89,7 @@ export const QUEUEABLE_OPERATIONS: {
   'send-message': {
     needsChannel: true,
     logFailureAs: { message: 'Sending the message failed.', method: 'sendMessage' },
-    /**
-     * A replayed send is the first time local state learns the message exists server-side: the
-     * optimistic layer that would normally reconcile it belongs to a `MessageOperations` call that
-     * finished (and failed) long ago.
-     */
+    // A replayed send is the first time local state learns the message exists server-side.
     onReplay: ({ client, result, task }) => {
       const message = result?.message;
       if (!message) return;
@@ -147,30 +118,16 @@ export const QUEUEABLE_OPERATIONS: {
 };
 
 /**
- * The shape every offline-aware request shares: try it through the pending-task queue so it can be
- * replayed on reconnect, and otherwise — no offline DB, queueing not possible, or the queued attempt
- * rejected — run it directly.
+ * Runs the task through `offlineDb.queueTask` (queued for replay on an ephemeral failure), or
+ * directly when there is no offline DB, `queue` is `false` or the task is not replayable.
  *
- * Both paths resolve through {@link QUEUEABLE_OPERATIONS}, so "what this task actually runs" is defined
- * once. Before, the caller passed its own direct call alongside the task, which meant the first attempt
- * and the replay were two independent statements of the same thing.
- *
- * Note the direct call is BOTH the no-offline-DB path — its actual purpose — and, on a queue failure, a
- * second attempt at a request that may already have reached the server. That predates this helper and
- * is unchanged by it; having one place to fix it is a reason this exists.
- *
- * A failed queueing attempt is logged, not rethrown: falling back to running the request directly is
- * the point. What it is logged as comes off the operation's own `logFailureAs`, so a caller says which
- * operation it wants and nothing about how to describe it.
+ * If `queueTask` rejects, the failure is logged and the request runs directly. It may already have
+ * reached the server or been stored for replay, so it can repeat.
  *
  * @internal
  *
- * @param params.channel - The channel instance the caller already holds, so a first attempt runs on
- *   that exact object rather than one `client.channelManager.ensure()` might reconstruct.
- * @param params.client - Resolves the operation, and carries the offline DB when one is registered.
- * @param params.queue - Whether this task can be queued at all. `false` for a send with no message id,
- *   which there is nothing to key a queue entry on — it still runs, just not through the queue.
- * @param params.task - Which operation to run, and the arguments to run it with.
+ * @param params.channel - The caller's channel instance, so a first attempt runs on that object.
+ * @param params.queue - `false` for a send with no message ID (nothing to key a queue entry on).
  */
 export const queueOrRun = async <T extends QueueableType>({
   channel,
@@ -185,8 +142,7 @@ export const queueOrRun = async <T extends QueueableType>({
 }): Promise<QueueableResult<T>> => {
   const { offlineDb } = client;
   const operation = QUEUEABLE_OPERATIONS[task.type];
-  // We never queue a task that could not be replayed. It still runs once, so the request reports the
-  // problem itself, i.e that the channel has no id yet.
+  // A task that could not be replayed is not queued, but still runs so the request reports why.
   const replayable = !operation.needsChannel || !!(task.channelType && task.channelId);
 
   if (offlineDb && queue && replayable) {
@@ -194,8 +150,6 @@ export const queueOrRun = async <T extends QueueableType>({
       return await offlineDb.queueTask<QueueableResult<T>>({ task });
     } catch (error) {
       const { message, method } = operation.logFailureAs;
-      // The cid comes from the task when it carries a channel, so a channel-scoped failure is logged
-      // against its channel without the caller having to say so.
       const cid =
         task.channelType && task.channelId
           ? [`${task.channelType}:${task.channelId}`]
@@ -208,7 +162,7 @@ export const queueOrRun = async <T extends QueueableType>({
 };
 
 /**
- * Resolves a task to its operation and runs it. Shared by a first attempt and by a replay.
+ * Runs a task through its operation, for a first attempt and for a replay.
  *
  * @internal
  */
@@ -229,9 +183,8 @@ export const runQueueableOperation = async <T extends QueueableType>({
     );
   }
 
-  // A payload read back from the offline DB went through JSON, which turns an omitted argument -
-  // say no `request` between `pathParams` and `requestOptions` - into `null`, and an optional or
-  // defaulted parameter only stands in for `undefined`.
+  // A payload read back from the offline DB went through JSON, which turns an omitted argument into
+  // `null`, and optional or defaulted parameters only accept `undefined`.
   const payload = task.payload.map(
     (arg) => arg ?? undefined,
   ) as PendingTaskOf<T>['payload'];
@@ -240,17 +193,13 @@ export const runQueueableOperation = async <T extends QueueableType>({
 };
 
 /**
- * Whether this message's mutation is sitting in the offline queue waiting to be replayed. A queued
- * mutation is pending, not failed: nothing to roll back and nothing to mark.
+ * Whether this message has a mutation of one of `types` waiting in the offline queue. A queued
+ * mutation is pending, not failed.
  *
- * Reads the queue. Inferring it from the error's shape ("an initialized offline DB plus an
- * `isEphemeral` error, so it must have been queued") over-reports, because the queue declines
- * tasks no error shape can predict — an `update-message` whose payload still points at a local
- * attachment URL is refused by `isMessageUpdateReplayable`, and the edit would then be suppressed as
- * "pending" with nothing to replay it. A row in the pending-tasks table is the actual fact.
- *
- * Ordering is safe: `queueTask` awaits `handleAddPendingTask` before it rethrows, so the row exists by
- * the time an operation's `catch` runs.
+ * It reads the queue because the queue can decline a task (for example an `update-message` refused
+ * by `isMessageUpdateReplayable`), which the error alone cannot tell. `queueTask` awaits
+ * `handleAddPendingTask` before it rethrows, so the row exists by the time an operation's `catch`
+ * runs.
  */
 export const isQueuedForReplay = async (
   client: StreamChat,
@@ -258,12 +207,10 @@ export const isQueuedForReplay = async (
   types: readonly QueueableType[],
 ): Promise<boolean> => {
   const { offlineDb } = client;
-  // No queue at all, so nothing can be pending. `initialized` matters as much as existence: a DB whose
-  // `init()` never succeeded cannot hold a pending task.
+  // A DB whose `init()` never succeeded cannot hold a pending task.
   if (!offlineDb?.state.getLatestValue().initialized) return false;
 
-  // Optional-chained: `getPendingTasks` is part of the `OfflineDBApi` an integrator can implement, so
-  // this must not assume a well-formed return.
+  // `getPendingTasks` is implemented by the integrator, so the return is not assumed well-formed.
   const pending = await offlineDb.getPendingTasks({ messageId });
 
   return !!pending?.some((task) => types.includes(task.type));

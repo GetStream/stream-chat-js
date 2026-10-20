@@ -1,15 +1,9 @@
 import type { LocalMessage } from './types';
 
 /**
- * One `LocalMessage` per source object, for as long as that source object lives.
- *
- * Several independent subscribers — `Channel`, `Thread`, `MessageComposer`, `PollManager` — each
- * format the same `event.message` for themselves. Those copies are equal but not identical, so
- * `EntityStore.upsert`'s reference bail never fires and every write re-projects the other holders.
- * Handing them all the same object makes the bail do its job.
- *
- * Keyed weakly on the source, so an entry lives exactly as long as the object it was derived from
- * and nothing is retained on its behalf.
+ * One `LocalMessage` per source object, shared by every subscriber that formats the same
+ * `event.message`, so `EntityStore.upsert`'s reference check skips redundant writes. Keyed weakly:
+ * an entry lives as long as its source.
  */
 const memo: WeakMap<object, LocalMessage> = new WeakMap();
 

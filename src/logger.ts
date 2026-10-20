@@ -17,9 +17,7 @@ export type ChatLoggerScope =
   | 'upload-manager'
   | 'utils';
 
-/**
- * @internal
- */
+/** @internal */
 export type ScopedLogger = scopedLogger.Logger<ChatLoggerScope>;
 
 export { LogLevelEnum } from '@stream-io/logger';

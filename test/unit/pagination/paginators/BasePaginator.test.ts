@@ -1113,7 +1113,8 @@ describe('BasePaginator', () => {
       paginator.queryReject(error);
       // hand over to finish the cleanup and state update after the query execution
       await toNextTick();
-      expect(paginator.lastQueryError).toEqual(error);
+      // a retry is pending, so the failed attempt is not the query's error
+      expect(paginator.lastQueryError).toBeUndefined();
       vi.advanceTimersByTime(DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES);
       await toNextTick();
 
@@ -1175,18 +1176,46 @@ describe('BasePaginator', () => {
       vi.useRealTimers();
     });
 
+    it('publishes lastQueryError once, after the last attempt fails', async () => {
+      vi.useFakeTimers();
+      const retryCount = 3;
+      const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR, retryCount });
+      const published: Array<Error | undefined> = [];
+      const unsubscribe = paginator.state.subscribeWithSelector(
+        ({ lastQueryError }) => ({ lastQueryError }),
+        ({ lastQueryError }) => published.push(lastQueryError),
+      );
+      const promise = paginator.toTail();
+
+      await failEveryAttempt(paginator, retryCount + 1);
+      await promise;
+      unsubscribe();
+
+      // the initial value, then the error once
+      expect(published).toEqual([undefined, new Error('Failed')]);
+      vi.useRealTimers();
+    });
+
     it('stops retrying as soon as an attempt succeeds', async () => {
       vi.useFakeTimers();
       const paginator = new Paginator({ initialCursor: ZERO_PAGE_CURSOR, retryCount: 3 });
       const promise = paginator.toTail();
 
+      const published: Array<Error | undefined> = [];
+      const unsubscribe = paginator.state.subscribeWithSelector(
+        ({ lastQueryError }) => ({ lastQueryError }),
+        ({ lastQueryError }) => published.push(lastQueryError),
+      );
       await failEveryAttempt(paginator, 1);
       await toNextTick();
       paginator.queryResolve({ items: [{ id: 'id1' }] });
       await promise;
+      unsubscribe();
 
       expect(paginator.mockClientQuery).toHaveBeenCalledTimes(2);
       expect(paginator.lastQueryError).toBeUndefined();
+      // a failure the retry recovered from never surfaces
+      expect(published).not.toContainEqual(new Error('Failed'));
       expect(paginator.items).toEqual([{ id: 'id1' }]);
       vi.useRealTimers();
     });

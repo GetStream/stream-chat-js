@@ -51,12 +51,10 @@ describe('client wiring — network + ws status', () => {
       expect(client.networkConnection.isOnline).toBeUndefined();
     });
 
-    it('installs a reporter supplied through options.config, and no default alongside it', () => {
+    it('installs a reporter supplied through the constructor config, and no default alongside it', () => {
       const source = fakeReporter();
       const configured = new StreamChat('api-key-2', {
-        config: {
-          client: { networkConnection: { statusReporter: source.reporter } },
-        },
+        client: { networkConnection: { statusReporter: source.reporter } },
       });
 
       expect(configured.networkConnection.config.statusReporter).toBe(source.reporter);
@@ -68,9 +66,7 @@ describe('client wiring — network + ws status', () => {
     it('lets setStatusReporter replace a config-supplied one cleanly', () => {
       const first = fakeReporter();
       const configured = new StreamChat('api-key-3', {
-        config: {
-          client: { networkConnection: { statusReporter: first.reporter } },
-        },
+        client: { networkConnection: { statusReporter: first.reporter } },
       });
 
       const second = fakeReporter();

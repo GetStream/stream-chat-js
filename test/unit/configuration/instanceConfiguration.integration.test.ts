@@ -673,12 +673,12 @@ describe('instance configuration — cross-instance', () => {
     ).toBe(100);
   });
 
-  it('seeds the client key through StreamChatOptions.config', () => {
+  it('seeds the client key through the constructor config argument', () => {
     // Constructed directly rather than via the test helper, because this is specifically about the
     // constructor option — the only construction-time route for `client`, whose configuration registry
     // is born inside that constructor.
     const seeded = new StreamChat('', {
-      config: { client: { reminders: { scheduledOffsetsMs: [7] } } },
+      client: { reminders: { scheduledOffsetsMs: [7] } },
     });
 
     expect(seeded.reminders.configState.getLatestValue().scheduledOffsetsMs).toEqual([7]);

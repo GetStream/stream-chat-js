@@ -46,6 +46,14 @@ describe('configuration tree shape', () => {
     >({ kind: 'group' });
   });
 
+  it('keeps descriptions free of em-dashes and migration history', () => {
+    // These strings are shown to end users, so they describe the current behavior only.
+    const offending = allNodes
+      .filter(({ node }) => /—|\bWas `/.test(node.description))
+      .map(({ path }) => path);
+    expect(offending).toEqual([]);
+  });
+
   it.each(allNodes)('$path is usable by a caller reading it', ({ node, path }) => {
     // A node without a description is a path a UI can render but nobody can understand — the same
     // dead end as not describing it at all, so an empty string is a failure rather than a gap.

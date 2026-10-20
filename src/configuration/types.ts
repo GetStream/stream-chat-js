@@ -1,3 +1,4 @@
+import type { AxiosRequestConfig } from 'axios';
 import type { StreamChat } from '../client';
 import type {
   LiveLocationManager,
@@ -12,6 +13,7 @@ import type { MessageComposerConfig } from '../messageComposer/configuration/typ
 import type { Channel, ChannelConfig } from '../channel';
 import type { Thread, ThreadConfig } from '../thread';
 import type { ReminderManagerConfig } from '../reminders/ReminderManager';
+import type { NotificationManager } from '../notifications/NotificationManager';
 import type { NotificationManagerConfig } from '../notifications/types';
 import type { MessageDeliveryReporterConfig } from '../messageDelivery/MessageDeliveryReporter';
 import type { ThreadManagerConfig } from '../thread_manager';
@@ -24,17 +26,9 @@ import type { MessageOperationsConfig } from '../messageOperations/MessageOperat
 import type { DeclarativePaginatorConfig as ImportedDeclarativePaginatorConfig } from '../pagination/paginators/BasePaginator';
 import type { DeepPartial } from '../types.utility';
 
-// ---------------------------------------------------------------------------
-// Keys
-// ---------------------------------------------------------------------------
-
 /**
- * Maps a configuration key to the argument its setup function receives.
- *
- * A closed set, and deliberately not an `interface`: a type alias cannot be reached by module
- * augmentation, so the key space cannot be extended from outside this package. Configuration for a class
- * this package does not own belongs to whoever owns that class — a registry of its own, not a key in this
- * one, which the SDK could neither type nor apply.
+ * Maps a configuration key to the argument its setup function receives. A type alias, so the key space
+ * is closed to module augmentation.
  */
 export type InstanceSetupFunctionArgs = {
   channel: { channel: Channel };
@@ -46,22 +40,11 @@ export type InstanceSetupFunctionArgs = {
 };
 
 /**
- * The keys that take a **setup function** — every one names a class the setup function receives an
- * instance of.
- *
- * Closed, and not extensible: an undeclared string is a compile error, and {@link
- * InstanceSetupFunctionArgs} is a type alias rather than an interface, so a key cannot be added by module
- * augmentation either. This key space describes what *this package* configures.
- *
- * A strict subset of {@link InstanceConfigKey}: `messagePaginator` and `messageOperations` take
- * configuration but have no setup function, because they are not built one-per-key — a channel and every
- * one of its threads each own one.
+ * The keys that take a setup function. A strict subset of {@link InstanceConfigKey}: `messagePaginator`
+ * and `messageOperations` take configuration but no setup function, since a channel and each of its
+ * threads own one.
  */
 export type InstanceSetupKey = keyof InstanceSetupFunctionArgs;
-
-// ---------------------------------------------------------------------------
-// Tier 2 — setup functions
-// ---------------------------------------------------------------------------
 
 export type InstanceSetupFunctionArgsOf<K extends InstanceSetupKey> =
   InstanceSetupFunctionArgs[K];
@@ -69,9 +52,8 @@ export type InstanceSetupFunctionArgsOf<K extends InstanceSetupKey> =
 export type InstanceSetupTearDownFunction = () => void;
 
 /**
- * Runs against every instance of its class — those that already exist when it is registered, and
- * every one created afterwards. Return a function that undoes whatever you changed: it is invoked
- * before the setup function is re-applied, and when the instance is disposed of.
+ * Runs against every instance of its class, existing and future. Return a function that undoes what you
+ * changed: it runs before the setup function is re-applied and when the instance is disposed of.
  */
 export type InstanceSetupFunction<K extends InstanceSetupKey = InstanceSetupKey> = (
   args: InstanceSetupFunctionArgsOf<K>,
@@ -81,31 +63,19 @@ export type InstanceSetupState<K extends InstanceSetupKey = InstanceSetupKey> = 
   setupFunction: InstanceSetupFunction<K> | null;
 };
 
-// ---------------------------------------------------------------------------
-// Tier 1 — declarative configuration
-// ---------------------------------------------------------------------------
-
 /** Whether `jumpToTheFirstUnreadMessage` prefers the paginator's snapshot or the channel read state. */
 export type UnreadReferencePolicy = 'snapshot' | 'read-state-only';
 
 /**
- * Paginator fields settable through the declarative tree. Single source of truth lives with the
- * paginator itself (`DeclarativePaginatorConfig` in `BasePaginator`), so the tree and the paginator's
- * own `initializeConfig` can never accept different sets of fields.
- *
- * Deliberately excluded there:
- * - `itemIndex` / `createItemIndex` — an index instance and a factory, not configuration. Deep-merging
- *   a class instance is unsound, and swapping an index would drop already-loaded items.
- * - `doRequest`, `itemOrderComparator`, `deriveCursor` — installed per paginator subclass
- *   (`PinnedMessagePaginator` supplies all three). Replace them through a setup function, where the
- *   existing value is visible and restorable.
- *
- * `initialCursor` and `initialOffset` are included but read only during construction — see
+ * Paginator fields settable through the declarative tree. Defined in `BasePaginator`, which excludes
+ * what is not plain configuration: `itemIndex` / `createItemIndex`, and the per-subclass `doRequest`,
+ * `itemOrderComparator` and `deriveCursor` (replace those through a setup function).
+ * `initialCursor` and `initialOffset` are read only during construction, see
  * {@link CONSTRUCTION_ONLY_CONFIG_PATHS}.
  */
 export type { DeclarativePaginatorConfig } from '../pagination/paginators/BasePaginator';
 
-/** Adds the message-list-only unread reference policy, which is a constructor argument. */
+/** Adds the message-list-only `unreadReferencePolicy`. */
 export type DeclarativeMessagePaginatorConfig = ImportedDeclarativePaginatorConfig & {
   unreadReferencePolicy?: UnreadReferencePolicy;
 };
@@ -126,7 +96,7 @@ export type ChannelDeclarativeConfig = {
   userMessageReminders?: Partial<ChannelConfig['userMessageReminders']>;
   /** Delivery receipts, ANDed with the channel type's `delivery_events`. */
   deliveryEvents?: Partial<ChannelConfig['deliveryEvents']>;
-  // `commands` is deliberately absent: the server owns the list outright, so there is nothing to set.
+  // `commands` is absent: the server owns the list.
 };
 
 export type ThreadDeclarativeConfig = {
@@ -138,98 +108,88 @@ export type ThreadDeclarativeConfig = {
 
 export type ClientDeclarativeConfig = {
   /**
-   * Nested rather than top-level keys: each of these managers has exactly one parent — the client — so
-   * there is nothing to say once and reuse, which is what a top-level key buys (**DEC-25**).
+   * Silences the warning `connectUser` / `connectAnonymousUser` log when called server-side, where a
+   * connection counts towards MAU and concurrent-connection billing. Read on every connect.
    */
+  allowServerSideConnect?: boolean;
+  /**
+   * Axios request configuration (`timeout`, `headers`, `httpsAgent`, ...). Built into the client's axios
+   * instance once, at construction; `headers` and `params` are also read on every request. Copied when
+   * registered, so mutating the object afterwards has no effect.
+   */
+  axiosRequestConfig?: AxiosRequestConfig;
+  /** Base URL of the API, such as `https://chat-proxy-dublin.stream-io-api.com`. Read once. */
+  baseURL?: string;
+  /**
+   * Forces browser (`true`) or Node (`false`) mode; detected from the global `window` when absent. Read
+   * live, through `client.browser` and `client.node`.
+   */
+  browser?: boolean;
+  /**
+   * A pre-built {@link NotificationManager} to use instead of constructing one, to share it between
+   * clients or hand over one that already holds notifications. Read once, at construction. The
+   * `notifications` slice is still applied to it.
+   */
+  notificationManager?: NotificationManager;
+  /**
+   * When true, `client.user` is kept if `connectUser` fails, so an offline-capable app does not have to
+   * call `connectUser` again to retry. Read when a connect fails.
+   */
+  persistUserOnConnectionFailure?: boolean;
   connectionRecovery?: Partial<ConnectionRecoveryManagerConfig>;
   messageDelivery?: Partial<MessageDeliveryReporterConfig>;
   /**
-   * Connection status — specifically, the platform listener that reports the device's network. There
-   * is no default outside the browser, so this is how React Native and other hosts supply one.
-   * `Partial`, not `DeepPartial`: the only field holds a function, which `DeepPartial` would descend
-   * into.
+   * The platform listener that reports the device's network, which React Native and other hosts supply
+   * here. Defaults to browser events, else a reporter that mirrors the WebSocket. `Partial`, not
+   * `DeepPartial`: the only field holds a function, which `DeepPartial` would descend into.
    */
   networkConnection?: Partial<NetworkConnectionObserverConfig>;
   threads?: Partial<ThreadManagerConfig>;
-  /**
-   * The WebSocket's timing: connect timeout, ping interval, and the health-check grace period on top of it.
-   * These three, and only these, because each was a public mutable field before it was configuration.
-   * `Partial`, not `DeepPartial`: every field is a flat number.
-   */
+  /** `Partial`, not `DeepPartial`: fields are flat or class instances, which it would descend into. */
   wsConnection?: Partial<WSConnectionConfig>;
   notifications?: DeepPartial<NotificationManagerConfig>;
   /**
    * `Partial`, not `DeepPartial`: `scheduledOffsetsMs` is a `number[]`, and `DeepPartial` would widen
-   * its elements to `number | undefined`, which `ReminderManager.updateConfig` rightly rejects.
+   * its elements to `number | undefined`, which `ReminderManager.updateConfig` rejects.
    */
   reminders?: Partial<ReminderManagerConfig>;
 };
 
 /**
- * Maps a configuration key to its declarative configuration subtree. Augmentable alongside
- * {@link InstanceSetupFunctionArgs}, so a custom key gets declarative configuration on the same terms
- * as a built-in one.
- *
- * **When something gets its own key rather than being nested under a parent** — the rule that decides
- * the shape of this interface:
- *
- * - **One parent type ⇒ nest it.** `channel.pinnedMessagesPaginator`, `channel.cooldownTimer`, the
- *   composer's own sub-managers. There is only one place it can be reached from.
- * - **Several parent types, and the configuration means the same thing under each ⇒ own key.**
- *   `MessageComposer` hangs off a `Channel`, a `Thread`, *and* a message (the React SDK builds
- *   message-scoped composers for editing). `drafts.enabled` means the same in all three, so nesting it
- *   under `channel` would silently miss two thirds of the composers.
- * - **Several parent types, but the configuration is inherently parent-specific ⇒ nest it anyway.**
- *   No built-in falls here today. It is kept as a case because it is the one that decides against a shared
- *   key, and the next entity to arrive may need it.
- * - **Several parent types, mixed ⇒ both.** A shared top-level key for what means the same thing, plus
- *   per-parent paths that override it field by field (see {@link mergeDeclarativeMessageOperationsConfig}).
- *   Both shared keys are here: `MessagePaginator` backs the channel message list *and* thread replies
- *   (`stateThrottleMs` / `retryCount` have no reason to differ, `pageSize` legitimately does), and
- *   `MessageOperations` backs channel *and* thread sends. `messageOperations` was briefly nested under
- *   `channel` on the reasoning that a channel send and a thread reply are different operations — which made
- *   `thread.messageOperations` unconfigurable entirely (**DV-15**). Counting parents is the check.
+ * Maps a configuration key to its declarative configuration subtree. A class with one parent type is
+ * nested under that parent. A class held by several parents (`MessageComposer`, `MessagePaginator`,
+ * `MessageOperations`) gets its own shared key, and where parents need to differ they override it per
+ * field (see {@link mergeDeclarativeMessageOperationsConfig}).
  */
 export type InstanceConfigTree = {
   channel: ChannelDeclarativeConfig;
   client: ClientDeclarativeConfig;
   /**
-   * Constructed by whoever needs it — the React SDK's `useLiveLocationSharingManager`, or an app
-   * directly — never by this package. It reaches its configuration the way a `MessageComposer` does, by
-   * registering itself against this key, so its owner does not have to thread a slice through.
+   * Constructed by the integrator or a UI SDK, never by this package. It reaches its configuration by
+   * registering itself against this key.
    */
   liveLocationManager: Partial<LiveLocationManagerConfig>;
   messageComposer: DeepPartial<MessageComposerConfig>;
   /**
-   * Applies to **every** `MessageOperations` — the channel's and every thread's, since messages are sent
-   * from both. `channel.messageOperations` and `thread.messageOperations` override it per parent.
+   * Applies to every `MessageOperations`, the channel's and each thread's.
+   * `channel.messageOperations` and `thread.messageOperations` override it per parent.
    */
   messageOperations: Partial<MessageOperationsConfig>;
   /**
-   * Applies to **every** `MessagePaginator` — the channel message list and thread replies alike.
+   * Applies to every `MessagePaginator`, the channel message list and thread replies alike.
    * `channel.messagePaginator` and `thread.messagePaginator` override it per parent.
-   *
-   * `channel.pinnedMessagesPaginator` is deliberately **not** included: it has a single parent, so by
-   * the rule above it stays nested. It is also a different class (`PinnedMessagePaginator`, with its own
-   * ordering and endpoint) rather than a `MessagePaginator`.
+   * `channel.pinnedMessagesPaginator` is not included: it is a different class with a single parent.
    */
   messagePaginator: DeclarativeMessagePaginatorConfig;
   /**
-   * Same story as {@link InstanceConfigTree.liveLocationManager}, with one caveat: a `SearchController`
-   * only reaches this key when it was constructed with a `client` — it is the one configurable class the
-   * SDK does not hand a client to. See `SearchControllerOptions.client`.
+   * Like {@link InstanceConfigTree.liveLocationManager}, but a `SearchController` reaches this key only
+   * when constructed with a `client` (see `SearchControllerOptions.client`).
    */
   searchController: Partial<SearchControllerConfig>;
   thread: ThreadDeclarativeConfig;
 };
 
-/**
- * Every key that takes **declarative configuration** — {@link InstanceSetupKey} plus the two that are
- * configuration-only.
- *
- * Closed for the same reason, and {@link InstanceConfigTree} is likewise a type alias, so this set is
- * fixed by the package.
- */
+/** Every key that takes declarative configuration: {@link InstanceSetupKey} plus the config-only ones. */
 export type InstanceConfigKey = keyof InstanceConfigTree;
 
 export type InstanceConfigOf<K extends InstanceConfigKey> = InstanceConfigTree[K];

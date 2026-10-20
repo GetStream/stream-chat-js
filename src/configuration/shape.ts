@@ -30,10 +30,7 @@ import type {
   TextComposerConfig,
 } from '../messageComposer/configuration/types';
 
-/**
- * What a configuration value holds. `'object'` covers anything whose interior is not described further
- * — a map of handler functions, a cursor — and tells a caller not to expect editable leaves inside.
- */
+/** What a value holds. `'object'` is anything whose interior is not described further (a cursor). */
 export type ConfigValueType =
   | 'boolean'
   | 'enum'
@@ -45,14 +42,14 @@ export type ConfigValueType =
   | 'string[]';
 
 export type ConfigValueNode = {
-  /** One line on what the value does. This is the payload a settings UI or a JS caller reads. */
+  /** One line on what the value does, for settings UIs and JS callers. */
   description: string;
   /** The permitted values, for `type: 'enum'` only. */
   enumValues?: readonly string[];
   kind: 'value';
   /**
-   * `'function'` marks a path the declarative tree cannot carry: JSON has no functions, so these are
-   * reachable only through a setup function or a direct `updateConfig` call.
+   * `'function'` marks a path the declarative tree cannot carry (JSON has no functions): reachable only
+   * through a setup function or `updateConfig`.
    */
   type: ConfigValueType;
 };
@@ -68,17 +65,9 @@ export type ConfigNode = ConfigGroupNode | ConfigValueNode;
 export type ConfigShape = { readonly [field: string]: ConfigNode };
 
 /**
- * The declarative paginator knobs, shared by every paginator path in the tree.
- *
- * Annotated as `Record<keyof …>` rather than left to inference, which is the whole point: adding a field
- * to `DeclarativePaginatorConfig` fails the build here until it is described. Same guard as
- * `INSTANCE_CONFIG_TREE_KEY_PRESENCE` uses for the top-level keys.
- */
-/**
- * `maxLoadedItems` is excluded here and documented only under {@link MESSAGE_PAGINATOR_FIELDS}: the
- * type allows it on any paginator, but a bounded window only makes sense for a message list — that is
- * the only paginator whose declarative config reaches it, and the only one whose pruned items can be
- * fetched back by cursor.
+ * The declarative paginator fields shared by every paginator path in the tree. `maxLoadedItems` is
+ * left out: only the message paginator's declarative config reaches it, see
+ * {@link MESSAGE_PAGINATOR_FIELDS}.
  */
 const PAGINATOR_FIELDS: Record<
   Exclude<keyof DeclarativePaginatorConfig, 'maxLoadedItems'>,
@@ -115,7 +104,7 @@ const PAGINATOR_FIELDS: Record<
   },
   pageSize: {
     description:
-      'Items requested per page. The effective default differs per paginator — the channel message list asks for more than the base default.',
+      'Items requested per page. The effective default differs per paginator: the channel message list asks for more than the base default.',
     kind: 'value',
     type: 'number',
   },
@@ -196,10 +185,6 @@ const messageOperationsGroup = (description: string): ConfigGroupNode => ({
   kind: 'group',
 });
 
-// ---------------------------------------------------------------------------
-// messageComposer
-// ---------------------------------------------------------------------------
-
 const ATTACHMENTS_FIELDS: Record<keyof AttachmentManagerConfig, ConfigNode> = {
   enabled: {
     description:
@@ -215,7 +200,7 @@ const ATTACHMENTS_FIELDS: Record<keyof AttachmentManagerConfig, ConfigNode> = {
   },
   customCdn: {
     description:
-      "Whether a custom upload request stores files somewhere Stream does not host. Left false — the default — files are treated as reaching Stream, so Stream's `uploads` flag and `upload-file` capability apply.",
+      "Whether a custom upload request stores files somewhere Stream does not host. When false (the default), files are treated as reaching Stream, so Stream's `uploads` flag and `upload-file` capability apply.",
     kind: 'value',
     type: 'boolean',
   },
@@ -332,8 +317,7 @@ const TEXT_FIELDS: Record<keyof TextComposerConfig, ConfigNode> = {
     type: 'number',
   },
   publishTypingEvents: {
-    description:
-      'Emits typing events as the user types. Off by default for threads and message editing.',
+    description: 'Emits typing events as the user types. Defaults to `true`.',
     kind: 'value',
     type: 'boolean',
   },
@@ -384,10 +368,6 @@ const MESSAGE_COMPOSER_FIELDS: Record<keyof MessageComposerConfig, ConfigNode> =
   text: { description: 'The text input itself.', fields: TEXT_FIELDS, kind: 'group' },
 };
 
-// ---------------------------------------------------------------------------
-// client
-// ---------------------------------------------------------------------------
-
 const MESSAGE_DELIVERY_FIELDS: Record<keyof MessageDeliveryReporterConfig, ConfigNode> = {
   markAsDeliveredBufferTimeoutMs: {
     description: 'How long delivery reports are buffered before being sent as one batch.',
@@ -426,7 +406,7 @@ const LIVE_LOCATION_MANAGER_FIELDS: Record<keyof LiveLocationManagerConfig, Conf
   {
     minUpdateThrottleMs: {
       description:
-        'Shortest gap between live-location update requests, in milliseconds. A rate-limit failsafe — raising it is always safe, lowering it risks 429s.',
+        'Shortest gap between live-location update requests, in milliseconds. A rate-limit failsafe: raising it is always safe, lowering it risks 429s.',
       kind: 'value',
       type: 'number',
     },
@@ -458,7 +438,7 @@ const NOTIFICATION_FIELDS: Record<keyof NotificationManagerConfig, ConfigNode> =
 const REMINDER_FIELDS: Record<keyof ReminderManagerConfig, ConfigNode> = {
   scheduledOffsetsMs: {
     description:
-      'Offsets from now offered when scheduling a reminder, in milliseconds — the "in 30 minutes / tomorrow" choices.',
+      'Offsets from now offered when scheduling a reminder, in milliseconds: the "in 30 minutes / tomorrow" choices.',
     kind: 'value',
     type: 'number[]',
   },
@@ -497,19 +477,19 @@ const NETWORK_CONNECTION_FIELDS: Record<
 const WS_CONNECTION_FIELDS: Record<keyof WSConnectionConfig, ConfigNode> = {
   connection: {
     description:
-      'A pre-built `StableWSConnection` to use instead of constructing one. A test seam; `client.config.reset()` discards it and the next connect builds a real socket. Was `StreamChatOptions.wsConnection`.',
+      'A pre-built `StableWSConnection` to use instead of constructing one. A test seam; `client.config.reset()` discards it and the next connect builds a real socket.',
     kind: 'value',
     type: 'object',
   },
   connectTimeoutMs: {
     description:
-      "How long `connect()` waits for the server's hello before giving up. The default of 15s allows between two and three attempts of the underlying retry. Was `client.defaultWSTimeout`.",
+      "How long `connect()` waits for the server's hello before giving up. The default of 15s allows between two and three attempts of the underlying retry.",
     kind: 'value',
     type: 'number',
   },
   enableWSFallback: {
     description:
-      'Falls back to HTTP long-polling (`/api/v2/longpoll`) when the WebSocket cannot connect, for networks that block WebSockets. The WebSocket connects within `connectTimeoutMs`, as without the flag; lower it to switch sooner. Dispatches `connection.fallback_activated` when it switches, and stays on long-poll from then on. Defaults to `false`. Was `StreamChatOptions.enableWSFallback`.',
+      'Falls back to HTTP long-polling (`/api/v2/longpoll`) when the WebSocket cannot connect, for networks that block WebSockets. The WebSocket connects within `connectTimeoutMs`, as without the flag; lower it to switch sooner. Dispatches `connection.fallback_activated` when it switches, and stays on long-poll from then on. Defaults to `false`.',
     kind: 'value',
     type: 'boolean',
   },
@@ -521,31 +501,54 @@ const WS_CONNECTION_FIELDS: Record<keyof WSConnectionConfig, ConfigNode> = {
   },
   healthCheckGracePeriodMs: {
     description:
-      'Extra room on top of the ping interval before the socket is declared dead — the time a ping has to make its round trip. The connection check fires at `pingIntervalMs + healthCheckGracePeriodMs`, so changing the ping interval moves it too. Floored at 1s, below which the connection check would fire on a healthy connection.',
+      'Extra room on top of the ping interval before the socket is declared dead: the time a ping has to make its round trip. The connection check fires at `pingIntervalMs + healthCheckGracePeriodMs`, so changing the ping interval moves it too. Floored at 1s, below which the connection check would fire on a healthy connection.',
     kind: 'value',
     type: 'number',
   },
   pingIntervalMs: {
     description:
-      'How often a health-check ping goes out while the socket is up. Held between 1s and 25s — 25s is also the default, so this can only make the socket ping more often, never less: a slower ping risks the connection being closed for idleness.',
+      'How often a health-check ping goes out while the socket is up. Held between 1s and 25s. 25s is also the default, so this can only make the socket ping more often, never less: a slower ping risks the connection being closed for idleness.',
     kind: 'value',
     type: 'number',
   },
   urlParams: {
-    description:
-      'Extra query parameters appended to the WebSocket URL. Was `StreamChatOptions.wsUrlParams`.',
+    description: 'Extra query parameters appended to the WebSocket URL.',
     kind: 'value',
     type: 'object',
   },
   webSocketImpl: {
     description:
-      'The `WebSocket` constructor to open the socket with, for hosts with no usable global — a Node process, or a test wanting a fake socket. Defaults to the global `WebSocket`. Was `StreamChatOptions.WebSocketImpl`.',
+      'The `WebSocket` constructor to open the socket with, for hosts with no usable global, such as a Node process or a test wanting a fake socket. Defaults to the global `WebSocket`.',
     kind: 'value',
     type: 'function',
   },
 };
 
 const CLIENT_FIELDS: Record<keyof ClientDeclarativeConfig, ConfigNode> = {
+  allowServerSideConnect: {
+    description:
+      'Silences the warning logged when `connectUser` is called server-side, where a connection counts towards MAU and concurrent-connection billing.',
+    kind: 'value',
+    type: 'boolean',
+  },
+  axiosRequestConfig: {
+    description:
+      "Axios-level request configuration, such as `timeout`, `headers` and `httpsAgent`. Built into the client's axios instance at construction; `headers` and `params` are also read on every request.",
+    kind: 'value',
+    type: 'object',
+  },
+  baseURL: {
+    description:
+      'Base URL of the API, such as `https://chat-proxy-dublin.stream-io-api.com`. Read at construction.',
+    kind: 'value',
+    type: 'string',
+  },
+  browser: {
+    description:
+      'Enforces browser (`true`) or Node (`false`) mode; detected from the global `window` when absent. Read live, through `client.browser` and `client.node`.',
+    kind: 'value',
+    type: 'boolean',
+  },
   connectionRecovery: {
     description:
       'Bringing the channels, lists and threads you are reading back in line after a reconnect.',
@@ -563,10 +566,22 @@ const CLIENT_FIELDS: Record<keyof ClientDeclarativeConfig, ConfigNode> = {
     fields: NETWORK_CONNECTION_FIELDS,
     kind: 'group',
   },
+  notificationManager: {
+    description:
+      'A pre-built `NotificationManager` to use instead of the client constructing its own, to share one between clients or hand over one that already holds notifications. Read at construction.',
+    kind: 'value',
+    type: 'object',
+  },
   notifications: {
     description: 'The client-wide notification (toast) manager.',
     fields: NOTIFICATION_FIELDS,
     kind: 'group',
+  },
+  persistUserOnConnectionFailure: {
+    description:
+      'Keeps the user on the client when `connectUser` fails, so an application working offline keeps `client.user` and need not call `connectUser` again to retry. Read when a connect fails.',
+    kind: 'value',
+    type: 'boolean',
   },
   reminders: {
     description: 'Message reminders and their scheduling offsets.',
@@ -585,10 +600,6 @@ const CLIENT_FIELDS: Record<keyof ClientDeclarativeConfig, ConfigNode> = {
     kind: 'group',
   },
 };
-
-// ---------------------------------------------------------------------------
-// channel / thread
-// ---------------------------------------------------------------------------
 
 const CHANNEL_FIELDS: Record<keyof ChannelDeclarativeConfig, ConfigNode> = {
   messageOperations: messageOperationsGroup(
@@ -626,7 +637,7 @@ const CHANNEL_FIELDS: Record<keyof ChannelDeclarativeConfig, ConfigNode> = {
     kind: 'group',
   },
   userMessageReminders: {
-    description: 'Message reminders — "remind me" and "save for later".',
+    description: 'Message reminders: "remind me" and "save for later".',
     fields: {
       enabled: {
         description:
@@ -680,29 +691,15 @@ const THREAD_FIELDS: Record<keyof ThreadDeclarativeConfig, ConfigNode> = {
 };
 
 /**
- * A runtime description of the whole declarative configuration tree: every path, what it holds, and what
- * it does.
+ * A runtime description of the declarative configuration tree (every path, what it holds and does) for
+ * settings UIs, JavaScript callers and doc generators. Every level is annotated
+ * `Record<keyof SomeConfigType, ConfigNode>`, so a field added to a configuration type fails the build
+ * until it is described here.
  *
- * The tree's types already describe all of this, and a TypeScript caller gets it as autocomplete on
- * `client.config.set()`. This is the same knowledge for everyone who cannot read the types at the moment
- * they need it — a settings UI listing what can be changed, a JavaScript caller, a documentation
- * generator. Without it, the only way to learn that `thread` accepts `messagePaginator` is to open the
- * SDK source.
- *
- * **Completeness is enforced by the compiler, not by discipline.** Every level is annotated
- * `Record<keyof SomeConfigType, ConfigNode>`, so a field added to any configuration type fails the build
- * until it is described here. That is what separates this from a hand-maintained list, which drifts
- * behind the tree silently and is exactly the failure this replaces.
- *
- * **What is deliberately absent.** No default values: an effective default depends on the construction
- * site — `pageSize` is 10 for a bare paginator and larger for the channel message list — so a table of
- * them here would be a second source of truth that disagrees with the instances. Read current values from
- * the instance (`channel.messagePaginator.config`) and registered values from
- * {@link InstanceConfigurationRegistry.getTree}. Construction-only paths are absent for the same reason:
- * `CONSTRUCTION_ONLY_CONFIG_PATHS` already lists them.
- *
- * **Built-in keys only.** The key space is open, so a key registered through module augmentation has no
- * entry here. Merge {@link InstanceConfigurationRegistry.getTree} in to see those.
+ * Carries no default values, since an effective default depends on the construction site. Read current
+ * values from the instance (`channel.messagePaginator.config`), registered values from
+ * {@link InstanceConfigurationRegistry.getTree}, and read-once paths from
+ * `CONSTRUCTION_ONLY_CONFIG_PATHS`.
  */
 export const INSTANCE_CONFIG_TREE_SHAPE: Record<
   keyof InstanceConfigTree,
@@ -728,7 +725,7 @@ export const INSTANCE_CONFIG_TREE_SHAPE: Record<
   },
   messageComposer: {
     description:
-      "Every MessageComposer — a channel's, a thread's, and the message-scoped ones built for editing. Its own key because the same settings mean the same thing under all three.",
+      "Every MessageComposer: a channel's, a thread's, and the message-scoped ones built for editing. Its own key because the same settings mean the same thing under all three.",
     fields: MESSAGE_COMPOSER_FIELDS,
     kind: 'group',
   },
@@ -740,13 +737,13 @@ export const INSTANCE_CONFIG_TREE_SHAPE: Record<
   },
   messagePaginator: {
     description:
-      'Every MessagePaginator at once — the channel message list and thread replies alike. `channel.messagePaginator` and `thread.messagePaginator` override it per parent.',
+      'Every MessagePaginator at once: the channel message list and thread replies alike. `channel.messagePaginator` and `thread.messagePaginator` override it per parent.',
     fields: MESSAGE_PAGINATOR_FIELDS,
     kind: 'group',
   },
   searchController: {
     description:
-      'Message/channel/user search. Reaches this key only when constructed with a `client` — see SearchControllerOptions.',
+      'Message/channel/user search. Reaches this key only when constructed with a `client` (see SearchControllerOptions).',
     fields: SEARCH_CONTROLLER_FIELDS,
     kind: 'group',
   },

@@ -3,29 +3,10 @@ import type { MessageOperationsConfig } from '../../messageOperations/MessageOpe
 import type { DeclarativeMessagePaginatorConfig } from '../types';
 
 /**
- * How a declarative subtree is combined before it reaches the object that owns it.
- *
- * Two shared keys (`messagePaginator`, `messageOperations`) are also offered nested under `channel` and
- * `thread`, so an owner has to layer the general registration and its own override — and, for the
- * paginator, split off the one member of the subtree that is a construction argument rather than
- * configuration.
- */
-
-/**
- * Layers a per-parent slice of a **shared** configuration key over the shared one, field by field.
- *
- * Two keys are shared between `Channel` and `Thread` — `messagePaginator` and `messageOperations`
- * (**DEC-25**, **DV-15**) — because both entities own one of each and most of the settings mean the same
- * thing under either parent. The shared key carries what is common; the per-parent slice overrides only the
- * fields it names.
- *
- * Fields the specific slice does not mention — including ones it sets to `undefined` explicitly — fall
- * through to the shared slice, so `{ messagePaginator: { pageSize: 50 } }` is not undone by a
- * `channel.messagePaginator` slice that only names `stateThrottleMs`. That `undefined` skip is the whole
- * reason this is not a plain object spread.
- *
- * One level deep on purpose: every field on both config types is a scalar or a function, so there is no
- * nested object for a deep merge to reach. Use `mergeWith` if that stops being true.
+ * Layers a per-parent slice of a shared key (`messagePaginator`, `messageOperations`) over the shared
+ * one, field by field. Fields the specific slice omits or sets to `undefined` fall through to the shared
+ * slice, which is why this is not a plain spread. One level deep: an object field such as
+ * `initialCursor` replaces the shared one whole.
  */
 const mergeDeclarativeSlice = <TConfig extends object>(
   general?: TConfig,
@@ -42,14 +23,14 @@ const mergeDeclarativeSlice = <TConfig extends object>(
   return merged;
 };
 
-/** Layers `channel.messageOperations` / `thread.messageOperations` over the shared `messageOperations` key. */
+/** Layers a per-parent `messageOperations` slice (channel or thread) over the shared key. */
 export const mergeDeclarativeMessageOperationsConfig = (
   general?: Partial<MessageOperationsConfig>,
   specific?: Partial<MessageOperationsConfig>,
 ): Partial<MessageOperationsConfig> | undefined =>
   mergeDeclarativeSlice(general, specific);
 
-/** Layers `channel.messagePaginator` / `thread.messagePaginator` over the shared `messagePaginator` key. */
+/** Layers a per-parent `messagePaginator` slice (channel or thread) over the shared key. */
 export const mergeDeclarativePaginatorConfig = (
   general?: DeclarativeMessagePaginatorConfig,
   specific?: DeclarativeMessagePaginatorConfig,
@@ -57,20 +38,9 @@ export const mergeDeclarativePaginatorConfig = (
   mergeDeclarativeSlice(general, specific);
 
 /**
- * Drops the construction-only arguments from a message-paginator slice, leaving only what is actually
- * paginator *configuration*.
- *
- * `unreadReferencePolicy` rides in the same subtree for the integrator's convenience, but it is not a
- * `BasePaginatorConfig` field — `MessagePaginator` reads it once into a private member. Passed through to
- * `initializeConfig` it landed in the published `config` as an untyped key that nothing reads, and a
- * registration arriving after construction made resolved configuration *contradict* behaviour: the
- * construction-only warning correctly said the value would not apply, and then
- * `paginator.config.unreadReferencePolicy` reported it as though it had. A settings UI reading resolved
- * config showed `read-state-only` for a paginator behaving as `snapshot`.
- *
- * So the owning `Channel` / `Thread` splits the slice: the constructor argument goes to the constructor,
- * and only this half reaches the paginator's configuration. Both already read the policy separately, so
- * nothing is lost.
+ * Drops `unreadReferencePolicy` from a message-paginator slice. `MessagePaginator` reads it once as a
+ * constructor argument, so leaving it in would make the resolved `config` report a value that does not
+ * apply.
  */
 export const toDeclarativePaginatorConfig = (
   slice?: DeclarativeMessagePaginatorConfig,

@@ -3585,10 +3585,13 @@ describe('Threads 2.0', () => {
         thread: threadResponse(),
       } as never);
 
-      await client.getThreadAndHydrate(parentMessageResponse.id, { watch: false });
+      await client.getThreadAndHydrate(
+        { message_id: parentMessageResponse.id },
+        { watch: false },
+      );
       expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
 
-      await client.getThreadAndHydrate(parentMessageResponse.id);
+      await client.getThreadAndHydrate({ message_id: parentMessageResponse.id });
       expect(channel.watchStatus).to.equal(ChannelWatchStatus.Watching);
     });
 

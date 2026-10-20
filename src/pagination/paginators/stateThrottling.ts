@@ -1,13 +1,3 @@
-/**
- * Global switch for the message-list `state` publish throttle (see `BasePaginator.scheduleWindowPublish`).
- *
- * Auto-disabled under test runners (Vitest / Jest) so the existing unit suites keep their synchronous,
- * un-throttled behavior with zero per-test changes: with throttling off, every live mutation publishes
- * to `state` immediately, exactly as before this feature. A dedicated throttle test flips it on
- * (around fake timers) via {@link setStateThrottlingEnabled} and restores it afterwards.
- *
- * Production (an app bundle) defaults ON.
- */
 const isTestRunner = (): boolean => {
   try {
     return (
@@ -22,6 +12,11 @@ const isTestRunner = (): boolean => {
   }
 };
 
+/**
+ * Global switch for the `state` publish throttle (see `BasePaginator.scheduleWindowPublish`). On by
+ * default, off under test runners (Vitest / Jest) so every mutation publishes synchronously. Tests
+ * of the throttle itself turn it on with {@link setStateThrottlingEnabled}.
+ */
 let enabled = !isTestRunner();
 
 export const isStateThrottlingEnabled = (): boolean => enabled;

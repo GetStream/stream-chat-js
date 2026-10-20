@@ -33,7 +33,7 @@ export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion>
     const { items } = this.state.getLatestValue();
     return {
       ...newState,
-      items, // preserve items to avoid flickering
+      items, // kept to avoid flickering
     };
   }
 
@@ -48,7 +48,7 @@ export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion>
     );
 
     if (searchQuery) {
-      // sort alphabetically unless you're matching the first char
+      // Alphabetical, with prefix matches first.
       selectedCommands.sort((a, b) => {
         let nameA = a.name?.toLowerCase();
         let nameB = b.name?.toLowerCase();
@@ -58,7 +58,6 @@ export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion>
         if (nameB?.indexOf(searchQuery) === 0) {
           nameB = `0${nameB}`;
         }
-        // Should confirm possible null / undefined when TS is fully implemented
         if (nameA != null && nameB != null) {
           if (nameA < nameB) {
             return -1;
@@ -86,19 +85,6 @@ export class CommandSearchSource extends BaseSearchSourceSync<CommandSuggestion>
   }
 }
 
-/**
- * TextComposer middleware for mentions
- * Usage:
- *
- *  const textComposer = new TextComposer(options);
- *
- *  textComposer.use(createCommandsMiddleware(channel, { trigger: '//', minChars: 2 } ));
- *
- * @param channel
- * @param {{ minChars: number; trigger: string }} options
- * @returns
- */
-
 const DEFAULT_OPTIONS: TextComposerMiddlewareOptions = { minChars: 1, trigger: '/' };
 
 export type CommandsMiddleware = Middleware<
@@ -106,6 +92,15 @@ export type CommandsMiddleware = Middleware<
   'onChange' | 'onSuggestionItemSelect'
 >;
 
+/**
+ * Suggests and activates slash commands.
+ *
+ * @param channel - The channel whose commands are suggested.
+ * @param options - Middleware options. Defaults to `trigger: '/'` and `minChars: 1`.
+ * @param options.composer - Used to refuse commands disabled by the editing or quoting state.
+ * @param options.searchSource - A search source to use instead of a new one. Its state is reset.
+ * @returns The commands middleware.
+ */
 export const createCommandsMiddleware = (
   channel: Channel,
   options?: Partial<TextComposerMiddlewareOptions> & {

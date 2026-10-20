@@ -16,14 +16,13 @@ export type MessageOperationStatePolicyContext = {
 
 /**
  * What {@link MessageOperationStatePolicy.optimistic} wrote, handed back to
- * {@link MessageOperationStatePolicy.failure} so it can decide whether to revert and to what.
+ * {@link MessageOperationStatePolicy.failure} so it can decide whether and what to revert.
  */
 export type OptimisticOutcome = {
   /**
-   * The exact object the optimistic step wrote. Used as a concurrency guard rather than a value:
-   * `EntityStore.upsert` REPLACES the canonical copy, so `get(id) === applied` is a sound "nothing
-   * else has written since" check, and anything else means a fresher truth (a WS event, another
-   * operation) landed and must not be clobbered by a revert.
+   * The exact object the optimistic step wrote, used as a concurrency guard: `EntityStore.upsert`
+   * replaces the canonical copy, so `get(id) === applied` means nothing wrote since. Anything else is a
+   * fresher truth (a WS event, another operation) that a revert must not clobber.
    */
   applied?: LocalMessage;
   /** The copy that was there beforehand, i.e. what a revert restores. */
@@ -33,47 +32,33 @@ export type OptimisticOutcome = {
 const isHardDelete = (options: unknown) =>
   !!(options as DeleteMessageOptions | undefined)?.hard;
 
-/**
- * Closes each phase's branches on the kind. A new `OperationKind` fails to compile at every call until
- * that phase decides what the kind does, instead of quietly getting another kind's rules.
- */
+/** Closes each phase's branches on the kind: a new `OperationKind` fails to compile until handled. */
 const unhandledKind = (kind: never): never => {
   throw new Error(`Unhandled message operation kind: ${String(kind)}`);
 };
 
 /**
- * The queued tasks that mean a failed request is still pending, so its optimistic state stays.
- *
- * A send has none. One that never reached the server has to settle as `failed` even when its task is
- * queued, because the retry affordance is the only way the user can get that message out.
+ * The queued tasks that mean a failed request is still pending, so its optimistic state stays. A send
+ * has none: one that never reached the server must settle as `failed` even when queued, since retry is
+ * the only way the user can get the message out.
  */
 const PENDING_WHEN_QUEUED: Record<OperationKind, readonly QueueableType[]> = {
   delete: ['delete-message'],
   retry: [],
   send: [],
-  // An edit of a message the server has never seen is folded into that message's queued send
-  // (`AbstractOfflineDB.handleUpdateMessagePendingTask`), so it leaves no `update-message` row of
-  // its own.
+  // An edit of a message the server has never seen is folded into its queued send
+  // (`AbstractOfflineDB.handleUpdateMessagePendingTask`), leaving no `update-message` row.
   update: ['update-message', 'send-message'],
 };
 
 /**
- * The local-state half of every message operation: what to show before the request resolves, what to
- * do with the server's answer, and what to do when it fails.
+ * The local-state half of every message operation: what to show before the request resolves, and what
+ * to do with the answer or the failure.
  *
- * Per-operation rather than uniform, because the three kinds want genuinely different things:
- *
- * - **send / retry** — optimistically `sending`, `failed` on failure, and a pessimistic write-ahead to
- *   the offline DB so a process death between compose and server-ack leaves a message that hydrates as
- *   failed-and-retryable instead of vanishing.
- * - **update** — optimistically applied and persisted, and **never reverted**: rolling back would
- *   destroy text the user typed. A definitive rejection surfaces as a failed/error state on the message
- *   while keeping the edit; a queued (offline) failure surfaces as nothing at all, because the edit is
- *   pending, not failed.
- * - **delete** — optimistically marked `deleted` (or removed outright, for a hard delete), and
- *   **reverted** on a definitive rejection: unlike an edit there is no user input to lose, and leaving a
- *   "Message deleted" placeholder on a message that still exists server-side is a lie that only
- *   self-corrects on the next query.
+ * - send / retry: `sending`, then `failed` on failure, with a `failed` write-ahead to the offline DB.
+ * - update: applied and persisted, never reverted (that would destroy the user's text). A definitive
+ *   rejection marks the message `failed` and keeps the edit; a queued failure is pending, not failed.
+ * - delete: marked `deleted` (removed for a hard delete), reverted on a definitive rejection.
  */
 export class MessageOperationStatePolicy {
   private ctx: MessageOperationStatePolicyContext;
@@ -99,10 +84,8 @@ export class MessageOperationStatePolicy {
         return { previous };
       }
 
-      // Nothing holds this message, so there is nothing to optimistically hide — and ingesting would
-      // insert a phantom "Message deleted" row for something that was never on screen. Nothing is
-      // written to the offline DB either: it mirrors local state, so it must not be told about state
-      // that does not exist. The server response still reconciles normally below.
+      // Nothing holds this message, so there is nothing to hide, and ingesting would insert a phantom
+      // "Message deleted" row. The offline DB mirrors local state, so it is not written either.
       if (!previous) return {};
 
       const applied: LocalMessage = {
@@ -117,17 +100,16 @@ export class MessageOperationStatePolicy {
     }
 
     if (kind === 'update') {
-      // An edit keeps the message's status. A message the server already has must not go back to
-      // `sending`, and one that never left the device has to stay `failed`.
+      // An edit keeps the message's status: one the server has must not go back to `sending`, and one
+      // that never left the device stays `failed`.
       const isFailed = localMessage.status === 'failed';
       const editedAt = nowNs();
       const applied: LocalMessage = {
         ...localMessage,
         error: isFailed ? localMessage.error : undefined,
         updated_at: editedAt,
-        // `message_text_updated_at` is what drives the "edited" indicator, so it has to appear
-        // immediately — but only for a message the server has actually seen. A failed message never
-        // received a server-confirmed text update and must not appear to have had one.
+        // `message_text_updated_at` drives the "edited" indicator, so it appears immediately, but only
+        // for a message the server has seen: a failed one never had a confirmed text update.
         ...(isFailed ? {} : { message_text_updated_at: editedAt }),
       };
       this.ctx.ingest(applied);
@@ -145,10 +127,9 @@ export class MessageOperationStatePolicy {
             : localMessage.status,
       };
       this.ctx.ingest(applied);
-      // Write-ahead, pessimistically FAILED. If the app dies between here and the server's ack the
-      // message comes back as failed and retryable rather than disappearing; a success overwrites
-      // it below. The retry payload does not need persisting alongside it —
-      // `MessageOperations.retry` reconstructs it from the message when `failedSendCache` is cold.
+      // Write-ahead, pessimistically `failed`: if the app dies before the server's ack the message
+      // comes back failed and retryable, and a success overwrites it. The retry payload is not
+      // persisted: `MessageOperations.retry` rebuilds it when `failedSendCache` is cold.
       this.ctx.persist({ ...applied, status: 'failed' });
       return { applied, previous };
     }
@@ -169,9 +150,8 @@ export class MessageOperationStatePolicy {
     optimistic?: OptimisticOutcome;
     options?: MessageOperationSpec[K]['options'];
   }) {
-    // Guard before anything else. `formatMessage(undefined)` does not throw — it yields
-    // `{ status: 'received', created_at: <now>, updated_at: <now> }`, an id-less message whose
-    // `updated_at` beats the freshness check below, so without this an empty response ingested junk.
+    // `formatMessage(undefined)` does not throw: it yields an ID-less message whose `updated_at` would
+    // beat the freshness check below.
     if (!messageFromResponse) return;
 
     const formatted = formatMessage({ ...messageFromResponse, status: 'received' });
@@ -182,9 +162,8 @@ export class MessageOperationStatePolicy {
         this.ctx.purge(messageId);
         return;
       }
-      // Mirrors the `!previous` guard in `optimistic`: a message local state does not hold must not be
-      // re-inserted as a "Message deleted" row it never displayed. Read live rather than from the
-      // optimistic snapshot, so a copy that arrived while the request was open is still marked.
+      // Mirrors the `!previous` guard in `optimistic`. Read live, not from the optimistic snapshot, so a
+      // copy that arrived while the request was open is still marked.
       if (!this.ctx.get(messageId)) return;
 
       this.ctx.ingest(formatted);
@@ -198,10 +177,8 @@ export class MessageOperationStatePolicy {
       const nothingWroteSinceOptimistic =
         !!optimistic?.applied && existing === optimistic.applied;
 
-      // Reached only when something else did write since the optimistic step. For an edit both
-      // copies are then server derived, so comparing their timestamps compares one clock against
-      // itself. For a send the copy that landed is a `message.new` WS event, which is server derived
-      // too.
+      // When something else wrote since the optimistic step, both copies are server derived, so
+      // `updated_at` compares one clock.
       const serverNewer = !existing || formatted.updated_at > existing.updated_at;
       const serverSameOrNewer = !existing || formatted.updated_at >= existing.updated_at;
       const existingIsOurOptimisticSend = existing?.status === 'sending';
@@ -211,12 +188,13 @@ export class MessageOperationStatePolicy {
         serverNewer ||
         (existingIsOurOptimisticSend && serverSameOrNewer);
 
+      // Declined only when a copy at least as fresh already landed (for example the same message
+      // from a WS event), whose own write replaced the `failed` row.
       if (!applyServerCopy) return;
 
       this.ctx.ingest(formatted);
-      // Persist only what was actually applied, so the row can never disagree with memory. For
-      // send/retry this is also what supersedes the pessimistic `failed` write-ahead — and when the
-      // copy is declined it is because a fresher one already landed, whose own path wrote the row.
+      // Persist only what was applied, so the row never disagrees with memory. For send/retry this
+      // supersedes the `failed` write-ahead.
       this.ctx.persist(formatted);
       return;
     }
@@ -251,8 +229,7 @@ export class MessageOperationStatePolicy {
       return;
     }
 
-    // A request waiting in the offline queue hasn't failed, it just hasn't been sent yet, so the
-    // optimistic state stays exactly as it is.
+    // A request waiting in the offline queue has not failed: the optimistic state stays.
     const pendingTaskTypes = PENDING_WHEN_QUEUED[kind];
     const queued =
       pendingTaskTypes.length > 0 &&
@@ -265,9 +242,8 @@ export class MessageOperationStatePolicy {
 
     if (kind === 'update') {
       if (queued) return;
-      // The edit itself is kept — only the failure is recorded on top of it. NOTE: this lights up the
-      // retry affordance, which re-SENDS rather than re-edits; that predates this change and is
-      // deliberately left alone.
+      // The edit is kept and the failure recorded on it. Note the retry this enables re-sends rather
+      // than re-edits.
       const failed: LocalMessage = {
         ...(this.ctx.get(messageId) ?? localMessage),
         error: parsed,
@@ -298,12 +274,10 @@ export class MessageOperationStatePolicy {
     options?: MessageOperationSpec[K]['options'];
   }) {
     const previous = optimistic?.previous;
-    // Nothing was held locally, so the optimistic step changed nothing to put back.
     if (!previous) return;
 
     if (isHardDelete(options)) {
-      // A hard delete took the message out of local state, so there is no current copy to compare
-      // against — the snapshot is unambiguously what belongs there.
+      // A hard delete removed the message, so there is no current copy to compare: restore the snapshot.
       this.ctx.ingest(previous);
       this.ctx.persist(previous);
       return;
@@ -312,8 +286,7 @@ export class MessageOperationStatePolicy {
     if (optimistic?.applied && this.ctx.get(messageId) !== optimistic.applied) return;
 
     this.ctx.ingest(previous);
-    // Undoes the row the optimistic step soft-deleted: the upsert rewrites `type` and `deletedAt` from
-    // the restored message.
+    // The upsert rewrites `type` and `deletedAt` from the restored message, undoing the soft delete.
     this.ctx.persist(previous);
   }
 }

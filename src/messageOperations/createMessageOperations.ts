@@ -9,17 +9,12 @@ import type { PendingTaskOf, QueueableType } from '../offline-support/types';
 import type { Thread } from '../thread';
 
 /**
- * Builds the `MessageOperations` a message collection owns, shared by `Channel` and `Thread` so the
- * two cannot drift.
- *
- * Everything it needs is derivable from the collection: a `Thread` sends against its parent channel
- * and stamps its own id as `parent_id`, a `Channel` against itself with no stamp.
+ * Builds the `MessageOperations` a message collection owns, shared by `Channel` and `Thread`. A
+ * `Thread` sends against its parent channel and stamps its own ID as `parent_id`; a `Channel` sends
+ * against itself.
  */
 export const createMessageOperations = (collection: Channel | Thread) => {
-  // Read off the paginator rather than discriminating on the collection: it already holds both, and a
-  // `Channel | Thread` discriminator would have to be either an `instanceof` (a value import that
-  // closes a module-load cycle back to `channel.ts`) or a duck-type that a codegen run could silently
-  // invert.
+  // Read off the paginator, which holds both: an `instanceof` check would import `channel.ts` back.
   const paginator = collection.messagePaginator;
   const { channel, parentMessageId } = paginator;
 
@@ -27,8 +22,8 @@ export const createMessageOperations = (collection: Channel | Thread) => {
     task: PendingTaskOf<T>,
     { queue = true }: { queue?: boolean } = {},
   ) => queueOrRun({ channel, client: channel.getClient(), queue, task });
-  // Read on every call, because a channel created from its member list only gets an id once the
-  // server has created it.
+  // Read on every call: a channel created from its member list only gets an ID once the server has
+  // created it.
   const channelTaskData = () => ({ channelId: channel.id, channelType: channel.type });
 
   return new MessageOperations({
@@ -42,15 +37,13 @@ export const createMessageOperations = (collection: Channel | Thread) => {
     settlePendingUploads: (attachments) =>
       settlePendingAttachmentUploads({
         attachments,
-        // A reply uploads against the channel the thread belongs to - there is no thread-scoped
-        // upload target.
+        // A reply uploads against its channel: there is no thread-scoped upload target.
         channelCid: channel.cid,
         client: channel.getClient(),
       }),
     channel,
-    // We don't wait for the offline DB here. It only mirrors what's in memory, so if it isn't ready
-    // or the write fails, the message operation should carry on as if nothing happened.
-    // Replies are stored under their channel, like any other message.
+    // Not awaited: the offline DB only mirrors memory, so a slow or failed write must not affect the
+    // operation. Replies are stored under their channel.
     persist: (message) => {
       channel.getClient().offlineDb?.executeQuerySafely(
         (db) =>
@@ -71,14 +64,9 @@ export const createMessageOperations = (collection: Channel | Thread) => {
       isQueuedForReplay(channel.getClient(), messageId, types),
     ingest: (m) => {
       const store = channel.getClient().messageStore;
-      // The paginator is the entry point whenever it can hold the message — it owns interval
-      // placement, and its "no longer matches the filter" branch correctly evicts a message that
-      // stopped matching. But its filter is `{ cid, parent_id? }`, so an operation aimed at a message
-      // this paginator does not accept (most importantly a THREAD PARENT edited or deleted from
-      // inside the open thread, which the reply paginator rejects for having no `parent_id`) would
-      // otherwise be silently dropped. Falling back to the client-global store reaches the message
-      // wherever it is held and fans out to every collection holding it — the same reason
-      // `applyReactionLocally` addresses purely by id.
+      // The paginator ingests what matches its filter (`{ cid, parent_id? }`). Otherwise fall back to
+      // the client-global store, so an operation on a message the paginator rejects (a thread parent
+      // edited from inside its thread) is not dropped.
       if (paginator.matchesFilter(m)) {
         paginator.ingestItem(m);
       } else if (store.has(m.id)) {
@@ -86,10 +74,8 @@ export const createMessageOperations = (collection: Channel | Thread) => {
       }
       store.flushSubscribers(m.id);
     },
-    // Mirrors `ingest`'s routing: a message this paginator does not hold can still be held by the
-    // client-global store (a thread parent, a message displayed by another collection), and the
-    // policy uses this both for its freshness comparison and to decide whether there is anything to
-    // update optimistically at all. Reading only the paginator would make those two disagree.
+    // Mirrors `ingest`: a message the paginator does not hold may still be in the client-global store
+    // (a thread parent).
     get: (id) => paginator.getItem(id) ?? channel.getClient().messageStore.get(id),
     remove: (id) => {
       const client = channel.getClient();
@@ -106,9 +92,8 @@ export const createMessageOperations = (collection: Channel | Thread) => {
     ...(parentMessageId
       ? { normalizeOutgoingMessage: (m) => ({ ...m, parent_id: parentMessageId }) }
       : {}),
-    // We stop typing before the send and don't wait for it. A send with an upload can take as long
-    // as the transfer, and everyone would see us typing the whole time. A thread reply stops the
-    // typing in its thread.
+    // Typing stops before the send, without waiting for it: a send with an upload lasts as long as the
+    // transfer. A thread reply stops typing in its thread.
     beforeSend: () => {
       if (collection.messageComposer.config.text.publishTypingEvents) {
         channel.stopTyping(parentMessageId).catch(() => undefined);
@@ -141,7 +126,6 @@ export const createMessageOperations = (collection: Channel | Thread) => {
             updateMessageRequest({ localMessage, options }, defaultRequest)),
       };
     },
-    // The HTTP requests, through the offline queue so they replay on reconnect.
     defaults: {
       delete: async (id, o) => {
         const { message } = await queueOrRunTask({
@@ -159,7 +143,7 @@ export const createMessageOperations = (collection: Channel | Thread) => {
             payload: [{ message: m, ...o }],
             type: 'send-message',
           },
-          // Without a message id there is nothing to key a queue entry on, so it just runs.
+          // Without a message ID there is nothing to key a queue entry on, so it just runs.
           { queue: !!m.id },
         );
         return { message };

@@ -30,12 +30,8 @@ const decodeCursor = <TCursor extends object>(cursor: string | null | undefined)
 };
 
 /**
- * Paginates user-group listing through `/usergroups`.
- *
- * This entity only supports forward (tailward) cursor pagination via
- * `created_at_gt` and `id_gt`. Backward (headward) pagination is not available
- * because the API does not expose a backward cursor, so the headward cursor is
- * initialized as exhausted (`null`).
+ * Paginates `/usergroups` forward (tailward) only, via `created_at_gt` and `id_gt`. The API has no
+ * backward cursor, so the headward cursor starts exhausted (`null`).
  */
 export class UserGroupPaginator extends BasePaginator<
   UserGroupResponse,
@@ -57,9 +53,7 @@ export class UserGroupPaginator extends BasePaginator<
       ...options,
     });
     this.client = client;
-    // Interval storage needs a total order for its placement/merge math. The listing is ordered by
-    // the forward cursor (`created_at_gt`, `id_gt`), i.e. ascending `created_at` then `id` — mirror
-    // that here so the visible order matches the server's.
+    // Total order for interval storage, mirroring the server's ascending (`created_at`, `id`).
     this.sortComparator = (a, b) => {
       if (a.created_at !== b.created_at) return a.created_at < b.created_at ? -1 : 1;
       return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
@@ -89,19 +83,15 @@ export class UserGroupPaginator extends BasePaginator<
     if (!lastItem) return undefined;
 
     return JSON.stringify({
-      // The cursor is a request value, so it has to go back out as RFC3339 rather than as the
-      // wire number the item carries. `nsToRfc3339` and not `nsToDate(...).toISOString()`:
-      // `Date` holds only milliseconds, so flooring the boundary item's timestamp would put the
-      // cursor below it and a strict `created_at_gt` could hand that same item back on the next
-      // page.
+      // `nsToRfc3339` keeps the nanoseconds: a `Date` would floor the boundary timestamp and the
+      // strict `created_at_gt` could return that same item on the next page.
       created_at_gt: nsToRfc3339(lastItem.created_at),
       id_gt: lastItem.id,
     } satisfies UserGroupListCursor);
   };
 
-  // The query shape must stay stable across pages: the paginator resets its
-  // accumulated list when the query shape changes ('auto' reset policy), so the
-  // forward cursor is NOT part of the shape — it is applied per request in `fetchQueryResponse`.
+  // The cursor stays out of the shape (a shape change resets the list): `fetchQueryResponse`
+  // applies it.
   protected getNextQueryShape(): ListUserGroupsOptions {
     return {
       limit: this.pageSize,

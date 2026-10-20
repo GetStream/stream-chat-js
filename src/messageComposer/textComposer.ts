@@ -18,7 +18,7 @@ import {
   userResponseToMentionEntity,
 } from './middleware/textComposer/mentionUtils';
 import type { MessageComposer } from './messageComposer';
-import type { Command, DraftMessage, Event, LocalMessage, UserResponse } from '../types';
+import type { Command, DraftMessage, LocalMessage, UserResponse } from '../types';
 
 export type TextComposerOptions = {
   composer: MessageComposer;
@@ -86,9 +86,7 @@ const getInitialMentions = (message?: DraftMessage | LocalMessage): MentionEntit
       })),
     );
   } else if (message.mentioned_group_ids?.length) {
-    // Composer rehydration can still receive draft/local request-shaped data, where
-    // group mentions are represented only by ids even though response/render paths use
-    // `mentioned_groups` for presentation metadata.
+    // Request-shaped drafts carry group mentions as IDs only.
     mentions.push(
       ...message.mentioned_group_ids.map((groupId) => ({
         id: groupId,
@@ -120,7 +118,6 @@ const initState = ({
       mentionedUsers: [],
       mentions: [],
       text,
-      typing: {},
       selection: { start: text.length, end: text.length },
     };
   }
@@ -134,7 +131,6 @@ const initState = ({
     mentionedUsers,
     mentions,
     text,
-    typing: {},
     selection: { start: text.length, end: text.length },
   };
 };
@@ -163,11 +159,6 @@ export class TextComposer {
   }
 
   set enabled(enabled: boolean) {
-    // No early return on "same value". The guard that used to be here compared against the *effective*
-    // value, while the write it skipped records the *requested* one — so asking for a value the server
-    // was currently masking recorded nothing, and the earlier request stayed in the patch layer to be
-    // honoured the moment the server relented. `ConfigController.write` already skips a publish when the
-    // resolved value does not move, which is the same guard applied to the right value.
     this.composer.updateConfig({ text: { enabled } });
   }
 
@@ -185,11 +176,8 @@ export class TextComposer {
   }
 
   set maxLengthOnEdit(maxLengthOnEdit: number | undefined) {
-    // No early return on "same value". The guard that used to be here compared against the *effective*
-    // value, while the write it skipped records the *requested* one — so asking for a value the server
-    // was currently masking recorded nothing, and the earlier request stayed in the patch layer to be
-    // honoured the moment the server relented. `ConfigController.write` already skips a publish when the
-    // resolved value does not move, which is the same guard applied to the right value.
+    // No same-value early return: the getter reads the effective value, and a request the server
+    // masks must still be recorded.
     this.composer.updateConfig({ text: { maxLengthOnEdit } });
   }
 
@@ -198,11 +186,8 @@ export class TextComposer {
   }
 
   set maxLengthOnSend(maxLengthOnSend: number | undefined) {
-    // No early return on "same value". The guard that used to be here compared against the *effective*
-    // value, while the write it skipped records the *requested* one — so asking for a value the server
-    // was currently masking recorded nothing, and the earlier request stayed in the patch layer to be
-    // honoured the moment the server relented. `ConfigController.write` already skips a publish when the
-    // resolved value does not move, which is the same guard applied to the right value.
+    // No same-value early return: the getter reads the effective value, and a request the server
+    // masks must still be recorded.
     this.composer.updateConfig({ text: { maxLengthOnSend } });
   }
 
@@ -214,8 +199,6 @@ export class TextComposer {
     if (publishTypingEvents === this.publishTypingEvents) return;
     this.composer.updateConfig({ text: { publishTypingEvents } });
   }
-
-  // --- START STATE API ---
 
   get command() {
     return this.state.getLatestValue().command;
@@ -241,29 +224,6 @@ export class TextComposer {
     return this.state.getLatestValue().text;
   }
 
-  get typing() {
-    return this.state.getLatestValue().typing;
-  }
-
-  set typing(typing: Record<string, Event>) {
-    this.state.partialNext({ typing });
-  }
-
-  setTyping = (typing: Record<string, Event>) => {
-    this.typing = typing;
-  };
-
-  setTypingEvent = (userId: string, event: Event) => {
-    this.typing = { ...this.typing, [userId]: event };
-  };
-
-  removeTypingEvent = (userId: string) => {
-    if (!this.typing[userId]) return;
-    const typing = { ...this.typing };
-    delete typing[userId];
-    this.typing = typing;
-  };
-
   get textIsEmpty() {
     return textIsEmpty(this.text);
   }
@@ -273,9 +233,8 @@ export class TextComposer {
   };
 
   /**
-   * Takes over `source`'s text: the text, selection, mentions and command. Not its suggestions,
-   * which belong to `source`'s open search, nor its typing events, which are the other users' in
-   * `source`'s channel.
+   * Takes over `source`'s text, selection, mentions and command, not its suggestions (they belong to
+   * `source`'s open search).
    *
    * @internal
    */
@@ -444,12 +403,7 @@ export class TextComposer {
     selection?: TextSelection;
   }) => {
     if (!this.enabled) return;
-    /**
-     * Windows inserts \r\n; macOS inserts \n.
-     * The caret can fall inside a CRLF pair during repeated pastes on Windows.
-     * That corrupts newline alignment (a\nb\na\nba\nb\n\n).
-     * Normalize the text to prevent it.
-     */
+    // Normalize CRLF: a caret inside a CRLF pair during repeated pastes (Windows) corrupts newlines.
     const normalizedText = text.replace(/\r\n/g, '\n');
     const finalSelection: TextSelection = selection ?? this.selection;
     const { maxLengthOnEdit } = this.composer.config.text ?? {};
@@ -509,7 +463,6 @@ export class TextComposer {
     if (!suggestions) return;
     this.state.partialNext({ suggestions: undefined });
   };
-  // --- END STATE API ---
 
   private commitState = (state: TextComposerMiddlewareExecutorState) => {
     const { change, effects, ...nextState } = state;
@@ -518,8 +471,6 @@ export class TextComposer {
     this.state.next(nextState);
     this.composer.applyEffects(effects);
   };
-
-  // --- START TEXT PROCESSING ----
 
   handleChange = async ({
     text,
@@ -563,5 +514,4 @@ export class TextComposer {
     if (output?.status === 'discard') return;
     this.commitState(output.state);
   };
-  // --- END TEXT PROCESSING ----
 }

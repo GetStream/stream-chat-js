@@ -26,15 +26,8 @@ export type LocationComposerState = {
 export type LocationComposerSnapshot = LocationComposerState;
 
 /**
- * Composer state holds a location in the shape the API accepts *back* — the fields
- * `SharedLocation` declares, plus the `message_id` the SDK has always sent alongside them.
- *
- * A location read off a message is the other shape: it carries `channel_cid`, `user_id`,
- * `created_at` and `updated_at` too, and its `end_at` is a unix-**nanosecond** number rather than a
- * `Date`. Narrowing here rather than at each send site is what stops those response-only fields
- * riding along into the next composition and reaching the API as raw nanosecond numbers — which is
- * not a type error, because {@link LiveLocationPreview} omits `end_at` and so accepts an object
- * carrying a numeric one.
+ * Keeps only the request-shaped fields of a message's location (plus `message_id`), so response-only
+ * fields (`channel_cid`, `user_id`, nanosecond `end_at`) never reach the next composition.
  */
 const initState = ({
   message,
@@ -43,8 +36,7 @@ const initState = ({
 }): LocationComposerState => {
   const location = message?.shared_location;
   if (!location) return { location: null };
-  // Guarded: an absent or non-finite `end_at` leaves the location static rather than producing an
-  // `Invalid Date` that would later serialize as `null`.
+  // An absent or non-finite `end_at` leaves the location static (no `Invalid Date`).
   const endAt = convertTimestampToDate(location.end_at);
   return {
     location: {
@@ -91,22 +83,14 @@ export class LocationComposer {
       location.longitude &&
       (typeof durationMs === 'undefined' || durationMs >= this.config.minShareDurationMs)
     ) {
-      // Listed field by field rather than spread, so this can only ever return what a
-      // `SharedLocation` request declares. The spread it replaces was how a response-shaped
-      // location reached the API: it carried the response's own `created_at` / `updated_at` /
-      // `channel_cid` / `user_id` straight into the outgoing payload.
+      // Field by field, so only what a `SharedLocation` request declares is sent.
       return {
         created_by_device_id: location.created_by_device_id,
         latitude: location.latitude,
         longitude: location.longitude,
         message_id: location.message_id,
-        // Two ways to express an expiry, and they must not be conflated. A `durationMs` is a
-        // duration, so it resolves against the clock at composition time (see `setData`). An
-        // `end_at` is already absolute — keep it, rather than recomputing it, or editing a message
-        // would push its live location's expiry out by however long the edit took. Dropping it
-        // instead (what the previous `end_at: undefined` did whenever `durationMs` was absent,
-        // which is always the case for a location hydrated from a message) silently turned a live
-        // location into a static one on every edit.
+        // A `durationMs` resolves against the clock when read. An existing `end_at` is kept as is, so
+        // editing a message does not extend (or drop) its live location's expiry.
         ...(typeof durationMs === 'number'
           ? { end_at: new Date(Date.now() + durationMs) }
           : end_at
@@ -122,7 +106,7 @@ export class LocationComposer {
   };
 
   /**
-   * Takes over `source`'s location, now for this composer's message (`message_id`).
+   * Takes over `source`'s location, re-keyed to this composer's message (`message_id`).
    *
    * @internal
    */

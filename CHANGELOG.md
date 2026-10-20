@@ -1,3 +1,48 @@
+## [10.0.0-rc.23](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.22...v10.0.0-rc.23) (2026-10-20)
+
+### Bug Fixes
+
+* add docs snippets; fix open api issues ([#1913](https://github.com/GetStream/stream-chat-js/issues/1913)) ([53505e7](https://github.com/GetStream/stream-chat-js/commit/53505e7229f6c42ee39de875a0014f817a2f93eb))
+* address code issues found while reviewing v10 source comments ([#1922](https://github.com/GetStream/stream-chat-js/issues/1922)) ([2fc319e](https://github.com/GetStream/stream-chat-js/commit/2fc319ed87556d1980f9971df569d6e29a4f35ce))
+* v10 in depth review hotfixes ([#1920](https://github.com/GetStream/stream-chat-js/issues/1920)) ([98a298d](https://github.com/GetStream/stream-chat-js/commit/98a298dc0d4222d733b1bb5d88141c811218e57d))
+
+## [10.0.0-rc.22](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.21...v10.0.0-rc.22) (2026-10-16)
+
+### ⚠ BREAKING CHANGES
+
+* `StreamChatOptions` and `client.options` are removed.
+`new StreamChat(key, config)` and `StreamChat.getInstance(key, config)` take
+the configuration tree (`DeepPartial<InstanceConfigTree>`) as their second
+argument; the `config` wrapper is dropped.
+Option moves:
+- `allowServerSideConnect`, `axiosRequestConfig`, `baseURL`, `browser`,
+  `persistUserOnConnectionFailure` -> `client.<same name>`
+- `notifications` -> `client.notificationManager`
+- top-level axios fields (`timeout`, `httpsAgent`, ...) ->
+  `client.axiosRequestConfig.<key>`
+Example: `new StreamChat(key, { client: { allowServerSideConnect: true } })`.
+`client.persistUserOnConnectionFailure` is no longer a field (use
+`client.config.setConfig('client', { persistUserOnConnectionFailure })`);
+`client.browser` and `client.node` are read-only getters.
+`baseURL`, `axiosRequestConfig` and `notificationManager` are read at
+construction, and the tree copies `axiosRequestConfig` instead of keeping
+your object. See v9-to-v10-migration-guide-client-construction.md.
+
+### Bug Fixes
+
+* don't override local message attachments in createLinkPreviewsCo… ([#1885](https://github.com/GetStream/stream-chat-js/issues/1885)) ([2aa5144](https://github.com/GetStream/stream-chat-js/commit/2aa5144eb4e3767dea704bebcee2985e2a2f8955))
+* ensure API errors parsing works even with multiple axios copies ([#1909](https://github.com/GetStream/stream-chat-js/issues/1909)) ([e0cfba9](https://github.com/GetStream/stream-chat-js/commit/e0cfba9caa35a7355085966e3bb7bb79457c2aa8))
+* stability and perf fixes ([#1910](https://github.com/GetStream/stream-chat-js/issues/1910)) ([080af2c](https://github.com/GetStream/stream-chat-js/commit/080af2c3e0f3abbf883291dfcb9c5c69cdb842ce))
+* type fixes from docs check; add docs snippet runner ([#1902](https://github.com/GetStream/stream-chat-js/issues/1902)) ([2095fc1](https://github.com/GetStream/stream-chat-js/commit/2095fc155912e34a7c0540c546be3c862d66d617))
+* type issues from platform docs check; add docs snippet test for the platform docs ([#1914](https://github.com/GetStream/stream-chat-js/issues/1914)) ([c7706d2](https://github.com/GetStream/stream-chat-js/commit/c7706d223873895204562857d9a7ad329a237ad0))
+* **types:** add before_message_send_hook_system_messages to app settings response ([#1887](https://github.com/GetStream/stream-chat-js/issues/1887)) ([724b4f7](https://github.com/GetStream/stream-chat-js/commit/724b4f7b13b5b24b9d09f40aa7512be1c4f44d3a))
+
+### Features
+
+* add poll translation i18n fields ([#1878](https://github.com/GetStream/stream-chat-js/issues/1878)) ([9d396e5](https://github.com/GetStream/stream-chat-js/commit/9d396e552d7049b83675805770101fc4a70d64a7)), closes [GetStream/chat#17029](https://github.com/GetStream/chat/issues/17029)
+* poll optimistic updates ([#1895](https://github.com/GetStream/stream-chat-js/issues/1895)) ([e3dac59](https://github.com/GetStream/stream-chat-js/commit/e3dac594bc9c0f61f3654d63a5f010548814a572))
+* replace StreamChatOptions with the configuration tree ([#1911](https://github.com/GetStream/stream-chat-js/issues/1911)) ([f05b861](https://github.com/GetStream/stream-chat-js/commit/f05b8613dea45f599c5c63bbfaeb6a77492332cf))
+
 ## [10.0.0-rc.21](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.20...v10.0.0-rc.21) (2026-10-09)
 
 ### Bug Fixes

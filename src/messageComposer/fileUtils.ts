@@ -90,7 +90,7 @@ export const ensureIsLocalAttachment = (
   if (isLocalAttachment(attachment)) {
     return attachment;
   }
-  // local is considered local only if localMetadata has `id` so this is to doublecheck
+  // Not local yet: a local attachment is one whose `localMetadata` has an `id`.
   const { localMetadata, ...rest } = attachment as LocalAttachment;
   return {
     localMetadata: {

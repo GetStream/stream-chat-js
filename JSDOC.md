@@ -38,6 +38,22 @@ The format is enforced by `eslint-plugin-jsdoc`. Run `yarn lint` to validate loc
 - **Short single-line form** `/** Foo. */` is allowed only when there are no tags and the description fits on one line.
 - **Field-level JSDoc** on interfaces/types may use the single-line form (mirrors `src/gen/models/index.ts`).
 
+## Public API vs internals
+
+- **Public API** (exported functions, and public members of exported classes): a summary sentence, `@param` for the parameters, and `@returns` iff the function returns something other than `void` / `Promise<void>`. These docs ship in `dist/types` and are what integrators read.
+- **Internals** (names starting with `_`, `private` / `protected` members, `@internal` symbols, non-exported helpers): prose only. Tags are optional; document only what the code does not already say.
+
+Lint does not enforce the public-API rule yet, and many existing members do not meet it. Apply it to every doc you add or edit.
+
+## Content
+
+- Describe the code as it is now. No history ("used to", "previously", "no longer", "now"), no issue or PR numbers, no review ids.
+- Keep only what the signature and names do not already say: invariants, ordering and timing constraints, gotchas, units, defaults, side effects, and a reason when it prevents a likely mistake (one clause).
+- Be terse: one line when it fits, members in one or two lines, classes in a short paragraph. No section banners, no method lists that repeat the signatures.
+- Write defaults as `Defaults to X.` (or the `@default` tag).
+- Use British spelling in prose (`behaviour`), matching identifiers such as `getBehaviourOverrides`.
+- No em-dashes; use a period, colon, comma or parentheses.
+
 ## Casing in prose
 
 Apply consistently in JSDoc and `//` comments. Do **not** rewrite identifiers, string literals, or `@example` code blocks.
@@ -62,5 +78,5 @@ Hand-written types in `src/types.ts` and elsewhere often share field names with 
 ## When in doubt
 
 - Cross-check that `@param` names match the actual parameter names.
-- Add `@returns` iff the function returns something other than `void` / `Promise<void>`.
-- Keep existing wording verbatim except to fix grammar, typos, casing, or factual mismatches with the signature.
+- Add `@returns` iff the function returns something other than `void` / `Promise<void>` (public API).
+- Check every claim a comment makes against the code it documents; fix the comment when it no longer matches.

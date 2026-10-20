@@ -1489,6 +1489,100 @@ describe('MessagePaginator', () => {
         deletedAt.toISOString(),
       );
     });
+
+    describe('after a jump to an older message', () => {
+      const bannedUser = { id: 'banned-user' };
+      const otherUser = { id: 'other-user' };
+      const at = (minute: number) =>
+        convertDateToTimestamp(
+          `2025-02-01T14:${String(minute).padStart(2, '0')}:00.000Z`,
+        );
+
+      // The head interval holds the banned user's newest message and a quote of it; the viewer
+      // has jumped to a disjoint older interval, so neither is in `items`.
+      const setupJumpedAway = () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        const bannedHeadMessage = createMessage({
+          cid: channel.cid,
+          created_at: at(50),
+          id: 'banned-head',
+          user: bannedUser,
+        });
+        const headQuoteCarrier = createMessage({
+          cid: channel.cid,
+          created_at: at(51),
+          id: 'head-quote-carrier',
+          quoted_message: bannedHeadMessage,
+          quoted_message_id: bannedHeadMessage.id,
+          user: otherUser,
+        });
+        paginator.ingestPage({
+          page: [bannedHeadMessage, headQuoteCarrier],
+          isHead: true,
+          isTail: false,
+          setActive: true,
+        });
+        paginator.ingestPage({
+          page: [
+            createMessage({
+              cid: channel.cid,
+              created_at: at(1),
+              id: 'old-1',
+              user: otherUser,
+            }),
+            createMessage({
+              cid: channel.cid,
+              created_at: at(2),
+              id: 'old-2',
+              user: otherUser,
+            }),
+          ],
+          isHead: false,
+          isTail: false,
+          setActive: true,
+        });
+        expect(paginator.items?.map((m) => m.id)).toEqual(['old-1', 'old-2']);
+        return { bannedHeadMessage, headQuoteCarrier, paginator };
+      };
+
+      it('soft deletes the user messages in the head interval', () => {
+        const { bannedHeadMessage, headQuoteCarrier, paginator } = setupJumpedAway();
+
+        paginator.applyMessageDeletionForUser({
+          userId: bannedUser.id,
+          hardDelete: false,
+          deletedAt: at(55),
+        });
+
+        expect(paginator.getItem(bannedHeadMessage.id)?.type).toBe('deleted');
+        expect(paginator.getItem(headQuoteCarrier.id)?.quoted_message?.type).toBe(
+          'deleted',
+        );
+        expect(
+          paginator.anchoredHeadItems.find((m) => m.id === bannedHeadMessage.id)?.type,
+        ).toBe('deleted');
+        expect(paginator.items?.map((m) => m.id)).toEqual(['old-1', 'old-2']);
+      });
+
+      it('hard deletes the user messages in the head interval', () => {
+        const { bannedHeadMessage, headQuoteCarrier, paginator } = setupJumpedAway();
+
+        paginator.applyMessageDeletionForUser({
+          userId: bannedUser.id,
+          hardDelete: true,
+          deletedAt: at(55),
+        });
+
+        expect(paginator.getItem(bannedHeadMessage.id)).toBeUndefined();
+        expect(paginator.anchoredHeadItems.map((m) => m.id)).toEqual([
+          headQuoteCarrier.id,
+        ]);
+        expect(paginator.getItem(headQuoteCarrier.id)?.quoted_message?.type).toBe(
+          'deleted',
+        );
+        expect(paginator.items?.map((m) => m.id)).toEqual(['old-1', 'old-2']);
+      });
+    });
   });
 
   describe('reflectQuotedMessageUpdate()', () => {
@@ -1757,6 +1851,34 @@ describe('MessagePaginator', () => {
       const sorted = paginator.sortIntervals([intervalA, intervalB]);
       expect(sorted[0].id).toBe(intervalB.id);
       expect(sorted[1].id).toBe(intervalA.id);
+    });
+
+    it('sorts an interval without bounds after the bounded ones', () => {
+      const paginator = new MessagePaginator({ channel, itemIndex });
+
+      const older = createMessage({
+        cid: 'channel-id',
+        id: 'm1',
+        created_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
+      });
+      const newer = createMessage({
+        cid: 'channel-id',
+        id: 'm2',
+        created_at: convertDateToTimestamp('2020-01-02T00:00:00.000Z'),
+      });
+      itemIndex.setMany([older, newer]);
+
+      const intervalA = paginator.makeInterval({ page: [older] });
+      const intervalB = paginator.makeInterval({ page: [newer] });
+      const empty = { ...paginator.makeInterval({ page: [] }), id: 'empty' };
+
+      // @ts-expect-error accessing protected method
+      const sorted = paginator.sortIntervals([intervalA, empty, intervalB]);
+      expect(sorted.map((itv: Interval) => itv.id)).toEqual([
+        intervalB.id,
+        intervalA.id,
+        'empty',
+      ]);
     });
 
     it('ingests a newer live message into the head interval (not logical tail)', () => {
@@ -2659,6 +2781,21 @@ describe('MessagePaginator', () => {
 
         // active [m1,m2] removed; nearest survivor to where it was = the oldest survivor [m5,m6]
         expect(paginator.items?.map((m) => m.id)).toEqual(['m5', 'm6']);
+      });
+
+      it('keeps showing the surviving live messages when the active window is the logical head', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        // No page loaded: live messages land in the logical head, which becomes the active window.
+        paginator.ingestItem(msg('m1', '01'));
+        paginator.ingestItem(msg('m9', '09'));
+        expect(paginator.items?.map((m) => m.id)).toEqual(['m1', 'm9']);
+
+        paginator.truncate({
+          truncatedAt: convertDateToTimestamp('2020-01-05T00:00:00.000Z'),
+        });
+
+        expect(paginator.getItem('m1')).toBeUndefined();
+        expect(paginator.items?.map((m) => m.id)).toEqual(['m9']);
       });
 
       it('splits at the correct point with duplicate timestamps at the boundary', () => {

@@ -771,6 +771,30 @@ describe('OfflineSupportApi', () => {
           expect(result).toEqual(mockUpsertMessagesQueries);
         });
 
+        it('writes the channel row and retries when the first write misses the channel', async () => {
+          const event = {
+            ...baseEvent,
+            channel_type: 'messaging',
+            channel_id: 'channel123',
+          } as Event;
+          const channelQueries = ['INSERT INTO channels'];
+          offlineDb.channelExists.mockResolvedValue(false);
+          offlineDb.upsertChannelData.mockResolvedValue(channelQueries);
+          offlineDb.executeSqlBatch
+            .mockRejectedValueOnce(new Error('FOREIGN KEY constraint failed'))
+            .mockResolvedValue(undefined);
+
+          const result = await offlineDb.handleNewMessage({ event, execute: true });
+
+          expect(offlineDb.executeSqlBatch).toHaveBeenCalledTimes(2);
+          expect(offlineDb.executeSqlBatch).toHaveBeenNthCalledWith(1, mockQueries);
+          expect(offlineDb.executeSqlBatch).toHaveBeenNthCalledWith(2, [
+            ...channelQueries,
+            ...mockQueries,
+          ]);
+          expect(result).toEqual([...channelQueries, ...mockQueries]);
+        });
+
         it('should not call executeSqlBatch if execute is false', async () => {
           const result = await offlineDb.handleNewMessage({
             event: baseEvent,
@@ -2877,22 +2901,17 @@ describe('OfflineSupportApi', () => {
           expect(deleteReactionSpy).toHaveBeenCalledWith(...task.payload);
         });
 
-        // `deleteReaction` has no request of its own, so its `requestOptions` sits behind an unused
-        // `_request` slot. That slot persists as `null` and has to come back as `undefined`, with
-        // the options still in third position.
-        it('replays a persisted delete-reaction with requestOptions behind the empty request slot', async () => {
+        // `deleteReaction` has no request of its own, so its `requestOptions` directly follow the
+        // path params and have to survive the JSON round trip in that position.
+        it('replays a persisted delete-reaction with its requestOptions', async () => {
           const task = generatePendingTask('delete-reaction') as PendingTask;
           const persisted = JSON.parse(
-            JSON.stringify({
-              ...task,
-              payload: [task.payload[0], undefined, { timeout: 5000 }],
-            }),
+            JSON.stringify({ ...task, payload: [task.payload[0], { timeout: 5000 }] }),
           ) as PendingTask;
-          expect(persisted.payload).toEqual([task.payload[0], null, { timeout: 5000 }]);
 
           await offlineDb['executeTask']({ task: persisted });
 
-          expect(deleteReactionSpy).toHaveBeenCalledWith(task.payload[0], undefined, {
+          expect(deleteReactionSpy).toHaveBeenCalledWith(task.payload[0], {
             timeout: 5000,
           });
         });

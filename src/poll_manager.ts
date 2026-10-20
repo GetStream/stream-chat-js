@@ -4,21 +4,16 @@ import type {
   LocalMessage,
   MessageResponse,
   PollResponseData,
-  QueryPollsFilters,
-  QueryPollsOptions,
-  SortParamRequest,
+  StreamRequestOptions,
 } from './types';
+import type { QueryPollsRequest } from './gen/models';
 import { Poll } from './poll';
 import { formatMessage } from './utils';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 
 export class PollManager extends WithSubscriptions {
   private client: StreamChat;
-  // The pollCache contains only polls that have been created and sent as messages
-  // (i.e only polls that are coupled with a message, can be voted on and require a
-  // reactive state). It shall work as a basic look-up table for our SDK to be able
-  // to quickly consume poll state that will be reactive even without the polls being
-  // rendered within the UI.
+  // Only polls attached to a sent message, so their state stays reactive without being rendered.
   private pollCache = new Map<string, Poll>();
 
   constructor({ client }: { client: StreamChat }) {
@@ -34,7 +29,6 @@ export class PollManager extends WithSubscriptions {
 
   public registerSubscriptions = () => {
     if (this.hasSubscriptions) {
-      // Already listening for events and changes
       return;
     }
 
@@ -62,14 +56,13 @@ export class PollManager extends WithSubscriptions {
   public getPoll = async (id: string) => {
     const cachedPoll = this.fromState(id);
 
-    // optimistically return the cached poll if it exists and update in the background
+    // Returns the cached poll right away and refreshes it in the background.
     if (cachedPoll) {
       this.client
         .getPoll({ poll_id: id })
         .then(({ poll }) => this.setOrOverwriteInCache(poll, true));
       return cachedPoll;
     }
-    // fetch it, write to the cache and return otherwise
     const { poll } = await this.client.getPoll({ poll_id: id });
 
     this.setOrOverwriteInCache(poll);
@@ -77,16 +70,19 @@ export class PollManager extends WithSubscriptions {
     return this.fromState(id);
   };
 
+  /**
+   * Queries polls and caches them as `Poll` instances. Takes the same request as `client.queryPolls`.
+   *
+   * @param request - The filter, sort and pagination of the query (optional).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The `Poll` instances and the cursor of the next page.
+   */
   public queryPolls = async (
-    filter: QueryPollsFilters,
-    sort: SortParamRequest[] = [],
-    options: QueryPollsOptions = {},
+    request: QueryPollsRequest = {},
+    requestOptions?: StreamRequestOptions,
   ) => {
-    const { polls, next } = await this.client.queryPolls({
-      filter,
-      sort,
-      ...options,
-    });
+    const { polls, next } = await this.client.queryPolls(request, requestOptions);
 
     const pollInstances = polls.map((poll) => {
       this.setOrOverwriteInCache(poll, true);
@@ -161,7 +157,7 @@ export class PollManager extends WithSubscriptions {
       }
     }).unsubscribe;
 
-  // votes carry a copy of their voter, so a changed name or image reaches the polls only from here
+  // Votes carry a copy of their voter, so a changed name or image reaches the polls only from here.
   private subscribeUserUpdated = () =>
     this.client.on('user.updated', (event) => {
       const { user } = event;
