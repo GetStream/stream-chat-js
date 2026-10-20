@@ -109,6 +109,93 @@ describe('scheduled messages API', () => {
     });
   });
 
+  describe('queryChannels', () => {
+    const channelResponse = (
+      id: string,
+      scheduled_messages?: ScheduledMessageResponse[],
+    ) => ({
+      ...mockChannelQueryResponse,
+      channel: { ...mockChannelQueryResponse.channel, id, cid: `messaging:${id}` },
+      ...(scheduled_messages ? { scheduled_messages } : {}),
+    });
+
+    it('passes include_scheduled_messages and hydrates the store per channel', async () => {
+      const client = setup();
+      const inA = { ...scheduledMessage, id: 'sm-a', cid: 'messaging:a' };
+      const spy = vi.spyOn(client, 'post').mockResolvedValue({
+        channels: [channelResponse('a', [inA]), channelResponse('b', [])],
+      });
+
+      await client.queryChannels({}, [], { include_scheduled_messages: true });
+
+      expect(spy.mock.calls[0][0]).toBe(`${client.baseURL}/channels`);
+      expect(spy.mock.calls[0][1]).toEqual(
+        expect.objectContaining({ include_scheduled_messages: true }),
+      );
+      expect(client.scheduledMessages.getForChannel('messaging:a')).toEqual([inA]);
+      expect(client.scheduledMessages.getForChannel('messaging:b')).toEqual([]);
+    });
+
+    it('empties a channel whose scheduled_messages is an empty list', async () => {
+      const client = setup();
+      const stale = { ...scheduledMessage, id: 'sm-stale', cid: 'messaging:a' };
+      const other = { ...scheduledMessage, id: 'sm-other', cid: 'messaging:other' };
+      client.scheduledMessages.upsertToState(stale);
+      client.scheduledMessages.upsertToState(other);
+      vi.spyOn(client, 'post').mockResolvedValue({
+        channels: [channelResponse('a', [])],
+      });
+
+      await client.queryChannels({}, [], { include_scheduled_messages: true });
+
+      expect(client.scheduledMessages.getForChannel('messaging:a')).toEqual([]);
+      expect(client.scheduledMessages.getForChannel('messaging:other')).toEqual([other]);
+    });
+
+    it('keeps the store when scheduled_messages is absent', async () => {
+      const client = setup();
+      const known = { ...scheduledMessage, id: 'sm-known', cid: 'messaging:a' };
+      client.scheduledMessages.upsertToState(known);
+      vi.spyOn(client, 'post').mockResolvedValue({
+        channels: [channelResponse('a')],
+      });
+
+      await client.queryChannels({}, [], { include_scheduled_messages: true });
+
+      expect(client.scheduledMessages.getForChannel('messaging:a')).toEqual([known]);
+    });
+
+    it('does not send include_scheduled_messages unless asked', async () => {
+      const client = setup();
+      const spy = vi.spyOn(client, 'post').mockResolvedValue({ channels: [] });
+
+      await client.queryChannels({}, [], {});
+
+      expect(spy.mock.calls[0][1]).not.toHaveProperty('include_scheduled_messages');
+    });
+
+    it('drops scheduled messages of a response that arrives after the user disconnected', async () => {
+      const client = setup();
+      let resolve!: (value: unknown) => void;
+      vi.spyOn(client, 'post').mockReturnValue(
+        new Promise((r) => (resolve = r)) as never,
+      );
+      vi.spyOn(client, 'closeConnection').mockResolvedValue(undefined);
+
+      const querying = client.queryChannels({}, [], { include_scheduled_messages: true });
+      await vi.waitFor(() => expect(client.post).toHaveBeenCalled());
+      await client.disconnectUser();
+      resolve({
+        channels: [
+          channelResponse('a', [{ ...scheduledMessage, id: 'sm-a', cid: 'messaging:a' }]),
+        ],
+      });
+      await querying.catch(() => undefined);
+
+      expect(client.scheduledMessages.scheduledMessages.size).toBe(0);
+    });
+  });
+
   describe('channel', () => {
     it('sendMessage passes scheduled_at through and stores the scheduled message', async () => {
       const client = setup();

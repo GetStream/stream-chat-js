@@ -2242,7 +2242,8 @@ export class StreamChat {
    * @param {ChannelFilters} filterConditions object MongoDB style filters
    * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
    * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
-   * @param {ChannelOptions} [options] Options object
+   * @param {ChannelOptions} [options] Options object. With `include_scheduled_messages: true`, the
+   * scheduled messages returned with each channel replace that channel's entries in `client.scheduledMessages`.
    * @param {ChannelStateOptions} [stateOptions] State options object. These options will only be used for state management and won't be sent in the request.
    * - stateOptions.skipInitialization - Skips the initialization of the state for the channels matching the ids in the list.
    * - stateOptions.skipHydration - Skips returning the channels as instances of the Channel class and rather returns the raw query response.
@@ -2269,6 +2270,7 @@ export class StreamChat {
     options: ChannelOptions = {},
     stateOptions: ChannelStateOptions = {},
   ): Promise<Channel[] | QueryChannelsResponseWithChannels> {
+    const scheduledMessagesToken = this.scheduledMessages.snapshotToken();
     const queryChannelsResponse = await this.queryChannelsRequestWithResponse(
       filterConditions,
       sort,
@@ -2292,6 +2294,15 @@ export class StreamChat {
       });
     }
 
+    // Not in hydrateActiveChannels: it also hydrates channels from the offline DB,
+    // which are not a fresh server snapshot of the scheduled messages.
+    for (const channelState of channels ?? []) {
+      this.scheduledMessages.hydrateChannelState(
+        channelState.channel.cid,
+        channelState.scheduled_messages,
+        scheduledMessagesToken,
+      );
+    }
     const hydratedChannels = this.hydrateActiveChannels(channels, stateOptions, options);
 
     if (stateOptions.withResponse) {

@@ -1156,6 +1156,13 @@ export type BanUserOptions = UnBanUserOptions & {
 };
 
 export type ChannelOptions = {
+  /**
+   * Client-side only. Adds the current user's scheduled messages to each returned
+   * channel (`scheduled_messages`). The field is absent on every channel when they
+   * are not known (e.g. more than 100 across the returned channels); use
+   * `client.queryScheduledMessages` then.
+   */
+  include_scheduled_messages?: boolean;
   limit?: number;
   member_limit?: number;
   message_limit?: number;
