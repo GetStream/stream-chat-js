@@ -1815,30 +1815,6 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Hides the channel from `queryChannels` for the user until a message is added.
-   *
-   * @param ...args - `[request, requestOptions]`. Pass `request: { clear_history: true }` to clear
-   *   message history for the user; `requestOptions` carries per-request options such as an abort
-   *   `signal` and is never serialized into the request.
-   * @returns The server response.
-   */
-  override async hide(...args: Parameters<ChannelApi['hide']>) {
-    return await super.hide(...args);
-  }
-
-  /**
-   * Removes the hidden status of the channel.
-   *
-   * @param ...args - `[request, requestOptions]`. `request` is the show-channel payload;
-   *   `requestOptions` carries per-request options such as an abort `signal` and is never
-   *   serialized into the request.
-   * @returns The server response.
-   */
-  override async show(...args: Parameters<ChannelApi['show']>) {
-    return await super.show(...args);
-  }
-
-  /**
    * Removes the bans of a user on this channel.
    *
    * @param targetUserId - The user to unban.
