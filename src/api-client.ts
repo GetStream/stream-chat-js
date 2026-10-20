@@ -223,6 +223,11 @@ export class ApiClient {
       'x-client-request-id'
     ] as string;
 
+    // Only a token provider can hand out a fresh token. A static token reloads to the same expired
+    // value, so its request fails immediately.
+    const canRefreshExpiredToken = (error: unknown) =>
+      isTokenExpiredError(error) && !this.client.tokenManager.isStatic();
+
     try {
       const response = await runWithRetry(
         async () => {
@@ -249,7 +254,7 @@ export class ApiClient {
           try {
             requestResponse = await this.client.axiosInstance.request<T>(config);
           } catch (error) {
-            if (isTokenExpiredError(error)) {
+            if (canRefreshExpiredToken(error)) {
               logger
                 .withExtraTags('_doRequest')
                 .debug(
@@ -267,13 +272,7 @@ export class ApiClient {
         {
           delayBetweenRetries: (attemptNumber) => retryInterval(attemptNumber + 1),
           retryAttempts: 10,
-          isRetryable: (error) => {
-            if (!isAxiosError(error)) return false;
-
-            if (error.status === 429 || isTokenExpiredError(error)) return true;
-
-            return false;
-          },
+          isRetryable: canRefreshExpiredToken,
         },
       )();
 

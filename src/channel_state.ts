@@ -294,17 +294,11 @@ export class ChannelState extends StateStore<ChannelStateData> {
   }
 
   get typing() {
-    return (
-      this._channel?.messageComposer?.textComposer.typing ?? this.getLatestValue().typing
-    );
+    return this.getLatestValue().typing;
   }
 
   set typing(typing: Record<string, Event>) {
     this.partialNext({ typing });
-
-    if (this._channel?.messageComposer) {
-      this._channel.messageComposer.textComposer.setTyping(typing);
-    }
   }
 
   setTypingEvent(userID: string, event: Event) {

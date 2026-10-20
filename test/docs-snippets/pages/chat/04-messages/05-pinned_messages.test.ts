@@ -73,13 +73,13 @@ describe('_default/04-messages/05-pinned_messages.md', () => {
     });
 
     // Pin an existing message for 120 seconds
-    await client.pinMessage(message, 120);
+    await client.pinMessage(message, { pin_expires: new Date(Date.now() + 120 * 1000) });
 
     // Pin with a specific expiration date
-    await client.pinMessage(message, '2077-01-01T00:00:00Z');
+    await client.pinMessage(message, { pin_expires: '2077-01-01T00:00:00Z' });
 
     // Pin indefinitely (remove expiration)
-    await client.pinMessage(message, null);
+    await client.pinMessage(message, { pin_expires: null });
 
     // Unpin a message
     await client.unpinMessage(message);

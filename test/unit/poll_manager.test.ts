@@ -644,7 +644,7 @@ describe('PollManager', () => {
         .resolves({ poll: pollMessage1.poll as PollResponse, duration: '10' });
     });
     it('should return a Poll instance on queryPolls', async () => {
-      const { polls } = await pollManager.queryPolls({}, {}, {});
+      const { polls } = await pollManager.queryPolls();
 
       expect(polls).to.have.lengthOf(2);
       polls.forEach((poll) => {
@@ -653,7 +653,7 @@ describe('PollManager', () => {
       expect(stubbedQueryPolls.calledOnce).to.be.true;
     });
     it('should properly populate the pollCache on queryPolls', async () => {
-      const { polls } = await pollManager.queryPolls({}, {}, {});
+      const { polls } = await pollManager.queryPolls();
 
       expect(pollManager.data.size).to.equal(2);
       expect(pollManager.fromState(pollId1)).to.not.be.undefined;
@@ -673,7 +673,7 @@ describe('PollManager', () => {
 
       const previousPollFromCache = pollManager.fromState(pollId1);
 
-      const { polls } = await pollManager.queryPolls({}, {}, {});
+      const { polls } = await pollManager.queryPolls();
 
       const pollFromQuery = polls[0];
 

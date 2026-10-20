@@ -424,10 +424,13 @@ export class Thread extends WithSubscriptions {
         Math.max(loadedReplyCount, this.messagePaginator.pageSize ?? 0) || undefined;
       const reconcileCandidateIds = new Set(loadedReplies.map((reply) => reply.id));
       const failedBefore = loadedReplies.filter((reply) => reply.status === 'failed');
-      const thread = await this.client.getThreadAndHydrate(this.id, {
-        watch: true,
-        reply_limit: requestedReplyLimit,
-      });
+      const thread = await this.client.getThreadAndHydrate(
+        { message_id: this.id },
+        {
+          watch: true,
+          reply_limit: requestedReplyLimit,
+        },
+      );
       this.hydrateState(thread, {
         reconcile: {
           requestedLimit: requestedReplyLimit,

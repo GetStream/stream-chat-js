@@ -2,7 +2,6 @@ type FunctionToRetry<T = any> = (...functionArguments: any[]) => PromiseLike<T>;
 
 enum RetryErrorType {
   ABORT,
-  ATTEMPT_LIMIT_REACHED,
 }
 
 export class RetryError extends Error {
@@ -10,7 +9,6 @@ export class RetryError extends Error {
 
   private static errorMap = {
     [RetryErrorType.ABORT]: 'Value changed, retry handler aborted',
-    [RetryErrorType.ATTEMPT_LIMIT_REACHED]: 'Reached maximum amount of retry attempts',
   } satisfies Record<RetryErrorType, string>;
 
   constructor({ type }: { type: RetryErrorType }) {
@@ -51,6 +49,7 @@ export type RunWithRetryOptions<T extends FunctionToRetry> = {
 /**
  * Function which wraps asynchronous functions with retry mechanism which'll keep executing said
  * function pre-defined number of times until it resolves, rejects or the retry mechanism runs out of available attempts.
+ * Running out of attempts rejects with the error of the last attempt.
  *
  * #### Available options:
  *  - `didValueChange` - check function with initial argument value to check against new values, return `true` to abort next attempt
@@ -73,10 +72,11 @@ export const runWithRetry = <T extends FunctionToRetry>(
   async function retryable(...functionArguments: Parameters<T>) {
     // starting with -1 as first attempt is not considered a retry
     let retryAttempt = -1;
+    let error: unknown = null;
 
     do {
       let data: Awaited<ReturnType<T>> | null = null;
-      let error: unknown = null;
+      error = null;
 
       if (await didValueChange?.(...functionArguments)) {
         throw new RetryError({ type: RetryErrorType.ABORT });
@@ -113,5 +113,5 @@ export const runWithRetry = <T extends FunctionToRetry>(
       }
     } while (retryAttempt < retryAttempts);
 
-    throw new RetryError({ type: RetryErrorType.ATTEMPT_LIMIT_REACHED });
+    throw error;
   };

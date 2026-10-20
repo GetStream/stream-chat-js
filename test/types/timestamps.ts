@@ -61,16 +61,19 @@ export const minted: TimestampNS[] = [
   asTimestampNS(0),
 ];
 
-// --- `pinMessage`: a `number` is a relative offset in seconds ----------------------------------------
+// --- `pinMessage`: dates are a `Date` or an RFC3339 string --------------------------------------------
 
-// @ts-expect-error -- a server timestamp would be read as ~1.79e18 seconds from now
-client.pinMessage(message.id, message.pin_expires);
-// @ts-expect-error -- same for `pinnedAt`
-client.pinMessage(message.id, null, message.pinned_at);
+// @ts-expect-error -- a server timestamp has to go through `nsToDate`
+client.pinMessage(message, { pin_expires: message.pin_expires });
+// @ts-expect-error -- same for `pinned_at`
+client.pinMessage(message, { pinned_at: message.pinned_at });
+// @ts-expect-error -- a relative offset in seconds is not accepted
+client.pinMessage(message, { pin_expires: 60 });
 
-client.pinMessage(message.id);
-client.pinMessage(message, null);
-client.pinMessage(message.id, 60);
-client.pinMessage(message.id, null, -60);
-client.pinMessage(message.id, nsToDate(message.created_at), '2026-01-01T00:00:00Z');
-client.pinMessage(message.id, untyped, untyped);
+client.pinMessage(message);
+client.pinMessage({ id: message.id }, { pin_expires: null });
+client.pinMessage(message, {
+  pin_expires: nsToDate(message.created_at),
+  pinned_at: '2026-01-01T00:00:00Z',
+});
+client.pinMessage(message, { pin_expires: untyped, pinned_at: untyped });

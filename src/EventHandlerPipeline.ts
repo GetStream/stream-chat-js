@@ -7,8 +7,8 @@ import type { Unsubscribe } from '@stream-io/state-store';
  * Flat routing view of an event: every field any event can carry, all optional, on one object.
  *
  * Handlers route without narrowing, which `Event` does not allow — it is a discriminated union whose
- * `{ type: '*' } & CustomEvent` member has none of the channel fields, and it admits bare custom-event
- * strings (hence the `unknown` hop in `processOne`). Derived from that union, so a new generated field
+ * members carry different fields (a custom event has none of the channel fields), and it admits bare
+ * custom-event strings (hence the `unknown` hop in `processOne`). Derived from that union, so a new generated field
  * is routable without widening anything by hand.
  */
 type EventObject = Extract<Event, object>;

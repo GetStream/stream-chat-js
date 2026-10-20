@@ -1411,7 +1411,7 @@ export class MessageIntervalPaginator extends BasePaginator<
     hardDelete?: boolean;
     deletedAt: TimestampNS;
   }) => {
-    const loadedMessages = this.items ?? [];
+    const loadedMessages = this._itemIndex.values();
 
     // One logical operation touching many messages so we `coalesce` so this paginator's own window
     // emits once at the end rather than per message, and the shared-store fan-out folds into a

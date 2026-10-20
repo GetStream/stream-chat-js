@@ -1392,6 +1392,26 @@ describe('Channel _handleChannelEvent', function () {
 			expect(channel.messagePaginator.getItem(threadReply.id)).to.be.undefined;
 		});
 
+		it('message.updated applies an edit of a reply shown in the channel', function () {
+			const parentMessage = generateMsg({ id: 'shown-reply-parent-id' });
+			const shownReply = generateMsg({
+				id: 'shown-reply-id',
+				parent_id: parentMessage.id,
+				show_in_channel: true,
+				text: 'before update',
+			});
+			seedLatestWindow(channel, [parentMessage, shownReply]);
+
+			channel._handleChannelEvent({
+				type: 'message.updated',
+				message: { ...shownReply, text: 'after update' },
+			});
+
+			expect(channel.messagePaginator.getItem(shownReply.id)?.text).to.equal(
+				'after update',
+			);
+		});
+
 		it('message.updated syncs quoted_message references in messagePaginator', function () {
 			const quotedMessage = generateMsg({
 				id: 'quoted-message-id',
@@ -1499,6 +1519,26 @@ describe('Channel _handleChannelEvent', function () {
 			});
 
 			expect(channel.messagePaginator.getItem(threadReply.id)).to.be.undefined;
+		});
+
+		it('message.undeleted restores a reply shown in the channel', function () {
+			const parentMessage = generateMsg({ id: 'shown-reply-parent-id-2' });
+			const shownReply = generateMsg({
+				id: 'shown-reply-id-2',
+				parent_id: parentMessage.id,
+				show_in_channel: true,
+				text: 'restored reply',
+			});
+			seedLatestWindow(channel, [
+				parentMessage,
+				{ ...shownReply, type: 'deleted', text: '' },
+			]);
+
+			channel._handleChannelEvent({ type: 'message.undeleted', message: shownReply });
+
+			const stored = channel.messagePaginator.getItem(shownReply.id);
+			expect(stored?.type).to.equal(shownReply.type);
+			expect(stored?.text).to.equal('restored reply');
 		});
 
 		it('message.undeleted syncs quoted_message references in messagePaginator', function () {
@@ -5031,5 +5071,70 @@ describe('Channel.updateAIState', () => {
 			},
 			undefined,
 		);
+	});
+});
+
+describe('Channel member, filter-tag and upload-delete requests', () => {
+	let channel;
+	let update;
+
+	beforeEach(async () => {
+		const client = await getClientWithUser({ id: 'user' });
+		channel = client.channel('messaging', 'requests');
+		update = vi.spyOn(channel, 'update').mockResolvedValue({});
+	});
+
+	it('addMembers turns user ids into member requests and passes the options through', async () => {
+		await channel.addMembers({
+			members: ['u1', { user_id: 'u2', channel_role: 'channel_moderator' }],
+			message: { text: 'welcome' },
+			hide_history: true,
+		});
+
+		expect(update).toHaveBeenCalledWith(
+			{
+				add_members: [
+					{ user_id: 'u1' },
+					{ user_id: 'u2', channel_role: 'channel_moderator' },
+				],
+				message: { text: 'welcome' },
+				hide_history: true,
+			},
+			undefined,
+		);
+	});
+
+	it('inviteMembers turns user ids into member requests', async () => {
+		await channel.inviteMembers({ members: ['u1'] });
+
+		expect(update).toHaveBeenCalledWith({ invites: [{ user_id: 'u1' }] }, undefined);
+	});
+
+	it('removeMembers sends the user ids', async () => {
+		await channel.removeMembers({ members: ['u1'], message: { text: 'bye' } });
+
+		expect(update).toHaveBeenCalledWith(
+			{ remove_members: ['u1'], message: { text: 'bye' } },
+			undefined,
+		);
+	});
+
+	it('addFilterTags / removeFilterTags send the tags', async () => {
+		await channel.addFilterTags({ tags: ['a'] });
+		await channel.removeFilterTags({ tags: ['b'] });
+
+		expect(update).toHaveBeenNthCalledWith(1, { add_filter_tags: ['a'] }, undefined);
+		expect(update).toHaveBeenNthCalledWith(2, { remove_filter_tags: ['b'] }, undefined);
+	});
+
+	it('deleteImage / deleteFile take the url in a request object', async () => {
+		const deleteImage = vi.spyOn(channel, 'deleteChannelImage').mockResolvedValue({});
+		const deleteFile = vi.spyOn(channel, 'deleteChannelFile').mockResolvedValue({});
+
+		await channel.deleteImage({ url: 'https://cdn/image.png' });
+		await channel.deleteFile({ url: 'https://cdn/file.pdf' });
+
+		expect(deleteImage).toHaveBeenCalledWith({ url: 'https://cdn/image.png' }, undefined);
+		expect(deleteFile).toHaveBeenCalledWith({ url: 'https://cdn/file.pdf' }, undefined);
 	});
 });

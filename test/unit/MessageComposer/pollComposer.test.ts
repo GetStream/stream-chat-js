@@ -260,11 +260,29 @@ describe('PollComposer', () => {
       const updateData = { name: 'Test Poll' };
       const spy = vi.spyOn(pollComposer.stateMiddlewareExecutor, 'execute');
 
-      await pollComposer.updateFields(updateData);
+      await pollComposer.updateFields({ data: updateData });
 
       expect(spy).toHaveBeenCalledWith({
         eventName: 'handleFieldChange',
         initialValue: expect.any(Object),
+      });
+    });
+
+    it('passes the data and injected errors to the middleware', async () => {
+      const spy = vi.spyOn(pollComposer.stateMiddlewareExecutor, 'execute');
+      const injectedFieldErrors = { max_votes_allowed: 'Too many' };
+
+      await pollComposer.updateFields({
+        data: { max_votes_allowed: '20' },
+        injectedFieldErrors,
+      });
+
+      expect(spy).toHaveBeenCalledWith({
+        eventName: 'handleFieldChange',
+        initialValue: expect.objectContaining({
+          injectedFieldErrors,
+          targetFields: { max_votes_allowed: '20' },
+        }),
       });
     });
 
@@ -281,7 +299,7 @@ describe('PollComposer', () => {
         status: 'discard',
       });
 
-      await pollComposer.updateFields(updateData);
+      await pollComposer.updateFields({ data: updateData });
 
       // Check that the state wasn't updated
       expect(pollComposer.state.getLatestValue()).toEqual(originalState);

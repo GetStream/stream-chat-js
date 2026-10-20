@@ -498,10 +498,10 @@ describe(DOCS, () => {
     });
 
     // or if you're using PollManager
-    const { polls: pollInstances } = await chatClient.polls.queryPolls(
-      { is_closed: true },
-      [{ field: 'created_at', direction: -1 }],
-    );
+    const { polls: pollInstances } = await chatClient.polls.queryPolls({
+      filter: { is_closed: true },
+      sort: [{ field: 'created_at', direction: -1 }],
+    });
     // the returned polls will be ones with reactive state
     // #endregion snippet
 

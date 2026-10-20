@@ -299,7 +299,7 @@ describe('ChannelState typing store', () => {
 		expect(state.getLatestValue()).to.deep.include({ typing: {} });
 	});
 
-	it('keeps typing store and textComposer typing in sync via setTypingEvent/removeTypingEvent', () => {
+	it('tracks typing in the store via setTypingEvent/removeTypingEvent', () => {
 		const client = new StreamChat();
 		const channel = new Channel(client, 'type', 'id', {});
 		const state = channel.state;
@@ -312,13 +312,66 @@ describe('ChannelState typing store', () => {
 
 		expect(state.typing).to.have.property('alice');
 		expect(state.getLatestValue().typing).to.have.property('alice');
-		expect(channel.messageComposer.textComposer.typing).to.have.property('alice');
+		expect(
+			channel.messageComposer.textComposer.state.getLatestValue(),
+		).to.not.have.property('typing');
 
 		state.removeTypingEvent('alice');
 
 		expect(state.typing).to.not.have.property('alice');
 		expect(state.getLatestValue().typing).to.not.have.property('alice');
-		expect(channel.messageComposer.textComposer.typing).to.not.have.property('alice');
+	});
+
+	describe('across text composer resets', () => {
+		let channel;
+		let composer;
+
+		const typingStart = (userId, receivedAtMs = Date.now()) => ({
+			type: 'typing.start',
+			user: { id: userId },
+			received_at: msToNs(receivedAtMs),
+		});
+		const typerIds = () => Object.keys(channel.state.typing).sort();
+
+		beforeEach(() => {
+			const client = new StreamChat();
+			client.user = { id: 'observer' };
+			channel = new Channel(client, 'type', 'id', {});
+			composer = channel.messageComposer;
+			channel.state.setTypingEvent('bob', typingStart('bob'));
+			channel.state.setTypingEvent('carol', typingStart('carol'));
+		});
+
+		it('keeps the typers when the composer is cleared', () => {
+			composer.clear();
+
+			expect(typerIds()).to.eql(['bob', 'carol']);
+		});
+
+		it('removes a typer who stops after the composer was cleared', () => {
+			composer.clear();
+			channel.state.removeTypingEvent('carol');
+
+			expect(typerIds()).to.eql(['bob']);
+		});
+
+		it('prunes a stale typer after the composer was cleared', () => {
+			channel.state.setTypingEvent('carol', typingStart('carol', Date.now() - 10000));
+			composer.clear();
+
+			channel.state.clean();
+
+			expect(typerIds()).to.eql(['bob']);
+		});
+
+		it('does not bring back a stopped typer when a composer snapshot is restored', () => {
+			const snapshot = composer.getSnapshot();
+			channel.state.removeTypingEvent('carol');
+
+			composer.restoreSnapshot(snapshot);
+
+			expect(typerIds()).to.eql(['bob']);
+		});
 	});
 });
 

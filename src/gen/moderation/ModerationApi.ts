@@ -112,7 +112,6 @@ export class ModerationApi {
 
   deleteActionConfig(
     pathParams: { id: string },
-    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<DeleteActionConfigResponse>> {
     return this.apiClient.sendRequest<DeleteActionConfigResponse>(
@@ -143,7 +142,6 @@ export class ModerationApi {
 
   getAppeal(
     pathParams: { id: string },
-    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<GetAppealResponse>> {
     return this.apiClient.sendRequest<GetAppealResponse>(
@@ -295,7 +293,6 @@ export class ModerationApi {
   }
 
   listQueues(
-    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<ListQueuesResponse>> {
     return this.apiClient.sendRequest<ListQueuesResponse>(
@@ -326,7 +323,6 @@ export class ModerationApi {
 
   getQueue(
     pathParams: { id: string },
-    _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<QueueResponse>> {
     return this.apiClient.sendRequest<QueueResponse>(

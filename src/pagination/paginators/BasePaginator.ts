@@ -3102,12 +3102,6 @@ export abstract class BasePaginator<T, Q> {
     try {
       return await this.query(params);
     } catch (e) {
-      const isOfflineSupportEnabledWithItems =
-        this.isOfflineSupportEnabled && (this.items ?? []).length > 0;
-      if (!isOfflineSupportEnabledWithItems) {
-        this.state.partialNext({ lastQueryError: e as Error });
-      }
-
       if (remainingRetries > 0) {
         await sleep(DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES);
         return await this.runQueryRetryable({
@@ -3115,6 +3109,14 @@ export abstract class BasePaginator<T, Q> {
           retryCount: remainingRetries - 1,
         });
       }
+
+      // run only once all retries are exhausted
+      const isOfflineSupportEnabledWithItems =
+        this.isOfflineSupportEnabled && (this.items ?? []).length > 0;
+      if (!isOfflineSupportEnabledWithItems) {
+        this.state.partialNext({ lastQueryError: e as Error });
+      }
+
       if (this.config.throwErrors) {
         this.state.partialNext({ isLoading: false });
         throw e;

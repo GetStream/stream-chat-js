@@ -32,7 +32,7 @@ Ordered by severity. The breaking dead-code removals and leftover decisions are 
 
 <a id="typing-stale"></a>
 
-### Typing indicators go stale after the composer resets
+### Typing indicators go stale after the composer resets [SOLVED f97ddd8b]
 
 `bug` · confidence: high · pre-release: yes · composer / channel state
 
@@ -43,7 +43,7 @@ Ordered by severity. The breaking dead-code removals and leftover decisions are 
 
 <a id="shared-markread-throttle"></a>
 
-### One mark-read throttle shared by every channel and thread
+### One mark-read throttle shared by every channel and thread [SOLVED 312e2e5c]
 
 `bug` · confidence: medium · pre-release: yes · message delivery / threads
 
@@ -54,7 +54,7 @@ Ordered by severity. The breaking dead-code removals and leftover decisions are 
 
 <a id="event-all-typing"></a>
 
-### `on('all')` and undeclared custom events are typed `never`
+### `on('all')` and undeclared custom events are typed `never` [SOLVED c103da00]
 
 `bug` · confidence: high · pre-release: yes · types / events
 
@@ -65,7 +65,7 @@ Ordered by severity. The breaking dead-code removals and leftover decisions are 
 
 <a id="event-star"></a>
 
-### `client.on('*')` type-checks but never fires
+### `client.on('*')` type-checks but never fires [SOLVED 79477d20]
 
 `bug` · confidence: high · pre-release: yes · types / events
 
@@ -76,7 +76,7 @@ Ordered by severity. The breaking dead-code removals and leftover decisions are 
 
 <a id="retry-error"></a>
 
-### Exhausted retries hide the API error; 429 now holds callers for about 100 s
+### Exhausted retries hide the API error; 429 now holds callers for about 100 s [SOLVED e295664a]
 
 `bug` · confidence: high · pre-release: yes · client / HTTP
 
@@ -87,7 +87,7 @@ Ordered by severity. The breaking dead-code removals and leftover decisions are 
 
 <a id="static-token-retries"></a>
 
-### Static expired token is retried 10 times
+### Static expired token is retried 10 times [SOLVED eef88681]
 
 `bug` · confidence: high · pre-release: yes · client / HTTP
 
@@ -98,7 +98,7 @@ Ordered by severity. The breaking dead-code removals and leftover decisions are 
 
 <a id="show-in-channel-edits"></a>
 
-### Edits to `show_in_channel` replies are not applied to the channel list
+### Edits to `show_in_channel` replies are not applied to the channel list [SOLVED dd1b8c7a]
 
 `bug` · confidence: medium · pre-release: yes · channel
 
@@ -109,7 +109,7 @@ Ordered by severity. The breaking dead-code removals and leftover decisions are 
 
 <a id="user-messages-deleted-window"></a>
 
-### `user.messages.deleted` only processes the active window
+### `user.messages.deleted` only processes the active window [SOLVED 45290f4e]
 
 `bug` · confidence: medium · pre-release: yes · channel / pagination
 
@@ -120,7 +120,7 @@ Ordered by severity. The breaking dead-code removals and leftover decisions are 
 
 <a id="recovery-disabled-no-event"></a>
 
-### `connectionRecovery.enabled: false` also suppresses `connection.recovered`
+### `connectionRecovery.enabled: false` also suppresses `connection.recovered` [SOLVED 311c28a2]
 
 `bug` · confidence: high · pre-release: yes · connection recovery
 
@@ -131,7 +131,7 @@ Ordered by severity. The breaking dead-code removals and leftover decisions are 
 
 <a id="reminder-paginator-flash"></a>
 
-### Reminder list blanks on every "load more"
+### Reminder list blanks on every "load more" [SOLVED 73a87752]
 
 `bug` · confidence: high · pre-release: yes · pagination / reminders
 
@@ -142,7 +142,7 @@ Ordered by severity. The breaking dead-code removals and leftover decisions are 
 
 <a id="last-query-error-flash"></a>
 
-### `lastQueryError` flashes on every failed retry attempt
+### `lastQueryError` flashes on every failed retry attempt [SOLVED 9cc208fd]
 
 `bug` · confidence: high · pre-release: yes · pagination / channel list
 
@@ -153,7 +153,7 @@ Ordered by severity. The breaking dead-code removals and leftover decisions are 
 
 <a id="message-search-sort"></a>
 
-### `messageSearchSort` cannot change the primary order
+### `messageSearchSort` cannot change the primary order [SOLVED e32c8d5e]
 
 `bug` · confidence: high · pre-release: yes · search
 
@@ -173,7 +173,7 @@ Ordered by severity. The breaking dead-code removals and leftover decisions are 
 
 <a id="query-date-filters-ns"></a>
 
-### Request date filters typed as `TimestampNS`
+### Request date filters typed as `TimestampNS` [SOLVED 202e6903]
 
 `bug` · confidence: medium · pre-release: yes · types / generated models
 
@@ -184,7 +184,7 @@ Ordered by severity. The breaking dead-code removals and leftover decisions are 
 
 <a id="pin-message"></a>
 
-### Positional `pinMessage` / `unpinMessage` wrappers
+### Positional `pinMessage` / `unpinMessage` wrappers [SOLVED be73434c]
 
 `simplification` · confidence: low · pre-release: yes · client
 
@@ -194,7 +194,7 @@ Ordered by severity. The breaking dead-code removals and leftover decisions are 
 
 <a id="placeholder-request"></a>
 
-### Placeholder `_request?: Record<string, never>` parameters
+### Placeholder `_request?: Record<string, never>` parameters [SOLVED 51fa7695]
 
 `simplification` · confidence: high · pre-release: yes · channel / generated API
 
@@ -214,7 +214,7 @@ Ordered by severity. The breaking dead-code removals and leftover decisions are 
 
 <a id="poll-update-fields"></a>
 
-### `PollComposer.updateFields` "change with the next major" FIXME
+### `PollComposer.updateFields` "change with the next major" FIXME [SOLVED 4f8f95cf]
 
 `simplification` · confidence: high · pre-release: yes · composer
 
@@ -1022,7 +1022,7 @@ Only places that survive the guide cleanup: JSDoc and code comments, README, CHA
 - **Where / What:**
   - `src/offline-support/offline_support_api.ts:285`: `getChannelsForQuery` `@returns` says `Omit<ChannelStateResponseFields, 'duration'>[] | null`; it returns `DBGetChannelsForQueryResult | null` (`{ channels, predefinedFilter? }`).
   - `src/offline-support/types.ts:189`: `DBGetChannelsForQueryType.options` is commented "Optional filters for channels."; it is the full `QueryChannelsRequest` used as the cache key.
-  - `src/offline-support/types.ts:31, 155, 167`, `src/moderation.ts:54`: bulk-rename artifacts ("MessageRequest to which the reaction is applied", "MessageRequest ID to be flagged", ...) where "message" is meant.
+  - `src/offline-support/types.ts:31, 155, 167`, `src/moderation.ts:54`: bulk-rename artifacts ("MessageRequest to which the reaction is applied", "MessageRequest ID to be flagged", ...) where "message" is meant. (`src/moderation.ts:54` [SOLVED be73434c]; the `offline-support/types.ts` ones remain)
 - **Suggested change:** Fix the `@returns` and describe `predefinedFilter`; reword the options comment; revert the artifacts to "message" and grep `MessageRequest ID\|MessageRequest to\|MessageRequest associated` across `src`.
 
 <a id="doc-paginator-jsdoc"></a>
@@ -1146,9 +1146,9 @@ Only places that survive the guide cleanup: JSDoc and code comments, README, CHA
 | `test/unit/MessageComposer/messageComposer.test.ts:1846, 1879`                   | "as not delivered" and "as not failed" have identical bodies (only the ms offset differs) and neither sets that status. Confidence medium.                                                  | Make each set the status it names.                             |
 | `src/messageComposer/attachmentManager.ts:667`                                   | New throw "The upload succeeded but the response carried no file URL" has no test.                                                                                                          | Add one.                                                       |
 | `src/search/MessageSearchSource.ts:259, 288`                                     | Both abort guards are untested since v9's "skips the channel hydration request when the query was aborted" was deleted.                                                                     | Restore the test.                                              |
-| `test/unit/search/MessageSearchSource.test.ts:272-276, 324-328`                  | Pins the contradictory sort from [messageSearchSort](#message-search-sort).                                                                                                                 | Update with the fix.                                           |
+| `test/unit/search/MessageSearchSource.test.ts:272-276, 324-328`                  | Pins the contradictory sort from [messageSearchSort](#message-search-sort). [SOLVED e32c8d5e]                                                                                               | Update with the fix.                                           |
 | `test/unit/signing.test.js:33-36`                                                | "round-trips ... non-Latin-1 ids" only asserts no throw.                                                                                                                                    | Assert `UserFromToken(DevToken(id)) === id` for non-ASCII ids. |
-| `src/channel.ts:2680`                                                            | No test covers `show_in_channel` reply edits ([item](#show-in-channel-edits)).                                                                                                              | Add one.                                                       |
+| `src/channel.ts:2680`                                                            | No test covers `show_in_channel` reply edits ([item](#show-in-channel-edits)). [SOLVED dd1b8c7a]                                                                                            | Add one.                                                       |
 | `src/thread_manager.ts:472-475`                                                  | No test covers unregister then register of the manager with loaded threads ([item](#thread-manager-reregister)).                                                                            | Add one.                                                       |
 | `test/unit/messageDelivery/MessageReceiptsTracker.test.ts` (`createChannelMock`) | Mock provides only the deprecated `userID`, blocking the `userId` switch.                                                                                                                   | Provide `userId`.                                              |
 

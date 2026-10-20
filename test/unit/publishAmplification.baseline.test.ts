@@ -192,6 +192,22 @@ describe('publish amplification — one event, one publish per collection', () =
     expect(recorder.stateCounts()).toEqual(FLOOR);
     recorder.stop();
   });
+
+  it('message.updated of a reply shown in the channel reaches every holder through the held thread', () => {
+    const { channel, client, held, recorder } = linked();
+    const thread = client.threads.get(PARENT_ID);
+
+    client.dispatchEvent({
+      cid: channel.cid,
+      message: generateMsg({ ...held, id: 'seed', text: 'edited' }),
+      type: 'message.updated',
+    } as never);
+
+    expect(channel.messagePaginator.getItem('seed')?.text).toBe('edited');
+    expect(channel.pinnedMessagesPaginator.getItem('seed')?.text).toBe('edited');
+    expect(thread?.messagePaginator.getItem('seed')?.text).toBe('edited');
+    recorder.stop();
+  });
 });
 
 describe('publish amplification — baseline (unthrottled)', () => {

@@ -44,13 +44,13 @@ import type {
   LocalMessage,
   OwnUserResponse,
   PartializeAllBut,
+  PinMessageOptions,
   QueryChannelsRequest,
   QueryChannelsResponse,
   QueryThreadsRequest,
   ReactionResponse,
   SdkIdentifier,
   StreamRequestOptions,
-  TimestampNS,
   TokenOrProvider,
   UnBanUserOptions,
   UpdateUserPartialRequest,
@@ -99,10 +99,6 @@ import type {
 import { ChatApi } from './gen-imports';
 import type { StreamResponse } from './types';
 
-function isString(value: unknown): value is string {
-  return typeof value === 'string' || value instanceof String;
-}
-
 const logger = chatLoggerSystem.getLogger('client');
 const offlineDbLogger = chatLoggerSystem.getLogger('offline-db');
 
@@ -120,13 +116,6 @@ export type ChannelConfigsState = {
 };
 
 export type ClientUser = PartializeAllBut<OwnUserResponse, 'id'> & { anon?: boolean };
-
-/**
- * `T`, unless it is a server-sent {@link TimestampNS}: for parameters where a bare `number` means a
- * relative offset rather than an instant. `any` passes through (`0 extends 1 & T`), so untyped
- * callers are not suddenly rejected.
- */
-type NotATimestampNS<T> = 0 extends 1 & T ? T : T extends TimestampNS ? never : T;
 
 /**
  * A thread query that asked for `watch: true` came back, so the server now watches the thread's
@@ -805,17 +794,12 @@ export class StreamChat extends ChatApi {
   /**
    * Retrieves application settings.
    *
-   * @param   _request - Unused. Holds the request position so `requestOptions` stays the
-   *   second argument, as on the generated methods; pass `undefined`.
    * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The application settings response.
    */
-  async getAppSettings(
-    _request?: Record<string, never>,
-    requestOptions?: StreamRequestOptions,
-  ) {
-    return await (this.appSettingsPromise = this.getApp(undefined, requestOptions));
+  async getAppSettings(requestOptions?: StreamRequestOptions) {
+    return await (this.appSettingsPromise = this.getApp(requestOptions));
   }
 
   /**
@@ -985,12 +969,12 @@ export class StreamChat extends ChatApi {
    * @returns An object with an `unsubscribe()` method.
    */
   on(callback: EventHandler): { unsubscribe: () => void };
-  on<T extends EventType | string>(
+  on<T extends EventType>(
     eventType: T,
     callback: EventHandler<T>,
   ): { unsubscribe: () => void };
   on(
-    callbackOrString: EventHandler | string,
+    callbackOrString: EventHandler | EventType,
     callbackOrNothing?: EventHandler,
   ): { unsubscribe: () => void } {
     const key = callbackOrNothing ? (callbackOrString as EventType) : 'all';
@@ -1025,8 +1009,8 @@ export class StreamChat extends ChatApi {
    * @param callbackOrNothing - The callback to remove when an event type was provided (optional).
    */
   off(callback: EventHandler): void;
-  off(eventType: string, callback: EventHandler): void;
-  off(callbackOrString: EventHandler | string, callbackOrNothing?: EventHandler) {
+  off<T extends EventType>(eventType: T, callback: EventHandler<T>): void;
+  off(callbackOrString: EventHandler | EventType, callbackOrNothing?: EventHandler) {
     const key = callbackOrNothing ? (callbackOrString as EventType) : 'all';
     const callback = callbackOrNothing
       ? callbackOrNothing
@@ -1895,97 +1879,27 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Transforms an expiration value into an ISO string.
-   *
-   * A `number` is an offset in SECONDS, not a timestamp — passing a wire `pin_expires` overflows
-   * `Date`, which used to surface as an opaque `RangeError` from `toISOString()`.
-   *
-   * @param timeoutOrExpirationDate - Expiration date or timeout. Use `number` to set the timeout
-   *   in seconds, `string` or `Date` to set the exact expiration date (optional).
-   * @returns The expiration as an ISO string, or `null`.
-   * @throws If a numeric offset does not resolve to a representable date.
-   */
-  _normalizeExpiration(timeoutOrExpirationDate?: null | number | string | Date) {
-    let pinExpires: null | string = null;
-    if (typeof timeoutOrExpirationDate === 'number') {
-      const expiresAt = new Date();
-      expiresAt.setSeconds(expiresAt.getSeconds() + timeoutOrExpirationDate);
-      if (Number.isNaN(expiresAt.getTime())) {
-        throw new Error(
-          `Expiration offset ${timeoutOrExpirationDate} does not resolve to a valid date`,
-        );
-      }
-      pinExpires = expiresAt.toISOString();
-    } else if (isString(timeoutOrExpirationDate)) {
-      pinExpires = timeoutOrExpirationDate;
-    } else if (timeoutOrExpirationDate instanceof Date) {
-      pinExpires = timeoutOrExpirationDate.toISOString();
-    }
-    return pinExpires;
-  }
-
-  /**
-   * Extracts a string message ID from either a message object or a message ID.
-   *
-   * @param messageOrMessageId - MessageRequest object or message ID.
-   * @param errorText - Error message to report in case of message ID absence.
-   * @returns The extracted message ID.
-   */
-  _validateAndGetMessageId(
-    messageOrMessageId: string | { id: string },
-    errorText: string,
-  ) {
-    let messageId: string;
-    if (typeof messageOrMessageId === 'string') {
-      messageId = messageOrMessageId;
-    } else {
-      if (!messageOrMessageId.id) {
-        throw Error(errorText);
-      }
-      messageId = messageOrMessageId.id;
-    }
-    return messageId;
-  }
-
-  /**
    * Pins the message.
    *
-   * A `number` is a relative offset in SECONDS, so a server-sent timestamp (`message.pinned_at`,
-   * `message.pin_expires`) is rejected at compile time rather than read as ~1.79e18 seconds from now.
-   * Hand one back as a date with `nsToDate(timestamp)`.
-   *
-   * @param messageOrMessageId - MessageRequest object or message ID.
-   * @param timeoutOrExpirationDate - Expiration date or timeout. Use `number` to set the timeout
-   *   in seconds, `string` or `Date` to set the exact expiration date (optional).
-   * @param pinnedAt - Date when the message should be pinned. It affects the order of pinned
-   *   messages. Use a negative number to set relative time in the past, `string` or `Date` to
-   *   set the exact date of pin (optional).
+   * @param message - The message to pin, or just its `{ id }`.
+   * @param options - When the pin expires and where it sorts (optional).
+   * @param options.pin_expires - When the pin expires, as a `Date` or an RFC3339 string; `null` or
+   *   leaving it out pins without expiry. Hand a server-sent timestamp back with `nsToDate(timestamp)`.
+   * @param options.pinned_at - The pin time, which orders the pinned messages, as a `Date` or an
+   *   RFC3339 string (optional, defaults to now).
    * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The updated message response.
    */
-  pinMessage<
-    Expiration extends null | number | string | Date | undefined = undefined,
-    PinnedAt extends number | string | Date | undefined = undefined,
-  >(
-    messageOrMessageId: string | { id: string },
-    timeoutOrExpirationDate?: NotATimestampNS<Expiration>,
-    pinnedAt?: NotATimestampNS<PinnedAt>,
+  pinMessage(
+    { id }: { id: string },
+    { pin_expires = null, pinned_at }: PinMessageOptions = {},
     requestOptions?: StreamRequestOptions,
   ) {
-    const id = this._validateAndGetMessageId(
-      messageOrMessageId,
-      'Please specify the message id when calling pinMessage',
-    );
+    if (!id) throw new Error('Please specify the message id when calling pinMessage');
     return this.updateMessagePartial(
       { id },
-      {
-        set: {
-          pinned: true,
-          pin_expires: this._normalizeExpiration(timeoutOrExpirationDate),
-          pinned_at: this._normalizeExpiration(pinnedAt),
-        },
-      },
+      { set: { pinned: true, pin_expires, pinned_at: pinned_at ?? null } },
       requestOptions,
     );
   }
@@ -1993,19 +1907,13 @@ export class StreamChat extends ChatApi {
   /**
    * Unpins the message that was previously pinned.
    *
-   * @param messageOrMessageId - MessageRequest object or message ID.
+   * @param message - The message to unpin, or just its `{ id }`.
    * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The updated message response.
    */
-  unpinMessage(
-    messageOrMessageId: string | { id: string },
-    requestOptions?: StreamRequestOptions,
-  ) {
-    const id = this._validateAndGetMessageId(
-      messageOrMessageId,
-      'Please specify the message id when calling unpinMessage',
-    );
+  unpinMessage({ id }: { id: string }, requestOptions?: StreamRequestOptions) {
+    if (!id) throw new Error('Please specify the message id when calling unpinMessage');
     return this.updateMessagePartial({ id }, { set: { pinned: false } }, requestOptions);
   }
 
@@ -2101,7 +2009,8 @@ export class StreamChat extends ChatApi {
   /**
    * Returns the thread of a message by its ID, wrapped in a hydrated `Thread` instance.
    *
-   * @param messageId - The message ID.
+   * @param pathParams - The thread's parent message, as for `getThread`.
+   * @param pathParams.message_id - The parent message ID.
    * @param options - Options object for pagination and limiting the participants and replies
    *   (optional, defaults to `{}`).
    * @param options.watch - Subscribes the user to the channel of the thread (optional).
@@ -2112,7 +2021,7 @@ export class StreamChat extends ChatApi {
    * @returns The thread.
    */
   async getThreadAndHydrate(
-    messageId: string,
+    { message_id: messageId }: { message_id: string },
     options: GetThreadOptions = {},
     requestOptions?: StreamRequestOptions,
   ) {

@@ -19,28 +19,30 @@ export class Moderation extends ModerationApi {
   /**
    * Flags a user.
    *
-   * @param flaggedUserId - User ID to be flagged.
-   * @param reason - Reason for flagging the user.
-   * @param options - Additional options for flagging the user (optional, defaults to `{}`).
-   * @param options.custom - Additional data to be stored with the flag (optional).
-   * @param options.entity_creator_id - ID of the user who created the flagged entity.
+   * @param request - The user to flag, the reason and any other flag option.
+   * @param request.user_id - User ID to be flagged.
+   * @param request.reason - Reason for flagging the user (optional).
+   * @param request.custom - Additional data to be stored with the flag (optional).
+   * @param request.entity_creator_id - ID of the user who created the flagged entity.
    *   Omitted when not supplied; the server resolves it from the entity (optional).
-   * @param options.moderation_payload - Content submitted for moderation alongside the
+   * @param request.moderation_payload - Content submitted for moderation alongside the
    *   flag (optional).
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The flag response.
    */
   flagUser(
-    flaggedUserId: string,
-    reason?: string,
-    options: ModerationFlagOptions = {},
+    {
+      user_id,
+      reason,
+      ...options
+    }: { user_id: string; reason?: string } & ModerationFlagOptions,
     requestOptions?: StreamRequestOptions,
   ) {
     return this.flag(
       {
         entity_type: MODERATION_ENTITY_TYPES.user,
-        entity_id: flaggedUserId,
+        entity_id: user_id,
         reason,
         ...options,
       },
@@ -51,28 +53,30 @@ export class Moderation extends ModerationApi {
   /**
    * Flags a message.
    *
-   * @param messageId - MessageRequest ID to be flagged.
-   * @param reason - Reason for flagging the message.
-   * @param options - Additional options for flagging the message (optional, defaults to `{}`).
-   * @param options.custom - Additional data to be stored with the flag (optional).
-   * @param options.entity_creator_id - ID of the user who created the flagged entity.
+   * @param request - The message to flag, the reason and any other flag option.
+   * @param request.message_id - ID of the message to be flagged.
+   * @param request.reason - Reason for flagging the message (optional).
+   * @param request.custom - Additional data to be stored with the flag (optional).
+   * @param request.entity_creator_id - ID of the user who created the flagged entity.
    *   Omitted when not supplied; the server resolves it from the entity (optional).
-   * @param options.moderation_payload - Content submitted for moderation alongside the
+   * @param request.moderation_payload - Content submitted for moderation alongside the
    *   flag (optional).
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The flag response.
    */
   flagMessage(
-    messageId: string,
-    reason?: string,
-    options: ModerationFlagOptions = {},
+    {
+      message_id,
+      reason,
+      ...options
+    }: { message_id: string; reason?: string } & ModerationFlagOptions,
     requestOptions?: StreamRequestOptions,
   ) {
     return this.flag(
       {
         entity_type: MODERATION_ENTITY_TYPES.message,
-        entity_id: messageId,
+        entity_id: message_id,
         reason,
         ...options,
       },

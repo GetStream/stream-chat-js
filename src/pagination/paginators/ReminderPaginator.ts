@@ -81,27 +81,27 @@ export class ReminderPaginator extends BasePaginator<
     });
   }
 
-  protected getNextQueryShape({
-    direction,
-  }: Required<
-    Pick<PaginationQueryParams<QueryRemindersRequest>, 'direction'>
-  >): QueryRemindersRequest {
-    const cursor = this.cursor?.[direction] ?? undefined;
+  protected getNextQueryShape(): QueryRemindersRequest {
     return {
       filter: this.filters,
       sort: this.sort,
       limit: this.pageSize,
-      // The request names its cursors after the response's `next` / `prev`, not after the direction.
-      ...(cursor ? { [direction === 'tailward' ? 'next' : 'prev']: cursor } : {}),
     };
   }
 
   query = async ({
+    direction,
     queryShape,
   }: PaginationQueryParams<QueryRemindersRequest>): Promise<
     PaginationQueryReturnValue<ReminderResponseData>
   > => {
-    const { reminders: items, next, prev } = await this.client.queryReminders(queryShape);
+    const cursor = direction ? (this.cursor?.[direction] ?? undefined) : undefined;
+    const request: QueryRemindersRequest = {
+      ...(queryShape ?? this.getNextQueryShape()),
+      // The request names its cursors after the response's `next` / `prev`, not after the direction.
+      ...(cursor ? { [direction === 'tailward' ? 'next' : 'prev']: cursor } : {}),
+    };
+    const { reminders: items, next, prev } = await this.client.queryReminders(request);
     return { items, headward: prev, tailward: next };
   };
 

@@ -18,7 +18,10 @@
  *
  * Outgoing **request** date fields are unaffected: they are still typed `Date`, because
  * `JSON.stringify` emits RFC3339 for a `Date` and that is the format the request spec declares.
- * Use {@link nsToDate} when handing a server-sent timestamp back to the API.
+ * Use {@link nsToDate} when handing a server-sent timestamp back to the API. That includes the
+ * `created_at_*` filters of `QueryMembersPayload`, `QueryBannedUsersPayload` and
+ * `QueryFutureChannelBansPayload`, which take a `Date` or an RFC3339 string: the API rejects a
+ * nanosecond number there.
  *
  * Precision note: nanosecond epoch values exceed `Number.MAX_SAFE_INTEGER` (~9.01e15), so they are
  * quantised to roughly 256 ns steps. Ordering is unaffected; exact equality against a value that

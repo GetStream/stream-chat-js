@@ -122,7 +122,6 @@ describe('TextComposer', () => {
         mentions: [],
         selection: { start: 0, end: 0 },
         text: '',
-        typing: {},
       });
     });
 
@@ -135,7 +134,6 @@ describe('TextComposer', () => {
         mentions: [],
         selection: { start: defaultValue.length, end: defaultValue.length },
         text: defaultValue,
-        typing: {},
       });
     });
 
@@ -281,7 +279,6 @@ describe('TextComposer', () => {
         mentions: [],
         selection: { start: 0, end: 0 },
         text: '',
-        typing: {},
       };
       const {
         messageComposer: { textComposer },
