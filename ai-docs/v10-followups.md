@@ -194,7 +194,7 @@ Ordered by severity. The breaking dead-code removals and leftover decisions are 
 
 <a id="placeholder-request"></a>
 
-### Placeholder `_request?: Record<string, never>` parameters [SOLVED 51fa7695]
+### Placeholder `_request?: Record<string, never>` parameters
 
 `simplification` · confidence: high · pre-release: yes · channel / generated API
 

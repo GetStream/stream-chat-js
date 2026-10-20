@@ -629,11 +629,16 @@ export class Channel extends ChannelApi {
   /**
    * Disables slow mode.
    *
+   * @param   _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
    * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The server response.
    */
-  async disableSlowMode(requestOptions?: StreamRequestOptions) {
+  async disableSlowMode(
+    _request?: Record<string, never>,
+    requestOptions?: StreamRequestOptions,
+  ) {
     return await this.update({ cooldown: 0 }, requestOptions);
   }
 
@@ -870,11 +875,13 @@ export class Channel extends ChannelApi {
    * @example
    * await channel.archive();
    *
+   * @param _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The server response.
    */
-  async archive(requestOptions?: StreamRequestOptions) {
+  async archive(_request?: Record<string, never>, requestOptions?: StreamRequestOptions) {
     return await this.updateMemberPartial({ set: { archived: true } }, requestOptions);
   }
 
@@ -884,11 +891,16 @@ export class Channel extends ChannelApi {
    * @example
    * await channel.unarchive();
    *
+   * @param _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The server response.
    */
-  async unarchive(requestOptions?: StreamRequestOptions) {
+  async unarchive(
+    _request?: Record<string, never>,
+    requestOptions?: StreamRequestOptions,
+  ) {
     return await this.updateMemberPartial({ set: { archived: false } }, requestOptions);
   }
 
@@ -898,11 +910,13 @@ export class Channel extends ChannelApi {
    * @example
    * await channel.pin();
    *
+   * @param _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The server response.
    */
-  async pin(requestOptions?: StreamRequestOptions) {
+  async pin(_request?: Record<string, never>, requestOptions?: StreamRequestOptions) {
     return await this.updateMemberPartial({ set: { pinned: true } }, requestOptions);
   }
 
@@ -912,11 +926,13 @@ export class Channel extends ChannelApi {
    * @example
    * await channel.unpin();
    *
+   * @param _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The server response.
    */
-  async unpin(requestOptions?: StreamRequestOptions) {
+  async unpin(_request?: Record<string, never>, requestOptions?: StreamRequestOptions) {
     return await this.updateMemberPartial({ set: { pinned: false } }, requestOptions);
   }
 
@@ -1030,10 +1046,15 @@ export class Channel extends ChannelApi {
    * Sends an event to notify watchers to clear the typing/thinking UI when the AI response starts streaming.
    * Typically used by the server connected to the AI service to inform clients that the AI response has started.
    *
+   * @param _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    */
-  async clearAIIndicator(requestOptions?: StreamRequestOptions) {
+  async clearAIIndicator(
+    _request?: Record<string, never>,
+    requestOptions?: StreamRequestOptions,
+  ) {
     await this.sendEvent(
       {
         event: {
@@ -1048,10 +1069,15 @@ export class Channel extends ChannelApi {
    * Sends an event to stop AI response generation, leaving the message in its current state.
    * Triggered by the user to halt the AI response process.
    *
+   * @param _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    */
-  async stopAIResponse(requestOptions?: StreamRequestOptions) {
+  async stopAIResponse(
+    _request?: Record<string, never>,
+    requestOptions?: StreamRequestOptions,
+  ) {
     await this.sendEvent(
       {
         event: {
