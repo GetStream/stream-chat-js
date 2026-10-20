@@ -2,9 +2,8 @@ import type { CursorDeriveContext, PaginationFlags } from '../paginators';
 import type { MessagePaginationParams, TimestampNS } from '../../types';
 
 /**
- * The query keys this helper understands when deriving a cursor direction. Not a request
- * shape — `MessagePaginationParams` and `PinnedMessagePaginationOptions` are both assignable
- * to it, and `offset` is present because the pinned-messages endpoint accepts one.
+ * The query keys understood when deriving a cursor direction. `MessagePaginationParams` and
+ * `PinnedMessagePaginationOptions` are both assignable to it (`offset` is for pinned messages).
  */
 type LinearPaginationQueryShape = {
   created_at_after?: Date;
@@ -85,9 +84,8 @@ export const deriveLinearPaginationFlags = <
     typeof queriedMessagesTowardsTail !== 'undefined' ||
     containsUnrecognizedOptionsOnly
   ) {
-    // Without the isFirstPage branch, a partial first page (e.g. an
-    // offline prehydrate returning fewer than `requestedPageSize`) latches `hasMoreTail`
-    // to `false` and a subsequent full network first page can never restore it.
+    // A partial first page (e.g. an offline prehydrate) must not latch `hasMoreTail` to `false`:
+    // a later full network first page has to be able to restore it.
     hasMoreTail = isFirstPage ? hasMore : !hasMoreTail ? false : hasMore;
   }
   if (typeof queriedMessagesTowardsHead !== 'undefined') {

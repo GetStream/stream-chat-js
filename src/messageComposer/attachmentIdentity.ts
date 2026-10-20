@@ -28,13 +28,7 @@ export const isLocalUploadAttachment = (
 ): attachment is LocalUploadAttachment =>
   !!(attachment as LocalAttachment)?.localMetadata?.uploadState;
 
-/**
- * Upload states meaning "the bytes are not on the CDN yet, but they are on their way".
- * `blocked` and `failed` are excluded - those never resolve on their own.
- *
- * Typed against {@link AttachmentLoadingState} rather than `string`, so renaming a state fails
- * the build instead of silently making this list match nothing - it decides what gets sent.
- */
+/** Upload states that still resolve on their own (`blocked` and `failed` never do). */
 const PENDING_UPLOAD_STATES: ReadonlyArray<AttachmentLoadingState> = [
   'pending',
   'uploading',
@@ -54,12 +48,7 @@ export const isFinishedUpload = (
   isLocalUploadAttachment(attachment) &&
   attachment.localMetadata.uploadState === 'finished';
 
-/**
- * Whether this attachment's upload resolved to a failure the user can retry.
- *
- * Distinct from `blocked`, which the server's upload configuration rejected outright - that one
- * can never succeed, however many times it is retried.
- */
+/** Whether this attachment's upload failed in a way that can be retried (unlike `blocked`). */
 export const isFailedUpload = (
   attachment: unknown,
 ): attachment is LocalUploadAttachment =>

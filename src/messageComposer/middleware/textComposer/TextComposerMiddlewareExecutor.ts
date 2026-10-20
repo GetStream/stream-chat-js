@@ -68,12 +68,7 @@ export class TextComposerMiddlewareExecutor<
     });
 
     const { query, searchSource } = result.state.suggestions ?? ({} as Suggestions);
-    /**
-     * Catching error just for sanity purposes.
-     * The BaseSearchSource.search() method returns debounced result.
-     * That means the result of the previous search call as the debounced call result is unknown at the moment.
-     * Custom search source implementation should handle errors meaningfully internally.
-     */
+    // `search` is debounced, so its errors are only logged. Custom sources should handle their own.
     searchSource
       ?.search(query)
       ?.catch((error) =>

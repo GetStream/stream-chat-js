@@ -42,9 +42,6 @@ import type {
 
 import type { ChatApi } from './gen-imports';
 
-/**
- * Utility Types
- */
 export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Omit<T, Keys> &
   {
     [K in Keys]-?: Required<Pick<T, K>> & Partial<Record<Exclude<Keys, K>, undefined>>;
@@ -55,15 +52,8 @@ export type RequireAtLeastOne<T> = {
 }[keyof T];
 
 /**
- * Response Types
- */
-
-/**
- * Legacy response envelope. Every generated response already carries `duration`, and the
- * transport wraps results in `StreamResponse<T>`, which also carries `metadata`.
- *
- * Only still referenced by the hand-written `/moderation/*` methods on `StreamChat` that
- * bypass the generated client. Delete this together with those.
+ * Used only by `StreamChat.unbanUser`, a hand-written `/moderation/*` call that bypasses the
+ * generated client.
  */
 export type APIResponse = {
   duration: string;
@@ -80,7 +70,7 @@ type ChannelItemsUpdate<Key extends string, Item> = Record<Key, Item[]> & {
   message?: MessageRequest;
 } & ChannelUpdateOptions;
 
-/** Request of `channel.addMembers`: user ids, or member requests with a role or custom data. */
+/** Request of `channel.addMembers`: user IDs, or member requests with a role or custom data. */
 export type AddMembersRequest = ChannelItemsUpdate<
   'members',
   string | ChannelMemberRequest
@@ -92,7 +82,7 @@ export type InviteMembersRequest = ChannelItemsUpdate<
   string | Required<Omit<ChannelMemberRequest, 'channel_role'>>
 >;
 
-/** Request of `channel.removeMembers`: the user ids to remove. */
+/** Request of `channel.removeMembers`: the user IDs to remove. */
 export type RemoveMembersRequest = ChannelItemsUpdate<'members', string>;
 
 /** Request of `channel.addFilterTags` and `channel.removeFilterTags`. */
@@ -112,37 +102,28 @@ export type GetThreadOptions = NonNullable<Parameters<ChatApi['getThread']>[1]>;
 export type PinMessageOptions = {
   /** When the pin expires; `null` or leaving it out pins without expiry. */
   pin_expires?: Date | string | null;
-  /** The pin time, which orders the pinned messages (defaults to now). */
+  /** The pin time, which orders the pinned messages. Defaults to now. */
   pinned_at?: Date | string;
 };
 
 /**
- * The fields that exist on the connected user (`OwnUserResponse`) but not on a plain
- * `UserResponse` — i.e. the own-user-only slice of the user object.
- *
- * Derived, never hand-listed: `client._handleUserEvent` uses this set (through
- * `isOwnUserBaseProperty`) to decide which keys survive a `user.updated` event, so a field
- * missing from it is silently deleted off `client.user`. Deriving it means a spec change
- * cannot desynchronise the two.
+ * The fields of `OwnUserResponse` that a plain `UserResponse` lacks. `client._handleUserEvent` uses
+ * it (through `isOwnUserBaseProperty`) to decide which keys survive a `user.updated` event.
  */
 export type OwnUserBase = Pick<
   OwnUserResponse,
   Exclude<keyof OwnUserResponse, keyof UserResponse>
 >;
 
-// Thumb URL(thumb_url) is added considering video attachments as the backend will return the thumbnail in the response.
 export type BanUserOptions = Omit<BanRequest, 'target_user_id'>;
 
 /**
  * Everything `queryChannels()` accepts apart from the filter and the sort.
  *
- * Derived from the generated request so new query options appear here automatically.
- *
- * On `predefined_filter`: the backend resolves the named filter template and interpolates it
- * with `filter_values`. A regular `sort` can still be passed, but backend precedence applies —
- * if the predefined filter has its own stored sort template that template wins and the request
- * `sort` is ignored; if it does not, the request `sort` is used. `sort_values` interpolates the
- * stored sort template's placeholders. All three are only read when `predefined_filter` is set.
+ * `predefined_filter` names a backend filter template, interpolated with `filter_values`. If that
+ * template has its own stored sort, it wins over the request `sort` and `sort_values` fills its
+ * placeholders; otherwise the request `sort` is used. `filter_values` and `sort_values` are sent
+ * only when `predefined_filter` is set.
  */
 export type ChannelOptions = Omit<QueryChannelsRequest, 'filter_conditions' | 'sort'>;
 
@@ -151,12 +132,8 @@ export type ChannelStateOptions = {
   skipInitialization?: string[];
   skipHydration?: boolean;
   /**
-   * Returns the full query response with hydrated channels from `queryChannels()`.
-   *
-   * This is a compatibility bridge for internal callers that need response level
-   * metadata such as `predefined_filter`. The default `queryChannels()` return value
-   * remains `Channel[]` to avoid a breaking change. This should be folded into a
-   * single full response API in the next major release.
+   * Makes `queryChannelsAndHydrate()` return the full query response (with hydrated `channels`,
+   * plus metadata such as `predefined_filter`) instead of `Channel[]`.
    */
   withResponse?: boolean;
 };
@@ -187,13 +164,9 @@ export type UnBanUserOptions = {
 export type UserOptions = Omit<QueryUsersPayload, 'filter_conditions' | 'sort'>;
 
 /**
- * Which of the two connections a status refers to, and so which store it came from.
- *
- * `'network'` is the device's own network status, reported by the platform reporter installed on
- * `client.networkConnection`. `'ws'` is this client's WebSocket. They are different facts and routinely
- * disagree: a socket dies on a working network (server close, expired token, health-check timeout),
- * and a device goes offline while the socket has not noticed yet — which is why each has its own
- * store and neither is derived from the other.
+ * Which connection a status refers to: `'network'` is the device's network (reported by the
+ * platform reporter installed on `client.networkConnection`), `'ws'` is this client's WebSocket.
+ * They can disagree, so each has its own store.
  */
 export type ConnectionType = 'network' | 'ws';
 
@@ -252,10 +225,6 @@ export type EventHandler<T extends EventType = 'all'> = (
   event: T extends 'all' ? Event : Extract<Event, { type: T }>,
 ) => void;
 
-/**
- * Filter Types
- */
-
 export type ReactionFilters = NonNullable<QueryReactionsRequest['filter']>;
 
 export type ChannelFilters = NonNullable<QueryChannelsRequest['filter_conditions']>;
@@ -279,20 +248,16 @@ export type OGAttachment = RequireLiteral<Attachment, 'og_scrape_url'>;
 export type PushProvider = CreateDeviceRequest['push_provider'];
 
 /**
- * Server-provided channel configuration, keyed by **cid** (`messaging:general`, …). Most of
- * `ChannelConfigWithInfo` is a type-level setting, but a channel's `config_overrides` can narrow it for
- * that channel alone, so the effective answer is per channel. Read it via `channel.serverConfig`.
+ * Server-provided channel configuration, keyed by cid (`messaging:general`). Keyed per channel
+ * because a channel's `config_overrides` can narrow its type's config. Read it via
+ * `channel.serverConfig`.
  */
 export type Configs = Record<string, ChannelConfigWithInfo | undefined>;
 
 export type ConnectionOpen = EventPayload<'health.check'> | EventPayload<'connection.ok'>;
 
 /**
- * The message `type` values the server can return.
- *
- * Hand-written because there is no generated equivalent: `MessageResponse['type']` is a bare
- * `string`, so deriving it would widen rather than narrow. Both the React and React Native
- * SDKs use this as a discriminant (RN types its SQLite message rows with it).
+ * The message `type` values the server can return (`MessageResponse['type']` is a bare `string`).
  */
 export type MessageLabel =
   | 'deleted'
@@ -322,13 +287,9 @@ export class StreamAPIError<T = APIError> extends Error {
       status,
       response,
     }: {
-      /**
-       * Stream error code (`APIError.code`)
-       */
+      /** Stream error code (`APIError.code`) */
       code: StreamAPIError<T>['code'];
-      /**
-       * HTTP status code
-       */
+      /** HTTP status code */
       status: StreamAPIError<T>['status'];
       response: StreamAPIError<T>['response'];
     },
@@ -376,9 +337,6 @@ export class StreamAPIError<T = APIError> extends Error {
   }
 }
 
-/**
- * Poll vote visibility. Derived from the generated request shape so it tracks the spec.
- */
 export type VotingVisibility = NonNullable<CreatePollRequest['voting_visibility']>;
 
 export type PartialPollUpdate = {
@@ -386,10 +344,7 @@ export type PartialPollUpdate = {
   unset?: Array<keyof UpdatePollRequest>;
 };
 
-/**
- * Options accepted by `moderation.flagUser` / `moderation.flagMessage` on top of the
- * entity they resolve and the `reason` they take positionally.
- */
+/** Options of `moderation.flagUser` / `moderation.flagMessage` besides the entity and `reason`. */
 export type ModerationFlagOptions = Omit<
   FlagRequest,
   'entity_id' | 'entity_type' | 'reason'
@@ -413,26 +368,17 @@ export const AIStates = {
   Thinking: 'AI_STATE_THINKING',
 } as const satisfies Record<string, AIState>;
 
-/**
- * An identifier containing information about the downstream SDK using stream-chat. It
- * is used to resolve the user agent.
- */
+/** The downstream SDK using stream-chat, used to resolve the user agent. */
 export type SdkIdentifier = {
   name: 'react' | 'react-native' | 'expo' | 'angular';
   version: string;
 };
 
-/**
- * An identifier containing information about the downstream device using stream-chat, if
- * available. Is used by the react-native SDKs to enrich the user agent further.
- */
+/** The downstream device, used by the React Native SDKs to enrich the user agent. */
 export type DeviceIdentifier = { os: string; model?: string };
 
 /**
- * An identifier containing information about the downstream application integrating
- * stream-chat, if available. `name` is reported as `app` and `version` as `app_version`
- * in the user agent. Distinct from the SDK ({@link SdkIdentifier}) and device
- * ({@link DeviceIdentifier}) identifiers.
+ * The downstream app: `name` is reported as `app` and `version` as `app_version` in the user agent.
  */
 export type AppIdentifier = { name: string; version?: string };
 
@@ -494,10 +440,6 @@ export type DeleteMessageOptions = NonNullable<Parameters<ChatApi['deleteMessage
 export type SendMessageAPIResponse = StreamResponse<SendMessageResponse>;
 export type UpdateMessageOptions = Omit<UpdateMessageRequest, 'message'>;
 export type UpdateMessageAPIResponse = StreamResponse<UpdateMessageResponse>;
-/**
- * The Giphy rendition names, derived from the generated `Images` shape so the two cannot
- * drift. Consumed by the React and React Native SDKs to pick a rendition size.
- */
 export type GiphyVersions = keyof Images;
 export type TranslationLanguage = TranslateMessageRequest['language'];
 
@@ -510,8 +452,7 @@ export type FileReferenceBase = {
 export type FileUploadInput = File | Blob | FileReferenceBase | string;
 
 /**
- * Structural subset of axios' `AxiosProgressEvent`, kept transport-agnostic on purpose so the
- * public surface does not depend on axios.
+ * Structural subset of axios' `AxiosProgressEvent`, so the public surface does not depend on axios.
  */
 export type StreamProgressEvent = {
   loaded: number;
@@ -524,9 +465,7 @@ export type StreamRequestOptions = {
   signal?: AbortSignal;
   /** Only meaningful for upload (multipart) requests; ignored everywhere else. */
   onUploadProgress?: (event: StreamProgressEvent) => void;
-  /**
-   * Milliseconds before this request is aborted.
-   */
+  /** Milliseconds before this request is aborted. */
   timeout?: number;
 };
 

@@ -10,8 +10,8 @@ export type MinimumUploadRequestResult = { file: string; thumb_url?: string } & 
 
 /**
  * Optional second argument to `UploadRequestFn`.
- * - Call `onProgress` to report 0–100 or `undefined` when indeterminate.
- * - Forward `abortSignal` to your upload implementation to cancel the upload if the user deletes the attachment while it's uploading.
+ * - Call `onProgress` to report 0 to 100, or `undefined` when indeterminate.
+ * - Forward `abortSignal` to your upload to cancel it when the attachment is deleted mid-upload.
  */
 export type UploadRequestOptions = {
   onProgress?: (percent: number | undefined) => void;
@@ -30,7 +30,7 @@ export type DraftsConfiguration = {
 export type TextComposerConfig = {
   /** If false, the text input, change and selection events are disabled */
   enabled: boolean;
-  /** If true, triggers typing events on text input keystroke. Disabled for threads and message editing by default. */
+  /** If true, triggers typing events on text input keystroke. Defaults to `true`. */
   publishTypingEvents: boolean;
   /** Default value for the message input */
   defaultValue?: string;
@@ -65,66 +65,53 @@ export type CommandsConfig = {
 
 export type AttachmentManagerConfig = {
   /**
-   * Allows for toggling file attachments (defaults to `true`). The feature also has to be enabled at the
-   * channel-level config via `uploads`; the two are ANDed, so either side can switch it off.
+   * Toggles file attachments. ANDed with the channel config's `uploads` unless `customCdn` is set.
+   * Defaults to `true`.
    */
   enabled: boolean;
   // todo: document removal of noFiles prop showing how to achieve the same with custom fileUploadFilter function
-  /**
-   * Function that allows to prevent uploading files based on the functions output.
-   * Use this option to simulate deprecated prop noFiles which was actually a filter to upload only image files.
-   */
+  /** Prevents uploading a file when it returns `false`. */
   fileUploadFilter: FileUploadFilter;
   /** Maximum number of attachments allowed per message */
   maxNumberOfFilesPerMessage: number;
   /**
-   * Array of one or more file types, or unique file type specifiers (https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/accept#unique_file_type_specifiers),
-   * describing which file types are allowed to be selected when uploading files.
+   * File types or unique file type specifiers
+   * (https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/accept#unique_file_type_specifiers)
+   * allowed for selection. Empty means all files.
    */
   acceptedFiles: string[];
   /** Function that allows to customize the upload request. */
   doUploadRequest?: UploadRequestFn;
   /**
-   * Whether a custom {@link AttachmentManagerConfig.doUploadRequest} stores files somewhere Stream does
-   * not host (defaults to `false`).
-   *
-   * Left `false`, uploads are treated as reaching Stream — which covers the built-in request *and* a
-   * custom one that still posts to Stream, such as a wrapper adding retries or headers, or a proxy
-   * through your own backend. Stream's rules then govern attachments: the `upload-file` capability and
-   * the channel type's `uploads` flag.
-   *
-   * Set it to `true` when the bytes never reach Stream. Stream has no say over storage it does not host,
-   * so neither rule applies and the feature is governed by {@link AttachmentManagerConfig.enabled} alone.
-   *
-   * Declared rather than inferred from the presence of `doUploadRequest`, because supplying an upload
-   * function says *how* files are sent, not *where* — and treating it as a destination waived Stream's
-   * constraints for integrators who were still uploading to Stream.
+   * Whether a custom {@link AttachmentManagerConfig.doUploadRequest} stores files outside Stream.
+   * When `false`, Stream's rules apply (the `upload-file` capability and the channel type's
+   * `uploads` flag). When `true`, only {@link AttachmentManagerConfig.enabled} governs uploads.
+   * Defaults to `false`.
    */
   customCdn: boolean;
   /**
-   * When `true`, a message may be sent while its attachments are still uploading (defaults to
-   * `false`). The message is composed and shown right away, and the send request waits for those
-   * uploads to settle before it goes out; if one of them fails, the whole message fails.
+   * When `true`, a message may be sent while its attachments are still uploading. The message is
+   * composed and shown right away, and the send request waits for those uploads to settle before
+   * it goes out; if one of them fails, the whole message fails. Defaults to `false`.
    */
   pendingUploadsEnabled: boolean;
   /**
    * When `true`, the attachment manager sets `localMetadata.uploadProgress` and passes
    * `options.onProgress` to `doUploadRequest` (built-in and custom). Set to `false` to disable
-   * progress tracking (defaults to `true`).
+   * progress tracking. Defaults to `true`.
    */
   trackUploadProgress: boolean;
 };
 
 export type LinkPreviewsManagerConfig = {
-  /** Number of milliseconds to debounce firing the URL enrichment queries when typing (defaults to `1500`). */
+  /**
+   * Number of milliseconds to debounce firing the URL enrichment queries when typing. Defaults to
+   * `1500`.
+   */
   debounceURLEnrichmentMs: number;
   /**
-   * Allows for toggling URL enrichment and link previews in `MessageInput` (defaults to `true`).
-   *
-   * ANDed with the channel type's `url_enrichment`, so previews appear only where the server will
-   * actually enrich the message. `true` is the default for the same reason every other server-gated
-   * feature uses it: it means "no opinion — let the server decide". A `false` default double-gated the
-   * feature, leaving it off even where the server had enabled it.
+   * Toggles URL enrichment and link previews. ANDed with the channel type's `url_enrichment`.
+   * Defaults to `true`.
    */
   enabled: boolean;
   /** Custom function to identify URLs in a string and request OG data */
@@ -135,47 +122,33 @@ export type LinkPreviewsManagerConfig = {
 
 export type LocationComposerConfig = {
   /**
-   * Allows for toggling the location addition (defaults to `true`). The feature also has to be
-   * enabled at the channel-level config via `shared_locations`.
+   * Toggles location sharing. ANDed with the channel config's `shared_locations`. Defaults to
+   * `true`.
    */
   enabled: boolean;
   /** Function that provides a stable ID for the device from which the location is shared. */
   getDeviceId: () => string;
-  /**
-   * Shortest live-location duration accepted as valid (defaults to 60s). A shorter `durationMs` makes
-   * the composed location invalid rather than clamping it, so this is a product decision about the
-   * minimum useful sharing window — not a protocol limit.
-   */
+  /** Shortest live-location duration in ms. A shorter `durationMs` is invalid. Defaults to 60s. */
   minShareDurationMs: number;
 };
 
 export type PollComposerConfig = {
-  /**
-   * Allows for toggling poll composition (defaults to `true`). The feature also has to be enabled at the
-   * channel-level config via `polls`; the two are ANDed, so either side can switch it off.
-   */
+  /** Toggles poll composition. ANDed with the channel config's `polls`. Defaults to `true`. */
   enabled: boolean;
 };
 
 export type MessageComposerConfig = {
   /** If true, enables creating drafts on the server */
   drafts: DraftsConfiguration;
-  /** Configuration for command sendability validation */
   commands: CommandsConfig;
-  /** Configuration for the attachment manager */
   attachments: AttachmentManagerConfig;
-  /** Configuration for the link previews manager */
   linkPreviews: LinkPreviewsManagerConfig;
-  /** Configuration for the location composer */
   location: LocationComposerConfig;
-  /** Configuration for the poll composer */
   polls: PollComposerConfig;
   /**
-   * Decides whether submitting keeps the composer's contents instead of clearing them, and whether
-   * the attachments composition step leaves unresolved uploads behind with them. Defaults to
-   * retaining for a poll message, which carries no text or attachments of its own.
+   * Whether submitting keeps the composer's contents instead of clearing them (also leaving unresolved
+   * uploads in place). Defaults to retaining for a poll message.
    */
   retainCompositionOnSubmit: (composer: MessageComposer) => boolean;
-  /** Maximum number of characters in a message */
   text: TextComposerConfig;
 };

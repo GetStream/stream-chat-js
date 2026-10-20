@@ -1,12 +1,7 @@
 /**
- * Partition-point ("lower bound") binary search over the index range `[0, length)`.
- *
- * `predicate` must be **monotonic** over the range — `false` for a (possibly empty) prefix, then
- * `true` for the remaining suffix. Returns the first index at which `predicate(index)` holds, or
- * `length` if it never does. O(log length).
- *
- * Unlike `binarySearch`, this locates a *boundary* defined by a predicate rather than a specific
- * item by identity — e.g. "first message at/after a timestamp" over a chronologically sorted array.
+ * Lower-bound binary search over `[0, length)`: the first index where `predicate` holds, or `length`.
+ * `predicate` must be monotonic (`false` for a prefix, then `true`), e.g. "first item at or
+ * after a timestamp" over a sorted array.
  */
 export function lowerBound(
   length: number,
@@ -53,7 +48,7 @@ export function locateOnPlateauAlternating<T>(
     const rightOut =
       rightIndex >= items.length || compare(items[rightIndex], needle) !== 0;
     const leftOut = leftIndex < 0 || compare(items[leftIndex], needle) !== 0;
-    if (rightOut && leftOut) break; // plateau exhausted
+    if (rightOut && leftOut) break;
   }
 
   return -1;
@@ -68,11 +63,9 @@ export function locateOnPlateauScanOneSide<T>(
 ): number {
   const targetId = getItemId(needle);
 
-  // scan left
   for (let i = insertionIndex - 1; i >= 0 && compare(items[i], needle) === 0; i--) {
     if (getItemId(items[i]) === targetId) return i;
   }
-  // scan right
   for (let i = insertionIndex; i < items.length && compare(items[i], needle) === 0; i++) {
     if (getItemId(items[i]) === targetId) return i;
   }

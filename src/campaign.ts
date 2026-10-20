@@ -1,1 +1,1 @@
-// Campaign functionality has been moved to the server-side SDK.
+// Campaigns are available in the server-side SDK.

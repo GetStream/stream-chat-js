@@ -45,43 +45,35 @@ const DEFAULT_BACKEND_SORT: SortParamRequest[] = [
 ];
 
 /**
- * The `queryChannels` request this paginator will send, plus the client-only `stateOptions`.
- *
- * Deliberately the request's own shape (`filter_conditions`, `sort`, `limit`, `predefined_filter`, …)
- * rather than a `{ filters, sort, options }` wrapper: the same object goes on the wire, keys the
- * offline-db cache and is compared for query-shape changes, so any field mapping in between would be a
- * place for those three to drift apart. `MessageQueryShape` is likewise the request params themselves.
+ * The `queryChannels` request this paginator sends, plus the client-only `stateOptions`. It is the
+ * request's own shape because the same object goes on the wire, keys the offline-db cache and is
+ * compared for query-shape changes.
  */
 export type ChannelQueryShape = QueryChannelsRequest & {
-  /** Not part of the request — controls how the response is applied to client state. */
+  /** Not part of the request: controls how the response is applied to client state. */
   stateOptions?: ChannelStateOptions;
 };
 
 export type ChannelPaginatorState = PaginatorState<Channel>;
 
 /**
- * Request options sent with every page query (`state`, `watch`, `presence`, `message_limit`, …).
- * `limit` and `offset` are owned by the paginator: set the page size with
- * `paginatorOptions.pageSize` (the v9 `ChannelManager` `options.limit`).
+ * Request options sent with every page query (`state`, `watch`, `presence`, `message_limit`, ...).
+ * `limit` and `offset` belong to the paginator: set the page size with `paginatorOptions.pageSize`.
  */
 export type ChannelPaginatorRequestOptions = Partial<
   Omit<ChannelOptions, 'offset' | 'limit'>
 >;
 
 export type ChannelSortComparatorFactoryParams = {
-  /** Sort the comparator is being built for — the effective sort, so a backend-resolved sort template. */
+  /** The effective sort the comparator is built for (a backend-resolved template, if any). */
   sort: SortParamRequest[];
-  /**
-   * The comparator `ChannelPaginator` would use for this sort. Delegate to it for the fields you do not
-   * want to handle yourself instead of reimplementing channel field resolution and the cid tiebreaker.
-   */
+  /** The comparator `ChannelPaginator` would use: delegate to it for the fields you do not handle. */
   defaultComparator: (a: Channel, b: Channel) => number;
 };
 
 /**
- * Produces the comparator that orders this paginator's channels. Consulted on **every** comparator
- * rebuild (construction, `sort` change, backend-resolved predefined sort), so unlike assigning
- * `sortComparator` directly, a factory is not overwritten by later sort changes.
+ * Produces the comparator that orders the channels. Consulted on every rebuild (construction,
+ * `sort` change, backend-resolved predefined sort), so later sort changes do not overwrite it.
  */
 export type ChannelSortComparatorFactory = (
   params: ChannelSortComparatorFactoryParams,
@@ -98,18 +90,15 @@ export type ChannelPaginatorOptions = {
   sort?: SortParamRequest[];
   sortComparatorFactory?: ChannelSortComparatorFactory;
   /**
-   * The channel store the list's index holds its channels in. Defaults to `client.channelManager`'s
-   * store, so every list shares one instance per cid and keeps the channels it lists stored.
+   * The channel store backing the list's index. Defaults to `client.channelManager`'s store, shared
+   * by every list.
    *
    * @internal
    */
   store?: EntityStore<Channel>;
 };
 
-/**
- * What identifies the query itself, as opposed to which page of it is being requested. Two shapes with
- * the same identity continue one pagination; a different identity restarts it from the first page.
- */
+/** The query without its page: shapes with the same identity continue one pagination. */
 const getQueryIdentity = (queryShape: ChannelQueryShape | undefined) => {
   if (!queryShape) return queryShape;
   const {
@@ -133,9 +122,8 @@ const archivedFilterResolver: FieldToDataResolver<Channel> = {
   resolve: (channel) => channel.state.membership.archived_at != null,
 };
 
-// The resolvers that need the current user or the client's mute list read them from the list's own
-// client, not through `channel.getClient()`: that throws once the channel is disposed (to stop requests
-// for it), and a disposed channel must still sort and filter, so that a list can locate it to drop it.
+// Resolvers needing the user or the mute list use the list's client, not `channel.getClient()`: that
+// throws on a disposed channel, which must still sort and filter so a list can locate and drop it.
 
 const createAppBannedFilterResolver = (
   client: StreamChat,
@@ -169,9 +157,7 @@ const createHasUnreadFilterResolver = (
 
 const hiddenFilterResolver: FieldToDataResolver<Channel> = {
   matchesField: (field) => field === 'hidden',
-  // `hidden` is optional on ChannelResponse, so a response that omits it (and a channel that was never
-  // hidden or shown) leaves `channel.data.hidden` undefined. Coerce to a boolean so `{ hidden: false }`
-  // matches those channels instead of comparing undefined against false.
+  // `hidden` is optional on the response: coerce so `{ hidden: false }` matches channels without it.
   resolve: (channel) => !!channel.data?.hidden,
 };
 
@@ -193,8 +179,8 @@ const membersFilterResolver: FieldToDataResolver<Channel> = {
           return ids;
         }, [])
       : [];
-    // Only a page of a large channel's members may be loaded, but the current user's membership is
-    // always there, so `members: { $in: [ownId] }` holds even when they aren't in that page.
+    // Only a page of a large channel's members may be loaded, but the own membership always is, so
+    // `members: { $in: [ownId] }` holds.
     const { membership } = channel.state;
     const ownId = membership?.user?.id ?? membership?.user_id;
     if (ownId && !ids.includes(ownId)) ids.push(ownId);
@@ -222,21 +208,14 @@ const pinnedFilterResolver: FieldToDataResolver<Channel> = {
 
 const createMutedFilterResolver = (client: StreamChat): FieldToDataResolver<Channel> => ({
   matchesField: (field) => field === 'muted',
-  // UserMuteResponse state lives on the client (client.mutedChannels), not on channel.data — resolve it via
-  // the client so `{ muted: true/false }` matches client-side, rather than letting the generic
-  // data resolver read a non-existent `channel.data.muted` (which would resolve to undefined and
-  // never equal a boolean filter value).
+  // Mute state lives on the client (`client.mutedChannels`), not in `channel.data`.
   resolve: (channel) => client._muteStatus(channel.cid).muted,
 });
 
 /**
- * A channel field by path: from `channel.data`, or, for a field it doesn't have, from
- * `channel.data.custom`, where a channel response keeps `name` and the app's custom fields. So
- * `{ name: … }` and `{ color: … }` match what `{ 'custom.name': … }` and `{ 'custom.color': … }` do.
- *
- * `type`, `id` and `cid` come from the instance, which has them from construction, while
- * `channel.data` has them only after a query: a stored channel an event reaches before its first
- * query (such as one a thread created) must still match `{ type: … }`.
+ * A channel field by path: from `channel.data`, else from `channel.data.custom` (where a response
+ * keeps `name` and custom fields). `type`, `id` and `cid` come from the instance, since
+ * `channel.data` has them only after a query.
  */
 const resolveChannelDataValue = (channel: Channel, path: string) => {
   if (path === 'type' || path === 'id' || path === 'cid') return channel[path];
@@ -249,7 +228,7 @@ const dataFieldFilterResolver: FieldToDataResolver<Channel> = {
   resolve: resolveChannelDataValue,
 };
 
-// very, very unfortunately channel data is dispersed btw Channel.data and Channel.state
+// Channel data is split between `Channel.data` and `Channel.state`.
 const createChannelSortPathResolver = (client: StreamChat): PathResolver<Channel> => {
   const hasUnreadResolver = createHasUnreadFilterResolver(client);
   return (channel, path) => {
@@ -276,23 +255,18 @@ const createChannelSortPathResolver = (client: StreamChat): PathResolver<Channel
 };
 
 /**
- * A paginated channel list. Filters are described along three independent axes — the names follow them:
+ * A paginated channel list. `staticFilters` are the filters this client asked for, `filterBuilder`
+ * adds dynamic ones from its reactive context (merged over the static ones on every build). For a
+ * `predefined_filter` query the backend reports what it applied (`predefinedFilter`), which wins
+ * over `staticFilters` in `effectiveFilters` (and over `sort` in `effectiveSort`).
  *
- * - origin: `staticFilters` are supplied at construction and fixed; `filterBuilder` generates the
- *   dynamic ones from its reactive context on every build. Every build merges dynamic over static.
- * - authority: `staticFilters` are what this client asked for; `predefinedFilter` is what the backend
- *   reports it actually applied for a `predefined_filter` query. `effectiveFilters` is the winner of the
- *   two (and `effectiveSort` likewise for ordering).
- * - purpose: `buildQueryFilters()` produces the filters sent to the server (and the offline-db query
- *   key), built from the local filters only; `buildMatchFilters()` produces the filters items are
- *   matched against locally, built from `effectiveFilters`. They are not interchangeable: sending the
- *   resolved filter back changes the query shape mid-pagination, and matching against the local filter
- *   admits channels the queried list excludes.
+ * `buildQueryFilters()` (sent to the server, offline-db query key) uses the local filters only and
+ * `buildMatchFilters()` (local matching) uses `effectiveFilters`. Do not swap them: sending the
+ * resolved filter back changes the query shape mid-pagination, and matching on the local filter
+ * admits channels the list excludes.
  *
- * Ordering follows the same authority rule: `sortComparator` is derived from `effectiveSort` and is
- * rebuilt whenever that changes, so it must not be assigned to. Customize it through
- * `sortComparatorFactory` (constructor option or setter, consulted on every rebuild) or by overriding
- * `buildSortComparator` in a subclass.
+ * `sortComparator` is derived from `effectiveSort` and rebuilt when it changes, so do not assign
+ * it: use `sortComparatorFactory` or override `buildSortComparator`.
  */
 export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> {
   private readonly _id: string;
@@ -304,16 +278,13 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   protected _nextQueryShape: ChannelQueryShape | undefined;
   /** Backend-reported metadata of the last `predefined_filter` query (see `predefinedFilter`). */
   protected _predefinedFilter: ParsedPredefinedFilterResponse | undefined;
-  /**
-   * Predefined-filter metadata from the response of the query currently in flight. Held until
-   * `postQueryReconcile` decides whether it should be committed (first page only).
-   */
+  /** Metadata of the in-flight response, committed by `postQueryReconcile` on a first page only. */
   private _pendingPredefinedFilter: ParsedPredefinedFilterResponse | undefined;
   /**
-   * True while the loaded items came ONLY from the offline cache - seeded by `setItems`, never
-   * confirmed by a query. Such a state has no pagination position worth continuing from, so the seed
-   * records `offset = <cache size>` and a query shape, which is what makes the next query look like a
-   * continuation rather than a first page. See `executeQuery`.
+   * True while the loaded items came only from the offline cache (seeded by `setItems`, never
+   * confirmed by a query). The seed's offset and query shape would make the next query a
+   * continuation, but a cache has no pagination position, so `executeQuery` forces a first page that
+   * keeps the items.
    */
   private _itemsLoadedFromOfflineDB = false;
   /** The query in flight refreshes a cache-only window, so its response replaces the window. */
@@ -371,8 +342,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       memberUserNameFilterResolver,
       dataFieldFilterResolver,
     ]);
-    // since channels are reactive objects, we only really care about updating the
-    // list if their order of membership in the list changes.
+    // Channels are reactive objects: republish only when the list's membership or order changes.
     this.state.addPreprocessor((next, previous) => {
       if (previous && hasSameItems(previous.items, next.items))
         next.items = previous.items;
@@ -380,15 +350,10 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   }
 
   /**
-   * Builds the comparator for the given sort — the single construction point, so every rebuild (the
-   * `sort` setter, a backend-resolved predefined sort) keeps the channel-specific path resolver and the
-   * cid tiebreaker; omitting either makes ordering fall back to raw `channel.data` lookups and become
-   * non-deterministic for equal sort values.
-   *
-   * `sortComparator` is derived state and is therefore reassigned on every rebuild — assigning to it
-   * directly does not survive a sort change or a predefined-filter response. To customize ordering,
-   * supply `sortComparatorFactory` (it is consulted on every rebuild and may delegate to
-   * `defaultComparator`), or override this method in a subclass.
+   * The single construction point of `sortComparator`, so every rebuild keeps the channel path
+   * resolver and the cid tiebreaker. Customize it with `sortComparatorFactory` (which may delegate
+   * to `defaultComparator`) or by overriding this method: assigning `sortComparator` directly is
+   * lost on the next rebuild.
    */
   protected buildSortComparator(sort: SortParamRequest[]) {
     const defaultComparator = makeComparator<Channel>({
@@ -423,31 +388,22 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   }
 
   /**
-   * What the backend reported it actually filtered and sorted by for the last first-page query —
-   * `QueryChannelsResponse.predefined_filter` (`name`, `filter`, and `sort` when the stored filter
-   * carries its own sort template). Set only for `predefined_filter` queries: the raw `filter_conditions`
-   * of a normal query are not echoed back.
+   * What the backend reported it filtered and sorted by for the last first-page query
+   * (`QueryChannelsResponse.predefined_filter`: `name`, `filter`, and `sort` when the stored filter
+   * has a sort template). Set only for `predefined_filter` queries.
    */
   get predefinedFilter(): ParsedPredefinedFilterResponse | undefined {
     return this._predefinedFilter;
   }
 
-  /**
-   * Filters this paginator matches items against client-side. A predefined filter resolved by the backend
-   * wins over the locally configured one: for such a query the local `filters` are not what the server
-   * applied, so matching against them would admit items the queried list excludes.
-   */
+  /** Filters items are matched against locally: the backend-resolved one, else `staticFilters`. */
   get effectiveFilters(): ChannelFilters | undefined {
     return (
       (this._predefinedFilter?.filter as ChannelFilters | undefined) ?? this.staticFilters
     );
   }
 
-  /**
-   * Sort this paginator orders items by. Mirrors `effectiveFilters`: a sort template carried by a
-   * backend-resolved predefined filter takes precedence over the requested sort, matching backend
-   * precedence rules.
-   */
+  /** The sort items are ordered by: the backend-resolved predefined sort template, else `sort`. */
   get effectiveSort(): SortParamRequest[] {
     return (this._predefinedFilter?.sort as SortParamRequest[] | undefined) ?? this.sort;
   }
@@ -482,10 +438,8 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   }
 
   /**
-   * Take over channel ordering at any point in the paginator's life. The comparator is rebuilt
-   * immediately and the factory is consulted again on every later rebuild, so — unlike assigning
-   * `sortComparator` — a sort change or a backend-resolved predefined sort will not discard it. Set to
-   * `undefined` to go back to the built-in ordering.
+   * Rebuilds the comparator immediately; later rebuilds consult the factory again, so a sort change
+   * does not discard it. `undefined` restores the built-in ordering.
    */
   set sortComparatorFactory(factory: ChannelSortComparatorFactory | undefined) {
     this._sortComparatorFactory = factory;
@@ -497,21 +451,16 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   }
 
   /**
-   * Filters sent to the server with the next query (and used as the offline-db query key). Deliberately
-   * built from the locally configured filters only — feeding the backend-resolved filter back in would
-   * change the query shape after the first response and make the following page look like a new first
-   * page to `hasPaginationQueryShapeChanged`.
+   * Filters sent with the next query and used as the offline-db query key. Built from the local
+   * filters only: the backend-resolved filter would change the query shape after the first response,
+   * so the next page would look like a first page.
    */
   buildQueryFilters = (): ChannelFilters =>
     this.filterBuilder.buildFilters({
       baseFilters: { ...this.staticFilters },
     });
 
-  /**
-   * Filters items are matched against locally — the `BasePaginator.buildMatchFilters` hook consumed by
-   * `matchesFilter`. Built from `effectiveFilters`, so a `predefined_filter` list matches what the
-   * backend applied rather than the local filters, which are not what produced the list.
-   */
+  /** Filters items are matched against locally (`matchesFilter`), built from `effectiveFilters`. */
   buildMatchFilters = (): ChannelFilters =>
     this.filterBuilder.buildFilters({
       baseFilters: { ...this.effectiveFilters },
@@ -520,22 +469,16 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   matchesFilter(channel: Channel): boolean {
     const filters = this.buildMatchFilters();
 
-    // Mirror `queryChannels`, which excludes hidden channels unless the filter asks for them —
-    // otherwise a channel hidden while the list is open keeps matching and stays visible until the next
-    // query. Applied here rather than as a synthetic `hidden: false` filter entry so the default also
-    // holds for a paginator whose filter resolvers were replaced (`setFilterResolvers`), which would
-    // otherwise leave `hidden` unresolvable and reject every channel.
+    // Like `queryChannels`, exclude hidden channels unless the filter asks for them. Not a synthetic
+    // `hidden: false` entry: with replaced resolvers (`setFilterResolvers`) `hidden` would be
+    // unresolvable and reject every channel.
     if (channel.data?.hidden && !filterConstrainsField(filters, 'hidden')) return false;
     return itemMatchesFilter<Channel>(channel, filters, {
       resolvers: this._filterFieldToDataResolvers,
     });
   }
 
-  /**
-   * Commits the `predefined_filter` metadata of the response, or clears it when the response carried
-   * none (a plain `filter_conditions` query), so a switch away from a predefined filter cannot leave
-   * stale matching/ordering semantics behind.
-   */
+  /** Commits the response's `predefined_filter` metadata, or clears it when there is none. */
   protected applyPredefinedFilterResponse(
     predefinedFilter: ParsedPredefinedFilterResponse | undefined,
   ) {
@@ -544,12 +487,9 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   }
 
   /**
-   * The response metadata describes the query as a whole, so it is (re)committed only when a first page
-   * lands — matching the legacy `ChannelManager`, which kept it untouched while paginating. A failed
-   * query (`results === null`) must not drop the metadata of the already loaded list either.
-   *
-   * Committing before `super` matters: the base implementation filters and ingests the page using
-   * `matchesFilter` and the comparators this metadata feeds.
+   * The metadata describes the query as a whole, so it is committed only when a first page lands (a
+   * failed query keeps the loaded list's). It is committed before `super`, which filters and ingests
+   * the page using `matchesFilter` and the comparator this metadata feeds.
    */
   postQueryReconcile(params: PostQueryReconcileParams<Channel, ChannelQueryShape>) {
     const pendingPredefinedFilter = this._pendingPredefinedFilter;
@@ -560,16 +500,14 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     const replaceOfflineSeed = this._replaceOfflineSeedOnResponse;
     this._replaceOfflineSeedOnResponse = false;
     if (replaceOfflineSeed && params.results) {
-      // The cache can be arbitrarily old, so merging into it is out of question as it might keep channels
-      // the server no longer returns (hidden, deleted, left). The seed stays on screen until now, then the
-      // page replaces it.
+      // The cache can be arbitrarily old and hold channels the server dropped (hidden, deleted,
+      // left): the page replaces the seed instead of merging into it.
       this.clearItemStorage();
       return super.postQueryReconcile({ ...params, keepPreviousItems: false });
     }
     return super.postQueryReconcile(params);
   }
 
-  // invoked inside BasePaginator.executeQuery() to keep it as a query descriptor;
   protected getNextQueryShape({
     pageSize,
   }: { pageSize?: number } = {}): ChannelQueryShape {
@@ -598,19 +536,11 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   }
 
   /**
-   * Writes a cid order into the offline cache under the query that produced it.
-   *
-   * `filters` and `sort` are passed separately even though `options` already contains them: the concrete
-   * (RN) DB implementation derives the cache row key from those two top-level arguments in
-   * `convertFilterSortToQuery`, while `options` carries the full request — the only place
-   * `predefined_filter` / `filter_values` / `sort_values` appear, without which two predefined-filter
-   * lists cannot be told apart. The duplication goes away once `convertFilterSortToQuery` derives the
-   * key from `options` (a change in that implementation plus a schema-version bump to flush stale rows).
-   *
-   * The resolved `predefinedFilter` rides along with the order it produced: a cache-seeded list has no
-   * response to learn it from, and without it `effectiveFilters` / `effectiveSort` fall back to the
-   * local filters and the default sort - i.e. it would match and order by a different rule than the
-   * one the cached order came from.
+   * Writes a cid order into the offline cache under the query that produced it. `filters` and `sort`
+   * are passed apart from `options` (which already holds them) because the DB implementation derives
+   * the cache row key from them, while `options` carries the full request (`predefined_filter`, ...)
+   * that tells predefined-filter lists apart. The resolved `predefinedFilter` is stored with the
+   * order: a cache-seeded list has no response to learn it from.
    */
   protected cacheCidsForQuery({
     cids,
@@ -633,13 +563,12 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   }
 
   /**
-   * Persists the current cid order under the query that produced it. Called after every mutation of the
-   * loaded list — including live WS-driven inserts/removals, which reorder the list without any query
-   * running; skipping those would leave the cached order stale until the next full re-query.
+   * Persists the current cid order under the query that produced it. Runs after every mutation of
+   * the loaded list, including live inserts and removals that reorder it without a query.
    */
   protected persistLoadedCids() {
-    // Without a connected user the list is being emptied by `disconnectUser()`: what stays in the
-    // offline DB is the app's call (`resetDB()`), so nothing is written.
+    // Without a user the list is being emptied by `disconnectUser()`: what stays in the offline DB
+    // is the app's call (`resetDB()`).
     if (!this.client.offlineDb || !this.client.userId) return;
 
     this.cacheCidsForQuery({
@@ -674,7 +603,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
         }
         return this.client.hydrateChannels(cachedQuery.channels, {
           offlineMode: true,
-          skipInitialization: [], // passing empty array will clear out the existing messages from channel state, this removes the possibility of duplicate messages
+          skipInitialization: [], // an empty array clears existing channel messages (no duplicates)
         });
       }
     } catch (error) {
@@ -701,14 +630,11 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   };
 
   /**
-   * Postpones a first-page query while the offline sync is still in progress: the cached page is
-   * surfaced right away and the network query is handed to the sync manager, which re-runs it once
-   * reconciliation finished — querying (and persisting cids) against unsynced local state would race
-   * with the replay of pending local mutations. Mirrors `ChannelManager.queryChannels`, which deferred
-   * on every unsynced call and read the cache only when it had nothing loaded yet.
-   *
-   * Only first-page queries defer; paginating an already loaded list is unaffected (as was the legacy
-   * `loadNext`).
+   * Defers a first-page query (or a page of a cache-seeded list) while the offline sync is in
+   * progress: the cached page is shown right away and the network query is handed to the sync
+   * manager, which re-runs it after reconciliation. Querying and persisting cids against unsynced
+   * local state would race the replay of pending mutations. Paginating a list loaded from the
+   * network is not deferred.
    */
   async executeQuery(params: PaginationQueryParams<ChannelQueryShape> = {}) {
     const { offlineDb } = this.client;
@@ -723,7 +649,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       !!offlineDb?.getChannelsForQuery &&
       !!this.client.user?.id &&
       !offlineDb.syncManager.isSynced &&
-      // Items seeded from the cache are not an already loaded list, so paginating them has to defer too.
+      // A cache-seeded list is not a loaded one, so paginating it defers too.
       (this._itemsLoadedFromOfflineDB ||
         this.isFirstPageQuery({ queryShape, reset: effectiveParams.reset }));
 
@@ -749,16 +675,15 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
         throw error;
       }
       if (cachedChannels?.length) {
-        // Seed via `setItems` (which ingests the page into the interval/index storage), so that the items
-        // actually appear within the adequate index.
+        // Seed via `setItems`, which ingests the page into the interval/index storage.
         // TODO: Maybe find a better way to do this rather than 2 partialNext invocations
         //       running. This all happens so fast it should never be noticeable but it's
         //       a microoptimization.
         this.setItems({ valueOrFactory: cachedChannels, isFirstPage: true });
         this._itemsLoadedFromOfflineDB = true;
       }
-      // Nothing is in flight while we wait for the sync; leaving `isLoading` true would make
-      // `canExecuteQuery` reject the query scheduled below.
+      // Nothing is in flight while waiting for the sync: `isLoading` would make `canExecuteQuery`
+      // reject the query scheduled below.
       this.state.partialNext({ isLoading: false });
     }
 
@@ -768,9 +693,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       ...(this._itemsLoadedFromOfflineDB ? { reset: 'yes' as const } : {}),
     };
 
-    // Check if everything is synced up already and if so, just run the actual queryChannels request.
-    // Otherwise, the sync status change will never fire and so `executeQuery` will never really be
-    // run.
+    // Already synced: the sync-status callback would never fire, so run the query now.
     if (offlineDb.syncManager.isSynced) {
       this._queryAwaitingSync = undefined;
       return await super.executeQuery(refreshParams);
@@ -784,9 +707,8 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
 
   query = async (): Promise<PaginationQueryReturnValue<Channel>> => {
     if (this._itemsLoadedFromOfflineDB) this._replaceOfflineSeedOnResponse = true;
-    // A query is going out, so whatever it returns the items are no longer cache-only.
+    // A query is going out: the items stop being cache-only, whatever the response.
     this._itemsLoadedFromOfflineDB = false;
-    // get the params only if they were not generated previously
     if (!this._nextQueryShape) {
       this._nextQueryShape = this.getNextQueryShape();
     }
@@ -795,8 +717,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     if (this.config.doRequest) {
       items = (await this.config.doRequest(this._nextQueryShape)).items;
     } else {
-      // withResponse gives access to response-level metadata (`predefined_filter`) which a
-      // predefined-filter list needs to know what the backend actually filtered and sorted by.
+      // `withResponse` exposes `predefined_filter`, which a predefined-filter list needs.
       const response = await this.client.queryChannelsAndHydrate(request, {
         ...stateOptions,
         withResponse: true,
@@ -815,44 +736,33 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   }
 
   /**
-   * Places `channel` in the list if it matches, or drops it if it no longer does. A provisional
-   * channel (created from members, still without an id) is refused: it is stored under a temporary
-   * cid until its first query gives it the real one, and a list holding it would keep the temporary
-   * cid. It is listed once it has its id, as the channels in a server page always do. Another
-   * instance for a stored cid (a superseded one, or one made with `new Channel()`) is replaced by
-   * the stored instance (see `ChannelManager.resolveListedChannel`).
+   * Places `channel` in the list if it matches, or drops it when it stops matching. A provisional
+   * channel (created from members, no ID yet) is refused: it is stored under a temporary cid. Another
+   * instance for a stored cid is replaced by the stored one (`ChannelManager.resolveListedChannel`).
    */
   ingestItem(input: Channel): boolean {
     if (input.isProvisional) return false;
-    // the stored instance, never another one for the same cid (see `resolveListedChannel`)
     const channel = this.client.channelManager.resolveListedChannel(input);
     if (!channel) return false;
     const changed = super.ingestItem(channel);
-    // a channel that left the result set is no longer listed, so the list stops holding it
+    // A channel outside the result set is not held.
     if (!this.matchesFilter(channel)) this._itemIndex.remove(channel.cid);
     if (changed) this.persistLoadedCids();
     return changed;
   }
 
-  /**
-   * Entity-store subscriber (as the owner of its index). A channel publishes its own changes through
-   * `channel.state`, so the list has nothing to re-project when the store reports a change.
-   */
+  /** Entity-store subscriber. A channel publishes changes via `channel.state`: nothing to do. */
   onEntitiesChanged(): void {
     return;
   }
 
-  /**
-   * Entity-store subscriber: the store removed a channel this list holds (a known end, logout), so
-   * the list drops it from its windows.
-   */
+  /** Entity-store subscriber: the store removed a channel this list holds (e.g. logout). */
   onEntityRemoved(id: string, channel: unknown): void {
     this.removeItem({ id, item: channel as Channel });
   }
 
   resetState() {
     super.resetState();
-    // nothing is listed anymore, so the list holds no channels
     this._itemIndex.clear();
     this._queryAwaitingSync = undefined;
   }

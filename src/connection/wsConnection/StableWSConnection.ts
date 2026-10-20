@@ -10,7 +10,6 @@ import type { WSConnectionConfig } from './types';
 
 const logger = chatLoggerSystem.getLogger('connection');
 
-// Type guards to check WebSocket error type
 const isCloseEvent = (
   res: CloseEvent | MessageEvent | ErrorEvent | Event,
 ): res is CloseEvent => (res as CloseEvent).code !== undefined;
@@ -30,31 +29,18 @@ class WSCloseError extends Error {
 }
 
 /**
- * A WS connection that reconnects upon failure.
+ * A WS connection that reconnects upon failure. A ping goes out every `pingIntervalMs`, and the
+ * connection goes down on `onerror`, `onclose`, no frame within `connectionCheckTimeout`, or when
+ * `client.networkConnection` reports the device offline (this class consumes that status, it does not
+ * detect it).
  *
- * - the WS connection can break and fail; a ping goes out every 25s (`pingInterval`)
- * - sometimes the WS connection seems to work while the device is in fact offline
- * - the device's own network status is a separate fact, owned by `client.networkConnection` and fed by a
- *   platform listener the integrator registers; this class consumes it, it does not detect it
- *
- * There are 4 ways in which this connection can go down:
- * - WebSocket.onerror is called
- * - WebSocket.onclose is called
- * - no frame arrives for 35s, so the health-check loop gives up (`connectionCheckTimeout`)
- * - the device reports its network went offline
- *
- * There are 2 assumptions we make about the server:
- * - state can be recovered by querying the channel again
- * - if the servers fails to publish a message to the client, the WS connection is destroyed
+ * It assumes state can be recovered by querying the channel again, and that the server destroys the
+ * connection when it fails to publish a message to the client.
  */
 export class StableWSConnection {
-  /**
-   * The `WSConnection` this socket belongs to. Held instead of the client, because the status store
-   * lives here and everything the socket needs from the client is reachable through it.
-   */
+  /** The owning `WSConnection`, through which the client is reached. */
   wsConnection: WSConnection;
 
-  // local vars
   connectionOpen?: ConnectAPIResponse;
   consecutiveFailures: number;
   healthCheckTimeoutRef?: NodeJS.Timeout;
@@ -78,58 +64,38 @@ export class StableWSConnection {
   wsID: number;
 
   constructor({ wsConnection }: { wsConnection: WSConnection }) {
-    /** The `WSConnection` that owns this socket */
     this.wsConnection = wsConnection;
-    /** consecutive failures influence the duration of the timeout */
     this.consecutiveFailures = 0;
-    /** keep track of the total number of failures */
     this.totalFailures = 0;
-    /** We only make 1 attempt to reconnect at the same time.. */
     this.isConnecting = false;
-    /** To avoid reconnect if client is disconnected */
+    /** Set by `disconnect()` so a pending reconnect gives up. */
     this.isDisconnected = false;
-    /** Boolean that indicates if the connection promise is resolved */
     this.isResolved = false;
-    /** Boolean that indicates if we have a working connection to the server */
     this.isHealthy = false;
-    /** Incremented when a new WS connection is made */
+    /** Incremented when the current socket is closed or destroyed; older IDs' callbacks are ignored. */
     this.wsID = 1;
-    /** Store the last event time for health checks */
     this.lastEvent = null;
   }
 
-  /**
-   * The timing knobs, read from the parent **live** rather than snapshotted, so an `updateConfig`
-   * reaches the socket that is already open instead of only the next one.
-   */
+  /** Read live from the parent, so a config update reaches an already open socket. */
   private get config(): WSConnectionConfig {
     return this.wsConnection.config;
   }
 
-  /** How often a health-check ping goes out. Configurable as `pingIntervalMs`. */
   get pingInterval(): number {
     return this.config.pingIntervalMs;
   }
 
-  /**
-   * How long the connection check tolerates silence before tearing the socket down.
-   *
-   * Derived at read time rather than stored, so changing the ping interval moves the connection check
-   * with it instead of leaving the socket to kill itself between pings.
-   */
+  /** Silence tolerated before the socket is torn down: `pingIntervalMs + healthCheckGracePeriodMs`. */
   get connectionCheckTimeout(): number {
     return this.config.pingIntervalMs + this.config.healthCheckGracePeriodMs;
   }
 
-  /** The client, reached through the parent. See {@link wsConnection}. */
   get client(): StreamChat {
     return this.wsConnection.client;
   }
 
-  /**
-   * Re-parents this socket, for one supplied through `config.connection` and built against a
-   * different `WSConnection` than the client adopting it.
-   */
+  /** Re-parents a socket supplied through `config.connection`. */
   setWSConnection(wsConnection: WSConnection) {
     this.wsConnection = wsConnection;
   }
@@ -137,8 +103,7 @@ export class StableWSConnection {
   /**
    * Connects to the WS URL.
    *
-   * @param timeout - Connect timeout in milliseconds. Defaults to `config.connectTimeoutMs` (15s),
-   *   which allows between 2 and 3 tries.
+   * @param timeout - Connect timeout in milliseconds. Defaults to `config.connectTimeoutMs`.
    * @returns A promise that resolves once the server's `connection.ok` hello event arrives.
    */
   async connect(timeout: number = this.config.connectTimeoutMs) {
@@ -187,10 +152,8 @@ export class StableWSConnection {
   }
 
   /**
-   * _waitForHealthy polls the promise connection to see if its resolved until it times out.
-   *
-   * @param timeout - duration (ms). Defaults to `config.connectTimeoutMs` (15s), which allows
-   *   between 2~3 tries.
+   * Polls the connection promise until it resolves or `timeout` (ms) elapses. `timeout` defaults to
+   * `config.connectTimeoutMs`.
    */
   _waitForHealthy(timeout: number = this.config.connectTimeoutMs) {
     return Promise.race([
@@ -229,27 +192,20 @@ export class StableWSConnection {
     ]);
   }
 
-  /**
-   * Builds and returns the URL for the WebSocket connection.
-   *
-   * @private
-   * @returns url string
-   */
   _buildUrl = () => {
     const params = new URLSearchParams(this.config.urlParams);
     params.set('api_key', this.client.key);
     params.set('stream-auth-type', this.client.getAuthType());
-    // Browsers cannot set headers on the WS handshake, so the server reads this
-    // from the query string too.
+    // Browsers cannot set headers on the WS handshake, so the server reads this from the query too.
     params.set('X-Stream-Client', this.client.getUserAgent());
 
     return `${this.client.wsBaseURL}/api/v2/connect?${params.toString()}`;
   };
 
   /**
-   * Disconnects the connection without attempting to recover.
+   * Closes the socket without attempting to recover.
    *
-   * @param timeout - Optional timeout in milliseconds to wait for the close frame from the server.
+   * @param timeout - How long to wait for the server's close frame, in milliseconds. Defaults to 1s.
    */
   disconnect(timeout?: number) {
     logger
@@ -259,12 +215,11 @@ export class StableWSConnection {
     this.wsID += 1;
     this.isConnecting = false;
     this.isDisconnected = true;
-    // A deliberate close still expects a reopen - mobile backgrounding is the reason this method
-    // exists - so anything already waiting for a connection id keeps waiting. Invalidating drops the
-    // dead id and arms a fresh deferred for the socket `openConnection()` will build.
+    // A deliberate close still expects a reopen (mobile backgrounding), so waiters keep waiting:
+    // invalidating drops the dead ID and arms a fresh deferred for the next socket.
     this.client.connectionIdManager.invalidate();
 
-    // start by removing all the listeners
+    // Stop the ping and connection-check timers.
     if (this.healthCheckTimeoutRef) {
       clearInterval(this.healthCheckTimeoutRef);
     }
@@ -272,14 +227,11 @@ export class StableWSConnection {
       clearInterval(this.connectionCheckTimeoutRef);
     }
 
-    // Through `_applyHealth`, not a bare assignment: the store must tell the truth on this path too.
-    // It is what `closeConnection()` uses, and a deliberate shutdown is still a transition.
+    // Through `_applyHealth` so the store records a deliberate close as a transition too.
     this._applyHealth(false);
 
     let isClosedPromise: Promise<void>;
-    // and finally close...
-    // Assigning to local here because we will remove it from this before the
-    // promise resolves.
+    // Local copy: `this.ws` is deleted before the promise resolves.
     const { ws } = this;
     if (ws && ws.close && ws.readyState === ws.OPEN) {
       isClosedPromise = new Promise((resolve) => {
@@ -294,8 +246,7 @@ export class StableWSConnection {
         };
 
         ws.onclose = onclose;
-        // In case we don't receive a close frame from the WebSocket server in time,
-        // lets not wait for more than 1 seconds.
+        // Don't wait longer than the timeout for the server's close frame.
         setTimeout(onclose, timeout != null ? timeout : 1000);
       });
 
@@ -319,18 +270,13 @@ export class StableWSConnection {
     return isClosedPromise;
   }
 
-  /**
-   * Connects to the WS endpoint.
-   *
-   * @returns A promise that resolves once the server's `connection.ok` hello event arrives.
-   */
+  /** Connects to the WS endpoint, resolving with the server's `connection.ok` hello event. */
   async _connect() {
-    // simply ignore _connect if it's currently connecting, or if disconnect() was called
+    // Ignored while connecting, or after `disconnect()`.
     if (this.isConnecting || this.isDisconnected) return;
     this.isConnecting = true;
     this.requestID = randomId();
-    // Arm before anything can await a connection id. A no-op on a reconnect that still holds one -
-    // those requests keep flowing against the old id rather than blocking for the whole outage.
+    // Arm before anything can await a connection ID. A no-op while one is still held.
     this.client.connectionIdManager.arm();
     let isTokenReady = false;
     try {
@@ -351,9 +297,8 @@ export class StableWSConnection {
 
       this._setupConnectionPromise();
       const wsURL = this._buildUrl();
-      // Built before the socket exists on purpose: the token is guaranteed loaded by
-      // this point, and a failure here must reject _connect rather than leave an open
-      // socket to die against the server's 10s auth-message deadline.
+      // Built before the socket exists, so a failure rejects `_connect` instead of leaving an open
+      // socket to hit the server's 10s auth-message deadline.
       const authMessage = this.client._buildWSAuthMessage();
       logger.withExtraTags('_connect').info(`Connecting to ${wsURL}.`, {
         wsURL,
@@ -371,9 +316,7 @@ export class StableWSConnection {
       this.isConnecting = false;
 
       if (response) {
-        // The id is published to the ConnectionIdManager and nowhere else. A copy kept here would
-        // outlive the socket it belongs to - `invalidate()` / `reset()` cannot reach it - which is
-        // exactly the staleness this manager exists to end.
+        // The ID lives only in the ConnectionIdManager, so no stale copy outlives this socket.
         this.client.connectionIdManager.resolveConnectionId(response.connection_id);
         return response;
       }
@@ -387,18 +330,16 @@ export class StableWSConnection {
   }
 
   /**
-   * Retries the connection to the WS endpoint.
+   * Retries the connection.
    *
-   * @param options - Reconnect options.
-   * @param options.interval - Number of milliseconds to wait before reconnecting.
-   * @param options.refreshToken - Reload/refresh the user token before attempting to reconnect.
+   * @param options.interval - Milliseconds to wait first. Defaults to a randomised backoff.
+   * @param options.refreshToken - Reload the user token before reconnecting.
    */
   async _reconnect(
     options: { interval?: number; refreshToken?: boolean } = {},
   ): Promise<void> {
     logger.withExtraTags('_reconnect').info('Initiating a reconnect.');
 
-    // only allow 1 connection at the time
     if (this.isConnecting || this.isHealthy) {
       logger
         .withExtraTags('_reconnect')
@@ -406,17 +347,13 @@ export class StableWSConnection {
       return;
     }
 
-    // reconnect in case of on error or on close
-    // also reconnect if the health check cycle fails
     let interval = options.interval;
     if (!interval) {
       interval = retryInterval(this.consecutiveFailures);
     }
-    // reconnect, or try again after a little while...
     await sleep(interval);
 
-    // Check once again if by some other call to _reconnect is active or connection is
-    // already restored, then no need to proceed.
+    // Re-check: another `_reconnect` may have started, or the connection been restored, meanwhile.
     if (this.isConnecting || this.isHealthy) {
       logger
         .withExtraTags('_reconnect')
@@ -435,7 +372,6 @@ export class StableWSConnection {
       .withExtraTags('_reconnect')
       .info('Destroying the current WebSocket connection.');
 
-    // cleanup the old connection
     this._destroyCurrentWSConnection();
 
     if (options.refreshToken) {
@@ -471,9 +407,7 @@ export class StableWSConnection {
 
         this._reconnect();
       } else {
-        // Giving up. Going down armed a deferred on the assumption that a reconnect would settle it,
-        // and nothing will now — leaving it pending hangs every request waiting for an id, with no
-        // retry coming and no error to show for it.
+        // Giving up: reject the deferred armed when the socket went down, or waiting requests hang.
         this.client.connectionIdManager.rejectConnectionId(error);
       }
     }
@@ -481,23 +415,12 @@ export class StableWSConnection {
   }
 
   /**
-   * Handles a change reported for the `'network'` connection — the device's own — and applies it to
-   * the `'ws'` connection this class owns.
+   * Applies a device network status change to this socket.
    *
-   * The logs name both by their {@link ConnectionType} value rather than by prose, so a reader is
-   * never left guessing which connection a line is about. The effect clause is conditional because there may not be an effect: `_setHealth` returns
-   * early when the status is unchanged, and a `'network'` report commonly arrives after the socket has
-   * already died on its own.
-   *
-   * @deprecated Report network status through `client.networkConnection.setStatus(isOnline)` instead, or
-   *   register a listener with `client.networkConnection.setStatusReporter(…)`. This entry point takes
-   *   a DOM-shaped object and reaches into the socket, neither of which a caller should need. Kept
-   *   for one major because `stream-chat-react-native` calls it directly.
-   *
-   * @param event - A DOM-shaped object whose `type` is `'online'` or `'offline'`. It carries no
-   *   connection identifier and never has: it was fed by `window`'s own `online`/`offline` events,
-   *   which are always about the device's network, and React Native synthesizes the same shape from
-   *   `NetInfo`.
+   * @param event - A DOM-shaped object whose `type` is `'online'` or `'offline'`. Only `type` is
+   *   read.
+   * @deprecated Use `client.networkConnection.setStatus(isOnline)` or
+   *   `client.networkConnection.setStatusReporter(…)` instead.
    */
   onlineStatusChanged = (event: Event) => {
     if (event.type === 'offline') this._applyNetworkStatus(false);
@@ -505,11 +428,8 @@ export class StableWSConnection {
   };
 
   /**
-   * Applies a reported change in the `'network'` connection to the `'ws'` connection this class owns.
-   *
-   * The single body behind both entry points — the network-store subscription the parent owns, and
-   * the deprecated {@link onlineStatusChanged} shim React Native still calls — so the two cannot
-   * drift.
+   * Applies a network status change to this socket. Shared by the parent's network-store
+   * subscription and the deprecated {@link onlineStatusChanged}.
    *
    * @internal
    */
@@ -522,8 +442,7 @@ export class StableWSConnection {
       return;
     }
 
-    // A socket still carrying traffic has probably missed nothing, so replacing it would cost a
-    // handshake and a fresh connection ID for no gain. Only reconnect if it is actually down.
+    // A socket still carrying traffic has probably missed nothing: reconnect only if it is down.
     logger
       .withExtraTags('onlineStatusChanged')
       .info(
@@ -546,11 +465,11 @@ export class StableWSConnection {
       wsID: wsId,
     });
 
-    // `/api/v2/connect` authenticates off the first frame the client sends, not off
-    // the query string. The server closes the socket if it does not arrive in 10s.
+    // `/api/v2/connect` authenticates off the first frame the client sends, not the query string.
+    // The server closes the socket if it does not arrive in 10s.
     const { ws } = this;
-    // disconnect() deletes this.ws synchronously; the wsID guard above covers
-    // reconnects, this covers a socket torn down before `open` was dispatched.
+    // `disconnect()` deletes `this.ws` synchronously: the wsID guard above covers reconnects, this
+    // covers a socket torn down before `open` was dispatched.
     if (!ws || ws.readyState !== ws.OPEN) return;
 
     try {
@@ -575,9 +494,8 @@ export class StableWSConnection {
     const data = JSON.parse(event.data);
     const decodedData = data as WSEvent;
 
-    // we wait till the first message before we consider the connection open..
-    // the reason for this is that auth errors and similar errors trigger a ws.onopen and immediately
-    // after that a ws.onclose..
+    // The first message, not `onopen`, marks the connection open: auth errors fire `onopen` and
+    // then `onclose`.
     if (!this.isResolved) {
       this.isResolved = true;
       if (data.error) {
@@ -585,7 +503,7 @@ export class StableWSConnection {
         return;
       }
 
-      // Published before going online, so "the socket is up" implies "there is an id to watch on".
+      // Published before going online, so "the socket is up" implies "there is an ID to watch on".
       this.client.connectionIdManager.resolveConnectionId(
         (decodedData as ConnectionOpen).connection_id,
       );
@@ -594,12 +512,11 @@ export class StableWSConnection {
       this._setHealth(true);
     }
 
-    // trigger the event..
     this.lastEvent = new Date();
 
-    // `connection.ok` is the v2 hello event. The server only echoes health checks in
-    // response to an inbound frame, so failing to schedule here means we never ping
-    // and scheduleConnectionCheck tears the socket down 35s later, in a loop.
+    // The server sends a health check only in reply to a client frame, so the ping loop starts from
+    // the hello and continues on each health check. Without it the connection check tears the socket
+    // down every `connectionCheckTimeout`.
     if (data.type === 'health.check' || data.type === 'connection.ok') {
       this.scheduleNextPing();
     }
@@ -619,8 +536,7 @@ export class StableWSConnection {
       });
 
     if (event.code === chatCodes.WS_CLOSED_SUCCESS) {
-      // this is a permanent error raised by stream..
-      // usually caused by invalid auth details
+      // A permanent error raised by Stream, usually invalid auth details.
       const error = new WSCloseError(`WS connection reject with error ${event.reason}`);
 
       error.reason = event.reason;
@@ -646,7 +562,6 @@ export class StableWSConnection {
           event,
         });
 
-      // reconnect if its an abnormal failure
       this._reconnect();
     }
   };
@@ -668,15 +583,10 @@ export class StableWSConnection {
   };
 
   /**
-   * Writes this connection's status to the field and to `client.wsConnection.state`, and drops the
-   * connection id when it goes down. Returns whether the status changed.
-   *
-   * Every path that transitions the status goes through here — including `disconnect()`, which
-   * `closeConnection()` uses, and the two error paths. Covering all of them is why the store exists,
-   * and why invalidating the id belongs here rather than beside any one of those paths.
-   *
-   * Construction is not routed through here: initializing the field is not a transition, and stamping
-   * `lastUnhealthyAt` because a socket object was built would be a lie.
+   * Writes the status to the field and to `client.wsConnection.state`, and drops the connection ID
+   * when it goes down. Returns whether the status changed. Every transition goes through here
+   * (`disconnect()` and the error paths included); the constructor does not, since initializing the
+   * field is not a transition.
    */
   private _applyHealth(healthy: boolean): boolean {
     if (healthy === this.isHealthy) return false;
@@ -684,9 +594,7 @@ export class StableWSConnection {
     this.isHealthy = healthy;
 
     if (!healthy) {
-      // The id those watches were keyed by is dead, so no further request may carry it. Invalidating
-      // arms a fresh deferred, so requests needing one wait for the reconnect instead of racing
-      // ahead with the old one.
+      // The ID is dead; invalidating arms a fresh deferred so requests wait for the reconnect.
       this.client.connectionIdManager.invalidate();
     }
 
@@ -695,17 +603,7 @@ export class StableWSConnection {
     return true;
   }
 
-  /**
-   * Applies a status change and does the bookkeeping that goes with it.
-   *
-   * Announcing it is not this class's job. The status lives in `client.wsConnection.state`, which
-   * {@link _applyHealth} writes on every transition — including the ones that were always silent —
-   * so a consumer subscribes there rather than waiting to be told.
-   *
-   * The five-second wait before announcing a drop moved to whoever renders the banner, its length
-   * configurable as `offlineNotificationDisplayDelayMs`. The timer here outlived the socket that
-   * armed it, so a replaced connection announced a drop its replacement had already recovered from.
-   */
+  /** Applies a status change; on a drop, marks the channel watches as interrupted. */
   _setHealth = (healthy: boolean) => {
     if (!this._applyHealth(healthy)) return;
     if (this.isHealthy) return;
@@ -715,11 +613,8 @@ export class StableWSConnection {
   };
 
   /**
-   * Creates an error object for the WS event.
-   *
-   * @param event - The raw WebSocket close / data / error event.
-   * @param isWSFailure - Whether the underlying cause is a WebSocket failure (optional, defaults to `true`).
-   * @returns A normalized error describing the WS failure.
+   * Turns a raw WebSocket close, message or error event into an `Error` carrying `code`,
+   * `StatusCode` and `isWSFailure`.
    */
   _errorFromWSEvent = (
     event: CloseEvent | MessageEvent | ErrorEvent | Event,
@@ -740,7 +635,7 @@ export class StableWSConnection {
       message = event.error.message;
     }
 
-    // Keeping this `warn` level log, to avoid cluttering of error logs from ws failures.
+    // `warn`, not `error`, to avoid cluttering error logs with WS failures.
     logger
       .withExtraTags('_errorFromWSEvent')
       .warn(`The WebSocket failed with code ${code}.`, { event });
@@ -753,21 +648,14 @@ export class StableWSConnection {
       StatusCode?: string | number;
     };
     error.code = code;
-    /**
-     * StatusCode does not exist on any event types but has been left
-     * as is to preserve JS functionality during the TS implementation
-     */
+    // `StatusCode` is not on any event type; kept for JS compatibility.
     error.StatusCode = statusCode;
     error.isWSFailure = isWSFailure;
     return error;
   };
 
-  /**
-   * Removes the current WS connection.
-   */
   _destroyCurrentWSConnection() {
-    // increment the ID, meaning we will ignore all messages from the old
-    // ws connection from now on.
+    // Callbacks bound to the old ID are ignored.
     this.wsID += 1;
 
     try {
@@ -777,12 +665,9 @@ export class StableWSConnection {
     }
   }
 
-  /**
-   * Sets up the `this.connectionOpen` promise.
-   */
   _setupConnectionPromise = () => {
     this.isResolved = false;
-    /** a promise that is resolved once ws.open is called */
+    // Resolved by the first message (`connection.ok`), rejected on an error or close.
     this.connectionOpen = new Promise<ConnectionOpen>((resolve, reject) => {
       this.resolvePromise = resolve;
       this.rejectPromise = reject;
@@ -790,18 +675,18 @@ export class StableWSConnection {
   };
 
   /**
-   * Schedules the next health check ping for the WebSocket connection.
+   * Schedules the next health-check ping `pingIntervalMs` from now, replacing a pending one.
+   *
+   * @internal
    */
   scheduleNextPing = () => {
     if (this.healthCheckTimeoutRef) {
       clearTimeout(this.healthCheckTimeoutRef);
     }
 
-    // Sent every `config.pingIntervalMs` (25s by default); the server answers with a health check event.
     this.healthCheckTimeoutRef = setTimeout(() => {
-      // send the healthcheck.., server replies with a health check event
+      // The server answers with a health check event.
       const data = [{ type: 'health.check', client_id: this.client.clientId }];
-      // try to send on the connection
       try {
         this.ws?.send(JSON.stringify(data));
       } catch (e) {
@@ -810,11 +695,7 @@ export class StableWSConnection {
     }, this.pingInterval);
   };
 
-  /**
-   * Schedules a check for the time difference between the last received event and now. If the
-   * difference is more than 35 seconds, it means our health check logic has failed and the
-   * WebSocket needs to be reconnected.
-   */
+  /** Reconnects when no event has arrived for more than `connectionCheckTimeout`. */
   scheduleConnectionCheck = () => {
     if (this.connectionCheckTimeoutRef) {
       clearTimeout(this.connectionCheckTimeoutRef);

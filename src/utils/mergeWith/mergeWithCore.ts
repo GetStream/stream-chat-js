@@ -1,8 +1,3 @@
-/**
- * Core utility functions and types for mergeWith functionality.
- * This file contains shared logic used by both mergeWith and mergeWithDiff functions.
- */
-
 export type MergeWithCustomizer<T extends object> = (
   objValue: unknown,
   srcValue: unknown,
@@ -28,19 +23,15 @@ export interface DiffNode {
   oldValue?: unknown;
 }
 
+/** True for objects of a class other than `Object`. Arrays and plain objects are not. */
 export const isClassInstance = (value: unknown): boolean => {
   if (!value || typeof value !== 'object') return false;
 
-  // Arrays are not class instances
   if (Array.isArray(value)) return false;
 
-  // Get the prototype chain
   const proto = Object.getPrototypeOf(value);
-
-  // If it's null or Object.prototype, it's a plain object
   if (proto === null || proto === Object.prototype) return false;
 
-  // Check if it has a constructor that's not Object
   return value.constructor && value.constructor !== Object;
 };
 
@@ -55,18 +46,15 @@ function memoHasOrAdd(memo: PairMemo, a: object, b: object): boolean {
 }
 
 /**
- * Deep semantic equality with cycle safety and symbol-key support.
- * Keeps your existing semantics:
- *  - Dates/RegExps compared by value
- *  - "Class instances" are treated atomically (unequal unless ===)
- *  - NaN equals NaN; -0 equals 0 (same as ===)
+ * Deep equality that is cycle-safe and covers symbol keys. Dates and RegExps compare by value, Sets
+ * and Maps by content, other class instances only by `===`. `NaN` equals `NaN`, `-0` equals `0`.
  */
 export const isEqual = (
   value1: unknown,
   value2: unknown,
   pairMemo: PairMemo = new WeakMap(),
 ): boolean => {
-  if (value1 === value2) return true; // includes -0 === 0
+  if (value1 === value2) return true;
   if (value1 == null || value2 == null) return false;
 
   const t1 = typeof value1;
@@ -74,21 +62,18 @@ export const isEqual = (
   if (t1 !== t2) return false;
 
   if (t1 !== 'object') {
-    // NaN handling
     // eslint-disable-next-line no-self-compare
     return value1 !== value1 && value2 !== value2 ? true : value1 === value2;
   }
 
-  // Objects
   const o1 = value1 as object;
   const o2 = value2 as object;
 
-  // Fast path for tag mismatch
   const tag1 = Object.prototype.toString.call(o1);
   const tag2 = Object.prototype.toString.call(o2);
   if (tag1 !== tag2) return false;
 
-  // Special cases before instance test
+  // Dates and RegExps are class instances: compare them before that test.
   if (o1 instanceof Date && o2 instanceof Date) {
     return (o1 as Date).getTime() === (o2 as Date).getTime();
   }
@@ -98,11 +83,7 @@ export const isEqual = (
     return r1.source === r2.source && r1.flags === r2.flags;
   }
 
-  // Handle Set comparison
-  // Two sets are equal if they have the same size and
-  // every value in one has an equivalent value in the
-  // other (using deep equality).
-  // Cannot use the same item for multiple matches in another set.
+  // Sets are equal when every value matches a distinct deep-equal value in the other.
   if (value1 instanceof Set && value2 instanceof Set) {
     if (value1.size !== value2.size) return false;
     if (memoHasOrAdd(pairMemo, value1, value2)) return true;
@@ -113,7 +94,7 @@ export const isEqual = (
       let matched = false;
       for (const v2 of unmatched) {
         if (isEqual(v1, v2, pairMemo)) {
-          unmatched.delete(v2); // consume the match
+          unmatched.delete(v2);
           matched = true;
           break;
         }
@@ -124,13 +105,12 @@ export const isEqual = (
     return unmatched.size === 0;
   }
 
-  // Handle Map comparison
   if (value1 instanceof Map && value2 instanceof Map) {
     if (value1.size !== value2.size) return false;
 
     if (memoHasOrAdd(pairMemo, value1, value2)) return true;
 
-    const unmatched = new Set(value2); // tracks entries in map2 not yet matched
+    const unmatched = new Set(value2);
 
     for (const [k1, v1] of value1) {
       let matchedEntry: [unknown, unknown] | null = null;
@@ -143,20 +123,19 @@ export const isEqual = (
         }
       }
 
-      if (!matchedEntry) return false; // nothing matched this entry
-      unmatched.delete(matchedEntry); // consume it
+      if (!matchedEntry) return false;
+      unmatched.delete(matchedEntry);
     }
 
     return unmatched.size === 0;
   }
 
-  // Treat non-plain instances atomically (your current rule)
   if (isClassInstance(o1) || isClassInstance(o2)) return false;
 
-  // Cycle guard (pairwise)
+  // Cycle guard: a pair already being compared counts as equal.
   if (memoHasOrAdd(pairMemo, o1, o2)) return true;
 
-  // Arrays (respect holes vs undefined)
+  // A hole differs from `undefined`.
   if (Array.isArray(o1)) {
     const a1 = value1 as unknown[],
       a2 = value2 as unknown[];
@@ -167,7 +146,6 @@ export const isEqual = (
       if (has1 !== has2) return false;
       if (has1 && !isEqual(a1[i], a2[i], pairMemo)) return false;
     }
-    // Compare enumerable non-index props as well (to align with objects)
     const extraKeys1 = Reflect.ownKeys(o1)
       .filter((k) => typeof k !== 'string' || isNaN(+k))
       .filter((k) => Object.prototype.propertyIsEnumerable.call(o1, k));
@@ -183,7 +161,6 @@ export const isEqual = (
     return true;
   }
 
-  // Plain objects (string + symbol enumerable own keys)
   const keys1 = Reflect.ownKeys(o1).filter((k) =>
     Object.prototype.propertyIsEnumerable.call(o1, k),
   );
@@ -192,7 +169,7 @@ export const isEqual = (
   );
   if (keys1.length !== keys2.length) return false;
 
-  // enforce same prototype to avoid {} == Object.create(null, ...)
+  // Same prototype, so `{}` differs from `Object.create(null)`.
   if (Object.getPrototypeOf(o1) !== Object.getPrototypeOf(o2)) return false;
 
   for (const k of keys1) {
@@ -203,42 +180,27 @@ export const isEqual = (
   return true;
 };
 
-/**
- * Generates a diff between original and modified objects.
- * This is used after the merge operation to track what has changed.
- */
+/** Diff of the keys added or updated in `modified`, or `null` when there are none. */
 export function generateDiff(original: unknown, modified: unknown): DiffNode | null {
-  // Root diff node
   const diffRoot: DiffNode = { children: {} };
 
-  // Compare the objects and build the diff tree
   compareAndBuildDiff(original, modified, diffRoot);
 
-  // Clean up the diff tree (remove empty nodes)
   return cleanupDiffTree(diffRoot);
 }
 
-/**
- * Helper function to compare and build the diff tree
- */
 function compareAndBuildDiff(
   original: unknown,
   modified: unknown,
   parentDiffNode: DiffNode,
   key?: string | symbol,
   pairMemo: PairMemo = new WeakMap(),
-  /**
-   * Tracks individual objects that are being processed in the current traversal path
-   *  - It's used to detect when we encounter the same object multiple times in a single traversal path
-   *  - This helps identify self-referential or circular structures within a single object (e.g., when an object references itself)
-   *  - When an object appears in `objectStack` again, we know it's a circular reference within the same object
-   */
+  /** Objects on the current traversal path, to detect an object that references itself. */
   objectStack = new Set<unknown>(),
 ): void {
-  // If values are equal, no diff to record
   if (isEqual(original, modified)) return;
 
-  // Handle additions (value in modified but not in original)
+  // A null/undefined original counts as an addition.
   if (original === undefined || original === null) {
     if (key !== undefined) {
       parentDiffNode.children[String(key)] = {
@@ -250,7 +212,6 @@ function compareAndBuildDiff(
     return;
   }
 
-  // Check for circular references in objects
   if (typeof original === 'object' && original !== null) {
     if (objectStack.has(original)) {
       if (key !== undefined) {
@@ -266,7 +227,6 @@ function compareAndBuildDiff(
     objectStack.add(original);
   }
 
-  // Check if we're dealing with non-objects or special object types that should be treated atomically
   const shouldTreatAtomically =
     typeof original !== 'object' ||
     typeof modified !== 'object' ||
@@ -286,18 +246,15 @@ function compareAndBuildDiff(
       };
     }
 
-    // Remove from object stack if it was added
     if (typeof original === 'object' && original !== null) {
       objectStack.delete(original);
     }
     return;
   }
 
-  // Handle objects
   const originalObj = original as Record<string | symbol, unknown>;
   const modifiedObj = modified as Record<string | symbol, unknown>;
 
-  // Create a diff node for this level if we're processing a property
   const currentDiffNode =
     key !== undefined
       ? {
@@ -312,7 +269,7 @@ function compareAndBuildDiff(
     parentDiffNode.children[String(key)] = currentDiffNode;
   }
 
-  // Pairwise cycle check (prevents infinite recursion across the *pair*)
+  // Pairwise cycle check.
   if (
     typeof original === 'object' &&
     original !== null &&
@@ -320,14 +277,11 @@ function compareAndBuildDiff(
     modified !== null
   ) {
     if (memoHasOrAdd(pairMemo, original as object, modified as object)) {
-      // already visited this exact pair in this diff traversal
-      // (prevents infinite recursion), so stop here
       if (typeof original === 'object') objectStack.delete(original);
       return;
     }
   }
 
-  // Process all keys from both objects
   const allKeys = new Set([
     ...Object.keys(originalObj),
     ...Object.getOwnPropertySymbols(originalObj),
@@ -339,13 +293,11 @@ function compareAndBuildDiff(
     const originalValue = originalObj[childKey];
     const modifiedValue = modifiedObj[childKey];
 
-    // Handle deleted properties (they exist in original but not in modified)
+    // Deletions are not tracked.
     if (!(childKey in modifiedObj)) {
-      // Currently we don't track deletions, but could be added here if needed
       continue;
     }
 
-    // Handle added properties (they exist in modified but not in original)
     if (!(childKey in originalObj)) {
       currentDiffNode.children[String(childKey)] = {
         type: 'added',
@@ -355,7 +307,6 @@ function compareAndBuildDiff(
       continue;
     }
 
-    // Process properties that exist in both but may have changed
     compareAndBuildDiff(
       originalValue,
       modifiedValue,
@@ -383,7 +334,6 @@ export function createMergeCore<T extends object>(options: { trackDiff?: boolean
   }): { result: T; diff: DiffNode | null } {
     const sources = Array.isArray(source) ? source : [source];
 
-    // Store the original target if we need to track diffs
     const originalTarget = trackDiff ? structuredClone(target) : undefined;
 
     function handleCustomizer(
@@ -422,21 +372,18 @@ export function createMergeCore<T extends object>(options: { trackDiff?: boolean
         return srcValue;
       }
       if (targetValue && typeof targetValue === 'object') {
-        // Check if it's a class instance (not a plain object)
         const isTargetClassInstance = isClassInstance(targetValue);
         const isSourceClassInstance = isClassInstance(srcValue);
 
-        // If either is a class instance, don't try to merge them
+        // A class instance on either side is not merged: the source one wins, else the target
+        // stays.
         if (isTargetClassInstance || isSourceClassInstance) {
-          // If source is a class instance, use it
           if (isSourceClassInstance) {
             return srcValue as object;
           }
-          // Otherwise preserve the target
           return targetValue;
         }
 
-        // For plain objects, use normal merging
         return Array.isArray(targetValue) ? [...targetValue] : { ...targetValue };
       }
       return Array.isArray(srcValue) ? [] : {};
@@ -501,10 +448,8 @@ export function createMergeCore<T extends object>(options: { trackDiff?: boolean
       pendingMerges: PendingMerge[],
     ): void {
       if (stack.has(source)) {
-        // We've detected a circular reference in the source object
-        // Just skip this merge to avoid infinite recursion
-
-        // If we're tracking diffs, we need to mark this as a circular reference
+        // Circular reference in the source: skip the merge. With diff tracking the target is re-set
+        // on the parent.
         if (trackDiff && sourceKey && parentTarget) {
           Object.defineProperty(parentTarget, sourceKey, {
             value: target,
@@ -526,7 +471,7 @@ export function createMergeCore<T extends object>(options: { trackDiff?: boolean
     }
 
     function baseMerge(object: T, source: object, stack = new Set<unknown>()): T {
-      // prevent infinite recursion
+      // Prevents infinite recursion.
       if (stack.has(object) || stack.has(source)) {
         return { ...object };
       }
@@ -553,7 +498,6 @@ export function createMergeCore<T extends object>(options: { trackDiff?: boolean
       ...target,
     } as T);
 
-    // If diff tracking is enabled, generate the diff after the merge is complete
     const diff =
       trackDiff && originalTarget ? generateDiff(originalTarget, result) : null;
 
@@ -561,7 +505,7 @@ export function createMergeCore<T extends object>(options: { trackDiff?: boolean
   };
 }
 
-// Utility function to clean up the diff tree by removing empty child nodes
+/** Prunes nodes that have no type and no children. Returns `null` for an empty tree. */
 export function cleanupDiffTree(diffNode: DiffNode): DiffNode | null {
   const cleanChildren: Record<string | symbol, DiffNode> = {};
   let hasChildren = false;
@@ -574,7 +518,6 @@ export function cleanupDiffTree(diffNode: DiffNode): DiffNode | null {
     }
   }
 
-  // If this node has a type (added/updated) or has children, keep it
   if (diffNode.type || hasChildren) {
     return {
       ...diffNode,

@@ -6,22 +6,13 @@ import { WithSubscriptions } from './utils/WithSubscriptions';
 import type { Channel } from './channel';
 
 export type CooldownTimerState = {
-  /**
-   * Slow mode cooldown interval in seconds. Change reported via channel.updated WS event.
-   */
+  /** Slow mode cooldown interval in seconds. Change reported via channel.updated WS event. */
   cooldownConfigSeconds: number;
-  /**
-   * Whether the current user can skip slow mode. Change is not reported via WS.
-   */
+  /** Whether the current user can skip slow mode. Change is not reported via WS. */
   canSkipCooldown: boolean;
-  /**
-   * Creation timestamp of the latest message authored by the current user in this channel, in unix
-   * nanoseconds as the API sends it. Change reported via message.new WS event.
-   */
+  /** Creation time of the current user's latest message in this channel, in unix nanoseconds. */
   ownLatestMessageTimestamp?: TimestampNS;
-  /**
-   * Remaining cooldown in whole seconds (rounded).
-   */
+  /** Remaining cooldown in whole seconds (rounded). */
   cooldownRemaining: number;
 };
 
@@ -59,14 +50,9 @@ export class CooldownTimer extends WithSubscriptions {
   }
 
   /**
-   * Subscribes the timer to the two stores it derives from — `channel.state` for `cooldown` and
-   * `ownCapabilities`, the message paginator's store for the current user's latest message.
-   *
-   * `Channel` calls this right after constructing the timer and unregisters it in `disconnect`, the same
-   * way it drives `messageReceiptsTracker`. That replaces four imperative `cooldownTimer.refresh()` calls
-   * in `Channel`, and the three WS-event handlers that used to live here — which duplicated those calls
-   * and never ran, because nothing registered them. Between them the two arrangements still missed every
-   * `query()`, and any `updatePartial` that changed `cooldown` without changing capabilities.
+   * Derives the timer from `channel.state` (`cooldown`, `ownCapabilities`) and the message
+   * paginator's store (the current user's latest message). `Channel` registers it on construction
+   * and unregisters it in `disconnect`.
    */
   public registerSubscriptions = () => {
     this.incrementRefCount();
@@ -79,9 +65,8 @@ export class CooldownTimer extends WithSubscriptions {
       ),
     );
 
-    // `ownLatestMessageTimestamp` comes from the paginator's head interval. Selected on `items` rather than on
-    // the derived date: any ingest can change which message is the own-latest, and `refresh` already
-    // declines to publish unless one of its inputs actually moved.
+    // Selects `items`, not the derived timestamp: any ingest can change the own-latest message, and
+    // `refresh` publishes only when an input moved.
     this.addUnsubscribeFunction(
       this.channel.messagePaginator.state.subscribeWithSelector(
         ({ items }) => ({ items }),
@@ -89,7 +74,6 @@ export class CooldownTimer extends WithSubscriptions {
       ),
     );
 
-    // The countdown has no reason to keep running once the timer stops deriving.
     this.addUnsubscribeFunction(() => this.clearTimeout());
   };
 
@@ -136,8 +120,7 @@ export class CooldownTimer extends WithSubscriptions {
   };
 
   /**
-   * Updates the known latest own message timestamp and recomputes remaining time.
-   * Prefer calling this when you already know it (e.g. from an event).
+   * Sets the own latest message timestamp and recomputes the remaining time.
    *
    * @param timestamp - Unix nanoseconds, as the API sends it.
    */
@@ -181,8 +164,7 @@ export class CooldownTimer extends WithSubscriptions {
 
     const timeSinceOwnLastMessage =
       ownLatestMessageTimestamp != null
-        ? // prevent negative values. Both operands are wire timestamps, so the difference is in
-          // nanoseconds — convert once, here, to the seconds the cooldown config speaks.
+        ? // Clamped at 0. The timestamps are in nanoseconds, the cooldown config in seconds.
           Math.max(0, nsToMs(nowNs() - ownLatestMessageTimestamp) / 1000)
         : undefined;
 

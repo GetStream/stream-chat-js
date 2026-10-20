@@ -7,7 +7,7 @@ export const MODERATION_ENTITY_TYPES = {
   message: 'stream:chat:v1:message',
 };
 
-// Moderation class provides all the endpoints related to moderation v2.
+/** Moderation v2 endpoints. */
 export class Moderation extends ModerationApi {
   client: StreamChat;
 

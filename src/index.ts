@@ -2,11 +2,9 @@ export * from './client';
 export * from './client_state';
 export * from './channel';
 export * from './channel_state';
-// Don't use * here: the `Custom*Data` interfaces below are augmented by integrators, and `export *` can
-// break module augmentation (TS#46617). The configuration key types are deliberately *not* augmentable —
-// they are type aliases — so they are listed for the same mechanical reason, not to invite extension.
-// https://github.com/microsoft/TypeScript/issues/46617
-// Named in the signatures of `client.config.set` / `setConfig`, so a caller has to be able to write it.
+// The configuration exports are listed by name, not `export *`, which can break module augmentation
+// (https://github.com/microsoft/TypeScript/issues/46617).
+// `DeepPartial` is named in the signatures of `client.config.set` / `setConfig`.
 export type { DeepPartial } from './types.utility';
 export {
   BUILT_IN_INSTANCE_KEYS,
@@ -80,15 +78,15 @@ export type {
 export * from './thread_manager';
 export * from './token_manager';
 export * from './types';
-// Type-only and erased from the bundle, so there is no runtime import of an empty module. Declaration
-// emit keeps it, which is what carries the `DateConstructor` augmentation (`new Date(timestampNs)`
-// becomes a compile error) into the published types: a global augmentation only reaches a consumer if
-// the entry point's type graph imports the file that declares it.
+// Type-only, so it is erased from the bundle. Declaration emit keeps it, which carries the
+// `DateConstructor` augmentation (`new Date(timestampNs)` is a compile error) into the published
+// types.
 export type {} from './gen/models/timestamp-guard';
 export * from './uploadManager';
 export * from './offline-support';
 export * from './LiveLocationManager';
-// Don't use * here, that can break module augmentation https://github.com/microsoft/TypeScript/issues/46617
+// Don't use * here, that can break module augmentation
+// https://github.com/microsoft/TypeScript/issues/46617
 export type {
   CustomAttachmentData,
   CustomChannelData,
@@ -124,10 +122,8 @@ export {
   nsToRfc3339,
 } from './utils/time';
 /**
- * Tag-keyed async runners. Exported so the UI SDKs (and integrators) serialize their own
- * actions with the same primitive the SDK uses internally instead of hand-rolling promise
- * chains. Tags share one process-wide map, so namespace yours (`my-app/thing/${id}`) to avoid
- * colliding with another caller's.
+ * Tag-keyed async runners. Tags share one process-wide map, so namespace yours
+ * (`my-app/thing/${id}`).
  */
 export {
   hasPending,

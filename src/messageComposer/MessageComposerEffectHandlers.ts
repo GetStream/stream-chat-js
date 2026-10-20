@@ -26,7 +26,7 @@ const applyCommandActivationEffect: MessageComposerEffectHandler<
   }
   composer.captureSnapshot(snapshot);
 
-  // we manually clear because we want the command to still persist
+  // Cleared manually: the command itself must persist.
   composer.textComposer.state.next({
     command: effect.command,
     mentionedUsers: [],

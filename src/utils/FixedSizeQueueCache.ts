@@ -1,10 +1,7 @@
 type Dispose<K, T> = (key: K, value: T) => void;
 /**
- * A cache that stores a fixed number of values in a queue.
- * The most recently added or retrieved value is kept at the front of the queue.
- *
- * @template K - The type of the keys.
- * @template T - The type of the values.
+ * Least-recently-used cache holding at most `size` values. `add` and `get` mark a key as most
+ * recently used. Adding to a full cache evicts the least recently used entry, calling `dispose`.
  */
 export class FixedSizeQueueCache<K, T> {
   private keys: Array<K>;
@@ -21,7 +18,7 @@ export class FixedSizeQueueCache<K, T> {
   }
 
   /**
-   * Adds a new entry or moves the existing reference to the front of the queue.
+   * Inserts or updates an entry as the most recently used one.
    *
    * @param key - The cache key.
    * @param value - The value to associate with `key`.
@@ -50,7 +47,7 @@ export class FixedSizeQueueCache<K, T> {
   }
 
   /**
-   * Retrieves the value by key without changing its position in the queue.
+   * Retrieves a value without marking it as recently used.
    *
    * @param key - The cache key.
    * @returns The value, or `undefined` when the key is not cached.
@@ -62,7 +59,7 @@ export class FixedSizeQueueCache<K, T> {
   }
 
   /**
-   * Retrieves the value and moves it to the front of the queue.
+   * Retrieves a value and marks it as most recently used.
    *
    * @param key - The cache key.
    * @returns The value, or `undefined` when the key is not cached.
@@ -83,9 +80,7 @@ export class FixedSizeQueueCache<K, T> {
     return Array.from(this.map.values());
   }
 
-  /**
-   * Clears queue entirely and disposes of each item individually.
-   */
+  /** Empties the cache, calling `dispose` for each entry. */
   clear() {
     if (this.dispose) {
       this.map.forEach((entry, key) => this.dispose?.(key, entry));

@@ -3,9 +3,9 @@ export type DeepPartial<T> = {
 };
 
 /**
- * The keys of every union member, not only those common to all — which is what `keyof (A | B)` gives.
- * Distribution needs a naked type parameter: the same conditional written inline over a concrete union
- * silently yields the common keys instead.
+ * The keys of every union member, not only those common to all (`keyof (A | B)`). Distribution
+ * needs the naked type parameter: the same conditional inline over a concrete union yields the
+ * common keys.
  */
 export type KeysOfUnion<T> = T extends unknown ? keyof T : never;
 

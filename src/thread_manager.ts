@@ -26,10 +26,8 @@ const eventCarriesOwnUser = (
 
 export type ThreadManagerConfig = {
   /**
-   * Minimum gap between thread-list reloads triggered by connection recovery (defaults to 1000ms).
-   *
-   * Read when subscriptions are registered, since the throttle captures the interval in a closure — a
-   * change applies from the next `registerSubscriptions()`, not retroactively.
+   * Minimum gap between thread-list reloads triggered by connection recovery, in milliseconds.
+   * Defaults to 1000. Read in `registerSubscriptions()`, so a change applies from the next call.
    */
   connectionRecoveryThrottleMs: number;
 };
@@ -41,19 +39,12 @@ export const DEFAULT_THREAD_MANAGER_CONFIG: ThreadManagerConfig = deepFreezeConf
 /** Manager-level state. The list itself lives on {@link ThreadManager.paginator}. */
 export type ThreadManagerState = {
   active: boolean;
-  /**
-   * Whether the thread manager has been activated at least once in the current
-   * session (i.e. `activate()` was called). Used to avoid requerying threads
-   * on connection recovery for consumers that never actually activate the manager.
-   */
+  /** Whether `activate()` was called this session. Recovery skips the reload when it never was. */
   wasActivatedAtLeastOnce: boolean;
   /** A listed thread got a reply since the latest reload, so the list order may be out of date. */
   isThreadOrderStale: boolean;
   unreadThreadCount: number;
-  /**
-   * List of threads that haven't been loaded in the list, but have received new messages
-   * since the latest reload. Useful to display a banner prompting to reload the thread list.
-   */
+  /** Threads not in the list that got new messages since the latest reload (for a banner). */
   unseenThreadIds: string[];
 };
 
@@ -78,24 +69,20 @@ export class ThreadManager extends WithSubscriptions {
   public readonly paginator: ThreadPaginator;
   private client: StreamChat;
   /**
-   * Every live thread, held by the list (the paginator's own index over this store) and/or
-   * `REGISTERED_HOLDER` (opened this session). A thread leaves once neither holds it.
+   * Every live thread, held by the list and/or `REGISTERED_HOLDER` (opened this session). A thread
+   * leaves once neither holds it.
    */
   private readonly threadStore = new EntityStore<Thread>({ getEntityId: getThreadId });
-  /** A reload is in flight; a second one is dropped (`master`'s `pagination.isLoading` guard). */
+  /** A reload is in flight; a second one is dropped. */
   private isReloadInFlight = false;
   /**
-   * A local `pendingDisposal` listener (a state subscription, not a server watch) per channel instance
-   * that has had a listed or opened thread; removed when that channel is disposed or on reset.
+   * A local `pendingDisposal` listener per channel with a listed or opened thread, removed when the
+   * channel is disposed or on reset.
    */
   private readonly disposalListeners = new Map<Channel, Unsubscribe>();
 
-  /** The shared configuration machinery — see {@link ConfigController}. */
   private readonly configController: ConfigController<ThreadManagerConfig>;
-  /**
-   * Resolved configuration, as a store — the shape every configurable class exposes
-   * (`configState` / `config` / `updateConfig`).
-   */
+
   get configState(): StateStore<ThreadManagerConfig> {
     return this.configController.state;
   }
@@ -109,67 +96,58 @@ export class ThreadManager extends WithSubscriptions {
     this.client = client;
     this.state = new StateStore<ThreadManagerState>(THREAD_MANAGER_INITIAL_STATE);
     this.paginator = new ThreadPaginator({ client, store: this.threadStore });
-    // a thread keeps its channel, whether listed or opened
+    // A listed or opened thread keeps its channel.
     client.channelManager.channelStore.addClaim({
       heldBy: () => this.registeredThreads.map((thread) => thread.channel),
       name: 'threads',
     });
-    // Every thread entering the list gets its channel's disposal listener. Set up here rather than in
-    // `registerSubscriptions()`, so it doesn't depend on a UI having mounted.
+    // Every listed thread gets its channel's disposal listener, independent of
+    // `registerSubscriptions()`.
     this.paginator.state.subscribeWithSelector(
       ({ items }) => ({ items }),
       ({ items }) => items?.forEach(this.listenForDisposal),
     );
   }
 
-  /** The current resolved configuration. `Readonly` — change it through {@link updateConfig}. */
   public get config(): Readonly<ThreadManagerConfig> {
     return this.configState.getLatestValue();
   }
 
-  /** Merges a partial configuration into the resolved config and notifies subscribers. */
+  /**
+   * Merges a partial configuration into the resolved config.
+   *
+   * @param config - The fields to change.
+   */
   public updateConfig(config: Partial<ThreadManagerConfig>) {
     this.configController.patch(config);
   }
 
   /**
-   * Rebuilds the resolved configuration from package defaults plus the declarative slice.
+   * Re-derives the configuration from the declarative slice.
    *
-   * The derivation entry point every configurable entity exposes, so the owner routes a slice here and
-   * knows nothing about ThreadManager's defaults or merge semantics. This logic used to live in the owner,
-   * which is how `reset()` became a no-op for the client key (F4) and how a registered
-   * `notifications.sortComparator` became unremovable (G8) — an owner writing another object's
-   * derivation gets that object's rules wrong sooner or later.
-   *
-   * Routed through {@link updateConfig} rather than replacing the store, which is exact here because
-   * every field of `ThreadManagerConfig` is required and present in the defaults, so a patch naming all of
-   * them amounts to a replacement. `NotificationManager` cannot do this — its `sortComparator` is
-   * optional with no default, so a patch can never remove one — which is why it replaces outright.
+   * @param config - The declarative slice (optional).
    */
   public initializeConfig(config?: Partial<ThreadManagerConfig>) {
     this.configController.initialize(config);
   }
 
   /**
-   * The live thread for `id`: one in the list, or one opened this session (e.g. from a message
-   * list). Resolve threads through this, not `paginator.items`, which is the list only; list
-   * membership is `paginator.getItem(id)`.
+   * The live thread for `id`: one in the list, or one opened this session. `paginator.items` holds
+   * the list only; list membership is `paginator.getItem(id)`.
    */
   public get = (id: string): Thread | undefined => this.threadStore.get(id);
 
   /**
-   * Returns the thread for `parentMessage`, creating it if it doesn't exist yet. Use this to open a
-   * thread instead of calling `new Thread()`.
+   * Returns the thread for `parentMessage`, creating and registering it if needed. Use it instead
+   * of `new Thread()`: the thread list reuses this instance if it later loads the same thread. A
+   * created thread starts stale and loads its data when first opened, unless the parent has no
+   * replies in a watched channel (nothing to load: `getThread` would 404, the first reply arrives
+   * as an event). In an unwatched channel the parent's `reply_count` may miss newer replies, so it
+   * always loads.
    *
-   * The returned thread is registered right away. If the thread list loads it before the UI
-   * activates it, the list reuses this instance instead of creating a duplicate.
-   *
-   * A thread created here only has its parent message. It starts stale and loads its thread data
-   * (participants, read state, replies) once, the first time it's opened, when it may have any: when
-   * the parent has replies, and when the channel isn't watched, as the parent's `reply_count` then
-   * misses the replies sent since. A parent without replies in a watched channel has nothing to load
-   * yet (`getThread` would answer 404): the thread starts up to date, and its first reply arrives as
-   * an event.
+   * @param params.channel - The channel of the parent message.
+   * @param params.parentMessage - The thread's parent message.
+   * @returns The registered thread.
    */
   public ensure = ({
     channel,
@@ -187,10 +165,9 @@ export class ThreadManager extends WithSubscriptions {
   };
 
   /**
-   * The registered instance for a thread a query just built, or the query's own instance when none
-   * is registered, so `queryThreadsAndHydrate` / `getThreadAndHydrate` hand out the one instance
-   * events reach: a second one would be left unmanaged by `activate()`. A stale registered thread
-   * is refreshed from the query, unless it's open (active), in which case it reloads itself.
+   * The registered instance for a thread a query just built, else the query's own, so events keep
+   * reaching the one managed instance. A stale registered thread is refreshed from the query unless
+   * it is active (it reloads itself).
    *
    * @internal
    */
@@ -204,7 +181,7 @@ export class ThreadManager extends WithSubscriptions {
   };
 
   /**
-   * Every registered thread — the list's plus the opened ones.
+   * Every registered thread: the list's plus the opened ones.
    *
    * @internal
    */
@@ -213,9 +190,8 @@ export class ThreadManager extends WithSubscriptions {
   }
 
   /**
-   * Called by `thread.activate()`. Keeps `thread` for the session: it resolves through
-   * {@link ThreadManager.get} and stays subscribed whether or not the list holds it, until its
-   * channel is disposed or the user disconnects.
+   * Keeps `thread` for the session: resolvable through {@link ThreadManager.get} and subscribed
+   * whether or not the list holds it, until its channel is disposed or the user disconnects.
    *
    * @internal
    */
@@ -240,7 +216,7 @@ export class ThreadManager extends WithSubscriptions {
     this.listenForDisposal(thread);
   };
 
-  /** Releases the `REGISTERED_HOLDER` hold on `thread`; the list's own diff unsubscribes it if it is still listed. */
+  /** Releases the `REGISTERED_HOLDER` hold, and unsubscribes the thread unless listed. */
   private release = (thread: Thread) => {
     this.threadStore.unlink(thread.id, REGISTERED_HOLDER);
     if (this.hasSubscriptions && !this.paginator.items?.includes(thread)) {
@@ -312,10 +288,9 @@ export class ThreadManager extends WithSubscriptions {
   };
 
   /**
-   * Hands client events to the threads in the store by id, as `PollManager` does for polls: a thread
-   * doesn't listen to the client itself. A message event goes to the thread the message is a reply
-   * in and the thread it starts; quoted-message updates stay within the reply's own thread, as on
-   * `master`. A thread follows its channel's `watchStatus` itself, so watch events need no routing.
+   * Routes client events to the threads in the store by ID. A message event reaches the thread the
+   * message replies in and the thread it starts; quoted-message updates stay within the reply's own
+   * thread. A thread follows its channel's `watchStatus` itself.
    */
   private subscribeThreadEvents = () => {
     const threadsOf = (message?: { id: string; parent_id?: string }) =>
@@ -374,7 +349,6 @@ export class ThreadManager extends WithSubscriptions {
   };
 
   private subscribeUnreadThreadsCountChange = () => {
-    // initiate
     const { unread_threads: unreadThreadCount = 0 } =
       (this.client.user as OwnUserResponse) ?? {};
     this.state.partialNext({ unreadThreadCount });
@@ -409,8 +383,8 @@ export class ThreadManager extends WithSubscriptions {
       (nextValue) => ({ threads: nextValue.items ?? [] }),
       ({ threads: nextThreads }, prev) => {
         const { threads: prevThreads = [] } = prev ?? {};
-        // Left the list and wasn't opened. Asks for `REGISTERED_HOLDER`, not `threadStore.get`: `removeItem`
-        // publishes before it unlinks the list's hold.
+        // Left the list and not opened. Checks `REGISTERED_HOLDER`, not `threadStore.get`:
+        // `removeItem` publishes before it unlinks the list's hold.
         const listed = new Set(nextThreads);
         const removedThreads = prevThreads.filter(
           (thread) =>
@@ -446,15 +420,7 @@ export class ThreadManager extends WithSubscriptions {
       }
     }).unsubscribe;
 
-  /**
-   * Reloads the thread list once recovery after a reconnect has finished.
-   *
-   * `connection.recovered` on its own is the whole condition, with no drop timestamp to gate on:
-   * `ConnectionRecoveryManager` dispatches it on every reconnect path, so it already implies a drop.
-   *
-   * Anything that does need the drop timestamp should read `client.wsConnection.state.lastUnhealthyAt`,
-   * which is written on every status transition.
-   */
+  /** Reloads the thread list once recovery after a reconnect finished (`connection.recovered`). */
   private subscribeReloadOnConnectionRecovered = () => {
     const throttledHandleConnectionRecovered = throttle(
       () => {
@@ -477,8 +443,8 @@ export class ThreadManager extends WithSubscriptions {
   /**
    * Loads the first page, or re-queries a loaded list in place, sized to what is loaded plus the
    * unseen threads. Skipped once loaded unless forced or something changed; the list survives a
-   * failure. Guarded only against another reload, as on `master`. A reload of a loaded list shows
-   * no loading state; the first load shows through `paginator.isLoading`.
+   * failure. Dropped while another reload is in flight. Only the first load shows
+   * `paginator.isLoading`.
    */
   public reload = async ({ force = false } = {}) => {
     if (this.isReloadInFlight) return;

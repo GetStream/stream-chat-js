@@ -1,12 +1,7 @@
 /**
- * The minimal CRUD surface a paginator relies on from its item index.
- *
- * The sole implementation is {@link StoreBackedItemIndex}: backed by a shared, client-global store
- * it dedupes content across collections and fans changes out to every holder; backed by a private
- * store (the default, owner-less mode) it behaves as a plain per-instance index. Keeping this as an
- * interface lets `BasePaginator` stay agnostic to which backing a given paginator uses.
- *
- * @template T The domain item type managed by the index.
+ * The CRUD surface a paginator relies on from its item index. The only implementation is
+ * `StoreBackedItemIndex`: on a shared client store it dedupes items across collections and fans
+ * changes out to every holder, on a private store it is a plain per-instance index.
  */
 export interface ItemIndexApi<T> {
   setMany(items: T[]): void;
@@ -17,9 +12,6 @@ export interface ItemIndexApi<T> {
   clear(): void;
   entries(): [string, T][];
   values(): T[];
-  /**
-   * Runs `fn`, coalescing any change notifications it produces into a single flush. A private-store
-   * (owner-less) index has nothing to fan out and simply runs `fn`.
-   */
+  /** Runs `fn`, coalescing the change notifications it produces into a single flush. */
   batch<R>(fn: () => R): R;
 }

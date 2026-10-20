@@ -14,20 +14,17 @@ import type { Channel } from '../channel';
 
 type CustomContext = Record<string, unknown>;
 
-// Built-in contexts per builder
 type BuiltInContexts = {
   messageSearchChannel: { searchQuery?: string };
   messageSearch: { searchQuery?: string };
   channelQuery: { cids?: string[] };
 };
 
-// Merge Built-in with user-provided Custom context
 type MergeContext<
   B extends Record<string, unknown>,
   C extends CustomContext | undefined,
 > = B & (C extends object ? C : {});
 
-// User can provide custom context for each builder
 type MessageSearchSourceContexts = Partial<{
   messageSearchChannelContext: Record<string, unknown>;
   messageSearchContext: Record<string, unknown>;
@@ -64,9 +61,8 @@ export type MessageSearchSourceOptions = SearchSourceOptions & {
   channelQueryFilters?: ChannelFilters;
   channelQuerySort?: SortParamRequest[];
   /**
-   * Options for the follow-up query that hydrates unknown channels. Those channels are not watched
-   * unless `watch: true` is passed: a result is a preview, and opening one is what watches its
-   * channel.
+   * Options for the follow-up query that hydrates unknown channels. They are not watched unless
+   * `watch: true`: a result is a preview, and opening one watches its channel.
    */
   channelQueryOptions?: Omit<ChannelOptions, 'limit' | 'offset'>;
 };
@@ -162,7 +158,7 @@ export class MessageSearchSource<
       },
     });
 
-    // A subscription to the source's own state, so it lives and goes with the source itself.
+    // Subscribed to the source's own state, so it goes away with the source.
     this.state.subscribeWithSelector(
       ({ isActive }) => ({ isActive }),
       () => this.registerSubscriptions(),
@@ -170,10 +166,9 @@ export class MessageSearchSource<
   }
 
   /**
-   * While the search is active its results are on screen, so the channels they were found in count
-   * as used in the channel store (see `EntityStore.addClaim`), and stay the instances the results
-   * open. Follows `isActive`; also called by `SearchController.registerSubscriptions()` to take the
-   * registration again after `dispose()`.
+   * While active, the channels the results come from count as used in the channel store (see
+   * `EntityStore.addClaim`), so they stay the instances the results open. Follows `isActive`;
+   * `SearchController.registerSubscriptions()` also calls it to re-register after `dispose()`.
    */
   registerSubscriptions() {
     if (!this.isActive) {
@@ -187,8 +182,8 @@ export class MessageSearchSource<
   }
 
   /**
-   * Removes the registration that keeps the results' channels in the channel store, so a source that
-   * is dropped while active doesn't keep them, or itself, alive. A later activation registers again.
+   * Removes the channel-store claim, so the results' channels are no longer held and a dropped
+   * source can be collected.
    */
   dispose() {
     this.removeClaim?.();
@@ -256,7 +251,7 @@ export class MessageSearchSource<
       .map(({ message }) => message)
       .filter((m): m is NonNullable<typeof m> => Boolean(m));
 
-    // a newer query already replaced this one - skip the cid scan and the hydration request
+    // Superseded by a newer query: skip the hydration.
     if (queryOptions.signal?.aborted) return { items, next };
 
     const cids = Array.from(
@@ -288,10 +283,8 @@ export class MessageSearchSource<
 
     if (queryOptions.signal?.aborted) return { items, next };
 
-    // The query above doesn't return every result's channel: it leaves out hidden channels by
-    // default, and those its filters exclude. Each result carries its channel's data, so such a
-    // channel is stored from it, unwatched and not loaded, and every result has a channel to show and
-    // to open (opening loads and watches it).
+    // The hydration query can miss a result's channel (hidden or filtered out): store it from the
+    // message's channel data, unwatched, so every result has a channel to open.
     for (const message of items) {
       if (!message.cid) continue;
       const stored = this.client.channelManager.get(message.cid);

@@ -6,11 +6,7 @@ import type { TokenOrProvider } from './types';
 const logger = chatLoggerSystem.getLogger('token-manager');
 
 export type TokenManagerMinimalUser = { id: string; anon?: boolean };
-/**
- * TokenManager
- *
- * Handles all the operations around user token.
- */
+/** Holds the user token, either static or loaded from a provider. */
 export class TokenManager {
   loadTokenPromise: Promise<string> | null;
   type: 'static' | 'provider';
@@ -18,9 +14,6 @@ export class TokenManager {
   tokenProvider?: TokenOrProvider;
   user?: TokenManagerMinimalUser;
   private _isAnonymous = false;
-  /**
-   * Initializes the token manager.
-   */
   constructor() {
     this.loadTokenPromise = null;
 
@@ -32,11 +25,11 @@ export class TokenManager {
   }
 
   /**
-   * Sets the static string token or token provider. A token provider should return a token string
-   * or a promise that resolves to a token string.
+   * Sets a static token or a token provider, then loads the token.
    *
-   * @param tokenOrProvider - A token string or an async provider that returns one.
+   * @param tokenOrProvider - A token string, or an async provider that resolves to one.
    * @param user - The user the token belongs to.
+   * @throws When the token is not a string or function, or a string token does not match `user.id`.
    */
   setTokenOrProvider = async (
     tokenOrProvider: TokenOrProvider,
@@ -60,8 +53,10 @@ export class TokenManager {
   };
 
   /**
-   * Resets the token manager.
-   * Useful for client disconnection or switching user.
+   * Clears the token, the provider and the user. Called by the client on `disconnectUser()` and
+   * after an anonymous `createGuest()`.
+   *
+   * @internal
    */
   reset = () => {
     this._isAnonymous = false;
@@ -72,9 +67,8 @@ export class TokenManager {
     this.loadTokenPromise = null;
   };
 
-  // Validates the user token.
   validateToken = (tokenOrProvider: TokenOrProvider, user: TokenManagerMinimalUser) => {
-    // allow empty token for anon user
+    // Anonymous users may have an empty token.
     if (user && user.anon && !tokenOrProvider) return;
 
     if (
@@ -86,7 +80,6 @@ export class TokenManager {
     }
 
     if (typeof tokenOrProvider === 'string') {
-      // Allow empty token for anonymous users
       if (user.anon && tokenOrProvider === '') return;
 
       const tokenUserId = UserFromToken(tokenOrProvider);
@@ -101,12 +94,10 @@ export class TokenManager {
     }
   };
 
-  // Resolves when token is ready. This function is simply to check if loadToken is in progress, in which
-  // case a function should wait.
+  // The in-flight token load, for callers that must wait for it.
   tokenReady = () => this.loadTokenPromise;
 
-  // Fetches a token from tokenProvider function and sets in tokenManager.
-  // In case of static token, it will simply resolve to static token.
+  // Fetches the token from the provider and stores it. A static token resolves as is.
   loadToken = () => {
     // eslint-disable-next-line no-async-promise-executor
     this.loadTokenPromise = new Promise(async (resolve, reject) => {
@@ -132,7 +123,6 @@ export class TokenManager {
     return this.loadTokenPromise;
   };
 
-  // Returns a current token
   getToken = () => {
     if (this.token) {
       return this.token;

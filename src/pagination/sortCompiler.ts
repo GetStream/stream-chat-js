@@ -12,15 +12,10 @@ export type ItemLocation = {
 };
 
 /**
- * Generic binary-search + plateau lookup over an abstract sorted array.
- *
- * The array is represented by:
- *  - its length
- *  - a getter `getItemAt(index)` that returns the item (or undefined)
- *
- * It returns:
- *  - current: actual index of the item in the array
- *  - expected: lower-bound position where the item belongs according to compare function
+ * Binary search over an abstract sorted array. Returns the needle's `currentIndex` (`-1` if absent)
+ * and the `insertionIndex` where `compare` places it (after items that compare equal). With
+ * `plateauScan`, a needle not at the insertion index is looked for by identity, scanning outward
+ * from it.
  */
 export function binarySearch<T>({
   needle,
@@ -30,43 +25,32 @@ export function binarySearch<T>({
   compare,
   plateauScan,
 }: {
-  /** Target item in the searched array */
   needle: T;
   length: number;
-  /** Retrieves the item from an array. The array could be just an array of reference by id to an index.
-   * Therefore, we do not access the array directly but allow to determine, how the item is constructed.
-   */
+  /** Reads the item at an index (the array may hold IDs resolved through an index). */
   getItemAt: (index: number) => T | undefined;
-  /** Used to determine identity, not equality based on sort / comparator rules */
+  /** Identity, not equality under the sort order. */
   itemIdentityEquals: (item1: T, item2: T) => boolean;
-  /** Used to determine equality from the sort order point of view. */
   compare: Comparator<T>;
   plateauScan?: boolean;
 }): ItemLocation {
-  // empty array
   if (length === 0) return { currentIndex: -1, insertionIndex: 0 };
 
-  // --- 1) Binary search to find lower bound (insertionIndex) ---
   let lo = 0;
   let hi = length;
 
   while (lo < hi) {
-    const mid = (lo + hi) >> 1; // fast floor((low+high)/2)
+    const mid = (lo + hi) >> 1;
     const midItem = getItemAt(mid);
     if (!midItem) {
-      // Corruption: we have an ID but no backing item.
-      // Bail out with "not found".
+      // An ID without a backing item: report not found.
       return { currentIndex: -1, insertionIndex: -1 };
     }
 
     if (itemIdentityEquals(midItem, needle) && mid > 0) {
-      // The probe landed on the needle's own slot, where `compare` is 0 by definition and says
-      // nothing about where it belongs. That matters when relocating an item whose sort value just
-      // changed: the array is sorted EXCEPT at this slot, because items held by reference (a
-      // `Channel` mutated in place before the paginator is told) already carry the new value.
-      // Walking right on that 0 reports "insert just after where you are" — read downstream as
-      // "already in place" — so the item never moves. The left neighbour is the reliable signal;
-      // otherwise fall through, keeping the established end-of-plateau result.
+      // The needle's own slot compares 0 and says nothing about where it belongs, and its value may
+      // have just changed in place (items held by reference): use the left neighbour, or it never
+      // moves.
       const leftItem = getItemAt(mid - 1);
       if (leftItem && compare(leftItem, needle) > 0) {
         hi = mid;
@@ -75,17 +59,14 @@ export function binarySearch<T>({
     }
 
     if (compare(midItem, needle) <= 0) {
-      // midItem < needle ⇒ go right
       lo = mid + 1;
     } else {
-      // midItem ≥ needle ⇒ go left
       hi = mid;
     }
   }
 
   const insertionIndex = lo;
 
-  // item is located where it is expected to be according to the sort
   const itemAtExpectedIndex = getItemAt(insertionIndex);
   if (itemAtExpectedIndex && itemIdentityEquals(itemAtExpectedIndex, needle)) {
     return { currentIndex: insertionIndex, insertionIndex };
@@ -95,8 +76,6 @@ export function binarySearch<T>({
     return { currentIndex: -1, insertionIndex };
   }
 
-  // --- 2) Plateau scan around insertionIndex ---
-
   const checkSide = (atIndex: number) => {
     const result = { exhausted: false, found: false };
     const item = getItemAt(atIndex);
@@ -105,9 +84,8 @@ export function binarySearch<T>({
     return result;
   };
 
-  // Alternating left/right scan
   let iLeft = insertionIndex - 1;
-  let iRight = insertionIndex + 1; // we've already checked insertionIndex
+  let iRight = insertionIndex + 1; // insertionIndex itself is already checked
   let leftDone = iLeft < 0;
   let rightDone = iRight >= length;
 
@@ -125,22 +103,19 @@ export function binarySearch<T>({
     }
   }
 
-  // Not found in plateau; insertion index is still the correct lower bound.
   return { currentIndex: -1, insertionIndex };
 }
 
 /**
- * Negative number (< 0) → a comes before b
- *
- * Zero (0) → leave a and b unchanged relative to each other
- * (but they can still move relative to others — sort in JS is not guaranteed stable in older engines, though modern V8/Node/Chrome/Firefox make it stable)
- *
- * Positive number (> 0) → a comes after b
+ * Builds a comparator from a sort spec: terms apply in order, then `tiebreaker`.
+ * `null`/`undefined` values sort last whatever the direction.
  *
  * @param params - Comparator configuration.
  * @param params.sort - The sort specification defining fields and directions.
  * @param params.resolvePathValue - Resolver used to read a field value from an item.
- * @param params.tiebreaker - Comparator applied when all sort terms are equal.
+ * @param params.tiebreaker - Comparator applied when all sort terms are equal. Defaults to
+ *   comparing `cid`.
+ * @returns The comparator.
  */
 export function makeComparator<T>({
   sort,
@@ -165,17 +140,15 @@ export function makeComparator<T>({
           comparison = compare(normalized.a, normalized.b);
           break;
         default: {
-          // Null/undefined always sort to the tail, INDEPENDENT of `direction`. Return here so the
-          // result bypasses the direction flip below — otherwise a descending sort (e.g.
-          // `{ last_message_at: -1 }`) negates "null last" into "null first" and floats value-less
-          // items (e.g. channels with no last message) to the head of the list.
+          // Return before the direction flip below, which would turn "null last" into "null first"
+          // on a descending sort.
           if (leftValue == null && rightValue == null) {
-            comparison = 0; // tie on this term; fall through to the next term / tiebreaker
+            comparison = 0;
             break;
           }
-          if (leftValue == null) return 1; // a (null) sorts after b
-          if (rightValue == null) return -1; // b (null) sorts after a
-          // Both non-null but not normalizable: deterministic string compare (respects direction).
+          if (leftValue == null) return 1;
+          if (rightValue == null) return -1;
+          // Both non-null but not normalizable: compare as strings (respects direction).
           const stringLeftValue = String(leftValue),
             stringRightValue = String(rightValue);
           comparison =

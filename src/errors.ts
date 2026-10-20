@@ -43,13 +43,8 @@ export function isAPIError(error: Error): error is APIError {
 }
 
 /**
- * Whether the server answered "this does not exist" — a definitive, expected answer rather than a
- * failure. Distinct from a network error: the request succeeded, the resource simply is not there.
- * Use it to avoid surfacing an error state for something a caller can legitimately ask about before
- * it exists (a thread on a parent that has no replies yet, say).
- *
- * Resolved through {@link APIErrorCodes} rather than comparing the numeric code, so the table stays
- * the single place the mapping lives.
+ * Whether the server answered "does not exist": an expected answer for a resource a caller may ask
+ * about before it exists, not a failure.
  */
 export function isDoesNotExistError(error: Error): boolean {
   return (
@@ -69,17 +64,10 @@ export function isConnectionIDError(error: APIError) {
 }
 
 /**
- * Whether an error is EPHEMERAL — a transient failure worth queueing/retrying rather than a
- * definitive rejection. True when the server never responded (connection/network/offline error - no
- * `response`, i.e an axios network error or an `OfflineError`) and when the server responded with a
- * retryable code (see {@link APIErrorCodes}); false when the server responded with a
- * non-retryable code (InputError 4, DoesNotExist 16, NotAllowed 17, …) and when the caller
- * cancelled the request.
- *
- * Cancellation is deliberately NOT ephemeral even though an aborted request carries no `response`.
- * A caller who aborts via `StreamRequestOptions.signal` wants the operation dropped, so treating it
- * as transient would do the opposite of what was asked: the task would be queued and replayed on
- * reconnect, and any optimistic local update would be kept rather than rolled back.
+ * Whether an error is transient and worth queueing or retrying: the server never responded (no
+ * `response`, e.g. an axios network error or an `OfflineError`) or responded with a retryable code
+ * (see {@link APIErrorCodes}). A request cancelled by the caller is not ephemeral: it is dropped,
+ * not queued for replay.
  */
 export function isEphemeral(error: Error): boolean {
   if (isCancel(error)) return false;
@@ -111,6 +99,6 @@ export const parseError = (error: unknown): StreamAPIError => {
   return (stringError ? JSON.parse(stringError) : {}) as StreamAPIError;
 };
 
-/** Whether the server rejected a send because a message with that id already exists. */
+/** Whether the server rejected a send because a message with that ID already exists. */
 export const isAlreadyExistsError = (error: unknown, parsed: StreamAPIError) =>
   parsed.code === 4 && error instanceof Error && error.message.includes('already exists');

@@ -47,18 +47,14 @@ export type RunWithRetryOptions<T extends FunctionToRetry> = {
 };
 
 /**
- * Function which wraps asynchronous functions with retry mechanism which'll keep executing said
- * function pre-defined number of times until it resolves, rejects or the retry mechanism runs out of available attempts.
- * Running out of attempts rejects with the error of the last attempt.
+ * Wraps `f` so a failed call is retried. Throws the error when it is not retryable, else the last
+ * attempt's error once the retries run out. A falsy result counts as a failure and is retried.
  *
- * #### Available options:
- *  - `didValueChange` - check function with initial argument value to check against new values, return `true` to abort next attempt
- *
- *  - `isRetryable` - error evaluation function which determines whether to retry the execution
- *
- *  - `delayBetweenRetries` - accepts either fixed numeric value or function which provides retry attempt as the argument, expects number as return value
- *
- *  - `retryAttempts` - number of attempts to try out before rejecting the promise
+ * - `retryAttempts`: retries after the first attempt. Defaults to 3.
+ * - `isRetryable`: whether an error is worth retrying. Defaults to always.
+ * - `delayBetweenRetries`: ms, or a function of the 0-based retry number.
+ * - `didValueChange`: called with the call arguments before each attempt, `true` aborts with a
+ *   `RetryError`.
  */
 export const runWithRetry = <T extends FunctionToRetry>(
   f: T,

@@ -1,26 +1,20 @@
 import type { Unsubscribe } from '@stream-io/state-store';
 
 /**
- * Class to use as a template for subscribable entities.
+ * Base class for entities that own event subscriptions. `unregisterSubscriptions` is ref-counted:
+ * only the last consumer's call tears the subscriptions down.
  *
  * @internal
  */
 export abstract class WithSubscriptions {
   private unsubscribeFunctions: Set<Unsubscribe> = new Set();
-  /**
-   * Workaround for the missing TS keyword - ensures that inheritants
-   * overriding `unregisterSubscriptions` call the base method and return
-   * its unique symbol value.
-   */
+  /** Return brand that makes overrides of `unregisterSubscriptions` return the base result. */
   protected static symbol = Symbol(WithSubscriptions.name);
   private refCount = 0;
 
   public abstract registerSubscriptions(): void;
 
-  /**
-   * Returns a boolean, provides information of whether `registerSubscriptions`
-   * method has already been called for this instance.
-   */
+  /** Whether subscriptions are registered. Guards `registerSubscriptions` against running twice. */
   public get hasSubscriptions() {
     return this.unsubscribeFunctions.size > 0;
   }
@@ -29,16 +23,12 @@ export abstract class WithSubscriptions {
     this.unsubscribeFunctions.add(unsubscribeFunction);
   }
 
-  /**
-   * Increments `refCount` by one and returns new value.
-   */
   protected incrementRefCount() {
     return ++this.refCount;
   }
 
   /**
-   * If you re-declare `unregisterSubscriptions` method within your class
-   * make sure to run the original too.
+   * Overrides must call `super.unregisterSubscriptions()` and return its result.
    *
    * @example
    * ```ts

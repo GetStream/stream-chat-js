@@ -10,18 +10,12 @@ import type { Unsubscribe } from '@stream-io/state-store';
 const logger = chatLoggerSystem.getLogger('offline-db');
 
 /**
- * Manages synchronization between the local offline database and the Stream backend.
- *
- * Responsible for detecting connection changes, syncing channel data, and executing
- * pending tasks queued during offline periods. This class ensures the database remains
- * consistent with the server once connectivity is restored.
+ * Keeps the offline DB in line with the server. When the socket becomes healthy it replays the
+ * tasks queued while offline, then syncs missed events into the DB.
  */
 export class OfflineDBSyncManager {
   public isSynced = false;
-  /**
-   * Releases the subscription to the socket's status store. A bare unsubscribe now that this reads a
-   * store rather than an event, which no longer wraps it in an object.
-   */
+  /** Releases the subscription to the socket's status store. */
   public connectionChangedListener: Unsubscribe | null = null;
   private syncStatusListeners: Array<(status: boolean) => void> = [];
   private scheduledSyncStatusCallbacks: Map<string | symbol, () => Promise<void>> =
@@ -29,13 +23,9 @@ export class OfflineDBSyncManager {
   private client: StreamChat;
   private offlineDb: AbstractOfflineDB;
   /**
-   * Optional positive cap on the number of events a single `/sync` response may
-   * contain before this manager skips event replay into local storage and relies
-   * on the reconnect-time channel refresh (queryChannels + `channel.watch()`) to
-   * bring visible surfaces up to date.
-   *
-   * `undefined` or any non-positive value means "no limit" and event replay always
-   * runs with whatever maximum the server decides to return.
+   * Cap on the events a single `/sync` response may contain. Above it, event replay into local
+   * storage is skipped and the reconnect-time channel refresh updates what is visible. `undefined`
+   * or non-positive means no limit.
    */
   public readonly syncMaxEventCount?: number;
 
@@ -54,38 +44,26 @@ export class OfflineDBSyncManager {
   }
 
   /**
-   * Initializes the sync manager. Should only be called once per session.
-   *
-   * Cleans up old listeners if re-initialized to avoid memory leaks.
-   * Starts syncing immediately if already connected, otherwise waits for reconnection.
+   * Syncs immediately when the socket is already healthy, then on every later healthy transition.
+   * Re-initializing replaces the previous subscription.
    */
   public init = async () => {
     try {
-      // If the WebSocket connection is already active, then call
-      // the sync API straight away and also execute pending API calls.
-      // Otherwise wait for the socket's status store to report one.
       if (this.client.user?.id && this.client.wsConnection?.isHealthy) {
         await this.syncAndExecutePendingTasks();
         await this.invokeSyncStatusListeners(true);
       }
 
-      // If a listener has already been registered, unsubscribe from it so
-      // that it can be reinstated. This can happen if we reconnect with a
-      // different user or the component invoking the init() function gets
-      // unmounted and then remounted again. This part of the code makes
-      // sure the stale listener doesn't produce a memory leak.
       this.connectionChangedListener?.();
 
-      // Syncing is about reaching the server over this socket, so this reads the socket's own store.
-      // The device's network status is a separate fact with its own store, and a device with a
-      // network but no socket has nothing to sync over.
+      // Follows the socket, not the device's network status: the sync catches up the events the
+      // socket missed, so it runs once the socket is back and delivering new ones.
       let wasHealthy: boolean | undefined;
       this.connectionChangedListener =
         this.client.wsConnection.state.subscribeWithSelector(
           ({ isHealthy }) => ({ isHealthy }),
           async ({ isHealthy }) => {
-            // The immediate first call establishes the baseline. It is the current status rather than
-            // a change, and the block above has already acted on it.
+            // The first call reports the current status (handled above), not a change.
             const previous = wasHealthy;
             wasHealthy = isHealthy;
             if (previous === undefined) return;
@@ -106,7 +84,7 @@ export class OfflineDBSyncManager {
   };
 
   /**
-   * Registers a listener that is called whenever the sync status changes.
+   * Calls `listener` with the new sync status on every change.
    *
    * @param listener - A callback invoked with the new sync status (`true` or `false`).
    * @returns An object with an `unsubscribe` function to remove the listener.
@@ -124,9 +102,11 @@ export class OfflineDBSyncManager {
   };
 
   /**
-   * Schedules a one-time callback to be invoked after the next successful sync.
+   * Runs a callback once, the next time the sync status turns `true` (after the next sync attempt,
+   * even a failed one).
    *
-   * @param tag - A unique key to identify and manage the callback.
+   * @param tag - A unique key to identify and manage the callback. Scheduling the same tag replaces
+   *   it.
    * @param callback - An async function to run after sync.
    */
   public scheduleSyncStatusChangeCallback = (
@@ -136,11 +116,7 @@ export class OfflineDBSyncManager {
     this.scheduledSyncStatusCallbacks.set(tag, callback);
   };
 
-  /**
-   * Invokes all registered sync status listeners and executes any scheduled sync callbacks.
-   *
-   * @param status - The new sync status (`true` or `false`).
-   */
+  /** Notifies the listeners and, on `true`, runs and clears the scheduled callbacks. */
   private invokeSyncStatusListeners = async (status: boolean) => {
     this.isSynced = status;
     this.syncStatusListeners.forEach((l) => {
@@ -161,26 +137,19 @@ export class OfflineDBSyncManager {
           }
         },
       );
-      // Every callback is isolated above, so Promise.all never rejects and clear()
-      // always runs (no double-execution on the next sync).
+      // Each callback catches its own error, so `clear()` always runs.
       await Promise.all(promises);
       this.scheduledSyncStatusCallbacks.clear();
     }
   };
 
-  /**
-   * Performs synchronization with the Stream backend.
-   *
-   * This includes downloading events since the last sync, updating the local DB,
-   * and handling sync failures (e.g., if syncing beyond the allowed retention window).
-   */
+  /** Replays the events since the last sync into the DB, or resets the DB if too much was missed. */
   private sync = async () => {
     if (!this.client?.user) {
       return;
     }
     try {
       const cids = await this.offlineDb.getAllChannelCids();
-      // If there are no channels, then there is no need to sync.
       if (cids.length === 0) {
         return;
       }
@@ -194,14 +163,12 @@ export class OfflineDBSyncManager {
         const lastSyncedAtDate = new Date(lastSyncedAt);
         const nowDate = new Date();
 
-        // Calculate the difference in days
         const diff = Math.floor(
           (nowDate.getTime() - lastSyncedAtDate.getTime()) / (1000 * 60 * 60 * 24),
         );
 
         if (diff > 30) {
-          // stream backend will send an error if we try to sync after 30 days.
-          // In that case reset the entire DB and start fresh.
+          // The backend rejects a sync older than 30 days.
           await this.offlineDb.resetDB();
         } else {
           const result = await this.client.sync({
@@ -209,7 +176,6 @@ export class OfflineDBSyncManager {
             last_sync_at: lastSyncedAtDate,
           });
 
-          // Opt-in positive cap owned by this manager; undefined/non-positive = no limit.
           const { syncMaxEventCount } = this;
           const exceedsLimit =
             typeof syncMaxEventCount === 'number' &&
@@ -244,7 +210,6 @@ export class OfflineDBSyncManager {
         .error('An error occurred while syncing the database.', { error: e });
 
       if (isAxiosError(e) && e.code === 'ECONNABORTED') {
-        // If the sync was aborted due to timeout, we can simply return
         return;
       }
 
@@ -254,22 +219,15 @@ export class OfflineDBSyncManager {
         return;
       }
 
-      // Error will be raised by the sync API if there are too many events.
-      // In that case reset the entire DB and start fresh.
-      // We avoid resetting the DB if the error is due to timeout.
+      // The sync API errors when there are too many events, so reset. A timeout (above) must not.
       await this.offlineDb.resetDB();
     }
   };
 
   /**
-   * Executes any tasks that were queued while offline and then performs a sync.
-   *
-   * Each step is isolated so a failure in one does not prevent the other, and
-   * neither can escape to the callers (init + the status subscription).
-   * This guarantees the subsequent invokeSyncStatusListeners(true) always runs,
-   * so isSynced recovers to true and gated channel queries are unblocked.
-   * Failed syncs degrade to "possibly stale data until the next query" rather
-   * than freezing all future queries. See issue #1816.
+   * Replays queued tasks, then syncs. Each step swallows its own failure so the caller always goes
+   * on to `invokeSyncStatusListeners(true)`: a failed sync leaves possibly stale data rather than
+   * blocking later channel queries.
    */
   private syncAndExecutePendingTasks = async () => {
     try {
@@ -277,9 +235,7 @@ export class OfflineDBSyncManager {
     } catch (error) {
       console.log('Error executing pending tasks during sync.', error);
     }
-    // Note: sync() has its own try/catch, but its catch block calls resetDB(),
-    // which can itself throw on a corrupted DB and re-reject. This outer guard
-    // absorbs that case.
+    // `sync` can still reject: its catch calls `resetDB()`, which can throw on a corrupted DB.
     try {
       await this.sync();
     } catch (error) {

@@ -72,8 +72,8 @@ export class Poll {
   public id: string;
   private client: StreamChat;
   private optimisticVotes: OptimisticPollVotes;
-  // Set whenever server data (WS event or rehydration) confirms that the poll is closed,
-  // so that a failed optimistic close does not reopen a poll that is actually closed.
+  // Set when server data (WS event or rehydration) confirms the close, so a failed optimistic close
+  // does not reopen the poll.
   private closeConfirmed = false;
 
   constructor({ client, poll }: PollInitOptions) {
@@ -110,7 +110,7 @@ export class Poll {
     };
   };
 
-  // persists only the server's votes, never the optimistic ones
+  // Persists only the server's votes, never the optimistic ones.
   private upsertOfflineDb = () => {
     const serverState = this.optimisticVotes.withServerVotes(this.data);
     this.client.offlineDb?.executeQuerySafely(
@@ -126,7 +126,7 @@ export class Poll {
     this.state.partialNext(initialState);
   };
 
-  // Hands the vote state of a WS vote event to the optimistic votes, which decide whether to show it.
+  // The optimistic votes decide whether the event's vote state is shown.
   private updateFromVoteEvent = (
     event: EventPayload<'poll.vote_casted' | 'poll.vote_changed' | 'poll.vote_removed'>,
     ownVotesByOptionId: Record<OptionId, PollVoteResponseData>,
@@ -275,11 +275,9 @@ export class Poll {
   };
 
   /**
-   * Puts an updated user (new name or image) into the votes, answers and creator this poll keeps,
-   * so voter avatars show it. Each vote is replaced, not edited in place, and everything goes out in
-   * one state update; nothing is published when the poll doesn't contain the user. An option whose
-   * votes don't contain the user keeps its array, so what renders it doesn't re-render. The offline
-   * DB gets the updated poll, as with the other poll events.
+   * Puts an updated user (new name or image) into the votes, answers and creator of the poll in one
+   * state update, then saves the poll to the offline DB. Does nothing when the poll does not
+   * contain the user. Option vote arrays without the user keep their identity.
    */
   public handleUserUpdated = (user: UserResponse) => {
     const currentState = this.data;
@@ -289,7 +287,7 @@ export class Poll {
       changed = true;
       return { ...vote, user };
     };
-    // the same array when none of its votes is the user's
+    // Returns the same array when none of its votes is the user's.
     const withUserAll = (votes?: PollVoteResponseData[]) => {
       if (!votes) return votes;
       const next = votes.map(withUser);
@@ -344,9 +342,8 @@ export class Poll {
     );
 
   /**
-   * Closes the poll. The poll is marked as closed optimistically and the change is
-   * reverted if the request fails, unless the server confirmed the close meanwhile.
-   * Does nothing if the poll is already closed.
+   * Closes the poll optimistically. A failed request reverts it, unless the server confirmed the
+   * close meanwhile. No-op if the poll is already closed.
    */
   close = async () => {
     if (this.data.is_closed) return;
@@ -379,9 +376,8 @@ export class Poll {
     await this.client.deletePollOption({ poll_id: this.id as string, option_id });
 
   /**
-   * Casts a vote for an option. The vote is shown right away through a local placeholder vote,
-   * which the server's vote replaces once the WS events of all pending vote changes arrived.
-   * If the request fails, the change is reverted.
+   * Casts a vote, shown right away as a local placeholder that the server's vote replaces once the
+   * WS events of all pending vote changes arrived. A failed request reverts it.
    */
   castVote = async (optionId: string, messageId: string) => {
     const { max_votes_allowed, ownVotesByOptionId } = this.data;
@@ -407,9 +403,13 @@ export class Poll {
   };
 
   /**
-   * Removes a vote. The vote is removed right away and restored if the request fails. Vote
-   * requests are sent in order, so removing a vote whose cast is not confirmed yet uses the vote
-   * id from the cast's response; if that cast failed, there is nothing to remove.
+   * Removes a vote right away; a failed request restores it. Vote requests are sent in order, so a
+   * vote whose cast is not confirmed yet is removed by the ID from the cast's response (if that
+   * cast failed, there is nothing to remove).
+   *
+   * @param voteId - The ID of the vote to remove.
+   * @param messageId - The ID of the poll's message.
+   * @returns The delete response, or `undefined` when there was nothing to remove.
    */
   removeVote = async (voteId: string, messageId: string) =>
     await this.optimisticVotes.removeVote(voteId, messageId);

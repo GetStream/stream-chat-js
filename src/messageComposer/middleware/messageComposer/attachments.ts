@@ -21,22 +21,11 @@ const localAttachmentToAttachment = (localAttachment: LocalAttachment) => {
 };
 
 /**
- * The composition step taken when {@link AttachmentManagerConfig.pendingUploadsEnabled}
- * is on.
- *
- * The two payloads part ways here: `localMessage.attachments` keeps `localMetadata` for every
- * attachment that has not resolved to a URL - `id` (the `client.uploadManager` key), `file` (the
- * handle needed to await or retry the upload) and `previewUri` (so the message list can render
- * the user's own file meanwhile) - while `message.attachments`, which goes to the API, carries
- * only attachments that already resolved to a URL. `MessageOperations` fills in the rest once the
- * uploads settle.
- *
- * That includes uploads that already `failed`: dropping them here is how a file the user attached
- * disappears without trace, because the UI clears the composer on send. Riding along on the
- * optimistic message instead keeps the preview visible and leaves the `file` handle in reach of
- * `settlePendingAttachmentUploads`, which retries a failed upload rather than dropping it.
- * `blocked` is the one state that stays behind - the server's upload configuration refused it, so
- * no retry can ever settle it, and it belongs in the composer where the user can remove it.
+ * Composition when {@link AttachmentManagerConfig.pendingUploadsEnabled} is on. `message.attachments`
+ * (sent to the API) carries only resolved uploads; `MessageOperations` adds the rest once uploads
+ * settle. `localMessage.attachments` also carries pending and `failed` ones with their
+ * `localMetadata` (`id`, `file`, `previewUri`), so `settlePendingAttachmentUploads` can await or retry
+ * them, unless the composer retains its content. `blocked` uploads cannot be retried and stay put.
  */
 const composeWithPendingUploads = ({
   composer,
@@ -45,16 +34,11 @@ const composeWithPendingUploads = ({
   composer: MessageComposer;
   state: MessageComposerMiddlewareState;
 }): MessageComposerMiddlewareState => {
-  // Handing an unresolved attachment to a message the composer also keeps would leave the same
-  // `localMetadata.id` owned by both: the user could send it a second time, and that
-  // `UploadManager.upload` call would restart the request under an id whose in-flight entry had
-  // already been cleaned up. A retry from two places collides the same way. So both pending and
-  // failed uploads stay in the composer here, and ride along with the next message once they
-  // settle.
+  // When the composer keeps its content, unresolved uploads stay in it too: one `localMetadata.id`
+  // must not be owned by both the composer and the sent message.
   const composerIsKeptAsDraft = composer.retainsCompositionOnSubmit;
 
-  // Composer order is preserved in both payloads so previews do not reshuffle when an upload
-  // settles.
+  // Composer order is kept in both payloads, so previews do not reshuffle when an upload settles.
   const relevantAttachments = composer.attachmentManager.attachments.filter(
     (attachment) =>
       isFinishedUpload(attachment) ||
@@ -63,8 +47,7 @@ const composeWithPendingUploads = ({
   );
 
   const localAttachments = (state.localMessage.attachments ?? []).concat(
-    // Only a finished upload has a URL of its own. Everything else keeps `localMetadata`, which
-    // is what the message list joins to the live `uploadManager` record and what a retry needs.
+    // Only a finished upload has a URL; the rest keep `localMetadata` (joined to the upload record).
     relevantAttachments.map((attachment) =>
       isFinishedUpload(attachment) ? localAttachmentToAttachment(attachment) : attachment,
     ),
@@ -75,10 +58,8 @@ const composeWithPendingUploads = ({
 
   if (!localAttachments.length && !messageAttachments.length) return state;
 
-  // Each payload gets the `attachments` key only when there is something to put in it, matching
-  // the default middleware. An empty array is not "nothing to say": on an edit the API reads it
-  // as "remove every attachment", and a message whose uploads are all still in flight produces
-  // exactly that - no finished upload to put in `message.attachments` yet.
+  // `attachments` is set only when non-empty: on an edit the API reads an empty array as "remove every
+  // attachment".
   return {
     ...state,
     localMessage: localAttachments.length
@@ -97,15 +78,8 @@ const composeWithPendingUploads = ({
 };
 
 /**
- * Composes the message's attachments.
- *
- * By default an upload still in flight blocks the send: the chain warns and discards the
- * composition. With {@link AttachmentManagerConfig.pendingUploadsEnabled} on it composes
- * anyway, leaving `message.attachments` without the unresolved ones — `MessageOperations` awaits
- * those uploads and fills in the URLs before the request goes out.
- *
- * The config is read per composition rather than at construction, so `updateConfig` takes effect
- * on the next send with no need to reinstall anything.
+ * Composes the message's attachments. An upload in flight blocks the send (warns and discards) unless
+ * {@link AttachmentManagerConfig.pendingUploadsEnabled} is on. The config is read per composition.
  */
 export const createAttachmentsCompositionMiddleware = (
   composer: MessageComposer,
@@ -143,7 +117,7 @@ export const createAttachmentsCompositionMiddleware = (
         attachmentManager.successfulUploads.map(localAttachmentToAttachment),
       );
 
-      // prevent introducing attachments array into the payload sent to the server
+      // Do not add an empty `attachments` array to the payload.
       if (!attachments.length) return forward();
 
       return next({
