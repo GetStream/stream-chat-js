@@ -2594,7 +2594,7 @@ export class Channel extends ChannelApi {
     }
   }
 
-  _callChannelListeners = (event: WSEvent) => {
+  _callChannelListeners = (event: Event) => {
     // Snapshot: a listener added while handling an event must not be invoked for it (`on` adds in
     // place and iterating a `Set` visits entries appended mid-iteration).
     const listeners = [

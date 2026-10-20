@@ -5,7 +5,7 @@ import type { ConnectAPIResponse, ConnectionOpen } from '../../types';
 import type { WSConnection } from './WSConnection';
 import type { StreamChat } from '../../client';
 import type { APIError } from '../../errors';
-import type { WSEvent } from '../../gen/models';
+import type { Event as StreamEvent } from '../../types';
 import type { WSConnectionConfig } from './types';
 
 const logger = chatLoggerSystem.getLogger('connection');
@@ -491,7 +491,8 @@ export class StableWSConnection {
     });
     if (typeof event.data !== 'string') return;
     const data = JSON.parse(event.data);
-    const decodedData = data as WSEvent;
+    // Typed as `Event`, which leaves out the spec's never-sent `'*'` placeholder member.
+    const decodedData = data as StreamEvent;
 
     // The first message, not `onopen`, marks the connection open: auth errors fire `onopen` and
     // then `onclose`.

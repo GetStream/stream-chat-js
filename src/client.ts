@@ -955,13 +955,13 @@ export class StreamChat extends ChatApi {
     // Its handlers would throw at `getClient()`, so they are skipped (its own listeners below still
     // hear it).
     if (channel && !channel.pendingDisposal) {
-      channel._handleChannelEvent(event as WSEvent);
+      channel._handleChannelEvent(event);
     }
 
     this._callClientListeners(event);
 
     if (channel) {
-      channel._callChannelListeners(event as WSEvent);
+      channel._callChannelListeners(event);
     }
 
     // A failing in-memory cleanup must not skip the other callbacks or the offline DB write below.
