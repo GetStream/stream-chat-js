@@ -202,9 +202,12 @@ type LocalEvent = (
     })
 ) & { received_at?: TimestampNS };
 
-// Two WS events miss `received_at` in API spec, so we add it to typedef here
+// Two WS events miss `received_at` in API spec, so we add it to typedef here. The spec's custom-event
+// placeholder (`{ type: '*' } & CustomEvent`) is left out: nothing is dispatched under `'*'` (a
+// custom event arrives under its own name, declared through `CustomEventTypes`), so it is neither an
+// event a handler receives nor a name `on()` / `off()` accept.
 export type Event =
-  | (WSEvent & { received_at?: TimestampNS })
+  | (Exclude<WSEvent, { type: '*' }> & { received_at?: TimestampNS })
   | LocalEvent
   | CustomEventTypeUnion;
 

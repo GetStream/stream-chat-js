@@ -3,7 +3,7 @@
  * milliseconds and `Date`. Durations, intervals and delays stay in milliseconds. See `TimestampNS`
  * for why a timestamp must not be handed to `Date` or a date library directly. To hand a server-sent
  * timestamp back to the API use {@link nsToDate}: filters such as the `created_at_*` ones of the
- * member and ban queries take a `Date` or an RFC3339 string, never nanoseconds.
+ * member and ban queries take a `Date`, never nanoseconds.
  */
 
 import type { TimestampNS } from '../gen/models';

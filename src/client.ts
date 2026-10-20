@@ -705,12 +705,17 @@ export class StreamChat extends ChatApi {
   /**
    * Retrieves application settings.
    *
+   * @param   _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
    * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The application settings response.
    */
-  async getAppSettings(requestOptions?: StreamRequestOptions) {
-    return await (this.appSettingsPromise = this.getApp(requestOptions));
+  async getAppSettings(
+    _request?: Record<string, never>,
+    requestOptions?: StreamRequestOptions,
+  ) {
+    return await (this.appSettingsPromise = this.getApp(undefined, requestOptions));
   }
 
   /**
@@ -950,13 +955,13 @@ export class StreamChat extends ChatApi {
     // Its handlers would throw at `getClient()`, so they are skipped (its own listeners below still
     // hear it).
     if (channel && !channel.pendingDisposal) {
-      channel._handleChannelEvent(event as WSEvent);
+      channel._handleChannelEvent(event);
     }
 
     this._callClientListeners(event);
 
     if (channel) {
-      channel._callChannelListeners(event as WSEvent);
+      channel._callChannelListeners(event);
     }
 
     // A failing in-memory cleanup must not skip the other callbacks or the offline DB write below.

@@ -59,6 +59,13 @@ Conventions the agent must follow
 All source is TypeScript under src/. Keep strict types and update .d.ts surface when needed.
 Run yarn lint-fix and ensure zero ESLint errors (flat config).
 
+#### Generated code (src/gen)
+
+`src/gen` is generated from the OpenAPI spec by `yarn generate-client`. The only post-processing this repo applies to it is mapping `custom` fields to the `Custom*Data` interfaces (`scripts/apply-custom-data-types.mts`).
+
+- Do not hand-edit `src/gen`, and do not add scripts that rewrite the generated code for any other reason.
+- Problems in the generated code (wrong types, unwanted members, placeholder parameters, etc.) are fixed in the API spec or in the TypeScript generator. Neither lives in stream-chat-js: report the issue to the maintainers instead of patching it here.
+
 #### Releases
 
 Do not bump versions manually. CI uses semantic-release and the commit history to determine the next version & changelog.

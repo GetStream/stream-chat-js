@@ -4,7 +4,7 @@ import type { AbstractOfflineDB } from './offline_support_api';
 import type { AxiosError } from 'axios';
 import { isAxiosError } from 'axios';
 import { chatLoggerSystem } from '../logger';
-import type { APIError } from '../types';
+import type { APIError, Event } from '../types';
 import type { Unsubscribe } from '@stream-io/state-store';
 
 const logger = chatLoggerSystem.getLogger('offline-db');
@@ -189,7 +189,8 @@ export class OfflineDBSyncManager {
               );
           } else {
             const queryPromises = result.events.map((event) =>
-              this.offlineDb.handleEvent({ event, execute: false }),
+              // `Event` leaves out the spec's never-sent `'*'` placeholder member of `WSEvent`.
+              this.offlineDb.handleEvent({ event: event as Event, execute: false }),
             );
             const queriesArray = await Promise.all(queryPromises);
             const queries = queriesArray.flat() as ExecuteBatchDBQueriesType;

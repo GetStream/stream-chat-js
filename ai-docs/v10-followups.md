@@ -192,16 +192,6 @@ Ordered by severity. The breaking dead-code removals and leftover decisions are 
 - **What:** The helpers exist only for the positional `pinMessage(msg, expiration, pinnedAt)`; every other request method takes objects. Other mixed conventions: `client.getThreadAndHydrate(messageId, opts)` vs `getThread({ message_id })`, `channel.deleteImage(url)` vs `client.deleteImage({ url })`, positional `channel.addMembers`, `client.polls.queryPolls(filter, sort)` vs `client.queryPolls({ filter, sort })`, positional `client.moderation.flagMessage(id, reason, options)`.
 - **Suggested change:** Consider `pinMessage({ id }, { pin_expires?, pinned_at? })` and aligning the other outliers while signatures are breaking anyway.
 
-<a id="placeholder-request"></a>
-
-### Placeholder `_request?: Record<string, never>` parameters [SOLVED 51fa7695]
-
-`simplification` · confidence: high · pre-release: yes · channel / generated API
-
-- **Where:** `src/channel.ts:1029, 1045, 1064, 1080` (`archive`, `unarchive`, `pin`, `unpin`); `src/gen/chat/ChatApi.ts:167, 822, 902, 982, 998, 1176, 1316, 1346, 1467, 1483` (e.g. `listDevices`)
-- **What:** Callers must pass `undefined` first to reach `requestOptions`.
-- **Suggested change:** Drop the placeholder for body-less endpoints (generator and the four hand-written channel methods), so `requestOptions` is the first argument.
-
 <a id="channel-query-messageset"></a>
 
 ### `channel.query()` keeps v9 message-set semantics in its signature

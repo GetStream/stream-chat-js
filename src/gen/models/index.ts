@@ -1664,6 +1664,45 @@ export const ChannelOwnCapability = {
 export type ChannelOwnCapability =
   (typeof ChannelOwnCapability)[keyof typeof ChannelOwnCapability];
 
+export interface ChannelPartialUpdateResponse {
+  /**
+   * Channel CID (<type>:<id>)
+   */
+  cid: string;
+  /**
+   * Date/time of creation
+   */
+  created_at: TimestampNS;
+  /**
+   * Whether the channel is disabled
+   */
+  disabled: boolean;
+  /**
+   * Whether the channel is frozen
+   */
+  frozen: boolean;
+  /**
+   * Channel ID
+   */
+  id: string;
+  /**
+   * Channel type
+   */
+  type: string;
+  /**
+   * Date/time of the last update
+   */
+  updated_at: TimestampNS;
+  /**
+   * Custom data for this object
+   */
+  custom: Record<string, any>;
+  /**
+   * Team the channel belongs to
+   */
+  team?: string;
+}
+
 export interface ChannelPushPreferencesResponse {
   /**
    * The scope level of the push notifications.
@@ -1706,6 +1745,10 @@ export interface ChannelResponse {
    * Custom data for this object
    */
   custom: CustomChannelData;
+  /**
+   * Number of members who are not deactivated or deleted
+   */
+  active_member_count?: number;
   /**
    * Whether auto translation is enabled or not
    */
@@ -1829,7 +1872,7 @@ export interface ChannelStateResponse {
    */
   read?: Array<ReadStateResponse>;
   /**
-   * The caller's own scheduled, sending and failed messages in this channel. Set only by a client-side GetOrCreateChannel with include_scheduled_messages; absent when not requested or not known, in which case use the scheduled messages query
+   * The caller's own scheduled, sending and failed messages in this channel. Set only by a client-side GetOrCreateChannel or QueryChannels with include_scheduled_messages; absent when not requested or not known, in which case use the scheduled messages query
    */
   scheduled_messages?: Array<ScheduledMessageResponse>;
   /**
@@ -1890,6 +1933,10 @@ export interface ChannelStateResponseFields {
    * List of read states
    */
   read?: Array<ReadStateResponse>;
+  /**
+   * The caller's own scheduled, sending and failed messages in this channel. Set only by a client-side GetOrCreateChannel or QueryChannels with include_scheduled_messages; absent when not requested or not known, in which case use the scheduled messages query
+   */
+  scheduled_messages?: Array<ScheduledMessageResponse>;
   /**
    * List of user who is watching the channel
    */
@@ -3091,6 +3138,7 @@ export interface EnrichedActivity {
   foreign_id?: string;
   id?: string;
   score?: number;
+  time?: string;
   verb?: string;
   to?: Array<string>;
   actor?: Data;
@@ -3106,15 +3154,15 @@ export interface EnrichedReaction {
   activity_id: string;
   kind: string;
   user_id: string;
+  created_at?: string;
   id?: string;
   parent?: string;
+  updated_at?: string;
   target_feeds?: Array<string>;
   children_counts?: Record<string, number>;
-  created_at?: Time;
   data?: Record<string, any>;
   latest_children?: Record<string, Array<EnrichedReaction>>;
   own_children?: Record<string, Array<EnrichedReaction>>;
-  updated_at?: Time;
   user?: Data;
 }
 
@@ -4055,19 +4103,6 @@ export interface Images {
   original: ImageData;
 }
 
-export interface ImportBlockListRequest {
-  items: Array<string>;
-  chunk_size?: number;
-}
-
-export interface ImportBlockListResponse {
-  /**
-   * Duration of the request in milliseconds
-   */
-  duration: string;
-  task_id: string;
-}
-
 export interface IntentConfigRequest {
   /**
    * Topics to classify conversation text against (max 20, labels must be unique)
@@ -4127,6 +4162,8 @@ export interface LLMConfig {
   rules: Array<LLMRule>;
   app_context?: string;
   async?: boolean;
+  custom_keys_context_description?: string;
+  context_custom_keys?: Array<string>;
   severity_descriptions?: Record<string, string>;
 }
 
@@ -4835,7 +4872,7 @@ export interface MessageRequest {
   /**
    * Date when pinned message expires
    */
-  pin_expires?: Date;
+  pin_expires?: Date | null;
   /**
    * Whether message is pinned or not
    */
@@ -4843,7 +4880,7 @@ export interface MessageRequest {
   /**
    * Date when message got pinned
    */
-  pinned_at?: Date;
+  pinned_at?: Date | null;
   /**
    * Identifier of the poll to include in the message
    */
@@ -5409,6 +5446,10 @@ export interface ModerationFlagResponse {
   result: Array<Record<string, any>>;
   content_published_at?: TimestampNS;
   entity_creator_id?: string;
+  /**
+   * Unique identifier of the flag
+   */
+  id?: string;
   reason?: string;
   review_queue_item_id?: string;
   labels?: Array<string>;
@@ -5710,6 +5751,42 @@ export interface NotificationChannelMutesUpdatedEvent {
    */
   type: string;
   received_at?: TimestampNS;
+}
+
+export interface NotificationChannelPartialUpdatedEvent {
+  /**
+   * Date/time of creation
+   */
+  created_at: TimestampNS;
+  /**
+   * Basic channel data and the complete custom data after a partial update.
+   */
+  channel: ChannelPartialUpdateResponse;
+  custom: Record<string, any>;
+  /**
+   * The type of event: "notification.channel_partial_updated" in this case
+   */
+  type: string;
+  /**
+   * The ID of the updated channel
+   */
+  channel_id?: string;
+  channel_member_count?: number;
+  channel_message_count?: number;
+  /**
+   * The type of the updated channel
+   */
+  channel_type?: string;
+  /**
+   * The CID of the updated channel
+   */
+  cid?: string;
+  received_at?: TimestampNS;
+  /**
+   * The team ID
+   */
+  team?: string;
+  channel_custom?: CustomChannelData;
 }
 
 export interface NotificationChannelTruncatedEvent {
@@ -6812,10 +6889,10 @@ export interface QueryBannedUsersPayload {
       operators: '$eq' | '$exists' | '$gt' | '$gte' | '$in' | '$lt' | '$lte';
     };
   }>;
-  created_at_after?: Date | string;
-  created_at_after_or_equal?: Date | string;
-  created_at_before?: Date | string;
-  created_at_before_or_equal?: Date | string;
+  created_at_after?: Date;
+  created_at_after_or_equal?: Date;
+  created_at_before?: Date;
+  created_at_before_or_equal?: Date;
   /**
    * Whether to exclude expired bans or not
    */
@@ -6906,6 +6983,14 @@ export interface QueryChannelsDefaults {
 }
 
 export interface QueryChannelsRequest {
+  /**
+   * Whether to include active_member_count for each channel
+   */
+  include_active_member_count?: boolean;
+  /**
+   * Adds scheduled_messages to each returned channel: the caller's own scheduled, sending and failed messages in that channel. Client-side only. Absent from every channel when there are more than 100 across the returned channels or they could not be loaded; use the scheduled messages query then
+   */
+  include_scheduled_messages?: boolean;
   /**
    * Number of channels to limit
    */
@@ -7177,10 +7262,10 @@ export interface QueryDraftsResponse {
 }
 
 export interface QueryFutureChannelBansPayload {
-  created_at_after?: Date | string;
-  created_at_after_or_equal?: Date | string;
-  created_at_before?: Date | string;
-  created_at_before_or_equal?: Date | string;
+  created_at_after?: Date;
+  created_at_after_or_equal?: Date;
+  created_at_before?: Date;
+  created_at_before_or_equal?: Date;
   /**
    * Whether to exclude expired bans or not
    */
@@ -7220,10 +7305,10 @@ export interface QueryFutureChannelBansResponse {
 
 export interface QueryMembersPayload {
   type: string;
-  created_at_after?: Date | string;
-  created_at_after_or_equal?: Date | string;
-  created_at_before?: Date | string;
-  created_at_before_or_equal?: Date | string;
+  created_at_after?: Date;
+  created_at_after_or_equal?: Date;
+  created_at_before?: Date;
+  created_at_before_or_equal?: Date;
   id?: string;
   limit?: number;
   offset?: number;
@@ -8898,6 +8983,10 @@ export interface ReviewQueueItemResponse {
    */
   reviewed_at?: TimestampNS;
   /**
+   * IDs of the item's flags a moderator marked as false positives
+   */
+  false_positive_flags?: Array<string>;
+  /**
    * Teams associated with this item
    */
   teams?: Array<string>;
@@ -9811,8 +9900,6 @@ export interface SendReactionResponse {
   reaction: ReactionResponse;
 }
 
-export interface SendScheduledMessageNowRequest {}
-
 export interface SendScheduledMessageNowResponse {
   /**
    * Duration of the request in milliseconds
@@ -10321,8 +10408,6 @@ export interface Thresholds {
   spam?: LabelThresholds;
   toxic?: LabelThresholds;
 }
-
-export interface Time {}
 
 export interface TranslateMessageRequest {
   /**
@@ -11815,10 +11900,6 @@ export interface VideoContentParameters {
   harm_labels?: Array<string>;
 }
 
-export interface VideoEndCallRequestPayload {}
-
-export interface VideoKickUserRequestPayload {}
-
 export interface VideoRuleParameters {
   threshold?: number;
   time_window?: string;
@@ -11851,6 +11932,7 @@ export interface WSAuthMessage {
 }
 
 export type WSClientEvent =
+  | ({ type: '*' } & CustomEvent)
   | ({ type: 'ai_indicator.clear' } & AIIndicatorClearEvent)
   | ({ type: 'ai_indicator.stop' } & AIIndicatorStopEvent)
   | ({ type: 'ai_indicator.update' } & AIIndicatorUpdateEvent)
@@ -11886,6 +11968,9 @@ export type WSClientEvent =
   | ({
       type: 'notification.channel_mutes_updated';
     } & NotificationChannelMutesUpdatedEvent)
+  | ({
+      type: 'notification.channel_partial_updated';
+    } & NotificationChannelPartialUpdatedEvent)
   | ({ type: 'notification.channel_truncated' } & NotificationChannelTruncatedEvent)
   | ({ type: 'notification.invite_accepted' } & NotificationInviteAcceptedEvent)
   | ({ type: 'notification.invite_rejected' } & NotificationInviteRejectedEvent)
@@ -11935,6 +12020,7 @@ export type WSClientEvent =
   | ({ type: 'user_group.updated' } & UserGroupUpdatedEvent);
 
 export type WSEvent =
+  | ({ type: '*' } & CustomEvent)
   | ({ type: 'ai_indicator.clear' } & AIIndicatorClearEvent)
   | ({ type: 'ai_indicator.stop' } & AIIndicatorStopEvent)
   | ({ type: 'ai_indicator.update' } & AIIndicatorUpdateEvent)
@@ -11972,6 +12058,9 @@ export type WSEvent =
   | ({
       type: 'notification.channel_mutes_updated';
     } & NotificationChannelMutesUpdatedEvent)
+  | ({
+      type: 'notification.channel_partial_updated';
+    } & NotificationChannelPartialUpdatedEvent)
   | ({ type: 'notification.channel_truncated' } & NotificationChannelTruncatedEvent)
   | ({ type: 'notification.invite_accepted' } & NotificationInviteAcceptedEvent)
   | ({ type: 'notification.invite_rejected' } & NotificationInviteRejectedEvent)
