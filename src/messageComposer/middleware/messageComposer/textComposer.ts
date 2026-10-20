@@ -130,7 +130,7 @@ export const createTextComposerCompositionMiddleware = (
         mentioned_users,
       } = buildMentionCompositionMetadata({ mentions, text });
 
-      // prevent introducing text and mention metadata into the payload sent to the server
+      // Do not add empty text and mention metadata to the payload.
       if (
         !text &&
         !mentioned_channel &&

@@ -19,14 +19,7 @@ export const createUserDataInjectionMiddleware = (
       if (!composer.client.user) {
         return forward();
       }
-      // Exclude the following properties from client.user as they can be large objects
-      // that provide no value for localMessage (and will never exist within message.user).
-      // This way we make sure that our localMessage is enriched with data as close as
-      // possible to the actual user.
-      // The cast below is needed because `client.user` is `ClientUser`, which makes every
-      // field but `id` optional — it is only fully populated once `connectUser` has run and
-      // the connection hello event has arrived.
-
+      // Leave out large properties that never exist on `message.user`.
       const {
         channel_mutes: _channel_mutes,
         devices: _devices,
@@ -37,9 +30,7 @@ export const createUserDataInjectionMiddleware = (
         ...state,
         localMessage: {
           ...state.localMessage,
-          // `blocked_user_ids` is optional on `OwnUserResponse` — the connect payload
-          // omits it when nothing is blocked — but required on `UserResponse`. Supply the
-          // empty case rather than assert it; `[]` is what the server sends for other users.
+          // Optional on `OwnUserResponse` (omitted when nothing is blocked), required on `UserResponse`.
           user: {
             ...messageUser,
             blocked_user_ids: messageUser.blocked_user_ids ?? [],

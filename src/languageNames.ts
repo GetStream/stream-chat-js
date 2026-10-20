@@ -1,22 +1,10 @@
 import type { TranslationLanguage } from './types';
 
 /**
- * The human-readable name of each language the API can auto-translate a message into.
- *
- * These are display copy for a **core-owned** set: `message.i18n.language` is typed
- * {@link TranslationLanguage}, so core defines which languages exist and therefore owns their names
- * too. A UI SDK uses them to say "Translated from German" rather than "Translated from de".
- *
- * `satisfies Record<TranslationLanguage, string>` is the drift gate, and it works in both
- * directions: adding a language to the API union fails to compile until a name is supplied here, and a
- * name for a language the union does not contain is rejected as an excess property. Before this lived
- * in core, each UI SDK hand-maintained its own copy with nothing tying it to the union — so a miss
- * could only be detected at runtime, by comparing the rendered string against the key.
- *
- * Names are in English on purpose. A language picker conventionally shows each language endonymously
- * ("Deutsch", not "German"), but this is the *source* language of an auto-translated message rendered
- * inside a sentence in the reader's own language, so it has to agree with the surrounding copy. An
- * integrator wanting endonyms overrides the `language.*` keys.
+ * The human-readable name of each {@link TranslationLanguage}, for text like "Translated from
+ * German". `satisfies Record<TranslationLanguage, string>` fails to compile when the union and this
+ * table disagree. Names are in English so they fit inside the reader's sentence; override the
+ * `language.*` keys for endonyms.
  */
 export const LANGUAGE_NAMES = {
   af: 'Afrikaans',
@@ -79,10 +67,8 @@ export const LANGUAGE_NAMES = {
 } as const satisfies Record<TranslationLanguage, string>;
 
 /**
- * The `language.*` slice of a translation catalog.
- *
- * A UI SDK intersects this into its own generated catalog, which makes `t('language.de')` a checked
- * key rather than something that has to go through `asDynamicKey()`:
+ * The `language.*` slice of a translation catalog, to intersect into a UI SDK's own catalog so
+ * `t('language.de')` is a checked key:
  *
  * ```ts
  * type TranslationCatalog = GeneratedCatalog & LanguageNameCatalog;
@@ -93,10 +79,9 @@ export type LanguageNameCatalog = {
 };
 
 /**
- * {@link LANGUAGE_NAMES} keyed the way a catalog is, ready to merge into an SDK's bundled defaults.
- *
- * These keys are resolved from a runtime value (the message's source language), so there is no call
- * site to carry an inline default — which is exactly why they have to ship as data.
+ * {@link LANGUAGE_NAMES} keyed as a catalog (`language.<code>`), ready to merge into an SDK's
+ * bundled defaults. The keys are resolved from a runtime value, so there is no call site for an
+ * inline default.
  */
 export const languageNameDefaults: Record<string, string> = Object.fromEntries(
   Object.entries(LANGUAGE_NAMES).map(([code, name]) => [`language.${code}`, name]),

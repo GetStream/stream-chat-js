@@ -18,24 +18,13 @@ export type UserProgress = {
 export type MessageReceiptsSnapshot = {
   revision: number;
   /**
-   * Which users' read cursor sits *on* each message - not which messages have been read. A reader
-   * appears once, at the message they stopped on.
-   *
-   * This is the compact form: one entry per user, not per message. "Who has read message X" is
-   * every user at or past it, which {@link MessageReceiptsTracker.readersForMessage} answers, and
-   * which a consumer rendering a range can accumulate from these buckets in one pass.
+   * Users whose read cursor sits on each message: one entry per user, not everyone who has read it.
+   * For "who has read X" use {@link MessageReceiptsTracker.readersForMessage}.
    */
   readersByMessageId: Record<MessageId, UserResponse[]>;
   /** As {@link readersByMessageId}, for delivery. */
   deliveredByMessageId: Record<MessageId, UserResponse[]>;
-  /**
-   * How far the furthest *other* member has got, or `null` when nobody has got anywhere.
-   *
-   * Delivery and read only move forward, so one ref answers every message: at or before it means
-   * delivered/read, after it means not yet. A per-message map cannot express that - it marks only
-   * the message each cursor happens to land on, leaving every earlier message looking less far
-   * along than a later one, which is a state that cannot occur.
-   */
+  /** Furthest delivered ref of any other member, or `null`. A message at or before it is delivered. */
   lastDeliveredRefByOthers: MsgRef | null;
   /** As {@link lastDeliveredRefByOthers}, for reads. */
   lastReadRefByOthers: MsgRef | null;
@@ -53,8 +42,6 @@ type ReadStoreUserState = {
   last_delivered_at?: TimestampNS;
   last_delivered_message_id?: string;
 };
-
-// ---------- ordering utilities ----------
 
 const MIN_REF: MsgRef = {
   timestamp: asTimestampNS(Number.NEGATIVE_INFINITY),
@@ -82,15 +69,7 @@ const findIndex = <T>(arr: T[], target: MsgRef, keyOf: (x: T) => MsgRef): number
   return lo;
 };
 
-/**
- * Finds the insertion index after the last equal item. E.g. when array `[a]` exists and `b` is
- * being inserted we want `[a, b]`, not `[b, a]`.
- *
- * @param arr - The sorted array to search.
- * @param target - The reference value to compare against.
- * @param keyOf - Accessor that maps an item to its comparable reference.
- * @returns The insertion index in `arr`.
- */
+/** Insertion index after the last equal item, so ties keep arrival order. */
 const findUpperIndex = <T>(arr: T[], target: MsgRef, keyOf: (x: T) => MsgRef): number => {
   let lo = 0,
     hi = arr.length;
@@ -131,62 +110,12 @@ export type OwnMessageReceiptsTrackerOptions = {
 };
 
 /**
- * MessageReceiptsTracker
- * --------------------------------
- * Tracks **other participants’** delivery/read progress toward **own (outgoing) messages**
- * within a **single timeline** (one channel/thread).
+ * Tracks other participants' delivery and read progress toward own messages in one timeline (channel or
+ * thread). Per user it keeps `lastReadRef` and `lastDeliveredRef` (always `>= lastReadRef`) in two arrays
+ * sorted by timestamp, so "who read message M?" is a binary search plus a suffix slice.
  *
- * How it works
- * ------------
- * - Each user has a compact progress record:
- *     - `lastReadRef`: latest message they have **read**
- *     - `lastDeliveredRef`: latest message they have **received** (always `>= lastReadRef`)
- * - Internally keeps two arrays sorted **ascending by timestamp**:
- *     - `readSorted` (by `lastReadRef`)
- *     - `deliveredSorted` (by `lastDeliveredRef`)
- * - Queries like “who read message M?” become a **binary search + suffix slice**.
- *
- * Construction
- * ------------
- * `new MessageReceiptsTracker({ channel, locateMessage? })`
- * - By default, message references are read through `channel.state.findMessageByTimestamp`.
- * - `locateMessage` can override this lookup strategy.
- *   If a message cannot be resolved locally, the event is ignored.
- *
- * Event ingestion
- * ---------------
- * - `ingestInitial(rows: ReadStateResponse[])`: Builds initial state from server snapshot.
- *   If a user’s `last_read` is ahead of `last_delivered_at`, the tracker enforces
- *   the invariant `lastDeliveredRef >= lastReadRef`.
- * - `onMessageRead(user, readAt)`:
- *   Advances the user’s read; also bumps delivered to match if needed.
- * - `onMessageDelivered(user, deliveredAt)`:
- *   Advances the user’s delivered to `max(currentRead, deliveredAt)`.
- *
- * Queries
- * -------
- * - `readersForMessage(msgRef)         : UserResponse[]` → users with `lastReadRef >= msgRef`
- * - `deliveredForMessage(msgRef)       : UserResponse[]` → users with `lastDeliveredRef >= msgRef`
- * - `deliveredNotReadForMessage(msgRef): UserResponse[]` → delivered but `lastReadRef < msgRef`
- * - `usersWhoseLastReadIs              : UserResponse[]` →  users for whom `msgRef` is their *last read* (exact match)
- * - `usersWhoseLastDeliveredIs         : UserResponse[]` →  users for whom `msgRef` is their *last delivered* (exact match)
- * - `groupUsersByLastReadMessage       : Record<MsgId, UserResponse[]> → mapping of messages to their readers
- * - `groupUsersByLastDeliveredMessage  : Record<MsgId, UserResponse[]> → mapping of messages to their receivers
- * - `hasUserRead(msgRef, userId)       : boolean`
- * - `hasUserDelivered(msgRef, userId)  : boolean`
- *
- * Complexity
- * ----------
- * - Update on read/delivered: **O(log U)** (binary search + one splice) per event, where U is count of users stored by tracker.
- * - Query lists: **O(log U + K)** where `K` is the number of returned users (suffix length).
- * - Memory: **O(U)** - tracker’s memory grows linearly with the number of users in the channel/thread and does not depend on the number of messages.
- *
- * Scope & notes
- * -------------
- * - One tracker instance is **scoped to a single timeline**. Instantiate per channel/thread.
- * - Ordering is by **ascending timestamp**; ties are kept stable by inserting at the end of the
- *   equal-timestamp plateau (upper-bound insertion), preserving intuitive arrival order.
- * - This tracker models **others’ progress toward own messages**;
+ * Messages resolve through `channel.messagePaginator.findItemByTimestamp` unless `locateMessage` is
+ * passed. Events for messages that cannot be resolved are ignored.
  */
 export class MessageReceiptsTracker extends WithSubscriptions {
   private byUser = new Map<UserId, UserProgress>();
@@ -219,8 +148,7 @@ export class MessageReceiptsTracker extends WithSubscriptions {
     if (this.hasSubscriptions) return;
 
     this.addUnsubscribeFunction(
-      // Subscribe to only the `read` slice of the unified channel state so this reconcile fires on
-      // read changes, not on every unrelated channel-state write (typing/members/…).
+      // Only the `read` slice, to skip unrelated channel-state writes.
       this.channel.state.subscribeWithSelector(
         (currentState) => ({ read: currentState.read }),
         (next, prev) => {
@@ -258,7 +186,7 @@ export class MessageReceiptsTracker extends WithSubscriptions {
       return;
     }
 
-    // For non-bootstrap updates, we require patch metadata from channel read-store mutations.
+    // After the initial bootstrap, only updates that carry patch metadata are applied.
     if (!meta) return;
 
     const removedUserIds = new Set(meta?.removedUserIds ?? []);
@@ -291,7 +219,7 @@ export class MessageReceiptsTracker extends WithSubscriptions {
     }
   }
 
-  /** Build initial state from server snapshots (single pass + sort). */
+  /** Replaces the tracker's state with the given server read states. */
   ingestInitial(responses: ReadStateResponse[]) {
     this.byUser.clear();
     this.readSorted = [];
@@ -327,7 +255,7 @@ export class MessageReceiptsTracker extends WithSubscriptions {
     this.emitSnapshot();
   }
 
-  /** message.delivered — user device confirmed delivery up to and including messageId. */
+  /** `message.delivered`: delivery confirmed up to and including the message. */
   onMessageDelivered({
     user,
     deliveredAt,
@@ -349,7 +277,6 @@ export class MessageReceiptsTracker extends WithSubscriptions {
       compareRefsAsc(msgRef, userProgress.lastReadRef) < 0
         ? userProgress.lastReadRef
         : msgRef; // max(read, loc)
-    // newly announced delivered is older than or equal what is already registered
     if (compareRefsAsc(newDelivered, userProgress.lastDeliveredRef) <= 0) return;
 
     removeByOldKey(
@@ -363,7 +290,7 @@ export class MessageReceiptsTracker extends WithSubscriptions {
     this.emitSnapshot();
   }
 
-  /** message.read — user read up to and including messageId. */
+  /** `message.read`: read up to and including the message. */
   onMessageRead({
     user,
     readAt,
@@ -380,10 +307,8 @@ export class MessageReceiptsTracker extends WithSubscriptions {
       : this.locateMessage(timestamp);
     if (!msgRef) return;
     const userProgress = this.ensureUser(user);
-    // newly announced read message is older than or equal the already recorded last read message
     if (compareRefsAsc(msgRef, userProgress.lastReadRef) <= 0) return;
 
-    // move in readSorted
     removeByOldKey(
       this.readSorted,
       userProgress,
@@ -408,12 +333,7 @@ export class MessageReceiptsTracker extends WithSubscriptions {
     this.emitSnapshot();
   }
 
-  /** notification.mark_unread — user marked messages unread starting at `first_unread_message_id`.
-   * Sets lastReadRef to the event’s last_read_* values. Delivery never moves backward.
-   * The event is sent only to the user that triggered the action (own user), so we will never adjust read ref
-   * for other users - we will not see changes in the UI for other users. However, this implementation does not
-   * take into consideration this fact and is ready to handle the mark-unread event for any user.
-   */
+  /** `notification.mark_unread`: sets `lastReadRef` from `last_read_*`; delivery never moves back. */
   onNotificationMarkUnread({
     user,
     lastReadAt,
@@ -426,13 +346,12 @@ export class MessageReceiptsTracker extends WithSubscriptions {
   }) {
     const userProgress = this.ensureUser(user);
 
-    // `0` is the "never read" sentinel
+    // A missing or non-finite `lastReadAt` means "never read".
     const newReadRef: MsgRef =
       lastReadAt != null && Number.isFinite(lastReadAt)
         ? { timestamp: lastReadAt, msgId: lastReadMessageId ?? '' }
         : { ...MIN_REF };
 
-    // If no change, exit early.
     if (
       compareRefsAsc(newReadRef, userProgress.lastReadRef) === 0 &&
       newReadRef.msgId === userProgress.lastReadRef.msgId
@@ -481,10 +400,8 @@ export class MessageReceiptsTracker extends WithSubscriptions {
   }
 
   /**
-   * Whether at least one other member has this message delivered.
-   *
-   * Reads the single furthest cursor rather than asking who is past this message, so the answer is
-   * monotonic by construction: an older message can never report less than a newer one.
+   * Whether any other member has this message delivered. Uses the furthest cursor, so it is monotonic
+   * across messages.
    */
   isDeliveredToOthers(msgRef: MsgRef): boolean {
     const ref = this.snapshotStore.getLatestValue().lastDeliveredRefByOthers;
@@ -538,8 +455,6 @@ export class MessageReceiptsTracker extends WithSubscriptions {
     }
     return users;
   }
-
-  // ---- queries: per-user status ----
 
   hasUserRead(msgRef: MsgRef, userId: string): boolean {
     const up = this.byUser.get(userId);

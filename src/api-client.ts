@@ -23,15 +23,11 @@ const MULTIPART_CONTENT_TYPE = 'multipart/form-data';
 const LONG_POLL_PATH = '/api/v2/longpoll';
 
 /**
- * Upload requests must not inherit the axios instance timeout (3s by default) or the size
- * caps - either would abort a large or slow upload.
+ * Uploads must not inherit the axios instance timeout (3s by default) or the size caps.
  *
- * The body needs no `transformRequest` pin: for a `FormData` body axios' default transform is a
- * no-op unless the resolved `Content-Type` contains `application/json`, and
- * `populateRequestConfigWithDefaults` now lets this request's `multipart/form-data` win over an
- * integrator's global `axiosRequestConfig.headers`. If that precedence is ever reversed, an
- * upload turns into `JSON.stringify(formDataToJSON(form))` - the file silently disappears and
- * the request still returns 2xx.
+ * The request's `multipart/form-data` header must win over the global `axiosRequestConfig.headers`
+ * (see `populateRequestConfigWithDefaults`): under a JSON content type axios serializes the form to
+ * JSON, the file silently disappears and the request still returns 2xx.
  */
 const UPLOAD_REQUEST_DEFAULTS: AxiosRequestConfig = {
   timeout: 0,
@@ -51,11 +47,9 @@ export class ApiClient {
   }
 
   /**
-   * The transport of the generated API classes, which return what it resolves to as-is: the
-   * response body with the request's `metadata` merged in.
-   *
-   * `async` so that a synchronous throw here (URL resolution, form encoding) still reaches the
-   * caller as a rejection - the generated methods return this promise without awaiting it.
+   * The transport of the generated API classes. Resolves to the response body with the request's
+   * `metadata` merged in. `async` so synchronous throws (URL resolution, form encoding) become
+   * rejections.
    */
   async sendRequest<T>(
     method: Method,
@@ -78,8 +72,7 @@ export class ApiClient {
       params: queryParams,
       headers: { 'Content-Type': requestContentType },
       ...(isMultipart ? UPLOAD_REQUEST_DEFAULTS : {}),
-      // Keep this last so a caller-supplied signal and timeout win - and keep it returning only
-      // the keys it owns, so it can never clobber the upload defaults above.
+      // Last, so a caller-supplied signal and timeout win over the upload defaults.
       ...toAxiosRequestConfig(options),
     });
 
@@ -115,15 +108,12 @@ export class ApiClient {
     return this._doRequest<T>('delete', url, null, { params }).then((r) => r.body);
   }
 
-  // --- private ---
-
   private resolveUrl(url: string, pathParams?: Record<string, string>): string {
     let resolved = url;
     if (pathParams) {
       for (const [key, value] of Object.entries(pathParams)) {
-        // The generated methods take path params as their own argument and pass it here as-is, so a
-        // key with no placeholder is a query or body field handed to the wrong argument - one the
-        // request would otherwise drop without a word.
+        // A key with no placeholder is a query or body field passed as a path param, which the
+        // request would otherwise drop silently.
         if (!url.includes(`{${key}}`)) {
           throw new Error(
             `"${key}" is not a path parameter of ${url}; pass it in the request argument instead.`,
@@ -163,7 +153,8 @@ export class ApiClient {
       params: {
         user_id: this.client.userId,
         api_key: this.client.key,
-        // Read per request, unlike the rest of `axiosRequestConfig`, which the axios instance took at construction.
+        // Read per request (the rest of `axiosRequestConfig` is applied when the axios instance is
+        // created).
         ...axiosRequestConfig?.params,
         ...additonalConfig.params,
       },
@@ -183,8 +174,7 @@ export class ApiClient {
     const remaining = headers['x-ratelimit-remaining'] as string | undefined;
     if (remaining) rateLimit.rate_limit_remaining = parseInt(remaining, 10);
 
-    // Unix SECONDS (`strconv.FormatInt(info.Reset, 10)` server-side). `new Date('1700000000')` parses the
-    // string as a date and is Invalid Date, so convert the number explicitly.
+    // Unix seconds: `new Date('1700000000')` is an Invalid Date, so convert the number explicitly.
     const reset = Number(headers['x-ratelimit-reset']);
     if (Number.isFinite(reset) && reset > 0)
       rateLimit.rate_limit_reset = new Date(reset * 1000);
@@ -204,8 +194,8 @@ export class ApiClient {
     additionalConfig: AxiosRequestConfig = {},
   ): Promise<{ body: T; metadata: RequestMetadata }> {
     if (requiresConnectionId(additionalConfig.params, data)) {
-      // Axios types the signal structurally, so it accepts shapes a real `AbortSignal` would not —
-      // an offline-db task revived from JSON, for one. The wait only needs `aborted` and the event.
+      // The axios signal type is structural: a task revived from the offline db can carry a plain
+      // object instead of an `AbortSignal`.
       const signal = additionalConfig.signal as AbortSignal | undefined;
       const connectionId = await this.client.connectionIdManager.getConnectionId(
         typeof signal?.addEventListener === 'function' ? signal : undefined,
@@ -295,16 +285,13 @@ export class ApiClient {
 }
 
 /**
- * Whether a request registers a server-side subscription, and so must not be sent before the
- * handshake has produced a connection id: one with a `watch` or `presence` flag set.
+ * Whether a request (one with a `watch` or `presence` flag) registers a server-side subscription
+ * and so must wait for the connection id. Without it the server answers `200` but registers
+ * nothing, and the channel never receives an event.
  *
- * The server keys watches and presence by that id and answers `200` while registering nothing when it
- * is missing, so a request that races the handshake yields a channel that never receives an event.
- *
- * The two generated operations that declare `connection_id` without a flag set it themselves:
- * `stopWatchingChannel` through `StreamChat`'s override, and `longPoll`'s endpoint through the
- * long-poll fallback. `test/unit/codegen/connectionIdEndpoints.test.ts` pins that set, so a new one
- * surfaces there.
+ * Flagless operations that declare `connection_id` set it themselves (`stopWatchingChannel` through
+ * `StreamChat`'s override, `longPoll` through the fallback); `connectionIdEndpoints.test.ts` pins
+ * that set.
  */
 export const requiresConnectionId = (
   params: Record<string, unknown> | undefined,
@@ -326,38 +313,28 @@ export const requiresConnectionId = (
 };
 
 /**
- * An `AbortSignal` that went through JSON persistence - as it does when an offline-db task
- * payload is stored and replayed after a restart - revives as a plain `{}`: `aborted` is
- * `undefined` and `addEventListener` is gone. Axios reaches straight for
- * `signal.addEventListener`, so handing it such an object throws a `TypeError` and takes the
- * replay down with it. Only forward a signal that can still be listened to.
+ * An `AbortSignal` persisted as JSON (an offline-db task payload) revives as a plain `{}`, and
+ * axios throws a `TypeError` on it. Only forward a signal that can still be listened to.
  */
 const isUsableAbortSignal = (signal: unknown): signal is AbortSignal =>
   typeof (signal as AbortSignal | undefined)?.addEventListener === 'function';
 
-/**
- * Maps the SDK-level per-request options onto the axios request config they
- * translate to. Extend this when a new option is added to `StreamRequestOptions`.
- */
+/** Maps `StreamRequestOptions` onto the axios request config; extend it when an option is added. */
 const toAxiosRequestConfig = ({
   signal,
   onUploadProgress,
   timeout,
 }: StreamRequestOptions = {}): AxiosRequestConfig => ({
   signal: isUsableAbortSignal(signal) ? signal : undefined,
-  // Same reasoning as `isUsableAbortSignal`: an options object revived from a persisted
-  // offline-db task payload has lost its functions.
+  // Persisted offline-db options lose their functions.
   onUploadProgress: typeof onUploadProgress === 'function' ? onUploadProgress : undefined,
-  // Only when set: an explicit `undefined` would clobber the upload defaults' `timeout: 0`, and
-  // axios would fall back to the instance timeout.
+  // Only when set: an explicit `undefined` would clobber the upload defaults' `timeout: 0`.
   ...(typeof timeout === 'number' ? { timeout } : {}),
 });
 
 /**
- * `isAxiosError` checks the flag axios sets on its errors rather than `instanceof AxiosError`: an
- * error raised by a second copy of axios (e.g. an adapter installed from another package's copy, as
- * `stream-chat-react-native` does) is an instance of that copy's class, so `instanceof` misses it and
- * the error would escape unwrapped, without its Stream `code`.
+ * Uses `isAxiosError` (a flag check) rather than `instanceof AxiosError`, so errors raised by a
+ * second copy of axios (e.g. a React Native adapter) are wrapped with their Stream `code`.
  */
 const errorIsApiError = (error: unknown): error is AxiosError<APIError> => {
   if (!isAxiosError(error)) return false;

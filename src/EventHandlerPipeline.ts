@@ -3,16 +3,12 @@ import type { Event, EventType } from './types';
 import type { KeysOfUnion, ValueOfUnion } from './types.utility';
 import type { Unsubscribe } from '@stream-io/state-store';
 
-/**
- * Flat routing view of an event: every field any event can carry, all optional, on one object.
- *
- * Handlers route without narrowing, which `Event` does not allow — it is a discriminated union whose
- * members carry different fields (a custom event has none of the channel fields), and it admits bare
- * custom-event strings (hence the `unknown` hop in `processOne`). Derived from that union, so a new generated field
- * is routable without widening anything by hand.
- */
 type EventObject = Extract<Event, object>;
 
+/**
+ * Flat view of an event for routing without narrowing: every field any `Event` member can carry,
+ * all optional. Derived from the `Event` union, so new generated fields are routable automatically.
+ */
 export type PipelineEvent = {
   type: EventType | (string & {});
 } & {
@@ -80,23 +76,9 @@ export class EventHandlerPipeline<CTX extends Record<string, unknown> = {}> {
   }
 
   /**
-   * Insert a handler into the pipeline at the given index.
-   *
-   * - If `replace` is `true` and the index is within bounds, the existing handler
-   *   at that position will be replaced by the new one.
-   *   - If `revertOnUnsubscribe` is also `true`, then calling the returned
-   *     unsubscribe will both remove the inserted handler *and* restore the
-   *     previously replaced handler at the same index.
-   * - If `replace` is `false` (default), the new handler is inserted at the index
-   *   (or appended if the index is greater than the pipeline size). Unsubscribe
-   *   will only remove this handler.
-   *
-   * @param payload - Insertion options.
-   * @param payload.handle - The handler function to insert.
-   * @param payload.index - Target index in the pipeline (clamped to valid range).
-   * @param payload.replace - If true, replace existing handler at index instead of inserting.
-   * @param payload.revertOnUnsubscribe - If true, restore the replaced handler when unsubscribing.
-   * @returns                   An unsubscribe function that removes (and optionally restores) the handler.
+   * Inserts a handler at `index` (clamped to the pipeline size, default append). With `replace` and
+   * an in-bounds index it overwrites the handler there instead, and `revertOnUnsubscribe` restores
+   * that handler when the returned unsubscribe runs.
    */
   insert({
     handle,
@@ -127,17 +109,9 @@ export class EventHandlerPipeline<CTX extends Record<string, unknown> = {}> {
     }
   }
 
-  /**
-   * Remove handler by:
-   * - handler function identity or
-   * - by id that could be an exact match or
-   * - match by regexp.
-   *
-   * @param params - {FindEventHandlerParams}
-   */
+  /** Removes every handler matching by function identity, exact id or regexp. */
   remove(params: FindEventHandlerParams<CTX>): void {
     let index = this.findIndex(params);
-    // need to perform n+1 searches in case the search is done by regex => there can be multiple matches
     while (index > -1) {
       this.handlers.splice(index, 1);
       index = this.findIndex(params);
@@ -153,50 +127,41 @@ export class EventHandlerPipeline<CTX extends Record<string, unknown> = {}> {
   }
 
   /**
-   * Queue an event for processing. Events are processed serially, in the order
-   * `run` is called. Returns a promise that resolves/rejects for this specific
-   * event’s processing, while the internal chain continues (errors won’t break it).
+   * Queues an event. Events are processed serially in call order. The promise settles for this
+   * event only, a rejection does not break the queue.
    */
   run(event: Event, ctx: CTX): Promise<void> {
     let resolveTask!: () => void;
     let rejectTask!: (e: unknown) => void;
-    // Per-task promise the caller can await
     const taskPromise = new Promise<void>((res, rej) => {
       resolveTask = res;
       rejectTask = rej;
     });
 
-    // Queue this event’s work
     this.runnerExecutionPromise = this.runnerExecutionPromise
       .then(async () => {
         try {
           await this.processOne(event, ctx);
           resolveTask();
         } catch (e) {
-          // Reject this task’s promise, but keep the chain alive.
+          // Reject this task only, keep the chain alive.
           rejectTask(e);
         }
       })
       .catch((e) => {
         console.error(`[pipeline:${this.id}] execution error`, e);
-        // Ensure the chain remains resolved for the next enqueue:
         this.runnerExecutionPromise = Promise.resolve();
       });
 
     return taskPromise;
   }
 
-  /**
-   * Wait until all queued events have been processed.
-   */
+  /** Resolves once all queued events have been processed. */
   async drain(): Promise<void> {
     await this.runnerExecutionPromise;
   }
 
-  /**
-   * Process a single event through a stable snapshot of handlers to avoid
-   * mid-iteration mutations (insert/remove) affecting this run.
-   */
+  /** Runs the event through a snapshot of the handlers, so mid-run changes do not affect it. */
   private async processOne(event: Event, ctx: CTX): Promise<void> {
     const snapshot = this.handlers.slice();
     for (let i = 0; i < snapshot.length; i++) {

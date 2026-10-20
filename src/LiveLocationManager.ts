@@ -1,12 +1,7 @@
 /**
- * RULES:
- *
- * 1. one loc-sharing message per channel per user
- * 2. live location is intended to be per device, but `created_by_device_id` is set once
- * when the share is created and cannot be reassigned — `UpdateLiveLocationRequest` has no
- * device field at all, by design. Any of the user's devices can therefore push coordinate
- * updates to the same share, which makes location sharing effectively per user and
- * channel rather than per device.
+ * One live-location sharing message per channel per user. `created_by_device_id` is set at creation
+ * and cannot be reassigned (`UpdateLiveLocationRequest` has no device field), so any of the user's
+ * devices can update the same share: sharing is effectively per user and channel.
  */
 
 import { withCancellation } from './utils/concurrency';
@@ -52,18 +47,12 @@ const canTrackLocation = (location: SharedLocationResponseData): boolean =>
   Number.isFinite(location.end_at) &&
   location.end_at >= nowNs();
 
-/**
- * The narrowing form, which replaces the `as` cast at the response boundary. Negating a predicate
- * narrows `state.messages` values to `never`, so use `canTrackLocation` for the boolean.
- */
+/** Type guard form of `canTrackLocation`. Negating it narrows `state.messages` to `never`. */
 const isTrackableLocation = (
   location: SharedLocationResponseData,
 ): location is SharedLiveLocationResponse => canTrackLocation(location);
 
-/**
- * Milliseconds from now until a live location stops sharing. Never negative.
- * `end_at` is a wire timestamp, so the subtraction happens in nanoseconds and is converted once.
- */
+/** Milliseconds from now until `endAt` (unix nanoseconds), never negative. */
 const msUntilExpiry = (endAt: number) => Math.max(0, nsToMs(endAt - nowNs()));
 
 function isValidLiveLocationMessage(
@@ -80,16 +69,13 @@ export type LiveLocationManagerConstructorParameters = {
   watchLocation: WatchLocation;
 };
 
-// Hard-coded minimal throttle timeout
+/** Default of `minUpdateThrottleMs`, in milliseconds. */
 export const UPDATE_LIVE_LOCATION_REQUEST_MIN_THROTTLE_TIMEOUT = 3000;
 
 export type LiveLocationManagerConfig = {
   /**
-   * Shortest gap between live-location update requests (defaults to 3000ms).
-   *
-   * A failsafe against rate limiting, not a protocol limit: integrators already control the update
-   * cadence through a custom `watchLocation`, and this floor stops a chatty one from flooding the API.
-   * Raising it is always safe; lowering it risks 429s, so only do so against a known quota.
+   * Shortest gap between live-location update requests in milliseconds (default 3000). A failsafe
+   * against rate limiting for a chatty custom `watchLocation`; lowering it risks 429s.
    */
   minUpdateThrottleMs: number;
 };
@@ -106,15 +92,9 @@ export class LiveLocationManager extends WithSubscriptions {
   private _deviceId: string;
   private watchLocation: WatchLocation;
 
-  /** The shared configuration machinery — see {@link ConfigController}. */
   private readonly configController: ConfigController<LiveLocationManagerConfig>;
-  /** Teardown for this manager's configuration subscription, released by {@link dispose}. */
   private unsubscribeConfiguration?: Unsubscribe;
 
-  /**
-   * Resolved configuration, as a store — the shape every configurable class exposes
-   * (`configState` / `config` / `updateConfig`).
-   */
   get configState(): StateStore<LiveLocationManagerConfig> {
     return this.configController.state;
   }
@@ -144,19 +124,13 @@ export class LiveLocationManager extends WithSubscriptions {
       defaults: DEFAULT_LIVE_LOCATION_MANAGER_CONFIG,
     });
 
-    // Last statement of the constructor, so a setup function sees a whole object. Registered here rather
-    // than only in `registerSubscriptions` — this manager is constructed by whoever needs it and `init()`
-    // is async, so gating configuration on registration would leave a window where a registered value did
-    // not apply.
+    // Last statement, so a setup function sees a whole object. Subscribed here, not only in
+    // `registerSubscriptions`, so a config registered before the async `init()` resolves still
+    // applies.
     this.subscribeConfiguration();
   }
 
-  /**
-   * Subscribes this instance to the `'liveLocationManager'` configuration key, if it is not subscribed
-   * already. Idempotent, which is what lets both the constructor and {@link registerSubscriptions} call
-   * it: the first gives a value registered before `init()` resolves somewhere to land, the second brings
-   * a manager back after {@link dispose}.
-   */
+  /** Subscribes to the `'liveLocationManager'` configuration key. Idempotent. */
   private subscribeConfiguration = () => {
     if (this.unsubscribeConfiguration) return;
 
@@ -172,17 +146,14 @@ export class LiveLocationManager extends WithSubscriptions {
     });
   };
 
-  /** The current resolved configuration. `Readonly` — change it through {@link updateConfig}. */
   get config(): Readonly<LiveLocationManagerConfig> {
     return this.configState.getLatestValue();
   }
 
-  /** Merges a partial configuration into the resolved config and notifies subscribers. */
   updateConfig(config: Partial<LiveLocationManagerConfig>) {
     this.configController.patch(config);
   }
 
-  /** Rebuilds the resolved configuration from package defaults plus the declarative slice. */
   initializeConfig(config?: Partial<LiveLocationManagerConfig>) {
     this.configController.initialize(config);
   }
@@ -194,9 +165,8 @@ export class LiveLocationManager extends WithSubscriptions {
 
   public registerSubscriptions = () => {
     this.incrementRefCount();
-    // Restores configuration after a {@link dispose}, so a manager that is torn down and then used again
-    // is configurable again — React StrictMode's mount/cleanup/mount runs exactly that sequence against
-    // one instance. A no-op in the ordinary case: the constructor already subscribed.
+    // Restores the configuration subscription after `dispose` (e.g. React StrictMode's
+    // mount/cleanup/mount). No-op otherwise: the constructor already subscribed.
     this.subscribeConfiguration();
 
     if (this.hasSubscriptions) return;
@@ -205,29 +175,13 @@ export class LiveLocationManager extends WithSubscriptions {
     this.addUnsubscribeFunction(this.subscribeTargetMessagesChange());
   };
 
-  /**
-   * Ref-counted, and deliberately does **not** touch the configuration subscription: several callers can
-   * share one manager, so an early caller leaving must not take anything the remaining ones still need.
-   * Use {@link dispose} for the instance-level teardown.
-   */
+  /** Ref-counted. Leaves the configuration subscription to {@link dispose}. */
   public unregisterSubscriptions = () => super.unregisterSubscriptions();
 
   /**
    * Releases the configuration subscription, running the `'liveLocationManager'` setup function's
-   * teardown. Call it when you are finished with the manager.
-   *
-   * Separate from {@link unregisterSubscriptions} because the two have different lifetimes. Event
-   * subscriptions are shared and ref-counted; configuration is registered once, by the constructor, for
-   * the life of the instance. Releasing it from the ref-counted call meant the first of two callers to
-   * leave silently stopped a still-live manager from tracking `client.config` — permanently, since
-   * nothing but the constructor registers it. Mirrors `SearchController.dispose` and the configuration
-   * half of `Channel.disconnect`.
-   *
-   * Until this is called, the client's configuration registry holds a handle to this manager, so a
-   * long-lived client and many short-lived managers need it to be called.
-   *
-   * Recoverable: a later {@link registerSubscriptions} re-subscribes, so disposing a manager that is
-   * then reused costs a re-run of the setup function rather than silence.
+   * teardown. Call it when finished with the manager: until then the client's configuration
+   * registry holds a handle to it. A later {@link registerSubscriptions} re-subscribes.
    */
   public dispose = () => {
     this.unsubscribeConfiguration?.();
@@ -272,8 +226,7 @@ export class LiveLocationManager extends WithSubscriptions {
   private subscribeTargetMessagesChange() {
     let unsubscribeWatchLocation: null | (() => void) = null;
 
-    // Subscribe to location updates only if there are relevant messages to
-    // update, no need for the location watcher to be active/instantiated otherwise
+    // The location watcher runs only while there are messages to update.
     const unsubscribe = this.state.subscribeWithSelector(
       ({ messages }) => ({ messages }),
       ({ messages }) => {
@@ -296,8 +249,7 @@ export class LiveLocationManager extends WithSubscriptions {
     let nextAllowedUpdateCallTimestamp = Date.now();
 
     const unsubscribe = this.watchLocation(({ latitude, longitude }) => {
-      // Integrators can adjust the update interval by supplying custom watchLocation subscription,
-      // but the minimal timeout still has to be set as a failsafe (to prevent rate-limitting)
+      // Failsafe against rate limiting, whatever interval a custom `watchLocation` uses.
       if (Date.now() < nextAllowedUpdateCallTimestamp) return;
 
       nextAllowedUpdateCallTimestamp = Date.now() + this.config.minUpdateThrottleMs;
@@ -308,7 +260,7 @@ export class LiveLocationManager extends WithSubscriptions {
         const expiredLocations: string[] = [];
 
         for (const [messageId, location] of this.messages) {
-          // Drops an absent or non-finite `end_at` too, not just an expired one.
+          // Also drops a location with an absent or non-finite `end_at`.
           if (!canTrackLocation(location)) {
             expiredLocations.push(location.message_id);
             continue;
@@ -335,11 +287,8 @@ export class LiveLocationManager extends WithSubscriptions {
   }
 
   private subscribeLiveLocationSharingUpdates() {
-    /**
-     * Both message.updated & live_location_sharing.stopped get emitted when message gets an
-     * update, live_location_sharing.stopped gets emitted only locally and only if the update goes
-     * through, it's a failsafe for when channel is no longer being watched for whatever reason
-     */
+    // `live_location_sharing.stopped` is dispatched locally once the stop request succeeds: a
+    // failsafe for when the channel is no longer watched.
     const subscriptions = [
       ...(
         [
@@ -374,11 +323,7 @@ export class LiveLocationManager extends WithSubscriptions {
     return () => subscriptions.forEach((subscription) => subscription.unsubscribe());
   }
 
-  /**
-   * Arms the stop-sharing timer, stepping when the expiry is beyond `MAX_TIMEOUT_MS` (~24.9 days).
-   * A share of any length is valid — only a minimum duration is enforced — and scheduling one in a
-   * single call was clamped to 1 ms, unregistering it immediately.
-   */
+  /** Arms the stop-sharing timer, in steps past `MAX_TIMEOUT_MS` (~24.9 days). */
   private scheduleStopSharing(
     messageId: MessageId,
     endAt: number,

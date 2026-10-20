@@ -9,17 +9,15 @@ const isFileReferenceBase = (value: unknown): value is FileReferenceBase =>
   typeof (value as FileReferenceBase).uri === 'string';
 
 /**
- * Turns a bare URI string into a {@link FileReferenceBase} so the multipart encoder can derive a
- * file name from it. `File`, `Blob` and picker objects pass through untouched.
+ * Wraps a bare URI string in a {@link FileReferenceBase}; `File`, `Blob` and picker objects pass
+ * through.
  */
 export const normalizeUploadFile = (file?: FileUploadInput) =>
   typeof file === 'string' ? { uri: file } : file;
 
 /**
- * Appends one request-body entry to a multipart form using Stream's encoding rules.
- *
- * Callers must pass **raw** values - objects and arrays are JSON-encoded here (that is what
- * the API expects for `user` and `upload_sizes`), so pre-stringifying them double-encodes.
+ * Appends one request-body entry to a multipart form. Pass **raw** values: objects and arrays are
+ * JSON-encoded here, so pre-stringifying them double-encodes.
  */
 export function appendToFormData(data: FormData, key: string, value: unknown) {
   if (value === undefined || value === null) return;
@@ -42,10 +40,7 @@ export function appendToFormData(data: FormData, key: string, value: unknown) {
   }
 }
 
-/**
- * Encodes a request body as `multipart/form-data`. Used by `ApiClient.sendRequest` for every
- * generated operation declaring that content type.
- */
+/** Encodes a request body as `multipart/form-data`. */
 export function toFormData(body: Record<string, unknown>) {
   const data = new FormData();
   for (const [key, value] of Object.entries(body)) appendToFormData(data, key, value);

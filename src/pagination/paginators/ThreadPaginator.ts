@@ -15,7 +15,7 @@ import { isEqual } from '../../utils/mergeWith/mergeWithCore';
 
 export const DEFAULT_THREAD_PAGE_SIZE = 25;
 
-/** Per-page query options the thread list has always requested. */
+/** Default query options for every page of the thread list. */
 export const DEFAULT_THREAD_QUERY: QueryThreadsRequest = {
   participant_limit: 10,
   reply_limit: 10,
@@ -36,18 +36,16 @@ const hasPaginationQueryShapeChanged: PaginationQueryShapeChangeIdentifier<
 
 export type ThreadPaginatorOptions = {
   client: StreamChat;
-  /** The store the list holds its threads in (`client.threads`' thread store). Omitted, it keeps a private one. */
+  /** Store holding the list's threads (`client.threads`' thread store). Omitted: a private one. */
   store?: EntityStore<Thread>;
   paginatorOptions?: PaginatorOptions<Thread, QueryThreadsRequest>;
 };
 
 /**
- * The thread list, in the order `queryThreads` returns it.
- *
- * There is deliberately no client-side sort. The server's default order (unread first, then by
- * latest reply) reads state a `Thread` mutates in place, so a comparator over it would corrupt the
- * interval storage on every mark-read or reply. Pages append in server order and a reload replaces
- * the list ({@link ThreadPaginator.reload}).
+ * The thread list, in the order `queryThreads` returns it. There is no client-side sort: the server
+ * order (unread first, then latest reply) depends on state a `Thread` mutates in place, so a
+ * comparator would corrupt interval storage. Pages append in server order and
+ * {@link ThreadPaginator.reload} replaces the list.
  */
 export class ThreadPaginator extends BasePaginator<Thread, QueryThreadsRequest> {
   private readonly client: StreamChat;
@@ -73,10 +71,7 @@ export class ThreadPaginator extends BasePaginator<Thread, QueryThreadsRequest> 
     this.store = store;
   }
 
-  /**
-   * No next page until a load has landed (`master`'s `nextCursor: null`), so `toTail()` is a no-op
-   * before the first successful reload, e.g. when an empty list fires `onEndReached` on mount.
-   */
+  /** No next page until a load has landed, so `toTail()` is a no-op before the first reload. */
   get initialState(): PaginatorState<Thread> {
     return {
       ...super.initialState,
@@ -111,9 +106,9 @@ export class ThreadPaginator extends BasePaginator<Thread, QueryThreadsRequest> 
   };
 
   /**
-   * The stored instance for a queried thread, so there's one per id. The index upserts, so a second
-   * instance would replace the stored one. A stale stored thread is refreshed from the query, unless
-   * it's open (active) at which point it reloads itself and this would replace the replies on screen.
+   * Keeps one instance per id (the index upserts, so a second one would replace the stored one). A
+   * stale stored thread is hydrated from the query unless it is active: it reloads itself, and
+   * hydrating would replace the replies on screen.
    */
   private toStoredInstance = (incoming: Thread): Thread => {
     const stored = this.store.get(incoming.id);
@@ -127,10 +122,10 @@ export class ThreadPaginator extends BasePaginator<Thread, QueryThreadsRequest> 
   filterQueryResults = (threads: Thread[]) => threads;
 
   /**
-   * Re-queries the first page and swaps the list in place, in server order; also the first load. The
-   * current threads stay until the response lands, and a failed query leaves them untouched and
-   * records `lastQueryError`; a successful one clears it. Like any paginator, the first load publishes
-   * `isLoading`; a reload of a loaded list does not, since `isLoading` with items means the next page.
+   * Re-queries the first page and replaces the list in server order; also the first load. The
+   * current threads stay until the response lands. A failed query leaves them and records
+   * `lastQueryError`; a success clears it. Only the first load publishes `isLoading` (with items it
+   * would mean the next page).
    */
   reload = async ({ limit = this.pageSize }: { limit?: number } = {}) => {
     const isFirstLoad = !this.hasResults;
@@ -143,9 +138,7 @@ export class ThreadPaginator extends BasePaginator<Thread, QueryThreadsRequest> 
       });
       if (!results) return;
 
-      // We have to replace here as we can't hold then, since the sorting is server driven
-      // and stale ids get replaced (and subsequently evicted from the entity index if no holders
-      // exist).
+      // Replace rather than merge (the order is server-driven): ids absent from the response go.
       const nextIds = new Set(results.items.map((thread) => thread.id));
       this.setIntervals([]);
       this.setActiveInterval(undefined);
@@ -170,10 +163,7 @@ export class ThreadPaginator extends BasePaginator<Thread, QueryThreadsRequest> 
     }
   };
 
-  /**
-   * Also releases the list's hold on its threads, which the base reset leaves in the index. Released
-   * before the base publishes, so a subscriber sees the threads already gone from the registry.
-   */
+  /** Also clears the item index (the base reset keeps it), before the base publishes. */
   resetState() {
     this._itemIndex.clear();
     super.resetState();

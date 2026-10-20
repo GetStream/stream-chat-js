@@ -154,7 +154,7 @@ export const pollCompositionStateProcessors: Partial<
     max_votes_allowed: clampMaxVotesAllowed(value),
   }),
   options: ({ value, data }) => {
-    // If it's a direct array update (like drag-drop reordering)
+    // Whole-list update (e.g. drag-drop reordering).
     if (Array.isArray(value)) {
       return {
         options: value.map((option) => ({
@@ -164,7 +164,7 @@ export const pollCompositionStateProcessors: Partial<
       };
     }
 
-    // For single option updates
+    // Single option update.
     const { index, text } = value;
     const prevOptions = data.options || [];
 

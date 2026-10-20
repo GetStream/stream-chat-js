@@ -1,13 +1,6 @@
 import { deepFreezeConfig } from '../../configuration/utils/deepFreezeConfig';
 import type { WSConnectionConfig } from './types';
 
-/**
- * The WebSocket's timing defaults.
- *
- * In a module of their own rather than beside {@link WSConnection} because `StableWSConnection` needs
- * them too — as the fallback for when it has no client to read configuration from — and importing them
- * from `WSConnection.ts` would close a cycle, since that file imports `StableWSConnection`.
- */
 export const DEFAULT_WS_CONNECTION_CONFIG: WSConnectionConfig = deepFreezeConfig({
   connectTimeoutMs: 15 * 1000,
   enableWSFallback: false,
@@ -20,26 +13,15 @@ export const DEFAULT_WS_CONNECTION_CONFIG: WSConnectionConfig = deepFreezeConfig
 });
 
 /**
- * How long to wait before retrying once the device reports its network is back.
- *
- * Deliberately tiny — it short-circuits the randomised backoff, because a network that has just
- * returned is the one moment an immediate retry is likely to succeed. Not zero, so the retry lands in
- * a later task, after whatever else is reacting to the same edge.
- *
- * A constant rather than configuration: it was a bare `_reconnect({ interval: 10 })` nothing could
- * reach, so exposing it would add surface rather than preserve it.
+ * Delay before reconnecting once the device reports its network is back, bypassing the randomised
+ * backoff. Not zero, so the retry lands in a later task, after whatever else reacts to the same edge.
  */
 export const WS_NETWORK_RECOVERY_RETRY_MS = 10;
 
 /**
- * Bounds on the timing knobs, applied to every value that reaches the configuration — see
- * {@link clampWSConnectionConfig}.
- *
- * Three of the fields are bounded. Two of them for the same reason: a value outside the range makes
- * the socket fail by itself, with no bad network and nothing for the integrator to see but an
- * apparently random disconnect. `connectTimeoutMs` is deliberately unbounded — every value of it is a
- * legitimate trade-off rather than a self-inflicted failure, and tests set it absurdly low on
- * purpose.
+ * Bounds applied to the timing knobs by {@link clampWSConnectionConfig}. A value outside them makes
+ * the socket fail by itself, which looks like a random disconnect. `connectTimeoutMs` is unbounded:
+ * every value is a legitimate trade-off.
  */
 export const WS_CONNECTION_CONFIG_BOUNDS: {
   [Key in
@@ -47,37 +29,20 @@ export const WS_CONNECTION_CONFIG_BOUNDS: {
     | 'offlineNotificationDisplayDelayMs'
     | 'pingIntervalMs']: { max?: number; min: number };
 } = {
-  /**
-   * A grace period of zero puts the connection check exactly on the moment the next ping is due, so the socket
-   * declares itself dead on a healthy connection and does it again after every reconnect. A floor of
-   * 1s is not a judgement about the right value; it is the point below which the loop cannot work.
-   */
+  /** Zero would put the connection check on the next ping's due time and kill a healthy socket. */
   healthCheckGracePeriodMs: { min: 1_000 },
-  /** Zero is legitimate — hold nothing back — so the floor only rejects a negative delay. */
+  /** Zero holds nothing back; the floor only rejects a negative delay. */
   offlineNotificationDisplayDelayMs: { min: 0 },
   /**
-   * **The maximum is the default**, which means this setting can only ever make the socket ping
-   * more* often, never less. That is deliberate rather than an oversight: 25s is the interval the
-   * server is known to be happy with, and a slower ping risks the connection being closed for
-   * idleness — by Stream, or by whatever load balancers and proxies sit in between — which surfaces
-   * as an apparently random disconnect rather than as a setting.
-   *
-   * So the useful direction is downward: a client on a flaky network can shorten the interval to
-   * notice a dead socket sooner, since {@link WSConnectionConfig.healthCheckGracePeriodMs} moves the
-   * connection check along with it.
-   *
-   * The floor exists for the opposite hazard: a few-millisecond interval floods the server with
-   * health checks and earns a rate limit.
+   * The maximum is the default: a slower ping risks an idle close by Stream or an intermediary. The
+   * floor stops a tiny interval from flooding the server with health checks.
    */
   pingIntervalMs: { max: 25 * 1000, min: 1_000 },
 };
 
 /**
- * Clamps the timing knobs into {@link WS_CONNECTION_CONFIG_BOUNDS}, returning both the result and
- * what had to be moved, so the caller can say so out loud.
- *
- * Returns the same object reference when nothing is out of range — `ConfigController` skips a write
- * that changes nothing, and handing it a fresh equal object on every derivation would defeat that.
+ * Clamps the timing knobs into {@link WS_CONNECTION_CONFIG_BOUNDS} and reports what it moved. Returns
+ * the same object when nothing is out of range, so `ConfigController` skips the write.
  */
 export const clampWSConnectionConfig = (
   requested: WSConnectionConfig,
@@ -91,8 +56,7 @@ export const clampWSConnectionConfig = (
   for (const [field, { max, min }] of Object.entries(WS_CONNECTION_CONFIG_BOUNDS)) {
     const key = field as keyof typeof WS_CONNECTION_CONFIG_BOUNDS;
     const value = requested[key];
-    // A non-finite value is out of range in the way that matters — `setTimeout(fn, NaN)` fires
-    // immediately, so it would spin rather than fail visibly.
+    // Non-finite values are out of range too: `setTimeout(fn, NaN)` fires immediately and would spin.
     const used = !Number.isFinite(value)
       ? min
       : Math.min(max ?? Number.POSITIVE_INFINITY, Math.max(min, value));

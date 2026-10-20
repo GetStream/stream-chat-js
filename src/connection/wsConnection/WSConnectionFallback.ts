@@ -29,9 +29,8 @@ export class WSConnectionFallback {
   }
 
   /**
-   * Applies a change in the device's network status. Stands in for v9's `window` online/offline
-   * listeners: `WSConnection` routes the network-status store here once it has switched to this
-   * long-poll.
+   * Applies a change in the device's network status; `WSConnection` routes the network-status store
+   * here once it has switched to this long-poll.
    *
    * @internal
    */
@@ -55,10 +54,10 @@ export class WSConnectionFallback {
   };
 
   /**
-   * connect try to open a longpoll request
+   * Opens a long-poll connection.
    *
-   * @param reconnect - should be false for first call and true for subsequent calls to keep the connection alive and settle the connect promises
-   *
+   * @param reconnect - `false` on the first call, `true` on later ones (keeps the connection alive and
+   *   settles the connect promises).
    * @internal
    */
   connect = async (reconnect = false) => {
@@ -79,11 +78,11 @@ export class WSConnectionFallback {
         // Authenticated by the request's `Authorization` header, so the message carries only a
         // placeholder token.
         { json: this.client._buildWSAuthPayload() },
-        { timeout: 8000 }, // 8s
+        { timeout: 8000 },
         reconnect,
       );
 
-      // The id is published before the status says the connection is up, as the WebSocket does.
+      // Published before the status says the connection is up, as the WebSocket does.
       this.client.connectionIdManager.resolveConnectionId(event.connection_id);
       this._setState(WSFallbackConnectionState.Connected);
       this.client.dispatchEvent(event);
@@ -93,34 +92,27 @@ export class WSConnectionFallback {
       }
       return event;
     } catch (err) {
-      // `disconnect()` has already set the state of an attempt it cancelled. Overwriting it with
-      // Closed would let the next online edge in `_applyNetworkStatus` reconnect it.
+      // `disconnect()` already set the state of an attempt it cancelled. Overwriting it with Closed
+      // would let the next online edge in `_applyNetworkStatus` reconnect it.
       if (this.state !== WSFallbackConnectionState.Disconnected)
         this._setState(WSFallbackConnectionState.Closed);
-      // Nothing retries a failed connect, so fail whatever is waiting for a connection id. A cancel
-      // comes from `disconnect()`, which leaves them waiting for the next connection instead.
+      // Nothing retries a failed connect, so reject the waiters. A cancel (from `disconnect()`)
+      // leaves them waiting for the next connection.
       if (!axios.isCancel(err)) this.client.connectionIdManager.rejectConnectionId(err);
       throw err;
     }
   };
 
-  /**
-   * Whether a connect request is in flight.
-   *
-   * @internal
-   */
+  /** @internal */
   get isConnecting() {
     return this.state === WSFallbackConnectionState.Connecting;
   }
 
   /**
-   * Stops polling and tells the server to close `connectionId`.
+   * Stops polling and tells the server to close `connectionId`. The id is passed in because
+   * `WSConnection.disconnect()` disconnects the socket first, which drops the manager's id.
    *
    * @param timeout - The close request's timeout, in milliseconds.
-   * @param connectionId - The id to close. Passed in rather than read from
-   *   `client.connectionIdManager`, because `WSConnection.disconnect()` disconnects the old socket
-   *   first, and that drops the manager's id.
-   *
    * @internal
    */
   disconnect = async (timeout = 2000, connectionId?: string) => {
@@ -151,7 +143,6 @@ export class WSConnectionFallback {
     const previous = this.state;
     this.state = state;
 
-    // transition from connecting => connected
     if (
       previous === WSFallbackConnectionState.Connecting &&
       this.state === WSFallbackConnectionState.Connected
@@ -186,7 +177,7 @@ export class WSConnectionFallback {
         signal: this.abortController?.signal,
       });
 
-      this.consecutiveFailures = 0; // always reset in case of no error
+      this.consecutiveFailures = 0;
       // The spec declares no response body, so the generated response type is `{}`.
       return res as T;
     } catch (error: any) {
@@ -195,9 +186,9 @@ export class WSConnectionFallback {
       if (retry && isErrorRetryable(error)) {
         this._log(`_req() - Retryable error, retrying request`);
         await sleep(retryInterval(this.consecutiveFailures));
-        // A reconnect, `disconnect()` or going offline during the sleep dropped the connection id
-        // this request carries. Sent anyway, it would come back as a ConnectionIDNotFoundError, and
-        // `_poll` would tear down the connection that replaced it.
+        // A reconnect, `disconnect()` or going offline during the sleep dropped this request's
+        // connection id. Sent anyway, its ConnectionIDNotFoundError would make `_poll` tear down the
+        // connection that replaced it.
         if (
           params.connection_id &&
           params.connection_id !== this.client.connectionIdManager.connectionId
@@ -236,7 +227,7 @@ export class WSConnectionFallback {
           return;
         }
 
-        /** client.longPoll's request layer will take care of TOKEN_EXPIRED error */
+        // `client.longPoll`'s request layer handles TOKEN_EXPIRED.
 
         if (isConnectionIDError(error)) {
           this._log(`_poll() - ConnectionID error, connecting without ID...`);

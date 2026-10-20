@@ -1,4 +1,3 @@
-/** Represents the severity level of a notification */
 export type NotificationSeverity =
   | 'error'
   | 'warning'
@@ -6,35 +5,20 @@ export type NotificationSeverity =
   | 'success'
   | (string & {});
 
-/** Represents an action button for a notification */
 export type NotificationAction = {
-  /** Text label for the action button */
   label: string;
-  /** Handler function called when action button is clicked */
   handler: () => void;
-  /** Optional metadata for styling or other custom properties */
   metadata?: Record<string, unknown>;
 };
 
 export type NotificationOrigin = { emitter: string; context?: Record<string, unknown> };
 
 /**
- * Every notification type emitted by `stream-chat` itself.
+ * Notification types emitted by `stream-chat`, formatted `domain:entity:operation:result`
+ * (e.g. `api:message:send:failed`).
  *
- * Format is `domain:entity:operation:result`:
- *   - `domain` — where it happened: `api`, `validation`, `permission`, `network`, `auth`, `system`
- *   - `entity` — what was operated on: `attachment`, `poll`, `message`, `command`, `location`
- *   - `operation` — what was attempted, lowerCamelCase: `upload`, `create`, `castVote`, `jumpToLatest`
- *   - `result` — what happened: `failed`, `blocked`, `invalid`, `missing`, `limit`, `success`,
- *     or a short hyphenated state such as `in-progress` / `not-ready`
- *
- * **These values are public API.** UI SDKs key their translation tables on them, so renaming one is
- * a breaking change. Emit them through this map rather than writing the literal inline, so the whole
- * set stays greppable from one place and a typo is a compile error.
- *
- * Consumers translating notifications should switch on {@link Notification.type} rather than matching
- * on {@link Notification.message}, which is untranslated English intended as a developer-facing
- * fallback.
+ * **The values are public API**: UI SDKs key their translations on them. Emit them through this
+ * map, never as inline literals.
  */
 export const CORE_NOTIFICATION_TYPE = {
   attachmentFileMissing: 'validation:attachment:file:missing',
@@ -46,13 +30,11 @@ export const CORE_NOTIFICATION_TYPE = {
   commandDisabled: 'validation:command:disabled',
   commandNotReady: 'validation:command:not-ready',
   locationCreateFailed: 'api:location:create:failed',
-  /** Jumping to a specific message failed. */
   messageJumpFailed: 'api:message:jump:failed',
-  /** Jumping to the latest message failed. */
   messageJumpToLatestFailed: 'api:message:jumpToLatest:failed',
-  /** Sending a composed message failed. The message stays in the list, marked failed. */
+  /** The message stays in the list, marked failed. */
   messageSendFailed: 'api:message:send:failed',
-  /** Saving an edit failed. The edit is kept on the message, marked failed. */
+  /** The edit is kept on the message, marked failed. */
   messageUpdateFailed: 'api:message:update:failed',
   pollCastVoteLimit: 'validation:poll:castVote:limit',
   pollCreateFailed: 'api:poll:create:failed',
@@ -62,50 +44,34 @@ export const CORE_NOTIFICATION_TYPE = {
 export type CoreNotificationType =
   (typeof CORE_NOTIFICATION_TYPE)[keyof typeof CORE_NOTIFICATION_TYPE];
 
-/** Represents a single notification message */
 export type Notification = {
-  /** Unique identifier for the notification */
   id: string;
   /**
-   * Untranslated English text describing what happened.
-   *
-   * This is a **developer-facing fallback, not display copy.** It is not localized and its exact
-   * wording is not part of the public contract — it can be reworded in a minor release. Anything
-   * user-facing should resolve {@link Notification.type} to its own copy and fall back to this string
-   * only for an identifier it does not recognize.
+   * Untranslated English text, a developer-facing fallback rather than display copy. Its wording
+   * can change in a minor release: resolve {@link Notification.type} to your own copy instead.
    */
   message: string;
-  /** Timestamp when notification was created */
+  /** Creation time, in ms since epoch. */
   createdAt: number;
-  /**
-   * Identifier of the notification emitter.
-   * The identifier then can be recognized by notification consumers to act upon specific origin values.
-   */
+  /** The emitter, which consumers can match to act on specific origins. */
   origin: NotificationOrigin;
-  /** Array of action buttons for the notification */
   actions?: NotificationAction[];
-  /** The severity level of the notification (defaults to `undefined` unless explicitly provided). */
   severity?: NotificationSeverity;
   /**
-   * Stable identifier for what this notification is about, used to group notifications of the same
-   * kind and — for UI SDKs — to resolve a translation without matching on the English `message`.
-   *
-   * Values emitted by `stream-chat` are enumerated in {@link CORE_NOTIFICATION_TYPE}; those are the
-   * ones that autocomplete. The type stays open so SDKs and integrators can emit their own
-   * identifiers following the same `domain:entity:operation:result` convention.
+   * Stable identifier for what the notification is about, for grouping and for resolving a
+   * translation. Values emitted by `stream-chat` are in {@link CORE_NOTIFICATION_TYPE}. Custom
+   * identifiers should follow the same `domain:entity:operation:result` format.
    */
   type?: CoreNotificationType | (string & {});
-  /** Optional auto-dismiss duration in milliseconds. The timeout starts when NotificationManager.startTimeout() is called. */
+  /** Auto-dismiss duration in ms. The countdown starts on `NotificationManager.startTimeout()`. */
   duration?: number;
-  /** Optional metadata to attach to the notification */
   metadata?: Record<string, unknown>;
-  /** Optional tags that can be used for routing or grouping notifications (e.g. `target:channel`). */
+  /** For routing or grouping (e.g. `target:channel`). */
   tags?: string[];
-  /** In case of error notification the instance of the originally thrown error */
+  /** The originally thrown error, for error notifications. */
   originalError?: Error;
 };
 
-/** Configuration options when creating a notification */
 export type NotificationOptions = Partial<
   Pick<
     Notification,
@@ -113,23 +79,17 @@ export type NotificationOptions = Partial<
   >
 > & {
   /**
-   * How long a notification should be displayed in milliseconds.
-   * Use `0` for persistent (no auto-dismiss); call `client.notifications.remove(id)` to dismiss.
+   * Display time in ms, defaulting to the configured duration of the severity. `0` is persistent:
+   * dismiss it with `client.notifications.remove(id)`.
    */
   duration?: number;
 };
 
-/**
- * State shape for the notification store.
- *
- * @deprecated Use {@link NotificationManagerState} instead.
- */
+/** @deprecated Use {@link NotificationManagerState} instead. */
 export type NotificationState = {
-  /** Array of current notification objects. */
   notifications: Notification[];
 };
 
-/** State shape for the notification store */
 export type NotificationManagerState = NotificationState;
 
 export type NotificationSortComparator = (a: Notification, b: Notification) => number;

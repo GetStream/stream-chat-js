@@ -15,12 +15,10 @@ import { StoreBackedItemIndex } from '../../entityStore/StoreBackedItemIndex';
 import { makeComparator } from '../sortCompiler';
 import { resolveDotPathValue } from '../utility.normalization';
 
-// Reminders are keyed by the message they belong to; used for interval dedup and index addressing.
+// Reminders are keyed by the message they belong to.
 const getReminderId = (reminder: ReminderResponseData) => reminder.message_id;
 
-// Fallback order for interval placement when no explicit sort is set. Order is not a pinned contract
-// (ReminderManager stores reminders in a message_id-keyed Map), but interval storage needs a total
-// order, so default to a deterministic one.
+// Interval storage needs a total order, so default to a deterministic one when no sort is set.
 const DEFAULT_SORT: SortParamRequest[] = [{ direction: 1, field: 'created_at' }];
 
 export class ReminderPaginator extends BasePaginator<
@@ -70,8 +68,7 @@ export class ReminderPaginator extends BasePaginator<
     return getReminderId(item);
   }
 
-  // Interval storage needs a total order. Derive it from the requested sort (rebuilt when `sort`
-  // changes, which also resets the accumulated pages), with a message_id tiebreaker.
+  // Total order for interval storage: the requested sort, with a message_id tiebreaker.
   private buildSortComparator() {
     return makeComparator<ReminderResponseData>({
       sort: this._sort ?? DEFAULT_SORT,

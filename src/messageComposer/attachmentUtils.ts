@@ -3,14 +3,7 @@ import { isLocalUploadAttachment } from './attachmentIdentity';
 import type { Attachment } from '../types';
 import type { LocalAttachment } from './types';
 
-// Accessors reading values off an attachment payload — as opposed to `attachmentIdentity`, which
-// answers what kind of attachment it is. Each exists because the answer is not a plain field read.
-
-/**
- * The URL to render an attachment from, falling back to the local blob preview while its upload is
- * in flight. Lives here because the preview is this package's: created by `AttachmentManager`,
- * revoked by `settlePendingAttachmentUploads`.
- */
+/** The first truthy URL, else the local preview URL while the upload is in flight. */
 export const getAttachmentPreviewUrl = (
   attachment?: Attachment | LocalAttachment,
   ...urls: (string | undefined)[]
@@ -23,20 +16,13 @@ export const getAttachmentPreviewUrl = (
     : undefined;
 };
 
-/**
- * An attachment's declared file size. v10 moved these fields under `attachment.custom`; the flat
- * one remains a fallback for older or hand-built payloads. Where the field lives is this package's
- * schema knowledge, not a UI SDK's.
- */
+/** The declared file size: `custom.file_size`, falling back to a flat `file_size`. */
 export const resolveAttachmentFileSize = (attachment?: {
   custom?: { file_size?: number | string } | null;
   file_size?: number | string;
 }): number | string | undefined => attachment?.custom?.file_size ?? attachment?.file_size;
 
-/**
- * Size in bytes, preferring the held `File` — during an upload that is the only exact figure,
- * since `file_size` may be absent until the server answers.
- */
+/** Size in bytes, preferring the held `File` (`file_size` may be absent until the server answers). */
 export const resolveAttachmentFullByteSize = (attachment?: {
   custom?: { file_size?: number | string } | null;
   file_size?: number | string;

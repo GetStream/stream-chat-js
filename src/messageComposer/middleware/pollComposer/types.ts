@@ -21,10 +21,8 @@ export type UpdateFieldsData = Partial<Omit<PollComposerState['data'], 'options'
 };
 
 /**
- * Field validation errors, keyed by field. `options` errors are keyed by option id.
- *
- * Values carry a stable {@link PollComposerValidationError.code} rather than being bare English, so a UI can
- * localize them; see {@link POLL_COMPOSER_VALIDATION_CODE}.
+ * Field validation errors, keyed by field (`options` errors by option id). Each carries a stable
+ * {@link PollComposerValidationError.code} for localization.
  */
 export type PollComposerFieldErrors = Partial<
   Omit<Record<keyof CreatePollRequest, PollComposerValidationError>, 'options'> & {

@@ -63,11 +63,7 @@ import {
 
 type UnregisterSubscriptions = Unsubscribe;
 
-/**
- * Composer edit-audit clock. Both values are unix nanoseconds, so a locally stamped change and a
- * server-derived `created_at` / `updated_at` are directly comparable — which is the whole point of
- * this state.
- */
+/** Unix nanoseconds, directly comparable with server `created_at` / `updated_at`. */
 export type LastComposerChange = {
   draftUpdate: TimestampNS | null;
   stateUpdate: TimestampNS;
@@ -105,18 +101,12 @@ export type MessageComposerSnapshot = {
 export type CompositionContext = Channel | Thread | LocalMessage;
 
 /**
- * What a submit did, and by implication where the content now is.
- *
- * - `sent` - it went out.
- * - `nothing-to-send` - there was nothing to compose, or a middleware discarded the composition
- *   (a command that is not ready, one disabled by the quoted or edited message, an upload still
- *   running). **The composer keeps its contents**, and the reason has already been reported through
- *   `client.notifications`.
- * - `failed` - the request failed. **The composer has been released**; the content is in the
- *   message list marked `failed`, where the user retries it.
- *
- * The distinction matters because the last two leave the composer in opposite states, so a caller
- * that reopens or restores UI has to tell them apart.
+ * Outcome of `send()`:
+ * - `sent`: the message went out.
+ * - `nothing-to-send`: nothing to compose, or a middleware discarded the composition (reported through
+ *   `client.notifications`). **The composer keeps its contents.**
+ * - `failed`: the request failed. **The composer is released**; the content is in the message list
+ *   marked `failed`, where the user retries it.
  */
 export type MessageComposerSubmitResult = 'sent' | 'nothing-to-send' | 'failed';
 
@@ -126,18 +116,15 @@ export type MessageComposerState = {
   pollId: string | null;
   quotedMessage: LocalMessage | null;
   showReplyInChannel: boolean;
-  /**
-   * Baseline snapshot of the message being edited (if any).
-   * This is intentionally immutable with respect to the editing session and can be used for restore/cancel.
-   */
+  /** Baseline of the message being edited, unchanged during the session (for restore or cancel). */
   editedMessage: LocalMessage | null;
 };
 
 export type MessageComposerOptions = {
   client: StreamChat;
-  // composer can belong to a channel, thread, legacy thread or a local message (edited message)
+  // A channel, a thread, or a local message (edit flow).
   compositionContext: CompositionContext;
-  // initial state like draft message or edited message
+  // Initial state: a draft or the message being edited.
   composition?: DraftResponse | MessageResponse | LocalMessage;
   config?: DeepPartial<MessageComposerConfig>;
 };
@@ -183,7 +170,7 @@ const initState = (
     : formatMessage(composition);
   let message;
   let draftId = null;
-  let id = MessageComposer.generateId(); // do not use draft id for messsage id
+  let id = MessageComposer.generateId(); // a draft id is not the message id
   if (compositionIsDraftResponse(composition)) {
     message = composition.message;
     draftId = composition.message.id;
@@ -210,11 +197,6 @@ export class MessageComposer extends WithSubscriptions {
   readonly state: StateStore<MessageComposerState>;
   readonly editingAuditState: StateStore<EditingAuditState>;
 
-  /**
-   * Resolved configuration, as a store — the shape every configurable class exposes
-   * (`configState` / `config` / `updateConfig`). Delegates rather than holding a copy, so the field and
-   * the controller's store cannot drift.
-   */
   get configState(): StateStore<MessageComposerConfig> {
     return this.configController.state;
   }
@@ -230,16 +212,6 @@ export class MessageComposer extends WithSubscriptions {
   customDataManager: CustomDataManager;
   private snapshots: MessageComposerSnapshot[] = [];
   private effectHandlers: MessageComposerEffectHandlers;
-  /**
-   * The shared configuration machinery, with the three hooks this entity is the only one to need:
-   * `retainPatches` so an `updateConfig` request is *retained* and re-applied rather than written
-   * into the result (**DV-18**), and `applyAuthority` for the server's last word.
-   *
-   * A third hook, `finalizeRequest`, was added here for `commands.sendValidator` and then removed: the
-   * deep merge assigns function values directly and skips `undefined`, so the override it called reached
-   * the same answer on every layer shape — a later layer that stays silent cannot erase an earlier
-   * choice, because a merge only writes keys that are present.
-   */
   private readonly configController: ConfigController<
     MessageComposerConfig,
     DeepPartial<MessageComposerConfig>
@@ -256,7 +228,6 @@ export class MessageComposer extends WithSubscriptions {
 
     this.compositionContext = compositionContext;
 
-    // channel is easily inferable from the context
     if (compositionContext instanceof Channel) {
       this.channel = compositionContext;
     } else if (compositionContext instanceof Thread) {
@@ -278,7 +249,6 @@ export class MessageComposer extends WithSubscriptions {
       constructorOptions: config as Partial<MessageComposerConfig> | undefined,
       initialSlice: this.declarativeConfig as Partial<MessageComposerConfig> | undefined,
       mergeSlice: 'deep',
-      // Stages 4 and 5 both arrive through `updateConfig`, and both have to outlive a re-resolution.
       retainPatches: true,
       applyAuthority: (requested) =>
         deepFreezeConfig(
@@ -338,14 +308,6 @@ export class MessageComposer extends WithSubscriptions {
 
   static generateId = generateUUIDv4;
 
-  /**
-   * The current resolved configuration.
-   *
-   * `Readonly` for the same reason every other configurable class's getter is: the value is the store's
-   * live object, so assigning to a field would change state while notifying nobody. Use
-   * {@link updateConfig}. `Readonly` is shallow, so nested writes are caught at runtime instead — the
-   * whole resolution is deep-frozen by {@link resolvedConfig}, not only the untouched defaults.
-   */
   get config(): Readonly<MessageComposerConfig> {
     return this.configState.getLatestValue();
   }
@@ -388,7 +350,6 @@ export class MessageComposer extends WithSubscriptions {
       return this.compositionContext.id;
     }
 
-    // check if the message is a reply, get parentMessageId
     if (typeof this.compositionContext.parent_id === 'string') {
       return this.compositionContext.parent_id;
     }
@@ -471,22 +432,14 @@ export class MessageComposer extends WithSubscriptions {
     return !currentCommand || this.validateCommandSendability(currentCommand).ready;
   }
 
-  /**
-   * Whether a message may be sent while its attachments are still uploading — see
-   * {@link AttachmentManagerConfig.pendingUploadsEnabled}.
-   */
+  /** See {@link AttachmentManagerConfig.pendingUploadsEnabled}. */
   get allowsPendingUploads() {
     return this.attachmentManager.config.pendingUploadsEnabled;
   }
 
   /**
-   * Where a composed message goes: the thread when this composer belongs to one, the channel
-   * otherwise.
-   *
-   * Thread replies live in `thread.messagePaginator`, which is independent of the channel's, so
-   * dispatching to the wrong one leaves the reply invisible where it was written. An edit composer
-   * is built from the message rather than from its thread, so it finds the thread only when
-   * `client.threads` has it registered — listed, or active (open somewhere).
+   * The thread when this composer belongs to one, else the channel. An edit composer finds its thread
+   * only if `client.threads` has it registered (listed or active).
    */
   get defaultSubmitTarget(): Channel | Thread {
     if (this.compositionContext instanceof Thread) return this.compositionContext;
@@ -496,11 +449,8 @@ export class MessageComposer extends WithSubscriptions {
   }
 
   /**
-   * Whether submitting keeps the composer's contents rather than clearing them - see
-   * {@link MessageComposerConfig.retainCompositionOnSubmit}.
-   *
-   * Read by the attachments composition step too: content the composer keeps must not also ride
-   * along on the submitted message, or one `localMetadata.id` ends up owned in two places.
+   * See {@link MessageComposerConfig.retainCompositionOnSubmit}. The attachments composition step reads
+   * it too, so retained content is not also sent on the message.
    */
   get retainsCompositionOnSubmit() {
     return this.config.retainCompositionOnSubmit(this);
@@ -510,13 +460,8 @@ export class MessageComposer extends WithSubscriptions {
     if (!this.isCommandSendable) return false;
 
     if (this.allowsPendingUploads) {
-      // An upload in flight is no longer a blocker, and a pending attachment counts as content
-      // in its own right — otherwise an attachment-only message could never be sent before its
-      // upload finished, which is the point of the flow. A `failed` one counts too: it rides
-      // along on the optimistic message, where `settlePendingAttachmentUploads` retries it.
-      // `blocked` still does not — the server's upload configuration refused it, so no retry can
-      // settle it, and a message whose only attachment was rejected outright must not look
-      // sendable.
+      // Uploads in flight do not block. Pending and `failed` attachments count as content (they ride
+      // the optimistic message and are retried), `blocked` ones do not (they cannot be retried).
       const hasSendableAttachment = this.attachmentManager.attachments.some(
         (attachment) =>
           isFinishedUpload(attachment) ||
@@ -558,7 +503,7 @@ export class MessageComposer extends WithSubscriptions {
     const initiatedWithoutDraft = this.lastChange.draftUpdate === null;
     const composingMessageFromScratch = initiatedWithoutDraft && !this.editedMessage;
 
-    // does not mean that the original edited message is different from the current state
+    // Does not imply the edited message differs from the current state.
     const editedMessageWasUpdated =
       this.editedMessage?.updated_at != null &&
       this.editedMessage.updated_at < this.lastChange.stateUpdate;
@@ -570,24 +515,12 @@ export class MessageComposer extends WithSubscriptions {
     return editedMessageWasUpdated || draftWasChanged || composingMessageFromScratch;
   }
 
-  /**
-   * Records a configuration change as something *you* asked for, then republishes.
-   *
-   * The patch is kept — see {@link imperativeConfig} — rather than merged into the published result and
-   * forgotten. That is what makes the request survive a later re-resolution, including one triggered by
-   * the server changing its mind.
-   */
+  /** The patch is retained, so it survives later re-resolutions (e.g. a server change). */
   updateConfig(config: DeepPartial<MessageComposerConfig>) {
     this.configController.patch(config as Partial<MessageComposerConfig>);
   }
 
-  /**
-   * What this composer has been **asked** for, before the server has any say — stages 1 to 5 of
-   * `docs/instance-configuration.md` §3.
-   *
-   * Available on every entity that retains its patches, not just this one: it is the controller's, and
-   * the split it exposes is what **FU-35** would extend elsewhere by switching on `retainPatches`.
-   */
+  /** The config as requested, before server restrictions (`docs/instance-configuration.md` §3). */
   get requestedConfig(): Readonly<MessageComposerConfig> {
     return this.configController.requested;
   }
@@ -599,23 +532,9 @@ export class MessageComposer extends WithSubscriptions {
   }
 
   /**
-   * The configuration fields this composer's channel decides server-side.
-   *
-   * Reading them is the composer's job rather than the shared helper's: only the composer knows that
-   * `location.enabled` is gated on `shared_locations`, and only an existing composer has a channel to
-   * ask. `serverConfig` is re-read on every call, so a restriction that changes mid-session is picked up
-   * rather than captured once.
-   *
-   * Every entry here is a boolean gate, so `mergeServerRestrictions` ANDs it with what was requested and
-   * either side may switch the feature off — a client asking for less than the server grants is always
-   * legitimate. That is the whole point of mirroring these flags into configuration rather than leaving
-   * consumers to read `serverConfig` themselves: a raw server flag answers only the server's half, so a UI
-   * reading it offers features the composer has already disabled and would refuse to compose.
-   *
-   * `commands` is deliberately absent. The server sends a *list* of commands rather than a gate, so there
-   * is nothing to AND and no integrator intent to mirror; consumers read it from the channel's config.
-   *
-   * Takes the requested configuration because one restriction is conditional — see `uploads` below.
+   * Server-side gates from the channel config, re-read on every call. Each is a boolean that
+   * `mergeServerRestrictions` ANDs with the request. `commands` is absent (the server sends a list,
+   * not a gate).
    */
   private serverRestrictionsFor(
     requested: MessageComposerConfig,
@@ -623,21 +542,8 @@ export class MessageComposer extends WithSubscriptions {
     const channelConfig = this.channel.serverConfig;
 
     return {
-      /**
-       * `uploads` describes **Stream's upload endpoint**, not the concept of attaching files. Setting
-       * `attachments.customCdn` says the bytes go to storage Stream neither hosts nor charges for, and
-       * the flag says nothing about whether that can work — applying it there would make "turn uploads
-       * on in Stream" a precondition for uploading to your own CDN, which is not this SDK's to require.
-       *
-       * Keyed on `customCdn` rather than on the presence of `doUploadRequest`: a custom upload function
-       * says how files are sent, not where, and one that still posts to Stream must stay subject to
-       * Stream's rules.
-       *
-       * `undefined` rather than `true`: the server is not asserting the opposite either, it simply has
-       * no say. `mergeServerRestrictions` leaves the request standing for a field it states nothing
-       * about, so the integrator's `attachments.enabled` decides alone — the same way an unset
-       * `shared_locations` behaves.
-       */
+      // `uploads` governs Stream's upload endpoint, so it does not apply with `customCdn`. `undefined`
+      // leaves the request standing.
       attachments: {
         enabled: requested.attachments.customCdn ? undefined : channelConfig?.uploads,
       },
@@ -647,14 +553,7 @@ export class MessageComposer extends WithSubscriptions {
     };
   }
 
-  /**
-   * Ceilings this composer's channel imposes server-side.
-   *
-   * `max_message_length` caps both length limits rather than setting them: a composer asking for something
-   * shorter keeps its own number, and one asking for nothing at all inherits the server's — which is the
-   * default, and the case worth having. Left unlimited, the composer happily accepts text the send endpoint
-   * then rejects, so the limit is enforced late and as an API error instead of in the editor.
-   */
+  /** `max_message_length` caps both length limits: a smaller requested value wins, unset inherits it. */
   private get serverUpperBounds(): ServerUpperBounds<MessageComposerConfig> {
     const maxMessageLength = this.channel.serverConfig?.max_message_length;
 
@@ -663,52 +562,23 @@ export class MessageComposer extends WithSubscriptions {
     };
   }
 
-  /**
-   * Resolves the configuration and publishes it, unless the result is deep-equal to what is already there.
-   *
-   * The guard is needed because `StateStore.next`'s own `===` no-op can never apply here: every resolution
-   * allocates a new object, so without a comparison *every* publish notifies, whether or not any value
-   * moved.
-   *
-   * Worth the walk: `isEqual` over a resolved composer config measures ~1.7µs, against a resolution at
-   * ~3.5µs plus every subscriber's work. The dominant source of no-op publishes is fixed upstream in
-   * `StreamChat._addChannelConfig`, which stops a repeated channel query from waking that channel's
-   * composer at all; this
-   * catches the rest — re-registering a declarative value that has not changed, a `reset` with nothing
-   * registered, an empty `updateConfig({})`.
-   */
+  // The controller skips the publish when the resolved config is deep-equal to the last one.
   private publishConfig = () => {
     this.configController.rederive(this.declarativeConfig);
   };
 
   /**
-   * Rebuilds the configuration from its inputs and **discards imperative changes** — every
-   * {@link updateConfig} patch, including those made through a sub-composer setter such as
-   * `textComposer.defaultValue` or `attachmentManager.maxNumberOfFilesPerMessage`.
-   *
-   * Called by the constructor and by `client.config.reset()`, where dropping them is the point: a reset
-   * means "back to what is registered". Anything that merely needs the configuration re-resolved — the
-   * server's answer arriving, a declarative change — must use {@link publishConfig} or
-   * {@link applyServerRestrictions}, which keep them.
+   * Rebuilds the configuration from its inputs and **discards every {@link updateConfig} patch**,
+   * including those from sub-composer setters. To re-resolve and keep them, use
+   * {@link applyServerRestrictions}.
    */
   initializeConfig = () => {
     this.configController.initialize(this.declarativeConfig);
   };
 
   /**
-   * Re-resolves the configuration against the channel's current server-side restrictions.
-   *
-   * Call this when the server's answer may have changed — its config has just arrived, or it was updated.
-   * Safe in both directions, which is the whole reason it exists: a feature you disabled stays disabled
-   * when the server permits it, and a feature the server *stops* restricting goes back to whatever you
-   * asked for, because the restriction is applied to your request rather than to the previous result.
-   *
-   * Reachable rather than public: `Channel.query` is the only caller, covering a composer that has not
-   * registered subscriptions and so cannot hear the answer change through
-   * {@link subscribeChannelConfigChanged}. Nothing outside this package needs it — registering subscriptions
-   * is the supported way to stay current, and a composer that has done so is already covered. Marked
-   * `@internal` so it is not read as a supported extension point; the name is kept because what it does
-   * is* re-assert the server's restrictions, even though the whole resolution is what performs that.
+   * Re-resolves the configuration against the channel's current server-side restrictions, keeping
+   * `updateConfig` patches. `Channel.query` calls it for composers without registered subscriptions.
    *
    * @internal
    */
@@ -753,7 +623,7 @@ export class MessageComposer extends WithSubscriptions {
         (db) =>
           db.deleteDraft({
             cid: this.channel.cid,
-            parent_id: undefined, // makes sure that we don't delete thread drafts while upserting channels
+            parent_id: undefined, // keeps thread drafts when upserting channels
           }),
         { method: 'deleteDraft' },
       );
@@ -787,10 +657,8 @@ export class MessageComposer extends WithSubscriptions {
   };
 
   /**
-   * Moves this composition into `target`, replacing what `target` held, and clears this composer
-   * locally: the text, attachments, poll, location, link previews, custom data, quoted message and
-   * reply-in-channel choice. An upload still running keeps running and its result lands in `target`
-   * (see {@link AttachmentManager.takeOver}). Nothing is sent.
+   * Moves this composition into `target`, replacing what `target` held, and clears this composer.
+   * Running uploads continue into `target` (see {@link AttachmentManager.takeOver}). Nothing is sent.
    *
    * @internal
    */
@@ -900,24 +768,13 @@ export class MessageComposer extends WithSubscriptions {
       args: { composer: this },
       config: this.client.config,
       key: 'messageComposer',
-      // Re-resolve rather than merge the slice in. `requestedConfig` reads the declarative slice live, so
-      // there is nothing to copy — and copying it through `updateConfig` would file it under *imperative*
-      // changes, letting a later declarative change override an imperative one. That inverts stages 2 and
-      // 5 of the documented order, which says the more specific, later request wins.
+      // Re-resolve: copying the slice through `updateConfig` would make it an imperative patch.
       applyConfig: () => this.publishConfig(),
       reinitializeConfig: this.initializeConfig,
     });
 
-  /**
-   * The channel's server-side config (`client.channelServerConfigs[cid]`) is populated by `query`/`watch`,
-   * which for a channel opened via `client.channelManager.ensure({ type, id })` happens *after* this composer was
-   * constructed. Left unwatched, the composer would keep the defaults it derived when `serverConfig` was
-   * still undefined — so `location.enabled` would stay `true` for an app that disables `shared_locations`
-   * server-side. Re-deriving when the config lands keeps the server authoritative.
-   *
-   * Selected by cid, matching the store's key space: `shared_locations` and `max_message_length` are both
-   * overridable per channel, so a sibling channel's config is not this composer's answer.
-   */
+  // The channel's server config lands on `query`/`watch`, possibly after construction: re-resolve then.
+  // Selected by cid: the config is per channel.
   private subscribeChannelConfigChanged = () =>
     this.client.channelServerConfigsStore.subscribeWithSelector(
       ({ configs }) => ({ channelConfig: configs[this.channel.cid] }),
@@ -972,7 +829,7 @@ export class MessageComposer extends WithSubscriptions {
     this.textComposer.state.subscribeWithSelector(
       ({ text }) => [text] as const,
       ([currentText], previousSelection) => {
-        // do not handle on initial subscription
+        // Skip the initial subscription call.
         if (typeof previousSelection === 'undefined') return;
 
         this.logStateUpdateTimestamp();
@@ -1133,8 +990,8 @@ export class MessageComposer extends WithSubscriptions {
         },
         localMessage: {
           attachments: [] as Attachment[],
-          cid: this.channel.cid, // it is needed to match local paginator filters to be ingested into its state
-          created_at, // only assigned to localMessage as this is used for optimistic update
+          cid: this.channel.cid, // needed to match local paginator filters
+          created_at, // only on `localMessage`, for the optimistic update
           deleted_at: undefined,
           error: undefined,
           id: this.id,
@@ -1174,9 +1031,8 @@ export class MessageComposer extends WithSubscriptions {
   };
 
   createDraft = async () => {
-    // server-side drafts are not stored on message level but on thread and channel level
-    // therefore we don't need to create a draft if the message is edited
-    // nor for a channel without an id yet: there is nothing to save it for (see `isProvisional`)
+    // Server drafts live on the thread or channel, not on a message, so none for an edit. Nor for a
+    // provisional channel (no id yet).
     if (this.editedMessage || !this.config.drafts.enabled || this.channel.isProvisional)
       return;
     const composition = await this.composeDraft();
@@ -1292,26 +1148,13 @@ export class MessageComposer extends WithSubscriptions {
     }
   };
 
-  /**
-   * Lets go of what the submitted message took with it.
-   *
-   * A poll message carries no text or attachments of its own, so the composer keeps whatever else
-   * was drafted and releases only the poll. Everything else is a full clear.
-   */
+  /** Clears the composer, or only detaches the poll when `retainsCompositionOnSubmit`. */
   private releaseSubmittedComposition = () => {
     if (this.retainsCompositionOnSubmit) {
       this.state.partialNext({
         id: MessageComposer.generateId(),
-        // Unconditional, and safe whatever decided to retain: a poll that exists is always a poll
-        // that just went out, because `createMessageComposerStateCompositionMiddleware` copies a
-        // set `pollId` onto every composition - threads and edits included, where the poll-only
-        // middleware forwards. There is no state where this detaches one the submission did not
-        // carry.
-        //
-        // Detaching it is also not optional. While `pollId` is set, `hasSendableData` counts it as
-        // content on its own and `createPollOnlyCompositionMiddleware` turns every composition
-        // into a poll-only message, so a composer left bound to a spent poll nullifies whatever is
-        // typed next and re-sends the same poll.
+        // Always detached: a set `pollId` is copied onto every composition, so it just went out. Left
+        // set, `createPollOnlyCompositionMiddleware` would turn the next message into the same poll.
         pollId: null,
       });
       return;
@@ -1340,12 +1183,8 @@ export class MessageComposer extends WithSubscriptions {
   };
 
   /**
-   * Composes the message and sends it, releasing the composer as it goes.
-   *
-   * Never rejects - see {@link MessageComposerSubmitResult} for what each outcome means and where
-   * the content ends up. A failure is reported through `client.notifications`, and the message
-   * stays in the list marked `failed`, which is where the user retries it. Callers rendering their
-   * own post-send feedback have to check the result.
+   * Composes and sends the message. Never rejects: see {@link MessageComposerSubmitResult}. A failure is
+   * reported through `client.notifications`.
    */
   send = async (): Promise<MessageComposerSubmitResult> => {
     const composition = await this.compose();
@@ -1353,9 +1192,7 @@ export class MessageComposer extends WithSubscriptions {
 
     const { localMessage, message, sendOptions } = composition;
 
-    // Released before the request, not after. The request lasts a round trip - longer still when it
-    // waits for an upload to settle - and clearing at the end leaves that whole window for the
-    // user's next keystrokes to race the clear.
+    // Released before the request, so the user's next keystrokes cannot race the clear.
     this.releaseSubmittedComposition();
 
     try {
@@ -1366,9 +1203,7 @@ export class MessageComposer extends WithSubscriptions {
       });
       return 'sent';
     } catch (error) {
-      // Nothing is put back. The message is already in the list marked `failed` with a retry
-      // affordance, so restoring here would leave the same content - and the same attachment upload
-      // ids - owned in two places, where sending either copy corrupts the other.
+      // Nothing is restored: the failed message in the list owns the content and its upload ids.
       this.reportSubmitFailure(
         CORE_NOTIFICATION_TYPE.messageSendFailed,
         'Send message request failed',
@@ -1378,10 +1213,7 @@ export class MessageComposer extends WithSubscriptions {
     }
   };
 
-  /**
-   * Composes the edit and saves it, on the same terms as {@link send} - including releasing the
-   * composer before the request rather than after it.
-   */
+  /** Composes and saves the edit, on the same terms as {@link send}. */
   update = async (): Promise<MessageComposerSubmitResult> => {
     const composition = await this.compose();
     if (!composition?.message) return 'nothing-to-send';
@@ -1397,8 +1229,7 @@ export class MessageComposer extends WithSubscriptions {
       });
       return 'sent';
     } catch (error) {
-      // As in `send`: the edit is kept on the message and marked failed, so there is nothing to
-      // restore here.
+      // As in `send`: nothing is restored.
       this.reportSubmitFailure(
         CORE_NOTIFICATION_TYPE.messageUpdateFailed,
         'Edit message request failed',

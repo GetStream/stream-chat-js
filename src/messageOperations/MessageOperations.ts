@@ -36,11 +36,9 @@ export const DEFAULT_MESSAGE_OPERATIONS_CONFIG: MessageOperationsConfig =
   });
 
 /**
- * Every optimistic operation on a message, each one method reading top to bottom.
- *
- * Send, retry, update and delete are message REQUESTS with a status lifecycle, so they share
- * {@link run} and {@link MessageOperationStatePolicy}. Anything else (reactions, and whatever comes
- * next) applies its change, sends its request, and on failure calls {@link rollbackUnlessQueued}.
+ * Every optimistic operation on a message. Send, retry, update and delete have a status lifecycle and
+ * share {@link run} and {@link MessageOperationStatePolicy}. Reactions apply their change, send their
+ * request, and on failure call {@link rollbackUnlessQueued}.
  */
 export class MessageOperations {
   private ctx: MessageOperationsContext;
@@ -53,7 +51,6 @@ export class MessageOperations {
     MessageOperationsContext['sequenceRequests']
   >;
 
-  /** The shared configuration machinery — see {@link ConfigController}. */
   private readonly configController: ConfigController<MessageOperationsConfig>;
 
   constructor(ctx: MessageOperationsContext) {
@@ -73,38 +70,18 @@ export class MessageOperations {
     });
   }
 
-  /**
-   * Resolved configuration, as a store — the shape every configurable class exposes
-   * (`configState` / `config` / `updateConfig`).
-   */
   get configState(): StateStore<MessageOperationsConfig> {
     return this.configController.state;
   }
 
-  /** The current resolved configuration. `Readonly` — change it through {@link updateConfig}. */
   get config(): Readonly<MessageOperationsConfig> {
     return this.configState.getLatestValue();
   }
 
-  /** Merges a partial configuration into the resolved config and notifies subscribers. */
   updateConfig(config: Partial<MessageOperationsConfig>) {
     this.configController.patch(config);
   }
 
-  /**
-   * Rebuilds the resolved configuration from package defaults plus the declarative slice.
-   *
-   * The derivation entry point every configurable entity exposes, so the owner routes a slice here and
-   * knows nothing about MessageOperations's defaults or merge semantics. This logic used to live in the owner,
-   * which is how `reset()` became a no-op for the client key (F4) and how a registered
-   * `notifications.sortComparator` became unremovable (G8) — an owner writing another object's
-   * derivation gets that object's rules wrong sooner or later.
-   *
-   * Routed through {@link updateConfig} rather than replacing the store, which is exact here because
-   * every field of `MessageOperationsConfig` is required and present in the defaults, so a patch naming all of
-   * them amounts to a replacement. `NotificationManager` cannot do this — its `sortComparator` is
-   * optional with no default, so a patch can never remove one — which is why it replaces outright.
-   */
   initializeConfig(config?: Partial<MessageOperationsConfig>) {
     this.configController.initialize(config);
   }
@@ -121,9 +98,8 @@ export class MessageOperations {
     if (!settle || !attachments?.length) return { params };
 
     const { attachments: settledAttachments, failureReason } = await settle(attachments);
-    // Same array reference unless something uploaded just now, in which case the payload has to be
-    // rebuilt from it: the composition middleware left `message.attachments` holding only the
-    // attachments that already had a URL.
+    // Same reference unless an upload just resolved. Then the payload is rebuilt, since
+    // `message.attachments` only holds the attachments that already had a URL.
     if (settledAttachments === attachments) return { failureReason, params };
 
     const wirePayload =
@@ -142,10 +118,8 @@ export class MessageOperations {
   }
 
   /**
-   * The shared lifecycle: apply the optimistic state, settle any attachment upload still in flight,
-   * fire the request, then reconcile or record the failure. `kind` is threaded through because the
-   * three operations want materially different state transitions — see
-   * {@link MessageOperationStatePolicy}.
+   * The shared lifecycle: apply the optimistic state, settle uploads still in flight, fire the request,
+   * then reconcile or record the failure. The per-kind rules are in {@link MessageOperationStatePolicy}.
    */
   private async run<K extends OperationKind>(
     kind: K,
@@ -156,27 +130,22 @@ export class MessageOperations {
 
     const optimistic = this.policy.optimistic(kind, params);
 
-    // Carries whatever the settle step resolved, so a failure records partial progress and a
-    // retry re-uploads only what is missing.
+    // Carries what the settle step resolved, so a failure records partial progress.
     let effective = params;
 
     try {
-      // Ordering starts here, after the optimistic update and around the settle + request — the
-      // transfer is the slow part being ordered.
+      // Ordering covers the settle and the request, not the optimistic update.
       const response = await this.sequenceRequests(kind, async () => {
-        // An edit composes through the same middleware as a send, so it too can carry a pending
-        // upload. Only a delete is excluded — it discards the message. Deliberately not the
-        // `sequenceRequests` predicate, which asks a different question.
+        // An edit composes like a send, so it can carry a pending upload. A delete cannot.
         if (kind !== 'delete') {
           const settled = await this.withSettledUploads(params);
-          // Writes the outer `effective`, not a new local — the `catch` is outside this callback
-          // and needs the settled attachments to report partial success.
+          // Assigns the outer `effective`: the `catch` below needs the settled attachments.
           effective = settled.params;
           if (settled.failureReason) throw settled.failureReason;
 
           // Settling released the local previews, so publish the URLs now or the list points at a
-          // revoked blob for a round-trip. Patches what is held, since `effective.localMessage`
-          // still carries the caller's status and a retry would revert to `failed`.
+          // revoked blob until the response. Patches what is held, since `effective.localMessage` still
+          // has the caller's status (a retry would revert to `failed`).
           const settledAttachments = effective.localMessage.attachments;
           const held =
             settledAttachments === params.localMessage.attachments
@@ -189,8 +158,7 @@ export class MessageOperations {
           }
         }
 
-        // Destructured defensively: a custom request handler is free to resolve with nothing, and
-        // the policy's own guard treats a missing message as "no server copy to apply".
+        // A custom handler may resolve with nothing, which the policy treats as "no server copy".
         return await doRequest(effective);
       });
       this.policy.success({
@@ -214,10 +182,9 @@ export class MessageOperations {
   }
 
   /*
-   * Each operation sends through the integrator's handler for its kind
-   * (`ChannelConfig.requestHandlers`) when one is registered, and through `defaults.<kind>`
-   * otherwise. A handler is handed the default as `defaultRequest`, so it can still send that way.
-   * There is deliberately no per-call override: one would win over whatever the host SDK registered.
+   * Each operation sends through the integrator's handler for its kind (`ChannelConfig.requestHandlers`)
+   * when one is registered, else through `defaults.<kind>`. A handler receives the default as
+   * `defaultRequest`.
    */
 
   private resolveRequest<K extends OperationKind>(
@@ -324,12 +291,10 @@ export class MessageOperations {
   }
 
   /**
-   * Adds a reaction with an optimistic local state update: the reaction is applied to the cached
-   * message immediately, then the request is sent through the offline queue. The server-authoritative counts reconcile on the response; the reaction is
-   * rolled back on a definitive failure, and left alone when the request was queued for replay.
-   *
-   * The request routes through the channel because reactions are channel-level, while the local write
-   * is addressed by message id and so reaches a pure thread reply that no channel collection holds.
+   * Adds a reaction optimistically: it is applied to the cached message at once, then sent through the
+   * offline queue. The response's counts reconcile; a definitive failure rolls it back, a request queued
+   * for replay does not. The local write is by message id, so it also reaches a thread reply that no
+   * channel collection holds.
    */
   async addReaction({
     messageId,
@@ -341,8 +306,7 @@ export class MessageOperations {
     options?: Pick<SendReactionRequest, 'enforce_unique' | 'skip_push'>;
   }): Promise<void> {
     const { channel } = this.ctx;
-    // `reaction` is a REQUEST, so any timestamps on it are `Date`s. The local store speaks the wire
-    // unit, so bring them across rather than handing a `Date` to a numeric field.
+    // `reaction` is a request, so its timestamps are `Date`s. The local store uses the wire unit.
     const { created_at, updated_at, ...restOfReaction } = reaction;
     const undo = applyReactionLocally(channel.getClient(), {
       enforceUnique: options?.enforce_unique ?? false,
@@ -391,9 +355,9 @@ export class MessageOperations {
   }
 
   /**
-   * The failure rule every operation outside {@link run} shares: a request queued for replay is
-   * pending, not failed, so its optimistic change stays. Name the operation's OWN task types — every
-   * task carries the same `messageId`, so "anything queued" would let an unrelated task answer.
+   * The failure rule for operations outside {@link run}: a request queued for replay is pending, so its
+   * optimistic change stays. Pass the operation's own task types, as every task carries the same
+   * `messageId`.
    */
   private async rollbackUnlessQueued(
     messageId: string,
@@ -403,10 +367,7 @@ export class MessageOperations {
     if (!(await this.ctx.isQueued(messageId, types))) undo?.();
   }
 
-  /**
-   * Reconciles the server-authoritative copy, but only if we still hold it — a bare upsert of an unheld
-   * id would orphan it (the store's refcount GC only reclaims held ids).
-   */
+  /** Reconciles the server copy only if still held: a bare upsert of an unheld id would orphan it. */
   private reconcileHeldMessage(message: MessageResponse | undefined | null) {
     if (!message) return;
     const { messageStore } = this.ctx.channel.getClient();

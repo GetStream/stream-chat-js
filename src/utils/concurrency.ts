@@ -11,33 +11,13 @@ type AsyncWrapper<P extends unknown[], T> = (
   onContinued: () => void;
 };
 
-/**
- * Runs async functions serially. Useful for wrapping async actions that
- * should never run simultaneously: if marked with the same tag, functions
- * will run one after another.
- *
- * @param tag - Async functions with the same tag will run serially. Async functions
- * with different tags can run in parallel.
- * @param cb - Async function to run.
- * @returns Promise that resolves when async functions returns.
- */
+/** Runs async functions with the same `tag` one after another. Different tags run in parallel. */
 export const withoutConcurrency = createRunner(wrapWithContinuationTracking);
 
 /**
- * Runs async functions serially, and cancels all other actions with the same tag
- * when a new action is scheduled. Useful for wrapping async actions that override
- * each other (e.g. enabling and disabling camera).
- *
- * If an async function hasn't started yet and was canceled, it will never run.
- * If an async function is already running and was canceled, it will be notified
- * via an abort signal passed as an argument.
- *
- * @param tag - Async functions with the same tag will run serially and are canceled
- * when a new action with the same tag is scheduled.
- * @param cb - Async function to run. Receives AbortSignal as the only argument.
- * @returns Promise that resolves when async functions returns. If the function didn't
- * start and was canceled, will resolve with 'canceled'. If the function started to run,
- * it's up to the function to decide how to react to cancelation.
+ * Like {@link withoutConcurrency}, but scheduling a new action with the same `tag` cancels the
+ * earlier ones. One that has not started never runs and resolves `'canceled'`. A running one has
+ * its `AbortSignal` (the only argument of `cb`) aborted and decides how to react.
  */
 export const withCancellation = createRunner(wrapWithCancellation);
 
@@ -52,15 +32,8 @@ export async function settled(tag: string | symbol) {
 }
 
 /**
- * Implements common functionality of running async functions serially, by chaining
- * their promises one after another.
- *
- * Before running, async function is "wrapped" using the provided wrapper. This wrapper
- * can add additional steps to run before or after the function.
- *
- * When async function is scheduled to run, the previous function is notified
- * by calling the associated onContinued callback. This behavior of this callback
- * is defined by the wrapper.
+ * Chains functions with the same tag serially. `wrapper` adds steps around each function and
+ * defines its `onContinued`, which runs on the previous function when a successor is scheduled.
  */
 function createRunner<P extends unknown[], T>(wrapper: AsyncWrapper<P, T>) {
   return function run(tag: string | symbol, cb: (...args: P) => Promise<T>) {
@@ -73,11 +46,7 @@ function createRunner<P extends unknown[], T>(wrapper: AsyncWrapper<P, T>) {
   };
 }
 
-/**
- * Wraps an async function with an additional step run after the function:
- * if the function is the last in the queue, it cleans up the whole chain
- * of promises after finishing.
- */
+/** The last function in the queue cleans up the whole promise chain when it finishes. */
 function wrapWithContinuationTracking<T>(tag: string | symbol, cb: () => Promise<T>) {
   let hasContinuation = false;
   const wrapped = () =>
@@ -91,28 +60,8 @@ function wrapWithContinuationTracking<T>(tag: string | symbol, cb: () => Promise
 }
 
 /**
- * Wraps an async function with additional functionality:
- * 1. Associates an abort signal with every function, that is passed to it
- *    as an argument. When a new function is scheduled to run after the current
- *    one, current signal is aborted.
- * 2. If current function didn't start and was aborted, in will never start.
- * 3. If the function is the last in the queue, it cleans up the whole chain
- *    of promises after finishing.
- *
- *    The cb is passed the AbortController instance for a given execution.
- *    The cb should implement own cancellation logic to reflect that the given AbortController has been aborted.
- *
- *  ```
- *    const cb = async (signal: AbortSignal) => {
- *         await new Promise(resolve => setTimeout(resolve, 50));
- *         if (signal.aborted) {
- *           abortedSignals.push(signal);
- *           return 'canceled';
- *         }
- *         return 1;
- *       };
- *   const result = withCancellation('tag-x', cb); // the result variable may acquire value "canceled" or 1
- *  ```
+ * Passes each function an abort signal, aborted when a successor is scheduled. A function aborted
+ * before it starts never runs. The last function in the queue cleans up the promise chain.
  */
 function wrapWithCancellation<T>(
   tag: string | symbol,

@@ -31,44 +31,36 @@ export type {
 export { MessageIntervalPaginator } from './MessageIntervalPaginator';
 
 /**
- * Auxiliary (non-pagination) state for the message paginator: whole-collection aggregates that are
- * independent of the active pagination window (the dual of pagination — values over the entire set,
- * not a page of it). `lastMessageAt` is effectively `MAX(created_at)` over the channel-relevant
- * messages and is the source of truth for channel-list ordering
+ * Whole-collection aggregates, independent of the active pagination window. `lastMessageAt` is the
+ * max `created_at` over the channel-relevant messages and orders the channel list
  * (`channel.messagePaginator.lastMessageAt`): seeded from `ChannelResponse.last_message_at`, then
  * advanced monotonically as newer messages are ingested.
  */
 export type MessagePaginatorAggregateState = {
   /**
-   * The newest channel-relevant message, for display (e.g. a channel/thread list item's last-message
-   * preview or latest-reply avatar). A LIVE reference: it advances to a strictly newer message, is
-   * refreshed in place when that message is edited/soft-deleted/reacted-to, and is recomputed to the
-   * next newest when it is hard-removed. Respects `shouldAdvanceLastMessage` (skips system messages
-   * per `skip_last_msg_update_for_system_msgs`, and thread-only replies). `null` until one is ingested.
+   * The newest channel-relevant message, for display (last-message preview, latest-reply avatar). A
+   * live reference: it advances to a strictly newer message, is refreshed in place on edit,
+   * soft-delete or reaction, and is recomputed when hard-removed. Follows `shouldAdvanceLastMessage`
+   * (skips system messages per `skip_last_msg_update_for_system_msgs`, and thread-only replies).
+   * `null` until one is ingested.
    *
-   * Lives here, NOT derived from pagination `state`, so it stays reactive when a WS message lands in
-   * the head interval while an older window is active — the pagination store only emits when the
-   * active* interval is impacted (see `BasePaginator.ingestItem`), so a `state`-derived latest would
-   * go stale in that case.
+   * It lives outside pagination `state`, which only emits when the active interval is affected: a
+   * message landing in the head interval while an older window is active would go stale there.
    */
   lastMessage: LocalMessage | null;
   /**
-   * Server-provided `ChannelResponse.last_message_at` floor, for channels whose newest message is not
-   * loaded (e.g. surfaced by a channel-list query). Kept SEPARATE from {@link lastMessage} so it can
-   * outrank a stale/absent loaded message for sorting without overwriting the display message. The
-   * sort key {@link MessagePaginator.lastMessageAt} is derived as the max of the two, so the two can
-   * never drift out of sync.
+   * `ChannelResponse.last_message_at` floor, for channels whose newest message is not loaded. Kept
+   * apart from {@link lastMessage} so it can outrank a stale or absent loaded message for sorting
+   * without replacing the display message. {@link MessagePaginator.lastMessageAt} is the max of
+   * the two.
    */
   seededLastMessageAt: TimestampNS | null;
 };
 
 export type MessagePaginatorOptions = BaseMessagePaginatorOptions & {
   /**
-   * Controls whether `jumpToTheFirstUnreadMessage()` should prefer the `unreadStateSnapshot`
-   * state over `channel.state.read[...]`.
-   *
-   * - 'snapshot' (default): retrieve the first unread message id from the unreadStateSnapshot state when jumping to the first unread message
-   * - 'read-state-only': retrieve the last read message id from the channel read state when jumping to the first unread message
+   * Where `jumpToTheFirstUnreadMessage()` reads the unread reference from: `'snapshot'` (default)
+   * prefers `unreadStateSnapshot`, `'read-state-only'` uses only `channel.state.read[...]`.
    */
   unreadReferencePolicy?: 'snapshot' | 'read-state-only';
 };
@@ -77,57 +69,43 @@ export type UnreadSnapshotState = {
   lastReadAt: TimestampNS | null;
   unreadCount: number;
   /**
-   * Snapshot of the first unread message id for the user.
-   * This is intentionally decoupled from `channel.state.read[...]` because apps
-   * may mark the channel read immediately on open, while still wanting to render
-   * UI indicators that jump to the previously-unread location.
+   * First unread message id. Decoupled from `channel.state.read[...]` because apps may mark the
+   * channel read on open yet still want UI that jumps to the previously unread location.
    */
   firstUnreadMessageId: string | null;
-  /**
-   * Snapshot of the last read message id for the user (fallback when first unread
-   * is not known).
-   */
+  /** Last read message id, a fallback when the first unread is unknown. */
   lastReadMessageId: string | null;
 };
 
 /**
- * External, UI-driven signal: `true` while the user is actively viewing the latest messages of
- * this collection (app foregrounded AND the newest message on screen). The owning SDK sets it — the
- * state layer has no viewport. When live, an incoming message is NOT counted as unread (the count /
- * snapshot bump is skipped), so the "N new" separator/banner never flash for a message the user is
- * already looking at. Defaults to `false` (assume not viewing until the SDK proves otherwise).
+ * Set by the owning SDK (the state layer has no viewport): `true` while the user views the latest
+ * messages (app foregrounded and newest message on screen). While live, an incoming message does
+ * not bump the unread count or snapshot. Defaults to `false`.
  */
 export type LiveViewState = {
   isViewingLive: boolean;
 };
 
 /**
- * MessagePaginator extends {@link MessageIntervalPaginator} with the unread/live-view concern:
- * an independent unread reference snapshot, the UI-driven "viewing the latest messages" signal, and
- * the "jump to first unread" navigation built on top of them.
+ * Adds the unread snapshot, the UI-driven live-view signal and "jump to first unread" navigation to
+ * {@link MessageIntervalPaginator}.
  */
 export class MessagePaginator extends MessageIntervalPaginator {
   protected get holderName() {
     return 'message-paginator';
   }
   private unreadReferencePolicy: 'snapshot' | 'read-state-only';
-  /**
-   * Independent unread reference state (not tied to `channel.state.read`).
-   * Consumers may set this right before calling markRead / when opening a channel.
-   */
+  /** Unread reference state, independent of `channel.state.read`. Set it before `markRead`. */
   readonly unreadStateSnapshot: StateStore<UnreadSnapshotState>;
   /**
-   * UI-driven "viewing the latest messages" signal (see {@link LiveViewState}). Set by the SDK via
-   * {@link setViewingLive}; read by the channel to gate the unread bump on `message.new`. Subscribe to
-   * this store for reactivity, or read the current boolean directly via the {@link isViewingLive} getter.
+   * The "viewing the latest messages" signal ({@link LiveViewState}), set via {@link setViewingLive}
+   * and read by the channel to gate the unread bump on `message.new`.
    */
   readonly liveViewState: StateStore<LiveViewState>;
   /**
-   * Auxiliary (non-pagination) state — see {@link MessagePaginatorAggregateState}. A store separate
-   * from `state` so `lastMessageAt` can be advanced from inside a `state.next` updater
-   * (`ingestPage`) without being clobbered, and so consumers subscribe to a quiet signal that only
-   * emits when the aggregate actually changes (not on every scroll/pagination emission). This is
-   * distinct from the base's `intervalViews` interval-projection store.
+   * {@link MessagePaginatorAggregateState}, in a store apart from `state` so `lastMessageAt` can
+   * advance from inside a `state.next` updater (`ingestPage`) and subscribers only see aggregate
+   * changes.
    */
   readonly aggregateState: StateStore<MessagePaginatorAggregateState>;
 
@@ -135,21 +113,13 @@ export class MessagePaginator extends MessageIntervalPaginator {
     { unreadReferencePolicy = 'snapshot', ...options }: MessagePaginatorOptions,
     builtInDefaults: Partial<BasePaginatorConfig<LocalMessage, MessageQueryShape>> = {},
   ) {
-    super(
-      // NB: the store-backed item index is provided by MessageIntervalPaginator (the common
-      // ancestor), so both the main list and the pinned list share the client-global message store.
-      options,
-      {
-        // Throttle message-list `state` publishes to at most once per 500ms (leading + trailing), so a
-        // burst of events coalesces into ~2 renders/sec instead of one per event. Optimistic
-        // (local-user) writes bypass the throttle via EntityStore.flushSubscribers → flushState.
-        // A default rather than a construction argument, so `paginatorOptions.stateThrottleMs` and a
-        // declarative registration both override it — and so a re-derivation restores it without the
-        // subclass having to re-inject it, which is what the old `initializeConfig` override existed for.
-        stateThrottleMs: 500,
-        ...builtInDefaults,
-      },
-    );
+    super(options, {
+      // Publish `state` at most every 500ms (leading + trailing). Optimistic (local-user) writes
+      // bypass it via `EntityStore.flushSubscribers`. A default, so `stateThrottleMs` options and
+      // declarative registrations override it and a re-derivation restores it.
+      stateThrottleMs: 500,
+      ...builtInDefaults,
+    });
     this.unreadReferencePolicy = unreadReferencePolicy;
     this.unreadStateSnapshot = new StateStore<UnreadSnapshotState>({
       lastReadAt: null,
@@ -168,8 +138,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
 
   /**
    * Channel-list sort key: the later of the newest loaded message's `created_at` and the server seed.
-   * **Derived** (never stored) so it cannot drift from {@link lastMessage}. `null` until seeded or a
-   * message is ingested.
+   * Derived, so it cannot drift from {@link lastMessage}. `null` until seeded or a message arrives.
    */
   get lastMessageAt(): TimestampNS | null {
     const { lastMessage, seededLastMessageAt } = this.aggregateState.getLatestValue();
@@ -181,24 +150,18 @@ export class MessagePaginator extends MessageIntervalPaginator {
   }
 
   /**
-   * The newest channel-relevant message (the monotonic tracked latest), for display. Convenience read
-   * of {@link aggregateState}; subscribe to `aggregateState` for reactivity. `null` until a message is
-   * ingested (a server-only seed advances {@link lastMessageAt} but leaves this `null`).
+   * The tracked newest channel-relevant message ({@link aggregateState}), for display. `null` until
+   * one is ingested (a server-only seed advances {@link lastMessageAt} but not this).
    */
   get lastMessage(): LocalMessage | null {
     return this.aggregateState.getLatestValue().lastMessage;
   }
 
   /**
-   * The main channel list's notion of "latest message" for `channel.state.last_message_at`: on top of
-   * the base rule (not shadowed) this excludes thread-only replies (a reply with a `parent_id` that is
-   * not shown in the channel is not part of the channel list) and, when the channel is configured with
-   * `skip_last_msg_update_for_system_msgs`, system messages. Mirrors the legacy
-   * `Channel._trackLastMessage` skip logic.
-   *
-   * These exclusions are specific to the MAIN channel list. A reply list (thread paginator, which has
-   * a `parentMessageId`) is made ENTIRELY of thread replies — there the newest reply is exactly the
-   * "latest message", so the exclusions are skipped and only the base rule applies.
+   * Whether `message` may become the "latest message" behind `channel.state.last_message_at`: not
+   * shadowed and, in the main list, not a thread-only reply nor (with
+   * `skip_last_msg_update_for_system_msgs`) a system message. A reply list (`parentMessageId` set)
+   * holds only thread replies, so only the shadow rule applies there.
    */
   protected shouldAdvanceLastMessage(message: LocalMessage): boolean {
     if (message.shadowed) return false;
@@ -212,31 +175,24 @@ export class MessagePaginator extends MessageIntervalPaginator {
   }
 
   /**
-   * Monotonically advance {@link lastMessageAt} to `message.created_at` when it is newer than the
-   * current value and {@link shouldAdvanceLastMessage} permits it. Writes the dedicated
-   * {@link aggregateState} store (not `state`), so it is safe to call from inside a `state.next`
-   * updater (`ingestPage`). Returns `true` when the value moved.
-   *
-   * Called internally on ingest; also public for callers that advance the aggregate without a normal
-   * in-window ingest — e.g. offline pending-message replay, where the sent message has not yet been
-   * ingested via the `message.new` event.
+   * Advances the tracked latest message (and so {@link lastMessageAt}) to `message` when it is newer
+   * and {@link shouldAdvanceLastMessage} permits. Writes {@link aggregateState} only, so it is safe
+   * inside a `state.next` updater (`ingestPage`). Returns `true` when the value moved. Public for
+   * callers that advance it without an in-window ingest, e.g. offline pending-message replay.
    */
   trackLastMessage(message: LocalMessage): boolean {
     if (!this.shouldAdvanceLastMessage(message)) return false;
     const incoming = getMessageCreatedAtTimestamp(message);
     if (incoming === null) return false;
     const current = this.aggregateState.getLatestValue().lastMessage;
-    // Refresh in place when this IS the current latest being updated — an edit, soft-delete,
-    // reaction, or quoted-message update all re-ingest the same id (same `created_at`). This keeps
-    // `lastMessage` a LIVE reference (so a preview shows "deleted"/edited text), and because
-    // `aggregateState` emits regardless of the active interval, it stays reactive off-window.
+    // An edit, soft-delete, reaction or quote update re-ingests the current latest (same id and
+    // `created_at`): refresh it in place so `lastMessage` stays live.
     if (current && current.id === message.id) {
       this.aggregateState.partialNext({ lastMessage: message });
       return true;
     }
-    // Otherwise only advance to a strictly newer message. Guard against the current message's own
-    // timestamp — NOT `lastMessageAt` (which the server seed can inflate); otherwise a seed newer than
-    // the loaded window would reject the very message it was derived from.
+    // Otherwise only a strictly newer message advances. Compare against the current message's own
+    // timestamp, not `lastMessageAt`: a seed newer than the loaded window would reject the message.
     const currentTs = current ? getMessageCreatedAtTimestamp(current) : null;
     if (currentTs !== null && incoming <= currentTs) return false;
     this.aggregateState.partialNext({ lastMessage: message });
@@ -244,9 +200,8 @@ export class MessagePaginator extends MessageIntervalPaginator {
   }
 
   /**
-   * Seed {@link lastMessageAt} from the server-provided `ChannelResponse.last_message_at`, the
-   * authoritative whole-channel aggregate. Monotonic: a no-op when the paginator already advanced
-   * past it (e.g. from ingested messages), so seed order does not matter.
+   * Seeds {@link lastMessageAt} from `ChannelResponse.last_message_at`. Monotonic: a value not newer
+   * than the current seed is ignored, so seed order does not matter.
    */
   seedLastMessageAt(value: TimestampNS | null | undefined) {
     if (value == null || !Number.isFinite(value)) return;
@@ -256,9 +211,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
   }
 
   ingestItem(item: LocalMessage): boolean {
-    // Only items that survive the filter advance the aggregate (`ingestItem` also handles removals
-    // of items that no longer match). The advance writes the separate `aggregateState` store, so it
-    // is independent of `super`'s `state`/index mutations.
+    // Only items passing the filter advance the aggregate (`ingestItem` also removes the others).
     if (this.matchesFilter(item)) {
       this.trackLastMessage(item);
     }
@@ -269,8 +222,6 @@ export class MessagePaginator extends MessageIntervalPaginator {
     params: Parameters<MessageIntervalPaginator['ingestPage']>[0],
   ): Interval | null {
     const interval = super.ingestPage(params);
-    // Advance from each page item; the monotonic max over the page yields the newest. Comparison is
-    // by `created_at` against `aggregateState` (no index lookup), so order vs `super` is irrelevant.
     if (params.page?.length) {
       for (const item of params.page) this.trackLastMessage(item);
     }
@@ -301,8 +252,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
     const wasLatest = !!removedId && lastMessage?.id === removedId;
     const result = super.removeItem(params);
     if (wasLatest) {
-      // The tracked latest was hard-removed; fall back to the newest still-loaded message that
-      // passes the filter. `trackLastMessage` cannot do this (it only advances), so recompute here.
+      // The tracked latest was hard-removed: recompute it, since `trackLastMessage` only advances.
       const previous = this.recomputeLastMessage();
       const previousAt = getMessageCreatedAtTimestamp(previous);
       const removedAt = getMessageCreatedAtTimestamp(lastMessage);
@@ -339,14 +289,9 @@ export class MessagePaginator extends MessageIntervalPaginator {
   }
 
   /**
-   * The still-loaded message with the greatest `created_at` that passes
-   * {@link shouldAdvanceLastMessage} (skips system / thread-only per config), from the newest-loaded
-   * window. Used to recompute the tracked latest after the current one is removed. `null` when nothing
-   * loaded qualifies.
-   *
-   * "Latest" is defined by `created_at` (matching {@link trackLastMessage}), NOT by the paginator's
-   * display order — so this compares timestamps rather than assuming a position, and stays correct
-   * whatever `itemOrder` / `requestSort` are configured to.
+   * The message in `headItems` with the greatest `created_at` that passes
+   * {@link shouldAdvanceLastMessage}, or `null`. It compares timestamps rather than positions, so it
+   * holds for any `itemOrder` / `requestSort`.
    */
   private recomputeLastMessage(): LocalMessage | null {
     let latest: LocalMessage | null = null;
@@ -362,23 +307,16 @@ export class MessagePaginator extends MessageIntervalPaginator {
   }
 
   /**
-   * (Re)seed the unread state snapshot from the current own read state.
+   * (Re)seeds the unread snapshot from the own read state. Runs after the first-page query, and the
+   * SDK calls it again when a channel is reopened from a cached paginator (no first-page query), so
+   * the separator, unread count and jump target follow the current read boundary.
    *
-   * Called after the first-page query, and can be called again by the SDK whenever a channel is
-   * (re)opened from a cached paginator — where no fresh first-page query runs — so the snapshot
-   * reflects the CURRENT read boundary rather than one frozen at the very first open. Without a
-   * re-seed the separator position, unread count and "jump to first unread" target all go stale
-   * across reopens.
-   *
-   * `firstUnreadMessageId` is intentionally reset to `null`: it represents an EXPLICIT mark-unread
-   * (set by `notification.mark_unread`), not a live/computed boundary. Persisting a computed value
-   * here would make the channel look explicitly marked-unread and suppress auto-mark-read.
+   * `firstUnreadMessageId` is reset to `null`: it holds only an explicit mark-unread
+   * (`notification.mark_unread`), and a computed value would suppress auto-mark-read.
    */
   seedUnreadSnapshot = () => {
-    // A paginator query (BasePaginator.executeQuery) awaits the network before running its
-    // synchronous postQueryReconcile, which calls this on the first page. If the channel was
-    // disconnected (`disconnect()`) while that request was in flight, reading the client below
-    // throws, so guard against that.
+    // The query awaits the network before this runs: the channel may be pending disposal by then,
+    // and `getClient()` throws.
     if (this.channel.pendingDisposal) return;
     const ownUserId = this.channel.getClient().user?.id;
     const ownReadState = ownUserId ? this.channel.state.read[ownUserId] : undefined;
@@ -391,11 +329,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
     });
   };
 
-  /**
-   * Invokes super.postQueryReconcile() and takes an unread state snapshot on the first-page query.
-   * The snapshot has to be taken immediately after the query as the viewed channel is marked read
-   * immediately after opening it. The snapshot can be used to display unread UI indicators.
-   */
+  /** Also seeds the unread snapshot on a first page, before the opened channel is marked read. */
   postQueryReconcile(
     params: PostQueryReconcileParams<LocalMessage, MessageQueryShape>,
   ): ExecuteQueryReturnValue<LocalMessage> {
@@ -408,22 +342,17 @@ export class MessagePaginator extends MessageIntervalPaginator {
   }
 
   /**
-   * Jumps to the unread reference message.
-   *
-   * IMPORTANT: This intentionally does *not* rely on `channel.state.read[ownUserId]` only,
-   * because apps may mark a channel read immediately after opening it, while still
-   * wanting to keep "jump to unread" UI indicators alive (based on a snapshot).
+   * Jumps to the unread reference message. It does not rely on `channel.state.read` alone, since
+   * apps may mark a channel read on open yet keep "jump to unread" UI alive from the snapshot.
    *
    * Resolution order:
-   * 1) explicit first-unread id from snapshot/read-state (mark-unread) — jump straight to it
-   * 2) last-read timestamp: infer the FIRST UNREAD message from it — using the already-loaded
-   *    window when it straddles the boundary, otherwise a `created_at_around` query — and jump there
-   * 3) last read id from snapshot/read-state (last-resort fallback when no timestamp is available)
+   * 1. an explicit first-unread id (snapshot or read state): jump to it;
+   * 2. the last-read timestamp: infer the first unread message from the loaded window, or from a
+   *    `created_at_around` query when the window does not straddle the boundary, and jump to it;
+   * 3. the last-read id, when no timestamp is known.
    *
-   * The timestamp inference (2) is preferred over jumping to the last-read id so that the jump lands
-   * ON (and highlights) the first unread message rather than the last read one. The last-read id is
-   * only used as a fallback when we cannot infer an unread boundary. The inference is NOT persisted
-   * back into the snapshot (that is reserved for explicit mark-unread).
+   * The inference is not written to the snapshot: `firstUnreadMessageId` is reserved for an explicit
+   * mark-unread (it would suppress auto-mark-read).
    */
   jumpToTheFirstUnreadMessage = async (options?: JumpToMessageOptions) => {
     const ownUserId = this.channel.getClient().user?.id;
@@ -442,8 +371,6 @@ export class MessagePaginator extends MessageIntervalPaginator {
     const lastReadAtFromReadState = ownReadState?.last_read ?? null;
     const lastReadIdFromReadState = ownReadState?.last_read_message_id ?? null;
 
-    // 1) A stable first-unread id is known (mark-unread, or a previously persisted inference):
-    // jump straight to it.
     const firstUnreadMessageId = firstUnreadFromSnapshot ?? firstUnreadFromReadState;
     if (firstUnreadMessageId) {
       return await this.jumpToMessage(firstUnreadMessageId, {
@@ -453,24 +380,11 @@ export class MessagePaginator extends MessageIntervalPaginator {
     }
 
     const lastReadMessageId = lastReadIdFromSnapshot ?? lastReadIdFromReadState;
-    // Prefer the SNAPSHOT timestamp over the fresh read-state one. The snapshot is the frozen UI
-    // boundary the "N new" separator/banner render from, so a banner tap must jump to where that
-    // indicator points. On (re)open the SDK marks the channel read (`markReadOnMount`) which advances
-    // the read-state `last_read` to ~now and clears the server unread — so preferring read-state
-    // would make a later banner tap infer "nothing unread" and jump to the latest message. The
-    // snapshot is kept fresh on genuine catch-up (the SDK's mark-read resets it), so it is only
-    // "frozen" precisely while there are unreads to jump to.
+    // The snapshot timestamp wins over the read state's: the snapshot is the frozen boundary the
+    // "N new" banner renders from, while mark-read on open advances the read state to ~now, so a
+    // banner tap would infer nothing unread and jump to the latest message.
     const lastReadAt = lastReadAtFromSnapshot ?? lastReadAtFromReadState;
 
-    // 2) No explicit first-unread id, but we know when the channel was last read. Infer the first
-    // unread message from that timestamp so we land ON (and highlight) the first unread message
-    // instead of the last read one. Prefer the already-loaded window (the common "a few unreads at
-    // the bottom" case — no extra request); only query a page around last-read when the loaded
-    // window does not straddle the boundary (i.e. every loaded message is newer than last-read).
-    //
-    // We deliberately do NOT persist the inferred boundary back into the snapshot: writing
-    // `firstUnreadMessageId` would make the channel look explicitly marked-unread and suppress
-    // auto-mark-read at the bottom. The separator reads the (re-seeded) snapshot directly.
     const lastReadBoundary =
       lastReadAt != null && Number.isFinite(lastReadAt) ? lastReadAt : null;
 
@@ -513,7 +427,6 @@ export class MessagePaginator extends MessageIntervalPaginator {
       }
     }
 
-    // 3) Last resort: jump to the known last-read message when that is all we have.
     if (lastReadMessageId) {
       return await this.jumpToMessage(lastReadMessageId, {
         ...options,
@@ -529,18 +442,14 @@ export class MessagePaginator extends MessageIntervalPaginator {
     return this.unreadStateSnapshot.getLatestValue();
   };
 
-  /**
-   * Set the UI-driven "viewing the latest messages" signal (see {@link LiveViewState}). Called by
-   * the SDK from its message-list viewability + app-state tracking. No-ops when unchanged.
-   *
-   * Intentionally NOT reset by `clearStateAndCache` — it is an external input owned by the SDK, not
-   * derived pagination state.
-   */
-  /** Current "viewing the latest messages" boolean (convenience read of {@link liveViewState}). */
   get isViewingLive(): boolean {
     return this.liveViewState.getLatestValue().isViewingLive;
   }
 
+  /**
+   * Sets the live-view signal ({@link LiveViewState}). Not reset by `clearStateAndCache`: it is an
+   * external input owned by the SDK.
+   */
   setViewingLive = (isViewingLive: boolean) => {
     if (this.isViewingLive === isViewingLive) return;
     this.liveViewState.next({ isViewingLive });

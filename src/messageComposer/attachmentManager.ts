@@ -162,11 +162,7 @@ export class AttachmentManager {
   set maxNumberOfFilesPerMessage(
     maxNumberOfFilesPerMessage: AttachmentManagerConfig['maxNumberOfFilesPerMessage'],
   ) {
-    // No early return on "same value". The guard that used to be here compared against the *effective*
-    // value, while the write it skipped records the *requested* one — so asking for a value the server
-    // was currently masking recorded nothing, and the earlier request stayed in the patch layer to be
-    // honoured the moment the server relented. `ConfigController.write` already skips a publish when the
-    // resolved value does not move, which is the same guard applied to the right value.
+    // Always forwarded: the requested value is recorded even while the server masks it.
     this.composer.updateConfig({ attachments: { maxNumberOfFilesPerMessage } });
   }
 
@@ -193,28 +189,17 @@ export class AttachmentManager {
   }
 
   /**
-   * Whether uploaded bytes reach Stream, and therefore whether Stream's rules govern attachments here.
-   *
-   * Declared through {@link AttachmentManagerConfig.customCdn}, not inferred from `doUploadRequest`. A
-   * custom upload function says how files are sent, not where: wrapping the request to add retries,
-   * headers or a proxy through your own backend still ends at Stream. Inferring a different destination
-   * from it waived Stream's constraints for those integrators too.
+   * Whether uploaded bytes reach Stream (and so Stream's rules apply). Set by
+   * {@link AttachmentManagerConfig.customCdn}, not inferred from `doUploadRequest`.
    */
   get usesStreamStorage() {
     return !this.config.customCdn;
   }
 
   /**
-   * Whether this composer can accept a file right now — **the** answer to that question, for the SDK and
-   * for any UI deciding whether to offer an upload control. `uploadFiles` enforces exactly this; two
-   * predicates for one question could only agree by coincidence.
-   *
-   * - `config.enabled` — the configured answer, already ANDed with the channel type's `uploads` flag by
-   *   the composer's server restrictions (which apply only when files go to Stream, for the same reason
-   *   as below). The integrator's own switch, which nothing overrides.
-   * - a free slot under `maxNumberOfFilesPerMessage`.
-   * - the `upload-file` capability, **only when files go to Stream**. It governs Stream's upload
-   *   endpoint, so on storage Stream does not host there is nothing for it to permit or refuse.
+   * Whether this composer can accept a file (`uploadFiles` enforces it): `config.enabled` (already
+   * ANDed with the channel type's `uploads` flag when files go to Stream), a free slot, and the
+   * `upload-file` capability (only when files go to Stream).
    */
   get isUploadEnabled() {
     return (
@@ -289,11 +274,9 @@ export class AttachmentManager {
   };
 
   /**
-   * Moves `source`'s attachments here, as they are, replacing this manager's own (whose uploads are
-   * cancelled) and leaving `source` with none. An upload still running keeps running: it isn't
-   * cancelled, and this manager attaches to it (`UploadManager` runs one request per attachment), so
-   * its result lands here. `source`'s list is emptied without touching the uploads, so clearing
-   * `source` afterwards doesn't cancel them either.
+   * Moves `source`'s attachments here, replacing this manager's own (their uploads are cancelled) and
+   * emptying `source`. Running uploads are not cancelled: this manager joins them (`UploadManager` runs
+   * one request per attachment), so their results land here.
    *
    * @internal
    */
@@ -348,8 +331,7 @@ export class AttachmentManager {
     const attachments = [...this.attachments];
     const attachmentIndex = this.getAttachmentIndex(attachmentToUpdate.localMetadata.id);
     if (attachmentIndex === -1) return null;
-    // do not re-organize newAttachments array otherwise indexing would no longer work
-    // replace in place only with the attachments with the same id's
+    // Replace in place by id; reordering would break indexing.
     const merged = mergeWithDiff<LocalAttachment>(
       stateAttachments[attachmentIndex],
       attachmentToUpdate,
@@ -388,20 +370,13 @@ export class AttachmentManager {
         attachments = updatedAttachments;
         hasUpdates = true;
       }
-      // else: id exists and merge was a no-op (`prepareAttachmentUpdate` returns current state)
     });
     if (hasUpdates) {
       this.state.partialNext({ attachments });
     }
   };
 
-  /**
-   * Releases a local preview URL the SDK minted, if it minted one.
-   *
-   * Only `blob:` URLs are ours to revoke: `toLocalUploadAttachment` puts a
-   * `URL.createObjectURL` result in `previewUri` for a `File`, but for a React Native
-   * `FileReference` it stores the caller's own native file URI, which must be left alone.
-   */
+  /** Revokes `blob:` preview URLs only. A React Native `FileReference` keeps the caller's own URI. */
   private revokePreviewUri = (attachment: LocalAttachment) => {
     const previewUri = (
       attachment.localMetadata as Partial<LocalAttachmentUploadMetadata>
@@ -427,16 +402,8 @@ export class AttachmentManager {
       this.client.uploadManager.deleteUploadRecord(id);
     }
 
-    // Removal is the end of the line for these attachments, so the preview blob goes with
-    // them - otherwise every removed (or cancelled mid-upload) attachment leaks one blob URL
-    // until the page unloads. Revoked after the record is deleted, so nothing is still
-    // rendering from it.
-    //
-    // Deliberately not done in `initState`/`restoreSnapshot`: those drop the composer's *view*
-    // of the attachments without ending their life. A finished upload has already had its
-    // `previewUri` revoked and removed by the post-upload middleware, and an unfinished one may
-    // still be rendered by whoever took it over (an optimistic message sent with the upload
-    // still in flight, for instance).
+    // Removal ends the attachments' life, so their preview blobs are revoked (not in `initState` or
+    // `restoreSnapshot`, which only drop the composer's view of attachments others may still render).
     removedAttachments.forEach(this.revokePreviewUri);
   };
 
@@ -617,10 +584,7 @@ export class AttachmentManager {
     return newAttachment;
   };
 
-  /**
-   * Method to perform the default upload behavior without checking for custom upload functions
-   * to prevent recursive calls
-   */
+  /** The default upload, skipping the custom `doUploadRequest` so a custom one can delegate here. */
   doDefaultUploadRequest = async (
     fileLike: FileReference | FileLike,
     options?: UploadRequestOptions,
@@ -655,7 +619,7 @@ export class AttachmentManager {
 
     const {
       duration: _duration,
-      // per-request artifact - `doUploadRequest`'s result is public API
+      // Per-request artifacts, kept out of the public `doUploadRequest` result.
       metadata: _metadata,
       ...result
     } = await this.channel[isImageFile(fileLike) ? 'uploadImage' : 'uploadFile'](
@@ -727,16 +691,12 @@ export class AttachmentManager {
           ...attachment.localMetadata,
           uploadState: 'failed',
           uploadProgress: undefined,
-          // `false`, not `undefined`: these updates go through `updateAttachment`, which merges
-          // via `mergeWith` — and that skips `undefined` source values, so `undefined` would
-          // leave a stale `true` in place.
+          // `false`, not `undefined`: `mergeWith` skips `undefined`, which would leave a stale `true`.
           uploadConfirmationPending: false,
         },
       };
 
-      // A cancellation is the user getting what they asked for, so it gets no error
-      // notification. This path predates the post-upload middleware chain and notifies
-      // directly, so it needs the same guard `createUploadErrorHandlerMiddleware` applies.
+      // A cancellation is not an error (same guard as `createUploadErrorHandlerMiddleware`).
       if (!isUploadCancellation(error)) {
         this.client.notifications.addError({
           message: 'Error uploading attachment',
@@ -757,10 +717,7 @@ export class AttachmentManager {
     }
 
     if (!response) {
-      // Copied this from useImageUpload / useFileUpload.
-
-      // If doUploadRequest returns any falsy value, then don't create the upload preview.
-      // This is for the case if someone wants to handle failure on app level.
+      // A falsy `doUploadRequest` result drops the attachment, so the app can handle failure itself.
       this.removeAttachments([attachment.localMetadata.id]);
       return;
     }
@@ -771,7 +728,6 @@ export class AttachmentManager {
         ...attachment.localMetadata,
         uploadState: 'finished',
         uploadProgress: undefined,
-        // See the note in the failure branch: `undefined` cannot clear through `mergeWith`.
         uploadConfirmationPending: false,
       },
     };
@@ -855,7 +811,6 @@ export class AttachmentManager {
             ...attachment.localMetadata,
             uploadState: error ? 'failed' : 'finished',
             uploadProgress: undefined,
-            // See the note in `uploadAttachment`: `undefined` cannot clear through `mergeWith`.
             uploadConfirmationPending: false,
           },
         },

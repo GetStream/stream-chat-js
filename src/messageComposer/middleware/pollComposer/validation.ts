@@ -1,13 +1,7 @@
 /**
- * Stable identifiers for poll-composer field validation failures.
- *
- * **Not notifications, despite the shared `domain:entity:operation:result` shape.** These are *field*
- * errors, rendered inline beside the input that produced them, and they never reach
- * `NotificationManager` — routing them there would raise a toast per keystroke. `CORE_NOTIFICATION_TYPE`
- * is the notification counterpart; the two sets are disjoint and neither substitutes for the other.
- *
- * **These values are public API.** UI SDKs key their translation tables on them, so renaming one is a
- * breaking change.
+ * Identifiers for poll-composer field validation failures. They are rendered inline and never reach
+ * `NotificationManager` (unlike `CORE_NOTIFICATION_TYPE`). **Public API:** UI SDKs key translations on
+ * them, so renaming one is breaking.
  */
 export const POLL_COMPOSER_VALIDATION_CODE = {
   maxVotesNotNumeric: 'validation:poll:maxVotes:notNumeric',
@@ -21,13 +15,7 @@ export const POLL_COMPOSER_VALIDATION_CODE = {
 export type PollComposerValidationCode =
   (typeof POLL_COMPOSER_VALIDATION_CODE)[keyof typeof POLL_COMPOSER_VALIDATION_CODE];
 
-/**
- * Untranslated English for each code.
- *
- * Kept here rather than at the call sites so one code cannot end up with two different wordings, and
- * so the whole set is reviewable in one place. This is a developer-facing fallback — the wording is
- * not part of the public contract and may change in a minor release.
- */
+/** Untranslated English fallback per code. The wording is not public contract. */
 const POLL_COMPOSER_VALIDATION_MESSAGE: Record<PollComposerValidationCode, string> = {
   [POLL_COMPOSER_VALIDATION_CODE.maxVotesNotNumeric]: 'Only numbers are allowed',
   [POLL_COMPOSER_VALIDATION_CODE.maxVotesOutOfRange]: 'Type a number from 2 to 10',
@@ -38,13 +26,7 @@ const POLL_COMPOSER_VALIDATION_MESSAGE: Record<PollComposerValidationCode, strin
   [POLL_COMPOSER_VALIDATION_CODE.optionEmpty]: 'Option is empty',
 };
 
-/**
- * A poll-composer field validation failure.
- *
- * `code` is the stable identifier to resolve localized copy from. `message` carries untranslated
- * English alongside it so a consumer with no i18n layer still renders something, and so an
- * identifier a consumer does not recognize degrades to readable text instead of a blank field.
- */
+/** A poll-composer field validation failure. `message` is an English fallback for `code`. */
 export type PollComposerValidationError = {
   /** Stable identifier. See {@link POLL_COMPOSER_VALIDATION_CODE}. */
   code: PollComposerValidationCode;
@@ -64,12 +46,7 @@ export const pollComposerValidationError = (
   ...(metadata ? { metadata } : {}),
 });
 
-/**
- * Narrows a field's error to a single failure.
- *
- * `options` errors are keyed by option id, so a field error is either one `PollComposerValidationError` or a
- * record of them; this distinguishes the two.
- */
+/** Distinguishes a single failure from the per-option-id record that `options` errors use. */
 export const isPollComposerValidationError = (
   value: unknown,
 ): value is PollComposerValidationError =>

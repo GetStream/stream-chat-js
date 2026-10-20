@@ -62,32 +62,20 @@ export type MessageOperationsHandlers = {
 };
 
 export type MessageOperationsContext = {
-  /**
-   * The channel every request and offline-DB row belongs to. A `Thread` passes its parent channel,
-   * since a reply is sent, persisted and reacted to against the channel like any other message. It is
-   * what lets the reaction operations live here rather than being written once per owner.
-   */
+  /** The channel every request and offline-DB row belongs to. A `Thread` passes its parent channel. */
   channel: Channel;
   ingest: (m: LocalMessage) => void;
   get: (id: string) => LocalMessage | undefined;
-  /**
-   * Drops the message from local state entirely. Needed by the delete lifecycle: a hard delete removes
-   * the message rather than marking it `deleted` (mirroring the `message.deleted` WS handler, which
-   * branches on `event.hard_delete` the same way).
-   */
+  /** Drops the message from local state: a hard delete removes it rather than marking it `deleted`. */
   remove: (id: string) => void;
-  /**
-   * Mirrors a message into the offline DB. Fire-and-forget: local state is the source of truth, so a
-   * failed DB write must never fail the operation.
-   */
+  /** Mirrors a message into the offline DB. Fire-and-forget: a failed write never fails the operation. */
   persist: (m: LocalMessage) => void;
   /** Removes a message's offline-DB row (the hard-delete counterpart of {@link persist}). */
   purge: (id: string) => void;
   /**
-   * Whether this message's mutation is sitting in the offline queue waiting to be replayed — read from
-   * the queue, not inferred from the error ({@link isQueuedForReplay}). A queued mutation is pending,
-   * not failed, so the optimistic state stays exactly as it is: no `failed` status, no error, no revert.
-   * Reactions run the same predicate, which is what keeps the two from drifting.
+   * Whether this message's mutation sits in the offline queue waiting to be replayed, read from the
+   * queue rather than inferred from the error ({@link isQueuedForReplay}). A queued mutation is pending,
+   * not failed: the optimistic state stays as it is. Reactions use the same predicate.
    */
   isQueued: (messageId: string, types: readonly QueueableType[]) => Promise<boolean>;
 
@@ -97,25 +85,22 @@ export type MessageOperationsContext = {
   beforeSend?: () => void;
 
   /**
-   * Lets the owner run a request on its own instead of in parallel — the server dates a message
-   * on arrival, so a short text sent after a photo would otherwise be dated first. Wraps the
-   * request only; call it once and return its result.
+   * Lets the owner serialize requests: the server dates a message on arrival, so a short text sent after
+   * a photo would otherwise be dated first. Wraps the request only; call it once and return its result.
    */
   sequenceRequests?: <T>(kind: OperationKind, request: () => Promise<T>) => Promise<T>;
 
   /**
-   * Resolves any attachment upload still in flight, returning the attachments with their URLs
-   * written on. Supplied by the owner, which knows the target `cid` and the client. Only reachable
-   * with {@link AttachmentManagerConfig.pendingUploadsEnabled} on.
+   * Resolves any attachment upload still in flight, returning the attachments with their URLs written
+   * on. Only reachable with {@link AttachmentManagerConfig.pendingUploadsEnabled} on.
    */
   settlePendingUploads?: (
     attachments: NonNullable<LocalMessage['attachments']>,
   ) => Promise<{
     /**
-     * The same list, with each upload that resolved replaced by its uploaded form — URL written,
-     * `localMetadata` dropped. Ones that did not resolve come back untouched, so on failure this
-     * is a mix; `failureReason` is what distinguishes the two cases. Returned by reference when
-     * nothing was pending.
+     * The same list, with each resolved upload replaced by its uploaded form (URL written,
+     * `localMetadata` dropped). Unresolved ones come back untouched, so on failure this is a mix. The
+     * same reference when nothing was pending.
      */
     attachments: NonNullable<LocalMessage['attachments']>;
     /** Set if any upload failed. The ones that did resolve are still kept above. */
@@ -123,8 +108,8 @@ export type MessageOperationsContext = {
   }>;
 
   /**
-   * The HTTP requests, through the offline queue — used when no integrator {@link handlers} entry
-   * replaces them. A replaced request still reaches them through its `defaultRequest`.
+   * The HTTP requests, through the offline queue, used when no {@link handlers} entry replaces them.
+   * A replaced request still reaches them through its `defaultRequest`.
    */
   defaults: {
     delete: (id: string, o?: DeleteMessageOptions) => Promise<OperationResponse>;

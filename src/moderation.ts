@@ -7,7 +7,7 @@ export const MODERATION_ENTITY_TYPES = {
   message: 'stream:chat:v1:message',
 };
 
-// Moderation class provides all the endpoints related to moderation v2.
+/** Moderation v2 endpoints. */
 export class Moderation extends ModerationApi {
   client: StreamChat;
 
@@ -85,12 +85,8 @@ export class Moderation extends ModerationApi {
   }
 
   /**
-   * Unmutes a user.
-   *
-   * @param targetId - User ID to be unmuted.
-   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
-   *   into the request (optional).
-   * @returns The unmute response.
+   * Unmutes a user. `requestOptions` (e.g. an abort `signal`) are never serialized into the
+   * request.
    */
   async unmuteUser(targetId: string, requestOptions?: StreamRequestOptions) {
     return await this.unmute({ target_ids: [targetId] }, requestOptions);

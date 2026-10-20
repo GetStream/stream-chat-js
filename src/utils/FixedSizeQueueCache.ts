@@ -1,10 +1,7 @@
 type Dispose<K, T> = (key: K, value: T) => void;
 /**
- * A cache that stores a fixed number of values in a queue.
- * The most recently added or retrieved value is kept at the front of the queue.
- *
- * @template K - The type of the keys.
- * @template T - The type of the values.
+ * Least-recently-used cache holding at most `size` values. `add` and `get` mark a key as most
+ * recently used. Adding to a full cache evicts the least recently used entry, calling `dispose`.
  */
 export class FixedSizeQueueCache<K, T> {
   private keys: Array<K>;
@@ -20,12 +17,7 @@ export class FixedSizeQueueCache<K, T> {
     this.dispose = options?.dispose ?? null;
   }
 
-  /**
-   * Adds a new entry or moves the existing reference to the front of the queue.
-   *
-   * @param key - The cache key.
-   * @param value - The value to associate with `key`.
-   */
+  /** Inserts or updates `key` as the most recently used entry. */
   add(key: K, value: T) {
     const index = this.keys.indexOf(key);
 
@@ -49,24 +41,14 @@ export class FixedSizeQueueCache<K, T> {
     this.map.set(key, value);
   }
 
-  /**
-   * Retrieves the value by key without changing its position in the queue.
-   *
-   * @param key - The cache key.
-   * @returns The value, or `undefined` when the key is not cached.
-   */
+  /** Returns the value without marking it as recently used. */
   peek(key: K) {
     const value = this.map.get(key);
 
     return value;
   }
 
-  /**
-   * Retrieves the value and moves it to the front of the queue.
-   *
-   * @param key - The cache key.
-   * @returns The value, or `undefined` when the key is not cached.
-   */
+  /** Returns the value and marks it as most recently used. */
   get(key: K) {
     const foundItem = this.peek(key);
 
@@ -83,9 +65,7 @@ export class FixedSizeQueueCache<K, T> {
     return Array.from(this.map.values());
   }
 
-  /**
-   * Clears queue entirely and disposes of each item individually.
-   */
+  /** Empties the cache, calling `dispose` for each entry. */
   clear() {
     if (this.dispose) {
       this.map.forEach((entry, key) => this.dispose?.(key, entry));

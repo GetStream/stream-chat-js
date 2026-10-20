@@ -54,14 +54,8 @@ export type ReminderManagerOptions = {
 
 export class ReminderManager extends WithSubscriptions {
   private client: StreamChat;
-  /** The shared configuration machinery — see {@link ConfigController}. */
   private readonly configController: ConfigController<ReminderManagerConfig>;
 
-  /**
-   * Resolved configuration, as a store — the shape every configurable class exposes
-   * (`configState` / `config` / `updateConfig`). Delegates rather than holding a copy, so the field and
-   * the controller's store cannot drift.
-   */
   get configState(): StateStore<ReminderManagerConfig> {
     return this.configController.state;
   }
@@ -74,8 +68,7 @@ export class ReminderManager extends WithSubscriptions {
     this.configController = new ConfigController<ReminderManagerConfig>({
       defaults: DEFAULT_REMINDER_MANAGER_CONFIG,
       constructorOptions: config,
-      // Live timers hold the boundary, so a change has to be pushed to them. Previously this sat inside
-      // `updateConfig` and so ran only on that route; here it covers every write.
+      // Live timers hold the boundary, so a change is pushed to them.
       onChanged: (next, previous) => {
         if (next.stopTimerRefreshBoundaryMs === previous.stopTimerRefreshBoundaryMs)
           return;
@@ -88,11 +81,6 @@ export class ReminderManager extends WithSubscriptions {
     this.paginator = new ReminderPaginator(client);
   }
 
-  // Config API START //
-  /**
-   * The current resolved configuration. `Readonly` because the value is the store's live object —
-   * assigning to a field of it would change state without notifying anyone. Use {@link updateConfig}.
-   */
   get config(): Readonly<ReminderManagerConfig> {
     return this.configState.getLatestValue();
   }
@@ -101,20 +89,6 @@ export class ReminderManager extends WithSubscriptions {
     this.configController.patch(config);
   }
 
-  /**
-   * Rebuilds the resolved configuration from package defaults plus the declarative slice.
-   *
-   * The derivation entry point every configurable entity exposes, so the owner routes a slice here and
-   * knows nothing about ReminderManager's defaults or merge semantics. This logic used to live in the owner,
-   * which is how `reset()` became a no-op for the client key (F4) and how a registered
-   * `notifications.sortComparator` became unremovable (G8) — an owner writing another object's
-   * derivation gets that object's rules wrong sooner or later.
-   *
-   * Routed through {@link updateConfig} rather than replacing the store, which is exact here because
-   * every field of `ReminderManagerConfig` is required and present in the defaults, so a patch naming all of
-   * them amounts to a replacement. `NotificationManager` cannot do this — its `sortComparator` is
-   * optional with no default, so a patch can never remove one — which is why it replaces outright.
-   */
   initializeConfig(config?: Partial<ReminderManagerConfig>) {
     this.configController.initialize(config);
   }
@@ -126,9 +100,7 @@ export class ReminderManager extends WithSubscriptions {
   get scheduledOffsetsMs() {
     return this.configState.getLatestValue().scheduledOffsetsMs;
   }
-  // Config API END //
 
-  // State API START //
   get reminders() {
     return this.state.getLatestValue().reminders;
   }
@@ -174,9 +146,7 @@ export class ReminderManager extends WithSubscriptions {
       }
     });
   };
-  // State API END //
 
-  // Timers API START //
   initTimers = () => {
     this.reminders.forEach((reminder) => reminder.initTimer());
   };
@@ -184,9 +154,7 @@ export class ReminderManager extends WithSubscriptions {
   clearTimers = () => {
     this.reminders.forEach((reminder) => reminder.clearTimer());
   };
-  // Timers API END //
 
-  // WS event handling START //
   static isReminderWsEventPayload = (event: Event): event is ReminderEvent =>
     'reminder' in event &&
     !!event.reminder &&
@@ -270,9 +238,7 @@ export class ReminderManager extends WithSubscriptions {
         }
       },
     );
-  // WS event handling END //
 
-  // API calls START //
   upsertReminder = async (...args: Parameters<ChatApi['createReminder']>) => {
     const [{ message_id }] = args;
     if (this.getFromState(message_id)) {
@@ -318,6 +284,4 @@ export class ReminderManager extends WithSubscriptions {
   queryPreviousReminders = async () => {
     await this.paginator.toHead();
   };
-
-  // API calls END //
 }

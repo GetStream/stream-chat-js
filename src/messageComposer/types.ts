@@ -91,25 +91,22 @@ export type BaseLocalAttachmentMetadata = {
 
 export type LocalAttachmentUploadMetadata = {
   file: File | FileReference;
-  /**
-   * Local preview URI, typically a Blob URL from `URL.createObjectURL(file)`
-   * or (for React Native `FileReference`) the provided `uri`.
-   */
+  /** Local preview URI: a Blob URL for a `File`, or the `uri` of a React Native `FileReference`. */
   previewUri?: string;
   uploadState: AttachmentLoadingState;
   /**
-   * Mirrors {@link UploadRecord.uploadConfirmationPending}: every byte has been sent, but the server has
-   * not confirmed yet - not returned response to the upload request. Render an indeterminate indicator rather than a full bar.
+   * Mirrors {@link UploadRecord.uploadConfirmationPending}: every byte is sent but the server has not
+   * confirmed. Render an indeterminate indicator rather than a full bar.
    */
   uploadConfirmationPending?: boolean;
-  uploadPermissionCheck?: UploadPermissionCheckResult; // added new
-  /** 0–100 while uploading when progress tracking is enabled; undefined otherwise or when indeterminate */
+  uploadPermissionCheck?: UploadPermissionCheckResult;
+  /** 0 to 100 while uploading with progress tracking on; `undefined` otherwise or when indeterminate. */
   uploadProgress?: number;
 };
 
 export type LocalImageAttachmentUploadMetadata = LocalAttachmentUploadMetadata & {
   /**
-   * @deprecated `previewUri` is now available on `LocalAttachmentUploadMetadata`.
+   * @deprecated Use `LocalAttachmentUploadMetadata.previewUri` instead.
    */
   previewUri?: string;
 };
@@ -137,14 +134,14 @@ export type FileLike = File | Blob;
 // todo: make sure that RN SDK passes MIME type in the type field
 export type FileReference = FileReferenceBase &
   Pick<File, 'name' | 'size'> & {
-    // For images
+    // Images
     height?: number;
     width?: number;
 
-    // For voice recordings
+    // Voice recordings
     duration?: number;
     waveform_data?: number[];
 
-    // This is specially needed for video in camera roll
+    // Needed for video in the camera roll
     thumb_url?: string;
   };

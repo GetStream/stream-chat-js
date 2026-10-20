@@ -1,21 +1,16 @@
 import type { OwnUserResponse, UserResponse } from './types';
 import type { StreamChat } from './client';
 
-/**
- * Container class for the client state.
- */
 export class ClientState {
   private client: StreamChat;
   users: {
     [key: string]: UserResponse | OwnUserResponse;
   };
+  /** User id -> ids of the channels that reference the user. */
   userChannelReferences: { [key: string]: { [key: string]: boolean } };
   constructor({ client }: { client: StreamChat }) {
-    // show the status for a certain user...
-    // ie online, offline etc
     this.client = client;
     this.users = {};
-    // store which channels contain references to the specified user...
     this.userChannelReferences = {};
   }
 

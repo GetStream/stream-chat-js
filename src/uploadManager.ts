@@ -9,15 +9,8 @@ import type { AttachmentManager, LocalAttachmentUploadMetadata } from '.';
 const logger = chatLoggerSystem.getLogger('upload-manager');
 
 /**
- * Whether an upload ended because it was aborted rather than because it failed.
- *
- * {@link UploadManager.deleteUploadRecord} and {@link UploadManager.cancelAllUploads} abort the
- * request through its `AbortController`, which is what happens when an attachment is removed
- * from the composer mid-upload or the client disconnects. Axios reports that as a
- * `CanceledError` (`axios.isCancel`); a custom `doUploadRequest` on another transport
- * conventionally throws a `DOMException` named `AbortError`.
- *
- * Callers use this to keep a deliberate cancellation from being reported as an error.
+ * Whether an upload was aborted (attachment removed, client disconnected) rather than failed: an
+ * axios `CanceledError`, or an `AbortError` from a custom `doUploadRequest`.
  */
 export const isUploadCancellation = (error: unknown) =>
   axios.isCancel(error) || (error instanceof Error && error.name === 'AbortError');
@@ -26,31 +19,19 @@ export type UploadRecord = {
   /** The attachment's local id (`localMetadata.id`); also the key this record is held under. */
   id: string;
   /**
-   * `true` once every byte has been handed to the transport but the server has not responded
-   * yet.
-   *
-   * Upload progress measures bytes *written to the connection*, not bytes the server
-   * acknowledged, so it reaches 100% the moment the request body is flushed — then the
-   * connection sits idle while the CDN ingests the file and the response travels back. On a
-   * large file over a slow link that window is long, and a UI that renders 100% as "done"
-   * claims the upload is confirmed while it is not.
-   *
-   * Nothing measurable happens during that window, so it is the point at which a determinate
-   * progress bar should hand over to an indeterminate one. Confirmation is the record being
-   * removed, not progress reaching 100.
-   *
-   * Requires `AttachmentManagerConfig.trackUploadProgress`; without progress reporting there is
-   * no way to tell when the flush happened, and this stays `false`.
+   * `true` once every byte has been handed to the transport but the server has not responded yet.
+   * Progress reaches 100% when the request body is flushed, before the server confirms, so a
+   * determinate progress bar should turn indeterminate here. Confirmation is the record being
+   * removed. Stays `false` without `AttachmentManagerConfig.trackUploadProgress`.
    */
   uploadConfirmationPending?: boolean;
   uploadProgress?: number;
 };
 
 /**
- * Whether every byte is sent but the server has not answered — the window where a determinate
- * progress bar should go indeterminate. Reads
+ * Whether every byte is sent but the server has not answered. Reads
  * {@link UploadRecord.uploadConfirmationPending} when present, else infers it from progress
- * reaching 100. Takes `localMetadata`, which is what a handed-over message payload carries.
+ * reaching 100. Takes `localMetadata`, as carried by a message payload.
  */
 export const isUploadConfirmationPending = (
   localMetadata?: Pick<
@@ -69,14 +50,9 @@ export const isUploadConfirmationPending = (
 
 export type UploadManagerState = {
   /**
-   * In-flight uploads keyed by the attachment's local id (`localMetadata.id`) — not the message id
-   * or the URL, neither of which exists yet when an upload starts. That keying is what makes
-   * {@link UploadManager.upload} idempotent, so a message carrying a pending upload awaits the
-   * transfer the composer already began rather than starting a second one.
-   *
-   * A record lives only for the request, removed on success and on failure alike. So this answers
-   * "is a request running now", never "did this upload" — for that read
-   * `localMetadata.uploadState`.
+   * In-flight uploads keyed by the attachment's local id (`localMetadata.id`), which makes
+   * {@link UploadManager.upload} idempotent. A record lives only for the request (removed on
+   * success and failure alike), so for "did it upload" read `localMetadata.uploadState`.
    */
   uploads: Record<string, UploadRecord>;
 };
@@ -134,9 +110,8 @@ export class UploadManager {
   getUpload = (id: string) => this.uploads[id];
 
   /**
-   * Clears all upload records.
-   * Invoked when the user disconnects so a later session does not inherit stale upload state.
-   * Aborts every in-flight upload request via its `UploadRequestOptions.abortSignal`.
+   * Aborts every in-flight upload (`UploadRequestOptions.abortSignal`) and clears all records, so a
+   * later session does not inherit them. Invoked on disconnect.
    */
   reset = () => {
     for (const { abortController } of this.inFlightUploads.values()) {
@@ -146,10 +121,7 @@ export class UploadManager {
     this.state.next(initState());
   };
 
-  /**
-   * Removes the upload record for `id` if present.
-   * If an upload is still in progress, aborts its `UploadRequestOptions.abortSignal`.
-   */
+  /** Removes the record for `id` and aborts its upload if still in progress. */
   deleteUploadRecord = (id: string) => {
     const flight = this.inFlightUploads.get(id);
     if (flight) {
@@ -166,8 +138,8 @@ export class UploadManager {
 
   /**
    * Starts an upload for `id`, or returns the existing in-flight promise if one is already running.
-   * Uses {@link StreamChat.channel}(`channelCid`) → `messageComposer.attachmentManager.doUploadRequest`.
-   * Resolves with that result; rejects if the upload rejects (the record is removed from state either way).
+   * Uploads through the `attachmentManager.doUploadRequest` of the channel `channelCid`, and
+   * rejects if that rejects (the record is removed from state either way).
    */
   upload = ({
     id,
@@ -206,13 +178,9 @@ export class UploadManager {
               this.updateUpload({
                 id,
                 uploadProgress: progress,
-                // Only a number says anything about the flush, so a report without one leaves
-                // the flag alone: `undefined` means the transport cannot measure this upload,
-                // not that bytes were un-sent. Lowering it there would drop a UI that had
-                // already gone indeterminate back to a determinate one with nothing to show.
-                //
-                // The record is removed in the `finally` below, so a record that still exists
-                // while reporting 100% can only mean "flushed, awaiting the response".
+                // Only a numeric report moves the flag (`undefined` means the transport cannot
+                // measure). The record is removed in `finally`, so 100% on a live record means
+                // "flushed, awaiting the response".
                 ...(typeof progress === 'number'
                   ? { uploadConfirmationPending: progress >= 100 }
                   : {}),

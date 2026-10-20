@@ -20,13 +20,7 @@ import { isAPIError, isErrorRetryable } from '../errors';
 export type MessageDeliveryReporterConfig = {
   /** How long delivery reports are buffered before being sent as one batch (defaults to 1000ms). */
   markAsDeliveredBufferTimeoutMs: number;
-  /**
-   * Minimum gap between automatic `markRead` calls (defaults to 1000ms).
-   *
-   * Read once, when the throttle is built — assigning it later does nothing, which is why
-   * {@link MessageDeliveryReporter.setMarkAsReadThrottleOptions} exists and why the declarative path
-   * routes through it.
-   */
+  /** Minimum gap between automatic `markRead` calls (default 1000ms). Changes rebuild the throttle. */
   markAsReadThrottleTimeoutMs: number;
   /** Most delivery receipts sent in a single request; the remainder is carried to the next (100). */
   maxDeliveredMessageCountInPayload: number;
@@ -70,15 +64,10 @@ export class MessageDeliveryReporter {
 
   protected requestTimeoutMs: number =
     DEFAULT_MESSAGE_DELIVERY_REPORTER_CONFIG.markAsDeliveredBufferTimeoutMs;
-  // increased up to config.retryCountLimitForTimeoutIncrease
+  // Capped at `config.retryCountLimitForTimeoutIncrease`.
   protected requestRetryCount: number = 0;
 
-  /** The shared configuration machinery — see {@link ConfigController}. */
   private readonly configController: ConfigController<MessageDeliveryReporterConfig>;
-  /**
-   * Resolved configuration, as a store — the shape every configurable class exposes
-   * (`configState` / `config` / `updateConfig`).
-   */
   get configState(): StateStore<MessageDeliveryReporterConfig> {
     return this.configController.state;
   }
@@ -87,9 +76,7 @@ export class MessageDeliveryReporter {
     this.client = client;
     this.configController = new ConfigController<MessageDeliveryReporterConfig>({
       defaults: DEFAULT_MESSAGE_DELIVERY_REPORTER_CONFIG,
-      // The markRead throttle captures its interval in a closure, so storing a new one is not enough —
-      // it has to be rebuilt. Doing that here rather than in `updateConfig` is what makes the pairing
-      // hold for *every* route, including a declarative change.
+      // The throttle captures its interval, so it is rebuilt whenever the interval changes.
       onChanged: (next, previous) => {
         if (next.markAsReadThrottleTimeoutMs === previous.markAsReadThrottleTimeoutMs)
           return;
@@ -100,49 +87,22 @@ export class MessageDeliveryReporter {
     });
   }
 
-  /** The current resolved configuration. `Readonly` — change it through {@link updateConfig}. */
   get config(): Readonly<MessageDeliveryReporterConfig> {
     return this.configState.getLatestValue();
   }
 
-  /**
-   * Merges a partial configuration in. `markAsReadThrottleTimeoutMs` is routed through its rebuild
-   * setter, because the throttle captured the old interval in a closure and would otherwise ignore it.
-   */
   updateConfig(config: Partial<MessageDeliveryReporterConfig>) {
     this.configController.patch(config);
   }
 
-  /**
-   * Rebuilds the resolved configuration from package defaults plus the declarative slice.
-   *
-   * The derivation entry point every configurable entity exposes, so the owner routes a slice here and
-   * knows nothing about MessageDeliveryReporter's defaults or merge semantics. This logic used to live in the owner,
-   * which is how `reset()` became a no-op for the client key (F4) and how a registered
-   * `notifications.sortComparator` became unremovable (G8) — an owner writing another object's
-   * derivation gets that object's rules wrong sooner or later.
-   *
-   * Routed through {@link updateConfig} rather than replacing the store, which is exact here because
-   * every field of `MessageDeliveryReporterConfig` is required and present in the defaults, so a patch naming all of
-   * them amounts to a replacement. `NotificationManager` cannot do this — its `sortComparator` is
-   * optional with no default, so a patch can never remove one — which is why it replaces outright.
-   */
   initializeConfig(config?: Partial<MessageDeliveryReporterConfig>) {
     this.configController.initialize(config);
   }
 
-  /**
-   * Rebuilds the `markRead` throttle for a new interval.
-   *
-   * Needed because the throttle is created as a field initializer — before any declarative
-   * configuration has been applied — so the interval is captured once. Assigning the config value
-   * alone would leave the original throttle in place, silently.
-   */
+  /** Sets `markAsReadThrottleTimeoutMs`, which rebuilds the `markRead` throttle. */
   setMarkAsReadThrottleOptions = ({
     markAsReadThrottleTimeoutMs,
   }: Pick<MessageDeliveryReporterConfig, 'markAsReadThrottleTimeoutMs'>) => {
-    // Kept as released surface, but it no longer has to pair the write with the rebuild — the
-    // controller's `onChanged` does that for whichever route the value arrives by.
     this.updateConfig({ markAsReadThrottleTimeoutMs });
   };
 
@@ -178,13 +138,7 @@ export class MessageDeliveryReporter {
     this.requestRetryCount = 0;
   }
 
-  /**
-   * Builds the `latest_delivered_messages` payload from an arbitrary buffer
-   * (`deliveryReportCandidates` or `nextDeliveryReportCandidates`).
-   *
-   * @param map - The buffer mapping channel/thread composite IDs to the latest delivered message ID.
-   * @returns The payload entries ready to be sent to the server.
-   */
+  /** Builds the `latest_delivered_messages` payload from a candidates buffer. */
   private confirmationsFrom(map: Map<ChannelThreadCompositeId, MessageId>) {
     return Array.from(map.entries()).map(([key, messageId]) => {
       const [type, id, parent_id] = key.split(':');
@@ -206,12 +160,7 @@ export class MessageDeliveryReporter {
     return { latest_delivered_messages: this.confirmationsFrom(sendBuffer), sendBuffer };
   }
 
-  /**
-   * Generates a candidate key for storing in the candidates buffer.
-   *
-   * @param collection - The channel or thread to derive a candidate key for.
-   * @returns The composite identifier, or `undefined` when the collection is neither a Channel nor a Thread.
-   */
+  /** The buffer key: the channel `cid`, or `cid:threadId` for a thread. */
   private candidateKeyFor(
     collection: Channel | Thread,
   ): ChannelThreadCompositeId | undefined {
@@ -219,13 +168,7 @@ export class MessageDeliveryReporter {
     if (isThread(collection)) return `${collection.channel.cid}:${collection.id}`;
   }
 
-  /**
-   * Retrieves a reference to the latest message in the state that is neither read nor reported as
-   * delivered.
-   *
-   * @param collection - The channel or thread to inspect.
-   * @returns The next candidate to report as delivered, or `undefined` when none applies.
-   */
+  /** The latest message that is neither read nor reported as delivered (`id: null` when none). */
   private getNextDeliveryReportCandidate = (
     collection: Channel | Thread,
   ): { key: ChannelThreadCompositeId; id: MessageId | null } | undefined => {
@@ -233,7 +176,7 @@ export class MessageDeliveryReporter {
     if (!ownUserId) return;
 
     let latestMessages: LocalMessage[] = [];
-    // Wire timestamps (unix nanoseconds), directly comparable against a message's `created_at`.
+    // Unix nanoseconds, comparable with a message's `created_at`.
     let lastDeliveredAt: TimestampNS | undefined;
     let lastReadAt: TimestampNS | undefined;
     let key: string | undefined = undefined;
@@ -246,9 +189,7 @@ export class MessageDeliveryReporter {
       lastDeliveredAt = ownReadState?.last_delivered_at;
       key = collection.cid;
     } else if (isThread(collection)) {
-      // Use the head (newest-loaded) window, not the active/visible interval: the candidate logic
-      // below inspects the newest message, which the active interval only reflects when scrolled to
-      // the head. Mirrors the channel branch above.
+      // The head window, as for channels: the active interval may be scrolled away from the newest.
       latestMessages = collection.messagePaginator.headItems;
       const ownReadState =
         collection.state.getLatestValue().read[ownUserId] ?? ({} as ThreadUserReadState);
@@ -276,11 +217,7 @@ export class MessageDeliveryReporter {
     return { key, id: latestMessage.id || null };
   };
 
-  /**
-   * Updates the delivery candidates buffer with the latest delivery candidates.
-   *
-   * @param collection - The channel or thread whose latest delivery candidate to track.
-   */
+  // Candidates found while a request is in flight wait in the next buffer.
   private trackDeliveredCandidate(collection: Channel | Thread) {
     if (!MessageDeliveryReporter.hasPermissionToReportDeliveryFor(collection)) return;
     const candidate = this.getNextDeliveryReportCandidate(collection);
@@ -292,11 +229,6 @@ export class MessageDeliveryReporter {
     else buffer.set(candidate.key, candidate.id);
   }
 
-  /**
-   * Removes a candidate from the delivery report buffer.
-   *
-   * @param collection - The channel or thread whose candidate should be removed.
-   */
   private removeCandidateFor(collection: Channel | Thread) {
     const candidateKey = this.candidateKeyFor(collection);
     if (!candidateKey) return;
@@ -305,11 +237,8 @@ export class MessageDeliveryReporter {
   }
 
   /**
-   * Records the latest message delivered for Channel or Thread instances and schedules the next
-   * report if not already scheduled and candidates exist. Should be used for WS handling
-   * (`message.new`) as well as for ingesting HTTP channel query results.
-   *
-   * @param collections - The channels or threads whose candidates should be synced.
+   * Records each collection's latest undelivered message and schedules a report if none is pending. For
+   * WS handling (`message.new`) and for ingesting channel query results.
    */
   public syncDeliveredCandidates(collections: (Channel | Thread)[]) {
     if (this.client.user?.privacy_settings?.delivery_receipts?.enabled === false) return;
@@ -317,11 +246,7 @@ export class MessageDeliveryReporter {
     this.announceDeliveryBuffered();
   }
 
-  /**
-   * Fires a delivery announcement request followed by an immediate delivery candidate buffer reset.
-   *
-   * @param options - Flags forwarded to `client.markDelivered` (optional).
-   */
+  /** Sends the buffered report immediately, at most `maxDeliveredMessageCountInPayload` entries. */
   public announceDelivery = (options?: AnnounceDeliveryOptions) => {
     if (!this.canExecuteRequest) return;
 
@@ -336,14 +261,14 @@ export class MessageDeliveryReporter {
     }: { preventSchedulingRetry?: boolean } = {}) => {
       this.markDeliveredRequestPromise = null;
 
-      // promote anything that arrived during request
+      // Promote candidates that arrived during the request.
       for (const [k, v] of this.nextDeliveryReportCandidates.entries()) {
         this.deliveryReportCandidates.set(k, v);
       }
       this.nextDeliveryReportCandidates = new Map();
 
       if (preventSchedulingRetry) return;
-      // checks internally whether there are candidates to announce
+      // Checks internally whether there are candidates to announce.
       this.announceDeliveryBuffered(options);
     };
 
@@ -353,8 +278,7 @@ export class MessageDeliveryReporter {
     };
 
     const handleError = (error: StreamAPIError | Error) => {
-      // re-populate relevant candidates for the next report
-      // but make sure to keep the items that failed to be reported the first next time
+      // Restore the failed batch, with newer candidates taking precedence.
       const newDeliveryReportCandidates = new Map(sendBuffer);
       for (const [k, v] of this.deliveryReportCandidates.entries()) {
         newDeliveryReportCandidates.set(k, v);
@@ -388,11 +312,9 @@ export class MessageDeliveryReporter {
   };
 
   /**
-   * Delegates the mark-read call to the Channel or Thread instance. A channel whose read events are
-   * disabled is marked read locally instead, when the client opted into counting unread itself.
+   * Marks the channel or thread read. A channel with read events disabled is marked read locally when
+   * `localUnreadCountEnabled` is set.
    *
-   * @param collection - The channel or thread to mark as read.
-   * @param options - Flags forwarded to the underlying `markRead` call (optional).
    * @returns The server response, or `null` when no request went out.
    */
   public markRead = async (collection: Channel | Thread, options?: MarkReadRequest) => {
@@ -416,11 +338,8 @@ export class MessageDeliveryReporter {
     } else {
       const { readEvents, requestHandlers } = channel.configState.getLatestValue();
       const markReadRequestHandler = requestHandlers?.markReadRequest;
-      // Without read events there is no server-side read state to advance - `channel.markRead()`
-      // throws. `localUnreadCountEnabled` is how an integrator asks to count unread anyway, so the
-      // reset has to come from somewhere: `markReadLocally` clears it through the same read
-      // handling a `message.read` would. Threads are deliberately outside this branch - their read
-      // state is their own, and resetting the channel is not what a thread read means.
+      // Without read events `channel.markRead()` throws, so reset unread locally (threads have their own
+      // read state and are not affected).
       if (markReadRequestHandler) {
         result =
           (await markReadRequestHandler({ channel, options: requestOptions })) ?? null;
@@ -431,28 +350,16 @@ export class MessageDeliveryReporter {
       }
     }
 
-    // A read implies delivery, so the candidate is only dropped once the request actually went
-    // out. A `markReadRequest` handler that declines returns nothing, and those candidates must
-    // survive for the next delivery report.
+    // A read implies delivery, so the candidate is dropped only if a request went out (a declining
+    // `markReadRequest` handler returns nothing).
     if (result) this.removeCandidateFor(collection);
     return result;
   };
 
-  /**
-   * Builds the throttled `markRead`. A factory rather than an inline `throttle(...)` so the interval can
-   * be swapped later — see {@link setMarkAsReadThrottleOptions}.
-   *
-   * @param intervalMs - minimum gap between automatic `markRead` calls for the same collection
-   */
-  // Auto mark-read is throttled and fire-and-forget: it's triggered by state changes / WS events,
-  // not by an awaiting caller, so a rejection here has nowhere to propagate and would otherwise
-  // surface as an unhandled rejection (e.g. `channel.markRead` throwing when read events are
-  // disabled, or a transient network error). Swallow it — the auto path retries on the next
-  // trigger, and explicit `markRead()` callers still receive the error.
-  //
-  // One throttle per collection instance. A shared one keeps only the latest call for its trailing
-  // edge, so marking a channel inside the window dropped a pending mark-read of a thread or of another
-  // channel, and nothing retried it until the next unread message.
+  // Fire-and-forget: no caller awaits an automatic mark-read, so rejections are swallowed (the next
+  // trigger retries; explicit `markRead()` callers still get the error). One throttle per collection:
+  // a shared one keeps only the latest call for its trailing edge and would drop another
+  // collection's pending mark-read.
   private buildThrottledMarkRead = (intervalMs: number) => {
     const throttled = new WeakMap<
       Channel | Thread,

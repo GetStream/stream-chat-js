@@ -9,27 +9,19 @@ import type {
   UserResponse,
 } from '../types';
 
-/**
- * Milliseconds until `remindAt`, negative once it has passed.
- *
- * @param remindAt - Unix nanoseconds, as the API sends it. The subtraction happens in the wire unit
- *   and is converted once, so the returned duration stays in the milliseconds `setTimeout` speaks.
- */
+/** Milliseconds until `remindAt`, negative once it has passed. */
 export const timeLeftMs = (remindAt: TimestampNS) => nsToMs(remindAt - nowNs());
 
 export type ReminderResponseBaseOrResponse = ReminderResponseData;
 
 export type ReminderState = {
   channel_cid: string;
-  /** Unix nanoseconds, as the API sends it. */
   created_at: TimestampNS;
   message: MessageResponse | null;
   message_id: string;
-  /** Unix nanoseconds, as the API sends it. */
   remind_at: TimestampNS | null;
-  /** A duration, so milliseconds — see {@link timeLeftMs}. */
+  /** Milliseconds. See {@link timeLeftMs}. */
   timeLeftMs: number | null;
-  /** Unix nanoseconds, as the API sends it. */
   updated_at: TimestampNS;
   user: UserResponse | null;
   user_id: string;
@@ -54,8 +46,7 @@ export class Reminder {
     created_at: data.created_at,
     message: data.message || null,
     remind_at: data.remind_at ?? null,
-    // Nullish rather than truthy: `0` is a legitimate timestamp (the epoch), and treating it as
-    // "no reminder set" is a real bug now that these are numbers rather than `Date` objects.
+    // Nullish, not truthy: `0` is a valid timestamp.
     timeLeftMs: data.remind_at != null ? timeLeftMs(data.remind_at) : null,
     updated_at: data.updated_at,
     user: data.user || null,

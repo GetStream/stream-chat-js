@@ -11,14 +11,14 @@ export type LinkPreview = OGAttachment & {
 };
 
 export interface ILinkPreviewsManager {
-  /** Function cancels all scheduled or in-progress URL enrichment queries. */
+  /** Cancels all scheduled or in-progress URL enrichment queries. */
   cancelURLEnrichment: () => void;
-  /** Function that triggers the search for URLs and their enrichment. */
+  /** Searches the text for URLs and enriches them. */
   findAndEnrichUrls?: DebouncedFunc<(text: string) => void>;
 }
 
 export enum LinkPreviewStatus {
-  /** Link preview has been dismissed using */
+  /** Link preview has been dismissed (`dismissPreview`). */
   DISMISSED = 'dismissed',
   /** Link preview could not be loaded, the enrichment request has failed. */
   FAILED = 'failed',
@@ -68,11 +68,6 @@ const initState = ({
     : {
         previews: new Map<LinkURL, LinkPreview>(),
       };
-
-/*
-docs:
-You can customize  function to identify URLs in a string and request OG data by overriding findURLFn?: (text: string) => string[];
- */
 
 export class LinkPreviewsManager implements ILinkPreviewsManager {
   findAndEnrichUrls: DebouncedFunc<(text: string) => void>;
@@ -160,11 +155,7 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
   }
 
   set enabled(enabled: LinkPreviewsManagerConfig['enabled']) {
-    // No early return on "same value". The guard that used to be here compared against the *effective*
-    // value, while the write it skipped records the *requested* one — so asking for a value the server
-    // was currently masking recorded nothing, and the earlier request stayed in the patch layer to be
-    // honoured the moment the server relented. `ConfigController.write` already skips a publish when the
-    // resolved value does not move, which is the same guard applied to the right value.
+    // Always forwarded: the requested value is recorded even while the server masks it.
     this.composer.updateConfig({ linkPreviews: { enabled } });
   }
 
@@ -222,7 +213,7 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
     const newLinkPreviews = urls
       .filter((url) => {
         const existingPreviews = this.previews;
-        // account for trailing slashes added by the back-end
+        // The back-end may add a trailing slash.
         const existingPreviewLink =
           existingPreviews.get(url) || existingPreviews.get(url + '/');
         return !existingPreviewLink;
@@ -248,7 +239,7 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
             url: linkPreview.og_scrape_url,
           });
           if (this.shouldDiscardEnrichQueries) return;
-          // due to typing and text changes, the URL may not be anymore in the store
+          // The URL may have left the store while typing.
           if (this.previews.has(linkPreview.og_scrape_url)) {
             this.updatePreview(linkPreview.og_scrape_url, {
               status: LinkPreviewStatus.LOADED,
@@ -272,15 +263,11 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
     this.findAndEnrichUrls.flush?.();
   };
 
-  /**
-   * Clears all non-dismissed previews when the text composer is cleared.
-   * This ensures that dismissed previews are not re-enriched in the future.
-   */
+  /** Clears all previews except dismissed ones, so those are not re-enriched. */
   clearPreviews = () => {
     const currentPreviews = this.previews;
     const newPreviews = new Map<LinkURL, LinkPreview>();
 
-    // Keep only dismissed previews
     currentPreviews.forEach((preview, url) => {
       if (LinkPreviewsManager.previewIsDismissed(preview)) {
         newPreviews.set(url, preview);

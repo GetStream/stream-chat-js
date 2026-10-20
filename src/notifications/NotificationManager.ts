@@ -16,12 +16,7 @@ export class NotificationManager {
   store: StateStore<NotificationState>;
   private timeouts: Map<string, NodeJS.Timeout> = new Map();
 
-  /** The shared configuration machinery — see {@link ConfigController}. */
   private readonly configController: ConfigController<NotificationManagerConfig>;
-  /**
-   * Resolved configuration, as a store so consumers can react to it — the same shape every configurable
-   * class exposes (`configState` for the store, {@link config} for the current value).
-   */
   get configState(): StateStore<NotificationManagerConfig> {
     return this.configController.state;
   }
@@ -31,23 +26,17 @@ export class NotificationManager {
     this.configController = new ConfigController<NotificationManagerConfig>({
       defaults: DEFAULT_NOTIFICATION_MANAGER_CONFIG,
       constructorOptions: config,
-      // `durations` is a nested group, so naming one severity must keep the other three.
+      // `durations` is nested: naming one severity keeps the others.
       mergeSlice: 'deep',
     });
   }
 
-  /**
-   * The current resolved configuration. `Readonly` because the value is the store's live object —
-   * assigning to a field of it would change state without notifying anyone. Use {@link updateConfig}.
-   */
   get config(): Readonly<NotificationManagerConfig> {
     return this.configState.getLatestValue();
   }
 
-  /** Deep-merges a partial configuration into the resolved config and notifies subscribers. */
   updateConfig(config: Partial<NotificationManagerConfig>) {
-    // Deep-merged rather than patched, so the guard compares the merged *result*: `durations` is
-    // nested, and a patch naming one severity must not read as a change to the other three.
+    // Compares the merged result, so a patch naming one severity is not a change to the others.
     this.configState.next((current) => {
       const next = mergeWith({ ...current }, config as object);
       return isEqual(current, next) ? current : next;
@@ -55,20 +44,8 @@ export class NotificationManager {
   }
 
   /**
-   * Rebuilds the resolved configuration from package defaults plus the declarative slice, **replacing**
-   * what is there rather than merging into it. Called by the client's derivation, which shares one path
-   * with `client.config.reset()`.
-   *
-   * The distinction is not cosmetic here, and this manager is the only one that needs it.
-   * {@link updateConfig} deep-merges, and `sortComparator` is optional — so unlike every other field of
-   * every other manager config, it has no counterpart in {@link DEFAULT_NOTIFICATION_MANAGER_CONFIG} for
-   * a derivation to overwrite it with. Registering one through `client.config` therefore made it
-   * permanent: `reset()` re-derived, the merge kept it, and nothing could ever remove it. A merge cannot
-   * express a removal; this is the same rule `Channel.initializeConfig` follows for `requestHandlers`.
-   *
-   * The defaults are copied rather than spread, because a shallow spread would leave `durations`
-   * pointing at the module-level object and put it in the store, where a nested write would change the
-   * default for every client in the process.
+   * Rebuilds the config from the defaults, `config` and the constructor options instead of merging
+   * into the current value, so a `sortComparator` set through `updateConfig` is dropped.
    */
   initializeConfig(config: DeepPartial<NotificationManagerConfig> = {}) {
     this.configController.initialize(config as Partial<NotificationManagerConfig>);
@@ -168,15 +145,7 @@ export class NotificationManager {
     this.timeouts.set(id, timeout);
   }
 
-  /**
-   * Starts the notification's auto-dismiss countdown unless one is already running.
-   *
-   * The counterpart to {@link startTimeout}, which always restarts. Use this wherever the caller
-   * cannot know whether the countdown has been started already -- a UI component that remounts and
-   * has lost the record, or a second view displaying the same notification. Restarting there is
-   * invisible and open-ended: each call hands the notification another full lifetime, so it can
-   * outlive its duration indefinitely while looking like it is counting down.
-   */
+  /** Like {@link startTimeout}, but a no-op when a countdown is already running. */
   ensureTimeout(id: string, durationOverride?: number): void {
     if (this.timeouts.has(id)) return;
 

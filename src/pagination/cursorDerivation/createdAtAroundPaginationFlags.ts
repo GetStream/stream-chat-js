@@ -15,8 +15,7 @@ export const deriveCreatedAtAroundPaginationFlags = <
   requestedPageSize,
 }: CursorDeriveContext<T, Q>): PaginationFlags => {
   if (!queryShape?.created_at_around) return { hasMoreHead, hasMoreTail };
-  // `created_at_around` is a REQUEST field, so it is still a `Date` (or an ISO string). Items carry
-  // the wire unit, so bring the bound into that unit before comparing the two.
+  // The bound is a `Date` or ISO string but items carry nanoseconds: convert before comparing.
   const createdAtAround = dateToNs(new Date(queryShape.created_at_around));
   const olderCount = page.filter((item) => item.created_at < createdAtAround).length;
   return deriveAroundPaginationFlags({

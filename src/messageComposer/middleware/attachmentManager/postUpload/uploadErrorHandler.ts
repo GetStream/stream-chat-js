@@ -20,8 +20,7 @@ export const createUploadErrorHandlerMiddleware = (
       const { attachment, error } = state;
       if (!error) return forward();
       if (!attachment) return discard();
-      // A cancellation is the user getting what they asked for, so it gets no error
-      // notification. `ApiClient.doAxiosRequest` draws the same line for the same reason.
+      // A cancellation is not an error: no notification.
       if (isUploadCancellation(error)) return forward();
 
       const reason = error instanceof Error ? error.message : 'unknown error';

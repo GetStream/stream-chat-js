@@ -1,19 +1,17 @@
+import type { MergeWithCustomizer } from './mergeWithCore';
+import { createMergeCore } from './mergeWithCore';
+
 /**
- * This method is like `_.merge` except that it accepts `customizer` which
- * is invoked to produce the merged values of the destination and source
- * properties. If `customizer` returns `undefined` merging is handled by the
- * method instead. The `customizer` is invoked with seven arguments:
+ * Like lodash `_.merge`, but `customizer` produces the merged value of each destination and source
+ * property. When it returns `undefined` the default merge applies. It is called with
  * (objValue, srcValue, key, object, source, stack).
  *
- * @category Object
- * @param object - The destination object.
- * @param source - A single source object or an array of objects to be merged into the .
- * @param customizer - The function to customize assigned values.
- * @returns Returns `object`.
+ * Returns a new object; `target` is not mutated.
+ *
  * @example
  *
  * function customizer(objValue, srcValue) {
- *   if (_.isArray(objValue)) {
+ *   if (Array.isArray(objValue)) {
  *     return objValue.concat(srcValue);
  *   }
  * }
@@ -28,12 +26,9 @@
  *   'vegetables': ['carrot']
  * };
  *
- * _.mergeWith(object, other, customizer);
+ * mergeWith(object, other, customizer);
  * // => { 'fruits': ['apple', 'banana'], 'vegetables': ['beet', 'carrot'] }
  */
-import type { MergeWithCustomizer } from './mergeWithCore';
-import { createMergeCore } from './mergeWithCore';
-
 export function mergeWith<T extends object>(
   target: T,
   source: object | object[],

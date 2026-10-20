@@ -33,23 +33,12 @@ export type PinnedMessagePaginatorOptions = {
 const PINNED_AT_SORT: SortParamRequest[] = [{ field: 'pinned_at', direction: 1 }];
 
 /**
- * Pinned-message list paginator.
+ * The channel's pinned messages, ordered by `pinned_at` ascending (oldest-pinned first). Extends
+ * {@link MessageIntervalPaginator} rather than {@link MessagePaginator}: pinned messages are a subset
+ * of the channel and take no part in read/unread or delivery-receipt tracking.
  *
- * Extends the unread-free {@link MessageIntervalPaginator} base — pinned messages are a subset of
- * the channel and MUST NOT participate in read/unread or delivery-receipt tracking (that belongs to
- * the channel and thread message timelines). By extending the base rather than {@link MessagePaginator}
- * it simply never gets the unread surface.
- *
- * Differences from the main list:
- * - fetches from the `/pinned_messages` endpoint (`channel.getPinnedMessages`) rather than
- *   `channel.query({ messages })`;
- * - includes only pinned, non-shadowed messages (`shouldIncludeMessageInInterval`), and filters on
- *   `{ cid, pinned: true }` so `ingestItem` auto-adds on pin and auto-removes on unpin;
- * - orders by `pinned_at` ascending (oldest-pinned first), matching the legacy
- *   `channel.state.pinnedMessages` order.
- *
- * Navigation (`jumpToMessage` / `jumpToTheLatestMessage`) is inherited and meaningful — the endpoint
- * supports `id_around` — but no unread-coupled navigation exists.
+ * Fetches through `channel.getPinnedMessages`, includes only pinned, non-shadowed messages and
+ * matches `{ cid, pinned: true }`, so `ingestItem` adds on pin and removes on unpin.
  */
 export class PinnedMessagePaginator extends MessageIntervalPaginator {
   protected get holderName() {
@@ -65,9 +54,7 @@ export class PinnedMessagePaginator extends MessageIntervalPaginator {
     super({
       channel,
       id: id ?? `pinned-message-paginator-${generateUUIDv4()}`,
-      // No explicit index: inherit the store-backed item index from MessageIntervalPaginator so a
-      // pinned message shares the single canonical copy with the main list / thread and reflects
-      // reactions & edits applied elsewhere. A caller may still inject a custom `itemIndex`.
+      // Omitted: the inherited store-backed index shares one copy of each message with the main list.
       itemIndex,
       paginatorOptions,
     });
@@ -75,11 +62,7 @@ export class PinnedMessagePaginator extends MessageIntervalPaginator {
     this.installPinnedMessageBehaviour();
   }
 
-  /**
-   * Memoized for the reason {@link MessageIntervalPaginator}'s overlay is: the base derivation folds
-   * this in and skips the publish when nothing moved, which needs stable references. Both close over
-   * `this` and over a fixed `pinned_at` sort, so there is nothing to rebuild.
-   */
+  /** Memoized: stable references let the base derivation skip a publish when nothing moved. */
   private pinnedBehaviour?: Partial<BasePaginatorConfig<LocalMessage, MessageQueryShape>>;
 
   private buildPinnedBehaviour(): Partial<
@@ -93,9 +76,8 @@ export class PinnedMessagePaginator extends MessageIntervalPaginator {
           tiebreaker: this.pinnedTiebreaker,
         }),
 
-        // Fetch from the pinned-messages endpoint. The base `query` feeds the resolved query shape
-        // (including `id_around` jumps) here as `options`; we return both cursors and let the base gate
-        // them by direction.
+        // The base `query` passes the resolved shape (including `id_around` jumps) as `options`.
+        // Both cursors are returned and the base gates them by direction.
         doRequest: async (
           options: MessageQueryShape,
         ): Promise<{ cursor?: PaginatorCursor; items: LocalMessage[] }> => {
@@ -117,11 +99,7 @@ export class PinnedMessagePaginator extends MessageIntervalPaginator {
     return leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
   };
 
-  /**
-   * The ordering and request behaviour that makes this a *pinned*-message paginator, contributed to the
-   * base derivation so a re-derivation cannot drop it and does not need a second write to restore it.
-   * Spread over the interval overlay, so this class's `pinned_at` comparator wins.
-   */
+  /** Adds the pinned ordering and request behaviour to the derivation, over the interval overlay. */
   protected override getBehaviourOverrides(): Partial<
     BasePaginatorConfig<LocalMessage, MessageQueryShape>
   > {
@@ -129,12 +107,9 @@ export class PinnedMessagePaginator extends MessageIntervalPaginator {
   }
 
   private installPinnedMessageBehaviour(): void {
-    // Order by pinned_at (ascending), overriding the base's created_at comparators. Ascending keeps
-    // the head edge (most-recently-pinned) at the end of an interval, matching the base's interval
-    // direction getters (which are shared with created_at-asc semantics).
-    //
-    // A plain field rather than config, so a re-derivation never touches it — which is why only the
-    // constructor sets it.
+    // Ascending `pinned_at` keeps the head edge (most recently pinned) at the end of an interval,
+    // like the base's `created_at` ascending. A plain field rather than config, so a re-derivation
+    // never touches it and only the constructor sets it.
     this.sortComparator = makeComparator<LocalMessage>({
       sort: PINNED_AT_SORT,
       resolvePathValue: resolveDotPathValue,

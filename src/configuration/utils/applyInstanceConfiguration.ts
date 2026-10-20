@@ -17,56 +17,34 @@ const logger = chatLoggerSystem.getLogger('instance-configuration');
 
 /** @internal */
 export type ApplyInstanceConfigurationParams<K extends InstanceSetupKey> = {
-  /** The instance's argument for its setup function — `{ channel }`, `{ composer }`, and so on. */
+  /** The instance's argument for its setup function, such as `{ channel }`. */
   args: InstanceSetupFunctionArgsOf<K>;
-  /** The client's configuration registry, i.e. `client.config`. */
   config: InstanceConfigurationRegistry;
   key: K;
   /**
-   * Other keys this instance derives from. `Channel` and `Thread` both read the shared `messagePaginator`
-   * and `messageOperations` keys, so a change there has to re-run this instance's own cycle rather than
-   * only re-deriving: re-deriving alone would drop the setup function's overrides, since tier 2 is
-   * applied after tier 1.
-   *
-   * Keys rather than stores, which buys two things beyond brevity. The instance is registered as a
-   * live instance of each, so `hasLiveInstances` is true for a shared key and its construction-only paths get
-   * same late-registration warning the per-parent slices already got. And there is no longer a structural
-   * store type needed to work around `StateStore`'s invariance.
+   * Other keys this instance derives from (`Channel` and `Thread` read `messagePaginator` and
+   * `messageOperations`). A change there re-runs the whole cycle, so the setup function is re-applied
+   * over the new values. The instance is also registered as live under each.
    */
   alsoWatch?: readonly InstanceConfigKey[];
   /**
-   * Applies a declarative configuration slice to the instance. Omit it if the instance has no
-   * declarative surface and only wants the setup function.
-   *
-   * Called on every cycle, **including when this key has no configuration of its own** — an instance may
-   * derive from other inputs too (`alsoWatch`, or the server), so it has to be told to re-derive rather
-   * than being skipped. Hence the optional argument.
+   * Applies the declarative slice to the instance. Omit it if the instance only wants the setup function.
+   * Called on every cycle, with `undefined` when the key has no configuration, since the instance may
+   * derive from other inputs too.
    */
   applyConfig?: (config?: DeepPartial<InstanceConfigOf<K>>) => void;
   /**
-   * The instance's own `initializeConfig`, bound. Invoked by `config.reset()` after both slots are
-   * cleared, so the instance re-derives its configuration from current inputs. Omit it to get
-   * clear-registrations-only reset semantics.
+   * The instance's `initializeConfig`, bound. `reset` calls it after clearing both slots. Without it,
+   * reset only clears registrations.
    */
   reinitializeConfig?: () => void;
 };
 
 /**
- * Subscribes one instance to the configuration registered for its key, and returns the unsubscribe.
- *
- * This is the single place the *subscription* semantics live, so every configured instance behaves
- * identically:
- *
- * - applies whatever is already registered, immediately;
- * - re-applies on every change to either slot, declarative configuration first and the setup function
- *   second, so a setup function always wins for the same field;
- * - runs the previous setup function's teardown before re-applying, and again on unsubscribe;
- * - contains errors — a throwing setup function, teardown or applier is logged and never propagates,
- *   so it cannot break `client.channelManager.ensure()` or a `Thread` construction.
- *
- * Not exported from the package. It only does anything for a key in {@link InstanceSetupKey}, and those
- * keys all belong to classes this package constructs, so there is no caller outside it. `ConfigController`
- * _is_ exported, because resolution is reusable on its own — see `docs/instance-configuration.md` §6.
+ * Subscribes one instance to the configuration registered for its key and returns the unsubscribe.
+ * Applies what is registered immediately, then on every change: declarative configuration first and the
+ * setup function second (so it wins), running the previous teardown before each re-apply and on
+ * unsubscribe. A throwing setup function, teardown or applier is logged, never propagated.
  *
  * @internal
  */
@@ -115,22 +93,16 @@ export const applyInstanceConfiguration = <K extends InstanceSetupKey>({
     }
   };
 
-  // One handle, shared by every key this instance registers under. `reset` de-duplicates by object
-  // identity, so a handle allocated per key would defeat it — a `Channel` registered under `channel`,
-  // `messagePaginator` and `messageOperations` would re-derive three times for one reset.
+  // One handle for every key: `reset` de-duplicates by identity, so the instance re-derives once.
   const instanceHandle: ConfiguredInstance = { reinitializeConfig };
 
   const unregisterInstance = service.registerInstance(key, instanceHandle);
 
-  // `StateStore.subscribe` fires immediately, and we subscribe to two stores — so suppress while
-  // wiring and apply exactly once afterwards.
+  // `subscribe` fires immediately: suppress while wiring, then apply once.
   let suppress = true;
 
-  // `reset` clears every slot and *then* re-derives each live instance exactly once. An instance that
-  // supplied a `reinitializeConfig` is therefore covered already, so reacting to the individual clears
-  // would re-derive it once per populated key — and against a tree still half-cleared, since the
-  // notifications fire synchronously inside reset's loop. An instance without one has no other route, so
-  // it keeps reacting.
+  // An instance with `reinitializeConfig` is re-derived once by reset's final pass, so it ignores the
+  // per-key clears, which fire synchronously against a half-cleared tree.
   const coveredByResetsOwnPass = () => !!reinitializeConfig && service.isResetting;
 
   const onConfigChange = () => {
@@ -140,8 +112,7 @@ export const applyInstanceConfiguration = <K extends InstanceSetupKey>({
 
   const onSetupChange = () => {
     if (suppress) return;
-    // Teardown is not reset's to run: it lives in this closure, so `reinitializeConfig` cannot reach it.
-    // Run it here and leave the re-derivation to reset's final phase.
+    // Teardown lives in this closure, out of reset's reach: run it here, leave re-derivation to reset.
     if (coveredByResetsOwnPass()) {
       runTearDown();
       return;
@@ -155,17 +126,14 @@ export const applyInstanceConfiguration = <K extends InstanceSetupKey>({
   const unsubscribeSetup = service
     .getSetupState(key)
     .subscribeWithSelector(({ setupFunction }) => ({ setupFunction }), onSetupChange);
-  // Selector-based like the two above, so a store that publishes without its `config` moving — `reset`
-  // clearing an already-empty slot does exactly that, since `partialNext` always allocates — does not
-  // trigger a cycle.
+  // Selector-based so a publish that leaves `config` unchanged (`reset` clearing an empty slot) does
+  // not trigger a cycle.
   const unsubscribeExtra = (alsoWatch ?? []).map((watchedKey) =>
     service
       .getConfigState(watchedKey)
       .subscribeWithSelector(({ config }) => ({ config }), onConfigChange),
   );
-  // Registering against the watched keys too is what makes `hasLiveInstances` true for them. The shared
-  // `instanceHandle` is what lets `reset()` de-duplicate across keys, so being registered under several
-  // does not multiply re-derives.
+  // Registered under the watched keys too, so `hasLiveInstances` is true for them.
   const unregisterExtra = (alsoWatch ?? []).map((watchedKey) =>
     service.registerInstance(watchedKey, instanceHandle),
   );

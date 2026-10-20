@@ -19,69 +19,45 @@ import type { Unsubscribe } from '@stream-io/state-store';
 const logger = chatLoggerSystem.getLogger('client');
 
 /**
- * This client's WebSocket, as a stable object: `client.wsConnection` is created once with the client
- * and never replaced, so `state` is safe to subscribe to for the client's whole lifetime.
+ * This client's WebSocket as a stable object: `client.wsConnection` is created once with the client,
+ * so `state` can be subscribed to for its whole lifetime. The socket ({@link StableWSConnection}, in
+ * {@link connection}) is replaced on every {@link connect}, so a store living on it would be
+ * unreadable before `connectUser` and strand subscribers across `closeConnection()` and
+ * `openConnection()`.
  *
- * The socket itself — {@link StableWSConnection}, which does the connecting, pinging and
- * reconnecting — hangs off {@link connection} and **is** replaced: `client.connect()` builds a new one
- * on every call. That is the reason this wrapper exists. Without it the status store would live on the
- * socket, where two things would go wrong: it would be unreadable before `connectUser` (the field
- * is `null` until the first connect), and every `closeConnection()` → `openConnection()` cycle — the
- * documented mobile background/foreground flow — would strand anyone already subscribed.
- *
- * The members below forward to the current socket so existing call sites keep working, with one
- * deliberate exception: {@link isHealthy} is answered from `state`, not from `connection`, so it stays
- * correct across a replacement and while no socket exists yet.
- *
- * It also owns the **network-status subscription**, for the same reason it owns the store: subscribing
- * here means one subscription for the client's lifetime, routed to whichever socket is current. Per
- * socket it would leak — `client.connect()` overwrites `connection` without disconnecting the
- * previous one, leaving a dead socket still listening and still able to call `_reconnect()` on
- * itself.
- *
- * **With `enableWSFallback`, the store can describe the long-poll instead.** Once {@link connect}
- * has switched to `WSConnectionFallback` ({@link fallback}).
+ * It also owns the single network-status subscription, routed to the current socket. After an
+ * `enableWSFallback` switch `state` and that routing describe the long-poll ({@link fallback}).
  */
 export class WSConnection extends WithSubscriptions {
   state: StateStore<WSConnectionState>;
   /**
-   * The live socket, or `null` before the first {@link connect}. Built and replaced here, not from
-   * outside — reach for {@link isHealthy} rather than this.
+   * The live socket, or `null` before the first {@link connect}. Prefer {@link isHealthy} to it.
    *
    * @internal
    */
   connection: StableWSConnection | null = null;
   /**
-   * The long-poll, once `enableWSFallback` has switched to it; `undefined` until then. Built by
-   * {@link connect} and never cleared: as in v9, the client does not go back to the WebSocket, not
-   * even across `disconnectUser()`.
+   * The long-poll, once `enableWSFallback` has switched to it. Never cleared, not even by
+   * `disconnectUser()`.
    *
    * @internal
    */
   fallback?: WSConnectionFallback;
   /**
-   * Readable by the socket this object owns, which reaches the client through its parent rather than
-   * holding one of its own. Not part of the public surface — `client.wsConnection.client` is a
-   * round trip back to where you started.
+   * For the socket this object owns, which reaches the client through it.
    *
    * @internal
    */
   readonly client: StreamChat;
-  /** The shared configuration machinery — see {@link ConfigController}. */
   private readonly configController: ConfigController<WSConnectionConfig>;
-  /**
-   * The out-of-range values already warned about, so a bad setting is reported once rather than on
-   * every derivation. Configuration is re-derived more than once at construction alone — the client
-   * calls `initializeConfig` directly and again through the config store's immediate subscribe.
-   */
+  /** Out-of-range values already warned about, so a bad setting is reported once per value. */
   private warnedClamps = new Map<string, number>();
 
   constructor({ client }: { client: StreamChat }) {
     super();
     this.configController = new ConfigController<WSConnectionConfig>({
       defaults: DEFAULT_WS_CONNECTION_CONFIG,
-      // The bounds hook, not a check in `updateConfig`: it runs on every derivation *and* on every
-      // patch, so a limit cannot be escaped by setting the field again later.
+      // Runs on every derivation and every patch, so a limit cannot be escaped by setting it again.
       applyAuthority: (requested) => this.applyConfigBounds(requested),
     });
     this.client = client;
@@ -92,35 +68,16 @@ export class WSConnection extends WithSubscriptions {
     });
   }
 
-  /**
-   * Resolved configuration, as a store — the shape every configurable class exposes
-   * (`configState` / `config` / `updateConfig`).
-   */
   get configState(): StateStore<WSConnectionConfig> {
     return this.configController.state;
   }
 
-  /**
-   * The current resolved configuration. `Readonly` — change it through {@link updateConfig}.
-   *
-   * The socket reads this **live** rather than snapshotting it, so an update reaches the current
-   * connection instead of waiting for the next one. That matters here more than for most configurable
-   * classes, because {@link connect} replaces the socket every time it is called.
-   */
+  /** Read live by the socket, so an update reaches the current connection. */
   public get config(): Readonly<WSConnectionConfig> {
     return this.configState.getLatestValue();
   }
 
-  /**
-   * Holds the timing knobs inside {@link WS_CONNECTION_CONFIG_BOUNDS}, warning once per offending
-   * value.
-   *
-   * Clamps rather than throws. An out-of-range timing value is a misconfiguration, not a
-   * programming error, and refusing to construct a client over it would take down an application
-   * that is otherwise fine — while silently using the requested value would break the socket in a
-   * way that looks like a flaky network. So the socket keeps working at the nearest usable setting
-   * and says what it did.
-   */
+  /** Clamps the timing knobs into {@link WS_CONNECTION_CONFIG_BOUNDS}, warning once per value. */
   private applyConfigBounds(requested: WSConnectionConfig): WSConnectionConfig {
     const { clamped, corrections } = clampWSConnectionConfig(requested);
 
@@ -139,40 +96,27 @@ export class WSConnection extends WithSubscriptions {
     return clamped;
   }
 
-  /** Merges a partial configuration into the resolved config and notifies subscribers. */
   public updateConfig(config: Partial<WSConnectionConfig>) {
     this.configController.patch(config);
   }
 
-  /**
-   * Rebuilds the resolved configuration from package defaults plus the declarative slice — the
-   * derivation entry point every configurable entity exposes.
-   */
   public initializeConfig(config?: Partial<WSConnectionConfig>) {
     this.configController.initialize(config);
   }
 
-  /**
-   * Is this WebSocket up — or, after an `enableWSFallback` switch, the long-poll. Read from
-   * {@link state} rather than from the current socket, so it survives the socket being replaced and
-   * answers `false` rather than throwing before the first connect.
-   */
+  /** Read from {@link state}, so it survives socket replacement and is `false` before connecting. */
   get isHealthy(): boolean {
     return this.state.getLatestValue().isHealthy;
   }
 
-  /** Whether a connection attempt is in flight — the long-poll's after an `enableWSFallback` switch. */
+  /** Whether a connection attempt is in flight (the long-poll's, after a fallback switch). */
   get isConnecting(): boolean {
     return (this.fallback ?? this.connection)?.isConnecting ?? false;
   }
 
   /**
-   * Records this connection's status. Returns whether it changed.
-   *
-   * {@link StableWSConnection} routes **every** status transition through here — including
-   * `disconnect()`, which `closeConnection()` uses, and the two error paths. The one other
-   * caller is {@link fallback}, which takes over once `enableWSFallback` has switched to
-   * long-polling.
+   * Records this connection's status and returns whether it changed. Called by
+   * {@link StableWSConnection} on every status transition, and by {@link fallback} once it takes over.
    *
    * @internal
    */
@@ -187,27 +131,15 @@ export class WSConnection extends WithSubscriptions {
     return true;
   }
 
-  /**
-   * Routes the device's network status to whichever socket is current.
-   *
-   * One subscription, held here rather than on the socket: this object is created with the client and
-   * never replaced, while a socket is replaced on every connect and may be built before its client
-   * exists at all.
-   *
-   * Read from the store rather than from an event, so there is one description of the device's
-   * network rather than two that can disagree.
-   *
-   * After an `enableWSFallback` switch it routes to {@link fallback} instead, leaving the
-   * disconnected socket out of it.
-   */
+  /** Routes the device's network status to the current socket, or to {@link fallback} once set. */
   public registerSubscriptions = (): Unsubscribe => {
     if (!this.hasSubscriptions) {
       this.addUnsubscribeFunction(
         this.client.networkConnection.state.subscribeWithSelector(
           ({ isOnline }) => ({ isOnline }),
           ({ isOnline }) => {
-            // `undefined` is *unknown*, not offline: no reporter has said anything yet, and acting on
-            // it would tear down a healthy socket on every host that cannot answer the question.
+            // `undefined` is unknown, not offline: acting on it would tear down a healthy socket on
+            // hosts with no reporter.
             if (typeof isOnline !== 'boolean') return;
             (this.fallback ?? this.connection)?._applyNetworkStatus(isOnline);
           },
@@ -220,22 +152,12 @@ export class WSConnection extends WithSubscriptions {
   };
 
   /**
-   * Builds a socket and opens it, replacing any previous one.
-   *
-   * A fresh `StableWSConnection` per connect is the existing behaviour, kept deliberately: it resets
-   * `wsID`, the failure counters and the health-check timers, and `wsID` is what makes callbacks from
-   * an abandoned socket recognisable and ignorable. Reusing one across connect cycles would carry
-   * that state over.
-   *
-   * Creation lives here rather than in the constructor because a client that never calls
-   * `connectUser` should never build a socket, and here rather than in `client.connect()` because a
-   * field belongs to the object that owns it.
-   *
-   * With `enableWSFallback`, a socket that fails with a network error is replaced by the long-poll
-   * ({@link fallback}), which every later call connects instead of building a socket.
+   * Builds a fresh socket (resetting `wsID`, the failure counters and the health-check timers) and
+   * opens it, closing any previous one. With `enableWSFallback`, a network failure switches to the
+   * long-poll ({@link fallback}), which every later call connects instead.
    */
   async connect(timeout?: number): ConnectAPIResponse {
-    // if fallback is used before, continue using it instead of waiting for WS to fail
+    // Once switched, stay on the long-poll.
     if (this.fallback) {
       return await this.fallback.connect();
     }
@@ -243,19 +165,12 @@ export class WSConnection extends WithSubscriptions {
     const next = this.buildConnection();
     const previous = this.connection;
 
-    // Close the socket being replaced. Without this it is abandoned rather than shut down: nothing
-    // else clears its ping and connection-check timers, and only `disconnect()` sets
-    // `isDisconnected`, which is the flag `_reconnect()` checks before giving up. So the old socket
-    // stayed live and kept reconnecting *alongside* the new one — two sockets, two ping loops, and
-    // whichever answered last winning the client's status.
-    //
-    // Safe here because `openConnection()` has already returned early if a healthy connection exists
-    // or an attempt is in flight, so anything still held at this point is a socket we are done with.
-    // Skipped when `buildConnection` hands back the same instance, which it does for an injected one.
+    // Close the socket being replaced, else it keeps reconnecting alongside the new one (only
+    // `disconnect()` sets `isDisconnected`, which `_reconnect()` checks). Safe: `openConnection()`
+    // returns early while a healthy connection exists or an attempt is in flight.
     if (previous && previous !== next) {
-      // Fire and forget: the parts that neutralise it — bumping `wsID`, clearing the timers, setting
-      // `isDisconnected` — all happen synchronously, and only the socket close is awaited. Errors are
-      // swallowed deliberately; this socket is being discarded either way.
+      // Fire and forget: the neutralising steps (`wsID`, timers, `isDisconnected`) run synchronously.
+      // Errors are ignored since the socket is discarded either way.
       void Promise.resolve(previous.disconnect()).catch((error) => {
         logger
           .withExtraTags('wsConnection')
@@ -268,13 +183,10 @@ export class WSConnection extends WithSubscriptions {
     this.connection = next;
 
     try {
-      // Left to the socket to default from `config.connectTimeoutMs`, so the value lives in one place.
       return await next.connect(timeout);
     } catch (error) {
-      // run fallback only if it's WS/Network error and not a normal API error
-      // make sure the device is online before even trying the longpoll. The default reporter on
-      // hosts without a network API mirrors the WebSocket, so its "offline" only means the socket
-      // is down, and is ignored.
+      // Fall back only on a WS/network error, and not when the device is offline. The socket-mirroring
+      // default reporter's "offline" only means the socket is down, so it is ignored.
       const { networkConnection } = this.client;
       const isDeviceOffline =
         networkConnection.isOnline === false &&
@@ -296,7 +208,7 @@ export class WSConnection extends WithSubscriptions {
         return await this.fallback.connect();
       }
 
-      // A failure the socket does not retry leaves nothing else to settle the pending connection id.
+      // A failure the socket does not retry must settle the pending connection id.
       if (!isWSFailure(error as APIError)) {
         this.client.connectionIdManager.rejectConnectionId(error);
       }
@@ -304,10 +216,7 @@ export class WSConnection extends WithSubscriptions {
     }
   }
 
-  /**
-   * `config.connection` lets a caller supply a pre-built socket — used by unit tests, and the reason
-   * `StableWSConnection` accepts a parent through `setWSConnection` as well as its constructor.
-   */
+  /** Uses the pre-built `config.connection` when given (and `client.node`), else builds a socket. */
   private buildConnection(): StableWSConnection {
     const injected = this.config.connection;
 
@@ -320,13 +229,12 @@ export class WSConnection extends WithSubscriptions {
   }
 
   /**
-   * Closes the socket and, after an `enableWSFallback` switch, the long-poll too, telling the
-   * server to close its connection id. The long-poll's close request uses `timeout` as its timeout
-   * (2s when omitted).
+   * Closes the socket and, after an `enableWSFallback` switch, the long-poll too, telling the server
+   * to close its connection id. `timeout` (ms) bounds the socket's close frame (default 1s) and the
+   * long-poll's close request (default 2s).
    */
   async disconnect(timeout?: number): Promise<void> {
-    // Read before the socket's `disconnect()` drops it: after a switch it is the long-poll's id,
-    // which the long-poll's close request has to carry.
+    // Read before the socket's `disconnect()` drops it: the long-poll's close request must carry it.
     const connectionId = this.client.connectionIdManager.connectionId;
     await Promise.all([
       this.connection?.disconnect(timeout),
@@ -335,9 +243,8 @@ export class WSConnection extends WithSubscriptions {
   }
 
   /**
-   * @deprecated Report network status through `client.networkConnection.setStatus(isOnline)` instead,
-   *   or register a listener with `client.networkConnection.setStatusReporter(…)`. Forwarded
-   *   here only because `stream-chat-react-native` calls it directly.
+   * @deprecated Use `client.networkConnection.setStatus(isOnline)` or
+   *   `client.networkConnection.setStatusReporter(…)` instead.
    */
   onlineStatusChanged(event: Event): void {
     this.connection?.onlineStatusChanged(event);

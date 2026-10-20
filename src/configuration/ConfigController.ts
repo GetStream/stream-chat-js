@@ -5,105 +5,46 @@ import { copyConfigPatch } from './utils/copyConfigPatch';
 import { deepFreezeConfig } from './utils/deepFreezeConfig';
 
 export type ConfigControllerOptions<TConfig extends Record<string, unknown>> = {
-  /**
-   * Package defaults. Deep-frozen on construction, so a nested write through the entity's public
-   * `config` getter throws instead of silently changing the default for every instance in the process —
-   * a bug found three times in three entities before this was centralized.
-   */
+  /** Package defaults. Deep-frozen on construction, so a nested write through `config` throws. */
   defaults: TConfig;
-  /**
-   * Defaults the SDK itself supplies for this instance — a subclass's, or an owner's for the object it
-   * builds. Layered above {@link ConfigControllerOptions.defaults} and **below** the declarative slice.
-   *
-   * The distinction is the whole reason this exists. These arrive through the same constructor as an
-   * integrator's arguments, so before they were separated a paginator built with no configuration at all
-   * already carried `pageSize`, `stateThrottleMs`, `initialCursor` and `hasPaginationQueryShapeChanged`
-   * as "construction arguments" — which meant the documented order could not be applied to it without
-   * those SDK values beating every `client.config.set()`.
-   */
+  /** SDK-supplied defaults for this instance (a subclass's or an owner's), below the slice. */
   builtInDefaults?: Partial<TConfig>;
   /**
-   * Arguments the **integrator** passed to the constructor. Stage 3 of
-   * `docs/instance-configuration.md` §3, so they outrank the declarative tree, and they survive a reset —
-   * unlike the slice. Only what a caller actually supplied belongs here; anything the SDK injects on its
-   * own behalf goes in {@link ConfigControllerOptions.builtInDefaults}.
+   * Arguments the integrator passed to the constructor. They outrank the slice and survive a reset.
+   * SDK-injected values belong in `builtInDefaults`.
    */
   constructorOptions?: Partial<TConfig>;
   /**
-   * The declarative slice known at construction, used only to seed the store.
-   *
-   * Separate from calling {@link ConfigController.initialize} afterwards, because that would run
-   * `getBehaviourOverrides` — an override on the owning class — while the owner's own constructor is
-   * still in flight, memoizing closures over half-initialized fields.
+   * The declarative slice known at construction, used only to seed the store. Calling `initialize`
+   * instead would run `getBehaviourOverrides` while the owner's constructor is still in flight.
    */
   initialSlice?: Partial<TConfig>;
-  /**
-   * How the declarative slice combines with the layers beneath it. `'shallow'` (the default) suits a flat
-   * config; `'deep'` is for one with nested groups, where naming one member must not drop its siblings.
-   * Declared rather than implied, because reading `updateConfig(config: Partial<T>)` never told you which
-   * you were getting.
-   */
+  /** How the slice combines with lower layers. `'deep'` keeps siblings of a named nested member. */
   mergeSlice?: 'shallow' | 'deep';
   /**
-   * Fields that outrank every layer — behaviour no option can express, such as a comparator or a request
-   * function closed over the entity. Folded into the single derivation, so one re-derivation is one
-   * publish carrying a complete config.
-   *
-   * Must return **stable references**: rebuilding the closures per call makes every derived config differ
-   * from the last, which defeats the no-op guard and republishes on every unrelated re-derivation.
+   * Fields that outrank every layer: behaviour no option can express (a comparator, a request function
+   * closed over the entity). Must return stable references, or every re-derivation republishes.
    */
   getBehaviourOverrides?: () => Partial<TConfig>;
   /**
-   * Runs after a change lands, with the value it replaced.
-   *
-   * This is where read-once fields are re-applied. It exists because "store the value" and "make the
-   * value take effect" were separate steps that each entity had to remember to pair: a paginator's
-   * `updateConfig({ debounceMs })` stored 900 and left the debounce running at 300, so resolved
-   * configuration reported a value the entity was not using. Routing every write through one place means
-   * the pairing cannot be forgotten.
-   *
-   * Not called for the initial value — there is no previous state to compare, and construction is where
-   * the entity sets these up itself.
+   * Runs after a change lands, with the value it replaced. Where read-once fields are re-applied. Not
+   * called for the initial value.
    */
   onChanged?: (next: Readonly<TConfig>, previous: Readonly<TConfig>) => void;
   /**
-   * Whether a {@link ConfigController.patch} survives the next derivation.
+   * Keeps each {@link ConfigController.patch} as an input replayed on every derivation. Off, a patch is
+   * written into the current value and the next derivation replaces it.
    *
-   * Off by default: a patch is written into the resolved value, and the next derivation — which rebuilds
-   * from defaults and registrations — replaces it. On, each patch is kept as an input and replayed every
-   * time, so the request outlives anything else re-resolving.
-   *
-   * `MessageComposer` is the one entity that needs this on, because it is the one a server can narrow: a
-   * stored `false` cannot say whether the client or the server turned a feature off, so re-applying
-   * restrictions either makes the server's answer permanent or wipes the client's (**DV-18**). Retaining
-   * the request makes the resolution idempotent instead. **FU-35** is the question of which other
-   * entities should switch it on.
-   *
-   * Off is still safe alongside {@link ConfigControllerOptions.applyAuthority} — {@link
-   * ConfigController.patch} applies authority on that path too — but the request is written into the
-   * result rather than kept, so a field the server currently narrows is refused outright instead of
-   * taking effect if the server later relents.
+   * `MessageComposer` turns it on: a stored `false` cannot say whether the client or the server turned a
+   * feature off. Off with `applyAuthority`, a request the server narrows is lost, not restored if the
+   * server later relents.
    */
   retainPatches?: boolean;
-  /**
-   * The final transform, applied to the request to produce what is published — the composer's server
-   * restrictions and upper bounds.
-   *
-   * Kept as one opaque hook so the controller never learns the authority rules themselves; those live in
-   * `serverAuthority.ts`. Runs on *every* derivation and on {@link ConfigController.patch}, which is the
-   * point: a restriction applied only at construction stops holding the first time anything else updates
-   * the configuration.
-   */
+  /** Final transform from the requested config to the published one, on every derivation and `patch`. */
   applyAuthority?: (requested: TConfig) => TConfig;
 };
 
-/**
- * Lays one layer over another, ignoring keys whose value is `undefined`.
- *
- * Not a plain spread, because `Partial<T>` admits an explicit `undefined` and a spread would write it —
- * turning "I did not set this" into "I set this to nothing" and wiping the default underneath. The
- * declarative merge helpers draw the same line.
- */
+/** Lays `source` over `target`, skipping `undefined` values (a spread would wipe the default). */
 const layer = <T extends object>(target: T, source?: Partial<T>): T => {
   if (!source) return target;
   for (const [key, value] of Object.entries(source)) {
@@ -114,35 +55,12 @@ const layer = <T extends object>(target: T, source?: Partial<T>): T => {
 };
 
 /**
- * The configuration machinery every configurable entity needs, as an object they own rather than a base
- * class they extend — `MessageComposer`, `Thread`, `ReminderManager`, `ThreadManager` and
- * `LiveLocationManager` already extend `WithSubscriptions`, and `Channel` extends `ChannelApi`, so single
- * inheritance is spent.
+ * Configuration machinery for a configurable entity, held as a field rather than inherited. It freezes
+ * the defaults, derives in a fixed layer order (see `docs/instance-configuration.md` §3), skips a write
+ * that changes nothing, and re-applies read-once fields through `onChanged`.
  *
- * It owns the four things that were previously re-implemented per entity and got wrong
- * independently: freezing the defaults, deriving in a fixed layer order, skipping a write that changes
- * nothing, and re-applying read-once fields after a change.
- *
- * Not exported from the package. Every configurable class is one this package constructs, and the key
- * space is closed, so there is no caller outside it — see `docs/instance-configuration.md` §6.
- *
- * An entity keeps the shape every configurable class exposes by forwarding:
- *
- * ```ts
- * class MyEntity {
- *   private readonly configController = new ConfigController<MyEntityConfig>({
- *     defaults: DEFAULT_MY_ENTITY_CONFIG,
- *     onChanged: (next, previous) => {
- *       if (next.pollIntervalMs !== previous.pollIntervalMs) this.restartPolling();
- *     },
- *   });
- *
- *   get configState() { return this.configController.state; }
- *   get config() { return this.configController.value; }
- *   updateConfig(patch: Partial<MyEntityConfig>) { this.configController.patch(patch); }
- *   initializeConfig(slice?: Partial<MyEntityConfig>) { this.configController.initialize(slice); }
- * }
- * ```
+ * Entities forward it as `configState` (`state`), `config` (`value`), `updateConfig` (`patch`) and
+ * `initializeConfig` (`initialize`).
  *
  * @internal
  */
@@ -154,28 +72,24 @@ export class ConfigController<
   private readonly options: ConfigControllerOptions<TConfig>;
   /** Retained `patch` calls, under `retainPatches`. Cleared by {@link initialize}. */
   private patchLayer: Partial<TConfig> = {};
-  /** The slice last derived from, so {@link rederive} can re-run without being handed it again. */
+  /** The slice last derived from, so {@link rederive} can re-run without it. */
   private slice?: Partial<TConfig>;
 
   constructor(options: ConfigControllerOptions<TConfig>) {
     deepFreezeConfig(options.defaults);
     this.options = {
       ...options,
-      // Copied at the boundary, like a patch: these are read on every derivation for the entity's whole
-      // life, so holding the caller's object would let a later mutation of it change resolved
-      // configuration with no notification.
+      // Copied so a later mutation by the caller cannot change resolved config unnoticed.
       constructorOptions:
         options.constructorOptions && copyConfigPatch(options.constructorOptions),
     };
     this.slice = options.initialSlice;
-    // Seeded without `getBehaviourOverrides`: the hook is an override on the owning class, and running it
-    // here would call into a subclass before its own fields are initialized. Entities install their
-    // behaviour from their constructor, once they are whole. The authority hook *does* run — a value
-    // published before the server has had its say would be wrong from the first read.
+    // Seeded without `getBehaviourOverrides`: it is a hook on the owning class, which is not yet
+    // initialized. Authority still applies.
     this.state = new StateStore<TConfig>(this.resolve({ withBehaviourOverrides: false }));
   }
 
-  /** What was asked for, before {@link ConfigControllerOptions.applyAuthority} has its say. */
+  /** The configuration before {@link ConfigControllerOptions.applyAuthority} runs. */
   get requested(): Readonly<TConfig> {
     return this.resolve({ withBehaviourOverrides: true, skipAuthority: true });
   }
@@ -185,9 +99,8 @@ export class ConfigController<
   }
 
   /**
-   * Rebuilds from the real inputs — defaults, constructor options, the slice, then behaviour overrides —
-   * and publishes once, or not at all when nothing moved. Applied in that order, so the slice may narrow
-   * a constructor option and behaviour overrides outrank both.
+   * Drops retained patches and rebuilds from defaults, built-in defaults, the slice, constructor options
+   * and behaviour overrides (later wins), publishing once, or not at all when nothing changed.
    */
   initialize(slice?: TSlice): void {
     this.patchLayer = {};
@@ -195,42 +108,22 @@ export class ConfigController<
     this.write(this.resolve({ withBehaviourOverrides: true }));
   }
 
-  /**
-   * Re-runs the derivation **keeping** retained patches — for when an input the entity does not own has
-   * moved, such as the server's answer arriving. Without `retainPatches` there is nothing to keep, so
-   * this is the same as {@link initialize}.
-   */
+  /** Like {@link initialize} but keeps retained patches, for when an outside input changes. */
   rederive(slice?: TSlice): void {
     this.slice = slice as Partial<TConfig> | undefined;
     this.write(this.resolve({ withBehaviourOverrides: true }));
   }
 
-  /**
-   * Applies a partial configuration, skipping the write when every field already matches.
-   *
-   * Copied on the way in, because a deep merge can reuse the caller's nested object rather than copying it
-   * — the entity would then be holding an object the caller can still change, and changing it would move
-   * resolved configuration with nobody notified.
-   */
+  /** Applies a partial configuration, skipping the write when every field already matches. */
   patch(patch: Partial<TConfig>): void {
+    // Copied so a later mutation by the caller cannot change resolved config unnoticed.
     const owned = copyConfigPatch(patch);
     if (!this.options.retainPatches) {
-      // Written onto the current value rather than through `resolve`, because `resolve` rebuilds from the
-      // layers in `orderedLayers` and this patch is not one of them — `patchLayer` is only filled in on
-      // the retaining path below. Resolving here would produce a config without the patch, so the
-      // `updateConfig` call would do nothing. That is the whole difference between the two paths: whether
-      // a patch becomes an input that later derivations replay.
-      //
-      // A plain spread, deliberately: an explicit `undefined` has to be able to clear a field, which is
-      // how a paginator's state throttle is switched off. `resolve` skips `undefined` keys and could not
-      // express it.
+      // Spread onto the current value, not resolved: this patch is not a layer. A plain spread lets an
+      // explicit `undefined` clear a field, which `resolve` would skip.
       const patched = { ...this.value, ...owned } as TConfig;
-      // `resolve` applies authority itself, and this is the one write path that does not call it — so
-      // without this line the server's limits would hold everywhere except `updateConfig`.
-      //
-      // The patch is written into the value rather than stored, so if the server lowers a field here the
-      // caller's value is lost, and it is not restored if the server later allows it. Turning on
-      // `retainPatches` is what changes that.
+      // `resolve` applies authority itself, this path does not. The patch is not kept, so a value the
+      // server lowers is not restored if the server later relents.
       const { applyAuthority } = this.options;
       this.write(applyAuthority ? applyAuthority(patched) : patched);
       return;
@@ -242,17 +135,7 @@ export class ConfigController<
     this.write(this.resolve({ withBehaviourOverrides: true }));
   }
 
-  /**
-   * The layers beneath the patch layer, in `docs/instance-configuration.md` §3 order: package defaults,
-   * then the SDK's own defaults for this instance, then the declarative tree (stage 2), then the
-   * integrator's construction arguments (stage 3).
-   *
-   * One order for every entity. `BasePaginator` used to layer the last two the other way round while
-   * `MessageComposer` followed the doc, so the same registration answered differently depending on which
-   * object read it. Aligning them required separating {@link ConfigControllerOptions.builtInDefaults}
-   * from {@link ConfigControllerOptions.constructorOptions} first — the order was never the problem, the
-   * contents of that layer were.
-   */
+  /** Layers over the package defaults, later wins (`docs/instance-configuration.md` §3). */
   private orderedLayers(): (Partial<TConfig> | undefined)[] {
     const { builtInDefaults, constructorOptions } = this.options;
     return [builtInDefaults, this.slice, constructorOptions, this.patchLayer];
@@ -268,10 +151,8 @@ export class ConfigController<
     const { applyAuthority, defaults, getBehaviourOverrides, mergeSlice } = this.options;
     const layers = this.orderedLayers();
 
-    // Seeded with a shallow spread on both paths. A subtree no layer touches stays identical to the
-    // frozen module default, which is safe *because* it is frozen — and cheap, which matters on the
-    // composer's publish path. `mergeWith` copies any subtree a layer does touch, and never writes into
-    // its target.
+    // Seeded with a shallow spread: untouched subtrees stay the frozen default. `mergeWith` copies the
+    // subtrees a layer touches and never writes into its target.
     let requested =
       mergeSlice === 'deep'
         ? (layers.reduce<object>(

@@ -37,9 +37,8 @@ export function itemMatchesFilter<T>(
   const matches = (filterNode: QueryFilters<any>): boolean => {
     if (!filterNode || typeof filterNode !== 'object') return true;
 
-    // Logical operators are ANDed with each other AND with any sibling field conditions on the
-    // same node (MongoDB / Stream server semantics: `{ $or: [...], field: value }` means
-    // `(field == value) AND ($or ...)`). They must not short-circuit past the field loop below.
+    // Logical operators are ANDed with each other and with sibling field conditions on the same
+    // node (`{ $or: [...], field: value }` means `field == value AND $or`): do not skip the loop.
     if (filterNode.$and && !filterNode.$and.every((n) => matches(n))) return false;
     if (filterNode.$or && !filterNode.$or.some((n) => matches(n))) return false;
     if (filterNode.$nor && filterNode.$nor.some((n) => matches(n))) return false;
@@ -109,21 +108,7 @@ export function itemMatchesFilter<T>(
   return matches(filter);
 }
 
-/**
- * Duplicates ignored for array–array equality: ['a','a','b'] equals ['b','a'].
- *
- * Empty arrays: [] equals []; a scalar never equals [].
- *
- * This reuses your normalizeComparedValues so '1' equals 1, ISO dates compare correctly, etc.
- *
- * $gt/$gte/$lt/$lte remain scalar-only (return false if either side is iterable), as you wanted.
- *
- * $in/$nin left may be scalar or iterable; the right is a list.
- *
- * @param a - Left-hand operand.
- * @param b - Right-hand operand.
- * @param ok - Predicate applied to the result of comparing `a` and `b`.
- */
+/** `$gt/$gte/$lt/$lte` are scalar-only: false if either side is iterable or incomparable. */
 function orderedCompareOp(a: any, b: any, ok: (c: number) => boolean): boolean {
   if (isIterableButNotString(a) || isIterableButNotString(b)) return false;
   const n = normalizeComparedValues(a, b);
@@ -131,25 +116,27 @@ function orderedCompareOp(a: any, b: any, ok: (c: number) => boolean): boolean {
   return ok(compare(n.a, n.b));
 }
 
+/**
+ * Scalars are normalized before comparing (`'1'` equals `1`, ISO dates compare by value). Two arrays
+ * are equal as sets (order and duplicates ignored, `[]` equals `[]`). A scalar against an array
+ * matches by membership, so a scalar never equals `[]`.
+ */
 function equalsOp(left: any, right: any): boolean {
   const leftIsIter = isIterableButNotString(left);
   const rightIsIter = isIterableButNotString(right);
 
   if (!leftIsIter && !rightIsIter) {
-    // scalar vs scalar
     const n = normalizeComparedValues(left, right);
     if (n.kind === 'incomparable') return Object.is(left, right);
     return n.a === n.b;
   }
 
   if (leftIsIter && rightIsIter) {
-    // array vs array → set equality (order-insensitive)
     const a = toIterableArray(left);
     const b = toIterableArray(right);
     return arraysEqualAsSets(a, b);
   }
 
-  // one side scalar, the other iterable → membership
   if (leftIsIter) {
     const a = toIterableArray(left);
     return a.some((elem) => equalsOp(elem, right));
@@ -171,10 +158,9 @@ function containsOp(value: any, needle: any): boolean {
 }
 
 /**
- * A value matches an autocomplete query if:
- * - value is string: every query token is a prefix of some token in the value
- * - value is string[]: any element matches as above
- * - query can be string (tokenized) or string[]
+ * A string value matches when every query token is contained in some token of the value (substring,
+ * not only prefix); a `string[]` value matches when any element does. The query is a string
+ * (tokenized) or a `string[]`.
  */
 function autoCompleteOp(value: any, query: any): boolean {
   if (value == null || query == null) return false;

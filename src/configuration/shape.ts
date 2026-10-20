@@ -30,10 +30,7 @@ import type {
   TextComposerConfig,
 } from '../messageComposer/configuration/types';
 
-/**
- * What a configuration value holds. `'object'` covers anything whose interior is not described further
- * — a map of handler functions, a cursor — and tells a caller not to expect editable leaves inside.
- */
+/** What a value holds. `'object'` is anything whose interior is not described further (a cursor). */
 export type ConfigValueType =
   | 'boolean'
   | 'enum'
@@ -45,14 +42,14 @@ export type ConfigValueType =
   | 'string[]';
 
 export type ConfigValueNode = {
-  /** One line on what the value does. This is the payload a settings UI or a JS caller reads. */
+  /** One line on what the value does, for settings UIs and JS callers. */
   description: string;
   /** The permitted values, for `type: 'enum'` only. */
   enumValues?: readonly string[];
   kind: 'value';
   /**
-   * `'function'` marks a path the declarative tree cannot carry: JSON has no functions, so these are
-   * reachable only through a setup function or a direct `updateConfig` call.
+   * `'function'` marks a path the declarative tree cannot carry (JSON has no functions): reachable only
+   * through a setup function or `updateConfig`.
    */
   type: ConfigValueType;
 };
@@ -68,17 +65,9 @@ export type ConfigNode = ConfigGroupNode | ConfigValueNode;
 export type ConfigShape = { readonly [field: string]: ConfigNode };
 
 /**
- * The declarative paginator knobs, shared by every paginator path in the tree.
- *
- * Annotated as `Record<keyof …>` rather than left to inference, which is the whole point: adding a field
- * to `DeclarativePaginatorConfig` fails the build here until it is described. Same guard as
- * `INSTANCE_CONFIG_TREE_KEY_PRESENCE` uses for the top-level keys.
- */
-/**
- * `maxLoadedItems` is excluded here and documented only under {@link MESSAGE_PAGINATOR_FIELDS}: the
- * type allows it on any paginator, but a bounded window only makes sense for a message list — that is
- * the only paginator whose declarative config reaches it, and the only one whose pruned items can be
- * fetched back by cursor.
+ * The declarative paginator fields shared by every paginator path in the tree. `maxLoadedItems` is
+ * left out: only the message paginator's declarative config reaches it, see
+ * {@link MESSAGE_PAGINATOR_FIELDS}.
  */
 const PAGINATOR_FIELDS: Record<
   Exclude<keyof DeclarativePaginatorConfig, 'maxLoadedItems'>,
@@ -195,10 +184,6 @@ const messageOperationsGroup = (description: string): ConfigGroupNode => ({
   fields: MESSAGE_OPERATIONS_FIELDS,
   kind: 'group',
 });
-
-// ---------------------------------------------------------------------------
-// messageComposer
-// ---------------------------------------------------------------------------
 
 const ATTACHMENTS_FIELDS: Record<keyof AttachmentManagerConfig, ConfigNode> = {
   enabled: {
@@ -383,10 +368,6 @@ const MESSAGE_COMPOSER_FIELDS: Record<keyof MessageComposerConfig, ConfigNode> =
   },
   text: { description: 'The text input itself.', fields: TEXT_FIELDS, kind: 'group' },
 };
-
-// ---------------------------------------------------------------------------
-// client
-// ---------------------------------------------------------------------------
 
 const MESSAGE_DELIVERY_FIELDS: Record<keyof MessageDeliveryReporterConfig, ConfigNode> = {
   markAsDeliveredBufferTimeoutMs: {
@@ -622,10 +603,6 @@ const CLIENT_FIELDS: Record<keyof ClientDeclarativeConfig, ConfigNode> = {
   },
 };
 
-// ---------------------------------------------------------------------------
-// channel / thread
-// ---------------------------------------------------------------------------
-
 const CHANNEL_FIELDS: Record<keyof ChannelDeclarativeConfig, ConfigNode> = {
   messageOperations: messageOperationsGroup(
     'Sending and retrying messages in the channel. Overrides the shared `messageOperations` key for channels only.',
@@ -716,29 +693,15 @@ const THREAD_FIELDS: Record<keyof ThreadDeclarativeConfig, ConfigNode> = {
 };
 
 /**
- * A runtime description of the whole declarative configuration tree: every path, what it holds, and what
- * it does.
+ * A runtime description of the declarative configuration tree (every path, what it holds and does) for
+ * settings UIs, JavaScript callers and doc generators. Every level is annotated
+ * `Record<keyof SomeConfigType, ConfigNode>`, so a field added to a configuration type fails the build
+ * until it is described here.
  *
- * The tree's types already describe all of this, and a TypeScript caller gets it as autocomplete on
- * `client.config.set()`. This is the same knowledge for everyone who cannot read the types at the moment
- * they need it — a settings UI listing what can be changed, a JavaScript caller, a documentation
- * generator. Without it, the only way to learn that `thread` accepts `messagePaginator` is to open the
- * SDK source.
- *
- * **Completeness is enforced by the compiler, not by discipline.** Every level is annotated
- * `Record<keyof SomeConfigType, ConfigNode>`, so a field added to any configuration type fails the build
- * until it is described here. That is what separates this from a hand-maintained list, which drifts
- * behind the tree silently and is exactly the failure this replaces.
- *
- * **What is deliberately absent.** No default values: an effective default depends on the construction
- * site — `pageSize` is 10 for a bare paginator and larger for the channel message list — so a table of
- * them here would be a second source of truth that disagrees with the instances. Read current values from
- * the instance (`channel.messagePaginator.config`) and registered values from
- * {@link InstanceConfigurationRegistry.getTree}. Construction-only paths are absent for the same reason:
- * `CONSTRUCTION_ONLY_CONFIG_PATHS` already lists them.
- *
- * **Built-in keys only.** The key space is open, so a key registered through module augmentation has no
- * entry here. Merge {@link InstanceConfigurationRegistry.getTree} in to see those.
+ * Carries no default values, since an effective default depends on the construction site. Read current
+ * values from the instance (`channel.messagePaginator.config`), registered values from
+ * {@link InstanceConfigurationRegistry.getTree}, and read-once paths from
+ * `CONSTRUCTION_ONLY_CONFIG_PATHS`.
  */
 export const INSTANCE_CONFIG_TREE_SHAPE: Record<
   keyof InstanceConfigTree,

@@ -13,18 +13,14 @@ export type SearchControllerState = {
 };
 
 export type SearchControllerConfig = {
-  // The controller will make sure there is always exactly one active source. Enabled by default.
+  /** Keeps exactly one source active. Defaults to `true`. */
   keepSingleActiveSource: boolean;
 };
 
 export type SearchControllerOptions = {
   /**
-   * Required for this controller to take part in `client.config`.
-   *
-   * It is the one configurable class this package never constructs — an app or a downstream SDK does
-   * (`<Chat>` in `stream-chat-react`) — so there is no other route by which it could find the
-   * configuration registry. Left out, the controller still works and `updateConfig` still applies;
-   * only the declarative key and its setup function go unheard.
+   * Needed to take part in `client.config`. Without it the controller still works, but the
+   * declarative `searchController` key and its setup function are not applied.
    */
   client?: StreamChat;
   config?: Partial<SearchControllerConfig>;
@@ -38,16 +34,10 @@ export const DEFAULT_SEARCH_CONTROLLER_CONFIG: SearchControllerConfig = deepFree
 export class SearchController {
   state: StateStore<SearchControllerState>;
 
-  /** The shared configuration machinery — see {@link ConfigController}. */
   private readonly configController: ConfigController<SearchControllerConfig>;
   private readonly client?: StreamChat;
-  /** Teardown for the configuration subscription, when this controller was given a client. */
   private unsubscribeConfiguration?: Unsubscribe;
 
-  /**
-   * Resolved configuration, as a store so consumers can react to it — the same shape every configurable
-   * class exposes (`configState` for the store, {@link config} for the current value).
-   */
   get configState(): StateStore<SearchControllerConfig> {
     return this.configController.state;
   }
@@ -82,8 +72,8 @@ export class SearchController {
 
   /**
    * Takes again what {@link SearchController.dispose} released: the configuration subscription and
-   * whatever each source holds outside itself. A no-op for what is already held, so a UI can call it
-   * on every mount, including a remount of the same instance after its cleanup disposed it.
+   * what each source holds outside itself. A no-op for what is already held, so a UI can call it on
+   * every mount.
    */
   registerSubscriptions() {
     this.subscribeConfiguration();
@@ -91,9 +81,8 @@ export class SearchController {
   }
 
   /**
-   * Releases the configuration subscription, running the setup function's teardown, and what each
-   * source holds outside itself, such as a channel search's hold on its results in the channel
-   * store. {@link SearchController.registerSubscriptions} takes them again.
+   * Releases the configuration subscription (running the setup function's teardown) and what each
+   * source holds outside itself. {@link SearchController.registerSubscriptions} takes them again.
    */
   dispose() {
     this.unsubscribeConfiguration?.();
@@ -101,20 +90,14 @@ export class SearchController {
     this.sources.forEach((source) => source.dispose?.());
   }
 
-  /**
-   * The current resolved configuration. `Readonly` because the value is the store's live object —
-   * assigning to a field of it would change state without notifying anyone. Use {@link updateConfig}.
-   */
   get config(): Readonly<SearchControllerConfig> {
     return this.configState.getLatestValue();
   }
 
-  /** Merges a partial configuration into the resolved config and notifies subscribers. */
   updateConfig(config: Partial<SearchControllerConfig>) {
     this.configController.patch(config);
   }
 
-  /** Rebuilds the resolved configuration from package defaults plus the declarative slice. */
   initializeConfig(config?: Partial<SearchControllerConfig>) {
     this.configController.initialize(config);
   }

@@ -19,19 +19,19 @@ export const DEFAULT_LINK_PREVIEW_MANAGER_CONFIG: LinkPreviewsManagerConfig = {
     find(text, 'url', { defaultProtocol: 'https' }).reduce<string[]>((acc, link) => {
       try {
         const url = new URL(link.href);
-        // Check for valid hostname with at least one dot and valid TLD
+        // Hostname needs at least one dot and a valid TLD.
         if (link.isLink && /^[a-zA-Z0-9-.]+\.[a-zA-Z]{2,}$/.test(url.hostname)) {
           acc.push(link.href);
         }
       } catch {
-        // Invalid URL, skip it
+        // Invalid URL: skipped.
       }
       return acc;
     }, []),
 };
 
 export const DEFAULT_ATTACHMENT_MANAGER_CONFIG: AttachmentManagerConfig = {
-  acceptedFiles: [], // an empty array means all files are accepted
+  acceptedFiles: [],
   customCdn: false,
   enabled: true,
   fileUploadFilter: () => true,
@@ -56,11 +56,8 @@ export const DEFAULT_LOCATION_COMPOSER_CONFIG: LocationComposerConfig = {
 };
 
 /**
- * Frozen, because `MessageComposer.requestedConfig` seeds its merge with a *shallow* spread of this
- * object: any subtree no configuration layer names stays identical by reference to the one here, and is
- * reachable through the public `composer.config`. Without the freeze,
- * `composer.config.drafts.enabled = true` changed the default for every composer on every client in the
- * process. See {@link deepFreezeConfig}.
+ * Deep-frozen: composers share these subtrees by reference through `composer.config`. See
+ * {@link deepFreezeConfig}.
  */
 export const DEFAULT_COMPOSER_CONFIG: MessageComposerConfig = deepFreezeConfig({
   attachments: DEFAULT_ATTACHMENT_MANAGER_CONFIG,

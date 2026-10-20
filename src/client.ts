@@ -118,8 +118,8 @@ export type ChannelConfigsState = {
 export type ClientUser = PartializeAllBut<OwnUserResponse, 'id'> & { anon?: boolean };
 
 /**
- * A thread query that asked for `watch: true` came back, so the server now watches the thread's
- * channel, the same rule `channel.watch()` and `queryChannels` apply.
+ * After a thread query with `watch: true` the server watches the thread's channel, as for
+ * `channel.watch()` and `queryChannels`.
  */
 const markThreadChannelWatched = ({ channel }: Thread) => {
   channel.watchStatus = ChannelWatchStatus.Watching;
@@ -128,67 +128,43 @@ const markThreadChannelWatched = ({ channel }: Thread) => {
 export class StreamChat extends ChatApi {
   private static _instance?: unknown | StreamChat; // type is undefined|StreamChat, unknown is due to TS limitations with statics
   messageDeliveryReporter: MessageDeliveryReporter;
-  /**
-   * @internal
-   */
+  /** @internal */
   uploadManager: UploadManager;
-  /**
-   * @private
-   */
+  /** @private */
   _user?: ClientUser;
   appSettingsPromise?: Promise<StreamResponse<Gen_GetApplicationResponse>>;
   threads: ThreadManager;
   polls: PollManager;
   /**
-   * Channel lists — one or more `ChannelPaginator`s kept in sync with WS events, with ownership
-   * arbitration between them. Instantiated with the client and living as long as it does; register
-   * the lists with `client.channelManager.insertPaginator()` and drop them again with
-   * `removePaginator()`. It only starts handling events once something calls its (ref-counted)
-   * `registerSubscriptions()`.
-   *
-   * It is deliberately not configurable through the client options — everything is set on the
-   * manager itself (`setOwnershipResolver`, `addEventHandler` / `setEventHandlers` /
-   * `removeEventHandlers`), which is also the only way to reconfigure it later.
+   * Channel lists (`ChannelPaginator`s kept in sync with WS events, with ownership arbitration
+   * between them). Register lists with `insertPaginator()` / `removePaginator()`. It handles events
+   * only once something calls its ref-counted `registerSubscriptions()`. It is configured on the
+   * manager itself (`setOwnershipResolver`, `addEventHandler`, ...), not through the client
+   * options.
    */
   channelManager: ChannelManager;
   /**
-   * Owns connection recovery: on reconnect it re-runs each loaded channel list's own first-page query
-   * and reloads each active channel, then dispatches `connection.recovered`. Instantiated with the
-   * client and subscribed for its lifetime.
-   *
-   * Turn it off through the declarative configuration if the application recovers state itself:
-   * `client.config.set({ client: { connectionRecovery: { enabled: false } } })`.
+   * On reconnect, re-runs each loaded channel list's first-page query and reloads each active
+   * channel and thread, then dispatches `connection.recovered`. Disable it when the app recovers
+   * state itself: `client.config.set({ client: { connectionRecovery: { enabled: false } } })`.
    */
   connectionRecovery: ConnectionRecoveryManager;
   /**
-   * The device's own network status — whether this machine has a network at all, which is a different
-   * fact from whether our WebSocket is up ({@link wsConnection}). The two disagree routinely: a
-   * socket dies on a working network (server close, expired token, health-check timeout), and a
-   * device goes offline while the socket has not noticed yet.
-   *
-   * The SDK cannot detect this itself — every platform reports it differently — so it has to be told:
-   * `client.config.set({ client: { networkConnection: { statusReporter } } })`, or
-   * `client.networkConnection.setStatusReporter(…)` afterwards.
-   *
-   * A browser answers the question properly and its reporter is installed automatically. Everywhere
-   * else a stand-in mirrors the WebSocket until a real one arrives, which is coarse but better than
-   * nothing at all on an integration that forgot the line of setup. Either way `isOnline` is
-   * `undefined` — *unknown*, not offline — until something has reported.
+   * The device's network status, separate from the WebSocket's ({@link wsConnection}). Platforms
+   * report it through `client.config.set({ client: { networkConnection: { statusReporter } } })` or
+   * `client.networkConnection.setStatusReporter(...)`. Browsers get a reporter automatically;
+   * elsewhere a stand-in mirrors the WebSocket. `isOnline` is `undefined` (unknown, not offline)
+   * until something reports.
    */
   networkConnection: NetworkConnectionObserver;
   /**
-   * The connection id — the WebSocket's, or the long-poll's after an `enableWSFallback`
-   * switch — and the one place the rest of the client reads it from.
-   *
-   * The server keys channel watches and presence subscriptions by it, so a request carrying either
-   * waits here for the handshake rather than racing it. See `requiresConnectionId` in
-   * `api-client.ts`.
+   * The connection id (the WebSocket's, or the long-poll's after an `enableWSFallback` switch). A
+   * request with `watch` or `presence` waits here for the handshake (see `requiresConnectionId`).
    */
   connectionIdManager: ConnectionIdManager;
   /**
-   * Client-global, normalized store holding one canonical copy of each message. The channel main
-   * list and thread reply paginators read/write message content through it, so a message held in
-   * more than one of them stays consistent without copy-to-copy fan-out.
+   * Client-global store with one canonical copy of each message. The channel and thread paginators
+   * read and write messages through it, so a message held in several of them stays consistent.
    */
   messageStore: EntityStore<LocalMessage>;
   offlineDb?: AbstractOfflineDB;
@@ -201,20 +177,16 @@ export class StreamChat extends ChatApi {
   key: string;
   listeners: Map<EventType, Set<EventHandler>>;
   /**
-   * If true, we will not clean up threads when channel state is in initializing state.
-   * The main use case for SDKs who do independent state recovery for channels.
+   * When true, threads are not cleaned up while the channel state is initializing (for SDKs that
+   * recover channel state themselves).
    */
   preventThreadCleanup = false;
   moderation: Moderation;
   mutedChannels: ChannelMute[];
   readonly mutedUsersStore: StateStore<{ mutedUsers: UserMuteResponse[] }>;
   /**
-   * Reactive store behind {@link channelServerConfigs}. The only reactive way to observe server channel
-   * configuration today, which is why `stream-chat-react` reads it — a public, per-channel feature
-   * resolver is the intended replacement.
-   *
-   * Named for what it holds plus a `Store` suffix for what it is, matching {@link mutedUsersStore}. These
-   * are the backend's configs, not the ones you register through {@link config}.
+   * Reactive store behind {@link channelServerConfigs}: the backend's channel configs, not the ones
+   * registered through {@link config}.
    *
    * @internal
    */
@@ -234,8 +206,8 @@ export class StreamChat extends ChatApi {
   private _rejectWsPromise?: (reason?: unknown) => void;
 
   /**
-   * Whether the client runs in a browser. `client.browser` in the configuration when set, otherwise
-   * whether a global `window` exists.
+   * Whether the client runs in a browser: the `client.browser` option, else whether `window`
+   * exists.
    */
   get browser(): boolean {
     return this.config.getConfig('client')?.browser ?? typeof window !== 'undefined';
@@ -249,15 +221,11 @@ export class StreamChat extends ChatApi {
   get userId() {
     return this.user?.id;
   }
-  /**
-   * @deprecated Use `userId` instead.
-   */
+  /** @deprecated Use `userId` instead. */
   get userID() {
     return this.user?.id;
   }
-  /**
-   * @deprecated Use `clientId` instead.
-   */
+  /** @deprecated Use `clientId` instead. */
   get clientID() {
     return this.clientId;
   }
@@ -273,49 +241,38 @@ export class StreamChat extends ChatApi {
   private cachedUserAgent?: string;
   readonly messageComposerCache: FixedSizeQueueCache<string, MessageComposer>;
   /**
-   * Configuration you register for instances the SDK creates on your behalf — channels, threads,
-   * composers, and the client's own managers. See `InstanceConfigurationRegistry`.
-   *
-   * Not to be confused with {@link channelServerConfigs}, which holds the **server-provided channel
-   * configs** keyed by cid. This one is yours; that one is the backend's.
+   * Configuration registered for the instances the SDK creates (channels, threads, composers, the
+   * client's own managers). Not the server-provided channel configs ({@link channelServerConfigs}).
    */
   readonly config = new InstanceConfigurationRegistry();
   /** Teardown for the `'client'` setup function, released by {@link disconnectUser}. */
   private unsubscribeClientConfiguration?: Unsubscribe;
 
   /**
-   * Initializes a client.
+   * **Prefer `StreamChat.getInstance()`: a second client opens a second WebSocket connection.**
    *
-   * **Only use constructor for advanced usages. It is strongly advised to use `StreamChat.getInstance()` instead of `new StreamChat()` to reduce integration issues due to multiple WebSocket connections.**
+   * `config` is the tree `client.config.set()` takes, applied before anything is built so it
+   * reaches the managers and the options read once at construction (`client.baseURL`,
+   * `client.axiosRequestConfig`, `client.notificationManager`).
    *
    * @example <caption>initialize the client in user mode</caption>
    * new StreamChat('api_key')
    * @example <caption>initialize the client with configuration</caption>
    * new StreamChat('api_key', { client: { axiosRequestConfig: { timeout: 5000 } } })
-   *
-   * @param key - The API key.
-   * @param config - Declarative configuration, the same tree `client.config.set()` takes (optional).
-   *   Seeded before anything is built, so it reaches the client's own managers and the fields that are
-   *   read once during construction — `client.baseURL`, `client.axiosRequestConfig` and
-   *   `client.notificationManager`.
    */
   constructor(key: string, config?: DeepPartial<InstanceConfigTree>) {
-    // generated client requires ApiClient right away
+    // The generated base class needs the ApiClient before `this` exists, so it is bound afterwards.
     super(new ApiClient());
-    // but ApiClient relies on properties defined here so we set it after (can't pass `this` in super call)
     this.apiClient.client = this;
 
-    // set the key
     this.key = key;
 
-    // Seeded before anything is built: the fields read once below come from the `client` slice, and the
-    // registry is a field initializer, so it exists from here on. Wiring the managers to it stays the last
-    // statement of the constructor.
+    // Seeded first: the options read below come from the `client` slice.
     if (config) this.config.set(config);
     const clientConfig = this.config.getConfig('client');
     this.listeners = new Map();
     this.state = new ClientState({ client: this });
-    // a list of channels to hide ws events from
+    // channels to hide ws events from
     this.mutedChannels = [];
     this.mutedUsersStore = new StateStore<{ mutedUsers: UserMuteResponse[] }>({
       mutedUsers: [],
@@ -348,24 +305,24 @@ export class StreamChat extends ChatApi {
       this.setBaseURL(`http://${streamLocalTestHost}`);
     }
 
-    // Both before the WebSocket, which subscribes to the network store and drives the id's lifecycle.
+    // Both before the WebSocket, which subscribes to the network store and drives the id's
+    // lifecycle.
     this.connectionIdManager = new ConnectionIdManager();
     this.networkConnection = new NetworkConnectionObserver({ client: this });
     this.networkConnection.registerSubscriptions();
 
-    // WS connection is initialized when setUser is called
+    // The socket itself opens in `connectUser`.
     this.wsConnection = new WSConnection({ client: this });
     this.wsConnection.registerSubscriptions();
     this.wsPromise = null;
     this.setUserPromise = null;
-    // keeps a reference to all the channels that are in use
 
     this.tokenManager = new TokenManager();
 
     this.messageStore = new EntityStore<LocalMessage>({
       getEntityId: (message) => message.id,
     });
-    // before the managers that hold channels in its store
+    // Before the managers that hold channels in their store.
     this.channelManager = new ChannelManager({ client: this });
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
@@ -381,25 +338,15 @@ export class StreamChat extends ChatApi {
       name: 'message-composer-cache',
     });
 
-    // Last statement: everything a setup function might reach now exists. Subscribing applies the
-    // current configuration on the spot, which is the managers' one derivation — deriving here as
-    // well would run every `initializeConfig` twice per construction. `StateStore.subscribe` fires
-    // immediately, so a setup function registered later still applies at once.
+    // Last: everything a setup function might reach exists now. Subscribing applies the current
+    // configuration at once, so deriving it here too would run every `initializeConfig` twice.
     this.wireClientConfiguration();
   }
 
   /**
-   * Subscribes the client's managers to the `'client'` configuration key.
-   *
-   * Called by the constructor and again by {@link _setUser}, because {@link disconnectUser} releases this
-   * subscription to run the setup function's teardown. A client is reusable — `getInstance` hands the same
-   * object back, and disconnect/connect is the documented multi-user and mobile-background flow — and the
-   * managers this key configures (`reminders`, `threads`, `messageDeliveryReporter`, `notifications`)
-   * outlive the user. Without the re-arm the key went permanently dead on the second connect: `setConfig`,
-   * `setSetupFunction` and `reset` all stopped reaching any manager, silently.
-   *
-   * Idempotent through the `unsubscribeClientConfiguration` guard, so the constructor's wiring is not
-   * duplicated by the first `connectUser`.
+   * Subscribes the client's managers to the `'client'` configuration key. Called by the constructor
+   * and by {@link _setUser}, because {@link disconnectUser} releases the subscription (to run the
+   * setup function's teardown) while the managers outlive the user. Idempotent.
    */
   private wireClientConfiguration() {
     if (this.unsubscribeClientConfiguration) return;
@@ -413,14 +360,9 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Derives each manager's configuration from package defaults plus the `client` declarative subtree.
-   * Shared by the constructor and `config.reset()`, so the two cannot drift.
-   *
-   * Defaults are spread first, and every manager is written unconditionally, because this is a
-   * derivation* rather than a patch — the same rule `Channel.initializeConfig` follows. Guarding on
-   * `if (config?.reminders)` and merging made `reset()` a no-op for this key: the store is cleared
-   * before instances re-derive, so the guards all failed and the registered values stayed in force.
-   * It also meant a field *removed* from the tree lingered, which is exactly what a merge cannot express.
+   * Derives each manager's configuration from the package defaults plus the `client` subtree. Every
+   * manager is written unconditionally: it is a derivation, not a merge, so `config.reset()` and
+   * removed fields take effect.
    */
   private initializeManagerConfig() {
     const config = this.config.getConfig('client');
@@ -444,21 +386,10 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Cache of server-provided channel configuration, keyed by **cid** — a channel's own
-   * `config_overrides` can make it differ from every other channel of its type, so one entry per
-   * channel is the only key space that can represent the answer. See {@link _addChannelConfig}.
-   *
-   * Read it through {@link Channel.serverConfig} rather than here. Not to be confused with
-   * {@link config}, which is the configuration *you* register for SDK-created instances.
-   *
-   * This is `client.configs` from v9 under a name that says whose configuration it is — the key space is
-   * unchanged, so a v9 `client.configs[cid]` lookup translates directly. There is deliberately no
-   * `configs` alias: it read as a sibling of the integrator-facing {@link config} while holding the
-   * backend's answer, and the two being one letter apart is what made `channel.getConfig()` ambiguous
-   * enough to rename as well.
-   *
-   * Assigning through this setter notifies subscribers; mutating the returned record in place does not.
-   * Prefer {@link _addChannelConfig}.
+   * Cache of server-provided channel configuration, keyed by cid (a channel's `config_overrides`
+   * can make it differ from other channels of its type). Read it through
+   * {@link Channel.serverConfig}. Assigning through the setter notifies subscribers, mutating the
+   * record in place does not (prefer {@link _addChannelConfig}).
    *
    * @internal
    */
@@ -472,21 +403,14 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Returns a client instance.
+   * Returns the shared client instance, so there is only one client and WS connection.
    *
-   * This function always returns the same client instance to avoid issues raised by multiple client and WS connections.
-   *
-   * **After the first call, the client configuration will not change if the key or config parameters change.**
+   * **After the first call, the `key` and `config` parameters are ignored.**
    *
    * @example <caption>initialize the client in user mode</caption>
    * StreamChat.getInstance('api_key')
    * @example <caption>initialize the client with configuration</caption>
    * StreamChat.getInstance('api_key', { client: { axiosRequestConfig: { timeout: 5000 } } })
-   *
-   * @param key - The API key.
-   * @param config - Declarative configuration, as for the constructor (optional). Ignored once the
-   *   instance exists.
-   * @returns The shared client instance.
    */
   public static getInstance(
     key: string,
@@ -508,11 +432,8 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Creates a development token for `userId`, for apps with auth checks disabled. Never use one in
-   * production. See {@link DevToken}.
-   *
-   * @param userId - The id of the user the token is for.
-   * @returns The development token.
+   * Creates a development token for apps with auth checks disabled. Never use one in production.
+   * See {@link DevToken}.
    */
   devToken(userId: string) {
     return DevToken(userId);
@@ -531,9 +452,7 @@ export class StreamChat extends ChatApi {
 
   _hasConnectionID = () => Boolean(this._getConnectionID());
 
-  /**
-   * @deprecated Use `client.config.setSetupFunction('messageComposer', fn)`.
-   */
+  /** @deprecated Use `client.config.setSetupFunction('messageComposer', fn)`. */
   public setMessageComposerSetupFunction = (
     setupFunction: InstanceSetupState<'messageComposer'>['setupFunction'],
   ) => {
@@ -541,21 +460,15 @@ export class StreamChat extends ChatApi {
   };
 
   /**
-   * Sets the current user and opens a WebSocket connection.
-   *
-   * @param user - Data about this user, e.g. `{ name: 'john' }`.
-   * @param userTokenOrProvider - A token string or an async provider that returns one.
-   * @returns A promise that resolves when the connection is set up.
+   * Sets the current user and opens the WebSocket connection. Resolves when the connection is set
+   * up. Throws for a different user unless `disconnectUser()` ran first.
    */
   connectUser = async (user: ClientUser, userTokenOrProvider: TokenOrProvider) => {
     if (!user.id) {
       throw new Error('The "id" field on the user is missing');
     }
 
-    /**
-     * Calling connectUser multiple times is potentially the result of a bad integration; however,
-     * if the user ID remains the same we don't throw an error.
-     */
+    // Repeated calls for the same user warn and return the existing promise.
     if (this.userId === user.id && this.setUserPromise) {
       logger
         .withExtraTags('connectUser')
@@ -585,26 +498,23 @@ export class StreamChat extends ChatApi {
     const wsPromise = this.openConnection();
 
     const setUserPromise = Promise.all([setTokenPromise, wsPromise]).then(
-      (result) => result[1], // We only return connection promise;
+      (result) => result[1], // only the connection promise
     );
     this.setUserPromise = setUserPromise;
 
     try {
       return await setUserPromise;
     } catch (err) {
-      // disconnectUser() rejects an in-flight handshake, so this catch can run *after* something
-      // else has taken over. Cleaning up then would tear down whatever replaced us.
-      // `setUserPromise` catches a newer connectUser(); `userId` additionally catches
-      // connectAnonymousUser(), which never sets setUserPromise, and a bare disconnectUser()
-      // that already cleaned up.
+      // `disconnectUser()` rejects an in-flight handshake, so clean up only if nothing has taken
+      // over: a newer `connectUser()` changes `setUserPromise`; `connectAnonymousUser()` (which
+      // never sets it) or a bare `disconnectUser()` changes `userId`.
       if (this.setUserPromise === setUserPromise && this.userId === user.id) {
         if (!this.config.getConfig('client')?.persistUserOnConnectionFailure) {
-          // No user is kept, so there is nothing left to reconnect as. Tearing the socket down with
-          // it is the point: the application is expected to call `connectUser` again.
+          // No user is kept: the app is expected to call `connectUser` again.
           this.disconnectUser();
         } else if (!isWSFailure(err as APIError)) {
-          // A terminal failure, so a rejected token or a bad API key will not fix itself, thus we close the
-          // socket instead of leaving `StableWSConnection` retrying against it.
+          // A terminal failure (rejected token, bad API key) will not fix itself: close the socket
+          // so `StableWSConnection` stops retrying.
           this.closeConnection();
         }
       }
@@ -612,49 +522,30 @@ export class StreamChat extends ChatApi {
     }
   };
 
-  /**
-   * Sets the current user and opens a WebSocket connection.
-   *
-   * @deprecated Use {@link StreamChat.connectUser} instead. Its naming is more consistent with its functionality.
-   *
-   * @param user - Data about this user, e.g. `{ name: 'john' }`.
-   * @param userTokenOrProvider - A token string or an async provider that returns one.
-   * @returns A promise that resolves when the connection is set up.
-   */
+  /** @deprecated Use {@link StreamChat.connectUser} instead. */
   setUser = this.connectUser;
 
   _setToken = (user: TokenManagerMinimalUser, userTokenOrProvider: TokenOrProvider) =>
     this.tokenManager.setTokenOrProvider(userTokenOrProvider, user);
 
   _setUser(user: TokenManagerMinimalUser) {
-    /**
-     * This one is used by the frontend. This is a copy of the current user object stored on backend.
-     * It contains reserved properties and own user properties which are not present in `this._user`.
-     */
+    // Mirrors the backend's copy of the user, with reserved and own-user properties.
     this.user = user;
-    // this one is actually used for requests. This is a copy of current user provided to `connectUser` function.
+    // The copy given to `connectUser`, used for requests.
     this._user = { ...user };
-    // Re-arm the `'client'` key if a previous `disconnectUser` released it. Teardown at disconnect,
-    // setup at connect — see {@link wireClientConfiguration}.
+    // Re-arms the `'client'` key if a previous `disconnectUser` released it.
     this.wireClientConfiguration();
   }
 
   /**
-   * Disconnects the WebSocket connection, without removing the user set on client.
-   * client.closeConnection will not trigger default auto-retry mechanism for reconnection. You need
-   * to call `client.openConnection` to reconnect to the WebSocket.
+   * Closes the WebSocket without removing the user, and without auto-reconnect: call
+   * `openConnection` to reconnect. Mainly for mobile: push notifications arrive only while no
+   * WebSocket is active, so close on background and reopen on foreground. After an
+   * `enableWSFallback` switch it also closes the long-poll, telling the server to close its
+   * connection id.
    *
-   * This is mainly useful on mobile side. You can only receive push notifications
-   * if you don't have an active WebSocket connection.
-   * So when your app goes to background, you can call `client.closeConnection`.
-   * And when app comes back to foreground, call `client.openConnection`.
-   *
-   * After an `enableWSFallback` switch it closes the long-poll as well, telling the server to
-   * close its connection id.
-   *
-   * @param timeout - Max number of milliseconds to wait for the WebSocket close event before forcefully assuming
-   *   successful disconnection. See https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent (optional).
-   *   The long-poll's close request uses it as its timeout (2s when omitted).
+   * @param timeout - Milliseconds to wait for the WebSocket close event before assuming it closed
+   *   (also the long-poll close request's timeout; 2s when omitted).
    */
   closeConnection = async (timeout?: number) => {
     this.channelManager.resetAIStateOnChannels();
@@ -683,10 +574,10 @@ export class StreamChat extends ChatApi {
   };
 
   /**
-   * Creates a new WebSocket connection with the current user. After an `enableWSFallback` switch it
+   * Opens a WebSocket connection for the current user. After an `enableWSFallback` switch it
    * reconnects the long-poll instead: the client never goes back to the WebSocket.
    *
-   * @returns The WebSocket connect promise, or an empty resolved promise if a connection is already active.
+   * @returns The connect promise, or `undefined` when a healthy connection already exists.
    */
   openConnection = () => {
     if (!this.userId) {
@@ -716,9 +607,7 @@ export class StreamChat extends ChatApi {
     return wsPromise;
   };
 
-  /**
-   * Rejects the shared `wsPromise`, invalidates any in-flight connect attempt
-   */
+  /** Rejects the shared `wsPromise` and invalidates any in-flight connect attempt. */
   private _rejectPendingWsPromise = (reason: Error) => {
     if (!this._wsPromiseSettled) {
       // invalidate in-flight attempts so a late settle cannot revive this promise
@@ -733,8 +622,8 @@ export class StreamChat extends ChatApi {
   };
 
   /**
-   * Keep a single pending `wsPromise` across close/reopen so callers that already
-   * `await this.wsPromise` are not stranded when `openConnection` starts a new connect.
+   * Keeps a single pending `wsPromise` across close/reopen, so callers already awaiting it are not
+   * stranded when `openConnection` starts a new connect.
    */
   private _bindWsPromise = (connectPromise: ConnectAPIResponse): ConnectAPIResponse => {
     const connectId = ++this._wsConnectId;
@@ -765,14 +654,7 @@ export class StreamChat extends ChatApi {
     return pending;
   };
 
-  /**
-   * Revokes tokens for a connected user issued before the given time.
-   *
-   * @param before - Cutoff date; tokens issued before this are revoked (optional, defaults to the current time).
-   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
-   *   into the request (optional).
-   * @returns The updated users response.
-   */
+  /** Revokes the connected user's tokens issued before `before` (default: now). */
   async revokeTokens(before?: Date | null, requestOptions?: StreamRequestOptions) {
     if (!before) {
       before = new Date();
@@ -803,16 +685,12 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Disconnects the WebSocket and removes the user from client.
-   *
-   * @param timeout - Max number of milliseconds to wait for the WebSocket close event before forcefully assuming
-   *   successful disconnection. See https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent (optional).
-   * @returns The close-connection promise.
+   * Disconnects the WebSocket and removes the user and its state. `timeout` is passed to
+   * {@link closeConnection}.
    */
   disconnectUser = (timeout?: number) => {
     logger.withExtraTags('disconnectUser').info('Disconnecting the client.');
 
-    // remove the user specific fields
     delete this.user;
     delete this._user;
 
@@ -824,18 +702,16 @@ export class StreamChat extends ChatApi {
     this.wsPromise = null;
 
     const closePromise = this.closeConnection(timeout);
-    // After starting the close, which reads the connection id synchronously: after an
-    // `enableWSFallback` switch the long-poll's close request has to carry it.
+    // After starting the close, which reads the connection id synchronously (the long-poll's close
+    // request carries it).
     this.connectionIdManager.rejectConnectionId(teardownReason);
 
-    // Drop the channels loaded into the channel lists, which belong to the user being disconnected.
-    // The lists stay registered: which lists exist is the application's configuration, not user data.
-    // Reset first, so each list empties in one update and no longer holds its channels; clearing the
-    // store then has no list to remove them from one by one.
+    // Empties the channel lists (they hold the disconnected user's channels) but keeps them
+    // registered: which lists exist is app configuration. Reset first so each list empties in one
+    // update.
     this.channelManager.resetPaginatorStates();
-    // disconnects every channel (`disconnect()`) and ensures we no longer return inactive channels.
-    // It always empties the store, then rethrows the first error a holder threw; logged rather than
-    // propagated, so the rest of the logout below still runs.
+    // Disconnects every channel and empties the store, then rethrows the first error a holder
+    // threw. Logged, not propagated, so the rest of the logout still runs.
     try {
       this.channelManager.clearChannels();
     } catch (error) {
@@ -843,21 +719,20 @@ export class StreamChat extends ChatApi {
         .withExtraTags('disconnectUser')
         .error('Clearing the channels failed during disconnect.', { error });
     }
-    // reset client state
     this.state = new ClientState({ client: this });
-    // reset thread manager
     this.threads.resetState();
-    // channel mutes are per-user; leaving them would let `muted` filters resolve against the
-    // previous user until the next health check replaces them
+    // Channel mutes are per-user: stale ones would resolve `muted` filters against the previous
+    // user.
     this.mutedChannels = [];
     this.uploadManager.reset();
     this.messageComposerCache.clear();
-    // Runs the `'client'` setup function's teardown. Cleared so repeated calls cannot double-run it.
+    // Runs the `'client'` setup function's teardown. Cleared so repeated calls cannot double-run
+    // it.
     this.unsubscribeClientConfiguration?.();
     this.unsubscribeClientConfiguration = undefined;
 
-    // Deferred so the long-poll close can still authenticate. By the time it settles a
-    // connectUser() / connectAnonymousUser() may have set the next user and their token.
+    // Deferred so the long-poll close can still authenticate; a newer connect may have set the next
+    // user and token by then.
     closePromise
       .finally(() => {
         if (!this.userId) this.tokenManager.reset();
@@ -868,23 +743,13 @@ export class StreamChat extends ChatApi {
           .error('The close promise rejected during disconnect.', { error: err }),
       );
 
-    // close the WS connection
     return closePromise;
   };
 
-  /**
-   *
-   * @deprecated Please use client.disconnectUser instead.
-   *
-   * Disconnects the WebSocket and removes the user from client.
-   */
+  /** @deprecated Use `client.disconnectUser` instead. */
   disconnect = this.disconnectUser;
 
-  /**
-   * Sets an anonymous user and opens a WebSocket connection.
-   *
-   * @returns A promise that resolves when the connection is set up.
-   */
+  /** Sets an anonymous user and opens the WebSocket connection. */
   connectAnonymousUser = () => {
     if (this.node && !this.config.getConfig('client')?.allowServerSideConnect) {
       logger
@@ -905,12 +770,7 @@ export class StreamChat extends ChatApi {
     return this.openConnection();
   };
 
-  /**
-   * Creates a guest user and returns its access token.
-   *
-   * @param args - The guest creation request, plus optional per-request options.
-   * @returns The created guest user and its access token.
-   */
+  /** Creates a guest user and returns it with its access token. */
   override async createGuest(...args: Parameters<ChatApi['createGuest']>) {
     if (this.tokenManager.token || this.tokenManager.tokenProvider) {
       return await super.createGuest(...args);
@@ -929,14 +789,7 @@ export class StreamChat extends ChatApi {
     }
   }
 
-  /**
-   * Sets up a temporary guest user.
-   *
-   * @param user - Data about this user, e.g. `{ name: 'john' }`.
-   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
-   *   into the request (optional).
-   * @returns A promise that resolves when the connection is set up.
-   */
+  /** Creates a temporary guest user and connects as it. */
   async setGuestUser(user: UserRequest, requestOptions?: StreamRequestOptions) {
     const response = await this.createGuest({ user }, requestOptions);
 
@@ -963,10 +816,6 @@ export class StreamChat extends ChatApi {
    * client.on((event) => {
    *   console.log(event.type);
    * });
-   *
-   * @param callbackOrString - The event type to listen for, or the callback when listening to all events.
-   * @param callbackOrNothing - The callback to call when an event type was provided (optional).
-   * @returns An object with an `unsubscribe()` method.
    */
   on(callback: EventHandler): { unsubscribe: () => void };
   on<T extends EventType>(
@@ -1002,12 +851,6 @@ export class StreamChat extends ChatApi {
     };
   }
 
-  /**
-   * Removes the event handler.
-   *
-   * @param callbackOrString - The event type, or the callback when removing an all-events listener.
-   * @param callbackOrNothing - The callback to remove when an event type was provided (optional).
-   */
   off(callback: EventHandler): void;
   off<T extends EventType>(eventType: T, callback: EventHandler<T>): void;
   off(callbackOrString: EventHandler | EventType, callbackOrNothing?: EventHandler) {
@@ -1030,15 +873,13 @@ export class StreamChat extends ChatApi {
   dispatchEvent = (event: Event) => {
     if (event.received_at == null) event.received_at = nowNs();
 
-    // client event handlers
     const postListenerCallbacks = this._handleClientEvent(event as WSEvent);
 
-    // channel event handlers
     const cid = (event as Extract<Event, { cid?: any }>).cid;
     const channel = cid ? this.channelManager.get(cid) : undefined;
     // A disconnected channel (`pendingDisposal`) may stay stored until `releaseUnusedChannels()`.
-    // Its state is not updated any more, and its handlers would throw at `getClient()`, so the
-    // event skips them; the channel's own listeners below still hear it.
+    // Its handlers would throw at `getClient()`, so they are skipped (its own listeners below still
+    // hear it).
     if (channel && !channel.pendingDisposal) {
       channel._handleChannelEvent(event as WSEvent);
     }
@@ -1049,9 +890,7 @@ export class StreamChat extends ChatApi {
       channel._callChannelListeners(event as WSEvent);
     }
 
-    // A failing in-memory cleanup (such as a holder throwing while a removed channel is unlinked)
-    // must not skip the other callbacks or the offline DB write below, or the offline DB would keep
-    // what the event ended.
+    // A failing in-memory cleanup must not skip the other callbacks or the offline DB write below.
     for (const callback of postListenerCallbacks) {
       try {
         callback();
@@ -1069,13 +908,10 @@ export class StreamChat extends ChatApi {
 
   /**
    * Puts `user`'s new object into the members, watchers, own membership and (with `readEntries`)
-   * read entries of the channels that list them. Each channel gets new objects in one state update,
-   * so its subscribers re-render.
+   * read entries of the channels that list them, in one state update per channel.
    *
-   * @param user - The updated user.
-   * @param options.readEntries - Also replace the user in read entries, refreshing the read receipts
-   *   (defaults to `true`). Off for a presence change: receipts show a user's name and image, never
-   *   their online status, so they would rebuild for nothing.
+   * @param options.readEntries - Also replace the user in read entries, refreshing read receipts
+   *   (default `true`). Off for presence changes: receipts never show online status.
    */
   _updateMemberWatcherReferences = (
     user: UserResponse,
@@ -1092,7 +928,7 @@ export class StreamChat extends ChatApi {
       const isOwnMembership = membership?.user?.id === user.id;
       if (!member && !hasWatcher && !readState && !isOwnMembership) continue;
       // The receipts tracker applies a read-state change only with metadata naming the changed
-      // users; without it, its readers would keep the user's old object.
+      // users.
       if (readState) {
         channel.messageReceiptsTracker.setPendingReadStoreReconcileMeta({
           changedUserIds: [user.id],
@@ -1116,49 +952,35 @@ export class StreamChat extends ChatApi {
   _updateUserReferences = this._updateMemberWatcherReferences;
 
   /**
-   * Updates the messages from the loaded channels that contain this user, with the updated user object.
+   * Replaces the user's object in the messages of the loaded channels.
    *
    * @private
-   *
-   * @param user - The updated user.
    */
   _updateUserMessageReferences = (user: UserResponse) => {
-    // Scan all loaded channels rather than a user->channel reference map. MessageRequest authors are no
-    // longer registered as channel references (that registration was removed along with
-    // `Channel._trackLatestMessage`); `reflectUserUpdate` filters by author id internally, so it is
-    // a no-op on channels without this user's messages.
-    // The next step is to have user ItemIndex, where the update would be O(1) complexity
+    // Scans all loaded channels: `reflectUserUpdate` filters by author id, so it is a no-op for
+    // channels without this user's messages.
     for (const channel of this.channelManager.values()) {
       if (!channel) continue;
 
-      /** update the messages from this user. */
       channel.pinnedMessagesPaginator.reflectUserUpdate(user);
       channel.messagePaginator.reflectUserUpdate(user);
     }
   };
 
   /**
-   * Deletes the messages from the loaded channels that contain this user.
-   *
-   * If `hardDelete` is `true`, all the content of the message will be stripped down.
-   * Otherwise, only `message.type` will be set as `'deleted'`.
+   * Deletes the user's messages in the loaded channels: stripped of their content with
+   * `hardDelete`, otherwise marked as deleted. `deletedAt` defaults to now.
    *
    * @private
-   *
-   * @param user - The user whose messages should be deleted.
-   * @param hardDelete - Whether to fully strip the message content (optional, defaults to `false`).
-   * @param deletedAt - Timestamp to mark messages as deleted at (optional).
    */
   _deleteUserMessageReference = (
     user: UserResponse,
     hardDelete = false,
     deletedAt?: LocalMessage['deleted_at'],
   ) => {
-    // Scan all loaded channels rather than a user->channel reference map (see
-    // `_updateUserMessageReferences`); `applyMessageDeletionForUser` filters by author id internally.
+    // Scans all loaded channels; `applyMessageDeletionForUser` filters by author id.
     for (const channel of this.channelManager.values()) {
       if (channel) {
-        /** deleted the messages from this user. */
         channel.messagePaginator.applyMessageDeletionForUser({
           userId: user.id,
           hardDelete,
@@ -1173,16 +995,7 @@ export class StreamChat extends ChatApi {
     }
   };
 
-  /**
-   * Handle the following user-related events:
-   * - `user.presence.changed`
-   * - `user.updated`
-   * - `user.deleted`
-   *
-   * @private
-   *
-   * @param event - The user event.
-   */
+  /** @private */
   _handleUserEvent = (
     event: Extract<
       WSEvent,
@@ -1193,13 +1006,12 @@ export class StreamChat extends ChatApi {
       return;
     }
 
-    /** update the client.state with any changes to users */
     if (event.type === 'user.presence.changed' || event.type === 'user.updated') {
       if (event.user.id === this.userId) {
         const user = { ...this.user } as NonNullable<StreamChat['user']>;
         const _user = { ...this._user } as NonNullable<StreamChat['_user']>;
 
-        // Remove deleted properties from user objects.
+        // Drop properties absent from the event, except own-user-only ones.
         for (const key in this.user) {
           if (key in event.user || isOwnUserBaseProperty(key)) {
             continue;
@@ -1211,7 +1023,7 @@ export class StreamChat extends ChatApi {
           delete _user[deleteKey];
         }
 
-        /** Updating only available properties in _user object. */
+        // Update only the properties `_user` already has.
         for (const key in _user) {
           const updateKey = key as keyof typeof _user;
 
@@ -1293,8 +1105,7 @@ export class StreamChat extends ChatApi {
 
     if (event.type === 'notification.mark_read' && event.unread_channels === 0) {
       this.channelManager.values().forEach((channel) => {
-        // resets `read[userId].unread_messages`, which is what the unread badge reads, so it does
-        // not stay stale.
+        // Resets `read[userId].unread_messages`, which the unread badge reads.
         if (!channel._setOwnUnreadCount(0)) return;
         // the event may name no channel (mark-all-read), but here we know which ones changed
         this.channelManager.dropFromUnmatchedLists(channel);
@@ -1312,18 +1123,17 @@ export class StreamChat extends ChatApi {
       ended?.disconnect();
 
       postListenerCallbacks.push(() => {
-        // only the instance disconnected above: a listener that got the channel again keeps its
-        // fresh instance (`ensure()` replaces a disposed one)
+        // Only the instance disconnected above: a listener that got the channel again keeps its
+        // fresh instance (`ensure()` replaces a disposed one).
         if (ended && this.channelManager.get(cid) === ended) {
           this.channelManager.removeChannel(cid);
         }
       });
     }
 
-    // Current user removed from a channel: evict it like channel.deleted so
-    // connection recovery won't re-watch it and no further events reach it (#2599).
-    // Type-agnostic. We skip deleteAllChannelReference (unlike deletion) since
-    // the channel still exists for its remaining members.
+    // Current user removed from a channel: evict it like channel.deleted so connection recovery
+    // does not re-watch it (#2599). `deleteAllChannelReference` is skipped: the channel still
+    // exists for its other members.
     if (event.type === 'notification.removed_from_channel' && event.cid) {
       const { cid } = event;
       const ended = this.channelManager.get(cid);
@@ -1346,8 +1156,7 @@ export class StreamChat extends ChatApi {
       const mute = this.mutedChannels[i];
       if (mute.channel?.cid === cid) {
         muteStatus = {
-          // `expires` is a wire timestamp, so it compares directly against the local clock in the
-          // same unit. Comparing it against `Date.now()` would make every expiry look far future.
+          // `expires` is in unix nanoseconds: compare it against `nowNs()`, not `Date.now()`.
           muted: mute.expires != null ? mute.expires > nowNs() : true,
           createdAt: mute.created_at ?? nowNs(),
           expiresAt: mute.expires ?? null,
@@ -1368,9 +1177,7 @@ export class StreamChat extends ChatApi {
   }
 
   _callClientListeners = (event: Event) => {
-    // Snapshot before dispatching: `on` adds to these sets in place and `Set.forEach` visits
-    // entries appended mid-iteration, so a listener that subscribes while handling an event
-    // must not be invoked for it.
+    // Snapshot first: a listener subscribed while handling an event must not be invoked for it.
     const listeners = [
       ...(this.listeners.get('all') ?? []),
       ...(this.listeners.get(event.type) ?? []),
@@ -1382,18 +1189,10 @@ export class StreamChat extends ChatApi {
   };
 
   /**
-   * Settles the connect promises after a successful reconnect, so `connectUser()` and the
-   * `wsPromise`/`setUserPromise` a caller may still be holding stop resolving against a superseded
-   * (possibly rejected) attempt.
-   *
-   * Requests no longer settle against these: waiting for a connection id is the
-   * {@link ConnectionIdManager}'s job, applied centrally in `ApiClient`.
-   *
-   * Called by `StableWSConnection._reconnect()`, and by `WSConnectionFallback.connect(true)`
-   * for the long-poll's own reconnects. Recovery itself is owned by
-   * {@link ConnectionRecoveryManager}, which subscribes to the connection lifecycle and so
-   * covers every reconnect path — including `closeConnection()` → `openConnection()` (mobile
-   * backgrounding), which reaches neither.
+   * Settles the connect promises after a successful reconnect, so a held `wsPromise` /
+   * `setUserPromise` stops resolving against a superseded (possibly rejected) attempt. Called by
+   * `StableWSConnection._reconnect()` and `WSConnectionFallback.connect(true)`. Recovery itself
+   * belongs to {@link ConnectionRecoveryManager}.
    *
    * @internal
    */
@@ -1404,18 +1203,16 @@ export class StreamChat extends ChatApi {
         `Connection re-established with connection ID ${this.connectionIdManager.connectionId}.`,
       );
 
-    // If state recovery happens afer a failed connect (for example on persistUserOnConnectionFailure: true) we need to flip the wsPromise from rejected to resolved
-    // Otherwise all API calls that wait for the promise will fail
-    // If promise is not yet settled - we leave it for the connect sequence to resolve the promise
+    // After a failed connect (e.g. `persistUserOnConnectionFailure: true`) recovery must flip
+    // `wsPromise` from rejected to resolved, or calls waiting on it fail. An unsettled promise is
+    // left to the connect sequence.
     if (this._wsPromiseSettled) {
       this.wsPromise = Promise.resolve();
     }
     this.setUserPromise = Promise.resolve();
   };
 
-  /**
-   * @private
-   */
+  /** @private */
   async connect() {
     if (!this.userId || !this._user) {
       throw Error(
@@ -1429,21 +1226,12 @@ export class StreamChat extends ChatApi {
       throw Error('Property clientId is not set');
     }
 
-    // `wsConnection` builds and owns the socket — and, with `enableWSFallback`, the long-poll it
-    // switches to; the reconnection logic and the connect timeout (`config.connectTimeoutMs`) live
-    // in there.
+    // `wsConnection` owns the socket, the long-poll fallback (`enableWSFallback`), reconnection and
+    // the connect timeout.
     return await this.wsConnection.connect();
   }
 
-  /**
-   * Queries users and watches user presence.
-   *
-   * @param ...args - `[request, requestOptions]`. The optional `request.payload` accepts
-   *   MongoDB-style filter conditions, sort directions (e.g. `[{ field: 'last_active', direction: -1 }]`),
-   *   and options such as `presence`. `requestOptions` carries per-request options such as an
-   *   abort `signal` and is never serialized into the request.
-   * @returns The user query response.
-   */
+  /** Queries users and watches user presence. */
   override async queryUsers(...args: Parameters<ChatApi['queryUsers']>) {
     const [request, requestOptions] = args;
     const data = await super.queryUsers(request ?? {}, requestOptions);
@@ -1453,17 +1241,10 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Stops watching a channel on this client's connection.
-   *
-   * It carries no `watch` flag, so the request layer does not hold it, but it is connection-scoped
-   * by definition: it tells the server which connection should stop watching. So it waits for this
-   * client's connection id exactly as a watching request does — through a handshake or a reconnect,
-   * until the caller's abort signal fires — and throws when there is no connection and none is being
-   * established.
-   *
-   * @param ...args - `[pathParams, request, requestOptions]`. `pathParams` identifies the channel
-   *   (`{ type, id }`); `request.connection_id` is replaced by this client's connection id.
-   * @returns The server response.
+   * Stops watching a channel on this client's connection. It carries no `watch` flag, but it waits
+   * for the connection id like a watching request (through a handshake or reconnect, until the
+   * caller's abort signal fires) and throws when there is no connection and none is being
+   * established. `request.connection_id` is replaced by the client's own.
    */
   override async stopWatchingChannel(
     ...args: Parameters<ChatApi['stopWatchingChannel']>
@@ -1471,7 +1252,7 @@ export class StreamChat extends ChatApi {
     const [pathParams, request, requestOptions] = args;
     const signal = requestOptions?.signal;
     const connectionId = await this.connectionIdManager.getConnectionId(
-      // Check if signal is still usable - if it is read from offline DB, it has lost `addEventListener`.
+      // A signal revived from the offline DB has lost `addEventListener`.
       typeof signal?.addEventListener === 'function' ? signal : undefined,
     );
 
@@ -1483,19 +1264,9 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Queries channels and returns the full API response including top-level metadata such as
-   * `predefined_filter`.
-   *
-   * This exists as a compatibility bridge, as changing `queryChannelsRequest()` to return
-   * `QueryChannelsResponse` would be a breaking change because it currently returns
-   * only the channel list. In the next major release, the request/response APIs should
-   * be consolidated so callers can access the full response through the primary API.
-   *
-   * @param ...args - `[request, requestOptions]`. The optional `request` accepts MongoDB-style
-   *   filter conditions, sort directions (e.g. `[{ field: 'created_at', direction: -1 }]`), and
-   *   options such as `predefined_filter`, `filter_values`, and `sort_values`. `requestOptions`
-   *   carries per-request options such as an abort `signal` and is never serialized into the request.
-   * @returns The full query channels response.
+   * Queries channels and returns the raw API response, including metadata such as
+   * `predefined_filter`. `state`, `watch` and `presence` default to `true`, `true` and `false`. See
+   * {@link queryChannelsAndHydrate} for `Channel` instances.
    */
   override async queryChannels(...args: Parameters<ChatApi['queryChannels']>) {
     const [request, requestOptions] = args;
@@ -1513,7 +1284,7 @@ export class StreamChat extends ChatApi {
       ...restOptions
     } = request ?? {};
 
-    // Build payload based on whether we're using a predefined filter or traditional filters
+    // With a predefined filter, `filter_conditions` is not sent.
     const payload: QueryChannelsRequest = predefined_filter
       ? {
           predefined_filter,
@@ -1528,33 +1299,20 @@ export class StreamChat extends ChatApi {
           ...restOptions,
         };
 
-    // No wait here either — see `channel.watch()`. `ApiClient` gates on the flags this payload
-    // carries, so a watched query waits for a connection id and a plain read does not.
+    // `ApiClient` waits for a connection id only when the payload sets `watch` or `presence`.
     return await super.queryChannels(payload, requestOptions);
   }
 
   /**
-   * Queries channels and hydrates them into `Channel` instances on this client.
+   * Queries channels and hydrates them into `Channel` instances on this client, dispatching
+   * `channels.queried` and syncing the offline DB. Use `queryChannels()` for the raw API response.
    *
-   * Use the inherited `queryChannels()` from `ChatApi` when only the raw API response
-   * is needed; this method wraps it with state hydration, `channels.queried` dispatch,
-   * and offline-db sync.
-   *
-   * @param options - The query channels request payload (optional). Accepts MongoDB-style filter
-   *   conditions, sort directions (e.g. `[{ field: 'created_at', direction: -1 }]`), and options
-   *   such as `predefined_filter`, `filter_values`, and `sort_values`.
-   * @param stateOptions - Options that only affect state management and aren't sent in the request
-   *   (optional, defaults to `{}`).
-   * @param stateOptions.skipInitialization - Skips the initialization of the state for the
-   *   channels matching the IDs in the list (optional).
-   * @param stateOptions.skipHydration - Skips returning the channels as instances of the `Channel`
-   *   class and instead returns the raw query response (optional).
-   * @param stateOptions.withResponse - Returns the full query response with hydrated channels.
-   *   This is a compatibility bridge for internal callers that need response-level metadata while
-   *   the default return value remains `Channel[]` (optional).
-   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
-   *   into the request (optional).
-   * @returns The hydrated channel list, or the full response when `withResponse` is `true`.
+   * @param stateOptions - Options that only affect state management and are not sent in the
+   *   request.
+   * @param stateOptions.skipInitialization - IDs of channels whose state is not initialized.
+   * @param stateOptions.skipHydration - Not read: it has no effect.
+   * @param stateOptions.withResponse - Returns the full query response (with hydrated `channels`)
+   *   instead of `Channel[]`.
    */
   async queryChannelsAndHydrate(
     options: QueryChannelsRequest | undefined,
@@ -1615,14 +1373,8 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Queries reactions for a message and hydrates any cached offline reactions before the network
-   * request.
-   *
-   * @param ...args - `[pathParams, request, requestOptions]`. `pathParams.id` is the target message ID;
-   *   `request` carries MongoDB-style filters, sort directions (e.g.
-   *   `[{ field: 'created_at', direction: -1 }]`) and pagination options; `requestOptions` carries
-   *   per-request options such as an abort `signal` and is never serialized into the request.
-   * @returns The query reactions response.
+   * Queries a message's reactions. On the first page, cached offline reactions are dispatched
+   * (`offline_reactions.queried`) before the network request.
    */
   async queryReactionsAndHydrate(...args: Parameters<ChatApi['queryReactions']>) {
     const [{ id: messageId }, request] = args;
@@ -1677,11 +1429,9 @@ export class StreamChat extends ChatApi {
           ? { initialized: false, offlineMode: true }
           : { initialized: true, offlineMode: false },
       );
-      // Same precedence `queryChannels` applies to the request: an explicit caller choice wins,
-      // otherwise we watch only if there is a connection to watch on: `hydrateChannels` is
-      // public, so a direct caller has no gated request behind it to imply a watch. Offline
-      // hydration populates state without a live watch, so it never counts - and a query that did
-      // not watch leaves the status untouched (it neither starts nor ends a watch).
+      // An explicit `watch` choice wins, otherwise watch only on a healthy socket
+      // (`hydrateChannels` is public, so there may be no gated request behind it). Offline
+      // hydration never counts, and a query that did not watch leaves the status untouched.
       if (!offlineMode && (queryChannelsOptions?.watch ?? this.wsConnection.isHealthy)) {
         c.watchStatus = ChannelWatchStatus.Watching;
       }
@@ -1694,19 +1444,11 @@ export class StreamChat extends ChatApi {
         queryChannelsOptions?.message_limit ??
         DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE;
 
-      // Seed the paginator BEFORE _initializeState, which hydrates read state and (via
-      // MessageReceiptsTracker) resolves read/delivered cursors against this paginator. Seeding
-      // first guarantees the tracker sees a populated timeline; a later async seed would run after
-      // the reconcile and mislabel delivery status.
-      //
-      // Skip the re-seed when this (shared) channel's paginator is already loaded AND the user has
-      // jumped to an older window (active interval is not the head): a first-page re-seed forces the
-      // newest page to merge into that jumped interval across the gap (missing messages in the
-      // middle). A cold paginator, or one still at the head (offline/at-latest), re-seeds normally so
-      // cursors/hasMoreTail get (re)derived and pagination keeps working.
-      // Also skip the re-seed for an ACTIVE (on-screen) channel: its own `channel.reload()` owns the
-      // loaded window (up to 100 msgs), so a 25-msg list re-seed here is a redundant second update
-      // that could perturb the fuller window. (Inert until a UI SDK calls `channel.activate()`.)
+      // Seed the paginator before `_initializeState`, which resolves read/delivered cursors against
+      // it (via `MessageReceiptsTracker`). Skip the re-seed when:
+      // - the paginator is loaded and the user jumped to an older window (active interval not at
+      //   the head): a first-page re-seed would merge the newest page across the gap;
+      // - the channel is active: its own `channel.reload()` owns the loaded window.
       if (
         willInitialize &&
         !c.active &&
@@ -1723,7 +1465,7 @@ export class StreamChat extends ChatApi {
       if (skipInitialization === undefined) {
         c._initializeState(channelState);
       } else if (!skipInitialization.includes(channelState.channel.id)) {
-        // The paginators are (re)seeded above and via _initializeState → seedFirstPageSync.
+        // The paginators are (re)seeded above and by `_initializeState` (`seedFirstPageSync`).
         c._initializeState(channelState);
       }
 
@@ -1741,18 +1483,12 @@ export class StreamChat extends ChatApi {
 
   /**
    * Returns the channel with the given type, ID and custom data: a shorthand for
-   * {@link ChannelManager.ensure} (`client.channelManager.ensure({ type, id, data })`), so it returns
-   * the stored instance for the cid, or creates and stores it.
+   * {@link ChannelManager.ensure}, so it returns the stored instance for the cid or creates and
+   * stores it. Initialize it with `channel.watch()`.
    *
-   * To get a distinct channel between two or more users, leave out the ID and pass the members:
+   * For a distinct channel between users, leave out the ID and pass the members:
    * `client.channel('messaging', { members: [{ user_id: 'tommaso' }, { user_id: 'thierry' }] })`.
    * It has no ID until `channel.watch()`, `query()` or `create()` returns one.
-   *
-   * @param channelType - The channel type.
-   * @param channelIdOrCustom - The channel ID; leave it out for a distinct channel created from
-   *   members (optional).
-   * @param custom - Data for a new channel, e.g. `members` or `custom` (optional, defaults to `{}`).
-   * @returns The channel; initialize it with `channel.watch()`.
    */
   channel(channelType: string, channelId?: string | null, custom?: ChannelInput): Channel;
   channel(channelType: string, custom?: ChannelInput): Channel;
@@ -1772,15 +1508,7 @@ export class StreamChat extends ChatApi {
     });
   }
 
-  /**
-   * Queries messages.
-   *
-   * @param ...args - `[request, requestOptions]`. The optional `request.payload` accepts
-   *   MongoDB-style filter conditions, a search query, and options such as `user_id`.
-   *   `requestOptions` carries per-request options such as an abort `signal` and is never
-   *   serialized into the request.
-   * @returns The search messages response.
-   */
+  /** Searches messages. Throws when both `offset` and `next` are given. */
   override async search(...args: Parameters<ChatApi['search']>) {
     const [request, requestOptions] = args;
     if (request?.payload?.offset && request?.payload?.next) {
@@ -1791,15 +1519,10 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Caches one channel's server configuration, read through {@link Channel.serverConfig}.
-   *
-   * Keyed by **cid** rather than by channel type: a channel's own `config_overrides` narrow its type's
-   * settings for that channel alone, so two channels of one type can disagree.
-   *
-   * Two writes are skipped. A response with no `config` — `notification.message_new` is one route that
-   * omits it — would otherwise un-learn a config already known for the channel. A config deep-equal to
-   * the stored one keeps a repeated query from waking that channel's subscribers, which matters because
-   * the API returns a fresh object every time and the store compares by reference.
+   * Caches one channel's server configuration, keyed by cid (see {@link Channel.serverConfig}).
+   * Skips the write for a response without `config` (`notification.message_new` omits it) and for a
+   * config deep-equal to the stored one: the API returns a fresh object each time and the store
+   * compares by reference.
    *
    * @internal
    */
@@ -1813,13 +1536,7 @@ export class StreamChat extends ChatApi {
     };
   }
 
-  /**
-   * Revoke a global ban for a user.
-   *
-   * @param targetUserId - The user to unban.
-   * @param options - Unban options (optional).
-   * @returns The server response.
-   */
+  /** Revokes a global ban. */
   async unbanUser(targetUserId: string, options?: UnBanUserOptions) {
     return await this.api.delete<APIResponse>(this.baseURL + '/moderation/ban', {
       target_user_id: targetUserId,
@@ -1861,12 +1578,7 @@ export class StreamChat extends ChatApi {
     return result;
   }
 
-  /**
-   * Checks whether a user is muted. Can be used after `connectUser()` is called.
-   *
-   * @param targetId - The user ID to check.
-   * @returns `true` if the user is muted, otherwise `false`.
-   */
+  /** Whether the user is muted. Throws unless `connectUser()` was awaited first. */
   userMuteStatus(targetId: string) {
     if (!this.user || !this.wsPromise) {
       throw new Error('Make sure to await connectUser() first.');
@@ -1918,8 +1630,8 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Updates the given message — the HTTP request and nothing else: no offline queueing and no local
-   * state. `messageOperations.update` on a channel or thread is the full edit.
+   * Only the HTTP request: no offline queueing and no local state. `messageOperations.update` on a
+   * channel or thread is the full edit.
    */
   override async updateMessage(...args: Parameters<ChatApi['updateMessage']>) {
     const [pathParams, request, requestOptions] = args;
@@ -1933,14 +1645,14 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Deletes a message — the HTTP request and nothing else: no offline queueing and no local state.
-   * `messageOperations.delete` on a channel or thread is the full delete.
+   * Only the HTTP request: no offline queueing and no local state. `messageOperations.delete` on a
+   * channel or thread is the full delete.
    */
   override async deleteMessage(...args: Parameters<ChatApi['deleteMessage']>) {
     const [, request] = args;
     const result = await super.deleteMessage(...args);
 
-    // necessary to populate the below values as the server does not return the message in the response as deleted
+    // The server does not return the message as deleted here.
     if (request?.delete_for_me) {
       result.message.deleted_for_me = true;
       result.message.type = 'deleted';
@@ -1950,19 +1662,9 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Returns the list of threads of the current user.
-   *
-   * @param options - Options object for pagination and limiting the participants and replies
-   *   (optional, defaults to `{}`).
-   * @param options.limit - Limits the number of threads to be returned (optional).
-   * @param options.watch - Subscribes the user to the channels of the threads (optional).
-   * @param options.participant_limit - Limits the number of participants returned per thread (optional).
-   * @param options.reply_limit - Limits the number of replies returned per thread (optional).
-   * @param options.filter - MongoDB style filters for threads (optional).
-   * @param options.sort - MongoDB style sort for threads (optional).
-   * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
-   *   into the request (optional).
-   * @returns The list of threads and the next cursor.
+   * Returns the current user's threads as hydrated `Thread` instances, with the next cursor.
+   * Defaults: `limit` 10, `participant_limit` 10, `reply_limit` 3, `watch` true (subscribes to the
+   * threads' channels).
    */
   async queryThreadsAndHydrate(
     options: QueryThreadsRequest = {},
@@ -1993,7 +1695,6 @@ export class StreamChat extends ChatApi {
 
     const response = await this.queryThreads(requestBody, requestOptions);
 
-    // Hydrate the polls for the parent messages of the threads
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const parentMessages = response.threads.map((thread) => thread.parent_message!);
     this.polls.hydratePollCache(parentMessages);
@@ -2056,8 +1757,7 @@ export class StreamChat extends ChatApi {
       return this.userAgent;
     }
 
-    // Computed once, then memoized for the client's lifetime - inputs read on
-    // the first call (sdk/device identifiers, build-time env) are not re-read.
+    // Memoized on the first call: later changes to the identifiers are not picked up.
     if (!this.cachedUserAgent) {
       const version = process.env.PKG_VERSION;
       const { name: sdkName, version: sdkVersion } = this.sdkIdentifier ?? {};
@@ -2070,8 +1770,7 @@ export class StreamChat extends ChatApi {
 
       this.cachedUserAgent = [
         head,
-        // reports the host app, the device OS, the device model, and the picked
-        // exports bundle, each only when a value is present
+        // Each only when a value is present.
         ...Object.entries({
           app: appName,
           app_version: appVersion,
@@ -2087,13 +1786,7 @@ export class StreamChat extends ChatApi {
     return this.cachedUserAgent;
   };
 
-  /**
-   * Sets the user agent string.
-   *
-   * @deprecated Use `sdkIdentifier` instead.
-   *
-   * @param userAgent - The user agent string.
-   */
+  /** @deprecated Use `sdkIdentifier` instead. */
   setUserAgent(userAgent: string) {
     this.userAgent = userAgent;
   }
@@ -2103,11 +1796,11 @@ export class StreamChat extends ChatApi {
       return;
     }
     this.cleaningIntervalRef = setInterval(() => {
-      // call clean on the channel, used for calling the stop.typing event etc.
+      // `clean()` sends the stop-typing event, among other things.
       for (const channel of this.channelManager.values()) {
-        // a disposed channel has nothing to clean, and `clean()` would throw on it
+        // A disposed channel has nothing to clean, and `clean()` would throw on it.
         if (channel.pendingDisposal) continue;
-        // one channel failing to clean must not stop the others (typing indicators would stick)
+        // One channel failing to clean must not stop the others (typing indicators would stick).
         try {
           channel.clean();
         } catch (error) {
@@ -2120,45 +1813,33 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Encodes the WebSocket auth message, sent as the first frame once the socket opens.
-   *
-   * `products` is not optional in practice: without `'chat'` the server treats the
-   * connection as video-only, which drops every chat event and unread count.
+   * The JSON-encoded WebSocket auth message, sent as the first frame once the socket opens.
    *
    * @private
-   *
-   * @returns The JSON-encoded auth message.
    */
   _buildWSAuthMessage = () =>
     JSON.stringify(this._buildWSAuthPayload(this.tokenManager.getToken()));
 
   /**
-   * The auth message itself — what {@link _buildWSAuthMessage} encodes for the WebSocket, and what
-   * the long-poll fallback sends as `longPoll()`'s `json` query param.
+   * The auth message that {@link _buildWSAuthMessage} encodes for the WebSocket and the long-poll
+   * fallback sends as `longPoll()`'s `json` query param.
    *
    * @private
    *
-   * @param token - The token the message carries. The long-poll passes none: it authenticates
-   *   through the request's `Authorization` header instead.
+   * @param token - The long-poll passes none: it authenticates through the `Authorization` header.
    */
   _buildWSAuthPayload = (token?: string): WSAuthMessage => ({
-    // The server requires a non-empty token, but skips JWT parsing for any string that is not
-    // shaped like one. Anonymous users have no token, and the long-poll does not send one, so both
-    // send a placeholder the server accepts and ignores.
+    // The server requires a non-empty token but ignores one that is not JWT-shaped, so anonymous
+    // users and the long-poll send a placeholder.
     token: token || 'anonymous',
     // `connect()` rejects before reaching this when `_user` is unset.
     user_details: this._user as ConnectUserDetailsRequest,
+    // Without 'chat' the server treats the connection as video-only and drops chat events and
+    // unread counts.
     products: ['chat'],
   });
 
-  /**
-   * Queries poll answers.
-   *
-   * @param ...args - `[pathParams, request, requestOptions]`. `pathParams.poll_id` is the poll ID;
-   *   `request` carries optional vote filter conditions, sort directions, and pagination options
-   *   (`limit`, `offset`).
-   * @returns The poll answers.
-   */
+  /** Queries poll answers: the votes with `is_answer: true`. */
   async queryPollAnswers(...args: Parameters<ChatApi['queryPollVotes']>) {
     const [pathParams, request, requestOptions] = args;
     const { filter, ...options } = request ?? {};
@@ -2170,13 +1851,7 @@ export class StreamChat extends ChatApi {
     );
   }
 
-  /**
-   * Uploads a file to the Stream CDN
-   *
-   * @param request - Upload payload. `request.file` is the file to upload.
-   * @param requestOptions - Per-request options, e.g. `onUploadProgress` or an abort `signal` (optional).
-   * @returns Response containing the file URL.
-   */
+  /** Uploads a file to the Stream CDN. */
   override async uploadFile(
     request?: Omit<FileUploadRequest, 'file'> & { file?: FileUploadInput },
     requestOptions?: StreamRequestOptions,
@@ -2187,13 +1862,7 @@ export class StreamChat extends ChatApi {
     );
   }
 
-  /**
-   * Uploads an image to Stream CDN
-   *
-   * @param request - Upload payload. `request.file` is the image to upload.
-   * @param requestOptions - Per-request options, e.g. `onUploadProgress` or an abort `signal` (optional).
-   * @returns Response containing the image URL.
-   */
+  /** Uploads an image to the Stream CDN. */
   override async uploadImage(
     request?: Omit<ImageUploadRequest, 'file'> & { file?: FileUploadInput },
     requestOptions?: StreamRequestOptions,
@@ -2205,10 +1874,7 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Marks the channels as delivered for the given messages and the user.
-   *
-   * @param request - Mark delivered options.
-   * @returns The server response, or `undefined` if there are no messages to mark.
+   * Marks channels as delivered for the given messages. Returns `undefined` when there are none.
    */
   async markChannelsDelivered(
     request?: Gen_MarkDeliveredRequest,

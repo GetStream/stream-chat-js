@@ -12,8 +12,7 @@ export const getRawCommandName = (text?: string) =>
   text?.match(/^\/(\S+)(?:\s.*)?$/)?.[1];
 
 export const getCompleteCommandInString = (text: string) => {
-  // starts with "/" followed by 1+ non-whitespace chars followed by 1+ white-space chars
-  // the command name is extracted into a separate group
+  // `/name` followed by whitespace; captures the name.
   const match = text.match(/^\/(\S+)\s+.*/);
   const commandName = match && match[1];
   return commandName;
