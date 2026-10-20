@@ -286,7 +286,7 @@ const DEFAULT_SUGGESTION_FACTORY_MAPPERS: {
     return {
       description: userGroup.description,
       id: userGroup.id,
-      // All members are returned (groups hold at most 100), so this equals `members.length`.
+      // All members are returned (groups hold at most 100), so `members.length` is the full count.
       memberCount: userGroup.members?.length,
       mentionType: 'user_group',
       name: userGroup.name,

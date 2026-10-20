@@ -18,7 +18,7 @@ export type StoreBackedItemIndexOptions<T> = {
  * The item index of one list (a paginator). Items live in an {@link EntityStore}, which can be
  * shared with other lists; the index only records which IDs belong to this list (`memberIds`) and
  * stands for the list in the store with one `holder`. Reads see only this list's items, even when a
- * shared store holds other lists' items (e.g. `thread.messagePaginator` sees only its replies).
+ * shared store holds other lists' items.
  *
  * Store callbacks reach the owner through the holder: changes to held items (except the owner's own
  * writes), removals (with the removed item), and ID renames, which are also applied to `memberIds`.

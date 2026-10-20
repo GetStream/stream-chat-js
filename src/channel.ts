@@ -358,8 +358,9 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Re-derives the configuration from the declarative slice, the sub-objects' included. Called by
-   * the constructor and by `client.config.reset()`.
+   * Re-derives the configuration of the channel, its paginators and its message operations from the
+   * declarative slice. Runs at construction, on every change to the `channel`, `messagePaginator` or
+   * `messageOperations` configuration, and on `client.config.reset()`.
    *
    * @param declarativeConfig - The channel's declarative slice (optional).
    */
@@ -1104,7 +1105,7 @@ export class Channel extends ChannelApi {
   /**
    * Marks read through `MessageDeliveryReporter`: uses the `markReadRequest` handler if set, marks
    * read locally when read events are off and `localUnreadCountEnabled` is set, and drops the
-   * delivery candidate. `markRead()` does none of this.
+   * delivery candidate when a request went out. `markRead()` does none of this.
    *
    * @param data - Mark read options. Defaults to `{}`.
    * @returns The server response, or `null` when no request went out.
@@ -2588,9 +2589,9 @@ export class Channel extends ChannelApi {
   };
 
   /**
-   * Throws if the channel has no ID (created from members only). Narrows `id` to `string`. Also call
-   * it before reading `this.cid`: `cid` is always a string (possibly temporary), so TS does not flag
-   * a missing check.
+   * Throws if the channel has no ID (created from members only). Narrows `id` to `string`. Call it
+   * before any request that uses `this.cid`: it is a string (possibly temporary) even without an ID,
+   * so TypeScript does not flag a missing check.
    */
   _checkHasId(): asserts this is this & { id: string } {
     if (!this.id) {

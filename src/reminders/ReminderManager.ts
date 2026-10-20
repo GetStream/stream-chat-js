@@ -97,7 +97,8 @@ export class ReminderManager extends WithSubscriptions {
   /**
    * Re-derives the configuration from the declarative slice.
    *
-   * @param config - The declarative slice. Leave it out to rebuild from the defaults.
+   * @param config - The declarative slice. Leave it out to rebuild from the defaults and the
+   *   constructor's `config`.
    */
   initializeConfig(config?: Partial<ReminderManagerConfig>) {
     this.configController.initialize(config);

@@ -79,8 +79,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   abstract upsertCidsForQuery: OfflineDBApi['upsertCidsForQuery'];
 
   /**
-   * Upserts the channels, each into its own table: channels, messages, reactions, users, members,
-   * polls (for poll messages) and reads.
+   * Upserts the channels and their messages, reactions, users, members, polls (for poll messages)
+   * and reads, each kind into its own table.
    */
   abstract upsertChannels: OfflineDBApi['upsertChannels'];
 
@@ -366,7 +366,8 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
   /**
    * Upserts the message and, when another user sent it, the current user's read (from
-   * `channel.state`), behind the channel guard.
+   * `channel.state`). The channel guard upserts a missing channel row only with `execute: false`;
+   * with `execute: true` (the default) the row is not guarded.
    *
    * @param payload.event - The WS event we are trying to process.
    * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
@@ -1094,7 +1095,13 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     });
   };
 
-  /** Stores the task, or folds an edit of a never-sent message into its queued send. */
+  /**
+   * Stores the task. An edit of a never-sent message is folded into its queued send instead. With no
+   * queued send, an edit `isMessageUpdateReplayable` refuses (attachments still on local URLs) is
+   * dropped.
+   *
+   * @param payload.task - The pending task to store.
+   */
   public handleAddPendingTask = async ({ task }: { task: PendingTask }) => {
     if (task.type === 'update-message') {
       await this.handleUpdateMessagePendingTask(task);

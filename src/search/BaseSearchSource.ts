@@ -114,7 +114,7 @@ abstract class BaseSearchSourceBase<
     this.allowEmptySearchString = allowEmptySearchString;
     this.resetOnNewSearchQuery = resetOnNewSearchQuery;
     this.state = new StateStore<SearchSourceState<T>>(this.initialState);
-    // A field initializer, so already assigned here.
+    // `setDebounceOptions` is a field initializer, so it is already assigned here.
     this.setDebounceOptions(options ?? {});
   }
 

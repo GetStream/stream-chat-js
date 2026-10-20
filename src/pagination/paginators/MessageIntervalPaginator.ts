@@ -220,7 +220,7 @@ export class MessageIntervalPaginator extends BasePaginator<
   }
 
   /**
-   * Drops a message the entity store removed from this paginator's windows.
+   * Drops a message from this paginator's windows after the entity store removed it.
    *
    * @internal
    * @param id - ID of the removed message.
@@ -904,8 +904,8 @@ export class MessageIntervalPaginator extends BasePaginator<
    *
    * Messages below `page`'s oldest are kept (a hard-deleted oldest looks like a server-capped
    * over-request) and returned for {@link pruneBelowWindowIfReachedStart}. Removal goes through
-   * {@link removeItem}, so the index, intervals, message store and subclass bookkeeping (the
-   * {@link MessagePaginator} last message, via its `removeItem` override) stay correct.
+   * {@link removeItem}, so the index, intervals, message store and any subclass bookkeeping (e.g.
+   * an overridden `removeItem`) stay correct.
    *
    * @returns The below-window leftover IDs. Empty for the no-head and empty-page paths.
    */

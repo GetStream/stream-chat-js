@@ -1705,7 +1705,7 @@ export class StreamChat extends ChatApi {
    *
    * @param targetId - The user ID to check.
    * @returns `true` if the user is muted, otherwise `false`.
-   * @throws Unless `connectUser()` was called.
+   * @throws When no user is connected.
    */
   userMuteStatus(targetId: string) {
     if (!this.user || !this.wsPromise) {

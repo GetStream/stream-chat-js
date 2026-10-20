@@ -38,9 +38,9 @@ export type ConfigControllerOptions<TConfig extends Record<string, unknown>> = {
    * Keeps each {@link ConfigController.patch} as an input replayed on every derivation. Off, a patch is
    * written into the current value and the next derivation replaces it.
    *
-   * `MessageComposer` turns it on: a stored `false` cannot say whether the client or the server turned a
-   * feature off. Off with `applyAuthority`, a request the server narrows is lost, not restored if the
-   * server later relents.
+   * Turn it on when `applyAuthority` can narrow a field: a stored `false` cannot say whether the caller
+   * or the authority turned it off. Off with `applyAuthority`, a request the authority narrows is lost,
+   * not restored if the authority later relents.
    */
   retainPatches?: boolean;
   /** Final transform from the requested config to the published one, on every derivation and `patch`. */

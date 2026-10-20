@@ -164,7 +164,8 @@ export class EntityStore<T> {
    * Lists what holds the entity stored under an ID, for debugging.
    *
    * @param id - The ID to look up.
-   * @returns The names of the subscribers linked to `id` and the claims listing its entity.
+   * @returns The names of the named subscribers linked to `id` and of the named claims listing its
+   *   entity.
    */
   holderNames(id: string): string[] {
     const names: string[] = [];

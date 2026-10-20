@@ -43,8 +43,8 @@ export function isAPIError(error: Error): error is APIError {
 }
 
 /**
- * Whether the server answered "does not exist": an expected answer, not a failure (a thread on a
- * parent with no replies yet, say).
+ * Whether the server answered "does not exist": an expected answer for a resource a caller may ask
+ * about before it exists, not a failure.
  */
 export function isDoesNotExistError(error: Error): boolean {
   return (

@@ -106,7 +106,8 @@ export class SearchController {
   /**
    * Re-derives the configuration from the declarative slice.
    *
-   * @param config - The declarative slice. Leave it out to rebuild from the defaults.
+   * @param config - The declarative slice. Leave it out to rebuild from the defaults and the
+   *   constructor's `config`.
    */
   initializeConfig(config?: Partial<SearchControllerConfig>) {
     this.configController.initialize(config);

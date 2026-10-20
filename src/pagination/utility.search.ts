@@ -1,6 +1,6 @@
 /**
  * Lower-bound binary search over `[0, length)`: the first index where `predicate` holds, or `length`.
- * `predicate` must be monotonic (`false` for a prefix, then `true`), e.g. "first message at or
+ * `predicate` must be monotonic (`false` for a prefix, then `true`), e.g. "first item at or
  * after a timestamp" over a sorted array.
  */
 export function lowerBound(

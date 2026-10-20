@@ -317,8 +317,7 @@ const TEXT_FIELDS: Record<keyof TextComposerConfig, ConfigNode> = {
     type: 'number',
   },
   publishTypingEvents: {
-    description:
-      'Emits typing events as the user types. Off by default for threads and message editing.',
+    description: 'Emits typing events as the user types. Defaults to `true`.',
     kind: 'value',
     type: 'boolean',
   },

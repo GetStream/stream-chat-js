@@ -249,6 +249,7 @@ export class MessageComposer extends WithSubscriptions {
       constructorOptions: config as Partial<MessageComposerConfig> | undefined,
       initialSlice: this.declarativeConfig as Partial<MessageComposerConfig> | undefined,
       mergeSlice: 'deep',
+      // A stored `false` cannot say whether the client or the server turned a feature off.
       retainPatches: true,
       applyAuthority: (requested) =>
         deepFreezeConfig(

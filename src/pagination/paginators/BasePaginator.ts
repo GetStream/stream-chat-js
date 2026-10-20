@@ -163,7 +163,7 @@ export type PaginationQueryParams<Q> = {
   retryCount?: number;
   /**
    * Skips the `isLoading: true` publish for a non-first-page or `keepPreviousItems` query
-   * (background refresh). A first page still surfaces loading.
+   * (background refresh). A first page without `keepPreviousItems` still surfaces loading.
    */
   silent?: boolean;
   /** Whether the loaded page is committed to the paginator state. Defaults to true. */
@@ -283,7 +283,7 @@ export type PaginatorOptions<T, Q> = {
   /**
    * Coalesces the paginator's own live `state.items` publishes to one per `stateThrottleMs`
    * (leading and trailing edge). Pagination, jump and query publishes stay immediate. Disabled
-   * under test runners. Unset: no throttle (`MessagePaginator` defaults to 500).
+   * under test runners. Unset: no throttle.
    */
   stateThrottleMs?: number;
   /**
@@ -433,7 +433,7 @@ export abstract class BasePaginator<T, Q> {
   protected _nextQueryShape?: Q;
 
   /**
-   * Stable, purely data-driven comparison (age, last_message_at, ...). Default for
+   * Stable, purely data-driven comparison (age, timestamps, ...). Default for
    * `itemOrderComparator`, which orders items and intervals and breaks `boostComparator` ties.
    * Intervals never use the boost order: boosting a boundary item would boost its whole interval.
    */
@@ -614,7 +614,8 @@ export abstract class BasePaginator<T, Q> {
   }
 
   /**
-   * Merges a partial configuration into the resolved config.
+   * Merges a partial configuration into the resolved config. The next `initializeConfig` discards
+   * it.
    *
    * @param config - The fields to merge.
    */
@@ -676,7 +677,7 @@ export abstract class BasePaginator<T, Q> {
     return itv && isLiveTailInterval(itv) ? itv : undefined;
   }
 
-  /** `intervalViews.logicalHead`: items ingested out of pagination order. */
+  /** `intervalViews.logicalHead`: out-of-order items above the loaded window. */
   get logicalHeadItems(): T[] {
     return this.intervalViews.getLatestValue().logicalHead;
   }
@@ -785,8 +786,8 @@ export abstract class BasePaginator<T, Q> {
   }
 
   /**
-   * Filters that `matchesFilter` applies locally, not the ones sent to the server (see
-   * `ChannelPaginator.buildQueryFilters`). `null`: no filters.
+   * Filters that `matchesFilter` applies locally, not the ones sent to the server; a subclass whose
+   * backend query is filtered builds those separately. `null`: no filters.
    */
   protected buildMatchFilters(): object | null {
     return null;
@@ -906,7 +907,7 @@ export abstract class BasePaginator<T, Q> {
 
   /**
    * Whether the server knows `item`, so its ID is safe as a cursor. Prunes drop and anchor on such
-   * items only. Subclasses holding locally-created items (an unsent message) narrow it.
+   * items only. Subclasses holding locally-created items narrow it.
    */
   protected isPaginationAnchorable(item: T | undefined): boolean {
     return !!item;
@@ -973,7 +974,7 @@ export abstract class BasePaginator<T, Q> {
     interval.itemIds = ids.filter((id) => !dropped.has(id));
 
     // One transaction so sibling holders re-project once. `remove` releases only this paginator's
-    // reference: content still held elsewhere (e.g. an open thread) survives.
+    // reference: content still held elsewhere survives.
     this._itemIndex.batch(() => {
       for (const id of dropped) this._itemIndex.remove(id);
     });
@@ -1928,7 +1929,7 @@ export abstract class BasePaginator<T, Q> {
     page: T[];
     /**
      * 'auto' merges overlapping intervals. 'strict-overlap-only' merges only strictly overlapping
-     * ones, e.g. when jumping to a specific message. Defaults to 'auto'.
+     * ones, e.g. when jumping to a specific item. Defaults to 'auto'.
      */
     policy?: IntervalMergePolicy;
     isHead?: boolean;
@@ -2457,7 +2458,8 @@ export abstract class BasePaginator<T, Q> {
   }
 
   /**
-   * Re-derives the configuration from the declarative slice.
+   * Rebuilds the configuration from defaults, options and the declarative slice, dropping earlier
+   * `updateConfig` changes.
    *
    * @param declarativeConfig - The declarative slice. Leave it out to rebuild without one.
    */
@@ -2719,8 +2721,8 @@ export abstract class BasePaginator<T, Q> {
     const resolvedTailward = tailward ?? next;
 
     stateUpdate.lastQueryError = undefined;
-    // Filtering is synchronous, so reconciliation runs in a single tick (`seedFirstPageSync` relies
-    // on it).
+    // Filtering is synchronous, so reconciliation runs in a single tick (synchronous seeds rely on
+    // it).
     const filteredItems = this.filterQueryResults(items);
     stateUpdate.items = filteredItems;
 
@@ -2842,7 +2844,7 @@ export abstract class BasePaginator<T, Q> {
     } else if (!items.length && direction) {
       // An empty directional response means the dataset edge was reached, but `ingestPage` returns
       // no interval for an empty page: flag the active interval, or its `isHead`/`isTail` stay
-      // stale (`jumpToTheLatestMessage` would never see the head as loaded).
+      // stale and the head never reads as loaded.
       const activeInterval = this._activeIntervalId
         ? this._itemIntervals.get(this._activeIntervalId)
         : undefined;

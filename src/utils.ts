@@ -765,7 +765,12 @@ export const uniqBy = <T>(
   });
 };
 
-/** The user ID of a member given as an ID, a member request or a member response; `''` if none. */
+/**
+ * Reads the user ID of a member.
+ *
+ * @param member - A user ID, a member request or a member response.
+ * @returns The user ID, or `''` if there is none.
+ */
 export const getMemberUserId = (
   member: string | { user_id?: string; user?: { id?: string } },
 ) => (typeof member === 'string' ? member : member.user_id || member.user?.id || '');

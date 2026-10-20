@@ -21,12 +21,15 @@ export type ReminderResponseBaseOrResponse = ReminderResponseData;
 
 export type ReminderState = {
   channel_cid: string;
+  /** Unix nanoseconds, as the API sends it. */
   created_at: TimestampNS;
   message: MessageResponse | null;
   message_id: string;
+  /** Unix nanoseconds, as the API sends it. */
   remind_at: TimestampNS | null;
   /** Milliseconds. See {@link timeLeftMs}. */
   timeLeftMs: number | null;
+  /** Unix nanoseconds, as the API sends it. */
   updated_at: TimestampNS;
   user: UserResponse | null;
   user_id: string;
