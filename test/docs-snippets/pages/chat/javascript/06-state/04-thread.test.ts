@@ -67,9 +67,10 @@ describe(DOCS, () => {
 
     // #region snippet docs="chat/javascript/06-state/04-thread.md" heading="Initialization" tab="JavaScript" index=2
     // One thread, by its parent message id
-    const queriedThread = await client.getThreadAndHydrate(parentMessageId, {
-      watch: true,
-    });
+    const queriedThread = await client.getThreadAndHydrate(
+      { message_id: parentMessageId },
+      { watch: true },
+    );
 
     // Several threads
     const { threads } = await client.queryThreadsAndHydrate({

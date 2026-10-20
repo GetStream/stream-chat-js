@@ -197,7 +197,10 @@ describe(DOCS, () => {
       replyIds.push(reply.id);
     }
     // Loads the thread with its latest replies (3 by default)
-    const thread = await client.getThreadAndHydrate(parent.id, { watch: true });
+    const thread = await client.getThreadAndHydrate(
+      { message_id: parent.id },
+      { watch: true },
+    );
     const releaseThread = thread.activate();
     const replyId = replyIds[0];
 
