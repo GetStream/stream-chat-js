@@ -1,3 +1,11 @@
+## [10.0.0-rc.23](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.22...v10.0.0-rc.23) (2026-10-20)
+
+### Bug Fixes
+
+* add docs snippets; fix open api issues ([#1913](https://github.com/GetStream/stream-chat-js/issues/1913)) ([53505e7](https://github.com/GetStream/stream-chat-js/commit/53505e7229f6c42ee39de875a0014f817a2f93eb))
+* address code issues found while reviewing v10 source comments ([#1922](https://github.com/GetStream/stream-chat-js/issues/1922)) ([2fc319e](https://github.com/GetStream/stream-chat-js/commit/2fc319ed87556d1980f9971df569d6e29a4f35ce))
+* v10 in depth review hotfixes ([#1920](https://github.com/GetStream/stream-chat-js/issues/1920)) ([98a298d](https://github.com/GetStream/stream-chat-js/commit/98a298dc0d4222d733b1bb5d88141c811218e57d))
+
 ## [10.0.0-rc.22](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.21...v10.0.0-rc.22) (2026-10-16)
 
 ### ⚠ BREAKING CHANGES
