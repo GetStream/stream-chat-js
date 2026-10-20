@@ -155,7 +155,8 @@ export class LinkPreviewsManager implements ILinkPreviewsManager {
   }
 
   set enabled(enabled: LinkPreviewsManagerConfig['enabled']) {
-    // Always forwarded: the requested value is recorded even while the server masks it.
+    // No same-value early return: the getter reads the effective value, and a request the server
+    // masks must still be recorded.
     this.composer.updateConfig({ linkPreviews: { enabled } });
   }
 

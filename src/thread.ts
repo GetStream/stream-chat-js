@@ -59,7 +59,7 @@ export type ThreadState = {
   deletedAt: TimestampNS | null;
   isLoading: boolean;
   isStateStale: boolean;
-  /** A thread maps one-to-one to its parent message, whose id is the thread id. */
+  /** A thread maps one-to-one to its parent message, whose ID is the thread ID. */
   parentMessage: LocalMessage;
   participants: ThreadStateResponse['thread_participants'];
   read: ThreadReadState;
@@ -194,8 +194,9 @@ export class Thread extends WithSubscriptions {
         custom: {},
         deletedAt: formattedParentMessage.deleted_at ?? null,
         isLoading: false,
-        // Loads its data once when opened, unless the parent has no replies in a watched channel
-        // (nothing on the server yet: `getThread` would answer 404).
+        // Loads its data once when opened. A parent without replies in a watched channel has nothing
+        // on the server yet (`getThread` would answer 404); in an unwatched channel `reply_count` may
+        // miss newer replies, so it loads.
         isStateStale:
           replyCount > 0 || channel.watchStatus !== ChannelWatchStatus.Watching,
         parentMessage: formattedParentMessage,
@@ -487,7 +488,8 @@ export class Thread extends WithSubscriptions {
    * Subscribes to the `'thread'` configuration key. Unlike `Channel`, which subscribes in its
    * constructor, a thread that never registers sees the declarative slice only as of construction:
    * no setup function runs, later `client.config.set` calls miss it and `client.config.reset()`
-   * skips it. `ThreadManager` registers the threads it lists or that are active.
+   * skips it. `ThreadManager` registers the threads it holds (listed, `ensure()`d or active) while
+   * its own subscriptions are registered.
    */
   private subscribeThreadSetupStateChange = () =>
     applyInstanceConfiguration({
@@ -737,7 +739,7 @@ export class Thread extends WithSubscriptions {
 
   public unregisterSubscriptions = () => {
     const symbol = super.unregisterSubscriptions();
-    // Releases the reply paginator's per-id links on the shared message store (they are not in the
+    // Releases the reply paginator's per-ID links on the shared message store (they are not in the
     // subscription list), which would otherwise pin a removed thread and its replies. `getThread`
     // builds a fresh instance if the thread is re-opened.
     this.messagePaginator.dispose();

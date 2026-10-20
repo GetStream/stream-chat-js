@@ -12,9 +12,9 @@ const logger = chatLoggerSystem.getLogger('offline-db');
  * @internal
  */
 export type QueueableOperation<T extends QueueableType> = {
-  /** How a failed queueing attempt is logged. */
+  /** How a rejected `queueTask` attempt is logged. */
   logFailureAs: { message: string; method: string };
-  /** Whether a replay needs the channel. Such a task is only queued with a channel type and id. */
+  /** Whether a replay needs the channel. Such a task is only queued with a channel type and ID. */
   needsChannel: boolean;
   /**
    * Performs the request. `channel` is the instance the caller already holds (a first attempt); a
@@ -118,16 +118,16 @@ export const QUEUEABLE_OPERATIONS: {
 };
 
 /**
- * Queues the task in the offline DB so it replays on reconnect, and runs the request directly when
- * there is no offline DB, `queue` is `false`, the task is not replayable, or queueing rejects.
+ * Runs the task through `offlineDb.queueTask` (queued for replay on an ephemeral failure), or
+ * directly when there is no offline DB, `queue` is `false` or the task is not replayable.
  *
- * A queueing failure is logged and falls through to the direct call, which can repeat a request
- * that already reached the server.
+ * If `queueTask` rejects, the failure is logged and the request runs again directly, so a request
+ * that reached the server can repeat.
  *
  * @internal
  *
  * @param params.channel - The caller's channel instance, so a first attempt runs on that object.
- * @param params.queue - `false` for a send with no message id (nothing to key a queue entry on).
+ * @param params.queue - `false` for a send with no message ID (nothing to key a queue entry on).
  */
 export const queueOrRun = async <T extends QueueableType>({
   channel,

@@ -9,7 +9,9 @@ export type WSConnectionState = {
 
 /** The WebSocket's settings. Timings are in milliseconds. */
 export type WSConnectionConfig = {
-  /** How long `connect()` waits for the server's `connection.ok` before giving up. Default 15s. */
+  /**
+   * How long `connect()` waits for the server's `connection.ok` before giving up. Defaults to 15s.
+   */
   connectTimeoutMs: number;
   /**
    * Falls back to HTTP long-polling, for networks that block WebSockets, when the WebSocket cannot
@@ -26,7 +28,7 @@ export type WSConnectionConfig = {
   pingIntervalMs: number;
   /**
    * Extra time on top of {@link pingIntervalMs} before the health check declares the socket dead
-   * (the check fires after `pingIntervalMs + healthCheckGracePeriodMs` of silence).
+   * (the check fires after `pingIntervalMs + healthCheckGracePeriodMs` of silence). Defaults to 10s.
    */
   healthCheckGracePeriodMs: number;
   /**

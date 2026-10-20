@@ -184,7 +184,7 @@ export class MessageOperations {
   /*
    * Each operation sends through the integrator's handler for its kind (`ChannelConfig.requestHandlers`)
    * when one is registered, else through `defaults.<kind>`. A handler receives the default as
-   * `defaultRequest`.
+   * `defaultRequest`. There is no per-call override: it would win over the host SDK's handler.
    */
 
   private resolveRequest<K extends OperationKind>(
@@ -293,7 +293,7 @@ export class MessageOperations {
   /**
    * Adds a reaction optimistically: it is applied to the cached message at once, then sent through the
    * offline queue. The response's counts reconcile; a definitive failure rolls it back, a request queued
-   * for replay does not. The local write is by message id, so it also reaches a thread reply that no
+   * for replay does not. The local write is by message ID, so it also reaches a thread reply that no
    * channel collection holds.
    */
   async addReaction({
@@ -367,7 +367,7 @@ export class MessageOperations {
     if (!(await this.ctx.isQueued(messageId, types))) undo?.();
   }
 
-  /** Reconciles the server copy only if still held: a bare upsert of an unheld id would orphan it. */
+  /** Reconciles the server copy only if still held: a bare upsert of an unheld ID would orphan it. */
   private reconcileHeldMessage(message: MessageResponse | undefined | null) {
     if (!message) return;
     const { messageStore } = this.ctx.channel.getClient();

@@ -153,8 +153,9 @@ export class WSConnection extends WithSubscriptions {
 
   /**
    * Builds a fresh socket (resetting `wsID`, the failure counters and the health-check timers) and
-   * opens it, closing any previous one. With `enableWSFallback`, a network failure switches to the
-   * long-poll ({@link fallback}), which every later call connects instead.
+   * opens it, closing any previous one. A socket injected through `config.connection` (Node only) is
+   * reused as is. With `enableWSFallback`, a network failure switches to the long-poll
+   * ({@link fallback}), which every later call connects instead.
    */
   async connect(timeout?: number): ConnectAPIResponse {
     // Once switched, stay on the long-poll.
@@ -208,7 +209,7 @@ export class WSConnection extends WithSubscriptions {
         return await this.fallback.connect();
       }
 
-      // A failure the socket does not retry must settle the pending connection id.
+      // A failure the socket does not retry must settle the pending connection ID.
       if (!isWSFailure(error as APIError)) {
         this.client.connectionIdManager.rejectConnectionId(error);
       }
@@ -230,8 +231,8 @@ export class WSConnection extends WithSubscriptions {
 
   /**
    * Closes the socket and, after an `enableWSFallback` switch, the long-poll too, telling the server
-   * to close its connection id. `timeout` (ms) bounds the socket's close frame (default 1s) and the
-   * long-poll's close request (default 2s).
+   * to close its connection ID. `timeout` (ms) bounds the socket's close frame and the long-poll's
+   * close request. Defaults to 1s and 2s respectively.
    */
   async disconnect(timeout?: number): Promise<void> {
     // Read before the socket's `disconnect()` drops it: the long-poll's close request must carry it.

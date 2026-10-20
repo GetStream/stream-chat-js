@@ -127,6 +127,7 @@ export type DBGetLastSyncedAtType = {
 };
 
 export type DBGetPendingTasksType = {
+  /** Returns only this message's tasks. */
   messageId?: string;
 };
 

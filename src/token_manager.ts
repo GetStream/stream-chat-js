@@ -25,8 +25,11 @@ export class TokenManager {
   }
 
   /**
-   * Sets a static token or a provider (returns the token or a promise of it), then loads the token.
-   * Throws when the token is not a string or function, or a string token does not match `user.id`.
+   * Sets a static token or a token provider, then loads the token.
+   *
+   * @param tokenOrProvider - A token string, or a provider that returns one or a promise of one.
+   * @param user - The user the token belongs to.
+   * @throws When the token is not a string or function, or a string token does not match `user.id`.
    */
   setTokenOrProvider = async (
     tokenOrProvider: TokenOrProvider,

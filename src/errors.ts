@@ -99,6 +99,6 @@ export const parseError = (error: unknown): StreamAPIError => {
   return (stringError ? JSON.parse(stringError) : {}) as StreamAPIError;
 };
 
-/** Whether the server rejected a send because a message with that id already exists. */
+/** Whether the server rejected a send because a message with that ID already exists. */
 export const isAlreadyExistsError = (error: unknown, parsed: StreamAPIError) =>
   parsed.code === 4 && error instanceof Error && error.message.includes('already exists');

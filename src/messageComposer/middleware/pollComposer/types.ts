@@ -21,7 +21,7 @@ export type UpdateFieldsData = Partial<Omit<PollComposerState['data'], 'options'
 };
 
 /**
- * Field validation errors, keyed by field (`options` errors by option id). Each carries a stable
+ * Field validation errors, keyed by field (`options` errors by option ID). Each carries a stable
  * {@link PollComposerValidationError.code} for localization.
  */
 export type PollComposerFieldErrors = Partial<

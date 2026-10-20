@@ -282,8 +282,9 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   private _pendingPredefinedFilter: ParsedPredefinedFilterResponse | undefined;
   /**
    * True while the loaded items came only from the offline cache (seeded by `setItems`, never
-   * confirmed by a query). The seed records `offset = <cache size>` and a query shape, so the next
-   * query looks like a continuation rather than a first page. See `executeQuery`.
+   * confirmed by a query). The seed's offset and query shape would make the next query a
+   * continuation, but a cache has no pagination position, so `executeQuery` forces a first page that
+   * keeps the items.
    */
   private _itemsLoadedFromOfflineDB = false;
   /** The query in flight refreshes a cache-only window, so its response replaces the window. */
@@ -736,7 +737,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
 
   /**
    * Places `channel` in the list if it matches, or drops it when it stops matching. A provisional
-   * channel (created from members, no id yet) is refused: it is stored under a temporary cid. Another
+   * channel (created from members, no ID yet) is refused: it is stored under a temporary cid. Another
    * instance for a stored cid is replaced by the stored one (`ChannelManager.resolveListedChannel`).
    */
   ingestItem(input: Channel): boolean {

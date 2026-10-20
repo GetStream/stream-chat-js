@@ -17,7 +17,12 @@ export class FixedSizeQueueCache<K, T> {
     this.dispose = options?.dispose ?? null;
   }
 
-  /** Inserts or updates `key` as the most recently used entry. */
+  /**
+   * Inserts or updates an entry as the most recently used one.
+   *
+   * @param key - The cache key.
+   * @param value - The value to associate with `key`.
+   */
   add(key: K, value: T) {
     const index = this.keys.indexOf(key);
 
@@ -41,14 +46,24 @@ export class FixedSizeQueueCache<K, T> {
     this.map.set(key, value);
   }
 
-  /** Returns the value without marking it as recently used. */
+  /**
+   * Retrieves a value without marking it as recently used.
+   *
+   * @param key - The cache key.
+   * @returns The value, or `undefined` when the key is not cached.
+   */
   peek(key: K) {
     const value = this.map.get(key);
 
     return value;
   }
 
-  /** Returns the value and marks it as most recently used. */
+  /**
+   * Retrieves a value and marks it as most recently used.
+   *
+   * @param key - The cache key.
+   * @returns The value, or `undefined` when the key is not cached.
+   */
   get(key: K) {
     const foundItem = this.peek(key);
 

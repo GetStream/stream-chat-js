@@ -26,8 +26,8 @@ const eventCarriesOwnUser = (
 
 export type ThreadManagerConfig = {
   /**
-   * Minimum gap between thread-list reloads triggered by connection recovery, in milliseconds
-   * (default 1000). Read in `registerSubscriptions()`, so a change applies from the next call.
+   * Minimum gap between thread-list reloads triggered by connection recovery, in milliseconds.
+   * Defaults to 1000. Read in `registerSubscriptions()`, so a change applies from the next call.
    */
   connectionRecoveryThrottleMs: number;
 };
@@ -132,7 +132,8 @@ export class ThreadManager extends WithSubscriptions {
    * of `new Thread()`: the thread list reuses this instance if it later loads the same thread. A
    * created thread starts stale and loads its data when first opened, unless the parent has no
    * replies in a watched channel (nothing to load: `getThread` would 404, the first reply arrives
-   * as an event).
+   * as an event). In an unwatched channel the parent's `reply_count` may miss newer replies, so it
+   * always loads.
    */
   public ensure = ({
     channel,
@@ -273,7 +274,7 @@ export class ThreadManager extends WithSubscriptions {
   };
 
   /**
-   * Routes client events to the threads in the store by id. A message event reaches the thread the
+   * Routes client events to the threads in the store by ID. A message event reaches the thread the
    * message replies in and the thread it starts; quoted-message updates stay within the reply's own
    * thread. A thread follows its channel's `watchStatus` itself.
    */

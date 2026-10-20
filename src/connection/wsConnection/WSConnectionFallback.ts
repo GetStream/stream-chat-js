@@ -56,8 +56,8 @@ export class WSConnectionFallback {
   /**
    * Opens a long-poll connection.
    *
-   * @param reconnect - `false` on the first call, `true` on later ones (keeps the connection alive and
-   *   settles the connect promises).
+   * @param reconnect - `true` when the long-poll reconnects itself (retries retryable failures and
+   *   settles the client's pending connect promises); `false` when `WSConnection.connect()` calls it.
    * @internal
    */
   connect = async (reconnect = false) => {
@@ -71,7 +71,7 @@ export class WSConnectionFallback {
     }
 
     this._setState(WSFallbackConnectionState.Connecting);
-    // Before anything awaits, so a watch issued now waits for this connection's id.
+    // Before anything awaits, so a watch issued now waits for this connection's ID.
     this.client.connectionIdManager.arm();
     try {
       const { event } = await this._req<{ event: ConnectionOpen }>(
@@ -109,8 +109,8 @@ export class WSConnectionFallback {
   }
 
   /**
-   * Stops polling and tells the server to close `connectionId`. The id is passed in because
-   * `WSConnection.disconnect()` disconnects the socket first, which drops the manager's id.
+   * Stops polling and tells the server to close `connectionId`. The ID is passed in because
+   * `WSConnection.disconnect()` disconnects the socket first, which drops the manager's ID.
    *
    * @param timeout - The close request's timeout, in milliseconds.
    * @internal
@@ -154,7 +154,7 @@ export class WSConnectionFallback {
       this.state === WSFallbackConnectionState.Closed ||
       this.state === WSFallbackConnectionState.Disconnected
     ) {
-      // The server keyed watches by this connection id, so no request may carry it any more.
+      // The server keyed watches by this connection ID, so no request may carry it any more.
       this.client.connectionIdManager.invalidate();
       if (this.client.wsConnection._setStatus({ isHealthy: false })) {
         this.client.channelManager.markChannelsWatchInterrupted();
@@ -187,7 +187,7 @@ export class WSConnectionFallback {
         this._log(`_req() - Retryable error, retrying request`);
         await sleep(retryInterval(this.consecutiveFailures));
         // A reconnect, `disconnect()` or going offline during the sleep dropped this request's
-        // connection id. Sent anyway, its ConnectionIDNotFoundError would make `_poll` tear down the
+        // connection ID. Sent anyway, its ConnectionIDNotFoundError would make `_poll` tear down the
         // connection that replaced it.
         if (
           params.connection_id &&
@@ -238,7 +238,7 @@ export class WSConnectionFallback {
 
         if (isAPIError(error) && !isErrorRetryable(error)) {
           this._setState(WSFallbackConnectionState.Closed);
-          // Nothing reconnects from here, so fail whatever is waiting for a connection id.
+          // Nothing reconnects from here, so fail whatever is waiting for a connection ID.
           this.client.connectionIdManager.rejectConnectionId(error);
           return;
         }

@@ -162,7 +162,6 @@ export class AttachmentManager {
   set maxNumberOfFilesPerMessage(
     maxNumberOfFilesPerMessage: AttachmentManagerConfig['maxNumberOfFilesPerMessage'],
   ) {
-    // Always forwarded: the requested value is recorded even while the server masks it.
     this.composer.updateConfig({ attachments: { maxNumberOfFilesPerMessage } });
   }
 
@@ -331,7 +330,7 @@ export class AttachmentManager {
     const attachments = [...this.attachments];
     const attachmentIndex = this.getAttachmentIndex(attachmentToUpdate.localMetadata.id);
     if (attachmentIndex === -1) return null;
-    // Replace in place by id; reordering would break indexing.
+    // Replace in place by ID; reordering would break indexing.
     const merged = mergeWithDiff<LocalAttachment>(
       stateAttachments[attachmentIndex],
       attachmentToUpdate,

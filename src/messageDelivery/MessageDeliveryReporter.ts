@@ -18,13 +18,16 @@ import { throttle } from '../utils';
 import { isAPIError, isErrorRetryable } from '../errors';
 
 export type MessageDeliveryReporterConfig = {
-  /** How long delivery reports are buffered before being sent as one batch (defaults to 1000ms). */
+  /** How long delivery reports are buffered before being sent as one batch. Defaults to 1000ms. */
   markAsDeliveredBufferTimeoutMs: number;
-  /** Minimum gap between automatic `markRead` calls (default 1000ms). Changes rebuild the throttle. */
+  /**
+   * Minimum gap between automatic `markRead` calls. Changes rebuild the throttle. Defaults to
+   * 1000ms.
+   */
   markAsReadThrottleTimeoutMs: number;
-  /** Most delivery receipts sent in a single request; the remainder is carried to the next (100). */
+  /** Most delivery receipts sent in one request; the rest go in the next. Defaults to 100. */
   maxDeliveredMessageCountInPayload: number;
-  /** Consecutive timeouts before the buffer window is widened (defaults to 3). */
+  /** Consecutive timeouts before the buffer window is widened. Defaults to 3. */
   retryCountLimitForTimeoutIncrease: number;
 };
 
@@ -237,8 +240,10 @@ export class MessageDeliveryReporter {
   }
 
   /**
-   * Records each collection's latest undelivered message and schedules a report if none is pending. For
-   * WS handling (`message.new`) and for ingesting channel query results.
+   * Records each collection's latest undelivered message and schedules a report if none is
+   * pending. For WS handling (`message.new`) and for ingesting channel query results.
+   *
+   * @param collections - The channels or threads whose candidates should be synced.
    */
   public syncDeliveredCandidates(collections: (Channel | Thread)[]) {
     if (this.client.user?.privacy_settings?.delivery_receipts?.enabled === false) return;
@@ -246,7 +251,11 @@ export class MessageDeliveryReporter {
     this.announceDeliveryBuffered();
   }
 
-  /** Sends the buffered report immediately, at most `maxDeliveredMessageCountInPayload` entries. */
+  /**
+   * Sends the buffered report immediately, at most `maxDeliveredMessageCountInPayload` entries.
+   *
+   * @param options - Flags forwarded to `client.markDelivered`.
+   */
   public announceDelivery = (options?: AnnounceDeliveryOptions) => {
     if (!this.canExecuteRequest) return;
 
@@ -278,7 +287,7 @@ export class MessageDeliveryReporter {
     };
 
     const handleError = (error: StreamAPIError | Error) => {
-      // Restore the failed batch, with newer candidates taking precedence.
+      // Requeue the failed batch ahead of the remaining candidates, so it is retried first.
       const newDeliveryReportCandidates = new Map(sendBuffer);
       for (const [k, v] of this.deliveryReportCandidates.entries()) {
         newDeliveryReportCandidates.set(k, v);
@@ -315,6 +324,8 @@ export class MessageDeliveryReporter {
    * Marks the channel or thread read. A channel with read events disabled is marked read locally when
    * `localUnreadCountEnabled` is set.
    *
+   * @param collection - The channel or thread to mark as read.
+   * @param options - Flags forwarded to the underlying `markRead` call.
    * @returns The server response, or `null` when no request went out.
    */
   public markRead = async (collection: Channel | Thread, options?: MarkReadRequest) => {

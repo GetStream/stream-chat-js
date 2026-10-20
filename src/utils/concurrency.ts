@@ -11,13 +11,25 @@ type AsyncWrapper<P extends unknown[], T> = (
   onContinued: () => void;
 };
 
-/** Runs async functions with the same `tag` one after another. Different tags run in parallel. */
+/**
+ * Runs async functions with the same tag one after another.
+ *
+ * @param tag - Async functions with the same tag run serially. Different tags run in parallel.
+ * @param cb - Async function to run.
+ * @returns A promise that resolves with the result of `cb`.
+ */
 export const withoutConcurrency = createRunner(wrapWithContinuationTracking);
 
 /**
- * Like {@link withoutConcurrency}, but scheduling a new action with the same `tag` cancels the
- * earlier ones. One that has not started never runs and resolves `'canceled'`. A running one has
- * its `AbortSignal` (the only argument of `cb`) aborted and decides how to react.
+ * Like {@link withoutConcurrency}, but scheduling a new action with the same tag cancels the
+ * earlier ones.
+ *
+ * @param tag - Async functions with the same tag run serially, and are canceled when a new action
+ *   with the same tag is scheduled.
+ * @param cb - Async function to run. Receives an `AbortSignal` as the only argument, aborted when
+ *   the running action is canceled; `cb` decides how to react.
+ * @returns A promise that resolves with the result of `cb`, or with `'canceled'` when the action
+ *   was canceled before it started.
  */
 export const withCancellation = createRunner(wrapWithCancellation);
 

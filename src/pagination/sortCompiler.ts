@@ -27,7 +27,7 @@ export function binarySearch<T>({
 }: {
   needle: T;
   length: number;
-  /** Reads the item at an index (the array may hold ids resolved through an index). */
+  /** Reads the item at an index (the array may hold IDs resolved through an index). */
   getItemAt: (index: number) => T | undefined;
   /** Identity, not equality under the sort order. */
   itemIdentityEquals: (item1: T, item2: T) => boolean;
@@ -43,7 +43,7 @@ export function binarySearch<T>({
     const mid = (lo + hi) >> 1;
     const midItem = getItemAt(mid);
     if (!midItem) {
-      // An id without a backing item: report not found.
+      // An ID without a backing item: report not found.
       return { currentIndex: -1, insertionIndex: -1 };
     }
 
@@ -107,8 +107,15 @@ export function binarySearch<T>({
 }
 
 /**
- * Builds a comparator from a sort spec: terms apply in order, then `tiebreaker` (default: `cid`).
+ * Builds a comparator from a sort spec: terms apply in order, then `tiebreaker`.
  * `null`/`undefined` values sort last whatever the direction.
+ *
+ * @param params - Comparator configuration.
+ * @param params.sort - The sort specification defining fields and directions.
+ * @param params.resolvePathValue - Resolver used to read a field value from an item.
+ * @param params.tiebreaker - Comparator applied when all sort terms are equal. Defaults to
+ *   comparing `cid`.
+ * @returns The comparator.
  */
 export function makeComparator<T>({
   sort,

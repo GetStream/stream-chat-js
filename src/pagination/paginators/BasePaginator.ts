@@ -161,9 +161,12 @@ export type PaginationQueryParams<Q> = {
   requestOptions?: Record<string, unknown>;
   /** Number of retries after a failure. Overrides `PaginatorOptions.retryCount`. */
   retryCount?: number;
-  /** Suppresses `isLoading` transitions for this query (background refresh). */
+  /**
+   * Skips the `isLoading: true` publish for a non-first-page or `keepPreviousItems` query
+   * (background refresh). A first page still surfaces loading.
+   */
   silent?: boolean;
-  /** Whether the loaded page is committed to the paginator state. Default: true. */
+  /** Whether the loaded page is committed to the paginator state. Defaults to true. */
   updateState?: boolean;
 };
 
@@ -247,7 +250,7 @@ export interface PaginatorPlugin<T> {
   // onQueryError?(ctx: { error: unknown; paginator: BasePaginator<T, Q> }): void | Promise<void>;
 }
 
-/** Plugins hook into the paginator lifecycle and run in array order. */
+// Plugins hook into the paginator lifecycle and run in array order.
 // plugins?: PaginatorPlugin<T, Q>[];
 
 /**
@@ -275,7 +278,7 @@ export type PaginatorOptions<T, Q> = {
    * slice) drops them but keeps injected options. Not part of {@link BasePaginatorConfig}.
    */
   declarativeConfig?: DeclarativePaginatorConfig;
-  /** Debounce of the search query in milliseconds. Default: 300. */
+  /** Debounce of the search query in milliseconds. Defaults to 300. */
   debounceMs?: number;
   /**
    * Coalesces the paginator's own live `state.items` publishes to one per `stateThrottleMs`
@@ -300,11 +303,14 @@ export type PaginatorOptions<T, Q> = {
   /** Shared item index: a single source of data for all consumers. */
   itemIndex?: ItemIndexApi<T>;
   /**
-   * Builds the item index with the fully-constructed paginator as `owner`, for adapters that need
-   * the owner (e.g. a client-global store). Ignored when `itemIndex` is supplied.
+   * Builds the item index from the paginator (`owner`), for adapters that need it (e.g. a
+   * client-global store). Runs in the base constructor, before subclass fields are initialized.
+   * Ignored when `itemIndex` is supplied.
    */
   createItemIndex?: (owner: BasePaginator<T, Q>) => ItemIndexApi<T>;
-  /** Orders items in memory for interval math and the visible list. Default: `sortComparator`. */
+  /**
+   * Orders items in memory for interval math and the visible list. Defaults to `sortComparator`.
+   */
   itemOrderComparator?: (a: T, b: T) => number;
   /**
    * An already visible item keeps its relative position in the current items array when updated.
@@ -317,15 +323,15 @@ export type PaginatorOptions<T, Q> = {
    * below `pageSize` are clamped up to it. See {@link BasePaginator.pruneTailToLimit}.
    */
   maxLoadedItems?: number;
-  /** Items requested per page. Default: 10. */
+  /** Items requested per page. Defaults to 10. */
   pageSize?: number;
   /**
    * Retries after a failed request (`retryCount + 1` attempts),
-   * `DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES` apart. Default: 0.
+   * `DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES` apart. Defaults to 0.
    * `PaginationQueryParams.retryCount` overrides it per call.
    */
   retryCount?: number;
-  /** Rethrows errors from pagination execution instead of swallowing them. Default: false. */
+  /** Rethrows errors from pagination execution instead of swallowing them. Defaults to false. */
   throwErrors?: boolean;
 };
 
@@ -397,7 +403,7 @@ export abstract class BasePaginator<T, Q> {
    */
   private _viewPublishThrottle?: Throttled<[]>;
 
-  /** Changed ids buffered since the last {@link flushIntervalViewPublish} (throttled only). */
+  /** Changed IDs buffered since the last {@link flushIntervalViewPublish} (throttled only). */
   private _pendingViewChangedIds = new Set<string>();
 
   /**
@@ -408,7 +414,7 @@ export abstract class BasePaginator<T, Q> {
   /**
    * The interval a prune just shortened. Its `hasMoreTail` and `cursor` ride on the next
    * `state.items` publish, which can be a throttle interval late, so
-   * {@link consumePendingPrunePaginationState} rereads them from the interval by id when it fires.
+   * {@link consumePendingPrunePaginationState} rereads them from the interval by ID when it fires.
    */
   private _prunedIntervalId?: string;
   /** Set when a suspended op changed the active window, so {@link batch} publishes on exit. */
@@ -427,9 +433,9 @@ export abstract class BasePaginator<T, Q> {
   protected _nextQueryShape?: Q;
 
   /**
-   * Stable, purely data-driven comparison (age, last_message_at, ...). Orders intervals and is the
-   * fallback when `boostComparator` is inconclusive. Intervals are never ordered by the boost
-   * comparator, since boosting a boundary item would boost its whole interval.
+   * Stable, purely data-driven comparison (age, last_message_at, ...). Default for
+   * `itemOrderComparator`, which orders items and intervals and breaks `boostComparator` ties.
+   * Intervals never use the boost order: boosting a boundary item would boost its whole interval.
    */
   sortComparator: (a: T, b: T) => number;
   protected _filterFieldToDataResolvers: FieldToDataResolver<T>[];
@@ -438,15 +444,15 @@ export abstract class BasePaginator<T, Q> {
   protected _maxBoostSeq = 0;
 
   /**
-   * Whether `itemIds[0]` (true, default) or the last id (false) is the pagination head edge.
-   * `itemIds` stay in `sortComparator` order either way.
+   * Whether `itemIds[0]` (true) or the last ID (false) is the pagination head edge. Defaults to
+   * true. `itemIds` stay in `itemOrderComparator` order either way.
    */
   protected get intervalItemIdsAreHeadFirst(): boolean {
     return true;
   }
 
   /**
-   * Order of intervals relative to each other, comparing head edges under `sortComparator`.
+   * Order of intervals relative to each other, comparing head edges under `itemOrderComparator`.
    * Independent of the `itemIds` order and of `intervalItemIdsAreHeadFirst`.
    */
   protected get intervalSortDirection(): 'asc' | 'desc' {
@@ -547,7 +553,10 @@ export abstract class BasePaginator<T, Q> {
     return this.state.getLatestValue().isLoading;
   }
 
-  /** True once a query has run. */
+  /**
+   * True once a query has run or a non-empty window was loaded without one (`setItems`,
+   * `mergeNewestPage`). Cleared by `resetState`.
+   */
   get isInitialized() {
     return typeof this._lastQueryShape !== 'undefined';
   }
@@ -883,15 +892,15 @@ export abstract class BasePaginator<T, Q> {
   }
 
   /**
-   * Whether pruning is on hold, e.g. a UI that wants it only near the tail edge. False: the
-   * configured cap always applies.
+   * Whether pruning is on hold, e.g. while the user reads near the tail edge, where a prune drops
+   * items. False: the configured cap always applies.
    */
   protected get isPruningSuspended(): boolean {
     return false;
   }
 
   /**
-   * Whether the server knows `item`, so its id is safe as a cursor. Prunes drop and anchor on such
+   * Whether the server knows `item`, so its ID is safe as a cursor. Prunes drop and anchor on such
    * items only. Subclasses holding locally-created items (an unsent message) narrow it.
    */
   protected isPaginationAnchorable(item: T | undefined): boolean {
@@ -923,7 +932,8 @@ export abstract class BasePaginator<T, Q> {
     const limit = this.effectiveMaxLoadedItems;
     if (typeof limit === 'undefined' || this.isPruningSuspended) return false;
 
-    // Also narrows the type: `LogicalInterval` has no `isHead`/`isTail`/`hasMore*`.
+    // Anchored intervals only: a logical interval has no pagination provenance, so pruned items
+    // could not be refetched. Also narrows the type for the field reads below.
     if (isLogicalInterval(interval)) return false;
 
     if (
@@ -934,7 +944,7 @@ export abstract class BasePaginator<T, Q> {
       return false;
 
     const ids = interval.itemIds;
-    // The tail (oldest) edge is index 0 unless the interval stores ids head-first.
+    // The tail (oldest) edge is index 0 unless the interval stores IDs head-first.
     const tailEdgeIsFirst = !this.intervalItemIdsAreHeadFirst;
     const step = tailEdgeIsFirst ? 1 : -1;
     const dropped = new Set<string>();
@@ -954,7 +964,7 @@ export abstract class BasePaginator<T, Q> {
 
     if (!dropped.size) return false;
 
-    // Rebuild rather than splice: skipped local items leave the dropped ids non-contiguous.
+    // Rebuild rather than splice: skipped local items leave the dropped IDs non-contiguous.
     interval.itemIds = ids.filter((id) => !dropped.has(id));
 
     // One transaction so sibling holders re-project once. `remove` releases only this paginator's
@@ -968,15 +978,15 @@ export abstract class BasePaginator<T, Q> {
     interval.isTail = false;
     interval.hasMoreTail = true;
 
-    // Only the id is recorded: the `state` fields are derived at publish time.
+    // Only the ID is recorded: the `state` fields are derived at publish time.
     this._prunedIntervalId = interval.id;
 
     return true;
   }
 
   /**
-   * The edge-most id at `edge` that the server knows, so it is usable as a cursor. Not simply
-   * `itemIds[0]`: a prune skips locally-created items, so the outermost id may be client-generated.
+   * The edge-most ID at `edge` that the server knows, so it is usable as a cursor. Not simply
+   * `itemIds[0]`: a prune skips locally-created items, so the outermost ID may be client-generated.
    */
   private getPaginationEdgeId(interval: Interval, edge: 'head' | 'tail'): string | null {
     const ids = interval.itemIds;
@@ -1076,12 +1086,12 @@ export abstract class BasePaginator<T, Q> {
 
   /**
    * Reconciles the window and interval views after another holder swapped the shared item objects
-   * they reference: refreshes views holding a changed id and re-projects (or slot-swaps) the active
+   * they reference: refreshes views holding a changed ID and re-projects (or slot-swaps) the active
    * window, coalesced through the publish throttles when throttling is on.
    */
   protected reconcileChangedIds(changedIds: ReadonlySet<string>): void {
-    // Views refresh independently of the active window (they can hold ids it does not). Throttled:
-    // buffer the ids so refreshes coalesce.
+    // Views refresh independently of the active window (they can hold IDs it does not). Throttled:
+    // buffer the IDs so refreshes coalesce.
     if (this.isStateThrottled) {
       for (const id of changedIds) this._pendingViewChangedIds.add(id);
       this._viewPublishThrottle?.throttledFn();
@@ -1133,7 +1143,7 @@ export abstract class BasePaginator<T, Q> {
         if (!changedIds.has(id)) continue;
         const updated = this._itemIndex.get(id);
         if (!updated) {
-          // The id left the store (a removal): resync via a full projection.
+          // The ID left the store (a removal): resync via a full projection.
           needsFullProjection = true;
           break;
         }
@@ -1148,7 +1158,7 @@ export abstract class BasePaginator<T, Q> {
     }
 
     // Fallback (membership or order drifted, no window to patch, or a boost is active): re-project
-    // only if a changed id is in the active interval.
+    // only if a changed ID is in the active interval.
     if (this.intervalHoldsAnyChangedId(activeInterval, changedIds)) {
       this.state.partialNext({ items: this.intervalToItems(activeInterval) });
     }
@@ -1187,8 +1197,11 @@ export abstract class BasePaginator<T, Q> {
 
   /**
    * Raises the item's priority in `effectiveComparator`. Affects position inside an interval, not
-   * interval boundaries. `opts.ttlMs` or `opts.until` set the expiry (default: 15s from now),
-   * `opts.seq` orders concurrent boosts.
+   * interval boundaries.
+   *
+   * @param itemId - ID of the item to boost.
+   * @param opts - Boost options: `ttlMs` / `until` control expiry (defaults to 15s from now) and
+   *   `seq` orders concurrent boosts.
    */
   boost(itemId: string, opts?: { ttlMs?: number; until?: number; seq?: number }) {
     const now = Date.now();
@@ -1329,7 +1342,7 @@ export abstract class BasePaginator<T, Q> {
   /**
    * Pagination head/tail edges of an interval, taken from its sort bounds.
    * `intervalItemIdsAreHeadFirst` decides which bound is the head: where new items appear, not
-   * necessarily the min under `sortComparator`.
+   * necessarily the min under `itemOrderComparator`.
    */
   protected getIntervalPaginationEdges(
     interval: Interval | LogicalInterval,
@@ -1407,7 +1420,7 @@ export abstract class BasePaginator<T, Q> {
   }
 
   /**
-   * Whether intervals A and B should be merged: they strictly overlap in `sortComparator` order
+   * Whether intervals A and B should be merged: they strictly overlap in `itemOrderComparator` order
    * (`A.min <= B.max && B.min <= A.max`) or, under policy 'auto' only, one is marked
    * `isHead`/`isTail` and the other extends beyond its pagination head/tail edge.
    */
@@ -1609,7 +1622,7 @@ export abstract class BasePaginator<T, Q> {
     }
   }
 
-  /** The interval whose `itemIds` lists this id, regardless of where the item sorts. */
+  /** The interval whose `itemIds` lists this ID, regardless of where the item sorts. */
   protected findIntervalHoldingItem(item: T): AnyInterval | undefined {
     const id = this.getItemId(item);
     for (const interval of this.itemIntervals) {
@@ -1699,7 +1712,7 @@ export abstract class BasePaginator<T, Q> {
     };
   }
 
-  /** Inserts the item id at its sorted position; no-op when none can be determined. */
+  /** Inserts the item ID at its sorted position; no-op when none can be determined. */
   protected insertItemIdIntoInterval<I extends Interval | LogicalInterval>(
     interval: I,
     item: T,
@@ -1729,7 +1742,7 @@ export abstract class BasePaginator<T, Q> {
   /**
    * Re-evaluates what the logical (live head/tail) intervals hold against a freshly ingested page
    * and returns the resulting anchored interval. Live updates park items there before any page
-   * exists; once a page covers one, leaving it gives the same id two homes (a duplicated row).
+   * exists; once a page covers one, leaving it gives the same ID two homes (a duplicated row).
    * Unlike the `ingestPage` merge, whose heuristics fire only sometimes, this pass is unconditional
    * and idempotent.
    */
@@ -1909,8 +1922,8 @@ export abstract class BasePaginator<T, Q> {
   }: {
     page: T[];
     /**
-     * 'auto' (default) merges overlapping intervals. 'strict-overlap-only' merges only strictly
-     * overlapping ones, e.g. when jumping to a specific message.
+     * 'auto' merges overlapping intervals. 'strict-overlap-only' merges only strictly overlapping
+     * ones, e.g. when jumping to a specific message. Defaults to 'auto'.
      */
     policy?: IntervalMergePolicy;
     isHead?: boolean;
@@ -2112,7 +2125,9 @@ export abstract class BasePaginator<T, Q> {
     const { liveHeadLogical, liveTailLogical } = this;
 
     if (!targetInterval) {
-      // No anchored interval contains the new snapshot: it goes to the logical head or tail.
+      // No anchored interval contains the new snapshot: place it relative to the loaded intervals
+      // (logical head or tail, the head-anchored window it slid out of, or nowhere if its page is
+      // unloaded).
       if (this._itemIntervals.size === 0) {
         // No pages yet: keep it in the logical head.
         targetInterval = {
@@ -2220,7 +2235,7 @@ export abstract class BasePaginator<T, Q> {
           const insertAt = Math.min(originalIndexInState, nextView.length);
           nextView.splice(insertAt, 0, ingestedItem);
           this.state.partialNext({
-            // This branch republishes the last published array rather than re-projecting, so ids a
+            // This branch republishes the last published array rather than re-projecting, so IDs a
             // prune just removed would resurrect: drop them, keeping survivors' relative positions.
             items: prunedNow
               ? this.retainIntervalMembers(nextView, targetInterval)
@@ -2247,7 +2262,7 @@ export abstract class BasePaginator<T, Q> {
 
   /**
    * Runs `fn` as one batched mutation: per-item store notifications fold into one flush, so sibling
-   * holders of the same ids re-project once. With `coalesce: true` the active window also emits
+   * holders of the same IDs re-project once. With `coalesce: true` the active window also emits
    * exactly once on exit ({@link flushWindowPublish}), independent of throttling: for one-shot
    * operations. Omit it in WS event handlers so events ride the throttle.
    */
@@ -2443,7 +2458,7 @@ export abstract class BasePaginator<T, Q> {
   }
 
   /**
-   * Behavior a subclass installs that options cannot express (a comparator, `deriveCursor` or
+   * Behaviour a subclass installs that options cannot express (a comparator, `deriveCursor` or
    * `doRequest` closed over `this`). Applied last in `initializeConfig`. Must return stable
    * references (memoize them), or every derivation republishes. Called only after construction.
    */
@@ -2562,7 +2577,22 @@ export abstract class BasePaginator<T, Q> {
     }
   }
 
-  /** A falsy return value means the query was not successful. */
+  /**
+   * Runs a pagination query and reconciles its result into the paginator state.
+   *
+   * @param params - Query parameters.
+   * @param params.direction - Direction to paginate in (headward or tailward).
+   * @param params.keepPreviousItems - Keep already-loaded items instead of clearing them on a
+   *   first-page query.
+   * @param params.queryShape - Explicit query shape overriding the one derived from current state.
+   * @param params.requestOptions - Request options outside the query shape.
+   * @param params.reset - 'yes' forces a first page, 'no' continues, else the query shape decides.
+   * @param params.retryCount - Number of retries after a failure.
+   * @param params.silent - Skip the `isLoading: true` publish of a non-first-page query.
+   * @param params.updateState - Whether to write the query results back to state.
+   * @returns The reconciled result (`targetInterval: null` after a failed request), or nothing when
+   *   the query did not run.
+   */
   async executeQuery({
     direction,
     keepPreviousItems,
@@ -2684,7 +2714,7 @@ export abstract class BasePaginator<T, Q> {
     stateUpdate.items = filteredItems;
 
     const isJumpQuery = !!queryShape && this.isJumpQueryShape(queryShape);
-    // Read the kept window's ids before the ingest below adds the refreshed page to it.
+    // Read the kept window's IDs before the ingest below adds the refreshed page to it.
     const keptItemIds =
       isFirstPage && keepPreviousItems && !this.isCursorPagination && this.items?.length
         ? new Set(this.items.map((item) => this.getItemId(item)))
@@ -2847,7 +2877,7 @@ export abstract class BasePaginator<T, Q> {
   }
 
   /**
-   * Releases this paginator's hold on its item content (unlinks every member id from the shared
+   * Releases this paginator's hold on its item content (unlinks every member ID from the shared
    * store, which otherwise pins a discarded owner) and cancels pending throttled publishes. A
    * teardown, not a reset: the owner is not reused.
    */

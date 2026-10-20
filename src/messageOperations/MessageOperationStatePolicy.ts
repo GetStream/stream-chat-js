@@ -150,7 +150,7 @@ export class MessageOperationStatePolicy {
     optimistic?: OptimisticOutcome;
     options?: MessageOperationSpec[K]['options'];
   }) {
-    // `formatMessage(undefined)` does not throw: it yields an id-less message whose `updated_at` would
+    // `formatMessage(undefined)` does not throw: it yields an ID-less message whose `updated_at` would
     // beat the freshness check below.
     if (!messageFromResponse) return;
 
@@ -188,6 +188,7 @@ export class MessageOperationStatePolicy {
         serverNewer ||
         (existingIsOurOptimisticSend && serverSameOrNewer);
 
+      // Declined only when a fresher copy already landed, whose own path replaced the `failed` row.
       if (!applyServerCopy) return;
 
       this.ctx.ingest(formatted);

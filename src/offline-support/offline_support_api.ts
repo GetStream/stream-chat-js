@@ -42,8 +42,8 @@ import type { WSEvent } from '../gen/models';
 /**
  * Base class for an offline DB. A subclass provides the storage by implementing the abstract
  * {@link OfflineDBApi} members; the event handlers, channel guards and pending-task queue are built
- * on them. A handler takes `execute` (default `true`): with `false` it returns its queries
- * unexecuted, for one `executeSqlBatch`.
+ * on them. A handler takes `execute`, which defaults to `true`: with `false` it returns its
+ * queries unexecuted, for one `executeSqlBatch`.
  *
  * @abstract
  */
@@ -106,8 +106,9 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   abstract upsertMembers: OfflineDBApi['upsertMembers'];
 
   /**
-   * Updates a reaction as a `reaction.updated` event would: it assumes `enforce_unique` and removes
-   * the user's other reactions (reactions table only).
+   * Applies a reaction as a `reaction.updated` event would: it assumes `enforce_unique` and
+   * replaces the user's other reactions. Also writes the reacting user and the message's reaction
+   * groups.
    */
   abstract updateReaction: OfflineDBApi['updateReaction'];
 
@@ -129,7 +130,10 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
    */
   abstract getChannels: OfflineDBApi['getChannels'];
 
-  /** Same as `getChannels`, for the channels last cached for a filters + sort hash. */
+  /**
+   * The channels last cached for a filters + sort hash, in query order, with the predefined filter
+   * that produced them. Channels are aggregated as in `getChannels`.
+   */
   abstract getChannelsForQuery: OfflineDBApi['getChannelsForQuery'];
 
   /** All CIDs in the DB. Much cheaper than fetching all channels. */
@@ -137,7 +141,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
 
   abstract getLastSyncedAt: OfflineDBApi['getLastSyncedAt'];
 
-  /** Pending tasks ordered by creation time. */
+  /** Pending tasks ordered by creation time, optionally only one message's. */
   abstract getPendingTasks: OfflineDBApi['getPendingTasks'];
 
   /** The stored app settings. They only refresh when fetched again, so they can be stale. */
@@ -183,7 +187,11 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   /** Opens the DB connection (for SQLite, typically a file handle). */
   abstract initializeDB: OfflineDBApi['initializeDB'];
 
-  /** Initializes the DB and its sync manager for `userId`, and updates `state`. */
+  /**
+   * Initializes the DB and its sync manager for a user, and updates `state`.
+   *
+   * @param userId - The user ID for which we want to initialize.
+   */
   public init = async (userId: string) => {
     try {
       if (!this.shouldInitialize(userId)) {
@@ -204,15 +212,23 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     }
   };
 
-  /** Whether the DB is already initialized for `userId`. */
+  /**
+   * Checks whether the DB is already initialized for a user.
+   *
+   * @param userId - The user ID for which we want to check initialization.
+   * @returns Whether the DB is initialized for `userId`.
+   */
   public shouldInitialize(userId: string): boolean {
     const { userId: userIdFromState, initialized } = this.state.getLatestValue();
     return userId === userIdFromState && initialized;
   }
 
   /**
-   * Runs a write query detached, for synchronous callers. A failure is logged under `method`, not
-   * thrown. No-op until the DB is initialized.
+   * Runs a write query detached, for synchronous callers. A failure is logged, not thrown. No-op
+   * until the DB is initialized.
+   *
+   * @param queryCallback - A callback wrapping all query logic that is to be executed.
+   * @param options.method - The method name logged on failure.
    */
   public executeQuerySafely = <T>(
     queryCallback: (db: AbstractOfflineDB) => Promise<T>,
@@ -228,8 +244,14 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   /**
    * Runs `createQueries` so they cannot fail on the channel's foreign key. When the channel is
    * not in the DB it is upserted first, from the event's channel or else the one in state. If
-   * neither exists the queries are dropped. `forceUpdate` upserts the channel data even when it is
-   * stored. Returns the prepared queries, executed when `execute` is `true` (default).
+   * neither exists the queries are dropped.
+   *
+   * @param options.event - The WS event we are trying to process.
+   * @param options.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @param options.forceUpdate - Whether to upsert the channel data even when it is stored.
+   *   Defaults to `false`.
+   * @param createQueries - A callback that creates the queries to execute.
+   * @returns The prepared queries (executed when `execute` is `true`).
    */
   public queriesWithChannelGuard = async (
     {
@@ -342,8 +364,12 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   };
 
   /**
-   * Upserts the message behind the channel guard, plus the current user's reads (from
-   * `channel.state`) when another user sent it.
+   * Upserts the message and, when another user sent it, the current user's read (from
+   * `channel.state`), behind the channel guard.
+   *
+   * @param payload.event - The WS event we are trying to process.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
    */
   public handleNewMessage = async ({
     event,
@@ -408,7 +434,13 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     return finalQueries;
   };
 
-  /** Hard or soft deletes the message, depending on `event.hard_delete`. */
+  /**
+   * Hard or soft deletes the message, depending on `event.hard_delete`.
+   *
+   * @param payload.event - The WS event we are trying to process.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
+   */
   public handleDeleteMessage = async ({
     event,
     execute = true,
@@ -434,7 +466,13 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     return [];
   };
 
-  /** Drops the message's pending tasks and hard deletes it. */
+  /**
+   * Drops the message's pending tasks and hard deletes it.
+   *
+   * @param payload.messageId - The ID of the message we want to remove.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
+   */
   public handleRemoveMessage = async ({
     messageId,
     execute = true,
@@ -459,7 +497,13 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     return queries;
   };
 
-  /** Hard deletes the messages in one transaction. */
+  /**
+   * Hard deletes the messages in one transaction.
+   *
+   * @param payload.ids - The IDs of the messages to hard delete.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
+   */
   public hardDeleteMessages = async ({
     ids,
     execute = true,
@@ -480,9 +524,13 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   };
 
   /**
-   * Upserts a message, first making sure its channel row exists. The first optimistic write in a
-   * new channel can arrive before the channel was ever persisted. It upserts rather than updates
-   * because an UPDATE is a no-op for a row that does not exist yet.
+   * Upserts a message and writes its channel row when that row is missing (the first optimistic
+   * write in a new channel can precede the channel's persistence). Upserts because an UPDATE no-ops
+   * on a missing row.
+   *
+   * @param payload.message - The message to persist. Its `cid` decides the guarded channel row.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
    */
   public upsertMessageWithChannelGuard = async ({
     message,
@@ -549,6 +597,9 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   /**
    * The channel's persisted messages with a local `failed` status, which `Channel.reload`
    * re-ingests. Built on {@link getChannels}, so a custom offline DB implements nothing extra.
+   *
+   * @param payload.cid - The channel whose failed messages to read.
+   * @returns The failed messages, formatted.
    */
   public getFailedMessages = async ({
     cid,
@@ -566,7 +617,14 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       .filter((message) => message.status === 'failed');
   };
 
-  /** Upserts the reads of a read event. `unreadMessages` overrides `event.unread_messages`. */
+  /**
+   * Upserts the reads of a read event.
+   *
+   * @param payload.event - The WS event we are trying to process.
+   * @param payload.unreadMessages - An override of `event.unread_messages`.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
+   */
   public handleRead = async ({
     event,
     unreadMessages,
@@ -619,7 +677,13 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     return [];
   };
 
-  /** Removes or upserts the member, forcing a channel upsert so `member_count` updates. */
+  /**
+   * Removes or upserts the member, forcing a channel upsert so `member_count` updates.
+   *
+   * @param payload.event - The WS event we are trying to process.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
+   */
   public handleMemberEvent = async ({
     event,
     execute = true,
@@ -651,7 +715,13 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     return [];
   };
 
-  /** Updates the message behind the channel guard. Thread replies are ignored. */
+  /**
+   * Updates the message behind the channel guard. Thread replies are ignored.
+   *
+   * @param payload.event - The WS event we are trying to process.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
+   */
   public handleMessageUpdatedEvent = async ({
     event,
     execute = true,
@@ -672,7 +742,13 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     return [];
   };
 
-  /** Sets `hidden` from the event type, as the event's channel does not carry it. */
+  /**
+   * Sets `hidden` from the event type, as the event's channel does not carry it.
+   *
+   * @param payload.event - The WS event we are trying to process.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
+   */
   public handleChannelVisibilityEvent = async ({
     event,
     execute = true,
@@ -693,7 +769,13 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     return [];
   };
 
-  /** Deletes the channel's messages (before `truncated_at` when set) and upserts the reads. */
+  /**
+   * Deletes the channel's messages (before `truncated_at` when set) and upserts the reads.
+   *
+   * @param payload.event - The WS event we are trying to process.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
+   */
   public handleChannelTruncatedEvent = async ({
     event,
     execute = true,
@@ -753,7 +835,13 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     return [];
   };
 
-  /** Maps `reaction.new`, `.updated` and `.deleted` to the matching reaction write. */
+  /**
+   * Maps `reaction.new`, `.updated` and `.deleted` to the matching reaction write.
+   *
+   * @param payload.event - The WS event we are trying to process.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
+   */
   public handleReactionEvent = async ({
     event,
     execute = true,
@@ -789,7 +877,13 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     );
   };
 
-  /** Maps `draft.updated` and `draft.deleted` to `upsertDraft` and `deleteDraft`. */
+  /**
+   * Maps `draft.updated` and `draft.deleted` to `upsertDraft` and `deleteDraft`.
+   *
+   * @param payload.event - The WS event we are trying to process.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
+   */
   handleDraftEvent = async ({
     event,
     execute = true,
@@ -821,7 +915,13 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     return [];
   };
 
-  /** Routes an event to its handler by type. Used for WS events and for sync events. */
+  /**
+   * Routes an event to its handler by type. Used for WS events and for sync events.
+   *
+   * @param payload.event - The WS event we are trying to process.
+   * @param payload.execute - Whether to immediately execute the queries. Defaults to `true`.
+   * @returns The prepared queries.
+   */
   public handleEvent = async ({
     event,
     execute = true,
@@ -915,13 +1015,16 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   };
 
   /**
-   * Executes the task now and resolves with its response. On failure the task is stored in the
-   * pending tasks table when the error is {@link isEphemeral}, and the error is rethrown. With an
-   * unhealthy socket it fails with an `OfflineError` without executing.
+   * Executes the task now. On an {@link isEphemeral} failure the task goes to
+   * `handleAddPendingTask`, and the error is rethrown. With an unhealthy socket it fails with an
+   * `OfflineError` without executing.
    *
    * The payload carries the request options, including an `AbortSignal`. It is live while the task
    * runs now, but a replay from the table gets an inert `{}` when the store serializes the payload
    * (always across a restart), and `ApiClient` then runs the request uncancellable.
+   *
+   * @param payload.task - The pending task we want to execute.
+   * @returns The response of the task's request.
    */
   public queueTask = async <T>({ task }: { task: PendingTask }): Promise<T> => {
     const attemptTaskExecution = async () => {
@@ -954,7 +1057,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   /**
    * Folds an edit of a never-sent message into its queued `send-message` task, so a replay sends
    * the edited text once. The send task keeps its row and so its place in the queue. With no send
-   * task the edit is queued on its own.
+   * task the edit is queued on its own if `isMessageUpdateReplayable` allows it.
    *
    * A queued send is the only reliable sign the server never saw the message (a `failed` status can
    * also come from a rejected edit). The payloads are already `MessageRequest`s, so they merge by
@@ -967,7 +1070,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     const pendingTasks = await this.getPendingTasks({ messageId: id });
     const sendTask = pendingTasks.find(this.isPendingSendMessageTask);
 
-    // No queued send, or one without an id to rewrite (a task read from the DB always has one).
+    // No queued send, or one without an ID to rewrite (a task read from the DB always has one).
     if (sendTask?.id === undefined) {
       if (!isMessageUpdateReplayable(message)) return;
 

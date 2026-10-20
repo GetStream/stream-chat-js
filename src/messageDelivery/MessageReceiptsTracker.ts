@@ -93,7 +93,7 @@ const removeByOldKey = (
   oldKey: MsgRef,
   keyOf: (x: UserProgress) => MsgRef,
 ) => {
-  // Find the plateau for oldKey, scan to match by user id
+  // Find the plateau for oldKey, scan to match by user ID
   let i = findIndex(arr, oldKey, keyOf);
   while (i < arr.length && compareRefsAsc(keyOf(arr[i]), oldKey) === 0) {
     if (arr[i].user.id === item.user.id) {
@@ -110,9 +110,10 @@ export type OwnMessageReceiptsTrackerOptions = {
 };
 
 /**
- * Tracks other participants' delivery and read progress toward own messages in one timeline (channel or
- * thread). Per user it keeps `lastReadRef` and `lastDeliveredRef` (always `>= lastReadRef`) in two arrays
- * sorted by timestamp, so "who read message M?" is a binary search plus a suffix slice.
+ * Tracks other participants' delivery and read progress toward own messages in one timeline
+ * (channel or thread). Per user it keeps `lastReadRef` and `lastDeliveredRef` (always
+ * `>= lastReadRef`) in two arrays sorted by timestamp, so "who read message M?" is a binary search
+ * plus a suffix slice.
  *
  * Messages resolve through `channel.messagePaginator.findItemByTimestamp` unless `locateMessage` is
  * passed. Events for messages that cannot be resolved are ignored.
@@ -550,7 +551,7 @@ export class MessageReceiptsTracker extends WithSubscriptions {
       ) === 0 &&
       existingUserProgress.lastDeliveredRef.msgId ===
         nextUserProgress.lastDeliveredRef.msgId;
-    // by reference: an updated user (a new name or image) arrives as a new object with the same id
+    // by reference: an updated user (a new name or image) arrives as a new object with the same ID
     const hasSameUser = existingUserProgress.user === nextUserProgress.user;
 
     if (hasSameReadRef && hasSameDeliveredRef && hasSameUser) {

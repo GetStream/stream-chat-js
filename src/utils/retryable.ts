@@ -50,8 +50,8 @@ export type RunWithRetryOptions<T extends FunctionToRetry> = {
  * Wraps `f` so a failed call is retried. Throws the error when it is not retryable, else the last
  * attempt's error once the retries run out. A falsy result counts as a failure and is retried.
  *
- * - `retryAttempts`: retries after the first attempt (default 3).
- * - `isRetryable`: whether an error is worth retrying (default: always).
+ * - `retryAttempts`: retries after the first attempt. Defaults to 3.
+ * - `isRetryable`: whether an error is worth retrying. Defaults to always.
  * - `delayBetweenRetries`: ms, or a function of the 0-based retry number.
  * - `didValueChange`: called with the call arguments before each attempt, `true` aborts with a
  *   `RetryError`.

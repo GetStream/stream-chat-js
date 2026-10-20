@@ -404,7 +404,7 @@ export class Poll {
 
   /**
    * Removes a vote right away; a failed request restores it. Vote requests are sent in order, so a
-   * vote whose cast is not confirmed yet is removed by the id from the cast's response (if that
+   * vote whose cast is not confirmed yet is removed by the ID from the cast's response (if that
    * cast failed, there is nothing to remove).
    */
   removeVote = async (voteId: string, messageId: string) =>

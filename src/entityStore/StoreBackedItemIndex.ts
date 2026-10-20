@@ -3,7 +3,7 @@ import { EntityStore, type EntityStoreSubscriber } from './EntityStore';
 
 export type StoreBackedItemIndexOptions<T> = {
   getEntityId: (item: T) => string;
-  /** The list that owns this index; the store's notifications, id renames and removals reach it. */
+  /** The list that owns this index; the store's notifications, ID renames and removals reach it. */
   owner?: EntityStoreSubscriber;
   /** The holder's name in the store, for debugging tools: no spaces, e.g. `channel-paginator`. */
   holderName?: string;
@@ -16,12 +16,12 @@ export type StoreBackedItemIndexOptions<T> = {
 
 /**
  * The item index of one list (a paginator). Items live in an {@link EntityStore}, which can be
- * shared with other lists; the index only records which ids belong to this list (`memberIds`) and
- * stands for the list in the store with one `holder`. Reads see only this list's items, so
- * `threadPaginator.getItem(id)` can tell a thread's reply from a channel message.
+ * shared with other lists; the index only records which IDs belong to this list (`memberIds`) and
+ * stands for the list in the store with one `holder`. Reads see only this list's items, even when a
+ * shared store holds other lists' items (e.g. `thread.messagePaginator` sees only its replies).
  *
  * Store callbacks reach the owner through the holder: changes to held items (except the owner's own
- * writes), removals (with the removed item), and id renames, which are also applied to `memberIds`.
+ * writes), removals (with the removed item), and ID renames, which are also applied to `memberIds`.
  *
  * @template T The item type held by the index and its store.
  */
@@ -29,7 +29,7 @@ export class StoreBackedItemIndex<T> implements ItemIndexApi<T> {
   private memberIds = new Set<string>();
   private readonly store: EntityStore<T>;
   /**
-   * This index's identity in the store: linked per id while the index lists it, and unlinked on
+   * This index's identity in the store: linked per ID while the index lists it, and unlinked on
    * remove or clear. The store tells holders apart by object, so every index has its own, even with
    * the same owner or none.
    */

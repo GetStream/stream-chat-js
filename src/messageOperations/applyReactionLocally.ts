@@ -8,7 +8,7 @@ import {
 } from '../utils';
 
 /**
- * Applies a reaction to the canonical copy of a message in `client.messageStore`, by id, and mirrors it
+ * Applies a reaction to the canonical copy of a message in `client.messageStore`, by ID, and mirrors it
  * to the offline DB (fire-and-forget). The store notifies every collection holding the message. Returns
  * an `undo()` reversing both on the current state, or `undefined` when the user is not connected or the
  * message is not in the store.

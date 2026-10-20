@@ -98,7 +98,10 @@ export type MentionsSearchSourceOptions = SearchSourceOptions & {
   /** Base filters for the app-wide user query (`mentionAllAppUsers`). */
   userFilters?: UserFilters;
   userSort?: SortParamRequest[];
-  /** Base filters for the channel member query. */
+  /**
+   * Replaces the default `name` autocomplete filter of the channel member query, so the typed text
+   * is not applied.
+   */
   memberFilters?: MemberFilters;
   memberSort?: SortParamRequest[];
   searchOptions?: Omit<UserOptions, 'limit' | 'offset'>;
@@ -813,7 +816,14 @@ export type MentionsMiddleware = Middleware<
   'onChange' | 'onSuggestionItemSelect'
 >;
 
-/** Suggests and inserts mentions (defaults: `trigger: '@'`, `minChars: 1`). */
+/**
+ * Suggests and inserts mentions.
+ *
+ * @param channel - The channel to search mentions in.
+ * @param options - Middleware options. Defaults to `trigger: '@'` and `minChars: 1`.
+ * @param options.searchSource - A search source to use instead of a new one. Its state is reset.
+ * @returns The mentions middleware.
+ */
 export const createMentionsMiddleware = (
   channel: Channel,
   options?: Partial<TextComposerMiddlewareOptions> & {

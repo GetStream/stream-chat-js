@@ -4,7 +4,7 @@ import type { LocalMessage, MessageResponse, ReactionResponse } from '../types';
 
 /**
  * Applies a `reaction.new` / `reaction.updated` / `reaction.deleted` event to the canonical copy of the
- * message, by id. The event's counts are taken as they are; `own_reactions` is derived from what the
+ * message, by ID. The event's counts are taken as they are; `own_reactions` is derived from what the
  * store holds, because the event omits the current user's reactions or reports another user's.
  *
  * One write reaches every collection holding the message (main list, pinned list, thread replies, a

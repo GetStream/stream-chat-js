@@ -30,7 +30,10 @@ export type DraftsConfiguration = {
 export type TextComposerConfig = {
   /** If false, the text input, change and selection events are disabled */
   enabled: boolean;
-  /** If true, triggers typing events on text input keystroke. Disabled for threads and message editing by default. */
+  /**
+   * If true, triggers typing events on text input keystroke. Defaults to disabled for threads and
+   * message editing.
+   */
   publishTypingEvents: boolean;
   /** Default value for the message input */
   defaultValue?: string;
@@ -64,7 +67,10 @@ export type CommandsConfig = {
 };
 
 export type AttachmentManagerConfig = {
-  /** Toggles file attachments (default `true`). ANDed with the channel config's `uploads`. */
+  /**
+   * Toggles file attachments. ANDed with the channel config's `uploads` unless `customCdn` is set.
+   * Defaults to `true`.
+   */
   enabled: boolean;
   // todo: document removal of noFiles prop showing how to achieve the same with custom fileUploadFilter function
   /** Prevents uploading a file when it returns `false`. */
@@ -80,31 +86,35 @@ export type AttachmentManagerConfig = {
   /** Function that allows to customize the upload request. */
   doUploadRequest?: UploadRequestFn;
   /**
-   * Whether a custom {@link AttachmentManagerConfig.doUploadRequest} stores files outside Stream
-   * (default `false`). When `false`, Stream's rules apply (the `upload-file` capability and the channel
-   * type's `uploads` flag). When `true`, only {@link AttachmentManagerConfig.enabled} governs uploads.
+   * Whether a custom {@link AttachmentManagerConfig.doUploadRequest} stores files outside Stream.
+   * When `false`, Stream's rules apply (the `upload-file` capability and the channel type's
+   * `uploads` flag). When `true`, only {@link AttachmentManagerConfig.enabled} governs uploads.
+   * Defaults to `false`.
    */
   customCdn: boolean;
   /**
-   * When `true`, a message may be sent while its attachments are still uploading (defaults to
-   * `false`). The message is composed and shown right away, and the send request waits for those
-   * uploads to settle before it goes out; if one of them fails, the whole message fails.
+   * When `true`, a message may be sent while its attachments are still uploading. The message is
+   * composed and shown right away, and the send request waits for those uploads to settle before
+   * it goes out; if one of them fails, the whole message fails. Defaults to `false`.
    */
   pendingUploadsEnabled: boolean;
   /**
    * When `true`, the attachment manager sets `localMetadata.uploadProgress` and passes
    * `options.onProgress` to `doUploadRequest` (built-in and custom). Set to `false` to disable
-   * progress tracking (defaults to `true`).
+   * progress tracking. Defaults to `true`.
    */
   trackUploadProgress: boolean;
 };
 
 export type LinkPreviewsManagerConfig = {
-  /** Number of milliseconds to debounce firing the URL enrichment queries when typing (defaults to `1500`). */
+  /**
+   * Number of milliseconds to debounce firing the URL enrichment queries when typing. Defaults to
+   * `1500`.
+   */
   debounceURLEnrichmentMs: number;
   /**
-   * Toggles URL enrichment and link previews (default `true`). ANDed with the channel type's
-   * `url_enrichment`.
+   * Toggles URL enrichment and link previews. ANDed with the channel type's `url_enrichment`.
+   * Defaults to `true`.
    */
   enabled: boolean;
   /** Custom function to identify URLs in a string and request OG data */
@@ -114,16 +124,19 @@ export type LinkPreviewsManagerConfig = {
 };
 
 export type LocationComposerConfig = {
-  /** Toggles location sharing (default `true`). ANDed with the channel config's `shared_locations`. */
+  /**
+   * Toggles location sharing. ANDed with the channel config's `shared_locations`. Defaults to
+   * `true`.
+   */
   enabled: boolean;
   /** Function that provides a stable ID for the device from which the location is shared. */
   getDeviceId: () => string;
-  /** Shortest live-location duration in ms (default 60s). A shorter `durationMs` is invalid. */
+  /** Shortest live-location duration in ms. A shorter `durationMs` is invalid. Defaults to 60s. */
   minShareDurationMs: number;
 };
 
 export type PollComposerConfig = {
-  /** Toggles poll composition (default `true`). ANDed with the channel config's `polls`. */
+  /** Toggles poll composition. ANDed with the channel config's `polls`. Defaults to `true`. */
   enabled: boolean;
 };
 

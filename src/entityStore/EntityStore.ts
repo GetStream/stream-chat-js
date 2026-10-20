@@ -1,7 +1,7 @@
 import type { Unsubscribe } from '@stream-io/state-store';
 
 /**
- * The ids a subscriber watches whose canonical object changed reference in this flush (an upsert or
+ * The IDs a subscriber watches whose canonical object changed reference in this flush (an upsert or
  * a removal; after a removal `store.get(id)` returns `undefined`).
  */
 export type EntityStoreChangeBatch = {
@@ -9,8 +9,8 @@ export type EntityStoreChangeBatch = {
 };
 
 /**
- * Observes entities in an {@link EntityStore}, linked to them by id ({@link EntityStore.link}). It
- * is notified at most once per store transaction with the subset of its watched ids that changed,
+ * Observes entities in an {@link EntityStore}, linked to them by ID ({@link EntityStore.link}). It
+ * is notified at most once per store transaction with the subset of its watched IDs that changed,
  * and while linked it holds those entities (see {@link EntityStoreClaim} to hold without being
  * notified).
  */
@@ -23,7 +23,7 @@ export type EntityStoreSubscriber = {
   flushState?: () => void;
   /**
    * Called by {@link EntityStore.changeId} when this subscriber's link moves from `oldId` to
-   * `newId`, before the change notification. A subscriber keeping its own list of linked ids renames
+   * `newId`, before the change notification. A subscriber keeping its own list of linked IDs renames
    * the entry here, or its later `unlink(oldId)` misses the moved link.
    */
   onIdChanged?: (oldId: string, newId: string) => void;
@@ -33,19 +33,19 @@ export type EntityStoreSubscriber = {
    * read. Not called when the last holder unlinks.
    */
   onEntityRemoved?: (id: string, entity: unknown) => void;
-  /** What this subscriber is, for debugging tools: a kebab-case id, e.g. `channel-paginator`. */
+  /** What this subscriber is, for debugging tools: a kebab-case ID, e.g. `channel-paginator`. */
   name?: string;
 };
 
 /**
  * A standing claim on entities, added with {@link EntityStore.addClaim}. Unlike a subscriber it is
- * not linked per id and never notified: the store asks {@link EntityStoreClaim.heldBy} whenever it
+ * not linked per ID and never notified: the store asks {@link EntityStoreClaim.heldBy} whenever it
  * needs to know what is held.
  */
 export type EntityStoreClaim<T> = {
   /** The entities held by this claim right now, matched by identity against the stored ones. */
   heldBy: () => Iterable<T>;
-  /** What makes the claim, for debugging tools: a kebab-case id, e.g. `message-composer-cache`. */
+  /** What makes the claim, for debugging tools: a kebab-case ID, e.g. `message-composer-cache`. */
   name?: string;
 };
 
@@ -85,9 +85,10 @@ class RunnerWithErrorCollector {
 }
 
 /**
- * A client-global, normalized store of entities addressed by id: one canonical, immutable `T` per id
- * (`upsert` replaces, never mutates), shared by any number of subscribers linked to individual ids.
- * A write notifies exactly the subscribers holding that id, with the changed ids only (they pull
+ * A normalized store of entities addressed by ID: one canonical `T` per ID (`upsert` replaces the
+ * reference; `getOrCreate` hydrates the stored one in place), shared by any number of subscribers
+ * linked to individual IDs.
+ * A write notifies exactly the subscribers holding that ID, with the changed IDs only (they pull
  * content via `get`). Links are also the refcount: by default an entity is dropped when its last
  * holder unlinks. {@link EntityStore.transaction} coalesces notifications into one flush.
  *
@@ -150,7 +151,7 @@ export class EntityStore<T> {
   }
 
   /**
-   * Every stored entity that neither a linked subscriber nor a claim holds, with the id it is stored
+   * Every stored entity that neither a linked subscriber nor a claim holds, with the ID it is stored
    * under. Each claim is asked once for the whole list.
    */
   unheldEntries(): [string, T][] {
@@ -162,7 +163,7 @@ export class EntityStore<T> {
 
   /**
    * Adds `claim` until the returned function removes it. Entities are matched by identity, so one
-   * stored under an id other than its own (a temporary id) is still found.
+   * stored under an ID other than its own (a temporary ID) is still found.
    */
   addClaim(claim: EntityStoreClaim<T>): () => void {
     this.claims.add(claim);
@@ -188,13 +189,13 @@ export class EntityStore<T> {
     return Array.from(this.byId.values());
   }
 
-  /** Every stored entity with the id it is stored under, which can differ from its own id. */
+  /** Every stored entity with the ID it is stored under, which can differ from its own ID. */
   entries(): [string, T][] {
     return Array.from(this.byId.entries());
   }
 
   /**
-   * Replaces the canonical copy of `entity` and notifies the subscribers watching its id, except
+   * Replaces the canonical copy of `entity` and notifies the subscribers watching its ID, except
    * `subscriber`: the writer, which updates itself.
    */
   upsert(entity: T, subscriber?: EntityStoreSubscriber): void {
@@ -227,9 +228,9 @@ export class EntityStore<T> {
   }
 
   /**
-   * Moves an entity and its holders from `oldId` to `newId`, for ids assigned after storing. Moved
-   * holders get {@link EntityStoreSubscriber.onIdChanged}, then holders of both ids are notified.
-   * Returns `false` without changes when `oldId` is not stored or the ids are equal.
+   * Moves an entity and its holders from `oldId` to `newId`, for IDs assigned after storing. Moved
+   * holders get {@link EntityStoreSubscriber.onIdChanged}, then holders of both IDs are notified.
+   * Returns `false` without changes when `oldId` is not stored or the IDs are equal.
    *
    * When `newId` holds another entity, nothing changes unless `replace` is set. With `replace`, the
    * moved entity takes its place: the holders of `newId` stay linked and hold the moved one, and
@@ -261,7 +262,7 @@ export class EntityStore<T> {
       // Holders of `oldId` learn it resolves to `undefined`.
       this.markDirty(oldId);
       this.subscribers.delete(oldId);
-      // Subscribers may link an id before an entity is stored under it.
+      // Subscribers may link an ID before an entity is stored under it.
       const existing = this.subscribers.get(newId);
       if (existing) for (const subscriber of moved) existing.add(subscriber);
       else this.subscribers.set(newId, moved);
@@ -277,9 +278,9 @@ export class EntityStore<T> {
   }
 
   /**
-   * Stores `entity` in place of another stored under the same id. The holders of that id stay linked
+   * Stores `entity` in place of another stored under the same ID. The holders of that ID stay linked
    * and hold `entity`; they are notified of a change, not a removal, so a list can swap the item
-   * in place. The replaced entity goes to `onRelease`. With nothing under the id it stores like
+   * in place. The replaced entity goes to `onRelease`. With nothing under the ID it stores like
    * {@link EntityStore.upsert}.
    */
   replace(entity: T): void {
@@ -381,7 +382,7 @@ export class EntityStore<T> {
   }
 
   /**
-   * Watches a single id. Fires `handler` immediately with the current value (like
+   * Watches a single ID. Fires `handler` immediately with the current value (like
    * {@link StateStore.subscribe}) and on every change.
    */
   subscribe(id: string, handler: (entity: T | undefined) => void): Unsubscribe {

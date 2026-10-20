@@ -249,8 +249,9 @@ export class InstanceConfigurationRegistry {
   }
 
   /**
-   * Warns, rather than throws, when a JavaScript caller (or a cast) registers a key nothing will read.
-   * Quiet for a key whose owner is not constructed yet.
+   * Warns, rather than throws, when a key this package does not define (a JavaScript caller or a
+   * cast) is registered while no live instance uses it. Quiet once an instance has subscribed under
+   * the key.
    */
   private warnIfKeyLooksUnknown(key: InstanceConfigKey): void {
     if ((INSTANCE_CONFIG_TREE_KEYS as readonly string[]).includes(key)) return;

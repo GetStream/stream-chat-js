@@ -85,8 +85,12 @@ export class Moderation extends ModerationApi {
   }
 
   /**
-   * Unmutes a user. `requestOptions` (e.g. an abort `signal`) are never serialized into the
-   * request.
+   * Unmutes a user.
+   *
+   * @param targetId - User ID to be unmuted.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The unmute response.
    */
   async unmuteUser(targetId: string, requestOptions?: StreamRequestOptions) {
     return await this.unmute({ target_ids: [targetId] }, requestOptions);

@@ -286,7 +286,7 @@ export class ApiClient {
 
 /**
  * Whether a request (one with a `watch` or `presence` flag) registers a server-side subscription
- * and so must wait for the connection id. Without it the server answers `200` but registers
+ * and so must wait for the connection ID. Without it the server answers `200` but registers
  * nothing, and the channel never receives an event.
  *
  * Flagless operations that declare `connection_id` set it themselves (`stopWatchingChannel` through

@@ -79,8 +79,8 @@ export type NotificationOptions = Partial<
   >
 > & {
   /**
-   * Display time in ms, defaulting to the configured duration of the severity. `0` is persistent:
-   * dismiss it with `client.notifications.remove(id)`.
+   * Display time in ms. `0` is persistent: dismiss it with `client.notifications.remove(id)`.
+   * Defaults to the configured duration of the severity.
    */
   duration?: number;
 };

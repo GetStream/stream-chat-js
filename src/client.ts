@@ -158,7 +158,7 @@ export class StreamChat extends ChatApi {
    */
   networkConnection: NetworkConnectionObserver;
   /**
-   * The connection id (the WebSocket's, or the long-poll's after an `enableWSFallback` switch). A
+   * The connection ID (the WebSocket's, or the long-poll's after an `enableWSFallback` switch). A
    * request with `watch` or `presence` waits here for the handshake (see `requiresConnectionId`).
    */
   connectionIdManager: ConnectionIdManager;
@@ -249,16 +249,19 @@ export class StreamChat extends ChatApi {
   private unsubscribeClientConfiguration?: Unsubscribe;
 
   /**
-   * **Prefer `StreamChat.getInstance()`: a second client opens a second WebSocket connection.**
+   * Initializes a client.
    *
-   * `config` is the tree `client.config.set()` takes, applied before anything is built so it
-   * reaches the managers and the options read once at construction (`client.baseURL`,
-   * `client.axiosRequestConfig`, `client.notificationManager`).
+   * **Prefer `StreamChat.getInstance()`: a second client opens a second WebSocket connection.**
    *
    * @example <caption>initialize the client in user mode</caption>
    * new StreamChat('api_key')
    * @example <caption>initialize the client with configuration</caption>
    * new StreamChat('api_key', { client: { axiosRequestConfig: { timeout: 5000 } } })
+   *
+   * @param key - The API key.
+   * @param config - Declarative configuration, the tree `client.config.set()` takes (optional).
+   *   Applied before anything is built, so it reaches the managers and the options read once at
+   *   construction (`client.baseURL`, `client.axiosRequestConfig`, `client.notificationManager`).
    */
   constructor(key: string, config?: DeepPartial<InstanceConfigTree>) {
     // The generated base class needs the ApiClient before `this` exists, so it is bound afterwards.
@@ -305,7 +308,7 @@ export class StreamChat extends ChatApi {
       this.setBaseURL(`http://${streamLocalTestHost}`);
     }
 
-    // Both before the WebSocket, which subscribes to the network store and drives the id's
+    // Both before the WebSocket, which subscribes to the network store and drives the ID's
     // lifecycle.
     this.connectionIdManager = new ConnectionIdManager();
     this.networkConnection = new NetworkConnectionObserver({ client: this });
@@ -322,7 +325,7 @@ export class StreamChat extends ChatApi {
     this.messageStore = new EntityStore<LocalMessage>({
       getEntityId: (message) => message.id,
     });
-    // Before the managers that hold channels in their store.
+    // Before the managers that claim channels in its store.
     this.channelManager = new ChannelManager({ client: this });
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
@@ -403,7 +406,7 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Returns the shared client instance, so there is only one client and WS connection.
+   * Returns the shared client instance, so there is only one client and WebSocket connection.
    *
    * **After the first call, the `key` and `config` parameters are ignored.**
    *
@@ -411,6 +414,10 @@ export class StreamChat extends ChatApi {
    * StreamChat.getInstance('api_key')
    * @example <caption>initialize the client with configuration</caption>
    * StreamChat.getInstance('api_key', { client: { axiosRequestConfig: { timeout: 5000 } } })
+   *
+   * @param key - The API key.
+   * @param config - Declarative configuration, as for the constructor (optional).
+   * @returns The shared client instance.
    */
   public static getInstance(
     key: string,
@@ -434,6 +441,9 @@ export class StreamChat extends ChatApi {
   /**
    * Creates a development token for apps with auth checks disabled. Never use one in production.
    * See {@link DevToken}.
+   *
+   * @param userId - The ID of the user the token is for.
+   * @returns The development token.
    */
   devToken(userId: string) {
     return DevToken(userId);
@@ -460,8 +470,12 @@ export class StreamChat extends ChatApi {
   };
 
   /**
-   * Sets the current user and opens the WebSocket connection. Resolves when the connection is set
-   * up. Throws for a different user unless `disconnectUser()` ran first.
+   * Sets the current user and opens the WebSocket connection.
+   *
+   * @param user - Data about this user, e.g. `{ name: 'john' }`.
+   * @param userTokenOrProvider - A token string, or a provider that returns one or a promise of one.
+   * @returns A promise that resolves when the connection is set up.
+   * @throws For a different user, unless `disconnectUser()` ran first.
    */
   connectUser = async (user: ClientUser, userTokenOrProvider: TokenOrProvider) => {
     if (!user.id) {
@@ -522,7 +536,15 @@ export class StreamChat extends ChatApi {
     }
   };
 
-  /** @deprecated Use {@link StreamChat.connectUser} instead. */
+  /**
+   * Sets the current user and opens the WebSocket connection.
+   *
+   * @deprecated Use {@link StreamChat.connectUser} instead.
+   *
+   * @param user - Data about this user, e.g. `{ name: 'john' }`.
+   * @param userTokenOrProvider - A token string, or a provider that returns one or a promise of one.
+   * @returns A promise that resolves when the connection is set up.
+   */
   setUser = this.connectUser;
 
   _setToken = (user: TokenManagerMinimalUser, userTokenOrProvider: TokenOrProvider) =>
@@ -542,10 +564,10 @@ export class StreamChat extends ChatApi {
    * `openConnection` to reconnect. Mainly for mobile: push notifications arrive only while no
    * WebSocket is active, so close on background and reopen on foreground. After an
    * `enableWSFallback` switch it also closes the long-poll, telling the server to close its
-   * connection id.
+   * connection ID.
    *
-   * @param timeout - Milliseconds to wait for the WebSocket close event before assuming it closed
-   *   (also the long-poll close request's timeout; 2s when omitted).
+   * @param timeout - Milliseconds to wait for the WebSocket close event and for the long-poll close
+   *   request. Defaults to 1s and 2s respectively.
    */
   closeConnection = async (timeout?: number) => {
     this.channelManager.resetAIStateOnChannels();
@@ -654,7 +676,14 @@ export class StreamChat extends ChatApi {
     return pending;
   };
 
-  /** Revokes the connected user's tokens issued before `before` (default: now). */
+  /**
+   * Revokes the connected user's tokens issued before the given time.
+   *
+   * @param before - Cutoff date; tokens issued before it are revoked (optional). Defaults to now.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The updated users response.
+   */
   async revokeTokens(before?: Date | null, requestOptions?: StreamRequestOptions) {
     if (!before) {
       before = new Date();
@@ -685,8 +714,9 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Disconnects the WebSocket and removes the user and its state. `timeout` is passed to
-   * {@link closeConnection}.
+   * Disconnects the WebSocket and removes the user and its state.
+   *
+   * @param timeout - Passed to {@link closeConnection} (optional).
    */
   disconnectUser = (timeout?: number) => {
     logger.withExtraTags('disconnectUser').info('Disconnecting the client.');
@@ -702,7 +732,7 @@ export class StreamChat extends ChatApi {
     this.wsPromise = null;
 
     const closePromise = this.closeConnection(timeout);
-    // After starting the close, which reads the connection id synchronously (the long-poll's close
+    // After starting the close, which reads the connection ID synchronously (the long-poll's close
     // request carries it).
     this.connectionIdManager.rejectConnectionId(teardownReason);
 
@@ -749,7 +779,11 @@ export class StreamChat extends ChatApi {
   /** @deprecated Use `client.disconnectUser` instead. */
   disconnect = this.disconnectUser;
 
-  /** Sets an anonymous user and opens the WebSocket connection. */
+  /**
+   * Sets an anonymous user and opens the WebSocket connection.
+   *
+   * @returns A promise that resolves when the connection is set up.
+   */
   connectAnonymousUser = () => {
     if (this.node && !this.config.getConfig('client')?.allowServerSideConnect) {
       logger
@@ -770,7 +804,14 @@ export class StreamChat extends ChatApi {
     return this.openConnection();
   };
 
-  /** Creates a guest user and returns it with its access token. */
+  /**
+   * Creates a guest user.
+   *
+   * @param ...args - `[request, requestOptions]`. `request.user` is the guest user to create;
+   *   `requestOptions` carries per-request options such as an abort `signal` and is never
+   *   serialized into the request.
+   * @returns The created guest user and its access token.
+   */
   override async createGuest(...args: Parameters<ChatApi['createGuest']>) {
     if (this.tokenManager.token || this.tokenManager.tokenProvider) {
       return await super.createGuest(...args);
@@ -789,7 +830,14 @@ export class StreamChat extends ChatApi {
     }
   }
 
-  /** Creates a temporary guest user and connects as it. */
+  /**
+   * Creates a temporary guest user and connects as it.
+   *
+   * @param user - Data about this user, e.g. `{ name: 'john' }`.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns A promise that resolves when the connection is set up.
+   */
   async setGuestUser(user: UserRequest, requestOptions?: StreamRequestOptions) {
     const response = await this.createGuest({ user }, requestOptions);
 
@@ -816,6 +864,11 @@ export class StreamChat extends ChatApi {
    * client.on((event) => {
    *   console.log(event.type);
    * });
+   *
+   * @param callbackOrString - The event type to listen for, or the callback when listening to all
+   *   events.
+   * @param callbackOrNothing - The callback when an event type was provided (optional).
+   * @returns An object with an `unsubscribe()` method.
    */
   on(callback: EventHandler): { unsubscribe: () => void };
   on<T extends EventType>(
@@ -851,6 +904,12 @@ export class StreamChat extends ChatApi {
     };
   }
 
+  /**
+   * Removes the event handler.
+   *
+   * @param callbackOrString - The event type, or the callback when removing an all-events listener.
+   * @param callbackOrNothing - The callback to remove when an event type was provided (optional).
+   */
   off(callback: EventHandler): void;
   off<T extends EventType>(eventType: T, callback: EventHandler<T>): void;
   off(callbackOrString: EventHandler | EventType, callbackOrNothing?: EventHandler) {
@@ -910,8 +969,8 @@ export class StreamChat extends ChatApi {
    * Puts `user`'s new object into the members, watchers, own membership and (with `readEntries`)
    * read entries of the channels that list them, in one state update per channel.
    *
-   * @param options.readEntries - Also replace the user in read entries, refreshing read receipts
-   *   (default `true`). Off for presence changes: receipts never show online status.
+   * @param options.readEntries - Also replace the user in read entries, refreshing read receipts.
+   *   Off for presence changes: receipts never show online status. Defaults to `true`.
    */
   _updateMemberWatcherReferences = (
     user: UserResponse,
@@ -957,7 +1016,7 @@ export class StreamChat extends ChatApi {
    * @private
    */
   _updateUserMessageReferences = (user: UserResponse) => {
-    // Scans all loaded channels: `reflectUserUpdate` filters by author id, so it is a no-op for
+    // Scans all loaded channels: `reflectUserUpdate` filters by author ID, so it is a no-op for
     // channels without this user's messages.
     for (const channel of this.channelManager.values()) {
       if (!channel) continue;
@@ -978,7 +1037,7 @@ export class StreamChat extends ChatApi {
     hardDelete = false,
     deletedAt?: LocalMessage['deleted_at'],
   ) => {
-    // Scans all loaded channels; `applyMessageDeletionForUser` filters by author id.
+    // Scans all loaded channels; `applyMessageDeletionForUser` filters by author ID.
     for (const channel of this.channelManager.values()) {
       if (channel) {
         channel.messagePaginator.applyMessageDeletionForUser({
@@ -1132,7 +1191,7 @@ export class StreamChat extends ChatApi {
     }
 
     // Current user removed from a channel: evict it like channel.deleted so connection recovery
-    // does not re-watch it (#2599). `deleteAllChannelReference` is skipped: the channel still
+    // does not re-watch it. `deleteAllChannelReference` is skipped: the channel still
     // exists for its other members.
     if (event.type === 'notification.removed_from_channel' && event.cid) {
       const { cid } = event;
@@ -1231,7 +1290,17 @@ export class StreamChat extends ChatApi {
     return await this.wsConnection.connect();
   }
 
-  /** Queries users and watches user presence. */
+  /**
+   * Queries users and stores them in `client.state.users`. Watches presence only when
+   * `request.payload.presence` is set.
+   *
+   * @param ...args - `[request, requestOptions]`. The optional `request.payload` accepts
+   *   MongoDB-style filter conditions, sort directions (e.g.
+   *   `[{ field: 'last_active', direction: -1 }]`), and options such as `presence`.
+   *   `requestOptions` carries per-request options such as an abort `signal` and is never
+   *   serialized into the request.
+   * @returns The user query response.
+   */
   override async queryUsers(...args: Parameters<ChatApi['queryUsers']>) {
     const [request, requestOptions] = args;
     const data = await super.queryUsers(request ?? {}, requestOptions);
@@ -1242,9 +1311,13 @@ export class StreamChat extends ChatApi {
 
   /**
    * Stops watching a channel on this client's connection. It carries no `watch` flag, but it waits
-   * for the connection id like a watching request (through a handshake or reconnect, until the
+   * for the connection ID like a watching request (through a handshake or reconnect, until the
    * caller's abort signal fires) and throws when there is no connection and none is being
-   * established. `request.connection_id` is replaced by the client's own.
+   * established.
+   *
+   * @param ...args - `[pathParams, request, requestOptions]`. `pathParams` identifies the channel
+   *   (`{ type, id }`); `request.connection_id` is replaced by this client's connection ID.
+   * @returns The server response.
    */
   override async stopWatchingChannel(
     ...args: Parameters<ChatApi['stopWatchingChannel']>
@@ -1264,9 +1337,15 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Queries channels and returns the raw API response, including metadata such as
-   * `predefined_filter`. `state`, `watch` and `presence` default to `true`, `true` and `false`. See
-   * {@link queryChannelsAndHydrate} for `Channel` instances.
+   * Queries channels and returns the raw API response. See {@link queryChannelsAndHydrate} for
+   * `Channel` instances.
+   *
+   * @param ...args - `[request, requestOptions]`. The optional `request` accepts MongoDB-style
+   *   filter conditions, sort directions (e.g. `[{ field: 'created_at', direction: -1 }]`), and
+   *   options such as `predefined_filter`, `filter_values`, and `sort_values`. `state`, `watch` and
+   *   `presence` default to `true`, `true` and `false`. `requestOptions` carries per-request
+   *   options such as an abort `signal` and is never serialized into the request.
+   * @returns The full query channels response, including metadata such as `predefined_filter`.
    */
   override async queryChannels(...args: Parameters<ChatApi['queryChannels']>) {
     const [request, requestOptions] = args;
@@ -1299,7 +1378,7 @@ export class StreamChat extends ChatApi {
           ...restOptions,
         };
 
-    // `ApiClient` waits for a connection id only when the payload sets `watch` or `presence`.
+    // `ApiClient` waits for a connection ID only when the payload sets `watch` or `presence`.
     return await super.queryChannels(payload, requestOptions);
   }
 
@@ -1307,12 +1386,18 @@ export class StreamChat extends ChatApi {
    * Queries channels and hydrates them into `Channel` instances on this client, dispatching
    * `channels.queried` and syncing the offline DB. Use `queryChannels()` for the raw API response.
    *
+   * @param options - The query channels request payload (optional). Accepts MongoDB-style filter
+   *   conditions, sort directions (e.g. `[{ field: 'created_at', direction: -1 }]`), and options
+   *   such as `predefined_filter`, `filter_values`, and `sort_values`.
    * @param stateOptions - Options that only affect state management and are not sent in the
-   *   request.
+   *   request. Defaults to `{}`.
    * @param stateOptions.skipInitialization - IDs of channels whose state is not initialized.
    * @param stateOptions.skipHydration - Not read: it has no effect.
    * @param stateOptions.withResponse - Returns the full query response (with hydrated `channels`)
    *   instead of `Channel[]`.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The hydrated channel list, or the full response when `withResponse` is `true`.
    */
   async queryChannelsAndHydrate(
     options: QueryChannelsRequest | undefined,
@@ -1375,6 +1460,12 @@ export class StreamChat extends ChatApi {
   /**
    * Queries a message's reactions. On the first page, cached offline reactions are dispatched
    * (`offline_reactions.queried`) before the network request.
+   *
+   * @param ...args - `[pathParams, request, requestOptions]`. `pathParams.id` is the target message
+   *   ID; `request` carries MongoDB-style filters, sort directions (e.g.
+   *   `[{ field: 'created_at', direction: -1 }]`) and pagination options; `requestOptions` carries
+   *   per-request options such as an abort `signal` and is never serialized into the request.
+   * @returns The query reactions response.
    */
   async queryReactionsAndHydrate(...args: Parameters<ChatApi['queryReactions']>) {
     const [{ id: messageId }, request] = args;
@@ -1484,11 +1575,17 @@ export class StreamChat extends ChatApi {
   /**
    * Returns the channel with the given type, ID and custom data: a shorthand for
    * {@link ChannelManager.ensure}, so it returns the stored instance for the cid or creates and
-   * stores it. Initialize it with `channel.watch()`.
+   * stores it.
    *
    * For a distinct channel between users, leave out the ID and pass the members:
    * `client.channel('messaging', { members: [{ user_id: 'tommaso' }, { user_id: 'thierry' }] })`.
    * It has no ID until `channel.watch()`, `query()` or `create()` returns one.
+   *
+   * @param channelType - The channel type.
+   * @param channelId - The channel ID; leave it out for a distinct channel created from members
+   *   (optional).
+   * @param custom - Data for a new channel, e.g. `members` or `custom`. Defaults to `{}`.
+   * @returns The channel; initialize it with `channel.watch()`.
    */
   channel(channelType: string, channelId?: string | null, custom?: ChannelInput): Channel;
   channel(channelType: string, custom?: ChannelInput): Channel;
@@ -1508,7 +1605,16 @@ export class StreamChat extends ChatApi {
     });
   }
 
-  /** Searches messages. Throws when both `offset` and `next` are given. */
+  /**
+   * Searches messages.
+   *
+   * @param ...args - `[request, requestOptions]`. The optional `request.payload` accepts
+   *   MongoDB-style filter conditions, a search query, and options such as `user_id`.
+   *   `requestOptions` carries per-request options such as an abort `signal` and is never
+   *   serialized into the request.
+   * @returns The search messages response.
+   * @throws When both `offset` and `next` are given.
+   */
   override async search(...args: Parameters<ChatApi['search']>) {
     const [request, requestOptions] = args;
     if (request?.payload?.offset && request?.payload?.next) {
@@ -1536,7 +1642,13 @@ export class StreamChat extends ChatApi {
     };
   }
 
-  /** Revokes a global ban. */
+  /**
+   * Revokes a global ban.
+   *
+   * @param targetUserId - The user to unban.
+   * @param options - Unban options (optional).
+   * @returns The server response.
+   */
   async unbanUser(targetUserId: string, options?: UnBanUserOptions) {
     return await this.api.delete<APIResponse>(this.baseURL + '/moderation/ban', {
       target_user_id: targetUserId,
@@ -1578,7 +1690,13 @@ export class StreamChat extends ChatApi {
     return result;
   }
 
-  /** Whether the user is muted. Throws unless `connectUser()` was awaited first. */
+  /**
+   * Checks whether a user is muted.
+   *
+   * @param targetId - The user ID to check.
+   * @returns `true` if the user is muted, otherwise `false`.
+   * @throws Unless `connectUser()` was called.
+   */
   userMuteStatus(targetId: string) {
     if (!this.user || !this.wsPromise) {
       throw new Error('Make sure to await connectUser() first.');
@@ -1598,7 +1716,7 @@ export class StreamChat extends ChatApi {
    * @param options.pin_expires - When the pin expires, as a `Date` or an RFC3339 string; `null` or
    *   leaving it out pins without expiry. Hand a server-sent timestamp back with `nsToDate(timestamp)`.
    * @param options.pinned_at - The pin time, which orders the pinned messages, as a `Date` or an
-   *   RFC3339 string (optional, defaults to now).
+   *   RFC3339 string (optional). Defaults to now.
    * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The updated message response.
@@ -1630,8 +1748,8 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Only the HTTP request: no offline queueing and no local state. `messageOperations.update` on a
-   * channel or thread is the full edit.
+   * Updates a message over HTTP only: no offline queueing and no local state.
+   * `messageOperations.update` on a channel or thread is the full edit.
    */
   override async updateMessage(...args: Parameters<ChatApi['updateMessage']>) {
     const [pathParams, request, requestOptions] = args;
@@ -1645,8 +1763,8 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Only the HTTP request: no offline queueing and no local state. `messageOperations.delete` on a
-   * channel or thread is the full delete.
+   * Deletes a message over HTTP only: no offline queueing and no local state.
+   * `messageOperations.delete` on a channel or thread is the full delete.
    */
   override async deleteMessage(...args: Parameters<ChatApi['deleteMessage']>) {
     const [, request] = args;
@@ -1662,9 +1780,18 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Returns the current user's threads as hydrated `Thread` instances, with the next cursor.
-   * Defaults: `limit` 10, `participant_limit` 10, `reply_limit` 3, `watch` true (subscribes to the
-   * threads' channels).
+   * Returns the current user's threads as hydrated `Thread` instances.
+   *
+   * @param options - Pagination and limits for the participants and replies. Defaults to `{}`.
+   * @param options.limit - Limits the number of threads returned. Defaults to 10.
+   * @param options.watch - Subscribes the user to the channels of the threads. Defaults to `true`.
+   * @param options.participant_limit - Limits the participants returned per thread. Defaults to 10.
+   * @param options.reply_limit - Limits the replies returned per thread. Defaults to 3.
+   * @param options.filter - MongoDB-style filters for threads (optional).
+   * @param options.sort - MongoDB-style sort for threads (optional).
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The threads and the next cursor.
    */
   async queryThreadsAndHydrate(
     options: QueryThreadsRequest = {},
@@ -1712,8 +1839,8 @@ export class StreamChat extends ChatApi {
    *
    * @param pathParams - The thread's parent message, as for `getThread`.
    * @param pathParams.message_id - The parent message ID.
-   * @param options - Options object for pagination and limiting the participants and replies
-   *   (optional, defaults to `{}`).
+   * @param options - Options object for pagination and limiting the participants and replies.
+   *   Defaults to `{}`.
    * @param options.watch - Subscribes the user to the channel of the thread (optional).
    * @param options.participant_limit - Limits the number of participants returned per thread (optional).
    * @param options.reply_limit - Limits the number of replies returned per thread (optional).
@@ -1786,7 +1913,13 @@ export class StreamChat extends ChatApi {
     return this.cachedUserAgent;
   };
 
-  /** @deprecated Use `sdkIdentifier` instead. */
+  /**
+   * Sets the user agent string.
+   *
+   * @deprecated Use `sdkIdentifier` instead.
+   *
+   * @param userAgent - The user agent string.
+   */
   setUserAgent(userAgent: string) {
     this.userAgent = userAgent;
   }
@@ -1839,7 +1972,15 @@ export class StreamChat extends ChatApi {
     products: ['chat'],
   });
 
-  /** Queries poll answers: the votes with `is_answer: true`. */
+  /**
+   * Queries poll answers: the votes with `is_answer: true`.
+   *
+   * @param ...args - `[pathParams, request, requestOptions]`. `pathParams.poll_id` is the poll ID;
+   *   `request` carries optional vote filter conditions, sort directions, and pagination options
+   *   (`limit`, `offset`); `requestOptions` carries per-request options such as an abort `signal`
+   *   and is never serialized into the request.
+   * @returns The poll answers.
+   */
   async queryPollAnswers(...args: Parameters<ChatApi['queryPollVotes']>) {
     const [pathParams, request, requestOptions] = args;
     const { filter, ...options } = request ?? {};
@@ -1851,7 +1992,14 @@ export class StreamChat extends ChatApi {
     );
   }
 
-  /** Uploads a file to the Stream CDN. */
+  /**
+   * Uploads a file to the Stream CDN.
+   *
+   * @param request - Upload payload. `request.file` is the file to upload.
+   * @param requestOptions - Per-request options, e.g. `onUploadProgress` or an abort `signal`
+   *   (optional).
+   * @returns The upload response, with the file URL.
+   */
   override async uploadFile(
     request?: Omit<FileUploadRequest, 'file'> & { file?: FileUploadInput },
     requestOptions?: StreamRequestOptions,
@@ -1862,7 +2010,14 @@ export class StreamChat extends ChatApi {
     );
   }
 
-  /** Uploads an image to the Stream CDN. */
+  /**
+   * Uploads an image to the Stream CDN.
+   *
+   * @param request - Upload payload. `request.file` is the image to upload.
+   * @param requestOptions - Per-request options, e.g. `onUploadProgress` or an abort `signal`
+   *   (optional).
+   * @returns The upload response, with the image URL.
+   */
   override async uploadImage(
     request?: Omit<ImageUploadRequest, 'file'> & { file?: FileUploadInput },
     requestOptions?: StreamRequestOptions,
@@ -1874,7 +2029,12 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Marks channels as delivered for the given messages. Returns `undefined` when there are none.
+   * Marks channels as delivered for the given messages.
+   *
+   * @param request - Mark delivered options.
+   * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
+   *   into the request (optional).
+   * @returns The server response, or `undefined` if there are no messages to mark.
    */
   async markChannelsDelivered(
     request?: Gen_MarkDeliveredRequest,

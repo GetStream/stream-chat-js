@@ -56,6 +56,8 @@ export class OfflineDBSyncManager {
 
       this.connectionChangedListener?.();
 
+      // Follows the socket, not the device network status: sync runs over the socket, so a network
+      // with no socket has nothing to sync over.
       let wasHealthy: boolean | undefined;
       this.connectionChangedListener =
         this.client.wsConnection.state.subscribeWithSelector(
@@ -81,7 +83,12 @@ export class OfflineDBSyncManager {
     }
   };
 
-  /** Calls `listener` with the new sync status on every change. Returns `{ unsubscribe }`. */
+  /**
+   * Calls `listener` with the new sync status on every change.
+   *
+   * @param listener - A callback invoked with the new sync status (`true` or `false`).
+   * @returns An object with an `unsubscribe` function to remove the listener.
+   */
   public onSyncStatusChange = (listener: (status: boolean) => void) => {
     this.syncStatusListeners.push(listener);
 
@@ -94,7 +101,13 @@ export class OfflineDBSyncManager {
     };
   };
 
-  /** Runs `callback` once after the next successful sync. Scheduling the same `tag` replaces it. */
+  /**
+   * Runs a callback once after the next successful sync.
+   *
+   * @param tag - A unique key to identify and manage the callback. Scheduling the same tag replaces
+   *   it.
+   * @param callback - An async function to run after sync.
+   */
   public scheduleSyncStatusChangeCallback = (
     tag: string | symbol,
     callback: () => Promise<void>,

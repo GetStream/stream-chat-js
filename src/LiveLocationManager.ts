@@ -47,7 +47,10 @@ const canTrackLocation = (location: SharedLocationResponseData): boolean =>
   Number.isFinite(location.end_at) &&
   location.end_at >= nowNs();
 
-/** Type guard form of `canTrackLocation`. Negating it narrows `state.messages` to `never`. */
+/**
+ * Type guard form of `canTrackLocation`. Negating it narrows a `state.messages` value to `never`, so
+ * use `canTrackLocation` for a negated check.
+ */
 const isTrackableLocation = (
   location: SharedLocationResponseData,
 ): location is SharedLiveLocationResponse => canTrackLocation(location);
@@ -74,8 +77,8 @@ export const UPDATE_LIVE_LOCATION_REQUEST_MIN_THROTTLE_TIMEOUT = 3000;
 
 export type LiveLocationManagerConfig = {
   /**
-   * Shortest gap between live-location update requests in milliseconds (default 3000). A failsafe
-   * against rate limiting for a chatty custom `watchLocation`; lowering it risks 429s.
+   * Shortest gap between live-location update requests in milliseconds. Defaults to 3000. A
+   * failsafe against rate limiting for a chatty custom `watchLocation`; lowering it risks 429s.
    */
   minUpdateThrottleMs: number;
 };
@@ -125,8 +128,8 @@ export class LiveLocationManager extends WithSubscriptions {
     });
 
     // Last statement, so a setup function sees a whole object. Subscribed here, not only in
-    // `registerSubscriptions`, so a config registered before the async `init()` resolves still
-    // applies.
+    // `registerSubscriptions`, so registered configuration is in effect from construction, not only
+    // once the async `init()` resolves.
     this.subscribeConfiguration();
   }
 
@@ -175,7 +178,10 @@ export class LiveLocationManager extends WithSubscriptions {
     this.addUnsubscribeFunction(this.subscribeTargetMessagesChange());
   };
 
-  /** Ref-counted. Leaves the configuration subscription to {@link dispose}. */
+  /**
+   * Ref-counted event subscriptions only. Configuration is subscribed for the instance's lifetime,
+   * from construction, so only {@link dispose} releases it.
+   */
   public unregisterSubscriptions = () => super.unregisterSubscriptions();
 
   /**

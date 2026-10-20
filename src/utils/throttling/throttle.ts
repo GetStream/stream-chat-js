@@ -1,9 +1,9 @@
 export type ThrottledCallback = (...args: unknown[]) => unknown;
 
 export type ThrottleOptions = {
-  /** Call on the leading edge (default: true). */
+  /** Call on the leading edge. Defaults to `true`. */
   leading?: boolean;
-  /** Call once at the end of the window with the latest args (default: false). */
+  /** Call once at the end of the window with the latest args. Defaults to `false`. */
   trailing?: boolean;
 };
 
@@ -17,9 +17,9 @@ export type Throttled<T extends unknown[]> = {
 };
 
 /**
- * Runs `fn` at most once per `timeout` ms. `leading` (default `true`) fires when the window opens,
- * `trailing` (default `false`) fires once at its end with the latest args and `this`.
- * Create one instance and reuse it: recreating it resets the window.
+ * Runs `fn` at most once per `timeout` ms. `leading` fires when the window opens, `trailing` fires
+ * once at its end with the latest args and `this` (see {@link ThrottleOptions}). Create one
+ * instance and reuse it: recreating it resets the window. `timeout` defaults to 200.
  */
 export const throttle = <T extends unknown[]>(
   fn: (...args: T) => void,

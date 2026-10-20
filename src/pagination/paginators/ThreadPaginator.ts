@@ -106,7 +106,7 @@ export class ThreadPaginator extends BasePaginator<Thread, QueryThreadsRequest> 
   };
 
   /**
-   * Keeps one instance per id (the index upserts, so a second one would replace the stored one). A
+   * Keeps one instance per ID (the index upserts, so a second one would replace the stored one). A
    * stale stored thread is hydrated from the query unless it is active: it reloads itself, and
    * hydrating would replace the replies on screen.
    */
@@ -138,7 +138,7 @@ export class ThreadPaginator extends BasePaginator<Thread, QueryThreadsRequest> 
       });
       if (!results) return;
 
-      // Replace rather than merge (the order is server-driven): ids absent from the response go.
+      // Replace rather than merge (the order is server-driven): IDs absent from the response go.
       const nextIds = new Set(results.items.map((thread) => thread.id));
       this.setIntervals([]);
       this.setActiveInterval(undefined);

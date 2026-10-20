@@ -19,9 +19,10 @@ export const DEFAULT_WS_CONNECTION_CONFIG: WSConnectionConfig = deepFreezeConfig
 export const WS_NETWORK_RECOVERY_RETRY_MS = 10;
 
 /**
- * Bounds applied to the timing knobs by {@link clampWSConnectionConfig}. A value outside them makes
- * the socket fail by itself, which looks like a random disconnect. `connectTimeoutMs` is unbounded:
- * every value is a legitimate trade-off.
+ * Bounds applied to the timing knobs by {@link clampWSConnectionConfig}. A ping interval above its
+ * max, or a grace period below its min, makes the socket fail by itself, which looks like a random
+ * disconnect. The other bounds reject nonsense values. `connectTimeoutMs` is unbounded: every value
+ * is a legitimate trade-off.
  */
 export const WS_CONNECTION_CONFIG_BOUNDS: {
   [Key in

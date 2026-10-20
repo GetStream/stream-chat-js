@@ -119,7 +119,11 @@ export class CooldownTimer extends WithSubscriptions {
     this.recalculate();
   };
 
-  /** Sets the own latest message timestamp (unix nanoseconds) and recomputes the remaining time. */
+  /**
+   * Sets the own latest message timestamp and recomputes the remaining time.
+   *
+   * @param timestamp - Unix nanoseconds, as the API sends it.
+   */
   public setOwnLatestMessageTimestamp = (timestamp: TimestampNS | undefined) => {
     this.state.partialNext({ ownLatestMessageTimestamp: timestamp });
     this.recalculate();

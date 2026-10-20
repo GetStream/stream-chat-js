@@ -10,7 +10,7 @@ import type { Thread } from '../thread';
 
 /**
  * Builds the `MessageOperations` a message collection owns, shared by `Channel` and `Thread`. A
- * `Thread` sends against its parent channel and stamps its own id as `parent_id`; a `Channel` sends
+ * `Thread` sends against its parent channel and stamps its own ID as `parent_id`; a `Channel` sends
  * against itself.
  */
 export const createMessageOperations = (collection: Channel | Thread) => {
@@ -22,7 +22,7 @@ export const createMessageOperations = (collection: Channel | Thread) => {
     task: PendingTaskOf<T>,
     { queue = true }: { queue?: boolean } = {},
   ) => queueOrRun({ channel, client: channel.getClient(), queue, task });
-  // Read on every call: a channel created from its member list only gets an id once the server has
+  // Read on every call: a channel created from its member list only gets an ID once the server has
   // created it.
   const channelTaskData = () => ({ channelId: channel.id, channelType: channel.type });
 
@@ -143,7 +143,7 @@ export const createMessageOperations = (collection: Channel | Thread) => {
             payload: [{ message: m, ...o }],
             type: 'send-message',
           },
-          // Without a message id there is nothing to key a queue entry on, so it just runs.
+          // Without a message ID there is nothing to key a queue entry on, so it just runs.
           { queue: !!m.id },
         );
         return { message };

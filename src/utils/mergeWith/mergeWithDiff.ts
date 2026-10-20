@@ -5,6 +5,10 @@ import type { DiffNode, MergeWithCustomizer } from './mergeWithCore';
  * Like `mergeWith`, and also returns a hierarchical diff of the keys that were added or
  * updated.
  *
+ * @param target - The destination object. It is not mutated.
+ * @param source - A single source object or an array of objects to be merged into `target`.
+ * @param customizer - The function to customize assigned values.
+ * @returns The merged result and a hierarchical diff object.
  * @example
  *
  * const { result, diff } = mergeWithDiff({ a: 1, b: { c: 2 } }, { b: { c: 3 }, d: 4 });

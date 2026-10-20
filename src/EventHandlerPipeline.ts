@@ -76,9 +76,15 @@ export class EventHandlerPipeline<CTX extends Record<string, unknown> = {}> {
   }
 
   /**
-   * Inserts a handler at `index` (clamped to the pipeline size, default append). With `replace` and
-   * an in-bounds index it overwrites the handler there instead, and `revertOnUnsubscribe` restores
-   * that handler when the returned unsubscribe runs.
+   * Inserts a handler into the pipeline. With `replace` and an in-bounds index it overwrites the
+   * handler there instead.
+   *
+   * @param payload.handle - The handler function to insert.
+   * @param payload.id - The handler ID. Defaults to a generated UUID.
+   * @param payload.index - Target index, clamped to the pipeline size. Defaults to appending.
+   * @param payload.replace - Whether to replace the handler at `index` instead of inserting.
+   * @param payload.revertOnUnsubscribe - Whether unsubscribing restores the replaced handler.
+   * @returns An unsubscribe function that removes (and optionally restores) the handler.
    */
   insert({
     handle,
@@ -109,7 +115,11 @@ export class EventHandlerPipeline<CTX extends Record<string, unknown> = {}> {
     }
   }
 
-  /** Removes every handler matching by function identity, exact id or regexp. */
+  /**
+   * Removes every matching handler.
+   *
+   * @param params - Matches by handler function identity, exact ID or ID regexp.
+   */
   remove(params: FindEventHandlerParams<CTX>): void {
     let index = this.findIndex(params);
     while (index > -1) {

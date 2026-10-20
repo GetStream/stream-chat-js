@@ -161,7 +161,7 @@ export class OptimisticPollVotes {
     try {
       response = await this.send(async () => {
         const result = await sendRequest();
-        // Recorded before the next request is sent: a removal looks up the vote id in here.
+        // Recorded before the next request is sent: a removal looks up the vote ID in here.
         if (result !== undefined) this.succeededChanges.push(toChange(result));
         return result;
       });
@@ -194,7 +194,7 @@ export class OptimisticPollVotes {
   };
 
   /**
-   * The server id of the vote to remove. Casts and removals of an option alternate, so the option's
+   * The server ID of the vote to remove. Casts and removals of an option alternate, so the option's
    * last succeeded change tells: a cast is the vote being removed (e.g. a placeholder), a removal
    * means the cast in between failed. Without one, the server's own vote of the option is used.
    */

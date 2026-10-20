@@ -19,7 +19,10 @@ export type ConfigControllerOptions<TConfig extends Record<string, unknown>> = {
    * instead would run `getBehaviourOverrides` while the owner's constructor is still in flight.
    */
   initialSlice?: Partial<TConfig>;
-  /** How the slice combines with lower layers. `'deep'` keeps siblings of a named nested member. */
+  /**
+   * How each layer combines with the ones below. `'deep'` keeps siblings of a named nested member.
+   * Defaults to `'shallow'`.
+   */
   mergeSlice?: 'shallow' | 'deep';
   /**
    * Fields that outrank every layer: behaviour no option can express (a comparator, a request function
@@ -122,8 +125,8 @@ export class ConfigController<
       // Spread onto the current value, not resolved: this patch is not a layer. A plain spread lets an
       // explicit `undefined` clear a field, which `resolve` would skip.
       const patched = { ...this.value, ...owned } as TConfig;
-      // `resolve` applies authority itself, this path does not. The patch is not kept, so a value the
-      // server lowers is not restored if the server later relents.
+      // This path skips `resolve`, so it applies authority itself. The patch is not kept, so a value
+      // authority lowers is not restored if it later relents.
       const { applyAuthority } = this.options;
       this.write(applyAuthority ? applyAuthority(patched) : patched);
       return;

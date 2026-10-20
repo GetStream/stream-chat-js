@@ -101,8 +101,8 @@ export type MessageComposerSnapshot = {
 export type CompositionContext = Channel | Thread | LocalMessage;
 
 /**
- * Outcome of `send()`:
- * - `sent`: the message went out.
+ * Outcome of `send()` and `update()`:
+ * - `sent`: the message or edit went out.
  * - `nothing-to-send`: nothing to compose, or a middleware discarded the composition (reported through
  *   `client.notifications`). **The composer keeps its contents.**
  * - `failed`: the request failed. **The composer is released**; the content is in the message list
@@ -170,7 +170,7 @@ const initState = (
     : formatMessage(composition);
   let message;
   let draftId = null;
-  let id = MessageComposer.generateId(); // a draft id is not the message id
+  let id = MessageComposer.generateId(); // a draft ID is not the message ID
   if (compositionIsDraftResponse(composition)) {
     message = composition.message;
     draftId = composition.message.id;
@@ -460,8 +460,8 @@ export class MessageComposer extends WithSubscriptions {
     if (!this.isCommandSendable) return false;
 
     if (this.allowsPendingUploads) {
-      // Uploads in flight do not block. Pending and `failed` attachments count as content (they ride
-      // the optimistic message and are retried), `blocked` ones do not (they cannot be retried).
+      // Uploads in flight do not block. Pending attachments count as content (settled on send), so
+      // do `failed` ones (retried on send). `blocked` ones do not (no retry can settle them).
       const hasSendableAttachment = this.attachmentManager.attachments.some(
         (attachment) =>
           isFinishedUpload(attachment) ||
@@ -1032,7 +1032,7 @@ export class MessageComposer extends WithSubscriptions {
 
   createDraft = async () => {
     // Server drafts live on the thread or channel, not on a message, so none for an edit. Nor for a
-    // provisional channel (no id yet).
+    // provisional channel (no ID yet).
     if (this.editedMessage || !this.config.drafts.enabled || this.channel.isProvisional)
       return;
     const composition = await this.composeDraft();
@@ -1203,7 +1203,7 @@ export class MessageComposer extends WithSubscriptions {
       });
       return 'sent';
     } catch (error) {
-      // Nothing is restored: the failed message in the list owns the content and its upload ids.
+      // Nothing is restored: the failed message in the list owns the content and its upload IDs.
       this.reportSubmitFailure(
         CORE_NOTIFICATION_TYPE.messageSendFailed,
         'Send message request failed',

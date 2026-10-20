@@ -53,9 +53,9 @@ export type ChannelWatchState = {
   watchers: Record<string, UserResponse>;
   /**
    * See {@link ChannelWatchStatus}. Becomes `Watching` when a query with `watch: true` succeeds
-   * (`channel.watch()`, `channel.query({ watch: true })`, `client.queryChannels()`), `WasWatching` when
-   * the connection is lost (only from `Watching`), and `NotWatching` on `channel.stopWatching()` or
-   * `channel.disconnect()`.
+   * (`channel.watch()`, `channel.query({ watch: true })`, `client.queryChannelsAndHydrate()`, a
+   * thread query with `watch: true`), `WasWatching` when the connection is lost (only from
+   * `Watching`), and `NotWatching` on `channel.stopWatching()` or `channel.disconnect()`.
    */
   watchStatus: ChannelWatchStatus;
 };
@@ -73,7 +73,7 @@ export type MembersState = {
   /**
    * From `channel.data.member_count`. Set on query, watch and hydration (including the offline DB) and
    * on `channel.updated`, not on `member.added` / `member.removed`: `channel.updated` fires on every
-   * member change and is authoritative, while counting per member event double-counts (#1761).
+   * member change and is authoritative, while counting per member event double-counts.
    */
   memberCount: number;
 };
@@ -108,8 +108,8 @@ export type MuteStatusState = {
 };
 
 /**
- * Read through the `channel.initialized` / `offlineMode` / `pendingDisposal` getters. Only
- * `channel.disconnect()` sets `pendingDisposal`.
+ * Read through the `channel.initialized` / `offlineMode` / `pendingDisposal` / `supersededBy`
+ * getters. Only `channel.disconnect()` sets `pendingDisposal`.
  */
 export type ChannelLifecycleState = {
   /**
@@ -130,7 +130,7 @@ export type ChannelLifecycleState = {
    */
   pendingDisposal: boolean;
   /**
-   * The stored instance that replaced this one: this one was created without an id and, when the server
+   * The stored instance that replaced this one: this one was created without an ID and, when the server
    * answered with the cid, another instance was already stored under it. That instance took this one's
    * server data, local messages and (if this one was open and it was not) its composer. Set once.
    */
@@ -283,7 +283,13 @@ export class ChannelState extends StateStore<ChannelStateData> {
     this.partialNext({ watcherCount });
   }
 
-  /** Returns a new message object with the SDK-specific fields (`status`, `error`) added. */
+  /**
+   * Adds the SDK-specific fields (`status`, `error`) to a message. Memoized per source object:
+   * callers share the result, so do not mutate it.
+   *
+   * @param message - The message from the API, or a local one.
+   * @returns The `LocalMessage`.
+   */
   formatMessage = (message: MessageResponse | LocalMessage) => formatMessage(message);
 
   /** Removes users typing for more than 7 seconds without a new event, dispatching `typing.stop`. */

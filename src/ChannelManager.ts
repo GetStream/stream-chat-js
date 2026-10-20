@@ -30,7 +30,7 @@ type EventHandlerContext = ChannelManagerEventHandlerContext;
 type SupportedEventType = EventType | (string & {});
 
 /**
- * Picks which paginators own a channel that matches several, by returning their ids. An empty list
+ * Picks which paginators own a channel that matches several, by returning their IDs. An empty list
  * means every matching paginator keeps it.
  */
 export type PaginatorOwnershipResolver = (args: {
@@ -39,7 +39,7 @@ export type PaginatorOwnershipResolver = (args: {
 }) => string[];
 
 /**
- * Priority-based ownership resolver. `priority` lists paginator ids from highest to lowest: of the
+ * Priority-based ownership resolver. `priority` lists paginator IDs from highest to lowest: of the
  * paginators matching a channel, the highest-priority one owns it. If none of them is listed, all
  * keep it.
  */
@@ -204,7 +204,7 @@ const channelHiddenHandler: LabeledEventHandler<EventHandlerContext> = {
   id: 'ChannelManager:default-handler:channel.hidden',
 };
 
-// Member ids are stable, but `member.user.name` can affect a list's filter.
+// Member IDs are stable, but `member.user.name` can affect a list's filter.
 const memberUpdatedHandler: LabeledEventHandler<EventHandlerContext> = {
   handle: updateLists,
   id: 'ChannelManager:default-handler:member.updated',
@@ -305,8 +305,8 @@ export type ChannelManagerOptions = {
    */
   eventHandlers?: ChannelManagerEventHandlers;
   /**
-   * Picks which paginator(s) own a channel that matches several (default: all of them). A function
-   * returns the owning paginator ids; an array is a priority list (highest first), so the
+   * Picks which paginator(s) own a channel that matches several. Defaults to all of them. A function
+   * returns the owning paginator IDs; an array is a priority list (highest first), so the
    * highest-priority match owns the channel, and if none of them is listed all keep it.
    */
   ownershipResolver?: PaginatorOwnershipResolver | string[];
@@ -452,7 +452,7 @@ export class ChannelManager extends WithSubscriptions {
    * same members as another needs its own `id`.
    *
    * A channel created from members is {@link Channel.isProvisional} until its query is answered: it
-   * has no id yet, so nothing but that query can be sent for it.
+   * has no ID yet, so nothing but that query can be sent for it.
    *
    * ```ts
    * const general = client.channelManager.ensure({ type: 'messaging', id: 'general' });
@@ -463,6 +463,8 @@ export class ChannelManager extends WithSubscriptions {
    * await dm.watch();
    * ```
    *
+   * @param params.type - The channel type.
+   * @param params.id - The channel ID; leave it out for a distinct channel created from members.
    * @param params.data - Data for a new channel (members, custom fields). For a stored channel only
    *   `data.custom` is applied.
    * @returns The channel; initialize it with `channel.watch()`.
@@ -511,14 +513,14 @@ export class ChannelManager extends WithSubscriptions {
   }
 
   private ensureByMembers(type: string, data: ChannelInput): Channel {
-    // The id `Channel` gives itself until the server answers.
+    // The ID `Channel` gives itself until the server answers.
     const tempId = generateChannelTempId((data.members ?? []).map(getMemberUserId));
     if (!tempId) {
       throw Error('Please specify atleast one member when creating unique conversation');
     }
     const tempCid = `${type}:${tempId}`;
 
-    // The real id of a distinct channel starts with `!members-`: a loaded one with the same members
+    // The real ID of a distinct channel starts with `!members-`: a loaded one with the same members
     // is this conversation.
     if (this.get(tempCid)?.pendingDisposal) this.removeChannel(tempCid);
     if (!this.get(tempCid)) {
@@ -563,7 +565,7 @@ export class ChannelManager extends WithSubscriptions {
   }
 
   /**
-   * `previous`, created without an id, was answered with a cid `successor` already holds (stored by
+   * `previous`, created without an ID, was answered with a cid `successor` already holds (stored by
    * an event or a list meanwhile). `successor` stays the one instance and takes over: the response
    * is applied to it like a `queryChannels` result (local messages are never removed),
    * `previous`'s local messages (sending or failed) are added by id (`successor`'s copy wins), and
@@ -683,10 +685,11 @@ export class ChannelManager extends WithSubscriptions {
   }
 
   /**
-   * Demotes every `Watching` channel to `WasWatching`: the server keys watches by connection id, so
+   * Demotes every `Watching` channel to `WasWatching`: the server keys watches by connection ID, so
    * a dropped socket ends them all. Channels stopped on purpose or disconnected stay `NotWatching`.
    * Called when the socket goes unhealthy or offline (`StableWSConnection`, `WSConnectionFallback`)
-   * and by `closeConnection()`.
+   * and by `closeConnection()`, whose `disconnect()` writes health through `_applyHealth` and never
+   * reaches `_setHealth`.
    *
    * @internal
    */
@@ -718,7 +721,7 @@ export class ChannelManager extends WithSubscriptions {
   }
 
   /**
-   * Sets the rule deciding which paginator(s) own a channel matched by several. Pass paginator ids
+   * Sets the rule deciding which paginator(s) own a channel matched by several. Pass paginator IDs
    * (highest priority first) for the built-in priority resolver, a custom resolver, or `undefined`
    * for the default (every matching paginator keeps the channel). A setter because the client
    * builds the manager before the app creates its paginators.
@@ -745,12 +748,12 @@ export class ChannelManager extends WithSubscriptions {
    * Routes a channel into the paginator(s) that own it and removes it from any list it no longer
    * belongs to, as for live WS updates. Use it to surface a channel the app just opened (a search
    * result, a new DM) without a re-query; repeated calls are safe. A channel created from members
-   * is ignored until its first query gives it an id. A channel matching no paginator is added
+   * is ignored until its first query gives it an ID. A channel matching no paginator is added
    * nowhere: register a catch-all paginator (empty filter) with the lowest ownership priority as a
    * fallback.
    */
   ingestChannel(input: Channel) {
-    // Not listed until it has its id (see `ChannelPaginator.ingestItem`).
+    // Not listed until it has its ID (see `ChannelPaginator.ingestItem`).
     if (input.isProvisional) return;
     const channel = this.resolveListedChannel(input);
     if (!channel) return;
@@ -835,9 +838,11 @@ export class ChannelManager extends WithSubscriptions {
   }
 
   /**
-   * Replaces the whole set of lists, in render order, in one state update (the primitive
-   * `insertPaginator` and `removePaginator` build on). Dropped paginators are detached as
-   * `removePaginator` does; a repeated id keeps only its first occurrence.
+   * Replaces the whole set of lists in one state update (the primitive `insertPaginator` and
+   * `removePaginator` build on). Dropped paginators are detached as `removePaginator` does; a
+   * repeated ID keeps only its first occurrence.
+   *
+   * @param paginators - The lists this manager should hold, in render order.
    */
   setPaginators(paginators: ChannelPaginator[]) {
     const nextPaginators: ChannelPaginator[] = [];
@@ -868,14 +873,23 @@ export class ChannelManager extends WithSubscriptions {
     nextPaginators.forEach((paginator) => this.wrapPaginatorFiltering(paginator));
   }
 
-  /** Detaches every list as `removePaginator` does, in one update. Returns the detached lists. */
+  /**
+   * Detaches every list as `removePaginator` does, in one update.
+   *
+   * @returns The paginators the manager held, in the order it held them.
+   */
   clearPaginators(): ChannelPaginator[] {
     const cleared = this.paginators;
     this.setPaginators([]);
     return cleared;
   }
 
-  /** Inserts a paginator at `index` (default: append); one with the same id is moved. */
+  /**
+   * Inserts a paginator, or moves it when one with the same ID is already held.
+   *
+   * @param params.paginator - The paginator to insert or move.
+   * @param params.index - Target index, clamped to the list. Defaults to appending.
+   */
   insertPaginator({ paginator, index }: { paginator: ChannelPaginator; index?: number }) {
     const paginators = [...this.paginators];
     const existingIndex = paginators.findIndex((p) => p.id === paginator.id);
@@ -891,10 +905,12 @@ export class ChannelManager extends WithSubscriptions {
   }
 
   /**
-   * Removes a paginator (or the one with that id): it leaves `state.paginators`, stops receiving
-   * WS-driven updates and gets its own `filterQueryResults` back. Its loaded items stay, and a
-   * query scheduled through `nextDebounced` is canceled. Returns the removed paginator, or
-   * `undefined` when this manager did not hold it.
+   * Removes a paginator: it leaves `state.paginators`, stops receiving WS-driven updates and gets
+   * its own `filterQueryResults` back. Its loaded items stay, and a query scheduled through
+   * `nextDebounced` is canceled.
+   *
+   * @param paginatorOrId - The paginator to remove, or its ID.
+   * @returns The removed paginator, or `undefined` when this manager did not hold it.
    */
   removePaginator(
     paginatorOrId: ChannelPaginator | string,
@@ -991,9 +1007,10 @@ export class ChannelManager extends WithSubscriptions {
    * Re-runs every loaded list's own first-page query, the channel-list half of connection recovery
    * ({@link ConnectionRecoveryManager}). The page's channels are re-watched (`queryChannels`
    * watches by default), those below it come back through `restoreInterruptedWatch`.
-   * Never-queried paginators are skipped. Unlike {@link ChannelManager.reload}, it merges the page
-   * into the loaded list (`keepPreviousItems`) instead of blanking it, and is not `silent`: the
-   * `isLoading` transition guards against an overlapping query.
+   * Never-queried paginators are skipped: they run their own first query on mount, and querying them
+   * here would race it. Unlike {@link ChannelManager.reload}, it merges the page into the loaded
+   * list (`keepPreviousItems`) instead of blanking it, and is not `silent`: the `isLoading`
+   * transition guards against an overlapping query.
    */
   recover = async () =>
     await Promise.allSettled(

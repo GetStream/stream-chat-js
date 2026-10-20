@@ -6,8 +6,10 @@ import { createMergeCore } from './mergeWithCore';
  * property. When it returns `undefined` the default merge applies. It is called with
  * (objValue, srcValue, key, object, source, stack).
  *
- * Returns a new object; `target` is not mutated.
- *
+ * @param target - The destination object. It is not mutated.
+ * @param source - A single source object or an array of objects to be merged into `target`.
+ * @param customizer - The function to customize assigned values.
+ * @returns A new object with the merged result.
  * @example
  *
  * function customizer(objValue, srcValue) {

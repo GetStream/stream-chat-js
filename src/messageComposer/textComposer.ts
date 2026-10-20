@@ -86,7 +86,7 @@ const getInitialMentions = (message?: DraftMessage | LocalMessage): MentionEntit
       })),
     );
   } else if (message.mentioned_group_ids?.length) {
-    // Request-shaped drafts carry group mentions as ids only.
+    // Request-shaped drafts carry group mentions as IDs only.
     mentions.push(
       ...message.mentioned_group_ids.map((groupId) => ({
         id: groupId,
@@ -159,7 +159,6 @@ export class TextComposer {
   }
 
   set enabled(enabled: boolean) {
-    // Always forwarded: the requested value is recorded even while the server masks it.
     this.composer.updateConfig({ text: { enabled } });
   }
 
@@ -177,7 +176,8 @@ export class TextComposer {
   }
 
   set maxLengthOnEdit(maxLengthOnEdit: number | undefined) {
-    // Always forwarded: the requested value is recorded even while the server masks it.
+    // No same-value early return: the getter reads the effective value, and a request the server
+    // masks must still be recorded.
     this.composer.updateConfig({ text: { maxLengthOnEdit } });
   }
 
@@ -186,7 +186,8 @@ export class TextComposer {
   }
 
   set maxLengthOnSend(maxLengthOnSend: number | undefined) {
-    // Always forwarded: the requested value is recorded even while the server masks it.
+    // No same-value early return: the getter reads the effective value, and a request the server
+    // masks must still be recorded.
     this.composer.updateConfig({ text: { maxLengthOnSend } });
   }
 

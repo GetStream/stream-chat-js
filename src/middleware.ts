@@ -22,8 +22,8 @@ export type ExecuteParams<TValue> = {
   eventName: string;
   initialValue: TValue;
   /**
-   * `cancelable` (default): a new run cancels the unresolved previous run of the same `eventName`.
-   * `concurrent`: every run executes.
+   * `cancelable`: a new run cancels the unresolved previous run of the same `eventName`.
+   * `concurrent`: every run executes. Defaults to `cancelable`.
    */
   mode?: 'concurrent' | 'cancelable';
 };
@@ -58,8 +58,9 @@ export class MiddlewareExecutor<TValue, THandlers extends string> {
   }
 
   /**
-   * The installed middleware in execution order, read-only. Change the chain with `use`, `insert`,
-   * `replace`, `setOrder` or `remove`.
+   * The installed middleware in execution order, read-only, so a host component can check what the
+   * chain contains (by `id`). Change the chain with `use`, `insert`, `replace`, `setOrder` or
+   * `remove`.
    */
   get installedMiddleware(): ReadonlyArray<Middleware<TValue, THandlers>> {
     return this.middleware;

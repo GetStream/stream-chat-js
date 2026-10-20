@@ -70,7 +70,7 @@ type ChannelItemsUpdate<Key extends string, Item> = Record<Key, Item[]> & {
   message?: MessageRequest;
 } & ChannelUpdateOptions;
 
-/** Request of `channel.addMembers`: user ids, or member requests with a role or custom data. */
+/** Request of `channel.addMembers`: user IDs, or member requests with a role or custom data. */
 export type AddMembersRequest = ChannelItemsUpdate<
   'members',
   string | ChannelMemberRequest
@@ -82,7 +82,7 @@ export type InviteMembersRequest = ChannelItemsUpdate<
   string | Required<Omit<ChannelMemberRequest, 'channel_role'>>
 >;
 
-/** Request of `channel.removeMembers`: the user ids to remove. */
+/** Request of `channel.removeMembers`: the user IDs to remove. */
 export type RemoveMembersRequest = ChannelItemsUpdate<'members', string>;
 
 /** Request of `channel.addFilterTags` and `channel.removeFilterTags`. */
@@ -102,7 +102,7 @@ export type GetThreadOptions = NonNullable<Parameters<ChatApi['getThread']>[1]>;
 export type PinMessageOptions = {
   /** When the pin expires; `null` or leaving it out pins without expiry. */
   pin_expires?: Date | string | null;
-  /** The pin time, which orders the pinned messages (defaults to now). */
+  /** The pin time, which orders the pinned messages. Defaults to now. */
   pinned_at?: Date | string;
 };
 

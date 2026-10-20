@@ -3,12 +3,12 @@ import { chatLoggerSystem } from '../logger';
 const logger = chatLoggerSystem.getLogger('connection');
 
 /**
- * Holds the connection id (the WebSocket's, or the long-poll's after an `enableWSFallback` switch)
+ * Holds the connection ID (the WebSocket's, or the long-poll's after an `enableWSFallback` switch)
  * and lets callers await one that is still being negotiated.
  *
- * The server keys channel watches and presence subscriptions by connection id and answers `200`
+ * The server keys channel watches and presence subscriptions by connection ID and answers `200`
  * while registering nothing when a request that needs one carries none (see `requiresConnectionId`
- * in `api-client.ts`), so such requests wait for the handshake. The id lives only here, so a
+ * in `api-client.ts`), so such requests wait for the handshake. The ID lives only here, so a
  * replaced socket cannot leave a stale copy behind.
  *
  * Driven by {@link StableWSConnection}, or by `WSConnectionFallback` after a fallback switch.
@@ -31,21 +31,29 @@ export class ConnectionIdManager {
     this.loadConnectionIdPromise.catch(() => undefined);
   };
 
-  /** Publishes the id from the `connection.ok` event and releases anything waiting on one. */
+  /**
+   * Publishes the ID from the `connection.ok` event and releases anything waiting on one.
+   *
+   * @param connectionId - The connection ID carried by the `connection.ok` event.
+   */
   resolveConnectionId = (connectionId: string) => {
     this.connectionId = connectionId;
     this.resolve?.(connectionId);
     this.settle();
   };
 
-  /** Rejects pending waiters, for a connection attempt that will not be retried. */
+  /**
+   * Rejects pending waiters, for a connection attempt that will not be retried.
+   *
+   * @param reason - The error to reject pending waiters with.
+   */
   rejectConnectionId = (reason: unknown) => {
     this.connectionId = undefined;
     this.reject?.(reason);
     this.settle();
   };
 
-  /** Drops the id for a socket that died but will be retried. New requests wait for the reconnect. */
+  /** Drops the ID for a socket that died but will be retried. New requests wait for the reconnect. */
   invalidate = () => {
     if (!this.connectionId) return;
 
@@ -57,7 +65,7 @@ export class ConnectionIdManager {
     this.arm();
   };
 
-  /** Drops the id and rejects any pending waiter with a "connection closed" error. */
+  /** Drops the ID and rejects any pending waiter with a "connection closed" error. */
   reset = () => {
     logger.withExtraTags('reset').debug('Dropping the connection id.');
 
@@ -69,10 +77,10 @@ export class ConnectionIdManager {
   };
 
   /**
-   * The current id, or a promise for one while the handshake is in flight. Throws when no socket is
+   * The current ID, or a promise for one while the handshake is in flight. Throws when no socket is
    * open or being opened.
    *
-   * @param signal - Abandons the wait. Only the waiting path honours it; an id already in hand is
+   * @param signal - Abandons the wait. Only the waiting path honours it; an ID already in hand is
    *   returned either way.
    */
   getConnectionId = (signal?: AbortSignal): string | Promise<string> => {

@@ -59,8 +59,9 @@ export type MessagePaginatorAggregateState = {
 
 export type MessagePaginatorOptions = BaseMessagePaginatorOptions & {
   /**
-   * Where `jumpToTheFirstUnreadMessage()` reads the unread reference from: `'snapshot'` (default)
+   * Where `jumpToTheFirstUnreadMessage()` reads the unread reference from: `'snapshot'`
    * prefers `unreadStateSnapshot`, `'read-state-only'` uses only `channel.state.read[...]`.
+   * Defaults to `'snapshot'`.
    */
   unreadReferencePolicy?: 'snapshot' | 'read-state-only';
 };
@@ -69,11 +70,11 @@ export type UnreadSnapshotState = {
   lastReadAt: TimestampNS | null;
   unreadCount: number;
   /**
-   * First unread message id. Decoupled from `channel.state.read[...]` because apps may mark the
+   * First unread message ID. Decoupled from `channel.state.read[...]` because apps may mark the
    * channel read on open yet still want UI that jumps to the previously unread location.
    */
   firstUnreadMessageId: string | null;
-  /** Last read message id, a fallback when the first unread is unknown. */
+  /** Last read message ID, a fallback when the first unread is unknown. */
   lastReadMessageId: string | null;
 };
 
@@ -95,7 +96,10 @@ export class MessagePaginator extends MessageIntervalPaginator {
     return 'message-paginator';
   }
   private unreadReferencePolicy: 'snapshot' | 'read-state-only';
-  /** Unread reference state, independent of `channel.state.read`. Set it before `markRead`. */
+  /**
+   * Unread reference state, independent of `channel.state.read`. Seeded on each first page;
+   * consumers may also set it before `markRead`.
+   */
   readonly unreadStateSnapshot: StateStore<UnreadSnapshotState>;
   /**
    * The "viewing the latest messages" signal ({@link LiveViewState}), set via {@link setViewingLive}
@@ -114,9 +118,10 @@ export class MessagePaginator extends MessageIntervalPaginator {
     builtInDefaults: Partial<BasePaginatorConfig<LocalMessage, MessageQueryShape>> = {},
   ) {
     super(options, {
-      // Publish `state` at most every 500ms (leading + trailing). Optimistic (local-user) writes
-      // bypass it via `EntityStore.flushSubscribers`. A default, so `stateThrottleMs` options and
-      // declarative registrations override it and a re-derivation restores it.
+      // Coalesce live `state.items` publishes to one per 500ms (leading + trailing). Optimistic
+      // (local-user) writes bypass it via `EntityStore.flushSubscribers`. A default, so
+      // `stateThrottleMs` options and declarative registrations override it and a re-derivation
+      // restores it.
       stateThrottleMs: 500,
       ...builtInDefaults,
     });
@@ -185,7 +190,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
     const incoming = getMessageCreatedAtTimestamp(message);
     if (incoming === null) return false;
     const current = this.aggregateState.getLatestValue().lastMessage;
-    // An edit, soft-delete, reaction or quote update re-ingests the current latest (same id and
+    // An edit, soft-delete, reaction or quote update re-ingests the current latest (same ID and
     // `created_at`): refresh it in place so `lastMessage` stays live.
     if (current && current.id === message.id) {
       this.aggregateState.partialNext({ lastMessage: message });
@@ -346,10 +351,10 @@ export class MessagePaginator extends MessageIntervalPaginator {
    * apps may mark a channel read on open yet keep "jump to unread" UI alive from the snapshot.
    *
    * Resolution order:
-   * 1. an explicit first-unread id (snapshot or read state): jump to it;
+   * 1. an explicit first-unread ID (snapshot or read state): jump to it;
    * 2. the last-read timestamp: infer the first unread message from the loaded window, or from a
    *    `created_at_around` query when the window does not straddle the boundary, and jump to it;
-   * 3. the last-read id, when no timestamp is known.
+   * 3. the last-read ID, when no timestamp is known.
    *
    * The inference is not written to the snapshot: `firstUnreadMessageId` is reserved for an explicit
    * mark-unread (it would suppress auto-mark-read).

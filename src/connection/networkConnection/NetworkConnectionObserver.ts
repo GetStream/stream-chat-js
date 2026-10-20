@@ -73,13 +73,21 @@ export class NetworkConnectionObserver extends WithSubscriptions {
     return this.configState.getLatestValue();
   }
 
-  /** Also installs the reporter the patched config names. */
+  /**
+   * Merges a partial configuration into the resolved config. Also re-installs the reporter: the
+   * `setStatusReporter` one unless the config now names a different reporter, else the configured
+   * one, else the host default.
+   */
   public updateConfig(config: Partial<NetworkConnectionObserverConfig>) {
     this.configController.patch(config);
     this.installConfiguredReporter();
   }
 
-  /** Also installs the reporter the resolved config names, else the host default. */
+  /**
+   * Rebuilds the resolved configuration from package defaults plus the declarative slice. Also
+   * re-installs the reporter: the `setStatusReporter` one unless the config now names a different
+   * reporter, else the configured one, else the host default.
+   */
   public initializeConfig(config?: Partial<NetworkConnectionObserverConfig>) {
     this.configController.initialize(config);
     this.configInitialized = true;

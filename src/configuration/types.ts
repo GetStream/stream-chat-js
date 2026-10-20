@@ -140,7 +140,7 @@ export type ClientDeclarativeConfig = {
   messageDelivery?: Partial<MessageDeliveryReporterConfig>;
   /**
    * The platform listener that reports the device's network, which React Native and other hosts supply
-   * here (default: browser events, else a reporter that mirrors the WebSocket). `Partial`, not
+   * here. Defaults to browser events, else a reporter that mirrors the WebSocket. `Partial`, not
    * `DeepPartial`: the only field holds a function, which `DeepPartial` would descend into.
    */
   networkConnection?: Partial<NetworkConnectionObserverConfig>;

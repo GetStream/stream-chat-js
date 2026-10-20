@@ -6,7 +6,7 @@ export class ClientState {
   users: {
     [key: string]: UserResponse | OwnUserResponse;
   };
-  /** User id -> ids of the channels that reference the user. */
+  /** User ID -> cids of the channels that reference the user. */
   userChannelReferences: { [key: string]: { [key: string]: boolean } };
   constructor({ client }: { client: StreamChat }) {
     this.client = client;

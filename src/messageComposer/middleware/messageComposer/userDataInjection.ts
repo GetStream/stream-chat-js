@@ -30,7 +30,9 @@ export const createUserDataInjectionMiddleware = (
         ...state,
         localMessage: {
           ...state.localMessage,
-          // Optional on `OwnUserResponse` (omitted when nothing is blocked), required on `UserResponse`.
+          // `ClientUser` makes every field but `id` optional, so the cast holds only after connect.
+          // `blocked_user_ids` is optional on `OwnUserResponse` (omitted when nothing is blocked)
+          // but required on `UserResponse`.
           user: {
             ...messageUser,
             blocked_user_ids: messageUser.blocked_user_ids ?? [],

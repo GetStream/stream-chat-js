@@ -16,7 +16,7 @@ export const isUploadCancellation = (error: unknown) =>
   axios.isCancel(error) || (error instanceof Error && error.name === 'AbortError');
 
 export type UploadRecord = {
-  /** The attachment's local id (`localMetadata.id`); also the key this record is held under. */
+  /** The attachment's local ID (`localMetadata.id`); also the key this record is held under. */
   id: string;
   /**
    * `true` once every byte has been handed to the transport but the server has not responded yet.
@@ -50,7 +50,7 @@ export const isUploadConfirmationPending = (
 
 export type UploadManagerState = {
   /**
-   * In-flight uploads keyed by the attachment's local id (`localMetadata.id`), which makes
+   * In-flight uploads keyed by the attachment's local ID (`localMetadata.id`), which makes
    * {@link UploadManager.upload} idempotent. A record lives only for the request (removed on
    * success and failure alike), so for "did it upload" read `localMetadata.uploadState`.
    */

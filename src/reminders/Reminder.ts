@@ -9,7 +9,12 @@ import type {
   UserResponse,
 } from '../types';
 
-/** Milliseconds until `remindAt`, negative once it has passed. */
+/**
+ * Computes the time left until a reminder is due.
+ *
+ * @param remindAt - Unix nanoseconds, as the API sends it.
+ * @returns Milliseconds until `remindAt`, negative once it has passed.
+ */
 export const timeLeftMs = (remindAt: TimestampNS) => nsToMs(remindAt - nowNs());
 
 export type ReminderResponseBaseOrResponse = ReminderResponseData;

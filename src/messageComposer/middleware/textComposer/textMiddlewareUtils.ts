@@ -2,8 +2,9 @@ import type { TextSelection } from './types';
 import { escapeCommandRegExp } from './commandUtils';
 
 /**
- * The last trigger-prefixed token in `text`, if any. With `isCommand` the trigger must start the text
- * and the token must not contain whitespace.
+ * The trigger-prefixed token that ends `text`, if any (with `acceptTrailingSpaces` it may span one
+ * space). With `isCommand` the trigger must start the text and the token must not contain
+ * whitespace.
  */
 export const getTriggerCharWithToken = ({
   trigger,

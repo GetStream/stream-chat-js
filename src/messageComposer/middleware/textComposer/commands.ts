@@ -93,8 +93,13 @@ export type CommandsMiddleware = Middleware<
 >;
 
 /**
- * Suggests and activates slash commands (defaults: `trigger: '/'`, `minChars: 1`). `composer` is used
- * to refuse commands disabled by the editing or quoting state.
+ * Suggests and activates slash commands.
+ *
+ * @param channel - The channel whose commands are suggested.
+ * @param options - Middleware options. Defaults to `trigger: '/'` and `minChars: 1`.
+ * @param options.composer - Used to refuse commands disabled by the editing or quoting state.
+ * @param options.searchSource - A search source to use instead of a new one. Its state is reset.
+ * @returns The commands middleware.
  */
 export const createCommandsMiddleware = (
   channel: Channel,

@@ -19,7 +19,12 @@ import { nowNs, nsToDate } from './utils/time';
 
 const logger = chatLoggerSystem.getLogger('utils');
 
-/** Runs a promise fire-and-forget: logs an error naming `name` when it rejects. */
+/**
+ * Runs a promise fire-and-forget and logs an error when it rejects.
+ *
+ * @param promise - The promise to run.
+ * @param name - What the promise does, for the log output.
+ */
 export function logChatPromiseExecution<T>(promise: Promise<T>, name: string) {
   promise.then().catch((error) => {
     logger
@@ -192,7 +197,13 @@ export const axiosParamsSerializer: AxiosRequestConfig['paramsSerializer'] = (pa
   return newParams.join('&');
 };
 
-/** Returns a new `LocalMessage` with the SDK-specific fields (`status`, `error`) added. */
+/**
+ * Adds the SDK-specific fields (`status`, `error`) to a message. Memoized per source object: callers
+ * share the result, so do not mutate it.
+ *
+ * @param message - The message from the API, or a local one.
+ * @returns The `LocalMessage`.
+ */
 export function formatMessage(message: MessageResponse | LocalMessage): LocalMessage {
   // Memoized per source object: every consumer gets the same `LocalMessage`.
   const memoized = getMemoizedFormat(message);
@@ -383,14 +394,14 @@ const toRequestDateFields = ({
     : {}),
 });
 
-/** Whether a URL is http(s), so the API and other devices can fetch it. */
+/** Whether a URL is HTTP(S), so the API and other devices can fetch it. */
 const isRemoteUrl = (url?: string) => !!url && /^https?:\/\//i.test(url.trim());
 
 /**
  * Strips `localMetadata` (`AttachmentManager`'s upload state, never sent to the API) from a
- * message's attachments and drops, with a warning, those with no remote URL: their upload never
- * settled, so something bypassed the send path that awaits uploads. Returns the same message object
- * when nothing changed.
+ * message's attachments. Of those that carried it, drops with a warning the ones with no remote URL:
+ * their upload never settled, so something bypassed the send path that awaits uploads. Returns the
+ * same message object when nothing changed.
  */
 export const sanitizeOutgoingAttachments = <T extends { attachments?: Attachment[] }>(
   message: T,
@@ -460,7 +471,7 @@ export const localMessageToNewMessagePayload = (
     reaction_counts: _reaction_counts,
     reaction_scores: _reaction_scores,
     reply_count: _reply_count,
-    // Text-related fields that are not sent
+    // Text-related fields that are not sent as-is (`mentioned_users` goes out as IDs)
     command: _command,
     html: _html,
     i18n: _i18n,
@@ -759,8 +770,8 @@ export const getMemberUserId = (
 ) => (typeof member === 'string' ? member : member.user_id || member.user?.id || '');
 
 /**
- * The temporary id of a channel created from members without an id, until the server answers:
- * `!members-` plus the sorted member ids joined by `,`, so it is order-independent. `undefined`
+ * The temporary ID of a channel created from members without an ID, until the server answers:
+ * `!members-` plus the sorted member IDs joined by `,`, so it is order-independent. `undefined`
  * when there are no members.
  */
 export const generateChannelTempId = (memberIds: string[]) => {
@@ -770,9 +781,9 @@ export const generateChannelTempId = (memberIds: string[]) => {
 };
 
 /**
- * The temporary cid of such a channel: its {@link generateChannelTempId} under its type, so the
- * channel is stored once under it until the server assigns the real cid. `undefined` when there are
- * no members.
+ * The temporary cid of a channel created from members without an ID: its
+ * {@link generateChannelTempId} under its type, so the channel is stored once under it until the
+ * server assigns the real cid. `undefined` when there are no members.
  */
 export const generateChannelTempCid = (channelType: string, memberIds: string[]) => {
   const tempId = generateChannelTempId(memberIds);

@@ -72,7 +72,7 @@ export class StableWSConnection {
     this.isDisconnected = false;
     this.isResolved = false;
     this.isHealthy = false;
-    /** Incremented when the current socket is closed or destroyed; older ids' callbacks are ignored. */
+    /** Incremented when the current socket is closed or destroyed; older IDs' callbacks are ignored. */
     this.wsID = 1;
     this.lastEvent = null;
   }
@@ -101,9 +101,10 @@ export class StableWSConnection {
   }
 
   /**
-   * Connects to the WS URL, resolving once the server's `connection.ok` hello event arrives.
+   * Connects to the WS URL.
    *
    * @param timeout - Connect timeout in milliseconds. Defaults to `config.connectTimeoutMs`.
+   * @returns A promise that resolves once the server's `connection.ok` hello event arrives.
    */
   async connect(timeout: number = this.config.connectTimeoutMs) {
     if (this.isConnecting) {
@@ -151,8 +152,8 @@ export class StableWSConnection {
   }
 
   /**
-   * Polls the connection promise until it resolves or `timeout` (ms, default
-   * `config.connectTimeoutMs`) elapses.
+   * Polls the connection promise until it resolves or `timeout` (ms) elapses. `timeout` defaults to
+   * `config.connectTimeoutMs`.
    */
   _waitForHealthy(timeout: number = this.config.connectTimeoutMs) {
     return Promise.race([
@@ -215,7 +216,7 @@ export class StableWSConnection {
     this.isConnecting = false;
     this.isDisconnected = true;
     // A deliberate close still expects a reopen (mobile backgrounding), so waiters keep waiting:
-    // invalidating drops the dead id and arms a fresh deferred for the next socket.
+    // invalidating drops the dead ID and arms a fresh deferred for the next socket.
     this.client.connectionIdManager.invalidate();
 
     // Stop the ping and connection-check timers.
@@ -275,7 +276,7 @@ export class StableWSConnection {
     if (this.isConnecting || this.isDisconnected) return;
     this.isConnecting = true;
     this.requestID = randomId();
-    // Arm before anything can await a connection id. A no-op while one is still held.
+    // Arm before anything can await a connection ID. A no-op while one is still held.
     this.client.connectionIdManager.arm();
     let isTokenReady = false;
     try {
@@ -315,7 +316,7 @@ export class StableWSConnection {
       this.isConnecting = false;
 
       if (response) {
-        // The id lives only in the ConnectionIdManager, so no stale copy outlives this socket.
+        // The ID lives only in the ConnectionIdManager, so no stale copy outlives this socket.
         this.client.connectionIdManager.resolveConnectionId(response.connection_id);
         return response;
       }
@@ -414,8 +415,10 @@ export class StableWSConnection {
   }
 
   /**
-   * Only `event.type` (`'online'` or `'offline'`) is read.
+   * Applies a device network status change to this socket.
    *
+   * @param event - A DOM-shaped object whose `type` is `'online'` or `'offline'`. Only `type` is
+   *   read.
    * @deprecated Use `client.networkConnection.setStatus(isOnline)` or
    *   `client.networkConnection.setStatusReporter(…)` instead.
    */
@@ -500,7 +503,7 @@ export class StableWSConnection {
         return;
       }
 
-      // Published before going online, so "the socket is up" implies "there is an id to watch on".
+      // Published before going online, so "the socket is up" implies "there is an ID to watch on".
       this.client.connectionIdManager.resolveConnectionId(
         (decodedData as ConnectionOpen).connection_id,
       );
@@ -511,8 +514,9 @@ export class StableWSConnection {
 
     this.lastEvent = new Date();
 
-    // The ping loop starts from the hello and continues on each health check. Without it the
-    // connection check would tear the socket down every `connectionCheckTimeout`.
+    // The server sends a health check only in reply to a client frame, so the ping loop starts from
+    // the hello and continues on each health check. Without it the connection check tears the socket
+    // down every `connectionCheckTimeout`.
     if (data.type === 'health.check' || data.type === 'connection.ok') {
       this.scheduleNextPing();
     }
@@ -579,7 +583,7 @@ export class StableWSConnection {
   };
 
   /**
-   * Writes the status to the field and to `client.wsConnection.state`, and drops the connection id
+   * Writes the status to the field and to `client.wsConnection.state`, and drops the connection ID
    * when it goes down. Returns whether the status changed. Every transition goes through here
    * (`disconnect()` and the error paths included); the constructor does not, since initializing the
    * field is not a transition.
@@ -590,7 +594,7 @@ export class StableWSConnection {
     this.isHealthy = healthy;
 
     if (!healthy) {
-      // The id is dead; invalidating arms a fresh deferred so requests wait for the reconnect.
+      // The ID is dead; invalidating arms a fresh deferred so requests wait for the reconnect.
       this.client.connectionIdManager.invalidate();
     }
 
@@ -651,7 +655,7 @@ export class StableWSConnection {
   };
 
   _destroyCurrentWSConnection() {
-    // Callbacks bound to the old id are ignored.
+    // Callbacks bound to the old ID are ignored.
     this.wsID += 1;
 
     try {

@@ -181,7 +181,10 @@ export class MessageSearchSource<
     });
   }
 
-  /** Removes the channel-store registration, so a dropped active source can be collected. */
+  /**
+   * Removes the channel-store claim, so the results' channels are no longer held and a dropped
+   * source can be collected.
+   */
   dispose() {
     this.removeClaim?.();
     this.removeClaim = undefined;
