@@ -771,6 +771,30 @@ describe('OfflineSupportApi', () => {
           expect(result).toEqual(mockUpsertMessagesQueries);
         });
 
+        it('writes the channel row and retries when the first write misses the channel', async () => {
+          const event = {
+            ...baseEvent,
+            channel_type: 'messaging',
+            channel_id: 'channel123',
+          } as Event;
+          const channelQueries = ['INSERT INTO channels'];
+          offlineDb.channelExists.mockResolvedValue(false);
+          offlineDb.upsertChannelData.mockResolvedValue(channelQueries);
+          offlineDb.executeSqlBatch
+            .mockRejectedValueOnce(new Error('FOREIGN KEY constraint failed'))
+            .mockResolvedValue(undefined);
+
+          const result = await offlineDb.handleNewMessage({ event, execute: true });
+
+          expect(offlineDb.executeSqlBatch).toHaveBeenCalledTimes(2);
+          expect(offlineDb.executeSqlBatch).toHaveBeenNthCalledWith(1, mockQueries);
+          expect(offlineDb.executeSqlBatch).toHaveBeenNthCalledWith(2, [
+            ...channelQueries,
+            ...mockQueries,
+          ]);
+          expect(result).toEqual([...channelQueries, ...mockQueries]);
+        });
+
         it('should not call executeSqlBatch if execute is false', async () => {
           const result = await offlineDb.handleNewMessage({
             event: baseEvent,
