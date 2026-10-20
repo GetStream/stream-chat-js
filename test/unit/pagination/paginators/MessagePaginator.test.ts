@@ -1793,6 +1793,34 @@ describe('MessagePaginator', () => {
       expect(sorted[1].id).toBe(intervalA.id);
     });
 
+    it('sorts an interval without bounds after the bounded ones', () => {
+      const paginator = new MessagePaginator({ channel, itemIndex });
+
+      const older = createMessage({
+        cid: 'channel-id',
+        id: 'm1',
+        created_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
+      });
+      const newer = createMessage({
+        cid: 'channel-id',
+        id: 'm2',
+        created_at: convertDateToTimestamp('2020-01-02T00:00:00.000Z'),
+      });
+      itemIndex.setMany([older, newer]);
+
+      const intervalA = paginator.makeInterval({ page: [older] });
+      const intervalB = paginator.makeInterval({ page: [newer] });
+      const empty = { ...paginator.makeInterval({ page: [] }), id: 'empty' };
+
+      // @ts-expect-error accessing protected method
+      const sorted = paginator.sortIntervals([intervalA, empty, intervalB]);
+      expect(sorted.map((itv: Interval) => itv.id)).toEqual([
+        intervalB.id,
+        intervalA.id,
+        'empty',
+      ]);
+    });
+
     it('ingests a newer live message into the head interval (not logical tail)', () => {
       const paginator = new MessagePaginator({ channel, itemIndex });
 
@@ -2142,6 +2170,21 @@ describe('MessagePaginator', () => {
 
         // active [m1,m2] removed; nearest survivor to where it was = the oldest survivor [m5,m6]
         expect(paginator.items?.map((m) => m.id)).toEqual(['m5', 'm6']);
+      });
+
+      it('keeps showing the surviving live messages when the active window is the logical head', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        // No page loaded: live messages land in the logical head, which becomes the active window.
+        paginator.ingestItem(msg('m1', '01'));
+        paginator.ingestItem(msg('m9', '09'));
+        expect(paginator.items?.map((m) => m.id)).toEqual(['m1', 'm9']);
+
+        paginator.truncate({
+          truncatedAt: convertDateToTimestamp('2020-01-05T00:00:00.000Z'),
+        });
+
+        expect(paginator.getItem('m1')).toBeUndefined();
+        expect(paginator.items?.map((m) => m.id)).toEqual(['m9']);
       });
 
       it('splits at the correct point with duplicate timestamps at the boundary', () => {

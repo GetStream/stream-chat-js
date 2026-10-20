@@ -387,9 +387,9 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       return [];
     }
 
-    const finalQueries = await this.queriesWithChannelGuard(
+    return await this.queriesWithChannelGuard(
       { event, execute },
-      async () => {
+      async (executeOverride) => {
         let queries = await this.upsertMessages({
           execute: false,
           messages: [message],
@@ -425,15 +425,13 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
             queries = [...queries, ...upsertReadsQueries];
           }
         }
+        // Executed here so the guard's write-first path can catch a missing channel row.
+        if (executeOverride) {
+          await this.executeSqlBatch(queries);
+        }
         return queries;
       },
     );
-
-    if (execute) {
-      await this.executeSqlBatch(finalQueries);
-    }
-
-    return finalQueries;
   };
 
   /**

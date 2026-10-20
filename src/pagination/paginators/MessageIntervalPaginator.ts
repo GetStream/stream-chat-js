@@ -1164,8 +1164,13 @@ export class MessageIntervalPaginator extends BasePaginator<
     const active = this._activeIntervalId
       ? this._itemIntervals.get(this._activeIntervalId)
       : undefined;
-    if (active && !isLogicalInterval(active)) {
-      this.setActiveInterval(active);
+    if (active) {
+      // `setActiveInterval` does not emit for a logical interval, so its survivors are emitted here.
+      if (isLogicalInterval(active)) {
+        this.state.partialNext({ items: this.intervalToItems(active) });
+      } else {
+        this.setActiveInterval(active);
+      }
       return;
     }
 

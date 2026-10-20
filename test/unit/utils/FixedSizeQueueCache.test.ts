@@ -247,4 +247,40 @@ describe('FixedSizeQueueCache', () => {
       expect(dispose).toHaveBeenCalledWith('key1', 1);
     });
   });
+
+  describe('falsy keys and values', () => {
+    it('evicts a falsy key instead of leaving its value in the map', () => {
+      const dispose = vi.fn();
+      const cache = new FixedSizeQueueCache<number, string>(1, { dispose });
+
+      cache.add(0, 'zero');
+      cache.add(1, 'one');
+
+      expect(cache.peek(0)).toBeUndefined();
+      expect(cache.values()).toEqual(['one']);
+      expect(dispose).toHaveBeenCalledWith(0, 'zero');
+    });
+
+    it('disposes an evicted falsy value', () => {
+      const dispose = vi.fn();
+      const cache = new FixedSizeQueueCache<string, number>(1, { dispose });
+
+      cache.add('key1', 0);
+      cache.add('key2', 1);
+
+      expect(dispose).toHaveBeenCalledWith('key1', 0);
+    });
+
+    it('moves a falsy value to the front of the queue on get', () => {
+      const cache = new FixedSizeQueueCache<string, number>(2);
+
+      cache.add('key1', 0);
+      cache.add('key2', 1);
+      cache.get('key1');
+      cache.add('key3', 2);
+
+      expect(cache.peek('key1')).toBe(0);
+      expect(cache.peek('key2')).toBeUndefined();
+    });
+  });
 });
