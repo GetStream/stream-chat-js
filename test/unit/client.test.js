@@ -1172,6 +1172,16 @@ describe('Client WSFallback', () => {
 	});
 });
 
+// deterministic ids and timestamps, so the same message N is identical across pages
+const numberedMessages = (from, to) =>
+	Array.from({ length: to - from + 1 }, (_, i) =>
+		generateMsg({
+			id: `message-${from + i}`,
+			text: `Message ${from + i}`,
+			date: new Date(Date.UTC(2026, 0, 1, 0, from + i)).toISOString(),
+		}),
+	);
+
 describe('StreamChat.queryChannels', async () => {
 	it('should not hydrate activeChannels and channel configs when disableCache is true', async () => {
 		const client = await getClientWithUser();
@@ -1271,6 +1281,52 @@ describe('StreamChat.queryChannels', async () => {
 			});
 		});
 		mock.restore();
+	});
+
+	describe('message_limit: 0', () => {
+		it('keeps hasPrev of a channel that already has messages loaded', async () => {
+			const client = await getClientWithUser();
+			const postStub = sinon.stub(client, 'post');
+			postStub.resolves({
+				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(36, 60) }],
+			});
+			const [channel] = await client.queryChannels({}, {}, { message_limit: 25 });
+			expect(channel.state.messagePagination.hasPrev).toBe(true);
+
+			postStub.resolves({ channels: [{ ...mockChannelQueryResponse, messages: [] }] });
+			await client.queryChannels({}, {}, { message_limit: 0 });
+
+			expect(channel.state.messages.map((m) => m.text)).toEqual(
+				numberedMessages(36, 60).map((m) => m.text),
+			);
+			expect(channel.state.messagePagination.hasPrev).toBe(true);
+		});
+
+		it('keeps hasPrev false of a channel that is fully loaded', async () => {
+			const client = await getClientWithUser();
+			const postStub = sinon.stub(client, 'post');
+			postStub.resolves({
+				channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(1, 10) }],
+			});
+			const [channel] = await client.queryChannels({}, {}, { message_limit: 25 });
+			expect(channel.state.messagePagination.hasPrev).toBe(false);
+
+			postStub.resolves({ channels: [{ ...mockChannelQueryResponse, messages: [] }] });
+			await client.queryChannels({}, {}, { message_limit: 0 });
+
+			expect(channel.state.messagePagination.hasPrev).toBe(false);
+		});
+
+		it('allows loading messages of a channel that has none loaded yet', async () => {
+			const client = await getClientWithUser();
+			sinon
+				.stub(client, 'post')
+				.resolves({ channels: [{ ...mockChannelQueryResponse, messages: [] }] });
+
+			const [channel] = await client.queryChannels({}, {}, { message_limit: 0 });
+
+			expect(channel.state.messagePagination.hasPrev).toBe(true);
+		});
 	});
 });
 

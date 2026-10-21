@@ -1165,6 +1165,11 @@ const messagePaginationLinear = ({
 };
 
 export const messageSetPagination = (params: MessagePaginationUpdatedParams) => {
+  // an empty page asked for says nothing about what else exists
+  if (params.requestedPageSize === 0 && params.parentSet.messages.length > 0) {
+    return params.parentSet.pagination;
+  }
+
   if (
     params.parentSet.messages.length +
       (params.returnedPage.length - params.filteredReturnedPage.length) <
