@@ -1424,17 +1424,10 @@ export class StreamChat extends ChatApi {
     stateOptions: ChannelStateOptions = {},
     requestOptions?: StreamRequestOptions,
   ): Promise<Channel[] | QueryChannelsResponseWithChannels> {
-    // TODO(perf/cleanup): prefer an id snapshot over `anchoredHeadItems.map` here too — see the
-    // matching TODO in MessageIntervalPaginator.prepareExternalQuery for the full rationale.
     const headIntervalItemIdsAtRequestByCid = new Map<string, ReadonlySet<string>>();
     for (const channel of this.channelManager.values()) {
-      const { cid } = channel;
-      const head = channel.messagePaginator?.anchoredHeadItems;
-      if (head?.length)
-        headIntervalItemIdsAtRequestByCid.set(
-          cid,
-          new Set(head.map((message) => message.id)),
-        );
+      const idsAtRequest = channel.messagePaginator?.getHeadIntervalItemIdsAtRequest();
+      if (idsAtRequest) headIntervalItemIdsAtRequestByCid.set(channel.cid, idsAtRequest);
     }
     const queryChannelsResponse = await this.queryChannels(options, requestOptions);
     const channels = queryChannelsResponse.channels;
@@ -1562,18 +1555,13 @@ export class StreamChat extends ChatApi {
         c.messagePaginator.setQueriedLatestMessageAt(
           channelState.channel?.last_message_at,
         );
-        const messages = channelState.messages.map(formatMessage);
-        if (c.messagePaginator.canReconcileNewestMessages) {
-          c.messagePaginator.reconcileNewestMessages(messages, {
+        placedFirstPage = c.messagePaginator.placeExternalNewestPage(
+          channelState.messages.map(formatMessage),
+          {
             headIntervalItemIdsAtRequest: headIntervalItemIdsAtRequestByCid?.get(c.cid),
             requestedLimit: requestedPageSize,
-          });
-        } else {
-          placedFirstPage = c.messagePaginator.placeExternalQueryPage(
-            messages,
-            requestedPageSize,
-          );
-        }
+          },
+        );
       }
 
       if (skipInitialization === undefined) {

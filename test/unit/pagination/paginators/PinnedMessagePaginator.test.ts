@@ -82,6 +82,62 @@ describe('PinnedMessagePaginator', () => {
     expect(intervals).toContainEqual(['p8', 'p9', 'p10', 'p11']);
   });
 
+  describe('a pinned first page from a channel response, with an older window shown', () => {
+    const pinned = (id: string, at: number) => formatMessage(makePinned(id, at));
+    const pins = (from: number, to: number) =>
+      Array.from({ length: to - from + 1 }, (_, i) =>
+        pinned(`p${from + i}`, (from + i) * 1000),
+      );
+    type Window = { itemIds: string[]; isHead: boolean; hasMoreHead: boolean };
+    const windowsOf = (paginator: PinnedMessagePaginator) =>
+      (paginator as unknown as { itemIntervals: Window[] }).itemIntervals;
+    const newestWindowsOf = (paginator: PinnedMessagePaginator) =>
+      windowsOf(paginator)
+        .filter((window) => window.isHead)
+        .map((window) => window.itemIds);
+
+    // p8–p10 are the newest pins; the reader jumped to the window of p1–p3
+    const loadNewestAndJumpedWindows = (paginator: PinnedMessagePaginator) => {
+      paginator.pageSize = 3;
+      paginator.placeExternalQueryPage(pins(8, 10), 3);
+      paginator.ingestPage({ page: pins(1, 3), setActive: true });
+    };
+
+    it('keeps one newest window when the page does not overlap the stored one', async () => {
+      const getPinnedMessages = vi.fn().mockResolvedValue({ messages: pins(11, 13) });
+      const paginator = new PinnedMessagePaginator({
+        channel: makeChannel(getPinnedMessages),
+      });
+      loadNewestAndJumpedWindows(paginator);
+
+      // p11–p22 were pinned meanwhile
+      paginator.placeExternalQueryPage(pins(20, 22), 3);
+
+      expect(newestWindowsOf(paginator)).toEqual([['p20', 'p21', 'p22']]);
+      expect(paginator.items?.map((m) => m.id)).toEqual(['p1', 'p2', 'p3']);
+      // the window that was the newest one can load the pins made after it
+      expect(await paginator.jumpToMessage('p9')).toBe(true);
+      expect(paginator.hasMoreHead).toBe(true);
+      await paginator.toHead();
+      expect(getPinnedMessages).toHaveBeenCalledWith(
+        expect.objectContaining({ id_gt: 'p10', limit: 3 }),
+      );
+      expect(paginator.items?.map((m) => m.id)).toEqual(pins(8, 13).map((m) => m.id));
+      expect(newestWindowsOf(paginator)).toEqual([['p20', 'p21', 'p22']]);
+    });
+
+    it('merges a page that overlaps the stored newest window into it', () => {
+      const paginator = new PinnedMessagePaginator({ channel: makeChannel() });
+      loadNewestAndJumpedWindows(paginator);
+
+      paginator.placeExternalQueryPage(pins(9, 11), 3);
+
+      expect(newestWindowsOf(paginator)).toEqual([['p8', 'p9', 'p10', 'p11']]);
+      expect(windowsOf(paginator)).toHaveLength(2);
+      expect(paginator.items?.map((m) => m.id)).toEqual(['p1', 'p2', 'p3']);
+    });
+  });
+
   it('excludes non-pinned and shadowed messages from the queried page', async () => {
     const getPinnedMessages = vi.fn().mockResolvedValue({
       messages: [

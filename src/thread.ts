@@ -352,8 +352,9 @@ export class Thread extends WithSubscriptions {
   /**
    * Re-queries the replies, sized to the loaded window, and reconciles them in place (the thread
    * analogue of {@link Channel.reload}; recovery calls it for active threads). Failed replies are
-   * kept, as reconciling never removes a reply the server has not confirmed. Rethrows, except for
-   * a not-found answer on a thread that never had replies.
+   * kept: those loaded or in the offline DB before the request that are no longer loaded after it
+   * are ingested again (the offline DB read is best effort). Rethrows, except for a not-found
+   * answer on a thread that never had replies.
    */
   public reload = async () => {
     if (this.state.getLatestValue().isLoading) {
@@ -367,10 +368,15 @@ export class Thread extends WithSubscriptions {
       const loadedReplyCount = loadedReplies.length;
       const requestedReplyLimit =
         Math.max(loadedReplyCount, this.messagePaginator.pageSize ?? 0) || undefined;
-      // the head interval's replies when the request goes out (see ReconcileNewestMessagesOptions)
-      const headIntervalItemIdsAtRequest = new Set(
-        this.messagePaginator.anchoredHeadItems.map((reply) => reply.id),
-      );
+      const offlineDb = this.client.offlineDb;
+      // best effort: a failing read must not fail the reload
+      const failedInDb = offlineDb
+        ? await offlineDb.getFailedMessages({ cid: this.channel.cid }).catch(() => [])
+        : [];
+      // after the read: a reply that fails meanwhile is loaded by then
+      const failedBefore = this.messagePaginator.getFailedMessagesToRestore(failedInDb);
+      const headIntervalItemIdsAtRequest =
+        this.messagePaginator.getHeadIntervalItemIdsAtRequest();
       const thread = await this.client.getThreadAndHydrate(
         { message_id: this.id },
         {
@@ -384,6 +390,7 @@ export class Thread extends WithSubscriptions {
           headIntervalItemIdsAtRequest,
         },
       });
+      this.messagePaginator.restoreFailedMessages(failedBefore);
     } catch (error) {
       const notFound =
         isDoesNotExistError(error as Error) ||

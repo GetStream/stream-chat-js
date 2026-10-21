@@ -22,6 +22,7 @@ import {
 import { describe, it, beforeEach, expect, afterEach, onTestFinished, vi } from 'vitest';
 import { dateToNs, msToNs, nowNs } from '../../src/utils/time';
 import { convertDateToTimestamp } from './test-utils/time';
+import { MockOfflineDB } from './offline-support/MockOfflineDB';
 
 const TEST_USER_ID = 'observer';
 
@@ -977,7 +978,7 @@ describe('Threads 2.0', () => {
           expect(repliesOf(thread).map((reply) => reply.id)).to.eql(['r1', 'r2', 'r4']);
         });
 
-        it('keeps a failed (unsent) reply with the newest replies when the reloaded page is past a gap', async () => {
+        it('shows the reloaded page past a gap with the failed (unsent) reply', async () => {
           // A thread constructed directly and never registered, as the React Native SDK does: its
           // failed reply lives only in the reply paginator.
           const r1 = makeReply({
@@ -1017,11 +1018,152 @@ describe('Threads 2.0', () => {
 
           await thread.reload();
 
-          // the shown window keeps the older reply; the failed one moved with the newest replies
-          expect(repliesOf(thread).map((reply) => reply.id)).to.eql(['r1']);
+          // the page replaces the loaded window and keeps the failed reply
+          expect(repliesOf(thread).map((reply) => reply.id)).to.eql([
+            'far1',
+            'far2',
+            'failed-1',
+          ]);
           expect(
             thread.messagePaginator.anchoredHeadItems.map((reply) => reply.id),
           ).to.eql(['far1', 'far2', 'failed-1']);
+          expect(thread.messagePaginator.getItem('r1')).to.equal(undefined);
+        });
+
+        it('puts back a failed reply the placement of the reloaded page lost, without an offline DB', async () => {
+          const r1 = makeReply({
+            id: 'r1',
+            created_at: convertDateToTimestamp('2020-01-01T00:00:01.000Z'),
+          });
+          const thread = createTestThread({ latest_replies: [r1], reply_count: 1 });
+          const failed = formatMessage(
+            makeReply({
+              id: 'failed-1',
+              created_at: convertDateToTimestamp('2020-01-01T00:00:02.000Z'),
+            }),
+          );
+          failed.status = 'failed';
+          thread.messagePaginator.ingestItem(failed);
+          // a placement that loses the unsent reply, which no offline DB could restore
+          const paginator = thread.messagePaginator;
+          const reconcile = paginator.reconcileNewestMessages;
+          vi.spyOn(paginator, 'reconcileNewestMessages').mockImplementation(
+            (page, options) => {
+              reconcile(page, options);
+              paginator.removeItem({ id: 'failed-1' });
+            },
+          );
+          sinon
+            .stub(client, 'getThreadAndHydrate')
+            .resolves(createTestThread({ latest_replies: [r1], reply_count: 1 }));
+
+          await thread.reload();
+
+          expect(repliesOf(thread).map((reply) => reply.id)).to.eql(['r1', 'failed-1']);
+        });
+
+        it('keeps a failed reply resent and confirmed above the reloaded page during the reload', async () => {
+          const r1 = makeReply({
+            id: 'r1',
+            created_at: convertDateToTimestamp('2020-01-01T00:00:01.000Z'),
+          });
+          const thread = createTestThread({ latest_replies: [r1], reply_count: 1 });
+          const failed = formatMessage(
+            makeReply({
+              id: 'failed-1',
+              created_at: convertDateToTimestamp('2020-01-01T00:00:02.000Z'),
+            }),
+          );
+          failed.status = 'failed';
+          thread.messagePaginator.ingestItem(failed);
+          const offlineDb = new MockOfflineDB({ client });
+          client.setOfflineDBApi(offlineDb);
+          vi.spyOn(offlineDb, 'getFailedMessages').mockResolvedValue([failed]);
+          const hardDeleteMessages = vi
+            .spyOn(offlineDb, 'hardDeleteMessages')
+            .mockResolvedValue(undefined);
+          sinon.stub(client, 'getThreadAndHydrate').callsFake(async () => {
+            // resent while the reload runs, confirmed after the server produced the page
+            thread.messagePaginator.ingestItem({
+              ...failed,
+              status: 'received',
+              created_at: convertDateToTimestamp('2020-01-01T00:00:03.000Z'),
+            });
+            return createTestThread({ latest_replies: [r1], reply_count: 1 });
+          });
+
+          await thread.reload();
+
+          expect(repliesOf(thread).map((reply) => reply.id)).to.eql(['r1', 'failed-1']);
+          expect(thread.messagePaginator.getItem('failed-1')?.status).to.equal(
+            'received',
+          );
+          expect(hardDeleteMessages).not.toHaveBeenCalled();
+        });
+
+        it('puts back a failed reply the offline DB holds and memory does not', async () => {
+          const r1 = makeReply({
+            id: 'r1',
+            created_at: convertDateToTimestamp('2020-01-01T00:00:01.000Z'),
+          });
+          const thread = createTestThread({ latest_replies: [r1], reply_count: 1 });
+          const failed = formatMessage(
+            makeReply({
+              id: 'failed-1',
+              created_at: convertDateToTimestamp('2020-01-01T00:00:02.000Z'),
+            }),
+          );
+          failed.status = 'failed';
+          const otherThreadReply = formatMessage(
+            makeReply({ id: 'other-thread', parent_id: 'another-parent' }),
+          );
+          otherThreadReply.status = 'failed';
+          const offlineDb = new MockOfflineDB({ client });
+          client.setOfflineDBApi(offlineDb);
+          vi.spyOn(offlineDb, 'getFailedMessages').mockResolvedValue([
+            failed,
+            otherThreadReply,
+          ]);
+          sinon
+            .stub(client, 'getThreadAndHydrate')
+            .resolves(createTestThread({ latest_replies: [r1], reply_count: 1 }));
+
+          await thread.reload();
+
+          expect(offlineDb.getFailedMessages).toHaveBeenCalledWith({
+            cid: channel.cid,
+          });
+          expect(repliesOf(thread).map((reply) => reply.id)).to.eql(['r1', 'failed-1']);
+          // the channel's rows include other threads' replies, which this list does not take
+          expect(
+            thread.messagePaginator
+              .getFailedMessagesToRestore([failed, otherThreadReply])
+              .map((reply) => reply.id),
+          ).to.eql(['failed-1']);
+        });
+
+        it('reloads when the offline DB fails to read the failed replies', async () => {
+          const r1 = makeReply({
+            id: 'r1',
+            created_at: convertDateToTimestamp('2020-01-01T00:00:01.000Z'),
+          });
+          const r2 = makeReply({
+            id: 'r2',
+            created_at: convertDateToTimestamp('2020-01-01T00:00:02.000Z'),
+          });
+          const thread = createTestThread({ latest_replies: [r1], reply_count: 1 });
+          const offlineDb = new MockOfflineDB({ client });
+          client.setOfflineDBApi(offlineDb);
+          vi.spyOn(offlineDb, 'getFailedMessages').mockRejectedValue(
+            new Error('db read failed'),
+          );
+          sinon
+            .stub(client, 'getThreadAndHydrate')
+            .resolves(createTestThread({ latest_replies: [r1, r2], reply_count: 2 }));
+
+          await thread.reload();
+
+          expect(repliesOf(thread).map((reply) => reply.id)).to.eql(['r1', 'r2']);
         });
 
         it('rethrows a reload failure and releases isLoading', async () => {

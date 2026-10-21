@@ -739,6 +739,94 @@ describe('BasePaginator', () => {
       });
     });
 
+    describe('end marks of the intervals a page merges', () => {
+      // sorts above every other test item (highest age first)
+      const n: TestItem = { id: 'n', age: 40, name: 'N' };
+      const ids = (items: TestItem[] | undefined) => (items ?? []).map((item) => item.id);
+
+      const setup = (options: PaginatorOptions<TestItem, QueryShape> = {}) => {
+        const paginator = new Paginator({
+          itemIndex: new StoreBackedItemIndex<TestItem>({ getEntityId: ({ id }) => id }),
+          pageSize: 2,
+          ...options,
+        });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+        const load = async (
+          query: () => Promise<unknown>,
+          results: PaginationQueryReturnValue<TestItem>,
+        ) => {
+          const queryPromise = query();
+          await sleep(0);
+          paginator.queryResolve(results);
+          await queryPromise;
+        };
+        const refresh = (results: PaginationQueryReturnValue<TestItem>) =>
+          load(
+            () => paginator.executeQuery({ keepPreviousItems: true, reset: 'yes' }),
+            results,
+          );
+        return { load, paginator, refresh };
+      };
+
+      it('keeps paging after a full refreshed page merges the list marked as ended (offset)', async () => {
+        const { load, paginator, refresh } = setup();
+        await load(paginator.toTail, { items: [a, d] });
+        // a short page: the end of the list
+        await load(paginator.toTail, { items: [v] });
+        expect(paginator.hasMoreTail).toBe(false);
+
+        // `n` entered the list at the top: the full page says items may follow the kept list
+        await refresh({ items: [n, a] });
+
+        expect(ids(paginator.items)).toEqual(['n', 'a', 'd', 'v']);
+        expect(paginator.hasMoreTail).toBe(true);
+      });
+
+      it('keeps the tailward cursor of a refreshed page that merges the list marked as ended (cursor)', async () => {
+        const { load, paginator, refresh } = setup({ initialCursor: ZERO_PAGE_CURSOR });
+        await load(paginator.toTail, {
+          items: [a, d],
+          headward: null,
+          tailward: 'after-d',
+        });
+        await load(paginator.toTail, { items: [v], tailward: null });
+        expect(paginator.hasMoreTail).toBe(false);
+
+        await refresh({ items: [n, a], headward: null, tailward: 'after-a' });
+
+        expect(ids(paginator.items)).toEqual(['n', 'a', 'd', 'v']);
+        expect(paginator.hasMoreTail).toBe(true);
+        expect(paginator.cursor?.tailward).toBe('after-a');
+      });
+
+      it('keeps the headward cursor of a page that joins its interval to the head interval (cursor)', async () => {
+        const { load, paginator } = setup({
+          initialCursor: ZERO_PAGE_CURSOR,
+          pageSize: 3,
+        });
+        // the shown interval, and the head interval stored above it
+        await load(paginator.toTail, {
+          items: [v, x],
+          headward: 'before-v',
+          tailward: null,
+        });
+        paginator.ingestPage({ page: [n, a], isHead: true });
+
+        // the server says more items lie headward, whatever the head interval's mark says
+        await load(paginator.toHead, {
+          items: [a, d, v],
+          headward: 'before-a',
+          tailward: null,
+        });
+
+        expect(ids(paginator.items)).toEqual(['n', 'a', 'd', 'v', 'x']);
+        expect(paginator.hasMoreHead).toBe(true);
+        expect(paginator.cursor?.headward).toBe('before-a');
+      });
+    });
+
     it('anchors hasMoreHead from a new start offset when the window is re-established via reset (offset)', async () => {
       // To start a window mid-list, set the start offset and reset. isFirstPage is true,
       // getStateBeforeFirstQuery runs, and hasMoreHead is anchored from the (new) start offset.
@@ -1257,10 +1345,63 @@ describe('BasePaginator', () => {
       });
     });
 
-    it.todo(
-      'prevents setting active interval and emitting new state whe updateState === false',
-      () => {},
-    );
+    describe('with updateState: false', () => {
+      const setUpShownWindow = () => {
+        const paginator = new Paginator({ itemIndex });
+        paginator.sortComparator = makeComparator<TestItem>({
+          sort: [{ field: 'age', direction: -1 }],
+        });
+        paginator.ingestPage({ page: [a, b], setActive: true });
+        const publishedItems: Array<TestItem[] | undefined> = [];
+        const unsubscribe = paginator.state.subscribeWithSelector(
+          ({ items }) => ({ items }),
+          ({ items }) => publishedItems.push(items),
+        );
+        return { paginator, publishedItems, unsubscribe };
+      };
+
+      const queryStoredPage = async (paginator: Paginator, items: TestItem[]) => {
+        const promise = paginator.executeQuery({
+          direction: 'tailward',
+          queryShape: defaultNextQueryShape,
+          reset: 'no',
+          updateState: false,
+        });
+        await sleep(0);
+        paginator.queryResolve({ items });
+        await promise;
+      };
+
+      it('prevents setting active interval and emitting new state', async () => {
+        const { paginator, publishedItems, unsubscribe } = setUpShownWindow();
+        // @ts-expect-error accessing protected property
+        const activeIntervalId = paginator._activeIntervalId;
+        const shownItems = paginator.items;
+
+        await queryStoredPage(paginator, [y, z]);
+        unsubscribe();
+
+        // @ts-expect-error accessing protected property
+        expect(paginator._activeIntervalId).toBe(activeIntervalId);
+        expect(paginator.items).toBe(shownItems);
+        expect(publishedItems).toEqual([shownItems]);
+        // @ts-expect-error accessing protected property
+        const storedIds = Array.from(paginator._itemIntervals.values()).map(
+          ({ itemIds }) => itemIds,
+        );
+        expect(storedIds).toEqual(expect.arrayContaining([['y', 'z']]));
+      });
+
+      it('still publishes a page that lands in the active interval', async () => {
+        const { paginator, publishedItems, unsubscribe } = setUpShownWindow();
+
+        await queryStoredPage(paginator, [b, c]);
+        unsubscribe();
+
+        expect(paginator.items).toEqual([a, b, c]);
+        expect(publishedItems.at(-1)).toEqual([a, b, c]);
+      });
+    });
   });
 
   describe('item management', () => {

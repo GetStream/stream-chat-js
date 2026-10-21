@@ -1,4 +1,5 @@
 import type { BasePaginatorConfig, Interval, QueryPagePlacement } from './BasePaginator';
+import { isLogicalInterval } from './BasePaginator';
 import {
   type MessagePaginatorOptions as BaseMessagePaginatorOptions,
   getMessageCreatedAtTimestamp,
@@ -10,6 +11,7 @@ import {
 import type { LocalMessage, TimestampNS, UserResponse } from '../../types';
 import type { EntityStoreChangeBatch } from '../../entityStore/EntityStore';
 import { asTimestampNS, nsToDate } from '../../utils/time';
+import { isThreadOnlyReply } from '../../utils';
 import { StateStore } from '@stream-io/state-store';
 
 export type {
@@ -203,6 +205,19 @@ export class MessagePaginator extends MessageIntervalPaginator {
   }
 
   /**
+   * The newest server-confirmed message of the window that reaches the newest message (see
+   * {@link anchoredHeadItems}). Any message the window holds counts, system messages included, but
+   * not an unsent one: its id is local. `undefined` while that window is not loaded or holds no
+   * server-confirmed message.
+   *
+   * @internal
+   */
+  get anchoredHeadServerConfirmedItem(): LocalMessage | undefined {
+    const head = this.anchoredHeadInterval;
+    return head ? this.getServerKnownEdges(head).head : undefined;
+  }
+
+  /**
    * Whether `message` counts as the channel's latest message: not shadowed and, in the main list,
    * not a thread-only reply nor (with `skip_last_msg_update_for_system_msgs`, which the server also
    * applies to `last_message_at`) a system message. A reply list (`parentMessageId` set) holds only
@@ -211,8 +226,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
   protected shouldAdvanceLatestMessage(message: LocalMessage): boolean {
     if (message.shadowed) return false;
     if (this.parentMessageId) return true;
-    const isThreadOnlyReply = !!message.parent_id && !message.show_in_channel;
-    if (isThreadOnlyReply) return false;
+    if (isThreadOnlyReply(message)) return false;
     const skipSystemMessage =
       !!this.channel.serverConfig?.skip_last_msg_update_for_system_msgs &&
       message.type === 'system';
@@ -276,8 +290,9 @@ export class MessagePaginator extends MessageIntervalPaginator {
    *
    * Call it with each response that does not bring the newest messages up to date, before any page
    * the response carries is placed: a page that reaches the newest message marks its own window as
-   * the head. Call it only when the channel was not watched before the response: while it is
-   * watched, events are arriving, and a message the window lacks is still on its way.
+   * the head. Call it only when no events were arriving before the response and nothing else
+   * brings the newest messages: while the channel is watched, a message the window lacks is still
+   * on its way, and a re-watch that places the newest page settles the window itself.
    */
   unmarkStaleHead() {
     const head = this.anchoredHeadInterval;
@@ -311,13 +326,51 @@ export class MessagePaginator extends MessageIntervalPaginator {
     return createdAt !== null && createdAt >= latestServerMessageAt;
   }
 
+  /**
+   * Ingests a single message, from an event or an operation such as a send. A message that starts
+   * the newest window is placed by {@link ingestAsNewestInterval}. Any other goes into the window
+   * it belongs to and the reader stays on their window, except for the current user's new send (see
+   * {@link isOwnSendWhileOlderWindowIsRead}): the newest window holding it is shown, so the user
+   * sees what they sent.
+   */
   ingestItem(item: LocalMessage): boolean {
     // Only items passing the filter advance the aggregate (`ingestItem` also removes the others).
     if (this.matchesFilter(item)) {
       if (this.isNewNewestMessage(item)) return this.ingestAsNewestInterval(item);
       this.trackLatestMessage(item);
     }
-    return super.ingestItem(item);
+    // judged before ingesting, while the message is not held yet
+    const showsNewestWindow = this.isOwnSendWhileOlderWindowIsRead(item);
+    const ingested = super.ingestItem(item);
+    const newest = this.anchoredHeadInterval;
+    if (ingested && showsNewestWindow && newest?.itemIds.includes(item.id)) {
+      this.showWindowOfOwnSend(newest);
+    }
+    return ingested;
+  }
+
+  /**
+   * Whether `message` is the current user's own send (see {@link isOwnSend}) that the paginator
+   * does not hold yet, while the newest window is loaded but another window is read. A message
+   * already held (a retry of a failed send, a replayed send, its server confirmation) is not new.
+   */
+  private isOwnSendWhileOlderWindowIsRead(message: LocalMessage): boolean {
+    const newest = this.anchoredHeadInterval;
+    return (
+      !!newest &&
+      !this.isActiveInterval(newest) &&
+      !this.getItem(message.id) &&
+      this.isOwnSend(message)
+    );
+  }
+
+  /**
+   * Shows the window holding the current user's own send. The send decides the window shown, so it
+   * claims the active interval as a jump does: a page a query claimed earlier is then only stored.
+   */
+  private showWindowOfOwnSend(interval: Interval) {
+    this.claimActiveInterval();
+    this.showLoadedInterval(interval);
   }
 
   /**
@@ -352,31 +405,53 @@ export class MessagePaginator extends MessageIntervalPaginator {
 
   /**
    * Starts the newest window with `message`, together with the
-   * {@link logicalHeadItemsSinceQueriedLatestMessageAt} ingested before it. The messages before
-   * the window are not loaded, so it can still load older ones. It becomes the active window only
-   * when no window was active, or the logical head it takes items from was.
+   * {@link logicalHeadItemsSinceQueriedLatestMessageAt} ingested before it. It can load older
+   * messages unless none are left to load (see {@link hasNoMessagesBeforeLiveMessages}). It becomes
+   * the active window when no window was active, when the logical head it takes items from was, or
+   * when `message` is the current user's own send (see {@link isOwnSend}), as every own send shows
+   * the newest window (see {@link ingestItem}).
    */
   private ingestAsNewestInterval(message: LocalMessage): boolean {
     const liveHead = this.liveHeadLogical;
     const interval = this.ingestPage({
       page: [...this.logicalHeadItemsSinceQueriedLatestMessageAt, message],
       isHead: true,
+      isTail: this.hasNoMessagesBeforeLiveMessages,
       setActive: false,
     });
     if (!interval) return false;
 
-    const takeOverView =
-      !this._activeIntervalId || (!!liveHead && this.isActiveInterval(liveHead));
-    if (takeOverView) {
-      this.setActiveInterval(interval, { updateState: false });
-      this.state.partialNext({
-        items: this.intervalToItems(interval),
-        hasMoreHead: false,
-        hasMoreTail: interval.hasMoreTail,
-        cursor: this.getCursorFromInterval(interval),
-      });
+    if (this.isOwnSend(message)) {
+      this.showWindowOfOwnSend(interval);
+    } else if (
+      !this._activeIntervalId ||
+      (!!liveHead && this.isActiveInterval(liveHead))
+    ) {
+      this.showLoadedInterval(interval);
     }
     return true;
+  }
+
+  /**
+   * Whether no message older than the live messages is left to load: no window of queried messages
+   * is loaded and the list reports no older messages, as after a newest page that came back empty.
+   * A list never queried, or one holding a window (a jumped-to one, or one whose head mark was
+   * cleared), has older messages to load.
+   */
+  private get hasNoMessagesBeforeLiveMessages(): boolean {
+    return (
+      this.hasMoreTail === false &&
+      this.itemIntervals.every((interval) => isLogicalInterval(interval))
+    );
+  }
+
+  /**
+   * Whether `message` is one the current user is sending from this device: status `sending` and
+   * authored by the client's user. The same user's message from another device arrives
+   * server-confirmed and is not one.
+   */
+  private isOwnSend(message: LocalMessage): boolean {
+    return message.status === 'sending' && this.isOwnMessage(message);
   }
 
   ingestPage(

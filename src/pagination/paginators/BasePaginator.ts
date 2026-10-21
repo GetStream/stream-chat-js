@@ -90,9 +90,6 @@ type MergeIntervalsResult = {
   logicalTail: LogicalInterval | null;
 };
 
-/** The ids of the anchored intervals marked as reaching the head (`isHead`) and the tail (`isTail`). */
-type EndIntervalIds = { head: string[]; tail: string[] };
-
 /**
  * `headward` moves toward page 0, `tailward` away from it. New items are added at the head,
  * retrieved pages are appended at the tail.
@@ -851,34 +848,31 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     if (keptOtherHead) this.publishAsAnchoredHead(this.anchoredHeadInterval);
   }
 
-  /** The ids of the anchored intervals marked as reaching the head and the tail of the dataset. */
-  private getEndIntervalIds(): EndIntervalIds {
-    const ids: EndIntervalIds = { head: [], tail: [] };
+  /** The ids of the anchored intervals marked as reaching the head of the dataset. */
+  private getHeadIntervalIds(): string[] {
+    const ids: string[] = [];
     for (const interval of this._itemIntervals.values()) {
-      if (isLogicalInterval(interval)) continue;
-      if (interval.isHead) ids.head.push(interval.id);
-      if (interval.isTail) ids.tail.push(interval.id);
+      if (!isLogicalInterval(interval) && interval.isHead) ids.push(interval.id);
     }
     return ids;
   }
 
   /**
-   * The ends of the dataset `interval` reaches because it took in an interval marked as reaching
-   * that end (`endIntervalIds`, read before a page was placed): merged it, or is it. An interval
-   * that takes in the head interval reaches the head, and one that takes in the tail interval
-   * reaches the tail, whatever the page placed in it says alone: the page only adds items to an
-   * interval that already reached that end.
+   * Whether `interval` reaches the head because a headward page joined it to the head interval:
+   * it is, or merged, one of `headIntervalIds` (the intervals marked as the head before the page
+   * was placed). Only where cursors are derived from the interval (`config.deriveCursor`): a
+   * cursor a response returned stays as sent.
    */
-  private getEndsTakenIn(
+  private inheritsHeadMark(
     interval: Interval,
-    endIntervalIds: EndIntervalIds,
-  ): { head: boolean; tail: boolean } {
+    direction: PaginationDirection | undefined,
+    headIntervalIds: string[],
+  ): boolean {
+    if (!this.config.deriveCursor || direction !== 'headward') return false;
     // an interval merged into another one is dropped
-    const tookIn = (id: string) => id === interval.id || !this._itemIntervals.has(id);
-    return {
-      head: endIntervalIds.head.some(tookIn),
-      tail: endIntervalIds.tail.some(tookIn),
-    };
+    return headIntervalIds.some(
+      (id) => id === interval.id || !this._itemIntervals.has(id),
+    );
   }
 
   /** Whether `a`'s head edge (see {@link getServerKnownEdges}) is further headward than `b`'s. */
@@ -993,16 +987,6 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
 
   getItem(id: string | undefined): T | undefined {
     return typeof id === 'string' ? this._itemIndex?.get(id) : undefined;
-  }
-
-  /**
-   * Whether an interval, a logical one included, holds the item. Unlike {@link getItem}, it misses
-   * an item stored outside every interval.
-   *
-   * @internal
-   */
-  isInLoadedInterval(item: T): boolean {
-    return !!this.findIntervalHoldingItem(item);
   }
 
   /**
@@ -1632,9 +1616,37 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     this._itemIntervals = new Map(intervals.map((i) => [i.id, i]));
   }
 
+  /**
+   * The span pages and items are matched against: from the interval's outermost items the server
+   * knows about (see {@link isPaginationAnchorable}), or its sort bounds when it holds none. An
+   * item the server never saw does not stretch it, as its sort key may come from the client.
+   */
+  protected getIntervalSpan(interval: AnyInterval): IntervalSortBounds<T> | null {
+    const ids = interval.itemIds;
+    const knownItemAt = (index: number) => {
+      const item = this._itemIndex.get(ids[index]);
+      return this.isPaginationAnchorable(item) ? item : undefined;
+    };
+    let start: T | undefined;
+    let end: T | undefined;
+    for (let index = 0; index < ids.length && !start; index++) start = knownItemAt(index);
+    for (let index = ids.length - 1; index >= 0 && !end; index--)
+      end = knownItemAt(index);
+    return start && end ? { start, end } : this.getIntervalSortBounds(interval);
+  }
+
+  /** The head and tail edges of the interval's span (see {@link getIntervalSpan}). */
+  private getIntervalSpanEdges(interval: AnyInterval): IntervalPaginationEdges<T> | null {
+    const span = this.getIntervalSpan(interval);
+    if (!span) return null;
+    return this.intervalItemIdsAreHeadFirst
+      ? { head: span.start, tail: span.end }
+      : { head: span.end, tail: span.start };
+  }
+
   protected intervalsStrictlyOverlap(a: AnyInterval, b: AnyInterval): boolean {
-    const aBounds = this.getIntervalSortBounds(a);
-    const bBounds = this.getIntervalSortBounds(b);
+    const aBounds = this.getIntervalSpan(a);
+    const bBounds = this.getIntervalSpan(b);
     if (!aBounds || !bBounds) return false;
     return (
       this.itemOrderComparator(aBounds.start, bBounds.end) <= 0 &&
@@ -1652,8 +1664,8 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     b: AnyInterval,
     policy: IntervalMergePolicy = 'auto',
   ): boolean {
-    const aBounds = this.getIntervalSortBounds(a);
-    const bBounds = this.getIntervalSortBounds(b);
+    const aBounds = this.getIntervalSpan(a);
+    const bBounds = this.getIntervalSpan(b);
     if (!aBounds || !bBounds) return false;
 
     if (
@@ -1669,8 +1681,8 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     const aIsTail = (a as Interval).isTail;
     const bIsTail = (b as Interval).isTail;
 
-    const aEdges = this.getIntervalPaginationEdges(a);
-    const bEdges = this.getIntervalPaginationEdges(b);
+    const aEdges = this.getIntervalSpanEdges(a);
+    const bEdges = this.getIntervalSpanEdges(b);
     if (!aEdges || !bEdges) return false;
 
     if (bIsHead && this.aIsMoreHeadwardThanB(aEdges.head, bEdges.head)) return true;
@@ -1681,17 +1693,27 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     return false;
   }
 
+  /**
+   * Whether `item` belongs in `interval`: within its span (see {@link getIntervalSpan}), or beyond
+   * the edge of a head or tail interval. An item the server never saw stays in the interval holding
+   * it, so updating it does not move it.
+   */
   protected belongsToInterval(item: T, interval: AnyInterval): boolean {
-    const sortBounds = this.getIntervalSortBounds(interval);
-    if (!sortBounds) return false;
-    const { start, end } = sortBounds;
+    if (
+      !this.isPaginationAnchorable(item) &&
+      interval.itemIds.includes(this.getItemId(item))
+    )
+      return true;
+    const span = this.getIntervalSpan(interval);
+    if (!span) return false;
+    const { start, end } = span;
     if (
       this.itemOrderComparator(start, item) <= 0 &&
       this.itemOrderComparator(item, end) <= 0
     )
       return true;
 
-    const edges = this.getIntervalPaginationEdges(interval);
+    const edges = this.getIntervalSpanEdges(interval);
     if (!edges) return false;
 
     // Items beyond the edge of a head/tail page belong to it.
@@ -3115,9 +3137,9 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
    * With `updateState` (the default), its window becomes the shown one and the state is published.
    * Without it, the page is only stored, and published only if it landed in the active interval,
    * so the shown items never go stale. A page proven to reach the head of the dataset makes its
-   * interval the only head (see {@link makeOnlyHead}). An interval that takes in the interval
-   * marked as the head or the tail reaches that end, whatever the page says (see
-   * {@link getEndsTakenIn}).
+   * interval the only head (see {@link makeOnlyHead}). Where cursors are derived from the
+   * interval (`config.deriveCursor`), an interval a headward page joins to the head interval
+   * reaches the head, whatever the page says (see {@link inheritsHeadMark}).
    *
    * `endsQuery` says the page comes from the paginator's own query, which placing it ends: the
    * loading flag goes off, the last query error is cleared, and a first page goes to the offline
@@ -3161,7 +3183,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
         ? new Set(this.items.map((item) => this.getItemId(item)))
         : undefined;
     // Read before the ingest, which may merge them into the page's interval.
-    const endIntervalIds = this.getEndIntervalIds();
+    const headIntervalIds = this.getHeadIntervalIds();
     const interval = this.ingestPage({
       page: stateUpdate.items,
       policy: isSeparateInterval ? 'strict-overlap-only' : 'auto',
@@ -3183,11 +3205,9 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
             : undefined,
       targetIntervalId: isSeparateInterval ? undefined : this._activeIntervalId,
     });
-    const takenInEnds = interval
-      ? this.getEndsTakenIn(interval, endIntervalIds)
-      : { head: false, tail: false };
-    const intervalReachesHead = reachesHead || takenInEnds.head;
-    const intervalReachesTail = reachesTail || takenInEnds.tail;
+    const intervalReachesHead =
+      reachesHead ||
+      (!!interval && this.inheritsHeadMark(interval, direction, headIntervalIds));
     if (interval && updateState) {
       this.setActiveInterval(interval, { updateState: false });
       stateUpdate.items = this.intervalToItems(interval);
@@ -3252,16 +3272,16 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
         stateUpdate.hasMoreTail = !!tailward;
         stateUpdate.hasMoreHead = !!headward;
       }
-      if (interval && (intervalReachesHead || intervalReachesTail)) {
+      if (interval && (intervalReachesHead || reachesTail)) {
         // The interval reaches an end of the dataset, whatever the derivation guessed from the
         // page's shape and size.
         const cursor = stateUpdate.cursor ?? this.cursor;
         stateUpdate.cursor = {
           headward: intervalReachesHead ? null : (cursor?.headward ?? null),
-          tailward: intervalReachesTail ? null : (cursor?.tailward ?? null),
+          tailward: reachesTail ? null : (cursor?.tailward ?? null),
         };
         if (intervalReachesHead) stateUpdate.hasMoreHead = false;
-        if (intervalReachesTail) stateUpdate.hasMoreTail = false;
+        if (reachesTail) stateUpdate.hasMoreTail = false;
       }
     } else {
       // todo: we could keep the offset in two directions (initial tailward offset would be taken from config.initialOffset)
@@ -3287,9 +3307,6 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       // A `keepPreviousItems` first page never publishes `getStateBeforeFirstQuery()`, so anchor
       // its `hasMoreHead` from the start offset here.
       if (isFirstPage) stateUpdate.hasMoreHead = (this.config.initialOffset ?? 0) > 0;
-      // the interval reaches an end by taking in the interval that did (see getEndsTakenIn)
-      if (takenInEnds.head) stateUpdate.hasMoreHead = false;
-      if (takenInEnds.tail) stateUpdate.hasMoreTail = false;
     }
 
     if (interval) {

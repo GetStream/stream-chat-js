@@ -919,7 +919,7 @@ export class ChannelManager extends WithSubscriptions {
   /**
    * Removes a paginator: it leaves `state.paginators`, stops receiving WS-driven updates and gets
    * its own `filterQueryResults` back. Its loaded items stay, and a query scheduled through
-   * `nextDebounced` is cancelled.
+   * `toTailDebounced` or `toHeadDebounced` is cancelled.
    *
    * @param paginatorOrId - The paginator to remove, or its ID.
    * @returns The removed paginator, or `undefined` when this manager did not hold it.

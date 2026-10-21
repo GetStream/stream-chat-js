@@ -15,6 +15,7 @@ import {
   generateChannelTempCid,
   getMemberUserId,
   invokeEventListener,
+  isThreadOnlyReply,
   logChatPromiseExecution,
   sanitizeOutgoingAttachments,
 } from './utils';
@@ -1249,8 +1250,9 @@ export class Channel extends ChannelApi {
    *
    * While active, channel-list hydration places no page in the message list (`channel.reload()`
    * owns it), the message list keeps the reader on their window (otherwise a fresh newest page from
-   * a query the list did not run is shown), and the channel stays in the channel store. A disposed
-   * channel is not activated: a warning is logged and the returned release does nothing.
+   * a query the list did not run is shown; one separated from the loaded messages by a gap is shown
+   * either way), and the channel stays in the channel store. A disposed channel is not activated: a
+   * warning is logged and the returned release does nothing.
    */
   activate = (): (() => void) => {
     if (this.pendingDisposal) {
@@ -1300,6 +1302,12 @@ export class Channel extends ChannelApi {
    * `message.read_locally` event, handled like `message.read` minus the delivery-report sync. With
    * offline support the reset is persisted.
    *
+   * The event's `last_read_message_id` is the newest server-confirmed message, whatever its type,
+   * of the window holding the channel's newest messages
+   * (`messagePaginator.anchoredHeadServerConfirmedItem`). While that window is not loaded (e.g.
+   * only a jumped-to window is), the event carries none and the read covers everything up to its
+   * `created_at`.
+   *
    * @returns The dispatched `message.read_locally` event, or `undefined` if there is no connected
    *   user.
    */
@@ -1312,7 +1320,7 @@ export class Channel extends ChannelApi {
       channel_type: this.type,
       cid: this.cid,
       created_at: nowNs(),
-      last_read_message_id: this.messagePaginator.latestMessage?.id,
+      last_read_message_id: this.messagePaginator.anchoredHeadServerConfirmedItem?.id,
       team: this.data?.team,
       type: 'message.read_locally',
       user: client.user as UserResponse,
@@ -1426,9 +1434,9 @@ export class Channel extends ChannelApi {
    * the watch query reconciles the loaded newest messages with the re-queried page
    * (`messagePaginator.reconcileNewestMessages`, against the loaded IDs captured before its await).
    *
-   * Failed (unsent) messages are kept: reconciling never removes one an interval holds, and those
-   * the offline DB holds but no interval does (cold boot, eviction, or between two loaded windows)
-   * are ingested again.
+   * Failed (unsent) messages are kept: those loaded or in the offline DB (cold boot, eviction)
+   * before the request that are no longer loaded after it are ingested again. The offline DB is
+   * read on a best-effort basis.
    */
   async reload() {
     if (this._reloading || (!this.initialized && !this.offlineMode)) return;
@@ -1440,25 +1448,17 @@ export class Channel extends ChannelApi {
         Math.max(paginator.anchoredHeadItems.length, paginator.pageSize ?? 0) ||
         undefined;
       const offlineDb = this.getClient().offlineDb;
+      // best effort: a failing read must not fail the reload
       const failedInDb = offlineDb
-        ? await offlineDb.getFailedMessages({ cid: this.cid })
+        ? await offlineDb.getFailedMessages({ cid: this.cid }).catch(() => [])
         : [];
+      // after the read: a message that fails meanwhile is loaded by then
+      const failedBefore = paginator.getFailedMessagesToRestore(failedInDb);
 
       await this.watch({ messages: { limit: requestedLimit } });
       this.offlineMode = false;
 
-      // the user's unsent work no interval holds
-      const lostFailed = failedInDb.filter(
-        (message) => !paginator.isInLoadedInterval(message),
-      );
-      if (lostFailed.length) {
-        paginator.batch(
-          () => {
-            for (const failed of lostFailed) paginator.ingestItem(failed);
-          },
-          { coalesce: true },
-        );
-      }
+      paginator.restoreFailedMessages(failedBefore);
     } finally {
       this._reloading = false;
     }
@@ -1511,7 +1511,7 @@ export class Channel extends ChannelApi {
   _countMessageAsUnread(message: LocalMessage | MessageResponse) {
     if (message.shadowed) return false;
     if (message.silent) return false;
-    if (message.parent_id && !message.show_in_channel) return false;
+    if (isThreadOnlyReply(message)) return false;
     if (message.user?.id === this.getClient().userId) return false;
     if (message.user?.id && this.getClient().userMuteStatus(message.user.id))
       return false;
@@ -1794,13 +1794,25 @@ export class Channel extends ChannelApi {
     // a page reaches the newest message (`_initializeState` sets it too, after).
     this.messagePaginator.setQueriedLatestMessageAt(channel.last_message_at);
     // Checked before any page is placed, as a page that reaches the newest message marks its own
-    // window as the head. While the channel was watched, events were arriving, and a message the
-    // head window lacks is still on its way.
-    if (!placesNewestPage && this.watchStatus !== ChannelWatchStatus.Watching) {
+    // window as the head.
+    if (!placesNewestPage && this.isHeadLeftWithoutRefresh(queryPayload)) {
       this.messagePaginator.unmarkStaleHead();
     }
 
     return state;
+  }
+
+  /**
+   * Whether nothing but this query brings the head window up to date, so its `last_message_at` may
+   * show the window stale: the watch was stopped (`NotWatching`), or this query itself watches
+   * again after a dropped connection (`WasWatching`), leaving nothing to re-watch with the newest
+   * page. While the channel is watched, a message the window lacks is still on its way; after a
+   * dropped connection, the re-watch that follows places the newest page (see
+   * `ConnectionRecoveryManager`).
+   */
+  private isHeadLeftWithoutRefresh(query: ChannelGetOrCreateRequest): boolean {
+    if (this.watchStatus === ChannelWatchStatus.NotWatching) return true;
+    return this.watchStatus === ChannelWatchStatus.WasWatching && !!query.watch;
   }
 
   /**
@@ -2323,10 +2335,8 @@ export class Channel extends ChannelApi {
         if (event.message) {
           this._extendEventWithOwnReactions(event);
           const formattedMessage = formatMessage(event.message);
-          const isThreadReply =
-            !!event.message.parent_id && !event.message.show_in_channel;
           // Thread-only replies are handled by the Thread object; the channel owns the main list.
-          if (!isThreadReply) {
+          if (!isThreadOnlyReply(event.message)) {
             if (event.hard_delete) {
               this.messagePaginator.removeItem({ id: event.message.id });
               this.pinnedMessagesPaginator.removeItem({ id: event.message.id });
@@ -2361,9 +2371,7 @@ export class Channel extends ChannelApi {
         if (event.message) {
           const client = this.getClient();
           const ownMessage = event.user?.id === client.user?.id;
-          const isThreadMessage =
-            event.message.parent_id && !event.message.show_in_channel;
-
+          const isThreadMessage = isThreadOnlyReply(event.message);
           if (!isThreadMessage) {
             // `ingestItem` advances the tracked latest message. A message arriving while the viewer
             // is in an older window lands in the head interval, leaving the view as it is.
@@ -2448,13 +2456,12 @@ export class Channel extends ChannelApi {
         if (event.message) {
           this._extendEventWithOwnReactions(event);
           const formattedMessage = formatMessage(event.message);
-          const { parent_id: parentId, show_in_channel: shownInChannel } = event.message;
-          const isThreadReply = !!parentId && !shownInChannel;
+          const { parent_id: parentId } = event.message;
           const { threads } = this.getClient();
           // to avoid double state publish
           const isAppliedByThread =
             !!parentId && threads.hasSubscriptions && !!threads.get(parentId);
-          if (!isThreadReply && !isAppliedByThread) {
+          if (!isThreadOnlyReply(event.message) && !isAppliedByThread) {
             this.messagePaginator.ingestItem(formattedMessage);
             this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
             // Added on pin, removed on unpin (`matchesFilter`).

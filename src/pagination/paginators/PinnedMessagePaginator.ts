@@ -118,6 +118,19 @@ export class PinnedMessagePaginator extends MessageIntervalPaginator {
     this.updateConfig(this.buildPinnedBehaviour());
   }
 
+  /**
+   * The newest page (no cursor, not around a message) holds the most recently pinned messages, so
+   * it reaches the head: its window becomes the only newest window, and an older window that was
+   * the newest one can load newer pins (see `makeOnlyHead`). A newest page comes from this
+   * paginator's own query or with a channel response.
+   */
+  protected override pageReachesHead(
+    _page: LocalMessage[],
+    queryShape: MessageQueryShape | undefined,
+  ): boolean | undefined {
+    return this.isHeadPageQueryShape(queryShape) ? true : undefined;
+  }
+
   buildMatchFilters = (): PinnedMessagePaginatorFilter => ({
     cid: this.channel.cid,
     pinned: true,

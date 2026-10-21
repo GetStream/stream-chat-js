@@ -2505,6 +2505,39 @@ describe('ChannelPaginator', () => {
         'kpi-1',
       ]);
     });
+
+    it('keeps the list paging when a full refreshed page merges the list that ended', async () => {
+      const channels = [0, 1, 2, 3].map((i) => {
+        const channel = new Channel(client, 'messaging', `kpi-${i}`, {});
+        setLatestMessageAt(channel, new Date(Date.UTC(2020, 0, 9 - i)));
+        return channel;
+      });
+      const [newChannel, ...loadedChannels] = channels;
+      const doRequest = vi
+        .fn()
+        .mockResolvedValueOnce({ items: loadedChannels.slice(0, 2) })
+        // a short page: the end of the list
+        .mockResolvedValueOnce({ items: loadedChannels.slice(2) })
+        // reconnect: a channel entered the list at the top, so the first page is full
+        .mockResolvedValueOnce({ items: [newChannel, loadedChannels[0]] });
+      const paginator = new ChannelPaginator({
+        client,
+        paginatorOptions: { doRequest, pageSize: 2 },
+      });
+      await paginator.toTail();
+      await paginator.toTail();
+      expect(paginator.hasMoreTail).toBe(false);
+
+      await paginator.toTail({ keepPreviousItems: true, reset: 'yes' });
+
+      expect(paginator.items?.map((channel) => channel.id)).toEqual([
+        'kpi-0',
+        'kpi-1',
+        'kpi-2',
+        'kpi-3',
+      ]);
+      expect(paginator.hasMoreTail).toBe(true);
+    });
   });
   describe('fields kept under data.custom', () => {
     beforeEach(() => {
