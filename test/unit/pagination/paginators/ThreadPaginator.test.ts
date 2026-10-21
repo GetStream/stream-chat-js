@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ChannelResponse, MessageResponse, StreamChat } from '../../../../src';
-import { Thread } from '../../../../src';
+import type { ChannelResponse, MessageResponse } from '../../../../src';
+import { StreamChat, Thread } from '../../../../src';
 import { generateUUIDv4 as uuidv4 } from '../../../../src/utils';
 import { nowNs } from '../../../../src/utils/time';
 import { generateChannel } from '../../test-utils/generateChannel';
@@ -13,14 +13,10 @@ describe('ThreadPaginator', () => {
   let client: StreamChat;
   let channelResponse: ChannelResponse;
 
+  const threadResponse = (id = uuidv4()) =>
+    generateThreadResponse(channelResponse, generateMsg({ id }) as MessageResponse);
   const makeThread = (id = uuidv4()) =>
-    new Thread({
-      client,
-      threadData: generateThreadResponse(
-        channelResponse,
-        generateMsg({ id }) as MessageResponse,
-      ),
-    });
+    new Thread({ client, threadData: threadResponse(id) });
   const ids = () => (client.threads.paginator.items ?? []).map((thread) => thread.id);
   const respond = (threads: Thread[], next?: string) =>
     vi.spyOn(client, 'queryThreadsAndHydrate').mockResolvedValueOnce({ next, threads });
@@ -191,7 +187,13 @@ describe('ThreadPaginator', () => {
     client.threads.paginator.state.subscribe(({ isLoading, items }) =>
       snapshots.push({ hasItems: items !== undefined, isLoading }),
     );
-    respond([c, makeThread('a')]);
+    // The raw answer, through the real `queryThreadsAndHydrate`: `a` resolves to its listed instance.
+    vi.spyOn(client, 'queryThreads').mockResolvedValueOnce({
+      threads: [threadResponse('c'), threadResponse('a')],
+    } as never);
+    vi.spyOn(client, 'queryThreadsAndHydrate').mockImplementationOnce((...args) =>
+      StreamChat.prototype.queryThreadsAndHydrate.apply(client, args),
+    );
 
     await client.threads.reload({ force: true });
 

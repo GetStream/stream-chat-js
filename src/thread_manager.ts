@@ -16,6 +16,7 @@ import type {
   LocalMessage,
   MessageResponse,
   OwnUserResponse,
+  ThreadStateResponse,
 } from './types';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 
@@ -165,19 +166,19 @@ export class ThreadManager extends WithSubscriptions {
   };
 
   /**
-   * The registered instance for a thread a query just built, else the query's own, so events keep
-   * reaching the one managed instance. A stale registered thread is refreshed from the query unless
-   * it is active (it reloads itself).
+   * The registered thread, hydrated from `threadData`, or a new one when none is registered. Only a
+   * stale thread nobody has open takes the replies, replacing its own: an open one's are left to
+   * its `reload()`, and events kept any other's current.
    *
    * @internal
    */
-  public resolveQueried = (incoming: Thread): Thread => {
-    const stored = this.threadStore.get(incoming.id);
-    if (!stored) return incoming;
-    if (stored.hasStaleState && !stored.state.getLatestValue().active) {
-      stored.hydrateState(incoming);
-    }
-    return stored;
+  public resolveQueried = (threadData: ThreadStateResponse): Thread => {
+    const registered = this.threadStore.get(threadData.parent_message_id);
+    if (!registered) return new Thread({ client: this.client, threadData });
+
+    const { active, isStateStale } = registered.state.getLatestValue();
+    registered.hydrateState(threadData, { skipReplies: active || !isStateStale });
+    return registered;
   };
 
   /**
