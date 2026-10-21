@@ -454,6 +454,12 @@ export class MessagePaginator extends MessageIntervalPaginator {
     return message.status === 'sending' && this.isOwnMessage(message);
   }
 
+  /** Whether the client's user wrote `message`; never for a paginator without a client. */
+  private isOwnMessage(message: LocalMessage): boolean {
+    const userId = this.channel.getClient?.()?.userId;
+    return !!userId && message.user?.id === userId;
+  }
+
   ingestPage(
     params: Parameters<MessageIntervalPaginator['ingestPage']>[0],
   ): Interval | null {

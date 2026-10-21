@@ -4236,6 +4236,181 @@ describe('MessagePaginator', () => {
       expect(paginator.getItem('m3')).toBeUndefined();
     });
 
+    describe('with a newest page sharing messages the user wrote', () => {
+      const me = { id: 'me' };
+      const own = (id: string, minute: number) => msg(id, minute, { user: me });
+      const range = (from: number, to: number, make = msg) =>
+        Array.from({ length: to - from + 1 }, (_, i) => make(`m${from + i}`, from + i));
+      const snapshotOf = (paginator: MessagePaginator) =>
+        paginator.getHeadIntervalItemIdsAtRequest();
+
+      beforeEach(() => {
+        (channel as unknown as { userId: string }).userId = 'me';
+      });
+
+      it('merges a page whose overlap is only own messages, keeping the reader on their window', () => {
+        // m1–m10 from others, then the user's m11–m20; others sent m21–m40 while the user was away.
+        // The newest 25 are m16–m40: the only messages it shares with the window are the user's.
+        const paginator = loadHead([...range(1, 10), ...range(11, 20, own)]);
+        // the reader scrolled away to an older window
+        paginator.ingestPage({
+          page: [msg('old1', -20), msg('old2', -19)],
+          isHead: false,
+          isTail: false,
+          setActive: true,
+        });
+        const headIntervalItemIdsAtRequest = snapshotOf(paginator);
+
+        paginator.reconcileNewestMessages([...range(16, 20, own), ...range(21, 40)], {
+          headIntervalItemIdsAtRequest,
+          requestedLimit: 25,
+        });
+
+        expect(ids(paginator)).toEqual(['old1', 'old2']);
+        expect(paginator.anchoredHeadItems.map((m) => m.id)).toEqual(
+          range(1, 40).map((m) => m.id),
+        );
+        expect(paginator.itemIntervals).toHaveLength(2);
+      });
+
+      it('treats a page sharing only a send replayed after missed messages as past a gap', () => {
+        // The user queued "hello" offline while m11–m60 arrived; the replay confirmed it before the
+        // newest page was requested, so the window and the page both hold it.
+        const paginator = loadHead([...range(1, 10), own('hello', 61)]);
+        const headIntervalItemIdsAtRequest = snapshotOf(paginator);
+
+        paginator.reconcileNewestMessages([...range(59, 60), own('hello', 61)], {
+          headIntervalItemIdsAtRequest,
+          requestedLimit: 3,
+        });
+
+        expect(ids(paginator)).toEqual(['m59', 'm60', 'hello']);
+        expect(paginator.getItem('m10')).toBeUndefined();
+        expect(paginator.hasMoreTail).toBe(true);
+      });
+
+      it('treats a page sharing only sends replayed after missed messages as past a gap', () => {
+        const paginator = loadHead([...range(1, 10), own('hello', 61), own('again', 62)]);
+        const headIntervalItemIdsAtRequest = snapshotOf(paginator);
+
+        paginator.reconcileNewestMessages(
+          [...range(59, 60), own('hello', 61), own('again', 62)],
+          { headIntervalItemIdsAtRequest, requestedLimit: 4 },
+        );
+
+        expect(ids(paginator)).toEqual(['m59', 'm60', 'hello', 'again']);
+        expect(paginator.getItem('m10')).toBeUndefined();
+      });
+
+      it("merges a page starting at the user's own message without a snapshot of the request", () => {
+        const paginator = loadHead([...range(1, 4), own('m5', 5)]);
+
+        paginator.reconcileNewestMessages([own('m5', 5), ...range(6, 7)], {
+          requestedLimit: 3,
+        });
+
+        expect(ids(paginator)).toEqual(range(1, 7).map((m) => m.id));
+      });
+
+      it("merges a page whose oldest message is the user's own, loaded before the request", () => {
+        const paginator = loadHead([...range(1, 4), own('m5', 5)]);
+        const headIntervalItemIdsAtRequest = snapshotOf(paginator);
+
+        paginator.reconcileNewestMessages([own('m5', 5), ...range(6, 7)], {
+          headIntervalItemIdsAtRequest,
+          requestedLimit: 3,
+        });
+
+        expect(ids(paginator)).toEqual(range(1, 7).map((m) => m.id));
+        expect(paginator.itemIntervals).toHaveLength(1);
+      });
+    });
+
+    it.each([
+      { case: 'holding all of it', page: [8, 9, 10, 11, 12, 13, 14] },
+      { case: 'missing its oldest, hard-deleted', page: [8, 9, 11, 12, 13, 14, 15] },
+    ])(
+      'merges a page spanning the whole head window ($case), keeping the reader on their window',
+      ({ page }) => {
+        const paginator = loadHead([msg('m10', 10), msg('m11', 11), msg('m12', 12)]);
+        paginator.ingestPage({
+          page: [msg('m1', 1), msg('m2', 2)],
+          isHead: false,
+          isTail: false,
+          setActive: true,
+        });
+        const headIntervalItemIdsAtRequest = paginator.getHeadIntervalItemIdsAtRequest();
+
+        // the page's oldest, m8, was never loaded
+        paginator.reconcileNewestMessages(
+          page.map((n) => msg(`m${n}`, n)),
+          { headIntervalItemIdsAtRequest, requestedLimit: 7 },
+        );
+
+        expect(ids(paginator)).toEqual(['m1', 'm2']);
+        expect(paginator.anchoredHeadItems.map((m) => m.id)).toEqual(
+          page.map((n) => `m${n}`),
+        );
+      },
+    );
+
+    it('merges a page whose oldest message was hard-deleted during the request', () => {
+      const paginator = loadHead(
+        Array.from({ length: 10 }, (_, i) => msg(`m${1 + i}`, 1 + i)),
+      );
+      paginator.ingestPage({
+        page: [msg('old1', -20)],
+        isHead: false,
+        isTail: false,
+        setActive: true,
+      });
+      const headIntervalItemIdsAtRequest = paginator.getHeadIntervalItemIdsAtRequest();
+      // the server built the page m6–m15, then m6 was hard-deleted and its event removed it
+      paginator.removeItem({ id: 'm6' });
+
+      paginator.reconcileNewestMessages(
+        Array.from({ length: 10 }, (_, i) => msg(`m${6 + i}`, 6 + i)),
+        { headIntervalItemIdsAtRequest, requestedLimit: 10 },
+      );
+
+      // the windows are joined; the page brings m6 back until a later page no longer holds it
+      expect(ids(paginator)).toEqual(['old1']);
+      expect(paginator.anchoredHeadItems.map((m) => m.id)).toEqual(
+        Array.from({ length: 15 }, (_, i) => `m${1 + i}`),
+      );
+    });
+
+    it('merges a page whose oldest message is one the window filters out', () => {
+      const paginator = loadHead([msg('m1', 1), msg('m2', 2), msg('m4', 4)]);
+      const headIntervalItemIdsAtRequest = paginator.getHeadIntervalItemIdsAtRequest();
+
+      // m3 is shadowed, so the window never held it
+      paginator.reconcileNewestMessages(
+        [msg('m3', 3, { shadowed: true }), msg('m4', 4), msg('m5', 5)],
+        { headIntervalItemIdsAtRequest, requestedLimit: 3 },
+      );
+
+      expect(paginator.getItem('m1')).toBeDefined();
+      expect(paginator.itemIntervals).toHaveLength(1);
+    });
+
+    it('treats a page starting at a message that arrived during the request as past a gap', () => {
+      const paginator = loadHead([msg('m1', 1), msg('m2', 2), msg('m3', 3)]);
+      const headIntervalItemIdsAtRequest = paginator.getHeadIntervalItemIdsAtRequest();
+      // m20 and m21 arrive live while the request is out; m4–m19 were missed
+      paginator.ingestItem(msg('m20', 20));
+      paginator.ingestItem(msg('m21', 21));
+
+      paginator.reconcileNewestMessages([msg('m20', 20), msg('m21', 21)], {
+        headIntervalItemIdsAtRequest,
+        requestedLimit: 2,
+      });
+
+      expect(ids(paginator)).toEqual(['m20', 'm21']);
+      expect(paginator.getItem('m3')).toBeUndefined();
+      expect(paginator.hasMoreTail).toBe(true);
+    });
+
     it('snapshots only the server-confirmed messages of the newest window for a request', () => {
       const paginator = loadHead([
         msg('m1', 1),

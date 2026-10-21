@@ -175,8 +175,8 @@ export type ReconcileNewestMessagesOptions = {
    *
    * - deletion: at or above `page`'s newest message, and for an empty `page`, only this snapshot
    *   tells a just-deleted message from one that arrived live, or was sent, during the request;
-   * - contiguity: `page` connects to the head interval only through a message in this snapshot
-   *   that the user did not write (see `isSeparatedFromHeadByGap`).
+   * - contiguity: `page` starts inside the head interval only if its oldest message the head
+   *   interval could hold is in this snapshot (see `isSeparatedFromHeadByGap`).
    *
    * Only the head interval receives live messages, so only its IDs are needed.
    */
@@ -1170,14 +1170,21 @@ export class MessageIntervalPaginator extends BasePaginator<
   /**
    * Whether a fresh newest page and the head window (or the window whose head mark was cleared, see
    * {@link unmarkedHeadInterval}) are separated by a gap, with messages between them possibly not
-   * loaded. They are not when:
+   * loaded. They are not when the two together form one unbroken stretch of the channel:
    *
-   * - they share a message the head window held when the request went out, other than the user's
-   *   own (see {@link sharesMessageKnownBeforeRequest});
-   * - the head window holds no server message older than the page: the rest is within the page's
-   *   span, newer (sent after the page was produced, so it arrived as an event), or unsent (it
-   *   carries the device's clock);
-   * - the page reached the channel start (see {@link pageReachedChannelStart}).
+   * - the page starts inside the head window (see {@link pageStartsInsideHead});
+   * - the page covers the head window (see {@link pageCoversHead});
+   * - the page reached the channel start (see {@link pageReachedChannelStart}), so nothing older
+   *   than it exists to be missing.
+   *
+   * Sharing a message is not enough on its own: a message the user sent while offline is confirmed
+   * by the server before the reconnect's newest page is requested, so it sits at the top of the
+   * head window and in the page, with the messages missed below it in neither. For example, the
+   * window holds m1–m100 and the user's queued "hello"; the server got m101–m210 meanwhile. A page
+   * of 25 holds m187–m210 and "hello": it does not start inside the window (m187 was never loaded)
+   * nor cover it (m1 is not in it), so it is past a gap. When the user wrote the last 10 loaded
+   * messages and others sent 20 since, a page of 25 holds the user's last 5 and the 20 new ones:
+   * its oldest was loaded, so it starts inside the window.
    *
    * A message missed while the socket was down comes with connection recovery's newest page.
    */
@@ -1186,42 +1193,78 @@ export class MessageIntervalPaginator extends BasePaginator<
     page: LocalMessage[],
     options?: ReconcileNewestMessagesOptions,
   ): boolean {
-    if (this.sharesMessageKnownBeforeRequest(head, page, options)) return false;
-    if (!this.holdsServerMessageOlderThan(head, page)) return false;
+    if (this.pageStartsInsideHead(head, page, options)) return false;
+    if (this.pageCoversHead(head, page)) return false;
     if (this.pageReachedChannelStart(page, options)) return false;
     return true;
   }
 
   /**
-   * Whether `page` holds a message of the head window that was server-confirmed when the request
-   * went out (`options.headIntervalItemIdsAtRequest`; without it, one server-confirmed now) and
-   * can prove a connection (see {@link canProveConnection}). One that reached the window during the
-   * request, live or as a send confirmed meanwhile, may sit above messages the window never loaded.
+   * Whether the page's oldest message the head window could hold (see
+   * {@link getPageOldestHoldableMessage}) was in the head window when the request went out. The
+   * page runs unbroken from that message to the newest and the window is taken to run unbroken
+   * below it, so nothing between them is missing.
+   *
+   * With a snapshot of the request (`options.headIntervalItemIdsAtRequest`), the message must be
+   * in it and held by no window other than the head window: a message that reached the window
+   * during the request, live or as a send confirmed meanwhile, may sit above messages the window
+   * never loaded. One no longer loaded at all still counts: if the head window holds messages
+   * older than it, the window ran unbroken through it and it was removed (e.g. hard-deleted);
+   * if not, the page covers the window anyway. Without a snapshot, the message must be in the
+   * head window and server-confirmed now.
+   *
+   * The window is not unbroken below a send the server confirmed while the channel received no
+   * events, such as one replayed from the offline queue before the reconnect's newest page is
+   * requested. If that send is exactly the page's oldest (as many newer messages as the page has
+   * room for were sent after it), the page is taken to start inside the window although messages
+   * below the send were missed. The page and the window cannot tell this apart from a send
+   * confirmed while events were arriving.
    */
-  private sharesMessageKnownBeforeRequest(
+  private pageStartsInsideHead(
     head: Interval,
     page: LocalMessage[],
     options?: ReconcileNewestMessagesOptions,
   ): boolean {
+    const pageOldest = this.getPageOldestHoldableMessage(page);
+    if (!pageOldest) return false;
+    const id = this.getItemId(pageOldest);
     const idsAtRequest = options?.headIntervalItemIdsAtRequest;
-    const isKnownBeforeRequest = (id: string) =>
-      idsAtRequest ? idsAtRequest.has(id) : this.isServerConfirmedItemId(id);
-    const knownIds = new Set(head.itemIds.filter(isKnownBeforeRequest));
-    return page.some(
-      (message) =>
-        knownIds.has(this.getItemId(message)) && this.canProveConnection(message),
+    if (!idsAtRequest) {
+      return head.itemIds.includes(id) && this.isServerConfirmedItemId(id);
+    }
+    const heldByAnotherWindow = !head.itemIds.includes(id) && !!this.getItem(id);
+    return idsAtRequest.has(id) && !heldByAnotherWindow;
+  }
+
+  /**
+   * Whether the page spans the whole head window: the window holds no server-confirmed message
+   * older than the page. What the window holds beyond the page is newer (it arrived as an event
+   * after the page was produced) or unsent (it carries the device's clock).
+   */
+  private pageCoversHead(head: Interval, page: LocalMessage[]): boolean {
+    const pageOldest = this.getPageOldestMessage(page);
+    if (!pageOldest) return true;
+    return !head.itemIds.some((id) => {
+      const message = this.getItem(id);
+      return (
+        !!message &&
+        this.isServerConfirmedMessage(message) &&
+        this.aIsMoreTailwardThanB(message, pageOldest)
+      );
+    });
+  }
+
+  /**
+   * The page's oldest message that the head window could have loaded: server-confirmed and kept
+   * in intervals (see {@link filterQueryResults}). A message the window filters out, such as a
+   * shadowed one, would never be found in it. {@link pageCoversHead} compares with the page's
+   * oldest message of any kind instead: it only needs the page's span.
+   */
+  private getPageOldestHoldableMessage(page: LocalMessage[]): LocalMessage | undefined {
+    const holdable = this.filterQueryResults(page).filter((message) =>
+      this.isServerConfirmedMessage(message),
     );
-  }
-
-  /** The user's own message says nothing about whether the messages around it were loaded. */
-  private canProveConnection(message: LocalMessage): boolean {
-    return !this.isOwnMessage(message);
-  }
-
-  /** Whether the client's user wrote `message`; never for a paginator without a client. */
-  protected isOwnMessage(message: LocalMessage): boolean {
-    const userId = this.channel.getClient?.()?.userId;
-    return !!userId && message.user?.id === userId;
+    return this.getPageOldestMessage(holdable);
   }
 
   /**
@@ -1258,20 +1301,6 @@ export class MessageIntervalPaginator extends BasePaginator<
   override resetState() {
     this.unmarkedHeadEdgeId = undefined;
     super.resetState();
-  }
-
-  /** Whether the interval holds a server-confirmed message older than every message of `page`. */
-  private holdsServerMessageOlderThan(interval: Interval, page: LocalMessage[]): boolean {
-    const pageOldest = this.getPageOldestMessage(page);
-    if (!pageOldest) return false;
-    return interval.itemIds.some((id) => {
-      const message = this.getItem(id);
-      return (
-        !!message &&
-        this.isServerConfirmedMessage(message) &&
-        this.aIsMoreTailwardThanB(message, pageOldest)
-      );
-    });
   }
 
   private getPageOldestMessage(page: LocalMessage[]): LocalMessage | undefined {

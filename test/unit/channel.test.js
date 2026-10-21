@@ -5792,15 +5792,38 @@ describe('Channel.reload', () => {
 			expect(ids()).toEqual(range(1, 198).map((m) => m.id));
 		});
 
-		it('treats a newest page sharing only own messages as past a gap', async () => {
+		it('merges a newest page starting at an own message the window held', async () => {
+			// The same shape as a send replayed from the offline queue with exactly 99 messages sent
+			// after it: the page and the window cannot tell the two apart, so it merges.
 			await openWithOwnNewestMessage();
 			// the reload of 100 returns m100–m199
 			serverMessages = [...serverMessages, ...range(101, 199)];
 
 			await channel.reload();
 
-			expect(ids()).toEqual(range(100, 199).map((m) => m.id));
-			expect(channel.messagePaginator.getItem('m099')).toBeUndefined();
+			expect(ids()).toEqual(range(1, 199).map((m) => m.id));
+		});
+
+		it('keeps older messages loaded when only own messages overlap after a reconnect', async () => {
+			// One page of 25 is loaded, m076–m100, and the user wrote the last 10. While offline,
+			// others send m101–m120. The reload of 25 returns m096–m120: it shares only the user's
+			// m096–m100 with the window, and nothing was missed.
+			const mine = (n) => msg(id(n), n, { user: own });
+			channel.messagePaginator.pageSize = 25;
+			channel.activate();
+			serverMessages = [
+				...range(1, 90),
+				...Array.from({ length: 10 }, (_, i) => mine(91 + i)),
+			];
+			serveChannel();
+			await channel.watch();
+			client.channelManager.markChannelsWatchInterrupted();
+			serverMessages = [...serverMessages, ...range(101, 120)];
+
+			await channel.reload();
+
+			expect(ids()).toEqual(range(76, 120).map((m) => m.id));
+			expect(channel.messagePaginator.itemIntervals).toHaveLength(1);
 			expect(channel.messagePaginator.hasMoreTail).toBe(true);
 		});
 	});
