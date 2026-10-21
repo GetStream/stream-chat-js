@@ -439,8 +439,6 @@ export class Channel extends ChannelApi {
    * @returns The server response.
    */
   override async sendMessage(...args: Parameters<ChannelApi['sendMessage']>) {
-    this._checkHasId();
-
     const [request, requestOptions] = args;
 
     return await super.sendMessage(
@@ -540,25 +538,12 @@ export class Channel extends ChannelApi {
     requestOptions?: StreamRequestOptions,
   ) {
     this._checkHasId();
-    const payload = {
-      type: this.type,
-      // TODO: these should be probably optional in the OAPI spec
-      // filter_conditions: ...
-    } as QueryMembersPayload;
 
-    if (this.id) {
-      payload.id = this.id;
-    } else if (Array.isArray(this.data?.members)) {
-      payload.members = this.data.members.map((m) => ({
-        ...m,
-        // TODO: this should not be needed Gen_QueryMembersResponse should not come with user_id as optinal
-        user_id: (m.user_id ?? m.user?.id) as string,
-      }));
-    }
     return await this.getClient().queryMembers(
       {
         payload: {
-          ...payload,
+          // TODO: filter_conditions should probably be optional in the OAPI spec
+          ...({ type: this.type, id: this.id } as QueryMembersPayload),
           ...request?.payload,
         },
       },
@@ -669,7 +654,6 @@ export class Channel extends ChannelApi {
     payload: UpdateLiveLocationRequest,
     requestOptions?: StreamRequestOptions,
   ) {
-    this._checkHasId();
     // Picked, not spread: callers pass a whole shared location whose extra fields must not be sent.
     const { latitude, longitude, message_id } = payload;
     const location = await this.getClient().updateLiveLocation(
