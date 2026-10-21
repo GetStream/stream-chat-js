@@ -102,21 +102,10 @@ export class ThreadPaginator extends BasePaginator<Thread, QueryThreadsRequest> 
     PaginationQueryReturnValue<Thread>
   > => {
     const { threads, next } = await this.client.queryThreadsAndHydrate(queryShape);
-    return { items: threads.map(this.toStoredInstance), tailward: next };
-  };
-
-  /**
-   * Keeps one instance per ID (the index upserts, so a second one would replace the stored one). A
-   * stale stored thread is hydrated from the query unless it is active: it reloads itself, and
-   * hydrating would replace the replies on screen.
-   */
-  private toStoredInstance = (incoming: Thread): Thread => {
-    const stored = this.store.get(incoming.id);
-    if (!stored) return incoming;
-    if (stored.hasStaleState && !stored.state.getLatestValue().active) {
-      stored.hydrateState(incoming);
-    }
-    return stored;
+    return {
+      items: threads.map((thread) => this.store.get(thread.id) ?? thread),
+      tailward: next,
+    };
   };
 
   filterQueryResults = (threads: Thread[]) => threads;
