@@ -188,6 +188,66 @@ describe('Poll', () => {
 		expect(poll.data.description).to.equal(description);
 	});
 
+	describe('translations on poll.updated', () => {
+		const nameI18n = { en_text: 'XY', es_text: 'XY (es)', language: 'en' };
+		const descriptionI18n = { en_text: 'About', es_text: 'Acerca de', language: 'en' };
+
+		it('stores the translations of an edited question', () => {
+			const poll = new Poll({ client, poll: { ...pollResponse, name_i18n: nameI18n } });
+			const editedNameI18n = { en_text: 'XYZ', es_text: 'XYZ (es)', language: 'en' };
+
+			poll.handlePollUpdated({
+				type: 'poll.updated',
+				poll: { ...pollResponse, name: 'XYZ', name_i18n: editedNameI18n },
+			});
+
+			expect(poll.data.name).to.equal('XYZ');
+			expect(poll.data.name_i18n).to.eql(editedNameI18n);
+		});
+
+		it('stores a language added after the poll was sent', () => {
+			const poll = new Poll({ client, poll: { ...pollResponse, name_i18n: nameI18n } });
+			const withGerman = { ...nameI18n, de_text: 'XY (de)' };
+
+			poll.handlePollUpdated({
+				type: 'poll.updated',
+				poll: { ...pollResponse, name_i18n: withGerman },
+			});
+
+			expect(poll.data.name_i18n).to.eql(withGerman);
+		});
+
+		it('stores the translations of the description', () => {
+			const poll = new Poll({ client, poll: pollResponse });
+
+			poll.handlePollUpdated({
+				type: 'poll.updated',
+				poll: {
+					...pollResponse,
+					description: 'About',
+					description_i18n: descriptionI18n,
+				},
+			});
+
+			expect(poll.data.description_i18n).to.eql(descriptionI18n);
+		});
+
+		it('clears translations the event no longer carries', () => {
+			const poll = new Poll({
+				client,
+				poll: { ...pollResponse, description_i18n: descriptionI18n, name_i18n: nameI18n },
+			});
+
+			poll.handlePollUpdated({
+				type: 'poll.updated',
+				poll: { ...pollResponse, name: 'XYZ' },
+			});
+
+			expect(poll.data.name_i18n).to.be.undefined;
+			expect(poll.data.description_i18n).to.be.undefined;
+		});
+	});
+
 	it("should not update poll state when handlePollUpdated is called with other poll's event", () => {
 		const poll = new Poll({ client, poll: { ...pollResponse, id: 'X' } });
 		const description = 'Description update';
