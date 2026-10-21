@@ -64,6 +64,12 @@ const messageSetsOverlapByTimestamp = (a: LocalMessage[], b: LocalMessage[]) =>
   aOverlapsB(a, b) ||
   aOverlapsB(b, a);
 
+const isLocalOnlyMessage = (message: LocalMessage) =>
+  message.status === 'sending' ||
+  message.status === 'failed' ||
+  message.type === 'error' ||
+  message.type === 'ephemeral';
+
 /**
  * ChannelState - A container class for the channel state.
  */
@@ -970,6 +976,29 @@ export class ChannelState {
     }
     currentMessages.isCurrent = false;
     this.messageSets[index].isCurrent = true;
+  }
+
+  /**
+   * Empties the latest message set if the newest page is newer than it and shares no messages
+   * with it. Merging them would hide the messages in between from pagination.
+   * Skipped while the set holds local-only messages, so they are not lost.
+   */
+  _dropLatestMessagesDisjointFrom(newestPage: (MessageResponse | LocalMessage)[]) {
+    const latestSet = this.messageSets.find((s) => s.isLatest);
+    const newestLoaded = latestSet?.messages.slice(-1)[0];
+    const oldestReturned = newestPage.find((m) => !m.parent_id || m.show_in_channel);
+    if (!latestSet || !newestLoaded || !oldestReturned?.created_at) return;
+    if (
+      new Date(oldestReturned.created_at).getTime() <=
+        newestLoaded.created_at.getTime() ||
+      this.areMessageSetsOverlap(latestSet.messages, newestPage) ||
+      latestSet.messages.some(isLocalOnlyMessage)
+    ) {
+      return;
+    }
+
+    latestSet.messages = [];
+    latestSet.pagination = { ...DEFAULT_MESSAGE_SET_PAGINATION };
   }
 
   private areMessageSetsOverlap(
