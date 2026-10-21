@@ -8,7 +8,7 @@ import { ThreadPaginator } from './pagination/paginators/ThreadPaginator';
 
 import type { Channel } from './channel';
 import type { StreamChat } from './client';
-import { Thread } from './thread';
+import { ensureThreadChannel, Thread } from './thread';
 import type {
   Event,
   EventPayload,
@@ -166,9 +166,10 @@ export class ThreadManager extends WithSubscriptions {
   };
 
   /**
-   * The registered thread, hydrated from `threadData`, or a new one when none is registered. Only a
-   * stale thread nobody has open takes the replies, replacing its own: an open one's are left to
-   * its `reload()`, and events kept any other's current.
+   * The registered thread, or a new one when none is registered. Only a stale thread nobody has
+   * open is hydrated from `threadData`: an open one reloads itself, and events keep any other
+   * current (an answer that was in flight would roll them back). The channel's members and custom
+   * data are applied either way, as the constructor does for a new thread.
    *
    * @internal
    */
@@ -177,7 +178,8 @@ export class ThreadManager extends WithSubscriptions {
     if (!registered) return new Thread({ client: this.client, threadData });
 
     const { active, isStateStale } = registered.state.getLatestValue();
-    registered.hydrateState(threadData, { skipReplies: active || !isStateStale });
+    if (isStateStale && !active) registered.hydrateState(threadData);
+    else ensureThreadChannel(this.client, threadData);
     return registered;
   };
 

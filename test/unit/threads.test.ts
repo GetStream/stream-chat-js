@@ -437,6 +437,29 @@ describe('Threads 2.0', () => {
           expect(() => thread.hydrateState(otherThreadData)).to.throw();
         });
 
+        it('seeds a reply window that holds every reply as the last page, with soft-deleted replies counted out', () => {
+          // The parent's `reply_count` includes a soft-deleted reply the server does not return;
+          // the top-level one does not, as for the constructor.
+          const thread = createMinimalThread();
+          const replies = ['2020-01-01T00:00:01.000Z', '2020-01-01T00:00:02.000Z'].map(
+            (createdAt) =>
+              generateMsg({
+                parent_id: parentMessageResponse.id,
+                created_at: convertDateToTimestamp(createdAt),
+              }) as MessageResponse,
+          );
+
+          thread.hydrateState(
+            createGetThreadResponse({
+              latest_replies: replies,
+              parentMessageOverrides: { reply_count: 3 },
+              reply_count: 2,
+            }).thread,
+          );
+
+          expect(thread.messagePaginator.state.getLatestValue().hasMoreTail).to.be.false;
+        });
+
         it('seeds the reply window when the thread has never loaded one', () => {
           // A thread opened from a message (channel + parentMessage, no server payload) has never
           // held a reply window. `mergeNewestPage` deliberately no-ops in that state — it merges
@@ -3665,7 +3688,7 @@ describe('Threads 2.0', () => {
       expect(channel.watchStatus).to.equal(ChannelWatchStatus.Watching);
     });
 
-    it('getThreadAndHydrate updates a registered thread in place, and only a stale closed one takes the replies', async () => {
+    it('getThreadAndHydrate returns a registered thread as it is, unless it is stale and closed', async () => {
       const r1 = makeReply({
         id: 'r1',
         created_at: convertDateToTimestamp('2020-01-01T00:00:01.000Z'),
@@ -3676,10 +3699,14 @@ describe('Threads 2.0', () => {
       });
       const thread = createTestThread({ latest_replies: [r1], reply_count: 1 });
       subscribeThread(thread);
+      const { replyCount } = thread.state.getLatestValue();
       const answer = createGetThreadResponse({
         latest_replies: [r1, r2],
         parentMessageOverrides: { reply_count: 2 },
         reply_count: 2,
+        thread_participants: [
+          { user_id: 'p1' },
+        ] as ThreadStateResponse['thread_participants'],
       });
       vi.spyOn(client, 'getThread').mockResolvedValue(answer as never);
 
@@ -3688,8 +3715,9 @@ describe('Threads 2.0', () => {
       thread.state.partialNext({ isStateStale: true });
       const open = await client.getThreadAndHydrate({ message_id: thread.id });
 
+      // Open: it reloads itself.
       expect(open).to.equal(thread);
-      expect(thread.state.getLatestValue().replyCount).to.equal(2);
+      expect(thread.state.getLatestValue().replyCount).to.equal(replyCount);
       expect(repliesOf(thread).map((reply) => reply.id)).to.eql(['r1']);
       expect(thread.hasStaleState).to.equal(true);
 
@@ -3697,15 +3725,37 @@ describe('Threads 2.0', () => {
       thread.state.partialNext({ isStateStale: false });
       await client.getThreadAndHydrate({ message_id: thread.id });
 
-      // Current: events kept its replies, so only the state is taken.
+      // Current: events keep it so, and an older answer would roll it back.
+      expect(thread.state.getLatestValue().replyCount).to.equal(replyCount);
+      expect(thread.state.getLatestValue().participants).to.eql([]);
       expect(repliesOf(thread).map((reply) => reply.id)).to.eql(['r1']);
 
       thread.state.partialNext({ isStateStale: true });
       const stale = await client.getThreadAndHydrate({ message_id: thread.id });
 
       expect(stale).to.equal(thread);
+      expect(thread.state.getLatestValue().replyCount).to.equal(2);
       expect(repliesOf(thread).map((reply) => reply.id)).to.eql(['r1', 'r2']);
       expect(thread.hasStaleState).to.equal(false);
+      thread.unregisterSubscriptions();
+    });
+
+    it('getThreadAndHydrate applies the channel members and custom data to a registered thread it leaves as it is', async () => {
+      const thread = createTestThread();
+      subscribeThread(thread);
+      const answer = createGetThreadResponse({
+        channel: {
+          ...channelResponse,
+          custom: { name: 'Renamed' },
+          members: [{ user: { id: 'member' }, user_id: 'member' }],
+        } as ThreadStateResponse['channel'],
+      });
+      vi.spyOn(client, 'getThread').mockResolvedValue(answer as never);
+
+      await client.getThreadAndHydrate({ message_id: thread.id });
+
+      expect(thread.channel.state.members).to.have.property('member');
+      expect(thread.channel.data?.custom).to.deep.include({ name: 'Renamed' });
       thread.unregisterSubscriptions();
     });
 

@@ -133,28 +133,12 @@ export class Thread extends WithSubscriptions {
   }) {
     super();
     if (threadData) {
-      if (!threadData.channel) {
-        throw new Error('Thread channel is required when threadData is provided');
-      }
-      if (!threadData.parent_message) {
-        throw new Error('Thread parent_message is required when threadData is provided');
-      }
-      const threadChannel = client.channelManager.ensure({
-        type: threadData.channel.type,
-        id: threadData.channel.id,
-        data: { custom: threadData.channel.custom },
-      });
-      threadChannel._hydrateMembers({
-        members: threadData.channel.members ?? [],
-        overrideCurrentState: false,
-      });
-
       this.state = new StateStore<ThreadState>({
         active: false,
         isLoading: false,
         isStateStale: false,
-        channel: threadChannel,
         ...formatThreadState(threadData, client.userId),
+        channel: ensureThreadChannel(client, threadData),
       });
 
       this.id = threadData.parent_message_id;
@@ -227,7 +211,7 @@ export class Thread extends WithSubscriptions {
     // the head, and the tail only if it holds every reply.
     if (threadData?.latest_replies?.length) {
       const replies = threadData.latest_replies.map(formatMessage);
-      const isLastPage = replies.length === (threadData.reply_count ?? 0);
+      const isLastPage = holdsEveryReply(replies, threadData);
       this.messagePaginator.setItems({
         valueOrFactory: replies,
         cursor: getCursorFromReplies(replies, isLastPage),
@@ -358,7 +342,7 @@ export class Thread extends WithSubscriptions {
       const { thread: threadData } = await this.client.getThread(
         { message_id: this.id },
         {
-          participant_limit: 100,
+          participant_limit: DEFAULT_THREAD_PARTICIPANT_LIMIT,
           watch: true,
           reply_limit: requestedReplyLimit,
         },
@@ -399,53 +383,47 @@ export class Thread extends WithSubscriptions {
   };
 
   /**
-   * Updates the thread's state, and merges the replies into the loaded window (with `reconcile`)
-   * or replaces it (without). `skipReplies` leaves the replies and `isStateStale` as they are.
+   * Updates the thread's state and its channel's members and custom data, and merges the replies
+   * into the loaded window (with `reconcile`) or replaces it (without).
    */
   public hydrateState = (
     threadData: ThreadStateResponse,
-    options?: { reconcile?: MergeNewestPageOptions; skipReplies?: boolean },
+    options?: { reconcile?: MergeNewestPageOptions },
   ) => {
     if (threadData.parent_message_id !== this.id) {
-      throw new Error(
-        "Cannot hydrate thread's state using thread with different threadId",
-      );
+      throw new Error("Cannot hydrate thread's state from another thread's response");
     }
 
     const serverState = formatThreadState(threadData, this.client.userId);
-    const { parentMessage, replyCount } = serverState;
     const reconcile = options?.reconcile;
 
     // Failed replies survive the hydrate: they are re-ingested after the incoming page is merged.
     const pendingReplies = Array.from(this.failedRepliesMap.values());
 
-    this.state.partialNext(
-      options?.skipReplies ? serverState : { ...serverState, isStateStale: false },
-    );
+    ensureThreadChannel(this.client, threadData);
+    this.state.partialNext({ ...serverState, isStateStale: false });
 
     if (this.hasSubscriptions) {
-      this.client.messageStore.upsert(parentMessage);
+      this.client.messageStore.upsert(serverState.parentMessage);
     }
 
-    if (!options?.skipReplies) {
-      const incomingReplies = (threadData.latest_replies ?? []).map(formatMessage);
-      if (!reconcile) this.messagePaginator.clearStateAndCache();
-      if (typeof this.messagePaginator.items === 'undefined') {
-        // Nothing loaded yet (e.g. a thread opened from a message): `mergeNewestPage` no-ops
-        // without an anchored head and would drop the fetched replies, so seed as the constructor
-        // does.
-        const isLastPage = incomingReplies.length === replyCount;
-        this.messagePaginator.setItems({
-          valueOrFactory: incomingReplies,
-          cursor: getCursorFromReplies(incomingReplies, isLastPage),
-          isFirstPage: true,
-          isLastPage,
-        });
-      } else {
-        this.messagePaginator.mergeNewestPage(incomingReplies, reconcile);
-      }
-      pendingReplies.forEach((reply) => this.messagePaginator.ingestItem(reply));
+    const incomingReplies = (threadData.latest_replies ?? []).map(formatMessage);
+    if (!reconcile) this.messagePaginator.clearStateAndCache();
+    if (typeof this.messagePaginator.items === 'undefined') {
+      // Nothing loaded yet (e.g. a thread opened from a message): `mergeNewestPage` no-ops
+      // without an anchored head and would drop the fetched replies, so seed as the constructor
+      // does.
+      const isLastPage = holdsEveryReply(incomingReplies, threadData);
+      this.messagePaginator.setItems({
+        valueOrFactory: incomingReplies,
+        cursor: getCursorFromReplies(incomingReplies, isLastPage),
+        isFirstPage: true,
+        isLastPage,
+      });
+    } else {
+      this.messagePaginator.mergeNewestPage(incomingReplies, reconcile);
     }
+    pendingReplies.forEach((reply) => this.messagePaginator.ingestItem(reply));
     // Keeps `lastMessageAt` fresh when the merged page lacks the newest reply. Monotonic.
     this.messagePaginator.seedLastMessageAt(threadData.last_message_at);
   };
@@ -828,6 +806,33 @@ const normalizeThreadParticipants = (
       }) as ThreadParticipant,
   );
 };
+
+/** `participant_limit` of the single-thread requests (`getThreadAndHydrate`, `reload()`). */
+export const DEFAULT_THREAD_PARTICIPANT_LIMIT = 100;
+
+/** The thread's channel, with the members and custom data of `threadData` applied. */
+export const ensureThreadChannel = (
+  client: StreamChat,
+  threadData: ThreadStateResponse,
+) => {
+  if (!threadData.channel) {
+    throw new Error('Thread channel is required when threadData is provided');
+  }
+  const channel = client.channelManager.ensure({
+    type: threadData.channel.type,
+    id: threadData.channel.id,
+    data: { custom: threadData.channel.custom },
+  });
+  channel._hydrateMembers({
+    members: threadData.channel.members ?? [],
+    overrideCurrentState: false,
+  });
+  return channel;
+};
+
+/** Against the top-level `reply_count`: unlike the parent's, it excludes soft-deleted replies. */
+const holdsEveryReply = (replies: LocalMessage[], threadData: ThreadStateResponse) =>
+  replies.length === (threadData.reply_count ?? 0);
 
 const formatThreadState = (threadData: ThreadStateResponse, currentUserId?: string) => {
   const parentMessage = threadData.parent_message;

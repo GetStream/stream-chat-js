@@ -102,7 +102,10 @@ export class ThreadPaginator extends BasePaginator<Thread, QueryThreadsRequest> 
     PaginationQueryReturnValue<Thread>
   > => {
     const { threads, next } = await this.client.queryThreadsAndHydrate(queryShape);
-    return { items: threads, tailward: next };
+    return {
+      items: threads.map((thread) => this.store.get(thread.id) ?? thread),
+      tailward: next,
+    };
   };
 
   filterQueryResults = (threads: Thread[]) => threads;

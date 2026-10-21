@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ChannelResponse, MessageResponse } from '../../../../src';
-import { StreamChat, Thread } from '../../../../src';
+import { EntityStore, StreamChat, Thread, ThreadPaginator } from '../../../../src';
 import { generateUUIDv4 as uuidv4 } from '../../../../src/utils';
 import { nowNs } from '../../../../src/utils/time';
 import { generateChannel } from '../../test-utils/generateChannel';
@@ -25,6 +25,21 @@ describe('ThreadPaginator', () => {
     client = getClientWithUser({ id: 'user' });
     channelResponse = generateChannel({ channel: { id: uuidv4() } })
       .channel as ChannelResponse;
+  });
+
+  it('keeps the instances a store of its own holds across reloads', async () => {
+    const paginator = new ThreadPaginator({
+      client,
+      store: new EntityStore<Thread>({ getEntityId: (thread) => thread.id }),
+    });
+    respond([makeThread('a')]);
+    await paginator.reload();
+    const [listed] = paginator.items ?? [];
+
+    respond([makeThread('a')]);
+    await paginator.reload();
+
+    expect(paginator.items?.[0]).toBe(listed);
   });
 
   it('publishes isLoading on the first load, like any paginator, with no items until it lands', async () => {

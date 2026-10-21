@@ -61,7 +61,7 @@ import type {
 import { isWSFailure } from './errors';
 import type { APIError } from './errors';
 import { chatLoggerSystem } from './logger';
-import type { Thread } from './thread';
+import { DEFAULT_THREAD_PARTICIPANT_LIMIT, type Thread } from './thread';
 import { Moderation } from './moderation';
 import { ThreadManager } from './thread_manager';
 import { DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE } from './constants';
@@ -1884,7 +1884,7 @@ export class StreamChat extends ChatApi {
     }
 
     const optionsWithDefaults = {
-      participant_limit: 100,
+      participant_limit: DEFAULT_THREAD_PARTICIPANT_LIMIT,
       reply_limit: 3,
       watch: true,
       ...options,

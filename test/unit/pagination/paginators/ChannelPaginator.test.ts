@@ -2477,6 +2477,38 @@ describe('ChannelPaginator', () => {
       expect(paginator.hasMoreTail).toBe(false);
     });
   });
+  describe('reconnect refresh after a channel left the list while offline', () => {
+    // The refresh `ChannelManager.recover()` runs on reconnect. A channel archived, deleted or left
+    // while offline is simply absent from the refreshed page: the server no longer matches it. Its
+    // local copy is never updated (no event reached it), so only the response can say it is gone.
+    it('drops a loaded channel the refreshed first page no longer returns', async () => {
+      const [a, b, c] = ['a', 'b', 'c'].map((id, index) => {
+        const channel = new Channel(client, 'messaging', `left-${id}`, {});
+        setLastMessageAt(channel, new Date(Date.UTC(2020, 0, 3 - index)));
+        return channel;
+      });
+      let serverChannels = [a, b, c];
+      const paginator = new ChannelPaginator({
+        client,
+        paginatorOptions: {
+          doRequest: () => Promise.resolve({ items: serverChannels }),
+          pageSize: 10,
+        },
+      });
+      await paginator.toTail();
+      expect(paginator.items?.map((channel) => channel.id)).toEqual([
+        'left-a',
+        'left-b',
+        'left-c',
+      ]);
+
+      serverChannels = [a, c];
+      await paginator.toTail({ keepPreviousItems: true, reset: 'yes' });
+
+      expect(paginator.items?.map((channel) => channel.id)).toEqual(['left-a', 'left-c']);
+    });
+  });
+
   describe('first page loaded as a keepPreviousItems refresh', () => {
     it('is the head, so a channel with a newer message moves to the top instead of vanishing', async () => {
       const channels = [0, 1, 2].map((i) => {

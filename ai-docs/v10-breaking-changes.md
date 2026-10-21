@@ -431,7 +431,7 @@ Common rules for every generated or rewritten `StreamChat` method: path paramete
 **Kind:** signature · **Impact:** medium
 
 - **v9:** `queryThreads(options?)` -> `{ threads: Thread[], next }` (defaults `limit 10, participant_limit 10, reply_limit 3, watch true`, poll cache hydrated); `getThread(messageId, options?)` -> `Thread` (defaults `participant_limit 100, reply_limit 3, watch true`); `queryReactions(messageID, filter, sort?, options?)` read the offline DB first and dispatched `offline_reactions.queried`.
-- **v10:** `queryThreads(request?)`, `getThread({ message_id }, request?)`, `queryReactions({ id }, request?)` are raw generated calls with no defaults and no state. Hydrating versions: `queryThreadsAndHydrate(options?, requestOptions?)`, `getThreadAndHydrate({ message_id }, options?, requestOptions?)` (path params like `getThread`; a thread registered in `client.threads` is returned with its state updated, its replies replaced only when it is stale and not open), `queryReactionsAndHydrate({ id }, request?)`.
+- **v10:** `queryThreads(request?)`, `getThread({ message_id }, request?)`, `queryReactions({ id }, request?)` are raw generated calls with no defaults and no state. Hydrating versions: `queryThreadsAndHydrate(options?, requestOptions?)`, `getThreadAndHydrate({ message_id }, options?, requestOptions?)` (path params like `getThread`; a thread registered in `client.threads` is returned as it is, unless it is stale and not open: then it takes the answer, its replies replaced), `queryReactionsAndHydrate({ id }, request?)`.
 - **Migrate:** switch calls that need `Thread` instances or offline reactions to the `*AndHydrate` variants (`getThread(id)` -> `getThreadAndHydrate({ message_id: id })`); when calling the raw ones pass `watch: true` yourself if needed.
 - **Source:** `src/client.ts:1643-1670,2059-2142` (v10); `src/client.ts:2307-2349,3725-3808` (v9)
 
@@ -1923,7 +1923,7 @@ Client-level `queryThreads` / `getThread` becoming raw: [threads and reactions](
 
 - **v9:** `new Thread({ client, threadData: ThreadResponse })` (required); apps used `client.threads.threadsById[id] ?? new Thread(...)`.
 - **v10:** constructor `new Thread({ client, threadData?: ThreadStateResponse, channel?, parentMessage?, draft? })`. Without `threadData`, `channel` and `parentMessage` (with an `id`) are required, else it throws. A thread built from a parent message starts with `isStateStale: true` when the parent has replies or the channel is not watched, and loads once when activated. With `threadData`, `threadData.channel` and `threadData.parent_message` are required (throws otherwise) and the channel comes from `client.channelManager.ensure` (seeded with `channel.custom`, not `{ name }`). `ThreadResponse` -> `ThreadStateResponse` ([same-name changes](#same-name-meaning-changes)).
-- **Migrate:** `const thread = client.threads.ensure({ channel, parentMessage })`. Use `client.getThreadAndHydrate({ message_id: id })` / `client.queryThreadsAndHydrate()` for fetched threads; both return the already-registered instance when one exists, with the answer applied.
+- **Migrate:** `const thread = client.threads.ensure({ channel, parentMessage })`. Use `client.getThreadAndHydrate({ message_id: id })` / `client.queryThreadsAndHydrate()` for fetched threads; both return the already-registered instance when one exists, hydrated from the answer only when it is stale and not open.
 - **Source:** `src/thread.ts:133-231`, `src/thread_manager.ts:174-204`, `src/client.ts:2059-2142` (v10); `src/thread.ts:123-196` (v9)
 
 <a id="thread-hydrate-state"></a>
@@ -1933,8 +1933,8 @@ Client-level `queryThreads` / `getThread` becoming raw: [threads and reactions](
 **Kind:** signature · **Impact:** low
 
 - **v9:** `thread.hydrateState(otherThread: Thread)` copied another instance's state and replies into this one (no-op when passed itself).
-- **v10:** `thread.hydrateState(threadData: ThreadStateResponse, options?: { reconcile?, skipReplies? })` applies a `getThread` / `queryThreads` answer: the state, and the newest replies merged into the loaded window with `reconcile` (replacing it without). `skipReplies` takes the state only. Throws for a response of another thread.
-- **Migrate:** pass the response (`thread.hydrateState(response.thread)`) instead of a second `Thread`, or call `client.getThreadAndHydrate({ message_id })`, which hydrates the registered thread in place.
+- **v10:** `thread.hydrateState(threadData: ThreadStateResponse, options?: { reconcile? })` applies a `getThread` / `queryThreads` answer: the state, the channel's members and custom data, and the newest replies merged into the loaded window with `reconcile` (replacing it without). Throws for a response of another thread.
+- **Migrate:** pass the response (`thread.hydrateState(response.thread)`) instead of a second `Thread`, or call `client.getThreadAndHydrate({ message_id })`, which returns the registered thread (hydrated in place when it is stale and not open).
 - **Source:** `src/thread.ts:401-454`, `src/thread_manager.ts:169-190` (v10); `src/thread.ts:221-262` (v9)
 
 <a id="thread-state-derivation"></a>
@@ -1968,7 +1968,7 @@ Client-level `queryThreads` / `getThread` becoming raw: [threads and reactions](
 - **v9:** `client.getThread(id, { watch: true })` (server default reply limit), replaced `state.replies` (plus failed replies), rethrew every error.
 - **v10:** `client.getThread({ message_id: id }, { watch: true, participant_limit: 100, reply_limit: max(loaded replies, pageSize) })`, applied to the thread itself with `hydrateState` (merged into the reply paginator in place), and re-ingests failed replies. A not-found error (Stream code or HTTP 404) resolves silently when `replyCount === 0`; other errors rethrow.
 - **Migrate:** none.
-- **Source:** `src/thread.ts:413-466` (v10); `src/thread.ts:213-226` (v9)
+- **Source:** `src/thread.ts:329-384` (v10); `src/thread.ts:213-226` (v9)
 
 <a id="thread-mark-read"></a>
 

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  ChannelPaginator,
   ChannelWatchStatus,
   Thread,
   type Channel,
@@ -544,6 +545,86 @@ describe('ConnectionRecoveryManager', () => {
       expect(reload).toHaveBeenCalledTimes(1);
       expect(recoverLists).toHaveBeenCalledTimes(1);
       expect(recovered).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  /**
+   * Without offline support nothing catches up a loaded channel the list refresh does not reach:
+   * the refresh only re-asks for what the server caps it at. A channel the user lost, or archived,
+   * while offline stays in the list until a live event happens to touch it. `/sync` is what reports
+   * those, so recovery has to run it with offline support disabled too.
+   */
+  describe('without offline support: changes beyond the refreshed lists', () => {
+    const listWith = (...ids: string[]) => {
+      const channels = ids.map((id) =>
+        client.channelManager.ensure({ type: 'messaging', id }),
+      );
+      const paginator = new ChannelPaginator({ client, filters: { archived: false } });
+      paginator.setItems({
+        valueOrFactory: channels,
+        isFirstPage: true,
+        isLastPage: true,
+      });
+      client.channelManager.setPaginators([paginator]);
+      client.channelManager.registerSubscriptions();
+      // the refresh re-fetches a capped window that does not include the far channel
+      vi.spyOn(client.channelManager, 'recover').mockResolvedValue([]);
+      return paginator;
+    };
+    const listedIds = (paginator: ChannelPaginator) =>
+      paginator.items?.map((channel) => channel.id);
+
+    it('syncs the known channels on a reconnect', async () => {
+      listWith('near', 'far');
+      const sync = vi
+        .spyOn(client, 'sync')
+        .mockResolvedValue({ duration: '0ms', events: [], inaccessible_cids: [] });
+
+      offline();
+      online();
+
+      await vi.waitFor(() => expect(sync).toHaveBeenCalledTimes(1));
+      expect(sync.mock.calls[0][0].channel_cids).toEqual(
+        expect.arrayContaining(['messaging:near', 'messaging:far']),
+      );
+    });
+
+    it('drops a channel the sync reports as no longer accessible', async () => {
+      const paginator = listWith('near', 'far');
+      vi.spyOn(client, 'sync').mockResolvedValue({
+        duration: '0ms',
+        events: [],
+        inaccessible_cids: ['messaging:far'],
+      });
+
+      offline();
+      online();
+
+      await vi.waitFor(() => expect(listedIds(paginator)).toEqual(['near']));
+    });
+
+    it('moves a channel archived while offline out of a non-archived list', async () => {
+      const paginator = listWith('near', 'far');
+      const archivedAt = new Date().toISOString();
+      vi.spyOn(client, 'sync').mockResolvedValue({
+        duration: '0ms',
+        events: [
+          {
+            type: 'member.updated',
+            cid: 'messaging:far',
+            channel_type: 'messaging',
+            channel_id: 'far',
+            created_at: archivedAt,
+            member: { user_id: 'me', user: { id: 'me' }, archived_at: archivedAt },
+          },
+        ] as never,
+        inaccessible_cids: [],
+      });
+
+      offline();
+      online();
+
+      await vi.waitFor(() => expect(listedIds(paginator)).toEqual(['near']));
     });
   });
 
