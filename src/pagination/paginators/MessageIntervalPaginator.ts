@@ -165,8 +165,8 @@ export type ReconcileNewestMessagesOptions = {
    * says whether `page` reached the channel start (see
    * {@link MessageIntervalPaginator.pageReachedChannelStart}, which ignores a limit above
    * `pageSize`), deciding `hasMoreTail`, whether `page` can be separated from the head interval by
-   * a gap, and whether a reload probes for messages deleted below the page (see
-   * {@link MessageIntervalPaginator.pruneTailwardOfPageIfReachedStart}). On its own it never
+   * a gap, and whether a reload asks the server about messages deleted below the page (see
+   * {@link MessageIntervalPaginator.removeIdsTailwardOfPageIfNothingOlder}). On its own it never
    * removes a message. Pass the limit actually sent: a larger one makes a short page look like the
    * channel start, welding it to the head interval across a real gap.
    */
@@ -246,8 +246,8 @@ export class MessageIntervalPaginator extends BasePaginator<
   private messageFocusSignalToken = 0;
   protected _requestSort = DEFAULT_BACKEND_SORT;
   protected _itemOrder: MessagePaginatorSort = DEFAULT_BACKEND_SORT;
-  /** Pending below-interval reached-start probe (exposed so tests can await it). */
-  private _tailwardOfPageReconcile?: Promise<void>;
+  /** The pending {@link removeIdsTailwardOfPageIfNothingOlder} (kept so tests can await it). */
+  private _pendingTailwardOfPageRemoval?: Promise<void>;
   /**
    * The ID of the newest server-confirmed message of the interval whose head mark was cleared last
    * (see {@link unmarkedHeadInterval}). Forgotten once a newest page is reconciled with no head
@@ -1100,7 +1100,7 @@ export class MessageIntervalPaginator extends BasePaginator<
       this.showHeadInterval(page, options);
       return;
     }
-    // Inputs for the below-interval probe, captured before the merge overwrites state.
+    // Inputs for removeIdsTailwardOfPageIfNothingOlder, captured before the merge overwrites state.
     const wasAtChannelStart = !this.state.getLatestValue().hasMoreTail;
     const preMergeLoadedCount = headInterval.itemIds.length;
 
@@ -1136,9 +1136,9 @@ export class MessageIntervalPaginator extends BasePaginator<
 
     const idsTailwardOfPage = this.reconcileHeadAgainstPage(page, options);
 
-    // The leftovers are ambiguous (hard-deleted oldest vs server-capped over-request). Only a
-    // full-interval reload (`requestedLimit >= loaded`, not the small list hydrate) that believed it
-    // was at the start can settle them: probe then, otherwise skip.
+    // Messages tailward of the page may be deleted or just older than the page reached. Only a reload
+    // of the whole head interval (`requestedLimit >= loaded`, not the small list hydrate) that was at
+    // the channel start can settle them, by asking the server; otherwise they are kept.
     const requestedLimit = options?.requestedLimit;
     if (
       idsTailwardOfPage.length &&
@@ -1146,7 +1146,7 @@ export class MessageIntervalPaginator extends BasePaginator<
       typeof requestedLimit === 'number' &&
       requestedLimit >= preMergeLoadedCount
     ) {
-      this._tailwardOfPageReconcile = this.pruneTailwardOfPageIfReachedStart(
+      this._pendingTailwardOfPageRemoval = this.removeIdsTailwardOfPageIfNothingOlder(
         idsTailwardOfPage,
         this.getItemId(page[0]),
       );
@@ -1542,26 +1542,30 @@ export class MessageIntervalPaginator extends BasePaginator<
   }
 
   /**
-   * Settles the below-interval leftovers {@link reconcileHeadAgainstPage} returned (loaded messages
-   * older than `anchorId`, the page's oldest, and absent from it): from the page alone a
-   * hard-deleted oldest looks like a server-capped over-request. It asks the server whether anything
-   * is older than `anchorId`; if not, they are real deletes and are removed and the tail settled. A
-   * probe failure or a head change across the await keeps them. The caller decides when this runs.
+   * Settles the loaded messages {@link reconcileHeadAgainstPage} found tailward of the page (older
+   * than `pageTailId`, the page's oldest, and absent from it): from the page alone a hard-deleted
+   * oldest message looks like one the page was too short to include. It asks the server whether
+   * anything is older than `pageTailId`. When nothing is, those messages were deleted: they are
+   * removed and the head interval becomes the tail. A failed request, or a head interval replaced
+   * while waiting, keeps them. The caller decides when this runs.
    */
-  private async pruneTailwardOfPageIfReachedStart(
+  private async removeIdsTailwardOfPageIfNothingOlder(
     idsTailwardOfPage: string[],
-    anchorId: string,
+    pageTailId: string,
   ): Promise<void> {
-    const headId = (this.itemIntervals[0] as Interval | undefined)?.id;
-    // Something older exists (or the probe failed): the start is not proven, keep the leftovers.
-    if (await this.hasMessagesOlderThan(anchorId).catch(() => true)) return;
-    // Revalidate the head across the await (a jump, reset or newer merge aborts).
-    const head = this.itemIntervals[0] as Interval | undefined;
-    if (!head?.isHead || head.id !== headId) return;
+    const headIdBeforeRequest = (this.itemIntervals[0] as Interval | undefined)?.id;
+    // A failed request proves nothing, so it counts as "something older exists".
+    const hasMessagesOlderThanPage = await this.hasMessagesOlderThan(pageTailId).catch(
+      () => true,
+    );
+    if (hasMessagesOlderThanPage) return;
+    // A jump, a reset or another newest page may have replaced the head interval meanwhile.
+    const headAfterRequest = this.itemIntervals[0] as Interval | undefined;
+    if (!headAfterRequest?.isHead || headAfterRequest.id !== headIdBeforeRequest) return;
     this.removeReconciledItems(idsTailwardOfPage);
-    head.hasMoreTail = false;
-    head.isTail = true;
-    if (this.isActiveInterval(head)) {
+    headAfterRequest.hasMoreTail = false;
+    headAfterRequest.isTail = true;
+    if (this.isActiveInterval(headAfterRequest)) {
       this.state.partialNext({
         hasMoreTail: false,
         cursor: { headward: null, tailward: null },
@@ -1652,7 +1656,7 @@ export class MessageIntervalPaginator extends BasePaginator<
    *   arrival or a send confirmed during the request.
    *
    * Messages below `page`'s oldest are kept (a hard-deleted oldest looks like a server-capped
-   * over-request) and returned for {@link pruneTailwardOfPageIfReachedStart}. Removal goes through
+   * over-request) and returned for {@link removeIdsTailwardOfPageIfNothingOlder}. Removal goes through
    * {@link removeItem}, so the index, intervals, message store and any subclass bookkeeping (e.g.
    * the latest message of {@link MessagePaginator}) stay correct.
    *
@@ -1683,7 +1687,7 @@ export class MessageIntervalPaginator extends BasePaginator<
     const newestReturnedTs = getMessageCreatedAtTimestamp(page[page.length - 1]);
     const oldestReturnedTs = getMessageCreatedAtTimestamp(page[0]);
 
-    // Nothing below the page's oldest is removed here: those go to `idsTailwardOfPage` for the probe.
+    // Nothing below the page's oldest is removed here: those go to `idsTailwardOfPage`.
     const pageTailTs = oldestReturnedTs ?? Number.POSITIVE_INFINITY;
 
     const toRemove: string[] = [];
@@ -1703,7 +1707,7 @@ export class MessageIntervalPaginator extends BasePaginator<
         continue;
       }
       // Within the page's span a live arrival cannot be here, so absence means a hard delete. At or
-      // below the page's oldest the page cannot decide: return it for the reached-start probe.
+      // below the page's oldest the page cannot decide: return it for the caller to settle.
       if (ts > pageTailTs) toRemove.push(id);
       else idsTailwardOfPage.push(id);
     }

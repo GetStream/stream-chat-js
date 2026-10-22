@@ -4939,8 +4939,8 @@ describe('MessagePaginator', () => {
       const mockGetReplies = () =>
         channel.getReplies as unknown as ReturnType<typeof vi.fn>;
       const flushProbe = (p: MessagePaginator) =>
-        (p as unknown as { _tailwardOfPageReconcile?: Promise<void> })
-          ._tailwardOfPageReconcile;
+        (p as unknown as { _pendingTailwardOfPageRemoval?: Promise<void> })
+          ._pendingTailwardOfPageRemoval;
       const makePaginator = (pageSize: number, parentMessageId?: string) =>
         new MessagePaginator({
           channel,
