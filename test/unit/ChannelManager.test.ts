@@ -1071,42 +1071,48 @@ describe('ChannelManager', () => {
 
   describe('recover', () => {
     /**
-     * The channel-list half of connection recovery. Each list re-asserts its OWN query rather than
-     * some substitute, and non-destructively: the point is that a reconnect never blanks a list.
+     * The channel-list half of connection recovery. Each list recovers through its own query
+     * (`recoverLoadedItems`) rather than some substitute.
      */
-    it('re-runs each loaded list as a non-destructive first-page refresh', async () => {
+    it('recovers each loaded list through its own recovery', async () => {
       const paginator = new ChannelPaginator({ client });
       // `isInitialized` means "has queried"; fake that without a network round trip.
       vi.spyOn(paginator, 'isInitialized', 'get').mockReturnValue(true);
-      const toTail = vi.spyOn(paginator, 'toTail').mockResolvedValue(undefined);
+      const recoverLoadedItems = vi
+        .spyOn(paginator, 'recoverLoadedItems')
+        .mockResolvedValue(undefined);
       const channelManager = useClientManager({ paginators: [paginator] });
 
       await channelManager.recover();
 
-      expect(toTail).toHaveBeenCalledTimes(1);
-      expect(toTail).toHaveBeenCalledWith({ keepPreviousItems: true, reset: 'yes' });
+      expect(recoverLoadedItems).toHaveBeenCalledTimes(1);
     });
 
-    it('does not pass `silent`, which would disable the in-flight guard', async () => {
-      // `silent` suppresses the `isLoading` transition, and `isLoading` is the only thing stopping a
-      // second overlapping query from being issued for the same list (`canExecuteQuery`).
+    it('does not recover a list while its own query is in flight', async () => {
+      // The recovery's queries go through `executeQuery`, whose `isLoading` guard refuses to
+      // overlap a query already running for the same list.
       const paginator = new ChannelPaginator({ client });
       vi.spyOn(paginator, 'isInitialized', 'get').mockReturnValue(true);
-      const toTail = vi.spyOn(paginator, 'toTail').mockResolvedValue(undefined);
+      paginator.state.partialNext({ isLoading: true });
+      const queryChannels = vi
+        .spyOn(client, 'queryChannels')
+        .mockResolvedValue({ channels: [], duration: '0ms' } as never);
 
       await useClientManager({ paginators: [paginator] }).recover();
 
-      expect(toTail.mock.calls[0][0]).not.to.have.property('silent');
+      expect(queryChannels).not.toHaveBeenCalled();
     });
 
     it('skips a list that has never queried, so it cannot race its own first query', async () => {
       const paginator = new ChannelPaginator({ client });
       expect(paginator.isInitialized).to.equal(false);
-      const toTail = vi.spyOn(paginator, 'toTail').mockResolvedValue(undefined);
+      const recoverLoadedItems = vi
+        .spyOn(paginator, 'recoverLoadedItems')
+        .mockResolvedValue(undefined);
 
       await useClientManager({ paginators: [paginator] }).recover();
 
-      expect(toTail).not.toHaveBeenCalled();
+      expect(recoverLoadedItems).not.toHaveBeenCalled();
     });
 
     it('does not stop at the first list that fails', async () => {
@@ -1115,12 +1121,14 @@ describe('ChannelManager', () => {
       [failing, healthy].forEach((p) =>
         vi.spyOn(p, 'isInitialized', 'get').mockReturnValue(true),
       );
-      vi.spyOn(failing, 'toTail').mockRejectedValue(new Error('nope'));
-      const healthyToTail = vi.spyOn(healthy, 'toTail').mockResolvedValue(undefined);
+      vi.spyOn(failing, 'recoverLoadedItems').mockRejectedValue(new Error('nope'));
+      const healthyRecovery = vi
+        .spyOn(healthy, 'recoverLoadedItems')
+        .mockResolvedValue(undefined);
 
       await useClientManager({ paginators: [failing, healthy] }).recover();
 
-      expect(healthyToTail).toHaveBeenCalledTimes(1);
+      expect(healthyRecovery).toHaveBeenCalledTimes(1);
     });
   });
 
