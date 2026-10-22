@@ -59,6 +59,11 @@ Conventions the agent must follow
 All source is TypeScript under src/. Keep strict types and update .d.ts surface when needed.
 Run yarn lint-fix and ensure zero ESLint errors (flat config).
 
+Paginators hold their loaded items as **intervals**: call them that in names, comments and docs,
+never "windows" ("window" stays for the browser global and time spans). The terms (interval,
+head/tail, active interval, anchored head interval, logical head/tail interval) are defined in the
+doc comment on `BasePaginator` (`src/pagination/paginators/BasePaginator.ts`).
+
 #### Generated code (src/gen)
 
 `src/gen` is generated from the OpenAPI spec by `yarn generate-client`. The only post-processing this repo applies to it is mapping `custom` fields to the `Custom*Data` interfaces (`scripts/apply-custom-data-types.mts`).
