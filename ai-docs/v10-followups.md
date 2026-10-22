@@ -192,16 +192,6 @@ Ordered by severity. The breaking dead-code removals and leftover decisions are 
 - **What:** The helpers exist only for the positional `pinMessage(msg, expiration, pinnedAt)`; every other request method takes objects. Other mixed conventions: `client.getThreadAndHydrate(messageId, opts)` vs `getThread({ message_id })`, `channel.deleteImage(url)` vs `client.deleteImage({ url })`, positional `channel.addMembers`, `client.polls.queryPolls(filter, sort)` vs `client.queryPolls({ filter, sort })`, positional `client.moderation.flagMessage(id, reason, options)`.
 - **Suggested change:** Consider `pinMessage({ id }, { pin_expires?, pinned_at? })` and aligning the other outliers while signatures are breaking anyway.
 
-<a id="placeholder-request"></a>
-
-### Placeholder `_request?: Record<string, never>` parameters [SOLVED 51fa7695]
-
-`simplification` · confidence: high · pre-release: yes · channel / generated API
-
-- **Where:** `src/channel.ts:1029, 1045, 1064, 1080` (`archive`, `unarchive`, `pin`, `unpin`); `src/gen/chat/ChatApi.ts:167, 822, 902, 982, 998, 1176, 1316, 1346, 1467, 1483` (e.g. `listDevices`)
-- **What:** Callers must pass `undefined` first to reach `requestOptions`.
-- **Suggested change:** Drop the placeholder for body-less endpoints (generator and the four hand-written channel methods), so `requestOptions` is the first argument.
-
 <a id="channel-query-messageset"></a>
 
 ### `channel.query()` keeps v9 message-set semantics in its signature [SOLVED 397a2a2c]
@@ -925,11 +915,11 @@ Non-breaking; land any time. Breaking simplifications are in [section 1](#fix-be
 `simplification` · confidence: medium · pre-release: no · threads / reminders / delivery
 
 - **Where / What:**
-  - `src/pagination/paginators/ThreadPaginator.ts:113-125`: `toStoredInstance` repeats `ThreadManager.resolveQueried` (`src/thread_manager.ts:197-204`), which `queryThreadsAndHydrate` already applies (`src/client.ts:2093-2095`); only matters for a standalone paginator with a private store.
+  - `src/pagination/paginators/ThreadPaginator.ts:113-125`: `toStoredInstance` repeats `ThreadManager.resolveQueried` (`src/thread_manager.ts:197-204`), which `queryThreadsAndHydrate` already applies (`src/client.ts:2093-2095`); only matters for a standalone paginator with a private store. [SOLVED 25d24e8c]
   - `src/reminders/ReminderManager.ts:209-221`: `reminder!` assertions plus "TODO: OAPI discrepancy?" right after `isReminderWsEventPayload` already checked `!!event.reminder` (`:190-193`).
   - `src/thread.ts:129, 495-498, 872-878`: `failedRepliesMap` ("todo: do we really need the failedRepliesMap?"); `reload()` already reads failed replies from the paginator, only `hydrateState` uses the map.
   - `src/messageDelivery/MessageReceiptsTracker.ts:732`: `furthestRefByOthers` reads the deprecated `client.userID` (the test mock only provides `userID`).
-- **Suggested change:** Delegate both resolve paths to one helper; make the guard a type predicate (`event is ReminderEvent & { reminder: ReminderResponseData }`); read pending replies from `messagePaginator.items` and drop the map; use `client.userId` and update the mock.
+- **Suggested change:** Delegate both resolve paths to one helper [SOLVED 25d24e8c]; make the guard a type predicate (`event is ReminderEvent & { reminder: ReminderResponseData }`); read pending replies from `messagePaginator.items` and drop the map; use `client.userId` and update the mock.
 
 <a id="simp-composer"></a>
 

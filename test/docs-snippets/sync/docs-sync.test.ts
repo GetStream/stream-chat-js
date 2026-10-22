@@ -11,8 +11,8 @@ import {
   findTestFiles,
   formatForDocs,
   isExcludedFence,
-  NODE_TAB,
   normalize,
+  OUT_OF_SCOPE_TABS,
   parseDocsFences,
   parseTestRegions,
   readDocsPage,
@@ -20,10 +20,11 @@ import {
 import type { DocsFence, TestRegion } from './parse';
 
 // `yarn test-docs-sync`, in this order:
-// 1. Every JS fence (except `Node.js` and comment-only fences, like the "server-side
-//    only" placeholders) on the pages of the tested sidebars (chat JavaScript, platform)
-//    has a test region.
-// 2. Every JS fence on those pages is labelled `JavaScript` or `Node.js`.
+// 1. Every JS fence (except `OUT_OF_SCOPE_TABS` fences: `Node.js` and the
+//    stream-chat-js@9 versions, and comment-only fences, like the "server-side only"
+//    placeholders) on the pages of the tested sidebars (chat JavaScript, platform) has a
+//    test region.
+// 2. Every JS fence on those pages is labelled with one of `ALLOWED_JS_LABELS`.
 // 3. Every marked test region points at an existing fence and matches it (after
 //    applying COPY values and formatting both sides the same way).
 // Pages in `EXCLUDED_PAGES` and fences in `EXCLUDED_SECTIONS` (parse.ts) are skipped by
@@ -72,7 +73,9 @@ describe.skipIf(!hasDocs)(`docs sync (${DOCS_DIR})`, () => {
       fences
         .filter(
           (fence) =>
-            fence.tab !== NODE_TAB && !fence.commentOnly && !covered.has(fenceId(fence)),
+            !OUT_OF_SCOPE_TABS.includes(fence.tab) &&
+            !fence.commentOnly &&
+            !covered.has(fenceId(fence)),
         )
         .map((fence) => where(file, fence)),
     );
@@ -90,7 +93,7 @@ describe.skipIf(!hasDocs)(`docs sync (${DOCS_DIR})`, () => {
     );
     expect(
       mislabelled,
-      `JS fences need label="${ALLOWED_JS_LABELS.join('" or label="')}" (client-side code, or server-side Node.js code with or without @stream-io/node-sdk)`,
+      `JS fences need label="${ALLOWED_JS_LABELS.join('" or label="')}" (client-side code, server-side Node.js code with or without @stream-io/node-sdk, or their stream-chat-js@9 versions)`,
     ).toEqual([]);
   });
 
@@ -106,7 +109,7 @@ describe.skipIf(!hasDocs)(`docs sync (${DOCS_DIR})`, () => {
       expect(
         unknown.map((region) => `${fenceId(region)} (${region.file}:${region.line})`),
         `no such fence. Fences on this page:\n${fences
-          .filter((fence) => fence.tab !== NODE_TAB)
+          .filter((fence) => !OUT_OF_SCOPE_TABS.includes(fence.tab))
           .map((fence) => `  ${fenceId(fence)}`)
           .join('\n')}\n`,
       ).toEqual([]);

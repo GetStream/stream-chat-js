@@ -51,6 +51,22 @@ describe('Threads 2.0', () => {
     });
   }
 
+  // What `client.getThread` answers, for stubbing `Thread.reload()`.
+  function createGetThreadResponse({
+    parentMessageOverrides = {},
+    ...overrides
+  }: Partial<ThreadStateResponse> & {
+    parentMessageOverrides?: Partial<MessageResponse>;
+  } = {}) {
+    return {
+      thread: generateThreadResponse(
+        channelResponse,
+        { ...parentMessageResponse, ...parentMessageOverrides },
+        overrides,
+      ),
+    };
+  }
+
   function createMinimalThread({
     parentMessageOverrides = {},
     draft,
@@ -197,6 +213,39 @@ describe('Threads 2.0', () => {
         convertDateToTimestamp('2030-01-01T00:00:00.000Z'),
       );
       expect(thread.messagePaginator.latestMessage).to.be.null;
+    });
+
+    it('sets the queried latestMessageAt from each hydrated response, also an earlier one', () => {
+      const thread = createTestThread({
+        latest_replies: [],
+        reply_count: 0,
+        last_message_at: convertDateToTimestamp('2030-01-01T00:00:00.000Z'),
+      });
+
+      // the newest reply was hard-deleted: the response's earlier time replaces the known one
+      thread.hydrateState(
+        createGetThreadResponse({
+          latest_replies: [],
+          reply_count: 0,
+          last_message_at: convertDateToTimestamp('2029-01-01T00:00:00.000Z'),
+        }).thread,
+        { reconcile: {} },
+      );
+      expect(thread.messagePaginator.latestMessageAt).to.equal(
+        convertDateToTimestamp('2029-01-01T00:00:00.000Z'),
+      );
+
+      // also when hydrated without reconcile options, which replaces the loaded replies
+      thread.hydrateState(
+        createGetThreadResponse({
+          latest_replies: [],
+          reply_count: 0,
+          last_message_at: convertDateToTimestamp('2028-01-01T00:00:00.000Z'),
+        }).thread,
+      );
+      expect(thread.messagePaginator.latestMessageAt).to.equal(
+        convertDateToTimestamp('2028-01-01T00:00:00.000Z'),
+      );
     });
 
     it('initializes properly without threadData', () => {
@@ -412,14 +461,37 @@ describe('Threads 2.0', () => {
       });
 
       describe('hydrateState', () => {
-        it('prevents hydrating state from the instance with a different id', () => {
+        it('prevents hydrating state from a response for another thread', () => {
           const thread = createTestThread();
-          const otherThread = createTestThread({
+          const otherThreadData = createGetThreadResponse({
             parentMessageOverrides: { id: uuidv4() },
-          });
+          }).thread;
 
-          expect(thread.id).to.not.equal(otherThread.id);
-          expect(() => thread.hydrateState(otherThread)).to.throw();
+          expect(thread.id).to.not.equal(otherThreadData.parent_message_id);
+          expect(() => thread.hydrateState(otherThreadData)).to.throw();
+        });
+
+        it('seeds a reply window that holds every reply as the last page, with soft-deleted replies counted out', () => {
+          // The parent's `reply_count` includes a soft-deleted reply the server does not return;
+          // the top-level one does not, as for the constructor.
+          const thread = createMinimalThread();
+          const replies = ['2020-01-01T00:00:01.000Z', '2020-01-01T00:00:02.000Z'].map(
+            (createdAt) =>
+              generateMsg({
+                parent_id: parentMessageResponse.id,
+                created_at: convertDateToTimestamp(createdAt),
+              }) as MessageResponse,
+          );
+
+          thread.hydrateState(
+            createGetThreadResponse({
+              latest_replies: replies,
+              parentMessageOverrides: { reply_count: 3 },
+              reply_count: 2,
+            }).thread,
+          );
+
+          expect(thread.messagePaginator.state.getLatestValue().hasMoreTail).to.be.false;
         });
 
         it('seeds the reply window when the thread has never loaded one', () => {
@@ -434,15 +506,15 @@ describe('Threads 2.0', () => {
             parent_id: parentMessageResponse.id,
             created_at: convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
           }) as MessageResponse;
-          const hydrationThread = createTestThread({
+          const threadData = createGetThreadResponse({
             latest_replies: [reply],
             // The count that matters is the parent message's — the thread endpoint's top-level
             // `reply_count` excludes soft-deleted replies, so the LLC reads the parent's.
             parentMessageOverrides: { reply_count: 1 },
             reply_count: 1,
-          });
+          }).thread;
 
-          thread.hydrateState(hydrationThread);
+          thread.hydrateState(threadData);
 
           const paginatorState = thread.messagePaginator.state.getLatestValue();
           expect(paginatorState.items?.map((item) => item.id)).to.deep.equal([reply.id]);
@@ -462,13 +534,13 @@ describe('Threads 2.0', () => {
             parent_id: parentMessageResponse.id,
             created_at: convertDateToTimestamp('2020-01-03T00:00:00.000Z'),
           }) as MessageResponse;
-          const hydrationThread = createTestThread({
+          const threadData = createGetThreadResponse({
             latest_replies: [newer, older],
             parentMessageOverrides: { reply_count: 5 },
             reply_count: 5,
-          });
+          }).thread;
 
-          thread.hydrateState(hydrationThread);
+          thread.hydrateState(threadData);
           const getRepliesStub = sinon
             .stub(thread.channel.getClient(), 'getReplies')
             .resolves({ messages: [], duration: '' } as unknown as ReturnType<
@@ -480,30 +552,34 @@ describe('Threads 2.0', () => {
           expect(getRepliesStub.firstCall.args[1]?.id_lt).to.equal(older.id);
         });
 
-        it('copies state of the instance with the same id', () => {
+        it('takes the state of a response for the same thread', () => {
           const thread = createTestThread();
-          const hydrationThread = createTestThread();
-          thread.hydrateState(hydrationThread);
+          const threadData = createGetThreadResponse({
+            parentMessageOverrides: { text: 'edited-on-server' },
+            thread_participants: [
+              { user_id: 'u1' },
+            ] as ThreadStateResponse['thread_participants'],
+            title: 'renamed',
+          }).thread;
+          thread.hydrateState(threadData);
 
           const stateAfter = thread.state.getLatestValue();
-          const hydrationState = hydrationThread.state.getLatestValue();
 
-          // compare non-primitive values only
-          expect(stateAfter.read).to.equal(hydrationState.read);
-          expect(stateAfter.parentMessage).to.equal(hydrationState.parentMessage);
-          expect(stateAfter.participants).to.equal(hydrationState.participants);
+          expect(stateAfter.title).to.equal('renamed');
+          expect(stateAfter.participants).to.equal(threadData.thread_participants);
+          expect(stateAfter.parentMessage.text).to.equal('edited-on-server');
         });
 
         it('retains failed replies after hydration', () => {
           const thread = createTestThread();
-          const hydrationThread = createTestThread({
+          const threadData = createGetThreadResponse({
             latest_replies: [
               makeReply({
                 created_at: convertDateToTimestamp('2020-01-01T00:00:01.000Z'),
               }),
             ],
             reply_count: 1,
-          });
+          }).thread;
 
           // Pinned, failed reply NEWEST: `makeReply()` reads `created_at` from the clock, so implicit
           // timestamps landed in random order and an older-than-window reply sits below it, not in
@@ -514,7 +590,7 @@ describe('Threads 2.0', () => {
           });
           thread.upsertReplyLocally({ message: failedMessage });
 
-          thread.hydrateState(hydrationThread);
+          thread.hydrateState(threadData);
 
           // The failed reply survives the hydrate (it is re-ingested into the paginator).
           expect(repliesOf(thread).map((reply) => reply.id)).to.include(failedMessage.id);
@@ -540,11 +616,11 @@ describe('Threads 2.0', () => {
 
           // Reconnect hydrate (Thread.reload → hydrateState → reconcileNewestMessages) must
           // RE-DERIVE the cursor from the merged reply window so pagination works again.
-          const hydrationThread = createTestThread({
+          const threadData = createGetThreadResponse({
             latest_replies: [existingReply],
             reply_count: 10,
-          });
-          thread.hydrateState(hydrationThread, {
+          }).thread;
+          thread.hydrateState(threadData, {
             reconcile: { headIntervalItemIdsAtRequest: new Set([existingReply.id]) },
           });
 
@@ -576,12 +652,12 @@ describe('Threads 2.0', () => {
             parent_id: parentMessageResponse.id,
             created_at: convertDateToTimestamp('2020-01-02T00:00:00.000Z'),
           }) as MessageResponse;
-          const hydrationThread = createTestThread({
+          const threadData = createGetThreadResponse({
             latest_replies: [editedReply, newReply],
             reply_count: 11,
-          });
+          }).thread;
 
-          thread.hydrateState(hydrationThread, {
+          thread.hydrateState(threadData, {
             reconcile: { headIntervalItemIdsAtRequest: new Set([existingReply.id]) },
           });
 
@@ -611,12 +687,12 @@ describe('Threads 2.0', () => {
             reply_count: 5,
           });
           // The page a list query brings: only the newest replies, fetched without a snapshot.
-          const hydrationThread = createTestThread({
+          const threadData = createGetThreadResponse({
             latest_replies: [{ ...kept, text: 'edited' }],
             reply_count: 4,
-          });
+          }).thread;
 
-          thread.hydrateState(hydrationThread);
+          thread.hydrateState(threadData);
 
           expect(repliesOf(thread).map((reply) => reply.id)).to.deep.equal([kept.id]);
           expect(thread.messagePaginator.getItem(kept.id)?.text).to.equal('edited');
@@ -633,10 +709,10 @@ describe('Threads 2.0', () => {
           );
 
           // A fresh re-query (reload / reconnect) carries an edited parent.
-          const hydrationThread = createTestThread({
+          const threadData = createGetThreadResponse({
             parentMessageOverrides: { text: 'edited-on-server' },
-          });
-          thread.hydrateState(hydrationThread);
+          }).thread;
+          thread.hydrateState(threadData);
 
           // Both the projection AND the store's canonical copy are the hydrated parent (no
           // divergence). Regression: hydrateState used to update only state.parentMessage, leaving
@@ -741,6 +817,37 @@ describe('Threads 2.0', () => {
           expect(stub.thirdCall.args[1]?.reply_limit).to.equal(pageSize);
         });
 
+        it('applies the fetched replies to a registered thread', async () => {
+          // Stubs the raw `getThread`, so the reload runs against a thread `client.threads` holds:
+          // the registered instance must apply the response to itself.
+          const r1 = makeReply({
+            id: 'r1',
+            created_at: convertDateToTimestamp('2020-01-01T00:00:01.000Z'),
+          });
+          const r2 = makeReply({
+            id: 'r2',
+            created_at: convertDateToTimestamp('2020-01-01T00:00:02.000Z'),
+          });
+          const thread = createTestThread({ latest_replies: [r1], reply_count: 1 });
+          subscribeThread(thread);
+          const release = thread.activate();
+          sinon.stub(client, 'getThread').resolves({
+            thread: generateThreadResponse(
+              channelResponse,
+              { ...parentMessageResponse, reply_count: 2 },
+              { latest_replies: [r1, r2], reply_count: 2 },
+            ),
+          });
+
+          await thread.reload();
+
+          expect(repliesOf(thread).map((reply) => reply.id)).to.eql(['r1', 'r2']);
+          expect(client.threads.get(thread.id)).to.equal(thread);
+          expect(client.messageStore.holderNames('r2')).to.have.length(1);
+          release();
+          thread.unregisterSubscriptions();
+        });
+
         it('merges the fetched page into a thread whose only reply was ingested live', async () => {
           // A thread created this session has an EMPTY first reply page, so nothing anchors its
           // window and the sent reply lands in a LOGICAL head. Reconciling on reconnect must still
@@ -768,8 +875,8 @@ describe('Threads 2.0', () => {
             id: 'peer2',
             created_at: convertDateToTimestamp('2020-01-01T00:00:03.000Z'),
           });
-          sinon.stub(client, 'getThreadAndHydrate').resolves(
-            createTestThread({
+          sinon.stub(client, 'getThread').resolves(
+            createGetThreadResponse({
               latest_replies: [
                 makeReply({
                   id: 'mine',
@@ -820,8 +927,8 @@ describe('Threads 2.0', () => {
           const activeBefore = repliesOf(thread).map((r) => r.id);
           expect(activeBefore).to.eql(['old1', 'old2']);
 
-          sinon.stub(client, 'getThreadAndHydrate').resolves(
-            createTestThread({
+          sinon.stub(client, 'getThread').resolves(
+            createGetThreadResponse({
               latest_replies: [
                 makeReply({
                   id: 'mine',
@@ -854,7 +961,7 @@ describe('Threads 2.0', () => {
               StatusCode: 404,
             },
           );
-          sinon.stub(client, 'getThreadAndHydrate').rejects(notFound);
+          sinon.stub(client, 'getThread').rejects(notFound);
 
           // Resolves rather than rejecting: nothing to reload is not a failure, and rethrowing would
           // make every caller log "reload failed" on a brand-new thread.
@@ -871,7 +978,7 @@ describe('Threads 2.0', () => {
               status: 404,
             },
           );
-          sinon.stub(client, 'getThreadAndHydrate').rejects(notFound);
+          sinon.stub(client, 'getThread').rejects(notFound);
 
           await expect(thread.reload()).resolves.toBeUndefined();
         });
@@ -899,7 +1006,7 @@ describe('Threads 2.0', () => {
               status: 404,
             },
           );
-          sinon.stub(client, 'getThreadAndHydrate').rejects(notFound);
+          sinon.stub(client, 'getThread').rejects(notFound);
 
           await expect(thread.reload()).rejects.toThrow(notFound);
         });
@@ -907,7 +1014,7 @@ describe('Threads 2.0', () => {
         it('still rethrows a real failure', async () => {
           const thread = createTestThread({ latest_replies: [], reply_count: 0 });
           const failure = Object.assign(new Error('boom'), { code: 9, StatusCode: 500 });
-          sinon.stub(client, 'getThreadAndHydrate').rejects(failure);
+          sinon.stub(client, 'getThread').rejects(failure);
 
           await expect(thread.reload()).rejects.toThrow(failure);
         });
@@ -962,14 +1069,14 @@ describe('Threads 2.0', () => {
           });
 
           // The server's authoritative page (computed before r4 existed) has r3 hard-deleted, no r4.
-          const hydrationThread = createTestThread({
+          const getThreadResponse = createGetThreadResponse({
             latest_replies: [r1, r2],
             reply_count: 2,
           });
 
-          sinon.stub(client, 'getThreadAndHydrate').callsFake(async () => {
+          sinon.stub(client, 'getThread').callsFake(async () => {
             thread.messagePaginator.ingestItem(formatMessage(r4)); // live arrival during the await
-            return hydrationThread;
+            return getThreadResponse;
           });
 
           await thread.reload();
@@ -1011,11 +1118,11 @@ describe('Threads 2.0', () => {
             id: 'far2',
             created_at: convertDateToTimestamp('2021-06-01T00:00:02.000Z'),
           });
-          const hydrationThread = createTestThread({
+          const getThreadResponse = createGetThreadResponse({
             latest_replies: [far1, far2],
             reply_count: 2,
           });
-          sinon.stub(client, 'getThreadAndHydrate').resolves(hydrationThread);
+          sinon.stub(client, 'getThread').resolves(getThreadResponse);
 
           await thread.reload();
 
@@ -1031,7 +1138,7 @@ describe('Threads 2.0', () => {
           expect(thread.messagePaginator.getItem('r1')).to.equal(undefined);
         });
 
-        it('keeps a jumped-to older reply window active when the reloaded page is past a gap', async () => {
+        it('keeps the jumped-to older reply window of an open, registered thread active when the reloaded page is past a gap', async () => {
           const reply = (n: number) =>
             makeReply({
               id: `r${n}`,
@@ -1043,7 +1150,9 @@ describe('Threads 2.0', () => {
             latest_replies: [reply(8), reply(9), reply(10)],
             reply_count: 10,
           });
-          thread.activate();
+          subscribeThread(thread);
+          const release = thread.activate();
+          expect(client.threads.get(thread.id)).to.equal(thread);
           const paginator = thread.messagePaginator;
           paginator.pageSize = 3;
           const getReplies = sinon.stub(thread.channel.getClient(), 'getReplies');
@@ -1053,8 +1162,8 @@ describe('Threads 2.0', () => {
           } as unknown as ReturnType<StreamChat['getReplies']>);
           await paginator.jumpToMessage('r2');
           // r11–r14 arrived while offline: a full page of the newest 3 shares nothing with r8–r10
-          sinon.stub(client, 'getThreadAndHydrate').resolves(
-            createTestThread({
+          sinon.stub(client, 'getThread').resolves(
+            createGetThreadResponse({
               latest_replies: [reply(12), reply(13), reply(14)],
               reply_count: 14,
             }),
@@ -1076,6 +1185,8 @@ describe('Threads 2.0', () => {
           await paginator.jumpToTheLatestMessage();
           expect(repliesOf(thread).map((r) => r.id)).to.eql(['r12', 'r13', 'r14']);
           expect(getReplies.called).to.equal(false);
+          release();
+          thread.unregisterSubscriptions();
         });
 
         it('shows the reloaded page past a gap when the thread is not active, its channel is', async () => {
@@ -1099,8 +1210,8 @@ describe('Threads 2.0', () => {
             duration: '',
           } as unknown as ReturnType<StreamChat['getReplies']>);
           await paginator.jumpToMessage('r2');
-          sinon.stub(client, 'getThreadAndHydrate').resolves(
-            createTestThread({
+          sinon.stub(client, 'getThread').resolves(
+            createGetThreadResponse({
               latest_replies: [reply(12), reply(13), reply(14)],
               reply_count: 14,
             }),
@@ -1135,8 +1246,8 @@ describe('Threads 2.0', () => {
             },
           );
           sinon
-            .stub(client, 'getThreadAndHydrate')
-            .resolves(createTestThread({ latest_replies: [r1], reply_count: 1 }));
+            .stub(client, 'getThread')
+            .resolves(createGetThreadResponse({ latest_replies: [r1], reply_count: 1 }));
 
           await thread.reload();
 
@@ -1163,14 +1274,14 @@ describe('Threads 2.0', () => {
           const hardDeleteMessages = vi
             .spyOn(offlineDb, 'hardDeleteMessages')
             .mockResolvedValue(undefined);
-          sinon.stub(client, 'getThreadAndHydrate').callsFake(async () => {
+          sinon.stub(client, 'getThread').callsFake(async () => {
             // resent while the reload runs, confirmed after the server produced the page
             thread.messagePaginator.ingestItem({
               ...failed,
               status: 'received',
               created_at: convertDateToTimestamp('2020-01-01T00:00:03.000Z'),
             });
-            return createTestThread({ latest_replies: [r1], reply_count: 1 });
+            return createGetThreadResponse({ latest_replies: [r1], reply_count: 1 });
           });
 
           await thread.reload();
@@ -1206,8 +1317,8 @@ describe('Threads 2.0', () => {
             otherThreadReply,
           ]);
           sinon
-            .stub(client, 'getThreadAndHydrate')
-            .resolves(createTestThread({ latest_replies: [r1], reply_count: 1 }));
+            .stub(client, 'getThread')
+            .resolves(createGetThreadResponse({ latest_replies: [r1], reply_count: 1 }));
 
           await thread.reload();
 
@@ -1239,8 +1350,10 @@ describe('Threads 2.0', () => {
             new Error('db read failed'),
           );
           sinon
-            .stub(client, 'getThreadAndHydrate')
-            .resolves(createTestThread({ latest_replies: [r1, r2], reply_count: 2 }));
+            .stub(client, 'getThread')
+            .resolves(
+              createGetThreadResponse({ latest_replies: [r1, r2], reply_count: 2 }),
+            );
 
           await thread.reload();
 
@@ -1250,7 +1363,7 @@ describe('Threads 2.0', () => {
         it('rethrows a reload failure and releases isLoading', async () => {
           const thread = createTestThread({ latest_replies: [], reply_count: 0 });
           const failure = new Error('thread reload failed');
-          const stub = sinon.stub(client, 'getThreadAndHydrate').rejects(failure);
+          const stub = sinon.stub(client, 'getThread').rejects(failure);
 
           await expect(thread.reload()).rejects.toThrow(failure);
           // Not left mid-flight — otherwise the isLoading guard would swallow every later reload.
@@ -1259,8 +1372,8 @@ describe('Threads 2.0', () => {
           // Which is exactly what a later reload proves: it must reach the client again.
           stub.restore();
           const succeeding = sinon
-            .stub(client, 'getThreadAndHydrate')
-            .resolves(createTestThread({ latest_replies: [], reply_count: 0 }));
+            .stub(client, 'getThread')
+            .resolves(createGetThreadResponse({ latest_replies: [], reply_count: 0 }));
           await thread.reload();
           expect(succeeding.calledOnce).to.equal(true);
         });
@@ -1497,8 +1610,8 @@ describe('Threads 2.0', () => {
         const reloadedReply = makeReply({
           created_at: convertDateToTimestamp('2020-03-01T00:00:01.000Z'),
         });
-        const stubbedGetThread = sinon.stub(client, 'getThreadAndHydrate').resolves(
-          createTestThread({
+        const stubbedGetThread = sinon.stub(client, 'getThread').resolves(
+          createGetThreadResponse({
             latest_replies: [initialReply, reloadedReply],
             reply_count: 2,
           }),
@@ -2625,6 +2738,19 @@ describe('Threads 2.0', () => {
       });
       await manager.paginator.reload();
     };
+    /**
+     * Serves the next thread query from what the server answers, through the real
+     * `queryThreadsAndHydrate`, so registered threads are matched as in the SDK.
+     */
+    const respondFromServer = (threads: ThreadStateResponse[], next?: string) => {
+      vi.spyOn(client, 'queryThreads').mockResolvedValueOnce({ threads, next } as never);
+      vi.spyOn(client, 'queryThreadsAndHydrate').mockImplementationOnce((...args) =>
+        StreamChat.prototype.queryThreadsAndHydrate.apply(client, args),
+      );
+    };
+    const threadResponse = (
+      overrides: Parameters<typeof createGetThreadResponse>[0] = {},
+    ) => createGetThreadResponse(overrides).thread as ThreadStateResponse;
     /** Replaces a loaded list through a real reload. */
     const replaceList = async (manager: ThreadManager, threads: Thread[]) => {
       const fetchQueryResponse = sinon
@@ -3097,7 +3223,10 @@ describe('Threads 2.0', () => {
 
           expect(client.threads.get(parentMessage.id)).to.equal(thread);
           expect(client.threads.ensure({ channel, parentMessage })).to.equal(thread);
-          await loadList(client.threads, [createThreadWithId(parentMessage.id)]);
+          respondFromServer([
+            threadResponse({ parentMessageOverrides: { id: parentMessage.id } }),
+          ]);
+          await client.threads.paginator.reload();
           expect(listOf(client.threads)).to.have.lengthOf(1);
           expect(listOf(client.threads)[0]).to.equal(thread);
         });
@@ -3239,13 +3368,14 @@ describe('Threads 2.0', () => {
           await loadList(client.threads, [listed]);
           listed.state.partialNext({ isStateStale: true });
 
-          await loadList(client.threads, [
-            createTestThread({
+          respondFromServer([
+            threadResponse({
               latest_replies: [kept],
               parentMessageOverrides: { id },
               reply_count: 2,
             }),
           ]);
+          await client.threads.paginator.reload();
 
           expect(listOf(client.threads)[0]).to.equal(listed);
           expect(repliesOf(listed).map((r) => r.id)).to.deep.equal([kept.id]);
@@ -3271,13 +3401,14 @@ describe('Threads 2.0', () => {
           listed.activate();
           listed.state.partialNext({ isStateStale: true });
 
-          await loadList(client.threads, [
-            createTestThread({
+          respondFromServer([
+            threadResponse({
               latest_replies: [kept],
               parentMessageOverrides: { id },
               reply_count: 2,
             }),
           ]);
+          await client.threads.paginator.reload();
 
           expect(listOf(client.threads)[0]).to.equal(listed);
           expect(repliesOf(listed).map((r) => r.id)).to.deep.equal([older.id, kept.id]);
@@ -3401,9 +3532,10 @@ describe('Threads 2.0', () => {
 
         it('reuses an active instance when a reload returns its thread', async () => {
           const thread = createThreadWithId();
-          const copy = createThreadWithId(thread.id);
           thread.activate();
-          stubbedQueryThreads.resolves({ threads: [copy], next: undefined });
+          respondFromServer([
+            threadResponse({ parentMessageOverrides: { id: thread.id } }),
+          ]);
 
           await client.threads.reload({ force: true });
 
@@ -3413,10 +3545,11 @@ describe('Threads 2.0', () => {
         it('reuses an active instance when the next page returns its thread', async () => {
           const listed = createThreadWithId();
           const thread = createThreadWithId();
-          const copy = createThreadWithId(thread.id);
           thread.activate();
           setList(client.threads, [listed], 'cursor');
-          stubbedQueryThreads.resolves({ threads: [copy], next: undefined });
+          respondFromServer([
+            threadResponse({ parentMessageOverrides: { id: thread.id } }),
+          ]);
 
           await client.threads.paginator.toTail();
 
@@ -3427,8 +3560,10 @@ describe('Threads 2.0', () => {
           client.threads.registerSubscriptions();
           const thread = createThreadWithId();
           const getThread = sinon
-            .stub(client, 'getThreadAndHydrate')
-            .resolves(createThreadWithId(thread.id));
+            .stub(client, 'getThread')
+            .resolves(
+              createGetThreadResponse({ parentMessageOverrides: { id: thread.id } }),
+            );
 
           const releaseFirst = thread.activate();
           releaseFirst();
@@ -3556,25 +3691,24 @@ describe('Threads 2.0', () => {
         });
 
         it('hydrates existing stale threads when reloading', async () => {
+          // `client.threads`: queried threads are matched against the client's registry.
           const existingThread = createTestThread();
           existingThread.state.partialNext({ isStateStale: true });
-          const newThread = createTestThread({
-            thread_participants: [
-              { user_id: 'u1' },
-            ] as ThreadStateResponse['thread_participants'],
+          setList(client.threads, [existingThread]);
+          client.threads.state.partialNext({
+            unseenThreadIds: [existingThread.id],
           });
-          setList(threadManager, [existingThread]);
-          threadManager.state.partialNext({
-            unseenThreadIds: [newThread.id],
-          });
-          stubbedQueryThreads.resolves({
-            threads: [newThread],
-            next: undefined,
-          });
+          respondFromServer([
+            threadResponse({
+              thread_participants: [
+                { user_id: 'u1' },
+              ] as ThreadStateResponse['thread_participants'],
+            }),
+          ]);
 
-          await threadManager.reload();
+          await client.threads.reload();
 
-          const threads = listOf(threadManager);
+          const threads = listOf(client.threads);
 
           expect(threads).to.have.lengthOf(1);
           expect(threads).to.contain(existingThread);
@@ -3816,6 +3950,77 @@ describe('Threads 2.0', () => {
 
       await client.getThreadAndHydrate({ message_id: parentMessageResponse.id });
       expect(channel.watchStatus).to.equal(ChannelWatchStatus.Watching);
+    });
+
+    it('getThreadAndHydrate returns a registered thread as it is, unless it is stale and closed', async () => {
+      const r1 = makeReply({
+        id: 'r1',
+        created_at: convertDateToTimestamp('2020-01-01T00:00:01.000Z'),
+      });
+      const r2 = makeReply({
+        id: 'r2',
+        created_at: convertDateToTimestamp('2020-01-01T00:00:02.000Z'),
+      });
+      const thread = createTestThread({ latest_replies: [r1], reply_count: 1 });
+      subscribeThread(thread);
+      const { replyCount } = thread.state.getLatestValue();
+      const answer = createGetThreadResponse({
+        latest_replies: [r1, r2],
+        parentMessageOverrides: { reply_count: 2 },
+        reply_count: 2,
+        thread_participants: [
+          { user_id: 'p1' },
+        ] as ThreadStateResponse['thread_participants'],
+      });
+      vi.spyOn(client, 'getThread').mockResolvedValue(answer as never);
+
+      const release = thread.activate();
+      vi.spyOn(thread, 'reload').mockResolvedValue(undefined);
+      thread.state.partialNext({ isStateStale: true });
+      const open = await client.getThreadAndHydrate({ message_id: thread.id });
+
+      // Open: it reloads itself.
+      expect(open).to.equal(thread);
+      expect(thread.state.getLatestValue().replyCount).to.equal(replyCount);
+      expect(repliesOf(thread).map((reply) => reply.id)).to.eql(['r1']);
+      expect(thread.hasStaleState).to.equal(true);
+
+      release();
+      thread.state.partialNext({ isStateStale: false });
+      await client.getThreadAndHydrate({ message_id: thread.id });
+
+      // Current: events keep it so, and an older answer would roll it back.
+      expect(thread.state.getLatestValue().replyCount).to.equal(replyCount);
+      expect(thread.state.getLatestValue().participants).to.eql([]);
+      expect(repliesOf(thread).map((reply) => reply.id)).to.eql(['r1']);
+
+      thread.state.partialNext({ isStateStale: true });
+      const stale = await client.getThreadAndHydrate({ message_id: thread.id });
+
+      expect(stale).to.equal(thread);
+      expect(thread.state.getLatestValue().replyCount).to.equal(2);
+      expect(repliesOf(thread).map((reply) => reply.id)).to.eql(['r1', 'r2']);
+      expect(thread.hasStaleState).to.equal(false);
+      thread.unregisterSubscriptions();
+    });
+
+    it('getThreadAndHydrate applies the channel members and custom data to a registered thread it leaves as it is', async () => {
+      const thread = createTestThread();
+      subscribeThread(thread);
+      const answer = createGetThreadResponse({
+        channel: {
+          ...channelResponse,
+          custom: { name: 'Renamed' },
+          members: [{ user: { id: 'member' }, user_id: 'member' }],
+        } as ThreadStateResponse['channel'],
+      });
+      vi.spyOn(client, 'getThread').mockResolvedValue(answer as never);
+
+      await client.getThreadAndHydrate({ message_id: thread.id });
+
+      expect(thread.channel.state.members).to.have.property('member');
+      expect(thread.channel.data?.custom).to.deep.include({ name: 'Renamed' });
+      thread.unregisterSubscriptions();
     });
 
     it('queryThreadsAndHydrate marks the threads’ channels watched, unless asked not to watch', async () => {

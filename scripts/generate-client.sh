@@ -14,6 +14,4 @@ yarn exec prettier --write $OUTPUT_DIR/models/index.ts
 
 node ./scripts/apply-custom-data-types.mts -i $OUTPUT_DIR/models/index.ts
 
-node ./scripts/drop-placeholder-request-params.mts $OUTPUT_DIR/chat/ChatApi.ts $OUTPUT_DIR/chat/ChannelApi.ts $OUTPUT_DIR/moderation/ModerationApi.ts
-
 yarn lint-fix

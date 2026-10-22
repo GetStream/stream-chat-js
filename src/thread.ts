@@ -133,42 +133,12 @@ export class Thread extends WithSubscriptions {
   }) {
     super();
     if (threadData) {
-      if (!threadData.channel) {
-        throw new Error('Thread channel is required when threadData is provided');
-      }
-      if (!threadData.parent_message) {
-        throw new Error('Thread parent_message is required when threadData is provided');
-      }
-      const threadChannel = client.channelManager.ensure({
-        type: threadData.channel.type,
-        id: threadData.channel.id,
-        data: { custom: threadData.channel.custom },
-      });
-      threadChannel._hydrateMembers({
-        members: threadData.channel.members ?? [],
-        overrideCurrentState: false,
-      });
-
       this.state = new StateStore<ThreadState>({
         active: false,
         isLoading: false,
         isStateStale: false,
-        channel: threadChannel,
-        createdAt: threadData.created_at,
-        deletedAt: threadData.deleted_at ?? null,
-        parentMessage: formatMessage(threadData.parent_message),
-        participants: threadData.thread_participants,
-        read: formatReadState(
-          !threadData.read || threadData.read.length === 0
-            ? getPlaceholderReadResponse(client.userId)
-            : threadData.read,
-        ),
-        // From the parent message: the top-level `threadData.reply_count` excludes soft-deleted
-        // replies, the parent's (like the channel's) includes them.
-        replyCount: threadData.parent_message.reply_count ?? 0,
-        updatedAt: threadData.updated_at ?? null,
-        title: threadData.title,
-        custom: threadData.custom ?? {},
+        ...formatThreadState(threadData, client.userId),
+        channel: ensureThreadChannel(client, threadData),
       });
 
       this.id = threadData.parent_message_id;
@@ -242,7 +212,7 @@ export class Thread extends WithSubscriptions {
     // the head, and the tail only if it holds every reply.
     if (threadData?.latest_replies?.length) {
       const replies = threadData.latest_replies.map(formatMessage);
-      const isLastPage = replies.length === (threadData.reply_count ?? 0);
+      const isLastPage = holdsEveryReply(replies, threadData);
       this.messagePaginator.setItems({
         valueOrFactory: replies,
         cursor: getCursorFromReplies(replies, isLastPage),
@@ -357,10 +327,12 @@ export class Thread extends WithSubscriptions {
 
   /**
    * Re-queries the replies, sized to the loaded window, and reconciles them in place (the thread
-   * analogue of {@link Channel.reload}; recovery calls it for active threads). Failed replies are
-   * kept: those loaded or in the offline DB before the request that are no longer loaded after it
-   * are ingested again (the offline DB read is best effort). Rethrows, except for a not-found
-   * answer on a thread that never had replies.
+   * analogue of {@link Channel.reload}; recovery calls it for active threads). The thread applies
+   * the response to itself ({@link Thread.hydrateState}), whether or not it is registered in
+   * `client.threads`. Failed replies are kept: those loaded in the reply paginator or in the
+   * offline DB before the request that are no longer loaded after it are ingested again (the
+   * offline DB read is best effort). Rethrows, except for a not-found answer on a thread that never
+   * had replies.
    */
   public reload = async () => {
     if (this.state.getLatestValue().isLoading) {
@@ -370,8 +342,7 @@ export class Thread extends WithSubscriptions {
     this.state.partialNext({ isLoading: true });
 
     try {
-      const loadedReplies = this.messagePaginator.items ?? [];
-      const loadedReplyCount = loadedReplies.length;
+      const loadedReplyCount = this.messagePaginator.items?.length ?? 0;
       const requestedReplyLimit =
         Math.max(loadedReplyCount, this.messagePaginator.pageSize ?? 0) || undefined;
       const offlineDb = this.client.offlineDb;
@@ -383,14 +354,16 @@ export class Thread extends WithSubscriptions {
       const failedBefore = this.messagePaginator.getFailedMessagesToRestore(failedInDb);
       const headIntervalItemIdsAtRequest =
         this.messagePaginator.getHeadIntervalItemIdsAtRequest();
-      const thread = await this.client.getThreadAndHydrate(
+      const { thread: threadData } = await this.client.getThread(
         { message_id: this.id },
         {
+          participant_limit: DEFAULT_THREAD_PARTICIPANT_LIMIT,
           watch: true,
           reply_limit: requestedReplyLimit,
         },
       );
-      this.hydrateState(thread, {
+      this.channel.watchStatus = ChannelWatchStatus.Watching;
+      this.hydrateState(threadData, {
         reconcile: {
           requestedLimit: requestedReplyLimit,
           headIntervalItemIdsAtRequest,
@@ -411,65 +384,41 @@ export class Thread extends WithSubscriptions {
     }
   };
 
+  /**
+   * Updates the thread's state and its channel's members and custom data, and merges the replies
+   * into the loaded window (with `reconcile`) or replaces it (without).
+   */
   public hydrateState = (
-    thread: Thread,
+    threadData: ThreadStateResponse,
     options?: { reconcile?: ReconcileNewestMessagesOptions },
   ) => {
-    if (thread === this) {
-      return;
+    if (threadData.parent_message_id !== this.id) {
+      throw new Error("Cannot hydrate thread's state from another thread's response");
     }
 
-    if (thread.id !== this.id) {
-      throw new Error(
-        "Cannot hydrate thread's state using thread with different threadId",
-      );
-    }
-
-    const {
-      createdAt,
-      custom,
-      title,
-      deletedAt,
-      parentMessage,
-      participants,
-      read,
-      replyCount,
-      updatedAt,
-    } = thread.state.getLatestValue();
+    const serverState = formatThreadState(threadData, this.client.userId);
+    const reconcile = options?.reconcile;
 
     // Failed replies survive the hydrate: they are re-ingested after the incoming page is merged.
     const pendingReplies = Array.from(this.failedRepliesMap.values());
 
-    this.state.partialNext({
-      title,
-      createdAt,
-      custom,
-      deletedAt,
-      parentMessage,
-      participants,
-      read,
-      replyCount,
-      updatedAt,
-      isStateStale: false,
-    });
+    ensureThreadChannel(this.client, threadData);
+    this.state.partialNext({ ...serverState, isStateStale: false });
 
-    if (parentMessage && this.hasSubscriptions) {
-      this.client.messageStore.upsert(parentMessage);
+    if (this.hasSubscriptions) {
+      this.client.messageStore.upsert(serverState.parentMessage);
     }
 
-    const incomingReplies = thread.messagePaginator.state.getLatestValue().items ?? [];
-
-    if (!options?.reconcile) this.messagePaginator.clearStateAndCache();
-    // The re-queried thread's newest reply time replaces what was known, so latestMessageAt is
-    // right even when the merged page lacks the newest reply, or that reply was hard-deleted.
-    this.messagePaginator.setQueriedLatestMessageAt(
-      thread.messagePaginator.latestMessageAt,
-    );
+    const incomingReplies = (threadData.latest_replies ?? []).map(formatMessage);
+    if (!reconcile) this.messagePaginator.clearStateAndCache();
+    // The response's newest reply time replaces what was known, so latestMessageAt is right even
+    // when the merged page lacks the newest reply, or that reply was hard-deleted.
+    this.messagePaginator.setQueriedLatestMessageAt(threadData.last_message_at);
     if (typeof this.messagePaginator.items === 'undefined') {
       // Nothing loaded yet (e.g. a thread opened from a message): `reconcileNewestMessages` no-ops
       // without a loaded window and would drop the fetched replies, so set them as the constructor
       // does.
-      const isLastPage = incomingReplies.length === replyCount;
+      const isLastPage = holdsEveryReply(incomingReplies, threadData);
       this.messagePaginator.setItems({
         valueOrFactory: incomingReplies,
         cursor: getCursorFromReplies(incomingReplies, isLastPage),
@@ -477,7 +426,7 @@ export class Thread extends WithSubscriptions {
         isLastPage,
       });
     } else {
-      this.messagePaginator.reconcileNewestMessages(incomingReplies, options?.reconcile);
+      this.messagePaginator.reconcileNewestMessages(incomingReplies, reconcile);
     }
     pendingReplies.forEach((reply) => this.messagePaginator.ingestItem(reply));
   };
@@ -859,6 +808,58 @@ const normalizeThreadParticipants = (
         user_id: participant.id,
       }) as ThreadParticipant,
   );
+};
+
+/** `participant_limit` of the single-thread requests (`getThreadAndHydrate`, `reload()`). */
+export const DEFAULT_THREAD_PARTICIPANT_LIMIT = 100;
+
+/** The thread's channel, with the members and custom data of `threadData` applied. */
+export const ensureThreadChannel = (
+  client: StreamChat,
+  threadData: ThreadStateResponse,
+) => {
+  if (!threadData.channel) {
+    throw new Error('Thread channel is required when threadData is provided');
+  }
+  const channel = client.channelManager.ensure({
+    type: threadData.channel.type,
+    id: threadData.channel.id,
+    data: { custom: threadData.channel.custom },
+  });
+  channel._hydrateMembers({
+    members: threadData.channel.members ?? [],
+    overrideCurrentState: false,
+  });
+  return channel;
+};
+
+/** Against the top-level `reply_count`: unlike the parent's, it excludes soft-deleted replies. */
+const holdsEveryReply = (replies: LocalMessage[], threadData: ThreadStateResponse) =>
+  replies.length === (threadData.reply_count ?? 0);
+
+const formatThreadState = (threadData: ThreadStateResponse, currentUserId?: string) => {
+  const parentMessage = threadData.parent_message;
+  if (!parentMessage) {
+    throw new Error('Thread parent_message is required when threadData is provided');
+  }
+
+  return {
+    createdAt: threadData.created_at,
+    custom: threadData.custom ?? {},
+    deletedAt: threadData.deleted_at ?? null,
+    parentMessage: formatMessage(parentMessage),
+    participants: threadData.thread_participants,
+    read: formatReadState(
+      !threadData.read || threadData.read.length === 0
+        ? getPlaceholderReadResponse(currentUserId)
+        : threadData.read,
+    ),
+    // From the parent message: the top-level `threadData.reply_count` excludes soft-deleted
+    // replies, the parent's (like the channel's) includes them.
+    replyCount: parentMessage.reply_count ?? 0,
+    title: threadData.title,
+    updatedAt: threadData.updated_at ?? null,
+  };
 };
 
 const formatReadState = (read: ReadStateResponse[]): ThreadReadState =>

@@ -61,7 +61,7 @@ import type {
 import { isWSFailure } from './errors';
 import type { APIError } from './errors';
 import { chatLoggerSystem } from './logger';
-import { Thread } from './thread';
+import { DEFAULT_THREAD_PARTICIPANT_LIMIT, type Thread } from './thread';
 import { Moderation } from './moderation';
 import { ThreadManager } from './thread_manager';
 import { DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE } from './constants';
@@ -705,12 +705,17 @@ export class StreamChat extends ChatApi {
   /**
    * Retrieves application settings.
    *
+   * @param   _request - Unused. Holds the request position so `requestOptions` stays the
+   *   second argument, as on the generated methods; pass `undefined`.
    * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The application settings response.
    */
-  async getAppSettings(requestOptions?: StreamRequestOptions) {
-    return await (this.appSettingsPromise = this.getApp(requestOptions));
+  async getAppSettings(
+    _request?: Record<string, never>,
+    requestOptions?: StreamRequestOptions,
+  ) {
+    return await (this.appSettingsPromise = this.getApp(undefined, requestOptions));
   }
 
   /**
@@ -950,13 +955,13 @@ export class StreamChat extends ChatApi {
     // Its handlers would throw at `getClient()`, so they are skipped (its own listeners below still
     // hear it).
     if (channel && !channel.pendingDisposal) {
-      channel._handleChannelEvent(event as WSEvent);
+      channel._handleChannelEvent(event);
     }
 
     this._callClientListeners(event);
 
     if (channel) {
-      channel._callChannelListeners(event as WSEvent);
+      channel._callChannelListeners(event);
     }
 
     // A failing in-memory cleanup must not skip the other callbacks or the offline DB write below.
@@ -1861,8 +1866,8 @@ export class StreamChat extends ChatApi {
     const parentMessages = response.threads.map((thread) => thread.parent_message!);
     this.polls.hydratePollCache(parentMessages);
 
-    const threads = response.threads.map((thread) =>
-      this.threads.resolveQueried(new Thread({ client: this, threadData: thread })),
+    const threads = response.threads.map((threadData) =>
+      this.threads.resolveQueried(threadData),
     );
     if (optionsWithDefaults.watch) threads.forEach(markThreadChannelWatched);
 
@@ -1893,7 +1898,7 @@ export class StreamChat extends ChatApi {
     }
 
     const optionsWithDefaults = {
-      participant_limit: 100,
+      participant_limit: DEFAULT_THREAD_PARTICIPANT_LIMIT,
       reply_limit: 3,
       watch: true,
       ...options,
@@ -1905,9 +1910,7 @@ export class StreamChat extends ChatApi {
       requestOptions,
     );
 
-    const thread = this.threads.resolveQueried(
-      new Thread({ client: this, threadData: response.thread }),
-    );
+    const thread = this.threads.resolveQueried(response.thread);
     if (optionsWithDefaults.watch) markThreadChannelWatched(thread);
 
     return thread;
