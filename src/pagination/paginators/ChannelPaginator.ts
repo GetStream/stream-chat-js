@@ -291,6 +291,8 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   private _replaceOfflineSeedOnResponse = false;
   /** The query handed to the sync manager, from the cache read until it runs. See `executeQuery`. */
   private _queryAwaitingSync: ChannelQueryShape | undefined;
+  /** The cids of the page the latest query returned, `undefined` when it failed. */
+  private _lastPageCids: string[] | undefined;
   protected _sortComparatorFactory: ChannelSortComparatorFactory | undefined;
   sortComparator: (a: Channel, b: Channel) => number;
   filterBuilder: FilterBuilder<ChannelFilters>;
@@ -492,6 +494,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
    * the page using `matchesFilter` and the comparator this metadata feeds.
    */
   postQueryReconcile(params: PostQueryReconcileParams<Channel, ChannelQueryShape>) {
+    this._lastPageCids = params.results?.items.map((channel) => channel.cid);
     const pendingPredefinedFilter = this._pendingPredefinedFilter;
     this._pendingPredefinedFilter = undefined;
     if (params.isFirstPage && params.results) {
@@ -726,6 +729,67 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       this._pendingPredefinedFilter = response.predefined_filter;
     }
     return { items };
+  };
+
+  private getLastPageCids() {
+    return this._lastPageCids;
+  }
+
+  /**
+   * The reconnect refresh. Re-queries every loaded page, then drops the loaded channels no page
+   * returned: they were deleted, left, hidden, or no longer match the filter.
+   *
+   * Each page asks for everything still to cover and the next one starts where it ended, so the
+   * server's page cap decides the step. A failed page removes nothing.
+   */
+  recoverLoadedItems = async () => {
+    const { offlineDb } = this.client;
+    if (
+      offlineDb?.getChannelsForQuery &&
+      this.client.user?.id &&
+      !offlineDb.syncManager.isSynced
+    ) {
+      offlineDb.syncManager.scheduleSyncStatusChangeCallback(
+        `${this.id}:recover`,
+        this.recoverLoadedItems,
+      );
+      return;
+    }
+
+    const loadedCids = new Set((this.items ?? []).map((channel) => channel.cid));
+    this._lastPageCids = undefined;
+    await this.toTail({ keepPreviousItems: true, reset: 'yes' });
+    const firstPage = this.getLastPageCids();
+    if (!firstPage) return;
+
+    const returnedCids = new Set<string>(firstPage);
+    const { stateOptions, ...request } = this.getNextQueryShape();
+    let offset = firstPage.length;
+    while (firstPage.length && offset < loadedCids.size) {
+      let page: Channel[];
+      try {
+        page = await this.client.queryChannelsAndHydrate(
+          { ...request, offset, limit: loadedCids.size - offset },
+          stateOptions,
+        );
+      } catch (error) {
+        chatLoggerSystem
+          .getLogger('channel')
+          .warn('Recovering the loaded channels failed.', { error });
+        return;
+      }
+      if (!page.length) break;
+      for (const channel of page) {
+        returnedCids.add(channel.cid);
+        this.ingestItem(channel);
+      }
+      offset += page.length;
+    }
+
+    for (const cid of loadedCids) {
+      if (!returnedCids.has(cid)) this.removeItem({ id: cid });
+    }
+    this.state.partialNext({ offset: this.items?.length ?? 0 });
   };
 
   filterQueryResults = (items: Channel[]) => items;
