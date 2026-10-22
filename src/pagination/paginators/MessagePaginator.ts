@@ -329,8 +329,8 @@ export class MessagePaginator extends MessageIntervalPaginator {
   /**
    * Ingests a single message, from an event or an operation such as a send. A message that starts
    * the newest window is placed by {@link ingestAsNewestInterval}. Any other goes into the window
-   * it belongs to and the reader stays on their window, except for the current user's new send (see
-   * {@link isOwnSendWhileOlderWindowIsRead}): the newest window holding it is shown, so the user
+   * it belongs to and the active interval stays active, except for the current user's new send (see
+   * {@link isOwnSendWhileOlderWindowIsActive}): the newest window holding it is shown, so the user
    * sees what they sent.
    */
   ingestItem(item: LocalMessage): boolean {
@@ -340,7 +340,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
       this.trackLatestMessage(item);
     }
     // judged before ingesting, while the message is not held yet
-    const showsNewestWindow = this.isOwnSendWhileOlderWindowIsRead(item);
+    const showsNewestWindow = this.isOwnSendWhileOlderWindowIsActive(item);
     const ingested = super.ingestItem(item);
     const newest = this.anchoredHeadInterval;
     if (ingested && showsNewestWindow && newest?.itemIds.includes(item.id)) {
@@ -351,10 +351,10 @@ export class MessagePaginator extends MessageIntervalPaginator {
 
   /**
    * Whether `message` is the current user's own send (see {@link isOwnSend}) that the paginator
-   * does not hold yet, while the newest window is loaded but another window is read. A message
+   * does not hold yet, while the newest window is loaded but another window is active. A message
    * already held (a retry of a failed send, a replayed send, its server confirmation) is not new.
    */
-  private isOwnSendWhileOlderWindowIsRead(message: LocalMessage): boolean {
+  private isOwnSendWhileOlderWindowIsActive(message: LocalMessage): boolean {
     const newest = this.anchoredHeadInterval;
     return (
       !!newest &&

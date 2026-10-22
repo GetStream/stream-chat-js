@@ -223,6 +223,7 @@ export class Thread extends WithSubscriptions {
     this.messagePaginator = new MessagePaginator(
       {
         channel: this.channel,
+        thread: this,
         parentMessageId: this.id,
         requestSort: DEFAULT_SORT,
         itemOrder: DEFAULT_ITEM_ORDER,
@@ -321,6 +322,11 @@ export class Thread extends WithSubscriptions {
 
   get ownUnreadCount() {
     return ownUnreadCountSelector(this.client.userId)(this.state.getLatestValue());
+  }
+
+  /** See {@link Thread.activate}. */
+  get active() {
+    return this.state.getLatestValue().active;
   }
 
   /**

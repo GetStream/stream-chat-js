@@ -28,6 +28,7 @@ const makePinned = (
 
 const makeChannel = (getPinnedMessages = vi.fn()) =>
   ({
+    active: true,
     cid: CID,
     getClient: () => ({
       notifications: { addError: vi.fn() },

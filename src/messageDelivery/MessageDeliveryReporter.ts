@@ -192,7 +192,7 @@ export class MessageDeliveryReporter {
     if (!ownUserId) return;
 
     // The newest message the collection knows, whether or not the window holding it is loaded: a
-    // message received live while the reader sits in an older window is still delivered.
+    // message received live while an older window is active is still delivered.
     let latestMessage: LocalMessage | null = null;
     // Unix nanoseconds, comparable with a message's `created_at`.
     let lastDeliveredAt: TimestampNS | undefined;

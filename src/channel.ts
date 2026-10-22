@@ -1249,10 +1249,9 @@ export class Channel extends ChannelApi {
    * no-op.
    *
    * While active, channel-list hydration places no page in the message list (`channel.reload()`
-   * owns it), the message list keeps the reader on their window (otherwise a fresh newest page from
-   * a query the list did not run is shown; one separated from the loaded messages by a gap is shown
-   * either way), and the channel stays in the channel store. A disposed channel is not activated: a
-   * warning is logged and the returned release does nothing.
+   * owns it), the message list keeps its active interval (otherwise a fresh newest page from a
+   * query the list did not run is shown), and the channel stays in the channel store. A disposed
+   * channel is not activated: a warning is logged and the returned release does nothing.
    */
   activate = (): (() => void) => {
     if (this.pendingDisposal) {

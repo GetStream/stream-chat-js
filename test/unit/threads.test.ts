@@ -791,6 +791,7 @@ describe('Threads 2.0', () => {
           // Same rule as the jumped-away branch: anchor for later, never switch the active window
           // out from under someone reading an older island.
           const thread = createMinimalThread();
+          thread.activate();
           const mine = formatMessage(
             makeReply({
               id: 'mine',
@@ -1028,6 +1029,86 @@ describe('Threads 2.0', () => {
             thread.messagePaginator.anchoredHeadItems.map((reply) => reply.id),
           ).to.eql(['far1', 'far2', 'failed-1']);
           expect(thread.messagePaginator.getItem('r1')).to.equal(undefined);
+        });
+
+        it('keeps a jumped-to older reply window active when the reloaded page is past a gap', async () => {
+          const reply = (n: number) =>
+            makeReply({
+              id: `r${n}`,
+              created_at: convertDateToTimestamp(
+                `2020-01-01T00:00:${String(n).padStart(2, '0')}.000Z`,
+              ),
+            });
+          const thread = createTestThread({
+            latest_replies: [reply(8), reply(9), reply(10)],
+            reply_count: 10,
+          });
+          thread.activate();
+          const paginator = thread.messagePaginator;
+          paginator.pageSize = 3;
+          const getReplies = sinon.stub(thread.channel.getClient(), 'getReplies');
+          getReplies.resolves({
+            messages: [reply(1), reply(2), reply(3)],
+            duration: '',
+          } as unknown as ReturnType<StreamChat['getReplies']>);
+          await paginator.jumpToMessage('r2');
+          // r11–r14 arrived while offline: a full page of the newest 3 shares nothing with r8–r10
+          sinon.stub(client, 'getThreadAndHydrate').resolves(
+            createTestThread({
+              latest_replies: [reply(12), reply(13), reply(14)],
+              reply_count: 14,
+            }),
+          );
+
+          await thread.reload();
+
+          expect(repliesOf(thread).map((r) => r.id)).to.eql(['r1', 'r2', 'r3']);
+          expect(paginator.hasMoreHead).to.equal(true);
+          expect(paginator.anchoredHeadItems.map((r) => r.id)).to.eql([
+            'r12',
+            'r13',
+            'r14',
+          ]);
+          expect(paginator.getItem('r9')).to.equal(undefined);
+
+          // the stored page is shown on a jump to the latest reply, without a request
+          getReplies.resetHistory();
+          await paginator.jumpToTheLatestMessage();
+          expect(repliesOf(thread).map((r) => r.id)).to.eql(['r12', 'r13', 'r14']);
+          expect(getReplies.called).to.equal(false);
+        });
+
+        it('shows the reloaded page past a gap when the thread is not active, its channel is', async () => {
+          const reply = (n: number) =>
+            makeReply({
+              id: `r${n}`,
+              created_at: convertDateToTimestamp(
+                `2020-01-01T00:00:${String(n).padStart(2, '0')}.000Z`,
+              ),
+            });
+          const thread = createTestThread({
+            latest_replies: [reply(8), reply(9), reply(10)],
+            reply_count: 10,
+          });
+          // the channel being open says nothing about the thread: only the thread's own flag counts
+          thread.channel.activate();
+          const paginator = thread.messagePaginator;
+          paginator.pageSize = 3;
+          sinon.stub(thread.channel.getClient(), 'getReplies').resolves({
+            messages: [reply(1), reply(2), reply(3)],
+            duration: '',
+          } as unknown as ReturnType<StreamChat['getReplies']>);
+          await paginator.jumpToMessage('r2');
+          sinon.stub(client, 'getThreadAndHydrate').resolves(
+            createTestThread({
+              latest_replies: [reply(12), reply(13), reply(14)],
+              reply_count: 14,
+            }),
+          );
+
+          await thread.reload();
+
+          expect(repliesOf(thread).map((r) => r.id)).to.eql(['r12', 'r13', 'r14']);
         });
 
         it('puts back a failed reply the placement of the reloaded page lost, without an offline DB', async () => {

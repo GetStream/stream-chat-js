@@ -52,7 +52,9 @@ describe('MessagePaginator', () => {
   let itemIndex: StoreBackedItemIndex<LocalMessage>;
 
   beforeEach(() => {
+    // Opened by a UI: its paginators keep the window they show (see `isActivePaginator`).
     channel = {
+      active: true,
       cid: 'channel-id',
       getReplies: vi.fn(),
       query: vi.fn(),
@@ -2616,7 +2618,7 @@ describe('MessagePaginator', () => {
         expect(paginator.items?.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
       });
 
-      it('replaces every window with a newest page across a gap and shows it', () => {
+      it('stores a newest page across a gap as the newest window, leaving the jumped-to window active', () => {
         const paginator = new MessagePaginator({ channel, itemIndex });
         paginator.ingestPage({ page: page(8, 9), isHead: true, setActive: false });
         paginator.ingestPage({ page: page(1, 3), setActive: true });
@@ -2625,15 +2627,9 @@ describe('MessagePaginator', () => {
         reconnect(paginator, 20, 24);
 
         expect(headOf(paginator)).toEqual(['m20', 'm21', 'm22', 'm23', 'm24']);
-        // the jumped-to reader is moved to it, and the windows nothing brought up to date are gone
-        expect(paginator.items?.map((m) => m.id)).toEqual([
-          'm20',
-          'm21',
-          'm22',
-          'm23',
-          'm24',
-        ]);
-        expect(paginator.getItem('m1')).toBeUndefined();
+        // the jumped-to reader stays; the newest window nothing brought up to date is gone
+        expect(paginator.items?.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
+        expect(paginator.hasMoreHead).toBe(true);
         expect(paginator.getItem('m8')).toBeUndefined();
       });
     });
@@ -2787,7 +2783,7 @@ describe('MessagePaginator', () => {
         expect(paginator.state.getLatestValue()).toBe(before);
       });
 
-      it('replaces the windows with a newest page across a gap from it, also for a jumped-to reader', () => {
+      it('stores a newest page across a gap from it beside an active jumped-to window', () => {
         const paginator = new MessagePaginator({ channel, itemIndex });
         paginator.setQueriedLatestMessageAt(at('10'));
         paginator.placeExternalQueryPage(page(6, 10), 5);
@@ -2800,9 +2796,25 @@ describe('MessagePaginator', () => {
         });
 
         expect(headOf(paginator)).toEqual(['m16', 'm17', 'm18', 'm19', 'm20']);
+        // the reader stays on the jumped-to window; the window that stopped being the newest is gone
+        expect(ids(paginator.items)).toEqual(['m1', 'm2']);
+        expect(paginator.hasMoreHead).toBe(true);
+        expect(paginator.getItem('m6')).toBeUndefined();
+      });
+
+      it('shows a newest page across a gap from it when that window is active', () => {
+        const paginator = loadNewestWindow();
+        paginator.setQueriedLatestMessageAt(at('20'));
+        paginator.unmarkStaleHead();
+
+        hydrateNewestPage(paginator, page(16, 20), 5, {
+          headIntervalItemIdsAtRequest: paginator.getHeadIntervalItemIdsAtRequest(),
+        });
+
+        // the window read was the newest one until its head mark was cleared: the page replaces it
+        expect(headOf(paginator)).toEqual(['m16', 'm17', 'm18', 'm19', 'm20']);
         expect(ids(paginator.items)).toEqual(headOf(paginator));
         expect(paginator.getItem('m1')).toBeUndefined();
-        expect(paginator.getItem('m6')).toBeUndefined();
       });
 
       it('merges the newest page into it later, removing what the page proves was hard-deleted', () => {
@@ -3546,9 +3558,9 @@ describe('MessagePaginator', () => {
       expect(paginator.cursor?.headward).toBeNull();
     });
 
-    it('replaces a middle island and a newest window started live with a newest page past a gap', () => {
+    it('replaces a newest window started live with a newest page past a gap, beside the middle island read', () => {
       // Only a middle island loaded, then a live arrival, which starts the newest window. A page
-      // sharing nothing with it is past a gap: it replaces both windows and is shown.
+      // sharing nothing with it is past a gap: it replaces that window, and the reader stays.
       const paginator = new MessagePaginator({
         channel,
         itemIndex,
@@ -3565,10 +3577,15 @@ describe('MessagePaginator', () => {
 
       paginator.reconcileNewestMessages([m('m30', '30'), m('m31', '31')]);
 
-      // Not welded across the gap: the reader is moved to the page, and the old windows are gone.
-      expect(paginator.items?.map((message) => message.id)).toEqual(['m30', 'm31']);
-      expect(paginator.itemIntervals).toHaveLength(1);
-      expect(paginator.getItem('m4')).toBeUndefined();
+      // Not welded across the gap: the page is the newest window, the reader stays on the island,
+      // and the newest window nothing brought up to date is gone.
+      expect(paginator.items?.map((message) => message.id)).toEqual(['m4', 'm5']);
+      expect(paginator.hasMoreHead).toBe(true);
+      expect(paginator.anchoredHeadItems.map((message) => message.id)).toEqual([
+        'm30',
+        'm31',
+      ]);
+      expect(paginator.itemIntervals).toHaveLength(2);
       expect(paginator.getItem('live')).toBeUndefined();
     });
 
@@ -4183,36 +4200,170 @@ describe('MessagePaginator', () => {
       expect(paginator.itemIntervals).toHaveLength(1);
     });
 
-    it('moves a jumped-away reader to the newest page across a gap, keeping unsent messages', () => {
-      const paginator = loadHead([
-        msg('m30', 30),
-        msg('m31', 31),
-        msg('failed', 40, { status: 'failed' }),
-      ]);
-      // the reader jumped to an older window
-      paginator.ingestPage({
-        page: [msg('m1', 1), msg('m2', 2), msg('m3', 3)],
-        isHead: false,
-        isTail: false,
-        setActive: true,
+    describe('while an older window is active', () => {
+      // The newest window m30–m31 with a failed send, an older window m10–m12 nobody reads, and
+      // the window the reader jumped to, m1–m3. The reconnect's newest page is past a gap.
+      const readJumpedToWindow = () => {
+        const paginator = loadHead([
+          msg('m30', 30),
+          msg('m31', 31),
+          msg('failed', 40, { status: 'failed' }),
+        ]);
+        paginator.ingestPage({
+          page: [msg('m10', 10), msg('m11', 11), msg('m12', 12)],
+          isHead: false,
+          isTail: false,
+          setActive: false,
+        });
+        paginator.ingestPage({
+          page: [msg('m1', 1), msg('m2', 2), msg('m3', 3)],
+          isHead: false,
+          isTail: false,
+          setActive: true,
+        });
+        return paginator;
+      };
+      const newestPage = () => [msg('m38', 38), msg('m39', 39), msg('m41', 41)];
+
+      it('keeps the active window untouched and stores the page as the newest window', () => {
+        const paginator = readJumpedToWindow();
+        const shownBefore = paginator.items;
+
+        paginator.reconcileNewestMessages(newestPage());
+
+        expect(paginator.items).toBe(shownBefore);
+        expect(ids(paginator)).toEqual(['m1', 'm2', 'm3']);
+        // the page keeps the unsent message of the newest window it replaces
+        expect(paginator.anchoredHeadItems.map((message) => message.id)).toEqual([
+          'm38',
+          'm39',
+          'failed',
+          'm41',
+        ]);
+        // the old newest window and the window nobody reads are dropped
+        expect(paginator.getItem('m30')).toBeUndefined();
+        expect(paginator.getItem('m11')).toBeUndefined();
+        expect(paginator.itemIntervals).toHaveLength(2);
       });
 
-      paginator.reconcileNewestMessages([msg('m38', 38), msg('m39', 39), msg('m41', 41)]);
+      it('lets the active window load newer messages', () => {
+        const paginator = readJumpedToWindow();
 
-      const shown = ['m38', 'm39', 'failed', 'm41'];
-      expect(ids(paginator)).toEqual(shown);
-      expect(paginator.anchoredHeadItems.map((message) => message.id)).toEqual(shown);
-      expect(paginator.itemIntervals).toHaveLength(1);
+        paginator.reconcileNewestMessages(newestPage());
+
+        const readWindow = paginator.itemIntervals.find((interval) =>
+          paginator.isActiveInterval(interval),
+        ) as Interval;
+        expect(readWindow.isHead).toBe(false);
+        expect(readWindow.hasMoreHead).toBe(true);
+        expect(paginator.hasMoreHead).toBe(true);
+        expect(paginator.cursor?.headward).toBe('m3');
+        const newestWindow = paginator.itemIntervals[0] as Interval;
+        expect(newestWindow.isHead).toBe(true);
+        expect(newestWindow.hasMoreTail).toBe(true);
+      });
+
+      it('publishes the stored page once, leaving the window shown as it is', () => {
+        const paginator = readJumpedToWindow();
+        const shownBefore = paginator.items;
+        const publishes: unknown[] = [];
+        const unsubscribe = paginator.state.subscribe(({ cursor, hasMoreHead, items }) =>
+          publishes.push({ cursor, hasMoreHead, items }),
+        );
+        publishes.length = 0; // the call on subscribing
+        // a window that could not load newer messages, so the reconcile has something to publish
+        paginator.state.partialNext({
+          hasMoreHead: false,
+          cursor: { headward: null, tailward: 'm1' },
+        });
+        publishes.length = 0;
+
+        paginator.reconcileNewestMessages(newestPage());
+        unsubscribe();
+
+        expect(publishes).toEqual([
+          {
+            cursor: { headward: 'm3', tailward: 'm1' },
+            hasMoreHead: true,
+            items: shownBefore,
+          },
+        ]);
+      });
+
+      it('grows the active window into the newest window when the page overlaps it', () => {
+        const paginator = loadHead([msg('m30', 30), msg('m31', 31)]);
+        // m30–m31 stopped being the newest window; the reader jumped to m50–m52
+        paginator.setQueriedLatestMessageAt(msg('m60', 60).created_at);
+        paginator.unmarkStaleHead();
+        paginator.ingestPage({
+          page: [msg('m50', 50), msg('m51', 51), msg('m52', 52)],
+          isHead: false,
+          isTail: false,
+          setActive: true,
+        });
+
+        paginator.reconcileNewestMessages([
+          msg('m51', 51),
+          msg('m52', 52),
+          msg('m60', 60),
+        ]);
+
+        expect(ids(paginator)).toEqual(['m50', 'm51', 'm52', 'm60']);
+        expect(paginator.hasMoreHead).toBe(false);
+        expect(paginator.isActiveIntervalAtHead).toBe(true);
+        expect(paginator.itemIntervals).toHaveLength(1);
+        expect(paginator.getItem('m30')).toBeUndefined();
+      });
+
+      // defensive: a window being read that is not the head window should always offer newer
+      // messages; the state is set by hand, as no path is known to leave it otherwise
+      it('corrects an active window that was marked as able to load no newer messages', () => {
+        const paginator = readJumpedToWindow();
+        const readWindow = paginator.itemIntervals.find((interval) =>
+          paginator.isActiveInterval(interval),
+        ) as Interval;
+        readWindow.hasMoreHead = false;
+        paginator.state.partialNext({
+          hasMoreHead: false,
+          cursor: { headward: null, tailward: 'm1' },
+        });
+
+        paginator.reconcileNewestMessages(newestPage());
+
+        expect(readWindow.hasMoreHead).toBe(true);
+        expect(paginator.hasMoreHead).toBe(true);
+        expect(paginator.cursor?.headward).toBe('m3');
+      });
+
+      it('keeps an unsent message of the active window in that window', () => {
+        const paginator = loadHead([msg('m30', 30), msg('m31', 31)]);
+        paginator.ingestPage({
+          page: [msg('m1', 1), msg('m2', 2), msg('sending', 3, { status: 'sending' })],
+          isHead: false,
+          isTail: false,
+          setActive: true,
+        });
+
+        paginator.reconcileNewestMessages(newestPage());
+
+        // nothing moves under the reader
+        expect(ids(paginator)).toEqual(['m1', 'm2', 'sending']);
+        expect(paginator.anchoredHeadItems.map((message) => message.id)).toEqual([
+          'm38',
+          'm39',
+          'm41',
+        ]);
+      });
     });
 
     it('keeps an unsent message of any window in the newest page shown across a gap', () => {
       const paginator = loadHead([msg('m30', 30), msg('m31', 31)]);
-      // a window holding an unsent message, apart from the newest window
+      // a window holding an unsent message, apart from the newest window, which is read
       paginator.ingestPage({
         page: [msg('m1', 1), msg('m2', 2), msg('sending', 3, { status: 'sending' })],
         isHead: false,
         isTail: false,
-        setActive: true,
+        setActive: false,
       });
 
       paginator.reconcileNewestMessages([msg('m38', 38), msg('m39', 39), msg('m41', 41)]);
@@ -5180,6 +5331,7 @@ describe('MessagePaginator', () => {
 
     const reconcileGetReplies = vi.fn();
     const reconcileChannel = {
+      active: true,
       cid: 'channel-id',
       getReplies: reconcileGetReplies,
       query: vi.fn(),
