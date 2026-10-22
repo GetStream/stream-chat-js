@@ -521,6 +521,21 @@ describe('PollManager', () => {
       expect(spy2.calledOnce).to.be.false;
     });
 
+    it('should keep the translations of poll.updated in the cached poll', () => {
+      const nameI18n = { de_text: 'Neuer Titel', en_text: 'New title', language: 'en' };
+
+      client.dispatchEvent({
+        type: 'poll.updated',
+        poll: {
+          ...pollMessage1.poll,
+          name: 'New title',
+          name_i18n: nameI18n,
+        } as PollResponse,
+      });
+
+      expect(pollManager.fromState(pollId1)?.data.name_i18n).to.eql(nameI18n);
+    });
+
     const eventHandlerPairs = [
       ['poll.closed', 'handlePollClosed'],
       ['poll.vote_casted', 'handleVoteCasted'],
