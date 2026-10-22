@@ -2742,5 +2742,45 @@ describe('ChannelPaginator', () => {
       releaseSecondPage();
       await recovery;
     });
+
+    it('re-queries at most 150 channels and drops the rest, which load again on scroll', async () => {
+      const serverChannels = Array.from({ length: 160 }, (_, i) =>
+        channelResponse(
+          `d${i}`,
+          new Date(Date.UTC(2024, 0, 1) - i * 60_000).toISOString(),
+        ),
+      );
+      const queryChannels = vi
+        .spyOn(client, 'queryChannels')
+        .mockImplementation(async (options) => {
+          const offset = options?.offset ?? 0;
+          const limit = Math.min(options?.limit ?? 30, 30);
+          return {
+            channels: serverChannels.slice(offset, offset + limit),
+            duration: '0ms',
+          } as never;
+        });
+      const paginator = new ChannelPaginator({
+        client,
+        filters: {},
+        sort: [{ field: 'updated_at', direction: -1 }],
+        paginatorOptions: { pageSize: 30 },
+      });
+      while (paginator.hasMoreTail) await paginator.toTail();
+      expect(paginator.items).toHaveLength(160);
+      queryChannels.mockClear();
+
+      await paginator.recoverLoadedItems();
+
+      expect(queryChannels.mock.calls.map(([options]) => options?.offset)).toEqual([
+        0, 30, 60, 90, 120,
+      ]);
+      expect(paginator.items!.map((channel) => channel.id)).toEqual(
+        serverChannels.slice(0, 150).map((response) => response.channel.id),
+      );
+      expect(paginator.hasMoreTail).toBe(true);
+      await paginator.toTail();
+      expect(paginator.items).toHaveLength(160);
+    });
   });
 });

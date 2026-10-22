@@ -40,6 +40,12 @@ const hasSameItems = (current: Channel[] | undefined, next: Channel[] | undefine
   return true;
 };
 
+/**
+ * The most loaded channels a reconnect re-queries (`recoverLoadedItems`). Those loaded past it are
+ * dropped, and load again when the list is scrolled to them.
+ */
+const MAX_RECOVERED_ITEMS = 150;
+
 const DEFAULT_BACKEND_SORT: SortParamRequest[] = [
   { direction: -1, field: 'last_message_at' },
   { direction: -1, field: 'updated_at' },
@@ -741,10 +747,12 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
    * returned: they were deleted, left, hidden, or no longer match the filter.
    *
    * Each page asks for everything still to cover and the next one starts where it ended, so the
-   * server's page cap decides the step. A failed page removes nothing.
+   * server's page cap decides the step. A failed page removes nothing. At most
+   * {@link MAX_RECOVERED_ITEMS} channels are re-queried: the rest are dropped.
    */
   recoverLoadedItems = async () => {
     const loadedCids = new Set((this.items ?? []).map((channel) => channel.cid));
+    const recoveredCount = Math.min(loadedCids.size, MAX_RECOVERED_ITEMS);
     const returnedCids = new Set<string>();
     const shape = this.getNextQueryShape();
     let interval: AnyInterval | null = null;
@@ -759,8 +767,8 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
           offset,
           limit:
             offset === 0
-              ? Math.max(this.pageSize, loadedCids.size)
-              : loadedCids.size - offset,
+              ? Math.max(this.pageSize, recoveredCount)
+              : recoveredCount - offset,
         },
         reset: offset === 0 ? 'yes' : undefined,
         silent: true,
@@ -778,7 +786,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       for (const channel of result.stateCandidate.items ?? [])
         returnedCids.add(channel.cid);
       offset += page.length;
-    } while (offset < loadedCids.size);
+    } while (offset < recoveredCount);
 
     this.batch(
       () => {
