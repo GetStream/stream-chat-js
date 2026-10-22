@@ -764,14 +764,8 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       // the list's own query path, without publishing as the list is published once, below
       const result = await this.executeQuery({
         keepPreviousItems: true,
-        queryShape: {
-          ...shape,
-          offset,
-          limit:
-            offset === 0
-              ? Math.max(this.pageSize, recoveredCount)
-              : recoveredCount - offset,
-        },
+        queryShape:
+          offset === 0 ? undefined : { ...shape, offset, limit: recoveredCount - offset },
         reset: offset === 0 ? 'yes' : undefined,
         silent: true,
         updateState: false,

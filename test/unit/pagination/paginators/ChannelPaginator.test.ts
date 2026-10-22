@@ -2846,5 +2846,40 @@ describe('ChannelPaginator', () => {
         'c3',
       ]);
     });
+
+    it('shows a first page that shares no channel with the loaded list', async () => {
+      const { paginator, setServerChannels } = await setup();
+      // while away, c1 and c2 left and two channels the list never loaded took the top
+      setServerChannels([
+        channelResponse('y1', '2024-01-06T00:00:00.000Z'),
+        channelResponse('y2', '2024-01-05T00:00:00.000Z'),
+        channelResponse('c3', '2024-01-02T00:00:00.000Z'),
+        channelResponse('c4', '2024-01-01T00:00:00.000Z'),
+      ]);
+
+      await paginator.recoverLoadedItems();
+
+      expect(paginator.items!.map((channel) => channel.id)).toEqual([
+        'y1',
+        'y2',
+        'c3',
+        'c4',
+      ]);
+    });
+
+    it('shows the channels a list that was empty at the reconnect gained', async () => {
+      const { paginator, setServerChannels } = await setup({ pages: 0 });
+      setServerChannels([]);
+      await paginator.toTail();
+      expect(paginator.items).toEqual([]);
+      setServerChannels([
+        channelResponse('e1', '2024-01-02T00:00:00.000Z'),
+        channelResponse('e2', '2024-01-01T00:00:00.000Z'),
+      ]);
+
+      await paginator.recoverLoadedItems();
+
+      expect(paginator.items!.map((channel) => channel.id)).toEqual(['e1', 'e2']);
+    });
   });
 });
