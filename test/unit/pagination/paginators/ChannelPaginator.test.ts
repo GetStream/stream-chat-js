@@ -2668,5 +2668,79 @@ describe('ChannelPaginator', () => {
 
       expect(paginator.items!.map((channel) => channel.id)).toEqual(['c1', 'c2', 'c4']);
     });
+
+    it('leaves pagination open, so the next page finds the end of the list itself', async () => {
+      const { paginator, queryChannels } = await setup();
+      // the list is loaded to its end: the next page came back empty
+      await paginator.toTail();
+      expect(paginator.hasMoreTail).toBe(false);
+
+      await paginator.recoverLoadedItems();
+      expect(paginator.hasMoreTail).toBe(true);
+      const requests = queryChannels.mock.calls.length;
+      await paginator.toTail();
+
+      expect(queryChannels.mock.calls.length).toBe(requests + 1);
+      expect(paginator.hasMoreTail).toBe(false);
+    });
+
+    it('keeps paginating when the last recovery request asked for less than a page', async () => {
+      const { paginator, serverChannels, setServerChannels } = await setup();
+      setServerChannels([
+        ...serverChannels,
+        channelResponse('c5', '2023-12-31T00:00:00.000Z'),
+      ]);
+      // a short third page: 5 loaded, and the list believes it reached its end
+      await paginator.toTail();
+      expect(paginator.hasMoreTail).toBe(false);
+      setServerChannels([
+        ...serverChannels,
+        channelResponse('c5', '2023-12-31T00:00:00.000Z'),
+        channelResponse('c6', '2023-12-30T00:00:00.000Z'),
+      ]);
+
+      // the recovery's last request asks for the 1 channel still to cover, less than a page
+      await paginator.recoverLoadedItems();
+      await paginator.toTail();
+
+      expect(paginator.items!.map((channel) => channel.id)).toEqual([
+        'c1',
+        'c2',
+        'c3',
+        'c4',
+        'c5',
+        'c6',
+      ]);
+    });
+
+    it('shows the first page in its new order before the later pages arrive', async () => {
+      const { paginator, queryChannels, serverChannels, setServerChannels } =
+        await setup();
+      // while away, c3 got a message and is now the first channel
+      setServerChannels([
+        channelResponse('c3', '2024-01-05T00:00:00.000Z'),
+        ...serverChannels.filter((response) => response.channel.id !== 'c3'),
+      ]);
+      const answer = queryChannels.getMockImplementation()!;
+      let releaseSecondPage = () => {};
+      queryChannels.mockImplementation((options) => {
+        if (!options?.offset) return answer(options);
+        return new Promise(
+          (resolve) => (releaseSecondPage = () => resolve(answer(options))),
+        );
+      });
+
+      const recovery = paginator.recoverLoadedItems();
+      await vi.waitFor(() => expect(queryChannels.mock.lastCall?.[0]?.offset).toBe(2));
+
+      expect(paginator.items!.map((channel) => channel.id)).toEqual([
+        'c3',
+        'c1',
+        'c2',
+        'c4',
+      ]);
+      releaseSecondPage();
+      await recovery;
+    });
   });
 });

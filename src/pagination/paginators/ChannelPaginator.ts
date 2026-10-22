@@ -744,19 +744,6 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
    * server's page cap decides the step. A failed page removes nothing.
    */
   recoverLoadedItems = async () => {
-    const { offlineDb } = this.client;
-    if (
-      offlineDb?.getChannelsForQuery &&
-      this.client.user?.id &&
-      !offlineDb.syncManager.isSynced
-    ) {
-      offlineDb.syncManager.scheduleSyncStatusChangeCallback(
-        `${this.id}:recover`,
-        this.recoverLoadedItems,
-      );
-      return;
-    }
-
     const loadedCids = new Set((this.items ?? []).map((channel) => channel.cid));
     const returnedCids = new Set<string>();
     const shape = this.getNextQueryShape();
@@ -783,7 +770,9 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       if (!result || !page) return;
       if (result.targetInterval) {
         interval = result.targetInterval;
-        this.setActiveInterval(interval, { updateState: false });
+        // we update immediately for the first page as most of the stuff that is going
+        // to move is going to do it to this page
+        this.setActiveInterval(interval, { updateState: offset === 0 });
       }
       if (!page.length) break;
       for (const channel of result.stateCandidate.items ?? [])
@@ -800,7 +789,11 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       { coalesce: true },
     );
     if (interval) this.setActiveInterval(interval);
-    this.state.partialNext({ offset: this.items?.length ?? 0 });
+    this.state.partialNext({
+      offset: this.items?.length ?? 0,
+      // optimistically assume we have more pages, at worst it's one extra pagination attempt
+      hasMoreTail: true,
+    });
   };
 
   filterQueryResults = (items: Channel[]) => items;
