@@ -27,8 +27,8 @@ export const DEFAULT_CONNECTION_RECOVERY_MANAGER_CONFIG: ConnectionRecoveryManag
  * It does not sweep the channel store (watches are a bounded server resource). Other channels recover
  * on demand, when an event proves them relevant.
  *
- * Lists recover when the socket goes online. Active channels recover on the offline DB's sync-status
- * edge when offline support is on (it lands after pending tasks replay), else on the same socket status.
+ * Lists and active channels recover on the offline DB's sync-status edge when offline support is on (it
+ * lands after pending tasks replay), else when the socket goes online.
  */
 export class ConnectionRecoveryManager extends WithSubscriptions {
   client: StreamChat;
@@ -93,13 +93,11 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
 
             if (!this.config.enabled) return;
 
-            // Lists always recover here; their own deferral handles offline ordering.
-            runDetached(this.recoverChannelLists(), { context: 'recoverChannelLists' });
-
-            // Active channels recover off the sync-status edge when there is one (the only signal that
-            // lands after replay and sync), else here. Exactly one path runs per reconnect.
-            const syncEdgeDrivesActiveChannels = this.ensureSyncStatusSubscription();
-            if (!syncEdgeDrivesActiveChannels) {
+            // Lists and active channels recover off the sync-status edge when there is one (the only
+            // signal that lands after replay and sync), else here. Exactly one path runs per reconnect.
+            const syncEdgeDrivesRecovery = this.ensureSyncStatusSubscription();
+            if (!syncEdgeDrivesRecovery) {
+              runDetached(this.recoverChannelLists(), { context: 'recoverChannelLists' });
               runDetached(this.recoverActiveChannels(), {
                 context: 'recoverActiveChannels',
               });
@@ -121,8 +119,7 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
   /**
    * Binds to the offline DB's sync-status edge once the DB is initialized (an uninitialized one
    * publishes no edge). Safe from the status handler: the edge is published only after
-   * `syncAndExecutePendingTasks()` resolves. Returns whether the edge now drives active-channel
-   * recovery.
+   * `syncAndExecutePendingTasks()` resolves. Returns whether the edge now drives the recovery.
    */
   private ensureSyncStatusSubscription = (): boolean => {
     if (this.unsubscribeSyncStatus) return true;
@@ -132,6 +129,7 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
 
     const { unsubscribe } = offlineDb.syncManager.onSyncStatusChange((status) => {
       if (!status || !this.config.enabled) return;
+      runDetached(this.recoverChannelLists(), { context: 'recoverChannelLists' });
       runDetached(this.recoverActiveChannels(), { context: 'recoverActiveChannels' });
     });
     this.unsubscribeSyncStatus = unsubscribe;
