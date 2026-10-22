@@ -257,7 +257,7 @@ export class MessageIntervalPaginator extends BasePaginator<
   sortComparator: (a: LocalMessage, b: LocalMessage) => number;
   /**
    * Whether a message belongs in intervals and state. Keep it consistent with `filterQueryResults`
-   * and cursor flag derivation.
+   * and with the page the linear cursor flag derivation reads (see {@link deriveCursorFromPage}).
    */
   shouldIncludeMessageInInterval(message: LocalMessage): boolean {
     return !message.shadowed;
@@ -2088,17 +2088,18 @@ export class MessageIntervalPaginator extends BasePaginator<
   }
 
   /**
-   * The cursor and more-messages flags after a page is placed (`deriveCursor`), comparing the page
+   * The cursor and more-messages flags after a page is placed (`deriveCursor`). A page around a
+   * point counts the messages the server returned on each side of it. Any other page is compared
    * with the interval's outermost server-known messages (see {@link getServerKnownEdges}): a page
    * never holds an unsent message, so one at an edge must not hide that the page reached the edge.
    */
   private deriveCursorFromPage(
     ctx: CursorDeriveContext<LocalMessage, MessageQueryShape>,
   ): CursorDeriveResult {
-    // The interval is built from the filtered page but `ctx.page` is the raw response. The
-    // derivators compare the page's length with the requested size, and the linear one its edges
-    // with the interval's server-known edges, so the locally filtered messages (e.g. shadowed) are
-    // dropped here, or they would wrongly conclude the page is not at the bounds.
+    // The interval is built from the filtered page but `ctx.page` is the raw response. The linear
+    // derivation compares the page's length with the requested size and its edges with the
+    // interval's server-known edges, so the locally filtered messages (e.g. shadowed) are dropped for
+    // it, or it would wrongly conclude the page is not at the bounds.
     const pageWithPermittedMessages: LocalMessage[] = [];
     let filteredLocallyCount = 0;
     for (const message of ctx.page) {
@@ -2125,7 +2126,11 @@ export class MessageIntervalPaginator extends BasePaginator<
       };
     }
 
-    const derivationCtx = {
+    // A page around a point is judged by how many messages the server returned on each side of it,
+    // so it is read as returned: a message filtered locally, the target included, still shows the
+    // server had it, and dropping it would make its side look exhausted.
+    const aroundDerivationCtx = ctx;
+    const linearDerivationCtx = {
       ...ctx,
       intervalEdges: this.getServerKnownEdges(ctx.interval),
       page: pageWithPermittedMessages,
@@ -2133,11 +2138,11 @@ export class MessageIntervalPaginator extends BasePaginator<
     };
     const flags = (ctx.queryShape as MessagePaginationParams)?.created_at_around
       ? deriveCreatedAtAroundPaginationFlags<LocalMessage, MessagePaginationParams>(
-          derivationCtx,
+          aroundDerivationCtx,
         )
       : ctx.queryShape?.id_around
-        ? deriveIdAroundPaginationFlags(derivationCtx)
-        : deriveLinearPaginationFlags(derivationCtx);
+        ? deriveIdAroundPaginationFlags(aroundDerivationCtx)
+        : deriveLinearPaginationFlags(linearDerivationCtx);
     return { ...flags, cursor: this.getCursorFromInterval(ctx.interval, flags) };
   }
 }

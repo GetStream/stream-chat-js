@@ -1921,7 +1921,7 @@ describe('MessagePaginator', () => {
   });
 
   describe('jump pagination + local filtering', () => {
-    it('marks jump interval as head when the newest message in the raw page is shadowed', async () => {
+    it('marks a jump interval as head when the server returned only one message newer than the target', async () => {
       const paginator = new MessagePaginator({ channel, itemIndex });
 
       const m1 = createMessage({
@@ -1963,6 +1963,100 @@ describe('MessagePaginator', () => {
       expect(targetInterval).toBeTruthy();
       expect((targetInterval as unknown as { isHead: boolean }).isHead).toBe(true);
       expect((targetInterval as unknown as { isTail: boolean }).isTail).toBe(false);
+    });
+
+    describe('a full page around a point with messages hidden locally', () => {
+      const LIMIT = 25;
+      const TARGET_INDEX = 12;
+      const TARGET_ID = `m${TARGET_INDEX}`;
+      // message `m<index>` is created `<index>` minutes into 2020
+      const createdAtOf = (index: number) =>
+        new Date(Date.UTC(2020, 0, 1, 0, index)).toISOString();
+      // 12 older messages, the target (m12) and 12 newer ones: the server had more on both sides
+      const fullPageAround = (shadowedIndexes: number[]) =>
+        Array.from({ length: LIMIT }, (_, index) =>
+          createMessage({
+            cid: 'channel-id',
+            id: `m${index}`,
+            created_at: convertDateToTimestamp(createdAtOf(index)),
+            shadowed: shadowedIndexes.includes(index),
+          }),
+        );
+
+      const placeAroundPage = async (
+        items: LocalMessage[],
+        queryShape: MessageQueryShape,
+      ) => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        const { targetInterval } = await paginator.placeQueryPage({
+          isFirstPage: true,
+          queryShape: { ...queryShape, limit: LIMIT },
+          requestedPageSize: LIMIT,
+          results: { items },
+          updateState: false,
+        });
+        return targetInterval as Interval;
+      };
+
+      const expectMoreOnBothSides = (interval: Interval) =>
+        expect(interval).toMatchObject({
+          hasMoreHead: true,
+          hasMoreTail: true,
+          isHead: false,
+          isTail: false,
+        });
+
+      it('keeps older messages to load when some older ones are hidden (id_around)', async () => {
+        const items = fullPageAround([0, 1, 2]);
+        expectMoreOnBothSides(await placeAroundPage(items, { id_around: TARGET_ID }));
+      });
+
+      it('keeps newer messages to load, and is not the head, when some newer ones are hidden (id_around)', async () => {
+        const items = fullPageAround([22, 23, 24]);
+        expectMoreOnBothSides(await placeAroundPage(items, { id_around: TARGET_ID }));
+      });
+
+      it('keeps older messages to load when some older ones are hidden (created_at_around)', async () => {
+        const items = fullPageAround([0, 1, 2]);
+        expectMoreOnBothSides(
+          await placeAroundPage(items, {
+            created_at_around: createdAtOf(TARGET_INDEX),
+          }),
+        );
+      });
+
+      it('keeps newer messages to load when some newer ones are hidden (created_at_around)', async () => {
+        const items = fullPageAround([22, 23, 24]);
+        expectMoreOnBothSides(
+          await placeAroundPage(items, {
+            created_at_around: createdAtOf(TARGET_INDEX),
+          }),
+        );
+      });
+
+      it('reads the sides from the page when the target itself is hidden', async () => {
+        // two messages newer than the target on a full page: the server ran out of newer ones
+        const items = fullPageAround([22]);
+        expect(await placeAroundPage(items, { id_around: 'm22' })).toMatchObject({
+          hasMoreHead: false,
+          hasMoreTail: true,
+          isHead: true,
+          isTail: false,
+        });
+      });
+
+      it('does not report a jumped interval as the anchored head when newer messages are hidden', async () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        await paginator.placeQueryPage({
+          isFirstPage: true,
+          queryShape: { id_around: TARGET_ID, limit: LIMIT },
+          requestedPageSize: LIMIT,
+          results: { items: fullPageAround([22, 23, 24]) },
+          updateState: false,
+        });
+
+        expect(paginator.anchoredHeadItems).toEqual([]);
+      });
     });
   });
 
