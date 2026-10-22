@@ -209,6 +209,26 @@ describe('BasePaginator', () => {
       expect(paginator.mockClientQuery).toHaveBeenCalledTimes(1);
     });
 
+    it('prevents pagination to a previous page if another query is in progress', async () => {
+      const paginator = new Paginator();
+      const firstPage = paginator.next();
+      paginator.queryResolve({ items: [{ id: 'id1' }], next: 'next1', prev: 'prev1' });
+      await firstPage;
+      expect(paginator.mockClientQuery).toHaveBeenCalledTimes(1);
+
+      const prevPromise1 = paginator.prev();
+      expect(paginator.isLoading).toBe(true);
+      expect(paginator.mockClientQuery).toHaveBeenCalledTimes(2);
+      const resolveFirstPrev = paginator.queryResolve;
+      const prevPromise2 = paginator.prev();
+      // a second query must not be dispatched while the first one is still loading
+      expect(paginator.mockClientQuery).toHaveBeenCalledTimes(2);
+      resolveFirstPrev({ items: [{ id: 'id0' }], next: 'next1', prev: 'prev0' });
+      paginator.queryResolve({ items: [{ id: 'id0' }], next: 'next1', prev: 'prev0' });
+      await Promise.all([prevPromise1, prevPromise2]);
+      expect(paginator.items).toEqual([{ id: 'id1' }, { id: 'id0' }]);
+    });
+
     it('stores lastQueryError and clears it with the next successful query', async () => {
       const paginator = new Paginator();
       let nextPromise = paginator.next();
