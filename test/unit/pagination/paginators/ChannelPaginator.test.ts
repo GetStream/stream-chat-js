@@ -2647,5 +2647,26 @@ describe('ChannelPaginator', () => {
       expect(paginator.items).toBe(itemsBefore);
       expect(publishedItems).toEqual([]);
     });
+
+    it('drops a loaded channel that another list owns now, though its own query still returns it', async () => {
+      const { paginator, serverChannels, setServerChannels } = await setup();
+      const owner = new ChannelPaginator({ client, filters: {} });
+      // `c3` belongs to `owner` once its data says so; every other channel stays with this list.
+      client.channelManager.setOwnershipResolver(({ channel }) =>
+        channel.data?.name === 'c3 for the owner' ? [owner.id] : [paginator.id],
+      );
+      client.channelManager.setPaginators([paginator, owner]);
+      setServerChannels(
+        serverChannels.map((response) =>
+          response.channel.id === 'c3'
+            ? channelResponse('c3', '2024-01-02T00:00:00.000Z', 'c3 for the owner')
+            : response,
+        ),
+      );
+
+      await paginator.recoverLoadedItems();
+
+      expect(paginator.items!.map((channel) => channel.id)).toEqual(['c1', 'c2', 'c4']);
+    });
   });
 });

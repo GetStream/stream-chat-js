@@ -786,7 +786,8 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
         this.setActiveInterval(interval, { updateState: false });
       }
       if (!page.length) break;
-      for (const cid of page) returnedCids.add(cid);
+      for (const channel of result.stateCandidate.items ?? [])
+        returnedCids.add(channel.cid);
       offset += page.length;
     } while (offset < loadedCids.size);
 
