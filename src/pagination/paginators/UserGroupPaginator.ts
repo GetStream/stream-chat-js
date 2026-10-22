@@ -90,7 +90,8 @@ export class UserGroupPaginator extends BasePaginator<
     } satisfies UserGroupListCursor);
   };
 
-  // The cursor stays out of the shape (a shape change resets the list): `query` applies it.
+  // The cursor stays out of the shape (a shape change resets the list): `fetchQueryResponse`
+  // applies it.
   protected getNextQueryShape(): ListUserGroupsOptions {
     return {
       limit: this.pageSize,
@@ -98,7 +99,7 @@ export class UserGroupPaginator extends BasePaginator<
     };
   }
 
-  query = async ({
+  protected override fetchQueryResponse = async ({
     direction,
     queryShape,
   }: PaginationQueryParams<ListUserGroupsOptions>): Promise<
@@ -119,5 +120,11 @@ export class UserGroupPaginator extends BasePaginator<
     return { items, tailward: this.buildNextCursor(items) };
   };
 
-  filterQueryResults = (items: UserGroupResponse[]) => items;
+  /** The extracting step of the query pipeline: the response is the page. */
+  protected override extractQueryPage(
+    response: PaginationQueryReturnValue<UserGroupResponse>,
+    _params: PaginationQueryParams<ListUserGroupsOptions>,
+  ) {
+    return response;
+  }
 }

@@ -2756,7 +2756,7 @@ describe('OfflineSupportApi', () => {
             sendMessage: vi.fn(),
             _createDraft: vi.fn(),
             _deleteDraft: vi.fn(),
-            messagePaginator: { trackLastMessage: vi.fn() },
+            messagePaginator: { trackLatestMessage: vi.fn() },
           } as unknown as Channel;
 
           updateMessageSpy = vi
@@ -2948,7 +2948,7 @@ describe('OfflineSupportApi', () => {
           await offlineDb['executeTask']({ task }, true);
 
           expect(mockChannel.sendMessage).toHaveBeenCalledWith(...task.payload);
-          expect(mockChannel.messagePaginator.trackLastMessage).toHaveBeenCalledWith(
+          expect(mockChannel.messagePaginator.trackLatestMessage).toHaveBeenCalledWith(
             expect.objectContaining({ id: 'msg1' }),
           );
         });

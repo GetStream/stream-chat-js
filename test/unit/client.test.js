@@ -26,7 +26,7 @@ import {
 	afterAll,
 	vi,
 } from 'vitest';
-import { Channel } from '../../src';
+import { Channel, ChannelWatchStatus, formatMessage } from '../../src';
 import { MockOfflineDB } from './offline-support/MockOfflineDB';
 import { convertDateToTimestamp } from './test-utils/time';
 
@@ -1514,14 +1514,16 @@ describe('StreamChat.queryChannels', async () => {
 		expect(activeBefore).to.eql(['m1', 'm2']);
 
 		// A channel-list re-query on reconnect re-hydrates the SAME channel instance with the newest
-		// window (disjoint from the jumped one). It must NOT weld them (which would drop m3/m4 in the
-		// middle) nor yank the user off the jumped window.
+		// window (disjoint from the jumped one). Nobody reads the channel, so the newest window is
+		// shown; it must NOT be welded to the jumped one (which would drop m3/m4 in the middle).
 		await client.queryChannelsAndHydrate({ message_limit: 3 });
 
 		const activeAfter = channel.messagePaginator.state
 			.getLatestValue()
 			.items?.map((m) => m.id);
-		expect(activeAfter).to.eql(['m1', 'm2']);
+		expect(activeAfter).to.eql(['m5', 'm6', 'm7']);
+		await channel.messagePaginator.jumpToMessage('m1');
+		expect(channel.messagePaginator.items?.map((m) => m.id)).to.eql(['m1', 'm2']);
 
 		stub.restore();
 	});
@@ -1550,9 +1552,9 @@ describe('StreamChat.queryChannels', async () => {
 		const [channel] = await client.queryChannelsAndHydrate({ message_limit: 3 });
 		expect(channel.messagePaginator.getItem('m7')).to.not.be.undefined;
 
-		// While the app was closed, m7 (the last message) was hard-deleted. The next channel-list query
-		// returns the window WITHOUT it. m7 is above the newest returned message (m6), so only the
-		// pre-fetch head snapshot lets the reconcile prune it — the cold-boot path must supply it.
+		// While the app was closed, m7 (the latest message) was hard-deleted. The next channel-list
+		// query returns the window WITHOUT it. m7 is above the newest returned message (m6), so only
+		// the pre-fetch head snapshot lets the reconcile prune it — the cold-boot path must supply it.
 		stub.resolves({
 			channels: [{ ...mockChannelQueryResponse, messages: [full[0], full[1]] }],
 		});
@@ -1561,6 +1563,182 @@ describe('StreamChat.queryChannels', async () => {
 		expect(channel.messagePaginator.getItem('m7')).to.be.undefined;
 
 		stub.restore();
+	});
+
+	it('keeps a message unsent when the channel-list query went out and confirmed during it', async () => {
+		const client = await getClientWithUser();
+		const at = (second) => convertDateToTimestamp(`2023-11-14T12:00:0${second}.000Z`);
+		const loaded = [5, 6].map((second) =>
+			generateMsg({ id: `m${second}`, created_at: at(second) }),
+		);
+		const stub = sinon.stub(client, 'queryChannels').resolves({
+			channels: [{ ...mockChannelQueryResponse, messages: loaded }],
+		});
+		const [channel] = await client.queryChannelsAndHydrate({ message_limit: 3 });
+		const { cid } = channel;
+		channel.messagePaginator.ingestItem(
+			channel.state.formatMessage(
+				generateMsg({ cid, id: 'mine', created_at: at(7), status: 'failed' }),
+			),
+		);
+		stub.callsFake(async () => {
+			// resent while the query runs, confirmed after the server produced the page
+			channel.messagePaginator.ingestItem(
+				channel.state.formatMessage(generateMsg({ cid, id: 'mine', created_at: at(8) })),
+			);
+			return { channels: [{ ...mockChannelQueryResponse, messages: loaded }] };
+		});
+
+		await client.queryChannelsAndHydrate({ message_limit: 3 });
+
+		expect(channel.messagePaginator.getItem('mine')?.status).to.equal('received');
+
+		stub.restore();
+	});
+
+	describe('a list queried without messages (message_limit: 0)', () => {
+		const at = (minute) =>
+			convertDateToTimestamp(new Date(Date.UTC(2020, 0, 1, 0, minute, 0)));
+		const message = (cid, id, minute) => generateMsg({ cid, id, created_at: at(minute) });
+
+		// the channel's latest message is m30, but the list asked for none
+		const hydrateWithoutMessages = async (client) => {
+			const stub = sinon.stub(client, 'queryChannels').resolves({
+				channels: [
+					{
+						...mockChannelQueryResponse,
+						channel: { ...mockChannelQueryResponse.channel, last_message_at: at(30) },
+						messages: [],
+					},
+				],
+			});
+			const [channel] = await client.queryChannelsAndHydrate({ message_limit: 0 });
+			stub.restore();
+			return channel;
+		};
+
+		it('leaves the message list not loaded rather than empty', async () => {
+			const client = await getClientWithUser();
+			const channel = await hydrateWithoutMessages(client);
+
+			expect(channel.messagePaginator.items).toBeUndefined();
+			expect(channel.messagePaginator.hasMoreTail).toBe(true);
+		});
+
+		it('loads the messages older than a live message', async () => {
+			const client = await getClientWithUser();
+			const channel = await hydrateWithoutMessages(client);
+			channel._handleChannelEvent({
+				type: 'message.new',
+				user: { id: 'other' },
+				message: message(channel.cid, 'm40', 40),
+			});
+			const older = Array.from({ length: 5 }, (_, i) =>
+				message(channel.cid, `m${35 + i}`, 35 + i),
+			);
+			const getOrCreate = vi
+				.spyOn(channel, 'getOrCreate')
+				.mockResolvedValue({ ...mockChannelQueryResponse, messages: older });
+
+			await channel.messagePaginator.toTail();
+
+			expect(getOrCreate).toHaveBeenCalledWith(
+				expect.objectContaining({
+					messages: expect.objectContaining({ id_lt: 'm40' }),
+				}),
+				undefined,
+			);
+			expect(channel.messagePaginator.items.map((m) => m.id)).toEqual([
+				'm35',
+				'm36',
+				'm37',
+				'm38',
+				'm39',
+				'm40',
+			]);
+		});
+
+		it('keeps showing the next live message after loading older ones', async () => {
+			const client = await getClientWithUser();
+			const channel = await hydrateWithoutMessages(client);
+			const receive = (id, minute) =>
+				channel._handleChannelEvent({
+					type: 'message.new',
+					user: { id: 'other' },
+					message: message(channel.cid, id, minute),
+				});
+			receive('m40', 40);
+			vi.spyOn(channel, 'getOrCreate').mockResolvedValue({
+				...mockChannelQueryResponse,
+				messages: Array.from({ length: 5 }, (_, i) =>
+					message(channel.cid, `m${35 + i}`, 35 + i),
+				),
+			});
+			await channel.messagePaginator.toTail();
+
+			receive('m41', 41);
+
+			expect(channel.messagePaginator.items.map((m) => m.id).slice(-2)).toEqual([
+				'm40',
+				'm41',
+			]);
+		});
+	});
+
+	describe('a list response reporting newer messages than the newest window holds', () => {
+		const at = (second) => convertDateToTimestamp(`2023-11-14T12:00:0${second}.000Z`);
+		const message = (id, second) => generateMsg({ id, created_at: at(second) });
+		const respond = (client, messages, lastSecond) =>
+			sinon.stub(client, 'queryChannels').resolves({
+				channels: [
+					{
+						...mockChannelQueryResponse,
+						channel: {
+							...mockChannelQueryResponse.channel,
+							last_message_at: at(lastSecond),
+						},
+						messages,
+					},
+				],
+			});
+		// m5–m6 loaded as the newest window, the reader jumped to m1, then the connection dropped
+		const loadJumpedAwayChannel = async (client) => {
+			const stub = respond(client, [message('m5', 5), message('m6', 6)], 6);
+			const [channel] = await client.queryChannelsAndHydrate({ message_limit: 2 });
+			stub.restore();
+			channel.messagePaginator.ingestPage({
+				page: [formatMessage(message('m1', 1))],
+				setActive: true,
+			});
+			channel.watchStatus = ChannelWatchStatus.WasWatching;
+			return channel;
+		};
+
+		it('shows the newest page to a channel nobody reads, left on another window', async () => {
+			const client = await getClientWithUser();
+			const channel = await loadJumpedAwayChannel(client);
+			expect(channel.messagePaginator.anchoredHeadItem?.id).toBe('m6');
+
+			// m7–m9 were sent while the connection was down
+			const stub = respond(client, [message('m8', 8), message('m9', 9)], 9);
+			await client.queryChannelsAndHydrate({ message_limit: 2 });
+			stub.restore();
+
+			expect(channel.messagePaginator.anchoredHeadItem?.id).toBe('m9');
+			expect(channel.messagePaginator.items.map((m) => m.id)).toEqual(['m8', 'm9']);
+		});
+
+		it('leaves an on-screen channel to its own reload', async () => {
+			const client = await getClientWithUser();
+			const channel = await loadJumpedAwayChannel(client);
+			channel.activate();
+
+			const stub = respond(client, [message('m8', 8), message('m9', 9)], 9);
+			await client.queryChannelsAndHydrate({ message_limit: 2 });
+			stub.restore();
+
+			expect(channel.messagePaginator.anchoredHeadItem?.id).toBe('m6');
+		});
 	});
 
 	it('seeds each queried channel paginator with its full message page', async () => {

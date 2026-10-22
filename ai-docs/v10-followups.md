@@ -194,13 +194,14 @@ Ordered by severity. The breaking dead-code removals and leftover decisions are 
 
 <a id="channel-query-messageset"></a>
 
-### `channel.query()` keeps v9 message-set semantics in its signature
+### `channel.query()` keeps v9 message-set semantics in its signature [SOLVED 397a2a2c]
 
 `simplification` · confidence: high · pre-release: yes · channel
 
 - **Where:** `src/channel.ts:1909-1913, 1931-1934`; JSDoc `:1901-1904`
 - **What:** `messageSetToAddToIfDoesNotExist: MessageSetType` survives, but only `'latest'` has an effect (seeds the paginator); `'current'` and `'new'` are identical no-ops. The JSDoc still describes v9 message sets.
 - **Suggested change:** Replace with `{ seedLatest?: boolean }` (or narrow to `'latest' | undefined`) and fix the JSDoc.
+- **Resolution:** the parameter and `MessageSetType` are removed; `channel.query(options?, requestOptions?)` adds no messages, and the message paginator places the page `watch()` fetches ([channel-query](v10-breaking-changes.md#channel-query)).
 
 <a id="poll-update-fields"></a>
 
@@ -694,7 +695,7 @@ Unused in `src` and not used downstream. Most are v10-only. The ones marked "v9 
 - **Where / What:** no src reader, but used downstream, so keep (or migrate the consumer first):
   - `AttachmentManager.fileToLocalUploadAttachment` (deprecated): RN `examples/ExpoChatGPTSample/screens/ChatContent.tsx:121`.
   - `AttachmentManager.uploadAttachment` (deprecated): runtime use in both UI SDKs. React `src/components/MediaRecorder/hooks/useMediaRecorder.ts:58`, `src/components/MessageComposer/AttachmentPreviewList/AttachmentPreviewList.tsx:99-141` (`handleRetry`), `VoiceRecordingPreviewSlot.tsx:39`; RN `package/src/components/MessageInput/components/AttachmentPreview/AttachmentUploadPreviewList.tsx:353-503`, `package/src/components/MessageInput/hooks/useAudioRecorder.tsx:111`.
-  - `BasePaginator.next`, `hasNext`, `hasPrev` (deprecated shims): React `src/components/ChannelList/ChannelList.tsx:95` (`loadNextOnScrollToBottom={paginator.next}`), `src/components/InfiniteScrollPaginator/InfiniteScrollWithComponents.tsx:66-67` (see [shims](#lo-paginator-shims)).
+  - `BasePaginator.next`, `hasNext`, `hasPrev` (deprecated shims): React `src/components/ChannelList/ChannelList.tsx:95` (`loadNextOnScrollToBottom={paginator.next}`), `src/components/InfiniteScrollPaginator/InfiniteScrollWithComponents.tsx:66-67` (see [shims](#lo-paginator-shims)). Removed in 6bba7286, after React `master` moved to `toTail` / `hasMoreTail` / `hasMoreHead`.
   - `TextComposer.upsertMentionedUser` (deprecated): React `MessageInput.test.tsx:1750-1778`.
   - `MessageComposer.allowsPendingUploads`: React `examples/vite/src/Debug/ComposerStateInspector.tsx:140`. Now only an alias of `attachmentManager.config.pendingUploadsEnabled` (`src/messageComposer/messageComposer.ts:474-480`), still read by `hasSendableData`.
   - `MessageReceiptsTracker.onMessageDelivered` / `onMessageRead`: RN tests (see [above](#dc-receipts-tracker)).
@@ -746,13 +747,14 @@ Unused in `src` and not used downstream. Most are v10-only. The ones marked "v9 
 
 <a id="lo-paginator-shims"></a>
 
-#### Paginator and notification compat shims
+#### Paginator and notification compat shims [PARTLY SOLVED 6bba7286]
 
 `leftover` · confidence: high · pre-release: no · pagination / notifications
 
 - **Where:** `src/pagination/paginators/BasePaginator.ts:237-249, 700-709, 3492-3529` (`next`, `prev`, `nextDebounced`, `prevDebounced`, `hasNext`, `hasPrev`, `PaginationQueryReturnValue.next/prev`); `src/notifications/types.ts:122-133`
 - **What:** Deprecated shims shipped in the new major. React `master` still calls them at runtime on `ChannelPaginator`: `loadNextOnScrollToBottom={paginator.next}` (`src/components/ChannelList/ChannelList.tsx:95`) and `paginator.hasPrev` / `paginator.hasNext` (`src/components/InfiniteScrollPaginator/InfiniteScrollWithComponents.tsx:66-67`, through `PaginatorLike`). `NotificationState` is deprecated, yet `NotificationManagerState` is declared as an alias of it, so the deprecated name is the canonical definition.
 - **Suggested change:** Keep them for the whole v10 line ([keep](#keep-downstream)); removing them first requires migrating React's ChannelList / InfiniteScrollWithComponents to `toTail` / `hasMoreTail` / `hasMoreHead`, so remove in v11. Invert the alias so `NotificationState` points at `NotificationManagerState` (non-breaking, any time).
+- **Resolution:** the paginator shims (`next`, `prev`, `nextDebounced`, `prevDebounced`, `hasNext`, `hasPrev`, `PaginationQueryReturnValue.next/prev`) are removed before 10.0.0 ([paginator navigation](v10-breaking-changes.md#paginator-navigation)); React `master` type-checks and passes against that build. The `NotificationState` alias is still open.
 
 <a id="lo-composer-deprecations"></a>
 
@@ -1023,7 +1025,7 @@ Only places that survive the guide cleanup: JSDoc and code comments, README, CHA
 
 - **Where / What:**
   - `src/pagination/paginators/BasePaginator.ts:719-722`: `isInitialized` says "has not performed any query so far" but returns `true` once a query shape was recorded.
-  - `src/pagination/paginators/BasePaginator.ts:3260-3266`: the `next`/`prev` fallback "keeps non-migrated external subclasses working", but such subclasses reject in `getNextQueryShape()` (`:996-1000`) and, without `initialCursor`, their cursors are ignored (`:728-730`).
+  - `src/pagination/paginators/BasePaginator.ts:3260-3266`: the `next`/`prev` fallback "keeps non-migrated external subclasses working", but such subclasses reject in `getNextQueryShape()` (`:996-1000`) and, without `initialCursor`, their cursors are ignored (`:728-730`). [SOLVED 6bba7286: the fallback is removed.]
   - `src/thread_manager.ts:85, 318, 480`, `src/pagination/paginators/ThreadPaginator.ts:77`: comments compare against "`master`" as the baseline, which goes stale once v10 is `master`.
 - **Suggested change:** Fix the `isInitialized` doc; reword the fallback comment to "accepts legacy `next`/`prev` keys for subclasses that implement `getNextQueryShape` and set `initialCursor`" (or drop the fallback); say "v9" instead of `master`.
 
@@ -1124,9 +1126,9 @@ Only places that survive the guide cleanup: JSDoc and code comments, README, CHA
 | Where                                                                            | Gap                                                                                                                                                                                         | Suggested change                                               |
 | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
 | `test/unit/utils.test.js:6`                                                      | `describe.skip('generateUUIDv4')` (skipped in v9 too); its TODO says it fails on newer Node, so the no-`crypto` fallback is never tested.                                                   | Stub `crypto` instead of skipping.                             |
-| `test/unit/pagination/paginators/BasePaginator.test.ts:1200`                     | `it.todo('... whe updateState === false')`: the `updateState: false` path is untested ("whe" typo).                                                                                         | Write the test.                                                |
+| `test/unit/pagination/paginators/BasePaginator.test.ts:1200`                     | `it.todo('... whe updateState === false')`: the `updateState: false` path is untested ("whe" typo). [SOLVED #1926]                                                                          | Write the test.                                                |
 | `test/unit/pagination/paginators/BasePaginator.test.ts:192`                      | Title "throws is the paginator does implement own getNextQueryShape" means "throws if ... does not implement".                                                                              | Fix the title.                                                 |
-| `test/unit/pagination/paginators/MessagePaginator.test.ts:1630`                  | `describe.todo('postQueryReconcile and deriveCursor for', () => {})`: neither path is tested.                                                                                               | Write the tests.                                               |
+| `test/unit/pagination/paginators/MessagePaginator.test.ts:1630`                  | `describe.todo('postQueryReconcile and deriveCursor for', () => {})` (now `placeQueryPage`): neither path is tested.                                                                        | Write the tests.                                               |
 | `test/unit/channel.test.js:2618`                                                 | Empty body: `it('does not override the delivery information in the read status', () => {})` (also empty in v9).                                                                             | Implement or delete.                                           |
 | `test/unit/channel.test.js:3369-3373`                                            | Comment says "`client.search()` was removed - it forwarded to `client.search()`"; the removed method was `channel.search()`, and it did scope by `cid`.                                     | Fix the comment.                                               |
 | `test/unit/messageDelivery/MessageDeliveryReporter.test.ts:475-480`              | "still requests when no local unread count was configured" mocks `markRead`, hiding that the real `channel.markRead()` throws for `read_events: false` and `markReadViaReporter()` rejects. | Assert the real rejection.                                     |

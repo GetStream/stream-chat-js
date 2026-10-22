@@ -622,9 +622,9 @@ export class ChannelManager extends WithSubscriptions {
    * Removes every stored channel the app disconnected (`pendingDisposal`), whatever holds it, then
    * every one that is neither watched nor held; lists drop them. Kept: watched channels
    * (`watching`, or `wasWatching` until restored), active ones ({@link Channel.activate}), ones
-   * being loaded, and ones held in {@link ChannelManager.channelStore} (lists link theirs; threads,
-   * the composer cache and channel search hold theirs through claims,
-   * {@link EntityStore.addClaim}).
+   * being queried (`Channel.isQueryingChannel`), and ones held in
+   * {@link ChannelManager.channelStore} (lists link theirs; threads, the composer cache and channel
+   * search hold theirs through claims, {@link EntityStore.addClaim}).
    *
    * The SDK never calls this, as it cannot see channels an app keeps in its own state. Call it when
    * the app is done with them (e.g. after `searchController.dispose()`), and keep a channel your
@@ -919,7 +919,7 @@ export class ChannelManager extends WithSubscriptions {
   /**
    * Removes a paginator: it leaves `state.paginators`, stops receiving WS-driven updates and gets
    * its own `filterQueryResults` back. Its loaded items stay, and a query scheduled through
-   * `nextDebounced` is cancelled.
+   * `toTailDebounced` or `toHeadDebounced` is cancelled.
    *
    * @param paginatorOrId - The paginator to remove, or its ID.
    * @returns The removed paginator, or `undefined` when this manager did not hold it.

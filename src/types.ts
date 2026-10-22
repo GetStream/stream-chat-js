@@ -276,8 +276,6 @@ export type TokenOrProvider = null | string | TokenProvider | undefined;
 
 export type TokenProvider = () => Promise<string>;
 
-export type MessageSetType = 'latest' | 'current' | 'new';
-
 export class StreamAPIError<T = APIError> extends Error {
   public code: number | undefined;
   public status: number | undefined;

@@ -1,12 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getClientWithUser } from '../test-utils/getClient';
 import { generateChannel } from '../test-utils/generateChannel';
+import { generateMsg } from '../test-utils/generateMessage';
 import { generateThreadResponse } from '../test-utils/generateThreadResponse';
 import {
   type APIError,
   Channel,
   type CustomMarkReadRequestFn,
   Event,
+  formatMessage,
   MarkDeliveredResponse,
   MarkReadResponse,
   StreamAPIError,
@@ -31,8 +33,9 @@ const otherUser = {
 const mkMsg = (id: string, at: string | number | Date) =>
   ({ id, created_at: convertDateToTimestamp(new Date(at)) }) as any;
 
-// The delivery reporter now derives the latest message from `channel.messagePaginator.headItems`,
-// so tests seed the paginator's latest (head) window instead of assigning `channel.state.latestMessages`.
+// The delivery reporter takes the newest message from `channel.messagePaginator.latestMessage`,
+// which ingesting a page advances, so tests seed the paginator's newest window instead of assigning
+// `channel.state.latestMessages`.
 const setLatest = (channel: Channel, msgs: ReturnType<typeof mkMsg>[]) => {
   channel.messagePaginator.clearStateAndCache();
   if (msgs.length) {
@@ -73,12 +76,55 @@ describe('MessageDeliveryReporter', () => {
     vi.restoreAllMocks();
   });
 
+  it('makes the newest message of the page a jump loads the delivery candidate', async () => {
+    const at = (minute: number) => new Date(Date.UTC(2020, 0, 1, 0, minute));
+    const msg = (minute: number) =>
+      generateMsg({
+        cid: channel.cid,
+        date: at(minute),
+        id: `m${minute}`,
+        user: otherUser,
+      });
+    // an older window is loaded, not the newest messages
+    channel.messagePaginator.ingestPage({
+      page: [msg(1), msg(2)].map(formatMessage),
+      setActive: true,
+    });
+    vi.spyOn(channel, 'getOrCreate').mockResolvedValue(
+      generateChannel({
+        channel: {
+          id: channelId,
+          last_message_at: convertDateToTimestamp(at(9)),
+          type: channelType,
+        },
+        config: { delivery_events: true } as never,
+        messages: [msg(8), msg(9)],
+        // the user has read up to m1
+        read: [
+          {
+            last_read: convertDateToTimestamp(at(1)),
+            unread_messages: 3,
+            user: ownUser,
+          },
+        ],
+      }) as never,
+    );
+
+    // the paginator places the page, then the channel applies the rest of the response
+    await channel.messagePaginator.jumpToMessage('m9');
+
+    // @ts-expect-error accessing protected property deliveryReportCandidates
+    expect(client.messageDeliveryReporter.deliveryReportCandidates.get(channel.cid)).toBe(
+      'm9',
+    );
+  });
+
   it('announces delivery after the buffer window', async () => {
     const markDeliveredSpy = vi
       .spyOn(client, 'markDelivered')
       .mockResolvedValue({ ok: true } as any);
 
-    // last_read < last message
+    // last_read < latest message
     setLatest(channel, [mkMsg('m1', '2025-01-01T10:00:00Z')]);
     (channel.state as any).read['me'] = {
       last_read: convertDateToTimestamp(new Date('2025-01-01T09:00:00Z')),
@@ -101,12 +147,40 @@ describe('MessageDeliveryReporter', () => {
     });
   });
 
+  it('announces a message received live while only an older window is loaded', async () => {
+    const markDeliveredSpy = vi
+      .spyOn(client, 'markDelivered')
+      .mockResolvedValue({ ok: true } as any);
+
+    channel.messagePaginator.clearStateAndCache();
+    // a window reached by a jump, older than anything unread
+    channel.messagePaginator.ingestPage({
+      page: [mkMsg('old', '2025-01-01T08:00:00Z')],
+      setActive: true,
+    });
+    // received live while the reader sits in that window
+    channel.messagePaginator.ingestItem({
+      ...mkMsg('live', '2025-01-01T10:00:00Z'),
+      cid: channel.cid,
+    });
+    (channel.state as any).read['me'] = {
+      last_read: convertDateToTimestamp(new Date('2025-01-01T09:00:00Z')),
+    };
+
+    client.syncDeliveredCandidates([channel]);
+    vi.advanceTimersByTime(1000);
+
+    expect(markDeliveredSpy).toHaveBeenCalledWith({
+      latest_delivered_messages: [{ cid: channel.cid, id: 'live' }],
+    });
+  });
+
   it('announces at max 100 candidates per request', async () => {
     const markDeliveredSpy = vi
       .spyOn(client, 'markDelivered')
       .mockResolvedValue({ ok: true } as any);
 
-    // last_read < last message
+    // last_read < latest message
     const channels = Array.from({ length: 110 }, (_, i) => {
       const channel = client.channelManager.ensure({
         type: channelType,
@@ -245,8 +319,8 @@ describe('MessageDeliveryReporter', () => {
     vi.advanceTimersByTime(1000);
 
     // Thread delivery reporting is not yet supported: the thread branch returns before producing a
-    // candidate, so nothing is announced. (When enabled, it reads `messagePaginator.headItems` — the
-    // newest-loaded window — mirroring the channel branch.)
+    // candidate, so nothing is announced. (When enabled, it reads the thread's newest reply,
+    // `messagePaginator.latestMessage`, mirroring the channel branch.)
     expect(markDeliveredSpy).not.toHaveBeenCalled();
   });
 
@@ -570,7 +644,7 @@ describe('MessageDeliveryReporter', () => {
   });
 
   const receiveMessages = (count: number, startId = 0) => {
-    // last_read < last message
+    // last_read < latest message
     const channels = Array.from({ length: count }, (_, i) => {
       const channel = client.channelManager.ensure({
         type: channelType,

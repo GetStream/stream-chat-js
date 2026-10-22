@@ -25,7 +25,7 @@ import type { MessageOperations } from './messageOperations';
 import { nowNs } from './utils/time';
 import { WithSubscriptions } from './utils/WithSubscriptions';
 import { MessagePaginator } from './pagination';
-import type { MergeNewestPageOptions, PaginatorCursor } from './pagination';
+import type { PaginatorCursor, ReconcileNewestMessagesOptions } from './pagination';
 import { applyInstanceConfiguration } from './configuration/utils/applyInstanceConfiguration';
 import { ConfigController } from './configuration/ConfigController';
 import { deepFreezeConfig } from './configuration/utils/deepFreezeConfig';
@@ -193,6 +193,7 @@ export class Thread extends WithSubscriptions {
     this.messagePaginator = new MessagePaginator(
       {
         channel: this.channel,
+        thread: this,
         parentMessageId: this.id,
         requestSort: DEFAULT_SORT,
         itemOrder: DEFAULT_ITEM_ORDER,
@@ -220,8 +221,8 @@ export class Thread extends WithSubscriptions {
       });
     }
 
-    // Floor for `lastMessageAt`, for when the newest reply is not among `latest_replies`.
-    this.messagePaginator.seedLastMessageAt(threadData?.last_message_at);
+    // Floor for `latestMessageAt`, for when the newest reply is not among `latest_replies`.
+    this.messagePaginator.setQueriedLatestMessageAt(threadData?.last_message_at);
 
     this.messageComposer = new MessageComposer({
       client,
@@ -293,6 +294,11 @@ export class Thread extends WithSubscriptions {
     return ownUnreadCountSelector(this.client.userId)(this.state.getLatestValue());
   }
 
+  /** See {@link Thread.activate}. */
+  get active() {
+    return this.state.getLatestValue().active;
+  }
+
   /**
    * Declares that a consumer is displaying this thread and returns the function that ends it (as
    * `channel.activate()`). Refcounted: the thread stays active until the last release, and each
@@ -321,9 +327,12 @@ export class Thread extends WithSubscriptions {
 
   /**
    * Re-queries the replies, sized to the loaded window, and reconciles them in place (the thread
-   * analogue of {@link Channel.reload}; recovery calls it for active threads). Failed replies are
-   * kept, read from the reply paginator since `failedRepliesMap` misses threads never activated or
-   * listed. Rethrows, except for a not-found answer on a thread that never had replies.
+   * analogue of {@link Channel.reload}; recovery calls it for active threads). The thread applies
+   * the response to itself ({@link Thread.hydrateState}), whether or not it is registered in
+   * `client.threads`. Failed replies are kept: those loaded in the reply paginator or in the
+   * offline DB before the request that are no longer loaded after it are ingested again (the
+   * offline DB read is best effort). Rethrows, except for a not-found answer on a thread that never
+   * had replies.
    */
   public reload = async () => {
     if (this.state.getLatestValue().isLoading) {
@@ -333,12 +342,18 @@ export class Thread extends WithSubscriptions {
     this.state.partialNext({ isLoading: true });
 
     try {
-      const loadedReplies = this.messagePaginator.items ?? [];
-      const loadedReplyCount = loadedReplies.length;
+      const loadedReplyCount = this.messagePaginator.items?.length ?? 0;
       const requestedReplyLimit =
         Math.max(loadedReplyCount, this.messagePaginator.pageSize ?? 0) || undefined;
-      const reconcileCandidateIds = new Set(loadedReplies.map((reply) => reply.id));
-      const failedBefore = loadedReplies.filter((reply) => reply.status === 'failed');
+      const offlineDb = this.client.offlineDb;
+      // best effort: a failing read must not fail the reload
+      const failedInDb = offlineDb
+        ? await offlineDb.getFailedMessages({ cid: this.channel.cid }).catch(() => [])
+        : [];
+      // after the read: a reply that fails meanwhile is loaded by then
+      const failedBefore = this.messagePaginator.getFailedMessagesToRestore(failedInDb);
+      const headIntervalItemIdsAtRequest =
+        this.messagePaginator.getHeadIntervalItemIdsAtRequest();
       const { thread: threadData } = await this.client.getThread(
         { message_id: this.id },
         {
@@ -351,23 +366,10 @@ export class Thread extends WithSubscriptions {
       this.hydrateState(threadData, {
         reconcile: {
           requestedLimit: requestedReplyLimit,
-          candidateIds: reconcileCandidateIds,
+          headIntervalItemIdsAtRequest,
         },
       });
-
-      if (failedBefore.length) {
-        // Checks the visible window, not `getItem`: the item index can still hold a message the
-        // rebuild dropped from the loaded window.
-        const visible = new Set((this.messagePaginator.items ?? []).map((r) => r.id));
-        this.messagePaginator.batch(
-          () => {
-            for (const failed of failedBefore) {
-              if (!visible.has(failed.id)) this.messagePaginator.ingestItem(failed);
-            }
-          },
-          { coalesce: true },
-        );
-      }
+      this.messagePaginator.restoreFailedMessages(failedBefore);
     } catch (error) {
       const notFound =
         isDoesNotExistError(error as Error) ||
@@ -388,7 +390,7 @@ export class Thread extends WithSubscriptions {
    */
   public hydrateState = (
     threadData: ThreadStateResponse,
-    options?: { reconcile?: MergeNewestPageOptions },
+    options?: { reconcile?: ReconcileNewestMessagesOptions },
   ) => {
     if (threadData.parent_message_id !== this.id) {
       throw new Error("Cannot hydrate thread's state from another thread's response");
@@ -409,9 +411,12 @@ export class Thread extends WithSubscriptions {
 
     const incomingReplies = (threadData.latest_replies ?? []).map(formatMessage);
     if (!reconcile) this.messagePaginator.clearStateAndCache();
+    // The response's newest reply time replaces what was known, so latestMessageAt is right even
+    // when the merged page lacks the newest reply, or that reply was hard-deleted.
+    this.messagePaginator.setQueriedLatestMessageAt(threadData.last_message_at);
     if (typeof this.messagePaginator.items === 'undefined') {
-      // Nothing loaded yet (e.g. a thread opened from a message): `mergeNewestPage` no-ops
-      // without an anchored head and would drop the fetched replies, so seed as the constructor
+      // Nothing loaded yet (e.g. a thread opened from a message): `reconcileNewestMessages` no-ops
+      // without a loaded window and would drop the fetched replies, so set them as the constructor
       // does.
       const isLastPage = holdsEveryReply(incomingReplies, threadData);
       this.messagePaginator.setItems({
@@ -421,11 +426,9 @@ export class Thread extends WithSubscriptions {
         isLastPage,
       });
     } else {
-      this.messagePaginator.mergeNewestPage(incomingReplies, reconcile);
+      this.messagePaginator.reconcileNewestMessages(incomingReplies, reconcile);
     }
     pendingReplies.forEach((reply) => this.messagePaginator.ingestItem(reply));
-    // Keeps `lastMessageAt` fresh when the merged page lacks the newest reply. Monotonic.
-    this.messagePaginator.seedLastMessageAt(threadData.last_message_at);
   };
 
   public registerSubscriptions = () => {

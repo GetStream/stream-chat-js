@@ -473,7 +473,10 @@ describe('ReminderManager', () => {
       const queryReturnValue: PaginationQueryReturnValue<ReminderResponseData> = {
         items: reminders,
       };
-      vi.spyOn(manager.paginator, 'query').mockResolvedValue(queryReturnValue);
+      // @ts-expect-error stubbing the protected fetching step
+      vi.spyOn(manager.paginator, 'fetchQueryResponse').mockResolvedValue(
+        queryReturnValue,
+      );
       await manager.queryNextReminders();
       expect(manager.reminders.size).toBe(4);
       Array.from(manager.reminders.values()).forEach((reminder, i) => {
@@ -490,7 +493,10 @@ describe('ReminderManager', () => {
       const queryReturnValue: PaginationQueryReturnValue<ReminderResponseData> = {
         items: reminders,
       };
-      vi.spyOn(manager.paginator, 'query').mockResolvedValue(queryReturnValue);
+      // @ts-expect-error stubbing the protected fetching step
+      vi.spyOn(manager.paginator, 'fetchQueryResponse').mockResolvedValue(
+        queryReturnValue,
+      );
       await manager.queryPreviousReminders();
 
       expect(manager.reminders.size).toBe(4);

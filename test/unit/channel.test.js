@@ -9,7 +9,10 @@ import { mockChannelQueryResponse } from './test-utils/mockChannelQueryResponse'
 
 import { Channel, ChannelState, ChannelWatchStatus, StreamChat } from '../../src';
 import { StableWSConnection } from '../../src/connection';
-import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from '../../src/constants';
+import {
+	DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
+	DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES,
+} from '../../src/constants';
 import { MockOfflineDB } from './offline-support/MockOfflineDB';
 import { formatMessage, generateUUIDv4 as uuidv4 } from '../../src/utils';
 
@@ -18,9 +21,10 @@ import { convertDateToTimestamp } from './test-utils/time';
 import { msToNs } from '../../src/utils/time';
 import { chatLoggerSystem } from '../../src/logger';
 
-// Seed the channel's messagePaginator "latest" (head) window from raw generated messages.
-// The unread/last-message readers now source from `messagePaginator.headItems`/`headmostItem`,
-// so tests populate the paginator (formatted) rather than the legacy `state.addMessagesSorted`.
+// Seed the channel's messagePaginator "latest" (head) window from raw generated messages. The
+// unread/latest-message readers now source from
+// `messagePaginator.anchoredHeadItems`/`anchoredHeadItem`, so tests populate the paginator
+// (formatted) rather than the legacy `state.addMessagesSorted`.
 const seedLatestWindow = (channel, messages) =>
 	channel.messagePaginator.ingestPage({
 		page: messages.map((m) => formatMessage(m)),
@@ -466,14 +470,14 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 		// A plain read needs no connection id, so an explicit `watch: false` must not be made to wait
 		// for one — which is what would make it unusable offline.
 		socketDown();
-		const query = sinon
-			.stub(channel, 'query')
-			.resolves({ channel: {}, members: [], messages: [] });
+		const getOrCreate = sinon
+			.stub(channel, 'getOrCreate')
+			.resolves(generateChannel({ channel: { id: channel.id, type: channel.type } }));
 
 		await channel.watch({ watch: false, presence: false });
 
-		expect(query.calledOnce).to.be.true;
-		expect(query.firstCall.args[0]).to.include({ watch: false });
+		expect(getOrCreate.calledOnce).to.be.true;
+		expect(getOrCreate.firstCall.args[0]).to.include({ watch: false });
 	});
 
 	it('rejects at once after a deliberate closeConnection', async () => {
@@ -987,6 +991,95 @@ describe('Channel local unread count (readEvents.localUnreadCountEnabled)', func
 		expect(returned).to.equal(event);
 		expect(returned.last_read_message_id).to.be.equal(lastMsg.id);
 		expect(returned.created_at).to.be.a('number');
+	});
+
+	describe('markReadLocally marks read up to the newest server-confirmed message', () => {
+		const at = (minute) => new Date(Date.UTC(2020, 0, 1, 0, minute, 0));
+		const msgAt = (id, minute, overrides = {}) =>
+			generateMsg({ id, date: at(minute), user: otherUser, ...overrides });
+
+		it('a system message', function () {
+			const { client, channel } = setupChannel({ localUnreadCountEnabled: true });
+			// the system message is then not the channel's latest message
+			client._addChannelConfig({
+				cid: channel.cid,
+				config: { skip_last_msg_update_for_system_msgs: true },
+			});
+			seedLatestWindow(channel, [msgAt('m1', 1), msgAt('system', 2, { type: 'system' })]);
+			expect(channel.messagePaginator.latestMessage?.id).toBe('m1');
+
+			const event = channel.markReadLocally();
+
+			expect(event.last_read_message_id).toBe('system');
+			expect(channel.state.read[user.id].last_read_message_id).toBe('system');
+		});
+
+		it.each([['sending'], ['failed']])(
+			'before an own message that is %s',
+			function (status) {
+				const { channel } = setupChannel({ localUnreadCountEnabled: true });
+				seedLatestWindow(channel, [
+					msgAt('m1', 1),
+					msgAt('m2', 2),
+					msgAt('local-id', 3, { status, user }),
+				]);
+
+				const event = channel.markReadLocally();
+
+				expect(event.last_read_message_id).toBe('m2');
+				expect(channel.state.read[user.id].last_read_message_id).toBe('m2');
+			},
+		);
+
+		it('none while the window holding the newest messages is not loaded', function () {
+			const { channel } = setupChannel({ localUnreadCountEnabled: true });
+			// only a window reached by a jump: its newest message is not the channel's
+			channel.messagePaginator.ingestPage({
+				page: [msgAt('old1', 1), msgAt('old2', 2)].map((m) => formatMessage(m)),
+				setActive: true,
+			});
+			seedOwnUnreadCount(channel, 3);
+
+			const event = channel.markReadLocally();
+
+			expect(event.last_read_message_id).toBeUndefined();
+			// the read covers everything up to the event's time
+			expect(channel.state.read[user.id].last_read).toBe(event.created_at);
+			expect(channel.state.read[user.id].last_read_message_id).toBeUndefined();
+			expect(channel.countUnread()).toBe(0);
+		});
+	});
+
+	describe('while only a window reached by a jump is loaded', () => {
+		const at = (minute) => new Date(Date.UTC(2020, 0, 1, 0, minute, 0));
+		const msgIn = (channel, id, minute) =>
+			formatMessage(
+				generateMsg({ id, cid: channel.cid, date: at(minute), user: otherUser }),
+			);
+		const loadOlderWindowAndLiveMessage = (channel) => {
+			channel.messagePaginator.ingestPage({
+				page: [msgIn(channel, 'old1', 1), msgIn(channel, 'old2', 2)],
+				setActive: true,
+			});
+			// received live while the reader sits in the older window
+			channel.messagePaginator.ingestItem(msgIn(channel, 'live', 30));
+		};
+
+		it('markReadLocally marks the channel read up to its newest message', function () {
+			const { channel } = setupChannel({ localUnreadCountEnabled: true });
+			loadOlderWindowAndLiveMessage(channel);
+
+			const event = channel.markReadLocally();
+
+			expect(event.last_read_message_id).to.be.equal('live');
+		});
+
+		it('countUnread counts the newest messages, not the older window', function () {
+			const { channel } = setupChannel({ localUnreadCountEnabled: true });
+			loadOlderWindowAndLiveMessage(channel);
+
+			expect(channel.countUnread(convertDateToTimestamp(at(0)))).to.be.equal(1);
+		});
 	});
 
 	it('markReadLocally returns undefined and dispatches nothing when there is no connected user', function () {
@@ -1586,7 +1679,7 @@ describe('Channel _handleChannelEvent', function () {
 			].map(generateMsg);
 
 			seedLatestWindow(channel, messages);
-			expect(channel.messagePaginator.headItems.length).to.be.equal(3);
+			expect(channel.messagePaginator.anchoredHeadItems.length).to.be.equal(3);
 
 			channel._handleChannelEvent({
 				type: 'channel.truncated',
@@ -1596,7 +1689,7 @@ describe('Channel _handleChannelEvent', function () {
 				},
 			});
 
-			expect(channel.messagePaginator.headItems.length).to.be.equal(0);
+			expect(channel.messagePaginator.anchoredHeadItems.length).to.be.equal(0);
 		});
 
 		it('resets read[userId].unread_messages together with unreadCount so the badge does not go stale (#29)', function () {
@@ -1665,7 +1758,7 @@ describe('Channel _handleChannelEvent', function () {
 			].map(generateMsg);
 
 			seedLatestWindow(channel, messages);
-			expect(channel.messagePaginator.headItems.length).to.be.equal(3);
+			expect(channel.messagePaginator.anchoredHeadItems.length).to.be.equal(3);
 
 			channel._handleChannelEvent({
 				type: 'channel.truncated',
@@ -1675,7 +1768,7 @@ describe('Channel _handleChannelEvent', function () {
 				},
 			});
 
-			expect(channel.messagePaginator.headItems.length).to.be.equal(2);
+			expect(channel.messagePaginator.anchoredHeadItems.length).to.be.equal(2);
 		});
 
 		it('prunes pinned messages older than the cutoff on a partial channel.truncated', () => {
@@ -2812,7 +2905,7 @@ describe('Channel _handleChannelEvent', function () {
 			expect(Object.keys(channel.state.members).length).to.be.eq(1);
 			expect(Object.keys(channel.state.watchers).length).to.be.eq(1);
 			expect(Object.keys(channel.state.read).length).to.be.eq(1);
-			expect(channel.messagePaginator.headItems.length).to.be.eq(1);
+			expect(channel.messagePaginator.anchoredHeadItems.length).to.be.eq(1);
 			expect(channel.state.watcher_count).to.be.eq(5);
 		});
 
@@ -3462,7 +3555,7 @@ describe('Message search', async () => {
 	});
 });
 
-describe('Channel lastMessage', async () => {
+describe('Channel latestMessage', async () => {
 	let channel;
 	let client;
 	beforeEach(async () => {
@@ -3471,7 +3564,7 @@ describe('Channel lastMessage', async () => {
 		client._addChannelConfig({ type: channel.type, config: {} });
 	});
 
-	it('should return last message - messages are in order', () => {
+	it('should return the latest message - messages are in order', () => {
 		channel.state = new ChannelState(channel);
 		const latestMessageDate = '2018-01-01T00:13:24';
 		seedLatestWindow(channel, [
@@ -3480,12 +3573,12 @@ describe('Channel lastMessage', async () => {
 			generateMsg({ date: latestMessageDate }),
 		]);
 
-		expect(channel.messagePaginator.headmostItem.created_at).to.be.equal(
+		expect(channel.messagePaginator.anchoredHeadItem.created_at).to.be.equal(
 			convertDateToTimestamp(latestMessageDate),
 		);
 	});
 
-	it('should return last message - messages are out of order', () => {
+	it('should return the latest message - messages are out of order', () => {
 		channel.state = new ChannelState(channel);
 		const latestMessageDate = '2018-01-01T00:13:24';
 		seedLatestWindow(channel, [
@@ -3494,12 +3587,12 @@ describe('Channel lastMessage', async () => {
 			generateMsg({ date: '2018-01-01T00:00:00' }),
 		]);
 
-		expect(channel.messagePaginator.headmostItem.created_at).to.be.equal(
+		expect(channel.messagePaginator.anchoredHeadItem.created_at).to.be.equal(
 			convertDateToTimestamp(latestMessageDate),
 		);
 	});
 
-	it('should return last message - state has more message sets loaded', () => {
+	it('should return the latest message - state has more message sets loaded', () => {
 		channel.state = new ChannelState(channel);
 		const latestMessageDate = '2018-01-01T00:13:24';
 		const latestMessages = [
@@ -3518,12 +3611,12 @@ describe('Channel lastMessage', async () => {
 			setActive: false,
 		});
 
-		expect(channel.messagePaginator.headmostItem.created_at).to.be.equal(
+		expect(channel.messagePaginator.anchoredHeadItem.created_at).to.be.equal(
 			convertDateToTimestamp(latestMessageDate),
 		);
 	});
 
-	it('should return last message - system message is ignored when skip_last_msg_update_for_system_msgs: true', () => {
+	it('should return the latest message - system message is ignored when skip_last_msg_update_for_system_msgs: true', () => {
 		client._addChannelConfig({
 			cid: channel.cid,
 			config: { skip_last_msg_update_for_system_msgs: true },
@@ -3537,7 +3630,7 @@ describe('Channel lastMessage', async () => {
 		// ingestion advances the tracked latest, skipping the newest (system) message per config.
 		seedLatestWindow(channel, latestMessages);
 
-		expect(channel.messagePaginator.lastMessageAt).toBe(latestMessages[1].created_at);
+		expect(channel.messagePaginator.latestMessageAt).toBe(latestMessages[1].created_at);
 	});
 });
 
@@ -3551,21 +3644,21 @@ describe('Channel last_message_at', () => {
 		channel.state = new ChannelState(channel);
 	});
 
-	const track = (msg) => channel.messagePaginator.trackLastMessage(formatMessage(msg));
+	const track = (msg) => channel.messagePaginator.trackLatestMessage(formatMessage(msg));
 
 	it('advances monotonically as messages are tracked', () => {
-		expect(channel.messagePaginator.lastMessageAt).to.be.null;
+		expect(channel.messagePaginator.latestMessageAt).to.be.null;
 		track(generateMsg({ id: '0', date: '2020-01-01T00:00:00.000Z' }));
-		expect(channel.messagePaginator.lastMessageAt).to.be.equal(
+		expect(channel.messagePaginator.latestMessageAt).to.be.equal(
 			convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
 		);
 		track(generateMsg({ id: '1', date: '2019-01-01T00:00:00.000Z' }));
-		expect(channel.messagePaginator.lastMessageAt).to.be.equal(
+		expect(channel.messagePaginator.latestMessageAt).to.be.equal(
 			convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
 		);
 
 		track(generateMsg({ id: '2', date: '2020-01-01T00:00:00.001Z' }));
-		expect(channel.messagePaginator.lastMessageAt).to.be.equal(
+		expect(channel.messagePaginator.latestMessageAt).to.be.equal(
 			convertDateToTimestamp('2020-01-01T00:00:00.001Z'),
 		);
 	});
@@ -3575,30 +3668,30 @@ describe('Channel last_message_at', () => {
 			generateMsg({ id: 'reply', date: '2020-01-01T00:00:00.000Z', parent_id: 'parent' }),
 		);
 
-		expect(channel.messagePaginator.lastMessageAt).to.be.null;
+		expect(channel.messagePaginator.latestMessageAt).to.be.null;
 	});
 
 	it('is null when nothing has been tracked or seeded', () => {
-		expect(channel.messagePaginator.lastMessageAt).to.be.null;
+		expect(channel.messagePaginator.latestMessageAt).to.be.null;
 	});
 
-	it('is seeded from the server-provided last_message_at', () => {
-		// A channel surfaced by the channel-list query: lastMessageAt is seeded from the server
-		// aggregate so it sorts correctly even before its message paginator loads a page.
-		channel.messagePaginator.seedLastMessageAt(
+	it('takes the queried last_message_at', () => {
+		// A channel surfaced by the channel-list query: latestMessageAt comes from the query's
+		// `last_message_at`, so it sorts correctly even before its message paginator loads a page.
+		channel.messagePaginator.setQueriedLatestMessageAt(
 			convertDateToTimestamp('2023-05-03T11:12:53.993Z'),
 		);
-		expect(channel.messagePaginator.lastMessageAt).to.be.equal(
+		expect(channel.messagePaginator.latestMessageAt).to.be.equal(
 			convertDateToTimestamp('2023-05-03T11:12:53.993Z'),
 		);
 	});
 
-	it('advances past the seeded value when a newer message is tracked (monotonic max)', () => {
-		channel.messagePaginator.seedLastMessageAt(
+	it('advances past the queried value when a newer message is tracked (monotonic max)', () => {
+		channel.messagePaginator.setQueriedLatestMessageAt(
 			convertDateToTimestamp('2020-01-01T00:00:00.000Z'),
 		);
 		track(generateMsg({ id: '0', date: '2021-06-01T00:00:00.000Z' }));
-		expect(channel.messagePaginator.lastMessageAt).to.be.equal(
+		expect(channel.messagePaginator.latestMessageAt).to.be.equal(
 			convertDateToTimestamp('2021-06-01T00:00:00.000Z'),
 		);
 	});
@@ -3683,7 +3776,7 @@ describe('Channel _initializeState', () => {
 });
 
 describe('Channel.query', async () => {
-	it('seeds the message paginator with the full latest page on query', async () => {
+	it('places the full newest page on watch', async () => {
 		const client = await getClientWithUser();
 		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
 		const mockedChannelQueryResponse = {
@@ -3696,16 +3789,16 @@ describe('Channel.query', async () => {
 		const stub = sinon
 			.stub(client.api, 'sendRequest')
 			.resolves({ ...mockedChannelQueryResponse, metadata: {} });
-		await channel.query({}, 'latest');
-		// A latest-page query seeds the message paginator with the returned page.
+		await channel.watch();
+		// Opening the channel places the returned page in the message paginator.
 		expect(channel.messagePaginator.items).to.have.length(
 			DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE,
 		);
-		expect(channel.messagePaginator.headmostItem).to.not.equal(undefined);
+		expect(channel.messagePaginator.anchoredHeadItem).to.not.equal(undefined);
 		stub.restore();
 	});
 
-	it('seeds the message paginator with a partial latest page on query', async () => {
+	it('places a partial newest page on watch', async () => {
 		const client = await getClientWithUser();
 		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
 		const mockedChannelQueryResponse = {
@@ -3718,11 +3811,734 @@ describe('Channel.query', async () => {
 		const stub = sinon
 			.stub(client.api, 'sendRequest')
 			.resolves({ ...mockedChannelQueryResponse, metadata: {} });
-		await channel.query({}, 'latest');
+		await channel.watch();
 		expect(channel.messagePaginator.items).to.have.length(
 			DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE - 1,
 		);
 		stub.restore();
+	});
+
+	it('places no messages on create, which asks for no channel state', async () => {
+		const client = await getClientWithUser();
+		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
+		const stub = sinon.stub(client.api, 'sendRequest').resolves({
+			...mockChannelQueryResponse,
+			messages: [],
+			metadata: {},
+		});
+		await channel.create();
+		expect(channel.messagePaginator.items).to.equal(undefined);
+		stub.restore();
+	});
+
+	it('marks the window watched around a message as the newest when it holds the newest message, without showing it', async () => {
+		const client = await getClientWithUser();
+		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
+		const at = (minute) => new Date(Date.UTC(2020, 0, 1, 0, minute, 0));
+		const messages = [1, 2, 3].map((minute) =>
+			generateMsg({ id: `m${minute}`, cid: channel.cid, date: at(minute) }),
+		);
+		vi.spyOn(channel, 'getOrCreate').mockResolvedValue(
+			generateChannel({
+				channel: {
+					id: channel.id,
+					type: channel.type,
+					last_message_at: convertDateToTimestamp(at(3)),
+				},
+				messages,
+			}),
+		);
+
+		// A full page around a message near the newest: from its shape alone, newer messages could
+		// exist. Showing it is the paginator's own methods' job (`jumpToMessage()`).
+		await channel.watch({ messages: { id_around: 'm2', limit: 3 } });
+
+		expect(channel.messagePaginator.anchoredHeadItem?.id).to.equal('m3');
+		expect(channel.messagePaginator.items).to.equal(undefined);
+	});
+
+	it('places no messages on a plain query', async () => {
+		const client = await getClientWithUser();
+		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
+		const stub = sinon.stub(client.api, 'sendRequest').resolves({
+			...mockChannelQueryResponse,
+			messages: Array.from({ length: 3 }, generateMsg),
+			metadata: {},
+		});
+		await channel.query({});
+		expect(channel.messagePaginator.items).to.equal(undefined);
+		stub.restore();
+	});
+
+	it('does not add the paginator page size to a plain query', async () => {
+		const client = await getClientWithUser();
+		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
+		const getOrCreate = vi
+			.spyOn(channel, 'getOrCreate')
+			.mockResolvedValue(
+				generateChannel({ channel: { id: channel.id, type: channel.type } }),
+			);
+		await channel.query({});
+		expect(getOrCreate.mock.calls[0][0].messages).toBeUndefined();
+	});
+
+	describe('reports whether the queried page is the latest message set', () => {
+		const queriedFlags = async (run) => {
+			const client = await getClientWithUser();
+			const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
+			vi.spyOn(channel, 'getOrCreate').mockResolvedValue(
+				generateChannel({ channel: { id: channel.id, type: channel.type } }),
+			);
+			const upsertChannels = vi.fn();
+			client.offlineDb = {
+				executeQuerySafely: (fn, { method }) =>
+					method === 'upsertChannels' ? fn({ upsertChannels }) : undefined,
+			};
+			const events = [];
+			client.on('channels.queried', (event) => events.push(event));
+			await run(channel);
+			client.offlineDb = undefined;
+			return {
+				event: events[0].queriedChannels.isLatestMessageSet,
+				offline: upsertChannels.mock.calls[0][0].isLatestMessagesSet,
+			};
+		};
+
+		it('as latest for watch', async () => {
+			expect(await queriedFlags((channel) => channel.watch())).toEqual({
+				event: true,
+				offline: true,
+			});
+		});
+
+		it('as not latest for create, which asks for no channel state', async () => {
+			expect(await queriedFlags((channel) => channel.create())).toEqual({
+				event: false,
+				offline: false,
+			});
+		});
+
+		it('as not latest for watch around a message', async () => {
+			expect(
+				await queriedFlags((channel) =>
+					channel.watch({ messages: { id_around: 'm1', limit: 25 } }),
+				),
+			).toEqual({ event: false, offline: false });
+		});
+
+		it('as not latest for a plain query', async () => {
+			expect(await queriedFlags((channel) => channel.query({}))).toEqual({
+				event: false,
+				offline: false,
+			});
+		});
+
+		it('as not latest for watch at a cursor', async () => {
+			expect(
+				await queriedFlags((channel) =>
+					channel.watch({ messages: { id_lt: 'm1', limit: 25 } }),
+				),
+			).toEqual({ event: false, offline: false });
+		});
+	});
+
+	describe('watch places the page it queries', () => {
+		const at = (minute) => new Date(Date.UTC(2020, 0, 1, 0, minute, 0));
+		const setup = async () => {
+			const client = await getClientWithUser();
+			const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
+			channel.messagePaginator.pageSize = 3;
+			const msgIn = (minute) =>
+				generateMsg({ id: `m${minute}`, cid: channel.cid, date: at(minute) });
+			const respond = (minutes, lastMinute = minutes[minutes.length - 1]) =>
+				vi.spyOn(channel, 'getOrCreate').mockResolvedValue(
+					generateChannel({
+						channel: {
+							id: channel.id,
+							type: channel.type,
+							last_message_at: convertDateToTimestamp(at(lastMinute)),
+						},
+						messages: minutes.map(msgIn),
+					}),
+				);
+			const ids = (items) => (items ?? []).map((m) => m.id);
+			return { channel, respond, ids };
+		};
+
+		it('stores a page watched at a cursor, keeping the shown window', async () => {
+			const { channel, respond, ids } = await setup();
+			respond([8, 9, 10]);
+			await channel.watch();
+
+			respond([1, 2, 3], 10);
+			await channel.watch({ messages: { id_lt: 'm4', limit: 3 } });
+
+			expect(ids(channel.messagePaginator.items)).toEqual(['m8', 'm9', 'm10']);
+			expect(channel.messagePaginator.getItem('m1')).toBeDefined();
+			expect(ids(channel.messagePaginator.anchoredHeadItems)).toEqual([
+				'm8',
+				'm9',
+				'm10',
+			]);
+
+			// the stored page is no newest window, so loading older does not join it across m4
+			respond([5, 6, 7], 10);
+			await channel.messagePaginator.toTail();
+			expect(ids(channel.messagePaginator.items)).toEqual([
+				'm5',
+				'm6',
+				'm7',
+				'm8',
+				'm9',
+				'm10',
+			]);
+		});
+
+		it('keeps the shown window able to load older after an empty page watched at a cursor', async () => {
+			const { channel, respond } = await setup();
+			respond([8, 9, 10]);
+			await channel.watch();
+			expect(channel.messagePaginator.hasMoreTail).toBe(true);
+
+			respond([], 10);
+			await channel.watch({ messages: { id_lt: 'm1', limit: 3 } });
+
+			// the window's own flags, as showing it again publishes them
+			await channel.messagePaginator.jumpToMessage('m9');
+			expect(channel.messagePaginator.hasMoreTail).toBe(true);
+		});
+
+		it('keeps live messages shown when a page watched around a message takes them in', async () => {
+			const { channel, respond, ids } = await setup();
+			const live = (minute) =>
+				formatMessage(
+					generateMsg({ id: `m${minute}`, cid: channel.cid, date: at(minute) }),
+				);
+			channel.messagePaginator.ingestItem(live(50));
+			expect(ids(channel.messagePaginator.items)).toEqual(['m50']);
+
+			respond([48, 49, 50], 50);
+			await channel.watch({ messages: { id_around: 'm49', limit: 3 } });
+			expect(ids(channel.messagePaginator.items)).toEqual(['m48', 'm49', 'm50']);
+
+			channel.messagePaginator.ingestItem(live(51));
+			expect(ids(channel.messagePaginator.items)).toEqual(['m48', 'm49', 'm50', 'm51']);
+		});
+
+		it('keeps the shown window when watching around a message', async () => {
+			const { channel, respond, ids } = await setup();
+			respond([8, 9, 10]);
+			await channel.watch();
+
+			respond([4, 5, 6], 10);
+			await channel.watch({ messages: { id_around: 'm5', limit: 3 } });
+
+			expect(ids(channel.messagePaginator.items)).toEqual(['m8', 'm9', 'm10']);
+			expect(channel.messagePaginator.getItem('m5')).toBeDefined();
+		});
+
+		it('only stores a page watched around a message before anything is shown, for a jump to show it', async () => {
+			const { channel, respond, ids } = await setup();
+			const getOrCreate = respond([4, 5, 6], 10);
+
+			await channel.watch({ messages: { id_around: 'm5', limit: 3 } });
+			expect(channel.messagePaginator.items).toBeUndefined();
+
+			await channel.messagePaginator.jumpToMessage('m5');
+
+			expect(ids(channel.messagePaginator.items)).toEqual(['m4', 'm5', 'm6']);
+			expect(getOrCreate).toHaveBeenCalledTimes(1);
+
+			// loading older continues the shown window, and an empty page keeps it
+			respond([], 10);
+			await channel.messagePaginator.toTail();
+			expect(ids(channel.messagePaginator.items)).toEqual(['m4', 'm5', 'm6']);
+		});
+
+		it('leaves a running paginator query its window when watching around a message meanwhile', async () => {
+			const { channel, respond, ids } = await setup();
+			const getOrCreate = respond([8, 9, 10]);
+			await channel.watch();
+			const response = (minutes) =>
+				generateChannel({
+					channel: {
+						id: channel.id,
+						type: channel.type,
+						last_message_at: convertDateToTimestamp(at(10)),
+					},
+					messages: minutes.map((minute) =>
+						generateMsg({ id: `m${minute}`, cid: channel.cid, date: at(minute) }),
+					),
+				});
+			let respondOlder = () => {};
+			getOrCreate.mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						respondOlder = () => resolve(response([5, 6, 7]));
+					}),
+			);
+			const older = channel.messagePaginator.toTail();
+			await new Promise((resolve) => setTimeout(resolve, 0));
+
+			getOrCreate.mockResolvedValueOnce(response([1, 2, 3]));
+			await channel.watch({ messages: { id_around: 'm2', limit: 3 } });
+			expect(channel.messagePaginator.isLoading).toBe(true);
+
+			respondOlder();
+			await older;
+
+			expect(ids(channel.messagePaginator.items)).toEqual([
+				'm5',
+				'm6',
+				'm7',
+				'm8',
+				'm9',
+				'm10',
+			]);
+			expect(channel.messagePaginator.getItem('m2')).toBeDefined();
+			expect(channel.messagePaginator.isLoading).toBe(false);
+		});
+
+		it('continues the window that stopped being the newest from its newest sent message', async () => {
+			const { channel, respond, ids } = await setup();
+			const paginator = channel.messagePaginator;
+			respond([38, 39, 40]);
+			await channel.watch();
+			paginator.ingestItem(
+				formatMessage(
+					generateMsg({ id: 'failed', cid: channel.cid, date: at(41), status: 'failed' }),
+				),
+			);
+
+			// a page past the shown window that reaches the newest message
+			respond([42, 43, 44]);
+			await channel.watch({ messages: { id_gt: 'm41', limit: 3 } });
+
+			expect(ids(paginator.items)).toEqual(['m38', 'm39', 'm40', 'failed']);
+			expect(paginator.hasMoreHead).toBe(true);
+			expect(paginator.cursor?.headward).toBe('m40');
+			expect(ids(paginator.intervalViews.getLatestValue().anchoredHead)).toEqual([
+				'm42',
+				'm43',
+				'm44',
+			]);
+		});
+
+		it('grows the shown window with a watched page that overlaps it', async () => {
+			const { channel, respond, ids } = await setup();
+			respond([8, 9, 10]);
+			await channel.watch();
+
+			respond([7, 8, 9], 10);
+			await channel.watch({ messages: { id_lt: 'm10', limit: 3 } });
+
+			expect(ids(channel.messagePaginator.items)).toEqual(['m7', 'm8', 'm9', 'm10']);
+			expect(channel.messagePaginator.hasMoreTail).toBe(true);
+			expect(channel.messagePaginator.cursor?.tailward).toBe('m7');
+		});
+
+		it('stores a running paginator query page apart when a jump showed another window meanwhile', async () => {
+			const { channel, respond, ids } = await setup();
+			respond([8, 9, 10]);
+			await channel.watch();
+			// a page watched at a cursor is stored, for a jump to show later
+			const getOrCreate = respond([1, 2, 3], 10);
+			await channel.watch({ messages: { id_lt: 'm4', limit: 3 } });
+			const response = (minutes) =>
+				generateChannel({
+					channel: {
+						id: channel.id,
+						type: channel.type,
+						last_message_at: convertDateToTimestamp(at(10)),
+					},
+					messages: minutes.map((minute) =>
+						generateMsg({ id: `m${minute}`, cid: channel.cid, date: at(minute) }),
+					),
+				});
+			let respondOlder = () => {};
+			getOrCreate.mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						respondOlder = () => resolve(response([5, 6, 7]));
+					}),
+			);
+			const older = channel.messagePaginator.toTail();
+			await new Promise((resolve) => setTimeout(resolve, 0));
+
+			// the jump shows the stored window, without a request, while "load older" is running
+			await channel.messagePaginator.jumpToMessage('m2');
+			expect(ids(channel.messagePaginator.items)).toEqual(['m1', 'm2', 'm3']);
+			// an error recorded meanwhile, which the query's success replaces
+			channel.messagePaginator.state.partialNext({
+				lastQueryError: new Error('offline'),
+			});
+
+			respondOlder();
+			await older;
+
+			expect(ids(channel.messagePaginator.items)).toEqual(['m1', 'm2', 'm3']);
+			expect(channel.messagePaginator.getItem('m6')).toBeDefined();
+			expect(channel.messagePaginator.isLoading).toBe(false);
+			expect(channel.messagePaginator.lastQueryError).toBeUndefined();
+		});
+
+		it('leaves the loaded messages alone when watching for no messages', async () => {
+			const { channel, respond, ids } = await setup();
+			respond([8, 9, 10]);
+			await channel.watch();
+
+			respond([], 10);
+			await channel.watch({ messages: { limit: 0 } });
+
+			expect(ids(channel.messagePaginator.items)).toEqual(['m8', 'm9', 'm10']);
+		});
+
+		it('asks for the page size when watching around a message without a limit', async () => {
+			const { channel, respond } = await setup();
+			const getOrCreate = respond([4, 5, 6], 10);
+
+			await channel.watch({ messages: { id_around: 'm5' } });
+
+			expect(getOrCreate.mock.calls[0][0].messages).toEqual({
+				id_around: 'm5',
+				limit: 3,
+			});
+		});
+	});
+
+	describe('paginator queries while other intervals are loaded', () => {
+		const at = (minute) => new Date(Date.UTC(2020, 0, 1, 0, minute, 0));
+		const createChannel = async () => {
+			const client = await getClientWithUser();
+			const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
+			channel.messagePaginator.pageSize = 3;
+			const response = (minutes, lastMinute = 40) =>
+				generateChannel({
+					channel: {
+						id: channel.id,
+						type: channel.type,
+						last_message_at: convertDateToTimestamp(at(lastMinute)),
+					},
+					messages: minutes.map((minute) =>
+						generateMsg({ id: `m${minute}`, cid: channel.cid, date: at(minute) }),
+					),
+				});
+			const getOrCreate = vi.spyOn(channel, 'getOrCreate');
+			const respond = (minutes, lastMinute) =>
+				getOrCreate.mockResolvedValueOnce(response(minutes, lastMinute));
+			// the next request stays pending until the returned function answers it
+			const respondLater = (minutes, lastMinute) => {
+				let answer = () => {};
+				getOrCreate.mockImplementationOnce(
+					() =>
+						new Promise((resolve) => {
+							answer = () => resolve(response(minutes, lastMinute));
+						}),
+				);
+				return () => answer();
+			};
+			const ids = (items) => (items ?? []).map((m) => m.id);
+			const addError = vi.spyOn(client.notifications, 'addError');
+			return { addError, at, channel, getOrCreate, ids, respond, respondLater };
+		};
+		const setup = async () => {
+			const loaded = await createChannel();
+			// the newest messages are shown, and m1–m3 are stored for a jump to show
+			loaded.respond([38, 39, 40]);
+			await loaded.channel.watch();
+			loaded.respond([1, 2, 3]);
+			await loaded.channel.watch({ messages: { id_lt: 'm4', limit: 3 } });
+			return loaded;
+		};
+		const nextTick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+		describe('the latest claim decides the active interval', () => {
+			it('keeps the window of a later jump when an earlier jump’s page arrives', async () => {
+				const { addError, channel, getOrCreate, ids, respondLater } = await setup();
+				const paginator = channel.messagePaginator;
+				const answerJump = respondLater([19, 20, 21]);
+				const jump = paginator.jumpToMessage('m20');
+				await nextTick();
+
+				await paginator.jumpToMessage('m2');
+				expect(ids(paginator.items)).toEqual(['m1', 'm2', 'm3']);
+
+				answerJump();
+				expect(await jump).toBe(false);
+
+				expect(ids(paginator.items)).toEqual(['m1', 'm2', 'm3']);
+				expect(paginator.isLoading).toBe(false);
+				expect(addError).not.toHaveBeenCalled();
+				// the page stays stored, so jumping to it again needs no request
+				const requests = getOrCreate.mock.calls.length;
+				await paginator.jumpToMessage('m20');
+				expect(ids(paginator.items)).toEqual(['m19', 'm20', 'm21']);
+				expect(getOrCreate).toHaveBeenCalledTimes(requests);
+			});
+
+			it('lets a running jump show its page when a later jump is refused', async () => {
+				const { addError, channel, ids, respondLater } = await setup();
+				const paginator = channel.messagePaginator;
+				const answerJump = respondLater([19, 20, 21]);
+				const jump = paginator.jumpToMessage('m20');
+				await nextTick();
+
+				// a second tap while the first jump's request runs is refused
+				expect(await paginator.jumpToMessage('m20')).toBe(false);
+				expect(addError).toHaveBeenCalledTimes(1);
+
+				answerJump();
+				expect(await jump).toBe(true);
+				expect(ids(paginator.items)).toEqual(['m19', 'm20', 'm21']);
+			});
+
+			it('keeps the window the reader returned to when an earlier jump’s page arrives', async () => {
+				const { channel, ids, respondLater } = await setup();
+				const paginator = channel.messagePaginator;
+				const answerJump = respondLater([19, 20, 21]);
+				const jump = paginator.jumpToMessage('m20');
+				await nextTick();
+
+				// away and back to the window shown when the jump started
+				await paginator.jumpToMessage('m2');
+				await paginator.jumpToTheLatestMessage();
+				expect(ids(paginator.items)).toEqual(['m38', 'm39', 'm40']);
+
+				answerJump();
+				expect(await jump).toBe(false);
+
+				expect(ids(paginator.items)).toEqual(['m38', 'm39', 'm40']);
+				expect(paginator.getItem('m20')).toBeDefined();
+			});
+
+			it('keeps the window of a jump made while a reload keeping the items runs', async () => {
+				const { channel, ids, respondLater } = await setup();
+				const paginator = channel.messagePaginator;
+				const answerReload = respondLater([39, 40, 41]);
+				const reload = paginator.executeQuery({ keepPreviousItems: true, reset: 'yes' });
+				await nextTick();
+
+				await paginator.jumpToMessage('m2');
+				expect(ids(paginator.items)).toEqual(['m1', 'm2', 'm3']);
+
+				answerReload();
+				await reload;
+
+				expect(ids(paginator.items)).toEqual(['m1', 'm2', 'm3']);
+				expect(paginator.getItem('m41')).toBeDefined();
+				expect(paginator.isLoading).toBe(false);
+			});
+
+			it('keeps the window of a jump made while jumping to the latest message loads it', async () => {
+				const { addError, channel, ids, respond, respondLater } = await setup();
+				const paginator = channel.messagePaginator;
+				// another stored window, and a newer latest message than the newest window holds
+				respond([10, 11, 12], 42);
+				await channel.watch({ messages: { id_around: 'm11', limit: 3 } });
+				paginator.unmarkStaleHead();
+				await paginator.jumpToMessage('m2');
+				const answerNewest = respondLater([41, 42], 42);
+				const toLatest = paginator.jumpToTheLatestMessage();
+				await nextTick();
+
+				await paginator.jumpToMessage('m11');
+				expect(ids(paginator.items)).toEqual(['m10', 'm11', 'm12']);
+
+				answerNewest();
+				expect(await toLatest).toBe(false);
+
+				expect(ids(paginator.items)).toEqual(['m10', 'm11', 'm12']);
+				expect(addError).not.toHaveBeenCalled();
+				// the newest page is stored as the newest window, apart from the window shown
+				await paginator.jumpToMessage('m42');
+				expect(ids(paginator.items)).toEqual(['m41', 'm42']);
+			});
+
+			it('keeps the window of a jump made while jumping to the first unread message loads it', async () => {
+				const { channel, ids, respondLater } = await setup();
+				const paginator = channel.messagePaginator;
+				// read up to minute 20, before every shown message
+				paginator.setUnreadSnapshot({
+					firstUnreadMessageId: null,
+					lastReadAt: convertDateToTimestamp(at(20)),
+					lastReadMessageId: null,
+				});
+				const answerUnread = respondLater([19, 20, 21]);
+				const toUnread = paginator.jumpToTheFirstUnreadMessage();
+				await nextTick();
+
+				await paginator.jumpToMessage('m2');
+				expect(ids(paginator.items)).toEqual(['m1', 'm2', 'm3']);
+
+				answerUnread();
+				expect(await toUnread).toBe(false);
+
+				expect(ids(paginator.items)).toEqual(['m1', 'm2', 'm3']);
+				expect(paginator.getItem('m21')).toBeDefined();
+			});
+
+			it('lets a running jump show its page when jumping to the latest message is refused', async () => {
+				const { channel, ids, respond, respondLater } = await setup();
+				const paginator = channel.messagePaginator;
+				// the newest window no longer marked as the newest, so jumping to it needs a query
+				respond([10, 11, 12], 42);
+				await channel.watch({ messages: { id_around: 'm11', limit: 3 } });
+				paginator.unmarkStaleHead();
+				const answerJump = respondLater([19, 20, 21], 42);
+				const jump = paginator.jumpToMessage('m20');
+				await nextTick();
+
+				// refused while the jump's request runs
+				expect(await paginator.jumpToTheLatestMessage()).toBe(false);
+
+				answerJump();
+				expect(await jump).toBe(true);
+				expect(ids(paginator.items)).toEqual(['m19', 'm20', 'm21']);
+			});
+
+			it('lets a running jump show its page when jumping to the first unread message is refused', async () => {
+				// nothing shown yet, so finding the first unread message needs a query
+				const { channel, ids, respondLater } = await createChannel();
+				const paginator = channel.messagePaginator;
+				paginator.setUnreadSnapshot({
+					firstUnreadMessageId: null,
+					lastReadAt: convertDateToTimestamp(at(30)),
+					lastReadMessageId: null,
+				});
+				const answerJump = respondLater([19, 20, 21]);
+				const jump = paginator.jumpToMessage('m20');
+				await nextTick();
+
+				// refused while the jump's request runs
+				expect(await paginator.jumpToTheFirstUnreadMessage()).toBe(false);
+
+				answerJump();
+				expect(await jump).toBe(true);
+				expect(ids(paginator.items)).toEqual(['m19', 'm20', 'm21']);
+			});
+		});
+
+		describe('a page that is only stored', () => {
+			it('shows what it adds to the window being read, for a superseded jump', async () => {
+				const { channel, ids, respondLater } = await setup();
+				const paginator = channel.messagePaginator;
+				const answerJump = respondLater([36, 37, 38]);
+				const jump = paginator.jumpToMessage('m37');
+				await nextTick();
+
+				await paginator.jumpToMessage('m39');
+				answerJump();
+				expect(await jump).toBe(false);
+
+				// the page overlaps the window being read, which grew
+				expect(ids(paginator.items)).toEqual(['m36', 'm37', 'm38', 'm39', 'm40']);
+			});
+
+			it('shows what it adds to the window being read, for a load-older whose window was left', async () => {
+				const { channel, ids, respond, respondLater } = await setup();
+				const paginator = channel.messagePaginator;
+				respond([34, 35, 36]);
+				await channel.watch({ messages: { id_lt: 'm37', limit: 3 } });
+				const answerOlder = respondLater([35, 36, 37]);
+				const older = paginator.toTail();
+				await nextTick();
+
+				await paginator.jumpToMessage('m35');
+				answerOlder();
+				await older;
+
+				// the page continued m38–m40, which is no longer shown, and overlaps m34–m36
+				expect(ids(paginator.items)).toEqual(['m34', 'm35', 'm36', 'm37']);
+				expect(paginator.isLoading).toBe(false);
+			});
+
+			it('makes its window the only newest window when it reaches the newest message', async () => {
+				const { channel, ids, respondLater } = await setup();
+				const paginator = channel.messagePaginator;
+				const answerReload = respondLater([42, 43, 44], 44);
+				const reload = paginator.executeQuery({ keepPreviousItems: true, reset: 'yes' });
+				await nextTick();
+
+				await paginator.jumpToMessage('m2');
+				answerReload();
+				await reload;
+
+				expect(ids(paginator.items)).toEqual(['m1', 'm2', 'm3']);
+				expect(ids(paginator.anchoredHeadItems)).toEqual(['m42', 'm43', 'm44']);
+				// the window that was the newest can load newer messages, up to the newest window
+				await paginator.jumpToMessage('m39');
+				expect(paginator.hasMoreHead).toBe(true);
+			});
+		});
+
+		describe('a query at a shape the caller gives', () => {
+			it('stores its page apart from the active interval, and shows it', async () => {
+				const { channel, ids, respond } = await setup();
+				const paginator = channel.messagePaginator;
+				respond([10, 11, 12]);
+
+				await paginator.executeQuery({ queryShape: { id_lt: 'm13', limit: 3 } });
+
+				expect(ids(paginator.items)).toEqual(['m10', 'm11', 'm12']);
+				// the newest interval stays apart, across the messages between them
+				await paginator.jumpToMessage('m39');
+				expect(ids(paginator.items)).toEqual(['m38', 'm39', 'm40']);
+			});
+
+			it('stores its page apart from an interval loaded without a query', async () => {
+				const { at, channel, ids, respond } = await createChannel();
+				const paginator = channel.messagePaginator;
+				paginator.ingestPage({
+					page: [38, 39, 40].map((minute) =>
+						formatMessage(
+							generateMsg({ id: `m${minute}`, cid: channel.cid, date: at(minute) }),
+						),
+					),
+					isHead: true,
+					setActive: true,
+				});
+				respond([10, 11, 12]);
+
+				await paginator.executeQuery({ queryShape: { id_lt: 'm13', limit: 3 } });
+
+				expect(ids(paginator.items)).toEqual(['m10', 'm11', 'm12']);
+				await paginator.jumpToMessage('m39');
+				expect(ids(paginator.items)).toEqual(['m38', 'm39', 'm40']);
+			});
+
+			it('claims the active interval, so a jump made while it runs wins', async () => {
+				const { channel, ids, respondLater } = await setup();
+				const paginator = channel.messagePaginator;
+				const answer = respondLater([10, 11, 12]);
+				const query = paginator.executeQuery({ queryShape: { id_lt: 'm13', limit: 3 } });
+				await nextTick();
+
+				await paginator.jumpToMessage('m2');
+				answer();
+				await query;
+
+				expect(ids(paginator.items)).toEqual(['m1', 'm2', 'm3']);
+				expect(paginator.getItem('m11')).toBeDefined();
+				expect(paginator.isLoading).toBe(false);
+			});
+
+			it('shows its page when the active interval changed meanwhile without a claim', async () => {
+				const { channel, ids, respondLater } = await setup();
+				const paginator = channel.messagePaginator;
+				const answer = respondLater([10, 11, 12]);
+				const query = paginator.executeQuery({ queryShape: { id_lt: 'm13', limit: 3 } });
+				await nextTick();
+
+				paginator.setActiveInterval(
+					paginator.itemIntervals.find((interval) => interval.itemIds.includes('m2')),
+				);
+				expect(ids(paginator.items)).toEqual(['m1', 'm2', 'm3']);
+				answer();
+				await query;
+
+				expect(ids(paginator.items)).toEqual(['m10', 'm11', 'm12']);
+			});
+		});
 	});
 
 	it(`update the messageComposer config`, async () => {
@@ -4505,7 +5321,7 @@ describe('Channel.query — initial page size', () => {
 				generateChannel({ channel: { id: channel.id, type: channel.type } }),
 			);
 
-		await channel.query({}, 'latest');
+		await channel.watch();
 
 		// The initial open asks the server for exactly pageSize messages (not its larger default).
 		expect(getOrCreate).toHaveBeenCalledWith(
@@ -4523,7 +5339,7 @@ describe('Channel.query — initial page size', () => {
 			);
 
 		// e.g. channel.reload → watch({ messages: { limit: items.length } }) — passed through as-is.
-		await channel.query({ messages: { limit: 80 } }, 'latest');
+		await channel.watch({ messages: { limit: 80 } });
 
 		expect(getOrCreate).toHaveBeenCalledWith(
 			expect.objectContaining({ messages: { limit: 80 } }),
@@ -4563,11 +5379,12 @@ describe('Channel.reload', () => {
 		seedLatestWindow(channel, [msg('m1', 1), msg('m2', 2), msg('m3', 3)]);
 		expect(channel.messagePaginator.items.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
 
-		// The fold + reconcile now lives in query() → seedFirstPageSync (shared with the channel-list
-		// re-hydrate and connection recovery); reload() is just watch() with the full-window limit.
-		// query() snapshots the loaded ids BEFORE this fetch, so a brand-new message that lands via WS
-		// DURING it (below) — absent from the server page — must survive. This exercises the whole
-		// snapshot-before-await + reconcile chain end to end, not the paginator in isolation.
+		// reload() is watch() with the full-window limit: the newest page reconciles the loaded newest
+		// messages (reconcileNewestMessages, shared with the channel-list re-hydrate and connection
+		// recovery). The loaded ids are read BEFORE this fetch, so a
+		// brand-new message that lands via WS DURING it (below) — absent from the server page — must
+		// survive. This exercises the whole read-before-await + reconcile chain end to end, not the
+		// paginator in isolation.
 		vi.spyOn(channel, 'getOrCreate').mockImplementation(async () => {
 			channel.messagePaginator.ingestItem(formatMessage(msg('m4', 4)));
 			return generateChannel({
@@ -4596,8 +5413,7 @@ describe('Channel.reload', () => {
 
 	it('requests at least a page when the loaded window is smaller, so new messages are discoverable', async () => {
 		// Regression guard. Sizing the request to the loaded count alone means asking the server for
-		// exactly what we already hold: messages that arrived while offline can never come back, and
-		// the returned page is disjoint from the loaded window so the fold rebuilds and drops the rest.
+		// exactly what we already hold: messages that arrived while offline can never come back.
 		seedLatestWindow(channel, [msg('m1', 1), msg('m2', 2), msg('m3', 3)]);
 		const watchSpy = vi
 			.spyOn(channel, 'watch')
@@ -4610,7 +5426,8 @@ describe('Channel.reload', () => {
 		});
 	});
 
-	it('preserves a failed (unsent) message that a disjoint rebuild would otherwise drop', async () => {
+	it('shows a reloaded page past a gap with the failed (unsent) message, also to a reader', async () => {
+		channel.activate();
 		seedLatestWindow(channel, [
 			msg('m1', 1),
 			msg('m3', 3),
@@ -4618,8 +5435,8 @@ describe('Channel.reload', () => {
 			// way, or the scenario is not one that can actually occur.
 			msg('failed', 10, { status: 'failed' }),
 		]);
-		// A page that shares no id with the loaded window is disjoint, so the fold rebuilds and discards
-		// local-only messages — reload must re-ingest the failed one so it is not lost.
+		// a limit of 3 above the page size of 2 cannot prove the channel start: past a gap
+		channel.messagePaginator.pageSize = 2;
 		vi.spyOn(channel, 'getOrCreate').mockImplementation(async () =>
 			generateChannel({
 				channel: { id: channel.id, type: channel.type },
@@ -4629,13 +5446,485 @@ describe('Channel.reload', () => {
 
 		await channel.reload();
 
-		expect(channel.messagePaginator.items.map((m) => m.id)).toContain('failed');
+		// the page replaces the loaded window and keeps the unsent message
+		expect(channel.messagePaginator.items.map((m) => m.id)).toEqual([
+			'n8',
+			'n9',
+			'failed',
+		]);
+		expect(channel.messagePaginator.anchoredHeadItems.map((m) => m.id)).toEqual([
+			'n8',
+			'n9',
+			'failed',
+		]);
+		expect(channel.messagePaginator.getItem('m1')).toBeUndefined();
+	});
+
+	describe('with an own unsent message at the bottom', () => {
+		// The device clock dates the unsent message; a live message the server dates earlier must
+		// still be shown, before it.
+		const loadWithOwnUnsentMessage = async (status) => {
+			channel.activate();
+			vi.spyOn(channel, 'getOrCreate').mockResolvedValueOnce(
+				generateChannel({
+					channel: { id: channel.id, type: channel.type },
+					messages: [10, 11, 12].map((n) => msg(`m${n}`, n)),
+				}),
+			);
+			await channel.watch();
+			channel.messagePaginator.ingestItem(formatMessage(msg('mine', 20, { status })));
+		};
+		const ids = () => channel.messagePaginator.items.map((m) => m.id);
+
+		it('shows a live message that arrives while it is sending', async () => {
+			await loadWithOwnUnsentMessage('sending');
+
+			channel.messagePaginator.ingestItem(formatMessage(msg('m15', 15)));
+
+			expect(ids()).toEqual(['m10', 'm11', 'm12', 'm15', 'mine']);
+		});
+
+		it('shows live messages that arrive after it failed', async () => {
+			await loadWithOwnUnsentMessage('failed');
+
+			channel.messagePaginator.ingestItem(formatMessage(msg('m16', 16)));
+			channel.messagePaginator.ingestItem(formatMessage(msg('m17', 17)));
+
+			expect(ids()).toEqual(['m10', 'm11', 'm12', 'm16', 'm17', 'mine']);
+		});
+	});
+
+	describe('after a reconnect across a gap', () => {
+		// The channel is open at the bottom on m036–m060, one page of 25. While offline, m061–m100
+		// arrive, m050 is hard-deleted on the server, and a message the user sends fails. The
+		// reconnect reload returns the newest 25, m076–m100: it shares nothing with the loaded window.
+		const id = (n) => `m${String(n).padStart(3, '0')}`;
+		const range = (from, to) =>
+			Array.from({ length: to - from + 1 }, (_, i) => msg(id(from + i), from + i));
+		const respondWith = (messages) =>
+			vi
+				.spyOn(channel, 'getOrCreate')
+				.mockResolvedValueOnce(
+					generateChannel({ channel: { id: channel.id, type: channel.type }, messages }),
+				);
+		const ids = () => channel.messagePaginator.items.map((m) => m.id);
+
+		const reconnectAcrossGap = async () => {
+			channel.messagePaginator.pageSize = 25;
+			channel.activate();
+			respondWith(range(36, 60));
+			await channel.watch();
+			channel.messagePaginator.ingestItem(
+				formatMessage(
+					msg('failed', 70, {
+						date: new Date(at(70).getTime() + 30_000),
+						status: 'failed',
+					}),
+				),
+			);
+			respondWith(range(76, 100));
+			await channel.reload();
+		};
+
+		it('shows the newest page, with the message that failed while offline', async () => {
+			await reconnectAcrossGap();
+
+			expect(ids()).toEqual(['failed', ...range(76, 100).map((m) => m.id)]);
+			expect(channel.messagePaginator.hasMoreHead).toBe(false);
+			expect(channel.messagePaginator.hasMoreTail).toBe(true);
+		});
+
+		it('shows a message sent right after the reconnect', async () => {
+			await reconnectAcrossGap();
+
+			channel.messagePaginator.ingestItem(formatMessage(msg('mine', 101)));
+
+			expect(ids().at(-1)).toBe('mine');
+		});
+
+		it('does not bring back a message deleted on the server while offline', async () => {
+			await reconnectAcrossGap();
+			const getOrCreate = respondWith(range(51, 75));
+
+			await channel.messagePaginator.toTail();
+
+			expect(getOrCreate).toHaveBeenLastCalledWith(
+				expect.objectContaining({ messages: expect.objectContaining({ id_lt: 'm076' }) }),
+				undefined,
+			);
+			expect(ids()[0]).toBe('m051');
+			expect(channel.messagePaginator.getItem('m050')).toBeUndefined();
+		});
+
+		it('keeps a page jumped to in the gap apart from the newest page, despite the failed message', async () => {
+			await reconnectAcrossGap();
+			const newest = ['failed', ...range(76, 100).map((m) => m.id)];
+			respondWith(range(49, 73));
+
+			await channel.messagePaginator.jumpToMessage('m061');
+
+			// the failed message carries the device's clock, older than the newest page: the jumped
+			// page must not merge across m074–m075 into it
+			expect(ids()).toEqual(range(49, 73).map((m) => m.id));
+			expect(channel.messagePaginator.hasMoreHead).toBe(true);
+			expect(channel.messagePaginator.anchoredHeadItems.map((m) => m.id)).toEqual(newest);
+		});
+
+		it('does not show an update of a message in the gap', async () => {
+			await reconnectAcrossGap();
+			const shown = ids();
+
+			channel._handleChannelEvent({
+				type: 'message.updated',
+				cid: channel.cid,
+				message: msg('m072', 72, { text: 'edited' }),
+			});
+
+			expect(ids()).toEqual(shown);
+		});
+
+		it('keeps a retried failed message in the newest window, not in a page jumped to in the gap', async () => {
+			await reconnectAcrossGap();
+			const newest = channel.messagePaginator.anchoredHeadItems.map((m) => m.id);
+			respondWith(range(49, 73));
+			await channel.messagePaginator.jumpToMessage('m061');
+			const failed = channel.messagePaginator.getItem('failed');
+
+			channel.messagePaginator.ingestItem({ ...failed, status: 'sending' });
+
+			expect(channel.messagePaginator.anchoredHeadItems.map((m) => m.id)).toEqual(newest);
+			expect(ids()).toEqual(range(49, 73).map((m) => m.id));
+			expect(channel.messagePaginator.getItem('failed')?.status).toBe('sending');
+		});
+
+		describe('with a message the newest page shares only since the request went out', () => {
+			// Answers the reload's request with the newest 25, m077–m100 and `newest`, while
+			// `duringRequest` runs before the response arrives.
+			const reloadWhile = async (newest, duringRequest) => {
+				vi.spyOn(channel, 'getOrCreate').mockImplementationOnce(async () => {
+					duringRequest();
+					return generateChannel({
+						channel: { id: channel.id, type: channel.type },
+						messages: [...range(77, 100), newest],
+					});
+				});
+				await channel.reload();
+			};
+			const loadWindow = async () => {
+				channel.messagePaginator.pageSize = 25;
+				channel.activate();
+				respondWith(range(36, 60));
+				await channel.watch();
+			};
+			const newestPageIds = (newestId) => [...range(77, 100).map((m) => m.id), newestId];
+
+			it('keeps the missed messages loadable when a live message arrives during the reload', async () => {
+				await loadWindow();
+				const live = msg('m101', 101);
+
+				await reloadWhile(live, () =>
+					channel.messagePaginator.ingestItem(formatMessage(live)),
+				);
+
+				// m061–m076 were missed: the page is not welded onto the old window across them
+				expect(ids()).toEqual(newestPageIds('m101'));
+				expect(channel.messagePaginator.hasMoreTail).toBe(true);
+				const getOrCreate = respondWith(range(52, 76));
+				await channel.messagePaginator.toTail();
+				expect(getOrCreate).toHaveBeenLastCalledWith(
+					expect.objectContaining({
+						messages: expect.objectContaining({ id_lt: 'm077' }),
+					}),
+					undefined,
+				);
+				expect(ids()[0]).toBe('m052');
+			});
+
+			it('does not join the windows over a queued send delivered during the reload', async () => {
+				await loadWindow();
+				// sent while offline, so queued
+				channel.messagePaginator.ingestItem(
+					formatMessage(msg('hello', 70, { status: 'sending' })),
+				);
+				const delivered = msg('hello', 101);
+
+				await reloadWhile(delivered, () =>
+					channel.messagePaginator.ingestItem(formatMessage(delivered)),
+				);
+
+				expect(ids()).toEqual(newestPageIds('hello'));
+				expect(channel.messagePaginator.getItem('m060')).toBeUndefined();
+				expect(channel.messagePaginator.hasMoreTail).toBe(true);
+			});
+		});
+
+		it('only stores a page older messages bring once the reload replaced the windows', async () => {
+			channel.messagePaginator.pageSize = 25;
+			channel.activate();
+			respondWith(range(36, 60));
+			await channel.watch();
+			let respondOlder;
+			vi.spyOn(channel, 'getOrCreate').mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						respondOlder = () =>
+							resolve(
+								generateChannel({
+									channel: { id: channel.id, type: channel.type },
+									messages: range(11, 35),
+								}),
+							);
+					}),
+			);
+			const loadingOlder = channel.messagePaginator.toTail();
+			respondWith(range(76, 100));
+			await channel.reload();
+
+			respondOlder();
+			await loadingOlder;
+
+			expect(ids()).toEqual(range(76, 100).map((m) => m.id));
+			expect(channel.messagePaginator.isLoading).toBe(false);
+			expect(channel.messagePaginator.getItem('m011')).toBeDefined();
+		});
+	});
+
+	describe("with the user's own messages shared by the newest page", () => {
+		const own = { id: 'user' };
+		const id = (n) => `m${String(n).padStart(3, '0')}`;
+		const range = (from, to) =>
+			Array.from({ length: to - from + 1 }, (_, i) => msg(id(from + i), from + i));
+		const ids = () => channel.messagePaginator.items.map((m) => m.id);
+		// The server's messages, oldest first. Answers each query as the server would: the newest
+		// `limit` messages, older than `id_lt` when given.
+		let serverMessages;
+		const serveChannel = () =>
+			vi.spyOn(channel, 'getOrCreate').mockImplementation(async (payload) => {
+				const { limit, id_lt } = payload?.messages ?? {};
+				const end = id_lt
+					? serverMessages.findIndex((m) => m.id === id_lt)
+					: serverMessages.length;
+				return generateChannel({
+					channel: { id: channel.id, type: channel.type },
+					messages: serverMessages.slice(Math.max(0, end - limit), end),
+				});
+			});
+		const openAtNewest = async (messages) => {
+			channel.messagePaginator.pageSize = 100;
+			channel.activate();
+			serverMessages = messages;
+			serveChannel();
+			await channel.watch();
+		};
+
+		describe('after a reconnect with a message sent while offline', () => {
+			// The reader is at the bottom of m001–m100. Offline, they send "hello" (queued) while
+			// m101–m210 arrive on the server. On reconnect the offline queue replays before the newest
+			// page is requested: the server accepts "hello", the newest message, and its message.new
+			// confirms it. Both the loaded window and the newest page then hold it.
+			const hello = (overrides) => msg('hello', 211, { user: own, ...overrides });
+			const sendWhileOffline = async () => {
+				await openAtNewest(range(1, 100));
+				client.channelManager.markChannelsWatchInterrupted();
+				channel.messagePaginator.ingestItem(
+					formatMessage(
+						hello({ date: new Date(at(100).getTime() + 30_000), status: 'sending' }),
+					),
+				);
+				serverMessages = [...range(1, 210), hello()];
+			};
+			const confirmHello = () =>
+				client.dispatchEvent({
+					type: 'message.new',
+					cid: channel.cid,
+					message: hello(),
+					user: own,
+				});
+			// every message the server holds is loaded in one window, "hello" once
+			const expectNothingMissingFrom = (oldestId) => {
+				const oldest = serverMessages.findIndex((m) => m.id === oldestId);
+				expect(ids()).toEqual(serverMessages.slice(oldest).map((m) => m.id));
+			};
+
+			it('shows the newest page and loads the messages missed while offline', async () => {
+				await sendWhileOffline();
+				confirmHello();
+
+				await channel.reload();
+
+				// the reload asks for the 101 loaded messages: m111–m210 and "hello"
+				expect(ids()[0]).toBe('m111');
+				expectNothingMissingFrom('m111');
+				expect(channel.messagePaginator.getItem('m100')).toBeUndefined();
+				expect(channel.messagePaginator.hasMoreTail).toBe(true);
+				await channel.messagePaginator.toTail();
+				expectNothingMissingFrom('m011');
+			});
+
+			it('shows the newest page the watch restored by the confirmation loads', async () => {
+				const unsubscribe = client.channelManager.registerSubscriptions();
+				await sendWhileOffline();
+
+				confirmHello();
+
+				// a page of 100: m112–m210 and "hello"; the restored watch lands asynchronously
+				await vi.waitFor(() => expect(ids()[0]).toBe('m112'), { timeout: 5000 });
+				expect(channel.watchStatus).toBe(ChannelWatchStatus.Watching);
+				expectNothingMissingFrom('m112');
+				expect(channel.messagePaginator.getItem('m100')).toBeUndefined();
+				await channel.messagePaginator.toTail();
+				expectNothingMissingFrom('m012');
+				unsubscribe();
+			});
+		});
+
+		// m100, the newest loaded message, is the user's own; m099 is another user's
+		const openWithOwnNewestMessage = () =>
+			openAtNewest([...range(1, 99), msg('m100', 100, { user: own })]);
+
+		it("merges a newest page that also shares another user's message", async () => {
+			await openWithOwnNewestMessage();
+			// the reload of 100 returns m099–m198
+			serverMessages = [...serverMessages, ...range(101, 198)];
+
+			await channel.reload();
+
+			expect(ids()).toEqual(range(1, 198).map((m) => m.id));
+		});
+
+		it('merges a newest page starting at an own message the window held', async () => {
+			// The same shape as a send replayed from the offline queue with exactly 99 messages sent
+			// after it: the page and the window cannot tell the two apart, so it merges.
+			await openWithOwnNewestMessage();
+			// the reload of 100 returns m100–m199
+			serverMessages = [...serverMessages, ...range(101, 199)];
+
+			await channel.reload();
+
+			expect(ids()).toEqual(range(1, 199).map((m) => m.id));
+		});
+
+		it('keeps older messages loaded when only own messages overlap after a reconnect', async () => {
+			// One page of 25 is loaded, m076–m100, and the user wrote the last 10. While offline,
+			// others send m101–m120. The reload of 25 returns m096–m120: it shares only the user's
+			// m096–m100 with the window, and nothing was missed.
+			const mine = (n) => msg(id(n), n, { user: own });
+			channel.messagePaginator.pageSize = 25;
+			channel.activate();
+			serverMessages = [
+				...range(1, 90),
+				...Array.from({ length: 10 }, (_, i) => mine(91 + i)),
+			];
+			serveChannel();
+			await channel.watch();
+			client.channelManager.markChannelsWatchInterrupted();
+			serverMessages = [...serverMessages, ...range(101, 120)];
+
+			await channel.reload();
+
+			expect(ids()).toEqual(range(76, 120).map((m) => m.id));
+			expect(channel.messagePaginator.itemIntervals).toHaveLength(1);
+			expect(channel.messagePaginator.hasMoreTail).toBe(true);
+		});
+	});
+
+	it('does not put a failed thread-only reply from the offline DB into the channel list', async () => {
+		seedLatestWindow(channel, [msg('m1', 1), msg('m2', 2)]);
+		const offlineDb = new MockOfflineDB({ client });
+		client.setOfflineDBApi(offlineDb);
+		offlineDb.upsertChannels.mockResolvedValue([]);
+		const reply = formatMessage(msg('reply', 3, { parent_id: 'm1', status: 'failed' }));
+		vi.spyOn(offlineDb, 'getFailedMessages').mockResolvedValue([reply]);
+		vi.spyOn(channel, 'getOrCreate').mockResolvedValue(
+			generateChannel({
+				channel: { id: channel.id, type: channel.type },
+				messages: [msg('m1', 1), msg('m2', 2)],
+			}),
+		);
+
+		await channel.reload();
+
+		expect(channel.messagePaginator.items.map((m) => m.id)).toEqual(['m1', 'm2']);
+		expect(channel.messagePaginator.getItem('reply')).toBeUndefined();
+	});
+
+	it('reloads when the offline DB fails to read the failed messages', async () => {
+		seedLatestWindow(channel, [msg('m1', 1), msg('m2', 2)]);
+		const offlineDb = new MockOfflineDB({ client });
+		client.setOfflineDBApi(offlineDb);
+		offlineDb.upsertChannels.mockResolvedValue([]);
+		vi.spyOn(offlineDb, 'getFailedMessages').mockRejectedValue(
+			new Error('db read failed'),
+		);
+		vi.spyOn(channel, 'getOrCreate').mockResolvedValue(
+			generateChannel({
+				channel: { id: channel.id, type: channel.type },
+				messages: [msg('m1', 1), msg('m2', 2), msg('m3', 3)],
+			}),
+		);
+
+		await expect(channel.reload()).resolves.toBeUndefined();
+
+		expect(channel.messagePaginator.items.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
+	});
+
+	it('puts back a failed message the placement of the reloaded page lost, without an offline DB', async () => {
+		seedLatestWindow(channel, [
+			msg('m1', 1),
+			msg('m2', 2),
+			msg('failed', 3, { status: 'failed' }),
+		]);
+		const paginator = channel.messagePaginator;
+		// a placement that loses the unsent message, which no offline DB could restore
+		const reconcile = paginator.reconcileNewestMessages;
+		vi.spyOn(paginator, 'reconcileNewestMessages').mockImplementation((page, options) => {
+			reconcile(page, options);
+			paginator.removeItem({ id: 'failed' });
+		});
+		vi.spyOn(channel, 'getOrCreate').mockResolvedValue(
+			generateChannel({
+				channel: { id: channel.id, type: channel.type },
+				messages: [msg('m1', 1), msg('m2', 2)],
+			}),
+		);
+
+		await channel.reload();
+
+		expect(paginator.items.map((m) => m.id)).toEqual(['m1', 'm2', 'failed']);
+		expect(paginator.getItem('failed')?.status).toBe('failed');
+	});
+
+	it('does not put back the failed copy of a message resent during the reload', async () => {
+		channel.activate();
+		const paginator = channel.messagePaginator;
+		const unsent = msg('unsent', 10, { status: 'failed' });
+		paginator.ingestPage({
+			page: [msg('m8', 8), msg('m9', 9), unsent].map((m) => formatMessage(m)),
+			isHead: true,
+			setActive: true,
+		});
+		// the reader jumped to an older window, so the head window is not shown
+		paginator.ingestPage({
+			page: [msg('m1', 1), msg('m2', 2)].map((m) => formatMessage(m)),
+			setActive: true,
+		});
+		vi.spyOn(channel, 'getOrCreate').mockImplementation(async () => {
+			// the user resends it while the reload runs
+			paginator.ingestItem(formatMessage({ ...unsent, status: 'received' }));
+			return generateChannel({
+				channel: { id: channel.id, type: channel.type },
+				messages: [msg('m8', 8), msg('m9', 9), msg('unsent', 10)],
+			});
+		});
+
+		await channel.reload();
+
+		expect(paginator.items.map((m) => m.id)).toEqual(['m1', 'm2']);
+		expect(paginator.getItem('unsent')?.status).toBe('received');
 	});
 
 	it('recovers a failed message from the offline DB when memory no longer holds it', async () => {
-		// The cold-boot / evicted case. The in-memory window is the only place `failedBefore` used to look,
-		// so a failed message the paginator had already lost was unrecoverable — v9 got away with reading
-		// its own lagging React copy, which a single reactive source of truth does not have.
+		// The cold-boot / evicted case: the offline DB holds a failed message no loaded window does.
 		seedLatestWindow(channel, [msg('m1', 1), msg('m2', 2)]);
 		const unsent = formatMessage(msg('unsent', 10, { status: 'failed' }));
 		client.setOfflineDBApi(new MockOfflineDB({ client }));
@@ -4654,6 +5943,42 @@ describe('Channel.reload', () => {
 		await channel.reload();
 
 		expect(client.offlineDb.getFailedMessages).toHaveBeenCalledWith({ cid: channel.cid });
+		expect(channel.messagePaginator.items.map((m) => m.id)).toContain('unsent');
+	});
+
+	it('shows a failed message stored between two windows once a reload joins them', async () => {
+		// only an older window is loaded, someone reads it, and the offline DB holds a message sent
+		// in between
+		channel.activate();
+		channel.messagePaginator.ingestPage({
+			page: [msg('m1', 1), msg('m2', 2), msg('m3', 3)].map((m) => formatMessage(m)),
+			isHead: false,
+			isTail: true,
+			setActive: true,
+		});
+		const unsent = formatMessage(msg('unsent', 30, { status: 'failed' }));
+		client.setOfflineDBApi(new MockOfflineDB({ client }));
+		client.offlineDb.state.partialNext({ initialized: true, userId: 'user' });
+		client.offlineDb.upsertChannels.mockResolvedValue([]);
+		vi.spyOn(client.offlineDb, 'getFailedMessages').mockResolvedValue([unsent]);
+		const getOrCreate = vi.spyOn(channel, 'getOrCreate');
+		const respond = (minutes) =>
+			getOrCreate.mockResolvedValueOnce(
+				generateChannel({
+					channel: { id: channel.id, type: channel.type },
+					messages: minutes.map((minute) => msg(`m${minute}`, minute)),
+				}),
+			);
+
+		// the newest window loads apart, and the message lands between the two, in neither
+		respond([50, 51, 52]);
+		await channel.reload();
+		expect(channel.messagePaginator.getItem('unsent')).toBeDefined();
+		expect(channel.messagePaginator.items.map((m) => m.id)).not.toContain('unsent');
+
+		// a page overlapping both windows joins them, and the message is ingested into the joined one
+		respond([3, 50, 51, 52]);
+		await channel.reload();
 		expect(channel.messagePaginator.items.map((m) => m.id)).toContain('unsent');
 	});
 
@@ -4680,6 +6005,98 @@ describe('Channel.reload', () => {
 		);
 	});
 
+	it('keeps a failed message resent during the reload as sent, not as its offline-DB copy', async () => {
+		const unsent = msg('unsent', 10, { status: 'failed' });
+		seedLatestWindow(channel, [msg('m1', 1), unsent]);
+		client.setOfflineDBApi(new MockOfflineDB({ client }));
+		client.offlineDb.state.partialNext({ initialized: true, userId: 'user' });
+		client.offlineDb.upsertChannels.mockResolvedValue([]);
+		vi.spyOn(client.offlineDb, 'getFailedMessages').mockResolvedValue([
+			formatMessage(unsent),
+		]);
+		vi.spyOn(channel, 'getOrCreate').mockImplementation(async () => {
+			// the user resends it while the reload runs
+			channel.messagePaginator.ingestItem(
+				formatMessage({ ...unsent, status: 'received' }),
+			);
+			return generateChannel({
+				channel: { id: channel.id, type: channel.type },
+				messages: [msg('m1', 1), msg('unsent', 10)],
+			});
+		});
+
+		await channel.reload();
+
+		expect(channel.messagePaginator.getItem('unsent')?.status).toBe('received');
+	});
+
+	it('keeps a failed message resent and confirmed above the reloaded page during the reload', async () => {
+		const unsent = msg('unsent', 10, { status: 'failed' });
+		seedLatestWindow(channel, [msg('m1', 1), msg('m2', 2), unsent]);
+		client.setOfflineDBApi(new MockOfflineDB({ client }));
+		client.offlineDb.state.partialNext({ initialized: true, userId: 'user' });
+		client.offlineDb.upsertChannels.mockResolvedValue([]);
+		vi.spyOn(client.offlineDb, 'getFailedMessages').mockResolvedValue([
+			formatMessage(unsent),
+		]);
+		const hardDeleteMessages = vi
+			.spyOn(client.offlineDb, 'hardDeleteMessages')
+			.mockResolvedValue(undefined);
+		vi.spyOn(channel, 'getOrCreate').mockImplementation(async () => {
+			// resent while the reload runs, confirmed after the server produced the page
+			channel.messagePaginator.ingestItem(formatMessage(msg('unsent', 11)));
+			return generateChannel({
+				channel: { id: channel.id, type: channel.type },
+				messages: [msg('m1', 1), msg('m2', 2)],
+			});
+		});
+
+		await channel.reload();
+
+		expect(channel.messagePaginator.items.map((m) => m.id)).toEqual([
+			'm1',
+			'm2',
+			'unsent',
+		]);
+		expect(channel.messagePaginator.getItem('unsent')?.status).toBe('received');
+		expect(hardDeleteMessages).not.toHaveBeenCalled();
+	});
+
+	it('joins a reloaded page sharing a message loaded before the request, keeping the reader', async () => {
+		channel.activate();
+		const paginator = channel.messagePaginator;
+		paginator.pageSize = 3;
+		paginator.ingestPage({
+			page: [msg('m8', 8), msg('m9', 9), msg('m10', 10)].map((m) => formatMessage(m)),
+			isHead: true,
+			setActive: true,
+		});
+		// the reader jumped to an older window
+		paginator.ingestPage({
+			page: [msg('m1', 1), msg('m2', 2)].map((m) => formatMessage(m)),
+			setActive: true,
+		});
+		vi.spyOn(channel, 'getOrCreate').mockImplementation(async () => {
+			paginator.ingestItem(formatMessage(msg('m13', 13)));
+			return generateChannel({
+				channel: { id: channel.id, type: channel.type },
+				messages: [msg('m10', 10), msg('m11', 11), msg('m12', 12), msg('m13', 13)],
+			});
+		});
+
+		await channel.reload();
+
+		expect(paginator.items.map((m) => m.id)).toEqual(['m1', 'm2']);
+		expect(paginator.anchoredHeadItems.map((m) => m.id)).toEqual([
+			'm8',
+			'm9',
+			'm10',
+			'm11',
+			'm12',
+			'm13',
+		]);
+	});
+
 	it('reloads without consulting the DB when offline support is disabled', async () => {
 		seedLatestWindow(channel, [msg('m1', 1)]);
 		vi.spyOn(channel, 'watch').mockResolvedValue({ messages: [msg('m1', 1)] });
@@ -4697,7 +6114,7 @@ describe('Channel.reload', () => {
 		channel.messagePaginator.ingestItem(channel.state.formatMessage(mine));
 		expect(channel.messagePaginator.items.map((m) => m.id)).toEqual(['mine']);
 
-		// Mock the transport, not `watch`: mocking `watch` skips `seedFirstPageSync`, so no fold runs.
+		// Mock the transport, not `watch`: mocking `watch` skips reconciling the page, so no fold runs.
 		vi.spyOn(channel, 'getOrCreate').mockImplementation(async () =>
 			generateChannel({
 				channel: { id: channel.id, type: channel.type },
@@ -4766,6 +6183,1088 @@ describe('Channel.reload', () => {
 		});
 	});
 });
+
+describe('A newest page from a query the message list did not run', () => {
+	let client;
+	let channel;
+	let getOrCreate;
+
+	const at = (minute) => new Date(Date.UTC(2020, 0, 1, 0, minute, 0));
+	const ids = (items) => (items ?? []).map((m) => m.id);
+	const response = (minutes) =>
+		generateChannel({
+			channel: { id: channel.id, type: channel.type },
+			messages: minutes.map((minute) =>
+				generateMsg({ id: `m${minute}`, cid: channel.cid, date: at(minute) }),
+			),
+		});
+	const respond = (minutes) => getOrCreate.mockResolvedValueOnce(response(minutes));
+
+	beforeEach(() => {
+		client = new StreamChat('apiKey');
+		client.user = { id: 'user' };
+		// `watch()` waits for a live socket; a connected client has one.
+		client.wsConnection._setStatus({ isHealthy: true, connectionId: 'connection-id' });
+		channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
+		// a full page of 3 does not prove the channel start, so m1–m3 and m8–m10 have a gap
+		channel.messagePaginator.pageSize = 3;
+		getOrCreate = vi.spyOn(channel, 'getOrCreate');
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('shows a reconnect page past a gap when nobody reads the channel', async () => {
+		const paginator = channel.messagePaginator;
+		respond([1, 2, 3]);
+		await channel.watch();
+		respond([8, 9, 10]);
+
+		await channel.reload();
+
+		expect(ids(paginator.items)).toEqual(['m8', 'm9', 'm10']);
+		expect(paginator.hasMoreHead).toBe(false);
+		// the window shown before is dropped, not stored
+		expect(paginator.getItem('m2')).toBeUndefined();
+	});
+
+	it('moves the reader to a reconnect page past a gap', async () => {
+		const paginator = channel.messagePaginator;
+		channel.activate();
+		respond([1, 2, 3]);
+		await channel.watch();
+		respond([8, 9, 10]);
+
+		await channel.reload();
+
+		expect(ids(paginator.items)).toEqual(['m8', 'm9', 'm10']);
+		expect(paginator.hasMoreHead).toBe(false);
+		expect(paginator.hasMoreTail).toBe(true);
+		expect(ids(paginator.anchoredHeadItems)).toEqual(['m8', 'm9', 'm10']);
+		expect(paginator.getItem('m2')).toBeUndefined();
+	});
+
+	describe('with a jumped-to older window active and a reconnect page past a gap', () => {
+		const message = (minute, overrides = {}) =>
+			generateMsg({ id: `m${minute}`, cid: channel.cid, date: at(minute), ...overrides });
+		// The reader jumped to m2, away from the newest window m8–m10. While offline, m11–m14 arrive,
+		// so the reconnect's newest page m12–m14 shares nothing with m8–m10.
+		const reconnectWhileReadingOlderWindow = async () => {
+			const paginator = channel.messagePaginator;
+			channel.activate();
+			respond([8, 9, 10]);
+			await channel.watch();
+			respond([1, 2, 3]);
+			await paginator.jumpToMessage('m2');
+			respond([12, 13, 14]);
+			await channel.reload();
+			// the reader is still on the window they jumped to
+			expect(ids(paginator.items)).toEqual(['m1', 'm2', 'm3']);
+			return paginator;
+		};
+
+		it('keeps the jumped-to window active and stores the page as the newest window', async () => {
+			const paginator = await reconnectWhileReadingOlderWindow();
+
+			expect(ids(paginator.items)).toEqual(['m1', 'm2', 'm3']);
+			expect(paginator.hasMoreHead).toBe(true);
+			expect(paginator.isActiveIntervalAtHead).toBe(false);
+			expect(ids(paginator.anchoredHeadItems)).toEqual(['m12', 'm13', 'm14']);
+			// the newest window nothing brought up to date is gone
+			expect(paginator.getItem('m9')).toBeUndefined();
+		});
+
+		it('shows the stored page on a jump to the latest message, without a request', async () => {
+			const paginator = await reconnectWhileReadingOlderWindow();
+			getOrCreate.mockClear();
+
+			await paginator.jumpToTheLatestMessage();
+
+			expect(ids(paginator.items)).toEqual(['m12', 'm13', 'm14']);
+			expect(paginator.hasMoreHead).toBe(false);
+			expect(getOrCreate).not.toHaveBeenCalled();
+		});
+
+		it('loads newer messages from the window read until it joins the newest window', async () => {
+			const paginator = await reconnectWhileReadingOlderWindow();
+			respond([4, 5, 6]);
+			await paginator.toHead();
+			respond([7, 8, 9]);
+			await paginator.toHead();
+			expect(paginator.hasMoreHead).toBe(true);
+			respond([10, 11, 12]);
+
+			await paginator.toHead();
+
+			expect(getOrCreate).toHaveBeenLastCalledWith(
+				expect.objectContaining({ messages: expect.objectContaining({ id_gt: 'm9' }) }),
+				undefined,
+			);
+			expect(ids(paginator.items)).toEqual(
+				[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].map((n) => `m${n}`),
+			);
+			expect(paginator.itemIntervals).toHaveLength(1);
+			expect(paginator.isActiveIntervalAtHead).toBe(true);
+			expect(paginator.hasMoreHead).toBe(false);
+		});
+
+		it('shows the newest window for a message the user sends', async () => {
+			const paginator = await reconnectWhileReadingOlderWindow();
+			const mine = message(15, { id: 'mine', user: { id: 'user' } });
+			vi.spyOn(channel, 'sendMessage').mockResolvedValue({ message: mine });
+
+			await channel.messageOperations.send({
+				localMessage: formatMessage({ ...mine, status: 'sending' }),
+			});
+
+			expect(ids(paginator.items)).toEqual(['m12', 'm13', 'm14', 'mine']);
+			expect(paginator.isActiveIntervalAtHead).toBe(true);
+		});
+
+		it('adds a message that arrives live to the newest window', async () => {
+			const paginator = await reconnectWhileReadingOlderWindow();
+
+			// as a `message.new` event ingests it
+			paginator.ingestItem(formatMessage(message(15, { user: { id: 'other' } })));
+
+			expect(ids(paginator.items)).toEqual(['m1', 'm2', 'm3']);
+			expect(ids(paginator.anchoredHeadItems)).toEqual(['m12', 'm13', 'm14', 'm15']);
+		});
+	});
+
+	it('shows a reconnect page past a gap to a channel left on an older window', async () => {
+		const paginator = channel.messagePaginator;
+		const release = channel.activate();
+		respond([8, 9, 10]);
+		await channel.watch();
+		respond([1, 2, 3]);
+		await paginator.jumpToMessage('m2');
+		release();
+		respond([12, 13, 14]);
+
+		await channel.reload();
+
+		expect(ids(paginator.items)).toEqual(['m12', 'm13', 'm14']);
+		expect(paginator.isActiveIntervalAtHead).toBe(true);
+		expect(paginator.getItem('m2')).toBeUndefined();
+		expect(paginator.getItem('m9')).toBeUndefined();
+	});
+
+	it('keeps a reader who jumped to an older message on their window when a reconnect page joins the head window', async () => {
+		const paginator = channel.messagePaginator;
+		channel.activate();
+		respond([8, 9, 10]);
+		await channel.watch();
+		respond([1, 2, 3]);
+		await paginator.jumpToMessage('m2');
+		respond([9, 10, 11]);
+
+		await channel.reload();
+
+		expect(ids(paginator.items)).toEqual(['m1', 'm2', 'm3']);
+		expect(ids(paginator.anchoredHeadItems)).toEqual(['m8', 'm9', 'm10', 'm11']);
+	});
+
+	it('makes the reader window the head window once a newer page joins it to the head window', async () => {
+		const paginator = channel.messagePaginator;
+		channel.activate();
+		respond([6, 7, 8]);
+		await channel.watch();
+		// the reader jumps to an older window: m4 and m5 separate it from the head window m6–m8
+		respond([1, 2, 3]);
+		await paginator.jumpToMessage('m2');
+		expect(ids(paginator.items)).toEqual(['m1', 'm2', 'm3']);
+		// a full page of newer messages that does not reach the newest message, but overlaps the head window
+		respond([4, 5, 6]);
+
+		await paginator.toHead();
+
+		expect(ids(paginator.items)).toEqual([
+			'm1',
+			'm2',
+			'm3',
+			'm4',
+			'm5',
+			'm6',
+			'm7',
+			'm8',
+		]);
+		expect(paginator.itemIntervals).toHaveLength(1);
+		expect(paginator.itemIntervals[0].isHead).toBe(true);
+		expect(paginator.hasMoreHead).toBe(false);
+		expect(paginator.cursor?.headward).toBeNull();
+		expect(ids(paginator.anchoredHeadItems)).toEqual(ids(paginator.items));
+
+		// a live message joins the shown window rather than starting a head window of its own
+		paginator.ingestItem(
+			formatMessage(generateMsg({ id: 'm9', cid: channel.cid, date: at(9) })),
+		);
+
+		expect(ids(paginator.items)).toEqual([
+			'm1',
+			'm2',
+			'm3',
+			'm4',
+			'm5',
+			'm6',
+			'm7',
+			'm8',
+			'm9',
+		]);
+		expect(paginator.itemIntervals).toHaveLength(1);
+	});
+
+	it('shows the newest window of a channel left on an older window', async () => {
+		const paginator = channel.messagePaginator;
+		const release = channel.activate();
+		respond([8, 9, 10]);
+		await channel.watch();
+		respond([1, 2, 3]);
+		await paginator.jumpToMessage('m2');
+		release();
+		respond([9, 10, 11]);
+
+		await channel.reload();
+
+		expect(ids(paginator.items)).toEqual(['m8', 'm9', 'm10', 'm11']);
+		expect(paginator.hasMoreHead).toBe(false);
+	});
+
+	it('shows a channel-list page past a gap when nobody reads the channel', async () => {
+		const paginator = channel.messagePaginator;
+		respond([1, 2, 3]);
+		await channel.watch();
+
+		client.hydrateChannels([response([8, 9, 10])], {}, { message_limit: 3 });
+
+		expect(ids(paginator.items)).toEqual(['m8', 'm9', 'm10']);
+		// the window shown before is dropped, not stored
+		expect(paginator.getItem('m2')).toBeUndefined();
+	});
+
+	it('shows a channel-list page to a channel left on an older window', async () => {
+		const paginator = channel.messagePaginator;
+		const release = channel.activate();
+		respond([8, 9, 10]);
+		await channel.watch();
+		respond([1, 2, 3]);
+		await paginator.jumpToMessage('m2');
+		release();
+
+		client.hydrateChannels([response([9, 10, 11])], {}, { message_limit: 3 });
+
+		expect(ids(paginator.items)).toEqual(['m8', 'm9', 'm10', 'm11']);
+		expect(paginator.hasMoreHead).toBe(false);
+		// the window shown before stays stored
+		await paginator.jumpToMessage('m2');
+		expect(ids(paginator.items)).toEqual(['m1', 'm2', 'm3']);
+		expect(getOrCreate).toHaveBeenCalledTimes(2);
+	});
+
+	it('leaves an active channel to its own reload on a channel-list page', async () => {
+		const paginator = channel.messagePaginator;
+		channel.activate();
+		respond([8, 9, 10]);
+		await channel.watch();
+		respond([1, 2, 3]);
+		await paginator.jumpToMessage('m2');
+
+		client.hydrateChannels([response([9, 10, 11])], {}, { message_limit: 3 });
+
+		expect(ids(paginator.items)).toEqual(['m1', 'm2', 'm3']);
+		expect(paginator.getItem('m11')).toBeUndefined();
+	});
+
+	it('marks a new head window reaching the channel start as the tail', async () => {
+		const paginator = channel.messagePaginator;
+		// only a window reached by a jump is loaded: the channel has newer messages
+		const jumped = response([1, 2, 3]);
+		jumped.channel.last_message_at = convertDateToTimestamp(at(5));
+		getOrCreate.mockResolvedValueOnce(jumped);
+		await paginator.jumpToMessage('m2');
+		expect(paginator.anchoredHeadItem).toBeUndefined();
+		// a short page reaches the channel start, and proves m2 was hard-deleted
+		respond([1, 3]);
+
+		await channel.watch();
+
+		expect(ids(paginator.items)).toEqual(['m1', 'm3']);
+		expect(paginator.hasMoreTail).toBe(false);
+		const head = paginator.itemIntervals.find((interval) => interval.isHead);
+		expect(head?.isTail).toBe(true);
+		expect(head?.hasMoreTail).toBe(false);
+	});
+});
+
+describe('Channel responses reporting newer messages than the newest window holds', () => {
+	let client;
+	let channel;
+
+	const at = (minute) => new Date(Date.UTC(2020, 0, 1, 0, minute, 0));
+	const msg = (id, minute) => generateMsg({ id, cid: channel.cid, date: at(minute) });
+	const respondWith = ({ lastMessageMinute, messages = [] }) =>
+		vi.spyOn(channel, 'getOrCreate').mockImplementation(async () =>
+			generateChannel({
+				channel: {
+					id: channel.id,
+					type: channel.type,
+					last_message_at: convertDateToTimestamp(at(lastMessageMinute)),
+				},
+				messages,
+			}),
+		);
+
+	beforeEach(() => {
+		client = new StreamChat('apiKey');
+		client.user = { id: 'user' };
+		// `watch()` waits for a live socket; a connected client has one.
+		client.wsConnection._setStatus({ isHealthy: true, connectionId: 'connection-id' });
+		const channelResponse = generateChannel();
+		channel = client.channelManager.ensure({
+			type: channelResponse.channel.type,
+			id: channelResponse.channel.id,
+		});
+		channel.initialized = true;
+		seedLatestWindow(channel, [msg('m1', 1), msg('m2', 2)]);
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	const ids = () => channel.messagePaginator.items.map((m) => m.id);
+	// a page older than m1, with the channel's latest message at `lastMessageMinute`
+	// the reader at the bottom of m1–m2, the newest page, with older messages to load
+	const openAtNewest = async () => {
+		channel.activate();
+		channel.messagePaginator.pageSize = 2;
+		respondWith({ lastMessageMinute: 2, messages: [msg('m1', 1), msg('m2', 2)] });
+		await channel.messagePaginator.reload();
+	};
+	// a page older than m1, with the channel's latest message at `lastMessageMinute`
+	const loadOlder = async (lastMessageMinute) => {
+		respondWith({ lastMessageMinute, messages: [msg('m0', 0)] });
+		await channel.messagePaginator.toTail();
+	};
+
+	it('stops treating the window as the newest when the channel was not watched', async () => {
+		expect(channel.watchStatus).toBe(ChannelWatchStatus.NotWatching);
+		respondWith({ lastMessageMinute: 5 });
+
+		await channel.query();
+
+		expect(channel.messagePaginator.anchoredHeadItem).toBeUndefined();
+		expect(channel.messagePaginator.hasMoreHead).toBe(true);
+	});
+
+	it('keeps the window after a dropped connection: the re-watch that follows brings the newer messages', async () => {
+		await openAtNewest();
+		channel.watchStatus = ChannelWatchStatus.WasWatching;
+
+		await loadOlder(5);
+
+		expect(channel.messagePaginator.anchoredHeadItem?.id).toBe('m2');
+		// a message that arrives once the socket is back lands where the reader is
+		channel.messagePaginator.ingestItem(formatMessage(msg('m6', 6)));
+		expect(ids()).toEqual(['m0', 'm1', 'm2', 'm6']);
+	});
+
+	it('stops treating the window as the newest when a query watches again after a dropped connection', async () => {
+		// a channel nobody reads, opened at an older message from a search result
+		channel.watchStatus = ChannelWatchStatus.WasWatching;
+		// a full page: messages exist on both sides of it
+		channel.messagePaginator.pageSize = 3;
+		respondWith({
+			lastMessageMinute: 30,
+			messages: [msg('o1', -5), msg('o2', -4), msg('o3', -3)],
+		});
+
+		await channel.messagePaginator.jumpToMessage('o2', { watchChannel: true });
+		expect(channel.watchStatus).toBe(ChannelWatchStatus.Watching);
+		channel.messagePaginator.ingestItem(formatMessage(msg('m31', 31)));
+
+		// m3–m30 are missing: m31 starts a window of its own rather than joining m1–m2
+		expect(channel.messagePaginator.anchoredHeadItems.map((m) => m.id)).toEqual(['m31']);
+		expect(channel.messagePaginator.getItem('m2')).toBeDefined();
+	});
+
+	it('shows a message the user sends after the window stopped being the newest', async () => {
+		await openAtNewest();
+		await loadOlder(5);
+		expect(channel.messagePaginator.anchoredHeadItem).toBeUndefined();
+		const mine = generateMsg({
+			id: 'mine',
+			cid: channel.cid,
+			date: at(10),
+			user: { id: 'user' },
+		});
+		vi.spyOn(channel, 'sendMessage').mockResolvedValue({ message: mine });
+
+		// as the composer hands it over
+		const sending = channel.messageOperations.send({
+			localMessage: formatMessage({ ...mine, status: 'sending' }),
+		});
+
+		expect(ids()).toEqual(['mine']);
+		await sending;
+		expect(ids()).toEqual(['mine']);
+		expect(channel.messagePaginator.anchoredHeadItem?.id).toBe('mine');
+		// the messages between it and the older window load as the reader scrolls up
+		expect(channel.messagePaginator.hasMoreTail).toBe(true);
+	});
+
+	it('shows a reloaded page across a gap from it after the unsent message it ended with is deleted', async () => {
+		await openAtNewest();
+		channel.messagePaginator.ingestItem(
+			formatMessage(
+				generateMsg({ id: 'failed', cid: channel.cid, date: at(3), status: 'failed' }),
+			),
+		);
+		await loadOlder(30);
+		expect(ids()).toEqual(['m0', 'm1', 'm2', 'failed']);
+		channel.messagePaginator.removeItem({ id: 'failed' });
+		respondWith({
+			lastMessageMinute: 34,
+			messages: [30, 31, 32, 33, 34].map((minute) => msg(`m${minute}`, minute)),
+		});
+
+		await channel.reload();
+
+		expect(ids()).toEqual(['m30', 'm31', 'm32', 'm33', 'm34']);
+		expect(channel.messagePaginator.getItem('m1')).toBeUndefined();
+	});
+
+	it('shows a reloaded page across a gap from the window that stopped being the newest', async () => {
+		await openAtNewest();
+		await loadOlder(30);
+		channel.messagePaginator.ingestItem(
+			formatMessage(
+				generateMsg({
+					id: 'failed',
+					cid: channel.cid,
+					date: new Date(at(1).getTime() + 30_000),
+					status: 'failed',
+				}),
+			),
+		);
+		expect(ids()).toEqual(['m0', 'm1', 'failed', 'm2']);
+		const page = [30, 31, 32, 33, 34].map((minute) => msg(`m${minute}`, minute));
+		respondWith({ lastMessageMinute: 34, messages: page });
+
+		await channel.reload();
+
+		// the page replaces the loaded windows and keeps the unsent message
+		expect(ids()).toEqual(['failed', 'm30', 'm31', 'm32', 'm33', 'm34']);
+		expect(channel.messagePaginator.anchoredHeadItems.map((m) => m.id)).toEqual(ids());
+		expect(channel.messagePaginator.getItem('m1')).toBeUndefined();
+		expect(channel.messagePaginator.hasMoreHead).toBe(false);
+		expect(channel.messagePaginator.hasMoreTail).toBe(true);
+	});
+
+	it('keeps the window while the channel is watched: the newer messages are still arriving as events', async () => {
+		channel.watchStatus = ChannelWatchStatus.Watching;
+		respondWith({ lastMessageMinute: 5 });
+
+		await channel.query();
+
+		expect(channel.messagePaginator.anchoredHeadItem?.id).toBe('m2');
+	});
+
+	it('keeps the newest page it placed, even when last_message_at is later', async () => {
+		// the server still reports the time of m5, hard-deleted while no events arrived
+		respondWith({
+			lastMessageMinute: 5,
+			messages: [msg('m1', 1), msg('m2', 2), msg('m4', 4)],
+		});
+
+		await channel.watch();
+
+		expect(channel.messagePaginator.anchoredHeadItem?.id).toBe('m4');
+	});
+});
+
+describe('A channel whose query returned no messages', () => {
+	let client;
+	let channel;
+	let getOrCreate;
+
+	const at = (minute) => new Date(Date.UTC(2020, 0, 1, 0, minute, 0));
+	const otherUser = { id: 'other' };
+	const receive = (id, minute) =>
+		channel._handleChannelEvent({
+			type: 'message.new',
+			user: otherUser,
+			message: generateMsg({ id, cid: channel.cid, date: at(minute), user: otherUser }),
+		});
+
+	beforeEach(async () => {
+		client = new StreamChat('apiKey');
+		client.user = { id: 'user' };
+		client.wsPromise = Promise.resolve();
+		client.wsConnection._setStatus({ isHealthy: true });
+		client.connectionIdManager.resolveConnectionId('connection-id');
+		const channelResponse = generateChannel();
+		channel = client.channelManager.ensure({
+			type: channelResponse.channel.type,
+			id: channelResponse.channel.id,
+		});
+		getOrCreate = vi.spyOn(channel, 'getOrCreate').mockResolvedValue(
+			generateChannel({
+				channel: { id: channel.id, type: channel.type, last_message_at: undefined },
+				messages: [],
+			}),
+		);
+		channel.activate();
+		await channel.watch();
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('has no older messages to load once live messages arrive', async () => {
+		receive('m1', 1);
+		receive('m2', 2);
+
+		const paginator = channel.messagePaginator;
+		expect(paginator.items.map((m) => m.id)).toEqual(['m1', 'm2']);
+		expect(paginator.anchoredHeadItem?.id).toBe('m2');
+		expect(paginator.hasMoreTail).toBe(false);
+		getOrCreate.mockClear();
+		await paginator.toTail();
+		expect(getOrCreate).not.toHaveBeenCalled();
+	});
+});
+
+describe('Jumping to the latest message', () => {
+	let client;
+	let channel;
+	let getOrCreate;
+
+	const at = (minute) => new Date(Date.UTC(2020, 0, 1, 0, minute, 0));
+	const msg = (id, minute) => generateMsg({ id, cid: channel.cid, date: at(minute) });
+	// the page the server returns for a message query on a channel holding m0 to m<lastMinute>
+	const pageFor = (query, lastMinute) => {
+		const all = Array.from({ length: lastMinute + 1 }, (_, minute) =>
+			msg(`m${minute}`, minute),
+		);
+		const limit = query.limit ?? channel.messagePaginator.pageSize;
+		const indexOf = (id) => all.findIndex((m) => m.id === id);
+		if (query.id_gt) return all.slice(indexOf(query.id_gt) + 1).slice(0, limit);
+		if (query.id_lt) return all.slice(0, indexOf(query.id_lt)).slice(-limit);
+		if (query.id_around) {
+			const start = Math.max(0, indexOf(query.id_around) - Math.floor(limit / 2));
+			return all.slice(start, start + limit);
+		}
+		return all.slice(-limit);
+	};
+	const respond = (payload, lastMinute) =>
+		generateChannel({
+			channel: {
+				id: channel.id,
+				type: channel.type,
+				last_message_at: convertDateToTimestamp(at(lastMinute)),
+			},
+			messages: pageFor(payload.messages ?? {}, lastMinute),
+		});
+	// the server answers each query; its latest message is m<lastMinute>
+	const serveChannelUpTo = (lastMinute) =>
+		getOrCreate.mockImplementation(async (payload) => respond(payload, lastMinute));
+	// the next request stays pending until the returned function answers it
+	const holdNextAnswer = (lastMinute) => {
+		let answer = () => {};
+		getOrCreate.mockImplementationOnce(
+			(payload) =>
+				new Promise((resolve) => {
+					answer = () => resolve(respond(payload, lastMinute));
+				}),
+		);
+		return () => answer();
+	};
+	const lastQuery = () => getOrCreate.mock.calls.at(-1)[0].messages;
+	const ids = () => channel.messagePaginator.items.map((m) => m.id);
+	const nextTick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+	beforeEach(async () => {
+		client = new StreamChat('apiKey');
+		client.user = { id: 'user' };
+		client.wsConnection._setStatus({ isHealthy: true, connectionId: 'connection-id' });
+		const channelResponse = generateChannel();
+		channel = client.channelManager.ensure({
+			type: channelResponse.channel.type,
+			id: channelResponse.channel.id,
+		});
+		channel.initialized = true;
+		getOrCreate = vi.spyOn(channel, 'getOrCreate');
+		// the reader at the bottom of the newest page, m11–m12
+		channel.activate();
+		channel.messagePaginator.pageSize = 2;
+		serveChannelUpTo(12);
+		await channel.messagePaginator.reload();
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	// The channel is not watched while m13–m30 are sent, so loading older messages stops treating
+	// m11–m12 as the newest window.
+	const loadOlderWhileNewerAreSent = async () => {
+		serveChannelUpTo(30);
+		await channel.messagePaginator.toTail();
+		expect(channel.messagePaginator.anchoredHeadItem).toBeUndefined();
+	};
+
+	it('shows the newest page when more than a page of messages is missing', async () => {
+		await loadOlderWhileNewerAreSent();
+		expect(ids()).toEqual(['m9', 'm10', 'm11', 'm12']);
+		const addError = vi.spyOn(client.notifications, 'addError');
+
+		expect(await channel.messagePaginator.jumpToTheLatestMessage()).toBe(true);
+
+		expect(lastQuery()).toEqual({ limit: 2 });
+		expect(ids()).toEqual(['m29', 'm30']);
+		expect(channel.messagePaginator.anchoredHeadItem?.id).toBe('m30');
+		expect(channel.messagePaginator.hasMoreHead).toBe(false);
+		expect(channel.messagePaginator.hasMoreTail).toBe(true);
+		expect(addError).not.toHaveBeenCalled();
+		// the messages between the two windows are not loaded, so the older window stays apart
+		expect(channel.messagePaginator.getItem('m9')).toBeDefined();
+		expect(channel.messagePaginator.getItem('m28')).toBeUndefined();
+	});
+
+	it('merges the newest page into the window it overlaps and shows it', async () => {
+		// the reader jumped to an older message while m13 was sent
+		serveChannelUpTo(13);
+		await channel.messagePaginator.jumpToMessage('m3');
+		expect(ids()).toEqual(['m2', 'm3']);
+		expect(channel.messagePaginator.anchoredHeadItem).toBeUndefined();
+
+		expect(await channel.messagePaginator.jumpToTheLatestMessage()).toBe(true);
+
+		expect(lastQuery()).toEqual({ limit: 2 });
+		expect(ids()).toEqual(['m11', 'm12', 'm13']);
+		expect(channel.messagePaginator.anchoredHeadItems.map((m) => m.id)).toEqual(ids());
+		expect(channel.messagePaginator.hasMoreHead).toBe(false);
+	});
+
+	it('leaves the reader on the window of a later jump made while the newest page loads', async () => {
+		await loadOlderWhileNewerAreSent();
+		await channel.messagePaginator.jumpToMessage('m20');
+		expect(ids()).toEqual(['m19', 'm20']);
+		const answerNewest = holdNextAnswer(30);
+		const toLatest = channel.messagePaginator.jumpToTheLatestMessage();
+		await nextTick();
+
+		await channel.messagePaginator.jumpToMessage('m10');
+		expect(ids()).toEqual(['m9', 'm10', 'm11', 'm12']);
+
+		answerNewest();
+		expect(await toLatest).toBe(false);
+
+		expect(ids()).toEqual(['m9', 'm10', 'm11', 'm12']);
+		// the newest page is stored as the newest window, so returning to it needs no request
+		expect(channel.messagePaginator.anchoredHeadItem?.id).toBe('m30');
+		const requests = getOrCreate.mock.calls.length;
+		expect(await channel.messagePaginator.jumpToTheLatestMessage()).toBe(true);
+		expect(ids()).toEqual(['m29', 'm30']);
+		expect(getOrCreate).toHaveBeenCalledTimes(requests);
+	});
+
+	it('shows the loaded newest window without a request', async () => {
+		// newer messages arrive as events while the channel is watched
+		channel.watchStatus = ChannelWatchStatus.Watching;
+		serveChannelUpTo(12);
+		await channel.messagePaginator.jumpToMessage('m3');
+		expect(channel.messagePaginator.anchoredHeadItem?.id).toBe('m12');
+		const requests = getOrCreate.mock.calls.length;
+
+		expect(await channel.messagePaginator.jumpToTheLatestMessage()).toBe(true);
+
+		expect(ids()).toEqual(['m11', 'm12']);
+		expect(getOrCreate).toHaveBeenCalledTimes(requests);
+	});
+});
+
+describe('Message paginator queries through the channel', () => {
+	let client;
+	let channel;
+
+	const at = (minute) => new Date(Date.UTC(2020, 0, 1, 0, minute, 0));
+	const msg = (id, minute) => generateMsg({ id, cid: channel.cid, date: at(minute) });
+	const page = (from, to) =>
+		Array.from({ length: to - from + 1 }, (_, i) => msg(`m${from + i}`, from + i));
+	const readersOf = (messageId) =>
+		(
+			channel.messageReceiptsTracker.snapshotStore.getLatestValue().readersByMessageId[
+				messageId
+			] ?? []
+		).map((user) => user.id);
+	// The reader read up to m25, which only a jump loads; the read row names no message, so the
+	// position is looked up among the loaded messages. The own user has 3 unread messages.
+	const channelResponse = () =>
+		generateChannel({
+			channel: {
+				id: channel.id,
+				type: channel.type,
+				last_message_at: convertDateToTimestamp(at(50)),
+			},
+			messages: page(20, 30),
+			read: [
+				{
+					last_read: convertDateToTimestamp(at(25)),
+					unread_messages: 25,
+					user: { id: 'reader' },
+				},
+				{
+					last_read: convertDateToTimestamp(at(22)),
+					unread_messages: 3,
+					user: { id: 'user' },
+				},
+			],
+		});
+	const respondWithPage = () =>
+		vi.spyOn(channel, 'getOrCreate').mockResolvedValue(channelResponse());
+	const unreadSnapshot = () =>
+		channel.messagePaginator.unreadStateSnapshot.getLatestValue();
+
+	beforeEach(() => {
+		client = new StreamChat('apiKey');
+		client.user = { id: 'user' };
+		const channelResponse = generateChannel();
+		channel = client.channelManager.ensure({
+			type: channelResponse.channel.type,
+			id: channelResponse.channel.id,
+		});
+		channel.initialized = true;
+		// the newest messages are loaded
+		seedLatestWindow(channel, page(40, 50));
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('resolves a read position without a message id against the page the response loads', async () => {
+		respondWithPage();
+
+		await channel.messagePaginator.jumpToMessage('m25');
+
+		expect(readersOf('m25')).toEqual(['reader']);
+	});
+
+	it('takes the unread snapshot from the read state a first page brings', async () => {
+		respondWithPage();
+
+		await channel.messagePaginator.reload();
+
+		expect(unreadSnapshot().unreadCount).toBe(3);
+	});
+
+	it('keeps the head mark of a newest page it places, when its newest message is shadowed', async () => {
+		// a fresh channel nobody watches; its newest message (m11) is shadowed, so the paginator leaves
+		// it out, and the channel's last_message_at is newer than anything the paginator holds
+		const fresh = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
+		const getOrCreate = vi.spyOn(fresh, 'getOrCreate').mockResolvedValue(
+			generateChannel({
+				channel: {
+					id: fresh.id,
+					type: fresh.type,
+					last_message_at: convertDateToTimestamp(at(11)),
+				},
+				messages: [
+					...Array.from({ length: 10 }, (_, i) =>
+						generateMsg({ id: `m${i + 1}`, cid: fresh.cid, date: at(i + 1) }),
+					),
+					generateMsg({ id: 'm11', cid: fresh.cid, date: at(11), shadowed: true }),
+				],
+			}),
+		);
+		expect(fresh.watchStatus).not.toBe(ChannelWatchStatus.Watching);
+
+		await fresh.messagePaginator.reload();
+
+		expect(fresh.messagePaginator.anchoredHeadItem?.id).toBe('m10');
+		expect(fresh.messagePaginator.hasMoreHead).toBe(false);
+		await fresh.messagePaginator.toHead();
+		expect(getOrCreate).toHaveBeenCalledTimes(1);
+	});
+
+	it('records the watch a jump asked for', async () => {
+		respondWithPage();
+		expect(channel.watchStatus).not.toBe(ChannelWatchStatus.Watching);
+
+		await channel.messagePaginator.jumpToMessage('m25', { watchChannel: true });
+
+		expect(channel.watchStatus).toBe(ChannelWatchStatus.Watching);
+	});
+
+	it('takes the unread snapshot from the read state a jumped-to page brings', async () => {
+		respondWithPage();
+
+		await channel.messagePaginator.jumpToMessage('m25');
+
+		expect(unreadSnapshot().unreadCount).toBe(3);
+	});
+
+	it('keeps the error of applying the rest of a jumped-to page', async () => {
+		respondWithPage();
+		vi.spyOn(channel, '_initializeState').mockImplementation(() => {
+			throw new Error('apply failed');
+		});
+
+		await channel.messagePaginator.jumpToMessage('m25');
+
+		expect(channel.messagePaginator.lastQueryError?.message).toBe('apply failed');
+		expect(channel._channelQueriesInFlight).toBe(0);
+	});
+
+	it('tracks the query through its request, the placing of its page and the applying of the rest', async () => {
+		const inFlight = [];
+		const record = (step) => inFlight.push([step, channel._channelQueriesInFlight]);
+		const recordCalls = (object, method, step) => {
+			const original = object[method].bind(object);
+			vi.spyOn(object, method).mockImplementation((...args) => {
+				record(step);
+				return original(...args);
+			});
+		};
+		vi.spyOn(channel, 'getOrCreate').mockImplementation(async () => {
+			record('request');
+			return channelResponse();
+		});
+		recordCalls(channel.messagePaginator, 'placeQueryPage', 'place');
+		recordCalls(channel, '_initializeState', 'apply');
+
+		await channel.messagePaginator.jumpToMessage('m25');
+
+		expect(inFlight).toEqual([
+			['request', 1],
+			['place', 1],
+			['apply', 1],
+		]);
+		expect(channel._channelQueriesInFlight).toBe(0);
+	});
+
+	it('stops tracking the query when its request fails', async () => {
+		const inFlightWhileRequested = [];
+		vi.spyOn(channel, 'getOrCreate').mockImplementation(async () => {
+			inFlightWhileRequested.push(channel._channelQueriesInFlight);
+			throw new Error('offline');
+		});
+
+		await channel.messagePaginator.jumpToMessage('m25');
+
+		expect(inFlightWhileRequested).toEqual([1]);
+		expect(channel._channelQueriesInFlight).toBe(0);
+	});
+
+	it('keeps the channel stored while its query waits to retry', async () => {
+		vi.useFakeTimers();
+		try {
+			const getOrCreate = vi
+				.spyOn(channel, 'getOrCreate')
+				.mockRejectedValueOnce(new Error('offline'))
+				.mockResolvedValueOnce(channelResponse());
+
+			const query = channel.messagePaginator.executeQuery({
+				queryShape: { id_around: 'm25', limit: 11 },
+				retryCount: 1,
+			});
+			// the first attempt fails, and the query waits before retrying
+			await vi.advanceTimersByTimeAsync(0);
+			expect(getOrCreate).toHaveBeenCalledTimes(1);
+			client.channelManager.releaseUnusedChannels();
+			expect(channel.pendingDisposal).toBeFalsy();
+
+			await vi.advanceTimersByTimeAsync(DEFAULT_QUERY_CHANNELS_MS_BETWEEN_RETRIES);
+			await query;
+			expect(getOrCreate).toHaveBeenCalledTimes(2);
+			expect(channel.messagePaginator.getItem('m25')).toBeDefined();
+
+			// with its query over, nothing keeps the channel any more
+			client.channelManager.releaseUnusedChannels();
+			expect(channel.pendingDisposal).toBe(true);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('tracks a debounced query too', async () => {
+		vi.useFakeTimers();
+		try {
+			respondWithPage();
+			const runTrackedQuery = vi.spyOn(channel, 'runTrackedQuery');
+
+			channel.messagePaginator.toTailDebounced();
+			await vi.advanceTimersByTimeAsync(1000);
+
+			expect(runTrackedQuery).toHaveBeenCalledTimes(1);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('sends no request for a disposed channel, and records the refusal', async () => {
+		const getOrCreate = vi.spyOn(channel, 'getOrCreate');
+		channel.disconnect();
+
+		await channel.messagePaginator.executeQuery({
+			queryShape: { id_around: 'm25', limit: 11 },
+		});
+
+		expect(getOrCreate).not.toHaveBeenCalled();
+		expect(channel.messagePaginator.lastQueryError?.message).toBe(
+			channel.disposedError().message,
+		);
+		expect(channel._channelQueriesInFlight).toBe(0);
+	});
+});
+
+describe('Channel queries in flight', () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('refuses a tracked query of a disposed channel without running it', async () => {
+		const client = new StreamChat('apiKey');
+		client.user = { id: 'user' };
+		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
+		channel.disconnect();
+		const run = vi.fn(async () => 'ran');
+
+		await expect(channel.runTrackedQuery(run)).rejects.toThrow(
+			channel.disposedError().message,
+		);
+
+		expect(run).not.toHaveBeenCalled();
+		expect(channel.isQueryingChannel).toBe(false);
+	});
+
+	it('applies the rest of a watch response even when placing its page fails', async () => {
+		const client = new StreamChat('apiKey');
+		client.user = { id: 'user' };
+		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
+		vi.spyOn(channel, 'getOrCreate').mockResolvedValue(
+			generateChannel({ channel: { id: channel.id, type: channel.type } }),
+		);
+		vi.spyOn(channel.messagePaginator, 'placeExternalQueryPage').mockImplementation(
+			() => {
+				throw new Error('placing failed');
+			},
+		);
+
+		await expect(channel.watch()).rejects.toThrow('placing failed');
+
+		expect(channel.watchStatus).toBe(ChannelWatchStatus.Watching);
+		expect(channel.initialized).toBe(true);
+		expect(channel.isQueryingChannel).toBe(false);
+	});
+
+	it('counts a channel query as in flight from its request until its response is applied', async () => {
+		const client = new StreamChat('apiKey');
+		client.user = { id: 'user' };
+		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
+		const querying = [];
+		vi.spyOn(channel, 'getOrCreate').mockImplementation(async () => {
+			querying.push(['request', channel.isQueryingChannel]);
+			return generateChannel({ channel: { id: channel.id, type: channel.type } });
+		});
+		const initializeState = channel._initializeState.bind(channel);
+		vi.spyOn(channel, '_initializeState').mockImplementation((...args) => {
+			querying.push(['apply', channel.isQueryingChannel]);
+			return initializeState(...args);
+		});
+
+		await channel.query();
+
+		expect(querying).toEqual([
+			['request', true],
+			['apply', true],
+		]);
+		expect(channel.isQueryingChannel).toBe(false);
+	});
+});
+
+describe('Unread snapshot of a channel response placing the first page', () => {
+	let client;
+	let channel;
+
+	// the own user has 3 unread messages
+	const channelResponse = () =>
+		generateChannel({
+			channel: { id: channel.id, type: channel.type },
+			messages: [generateMsg({ cid: channel.cid })],
+			read: [
+				{
+					last_read: convertDateToTimestamp(new Date(Date.UTC(2020, 0, 1))),
+					unread_messages: 3,
+					user: { id: 'user' },
+				},
+			],
+		});
+	const unreadSnapshot = () =>
+		channel.messagePaginator.unreadStateSnapshot.getLatestValue();
+
+	beforeEach(() => {
+		client = new StreamChat('apiKey');
+		client.user = { id: 'user' };
+		channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('takes it from the read state the response brings, after watch()', async () => {
+		vi.spyOn(channel, 'getOrCreate').mockResolvedValue(channelResponse());
+
+		await channel.watch();
+
+		expect(unreadSnapshot().unreadCount).toBe(3);
+	});
+
+	it('takes it from the read state the response brings, after the channel-list hydrate', () => {
+		client.hydrateChannels([channelResponse()]);
+
+		expect(unreadSnapshot().unreadCount).toBe(3);
+	});
+
+	// A refresh reconciles the loaded messages and keeps the snapshot: retaking it would drop an
+	// explicit mark-unread on every reconnect or list refresh.
+	it('leaves it alone when watch() refreshes the loaded messages', async () => {
+		vi.spyOn(channel, 'getOrCreate').mockResolvedValue(channelResponse());
+		await channel.watch();
+		channel.messagePaginator.setUnreadSnapshot({
+			firstUnreadMessageId: 'marked',
+			unreadCount: 7,
+		});
+
+		await channel.watch();
+
+		expect(unreadSnapshot()).toMatchObject({
+			firstUnreadMessageId: 'marked',
+			unreadCount: 7,
+		});
+	});
+
+	it('leaves it alone when the channel-list hydrate refreshes the loaded messages', () => {
+		client.hydrateChannels([channelResponse()]);
+		channel.messagePaginator.setUnreadSnapshot({
+			firstUnreadMessageId: 'marked',
+			unreadCount: 7,
+		});
+
+		client.hydrateChannels([channelResponse()]);
+
+		expect(unreadSnapshot()).toMatchObject({
+			firstUnreadMessageId: 'marked',
+			unreadCount: 7,
+		});
+	});
+});
+
 describe('Channel active flag (mark-read stays UI-driven)', () => {
 	let client;
 	let channel;

@@ -825,6 +825,11 @@ export const runDetached = <T>(
   promise.catch(onError);
 };
 
+/** Whether the message is a thread reply not shown in the channel: only its thread lists it. */
+export const isThreadOnlyReply = (
+  message: Pick<LocalMessage | MessageResponse, 'parent_id' | 'show_in_channel'>,
+) => !!message.parent_id && !message.show_in_channel;
+
 export const isBlockedMessage = (message: LocalMessage) =>
   message.type === 'error' && message.moderation?.action === 'remove';
 

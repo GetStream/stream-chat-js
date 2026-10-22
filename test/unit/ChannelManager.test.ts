@@ -1880,7 +1880,7 @@ describe('ChannelManager', () => {
       const channels = Array.from({ length: PAGE_SIZE }, (_, i) => {
         const channel = makeChannel(`messaging:pin-${i}`);
         channel.messagePaginator.aggregateState.partialNext({
-          seededLastMessageAt: new Date(Date.UTC(2026, 0, PAGE_SIZE - i)),
+          queriedLatestMessageAt: new Date(Date.UTC(2026, 0, PAGE_SIZE - i)),
         });
         client.channelManager.getOrCreateChannel(channel.cid, () => channel);
         return channel;

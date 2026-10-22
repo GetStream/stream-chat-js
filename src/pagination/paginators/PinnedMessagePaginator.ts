@@ -1,6 +1,6 @@
 import type {
   BasePaginatorConfig,
-  PaginatorCursor,
+  DoRequestResponse,
   PaginatorOptions,
 } from './BasePaginator';
 import {
@@ -76,11 +76,11 @@ export class PinnedMessagePaginator extends MessageIntervalPaginator {
           tiebreaker: this.pinnedTiebreaker,
         }),
 
-        // The base `query` passes the resolved shape (including `id_around` jumps) as `options`.
-        // Both cursors are returned and the base gates them by direction.
+        // The base passes the resolved shape (including `id_around` jumps) as `options`. Both
+        // cursors are returned and the base `extractQueryPage` gates them by direction.
         doRequest: async (
           options: MessageQueryShape,
-        ): Promise<{ cursor?: PaginatorCursor; items: LocalMessage[] }> => {
+        ): Promise<DoRequestResponse<LocalMessage>> => {
           const { messages } = await this.channel.getPinnedMessages({
             ...(options as PinnedMessagePaginationOptions),
             sort: PINNED_AT_SORT,
@@ -116,6 +116,19 @@ export class PinnedMessagePaginator extends MessageIntervalPaginator {
       tiebreaker: this.pinnedTiebreaker,
     });
     this.updateConfig(this.buildPinnedBehaviour());
+  }
+
+  /**
+   * The newest page (no cursor, not around a message) holds the most recently pinned messages, so
+   * it reaches the head: its window becomes the only newest window, and an older window that was
+   * the newest one can load newer pins (see `makeOnlyHead`). A newest page comes from this
+   * paginator's own query or with a channel response.
+   */
+  protected override pageReachesHead(
+    _page: LocalMessage[],
+    queryShape: MessageQueryShape | undefined,
+  ): boolean | undefined {
+    return this.isHeadPageQueryShape(queryShape) ? true : undefined;
   }
 
   buildMatchFilters = (): PinnedMessagePaginatorFilter => ({

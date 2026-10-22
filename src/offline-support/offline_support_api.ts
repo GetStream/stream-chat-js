@@ -29,6 +29,7 @@ import {
   channelHasReadEvents,
   channelTracksReadLocally,
   formatMessage,
+  isThreadOnlyReply,
   runDetached,
 } from '../utils';
 import { nowNs } from '../utils/time';
@@ -383,7 +384,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
     const client = this.client;
     const { cid, message, user } = event;
 
-    if (!message || (message.parent_id && !message.show_in_channel)) {
+    if (!message || isThreadOnlyReply(message)) {
       return [];
     }
 
@@ -596,8 +597,9 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
   };
 
   /**
-   * The channel's persisted messages with a local `failed` status, which `Channel.reload`
-   * re-ingests. Built on {@link getChannels}, so a custom offline DB implements nothing extra.
+   * The channel's persisted messages with a local `failed` status, which `Channel.reload` and
+   * `Thread.reload` re-ingest. Built on {@link getChannels}, so a custom offline DB implements
+   * nothing extra.
    *
    * @param payload.cid - The channel whose failed messages to read.
    * @returns The failed messages, formatted.

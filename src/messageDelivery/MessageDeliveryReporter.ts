@@ -191,7 +191,9 @@ export class MessageDeliveryReporter {
     const ownUserId = this.client.user?.id;
     if (!ownUserId) return;
 
-    let latestMessages: LocalMessage[] = [];
+    // The newest message the collection knows, whether or not the window holding it is loaded: a
+    // message received live while an older window is active is still delivered.
+    let latestMessage: LocalMessage | null = null;
     // Unix nanoseconds, comparable with a message's `created_at`.
     let lastDeliveredAt: TimestampNS | undefined;
     let lastReadAt: TimestampNS | undefined;
@@ -199,14 +201,14 @@ export class MessageDeliveryReporter {
 
     // todo: unify the API for read state access btw channel and threads
     if (isChannel(collection)) {
-      latestMessages = collection.messagePaginator.headItems;
+      latestMessage = collection.messagePaginator.latestMessage;
       const ownReadState = collection.state.read[ownUserId] ?? {};
       lastReadAt = ownReadState?.last_read;
       lastDeliveredAt = ownReadState?.last_delivered_at;
       key = collection.cid;
     } else if (isThread(collection)) {
-      // The head window, as for channels: the active interval may be scrolled away from the newest.
-      latestMessages = collection.messagePaginator.headItems;
+      // The newest reply, as for channels: the active interval may be scrolled away from it.
+      latestMessage = collection.messagePaginator.latestMessage;
       const ownReadState =
         collection.state.getLatestValue().read[ownUserId] ?? ({} as ThreadUserReadState);
       lastReadAt = ownReadState?.lastReadAt;
@@ -220,14 +222,12 @@ export class MessageDeliveryReporter {
     }
 
     if (!key) return;
+    if (!latestMessage) return { key, id: null };
 
-    const [latestMessage] = latestMessages.slice(-1);
-
-    const wholeCollectionIsRead =
-      !latestMessage || (lastReadAt ?? 0) >= latestMessage.created_at;
+    const wholeCollectionIsRead = (lastReadAt ?? 0) >= latestMessage.created_at;
     if (wholeCollectionIsRead) return { key, id: null };
     const wholeCollectionIsMarkedDelivered =
-      !latestMessage || (lastDeliveredAt ?? 0) >= latestMessage.created_at;
+      (lastDeliveredAt ?? 0) >= latestMessage.created_at;
     if (wholeCollectionIsMarkedDelivered) return { key, id: null };
 
     return { key, id: latestMessage.id || null };
