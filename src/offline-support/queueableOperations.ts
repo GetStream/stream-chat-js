@@ -100,7 +100,7 @@ export const QUEUEABLE_OPERATIONS: {
           timestampChanged: true,
         });
       }
-      channelOf(client, task).messagePaginator.trackLastMessage(formatMessage(message));
+      channelOf(client, task).messagePaginator.trackLatestMessage(formatMessage(message));
     },
     run: ({ channel, client, task }) =>
       channelOf(client, task, channel).sendMessage(...task.payload),

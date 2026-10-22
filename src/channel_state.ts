@@ -141,8 +141,8 @@ export type ChannelLifecycleState = {
 export type ChannelActivationState = {
   /**
    * Whether a consumer declared this channel as the one it is reading, via `channel.activate()`. Its
-   * own state then takes precedence over bulk writes: channel-list hydration does not re-seed the
-   * message list of an `active` channel (`channel.reload()` owns that window).
+   * own state then takes precedence over bulk writes: channel-list hydration places no page in the
+   * message list of an `active` channel (`channel.reload()` owns its loaded interval).
    */
   active: boolean;
 };

@@ -6,7 +6,7 @@ import type {
   PaginationQueryShapeChangeIdentifier,
   PaginatorOptions,
   PaginatorState,
-  PostQueryReconcileParams,
+  PlaceQueryPageParams,
   SetPaginatorItemsParams,
 } from './BasePaginator';
 import { BasePaginator } from './BasePaginator';
@@ -172,7 +172,7 @@ const lastUpdatedFilterResolver: FieldToDataResolver<Channel> = {
   matchesField: (field) => field === 'last_updated',
   // the server uses the creation time for a channel without messages
   resolve: (channel) =>
-    channel.messagePaginator.lastMessageAt ?? channel.data?.created_at,
+    channel.messagePaginator.latestMessageAt ?? channel.data?.created_at,
 };
 
 const membersFilterResolver: FieldToDataResolver<Channel> = {
@@ -241,7 +241,7 @@ const createChannelSortPathResolver = (client: StreamChat): PathResolver<Channel
   return (channel, path) => {
     switch (path) {
       case 'last_message_at':
-        return channel.messagePaginator.lastMessageAt;
+        return channel.messagePaginator.latestMessageAt;
       case 'has_unread': {
         return hasUnreadResolver.resolve(channel, path);
       }
@@ -282,10 +282,9 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   protected _sort: SortParamRequest[] | undefined;
   protected _options: ChannelPaginatorRequestOptions | undefined;
   protected _channelStateOptions: ChannelStateOptions | undefined;
-  protected _nextQueryShape: ChannelQueryShape | undefined;
   /** Backend-reported metadata of the last `predefined_filter` query (see `predefinedFilter`). */
   protected _predefinedFilter: ParsedPredefinedFilterResponse | undefined;
-  /** Metadata of the in-flight response, committed by `postQueryReconcile` on a first page only. */
+  /** Metadata of the in-flight response, committed by `placeQueryPage` on a first page only. */
   private _pendingPredefinedFilter: ParsedPredefinedFilterResponse | undefined;
   /**
    * True while the loaded items came only from the offline cache (seeded by `setItems`, never
@@ -294,7 +293,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
    * keeps the items.
    */
   private _itemsLoadedFromOfflineDB = false;
-  /** The query in flight refreshes a cache-only window, so its response replaces the window. */
+  /** The query in flight refreshes a cache-only interval, so its response replaces the interval. */
   private _replaceOfflineSeedOnResponse = false;
   /** The query handed to the sync manager, from the cache read until it runs. See `executeQuery`. */
   private _queryAwaitingSync: ChannelQueryShape | undefined;
@@ -500,7 +499,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
    * failed query keeps the loaded list's). It is committed before `super`, which filters and ingests
    * the page using `matchesFilter` and the comparator this metadata feeds.
    */
-  postQueryReconcile(params: PostQueryReconcileParams<Channel, ChannelQueryShape>) {
+  override placeQueryPage(params: PlaceQueryPageParams<Channel, ChannelQueryShape>) {
     this._lastPageCids = params.results?.items.map((channel) => channel.cid);
     const pendingPredefinedFilter = this._pendingPredefinedFilter;
     this._pendingPredefinedFilter = undefined;
@@ -513,9 +512,9 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       // The cache can be arbitrarily old and hold channels the server dropped (hidden, deleted,
       // left): the page replaces the seed instead of merging into it.
       this.clearItemStorage();
-      return super.postQueryReconcile({ ...params, keepPreviousItems: false });
+      return super.placeQueryPage({ ...params, keepPreviousItems: false });
     }
-    return super.postQueryReconcile(params);
+    return super.placeQueryPage(params);
   }
 
   protected getNextQueryShape({
@@ -715,17 +714,19 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     });
   }
 
-  query = async (): Promise<PaginationQueryReturnValue<Channel>> => {
+  protected override fetchQueryResponse = async ({
+    queryShape: preparedQueryShape,
+  }: PaginationQueryParams<ChannelQueryShape> = {}): Promise<
+    PaginationQueryReturnValue<Channel>
+  > => {
     if (this._itemsLoadedFromOfflineDB) this._replaceOfflineSeedOnResponse = true;
     // A query is going out: the items stop being cache-only, whatever the response.
     this._itemsLoadedFromOfflineDB = false;
-    if (!this._nextQueryShape) {
-      this._nextQueryShape = this.getNextQueryShape();
-    }
-    const { stateOptions, ...request } = this._nextQueryShape;
+    const queryShape = preparedQueryShape ?? this.getNextQueryShape();
+    const { stateOptions, ...request } = queryShape;
     let items: Channel[];
     if (this.config.doRequest) {
-      items = (await this.config.doRequest(this._nextQueryShape)).items;
+      items = (await this.config.doRequest(queryShape)).items;
     } else {
       // `withResponse` exposes `predefined_filter`, which a predefined-filter list needs.
       const response = await this.client.queryChannelsAndHydrate(request, {
@@ -807,7 +808,13 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     });
   };
 
-  filterQueryResults = (items: Channel[]) => items;
+  /** The extracting step of the query pipeline: the response is the page. */
+  protected override extractQueryPage(
+    response: PaginationQueryReturnValue<Channel>,
+    _params: PaginationQueryParams<ChannelQueryShape>,
+  ) {
+    return response;
+  }
 
   setItems(params: SetPaginatorItemsParams<Channel>) {
     super.setItems(params);

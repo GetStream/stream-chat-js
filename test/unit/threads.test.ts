@@ -22,6 +22,7 @@ import {
 import { describe, it, beforeEach, expect, afterEach, onTestFinished, vi } from 'vitest';
 import { dateToNs, msToNs, nowNs } from '../../src/utils/time';
 import { convertDateToTimestamp } from './test-utils/time';
+import { MockOfflineDB } from './offline-support/MockOfflineDB';
 
 const TEST_USER_ID = 'observer';
 
@@ -201,17 +202,50 @@ describe('Threads 2.0', () => {
       expect(thread.messagePaginator.isInitialized).to.be.false;
     });
 
-    it('seeds the reply paginator lastMessageAt from the thread last_message_at', () => {
+    it('sets the reply paginator queried latestMessageAt from the thread last_message_at', () => {
       const thread = createTestThread({
         latest_replies: [],
         reply_count: 0,
         last_message_at: convertDateToTimestamp('2030-01-01T00:00:00.000Z'),
       });
       // The server floor seeds the sort key even with no replies loaded to display.
-      expect(thread.messagePaginator.lastMessageAt).to.equal(
+      expect(thread.messagePaginator.latestMessageAt).to.equal(
         convertDateToTimestamp('2030-01-01T00:00:00.000Z'),
       );
-      expect(thread.messagePaginator.lastMessage).to.be.null;
+      expect(thread.messagePaginator.latestMessage).to.be.null;
+    });
+
+    it('sets the queried latestMessageAt from each hydrated response, also an earlier one', () => {
+      const thread = createTestThread({
+        latest_replies: [],
+        reply_count: 0,
+        last_message_at: convertDateToTimestamp('2030-01-01T00:00:00.000Z'),
+      });
+
+      // the newest reply was hard-deleted: the response's earlier time replaces the known one
+      thread.hydrateState(
+        createGetThreadResponse({
+          latest_replies: [],
+          reply_count: 0,
+          last_message_at: convertDateToTimestamp('2029-01-01T00:00:00.000Z'),
+        }).thread,
+        { reconcile: {} },
+      );
+      expect(thread.messagePaginator.latestMessageAt).to.equal(
+        convertDateToTimestamp('2029-01-01T00:00:00.000Z'),
+      );
+
+      // also when hydrated without reconcile options, which replaces the loaded replies
+      thread.hydrateState(
+        createGetThreadResponse({
+          latest_replies: [],
+          reply_count: 0,
+          last_message_at: convertDateToTimestamp('2028-01-01T00:00:00.000Z'),
+        }).thread,
+      );
+      expect(thread.messagePaginator.latestMessageAt).to.equal(
+        convertDateToTimestamp('2028-01-01T00:00:00.000Z'),
+      );
     });
 
     it('initializes properly without threadData', () => {
@@ -462,10 +496,9 @@ describe('Threads 2.0', () => {
 
         it('seeds the reply window when the thread has never loaded one', () => {
           // A thread opened from a message (channel + parentMessage, no server payload) has never
-          // held a reply window. `mergeNewestPage` deliberately no-ops in that state — it merges
-          // into an anchored head and leaves seeding to the query path — so hydrating through it
-          // dropped the replies `Thread.reload()` had just fetched, and the panel stayed empty
-          // until something else queried them separately.
+          // held a reply window. `reconcileNewestMessages` has nothing loaded to reconcile there
+          // and does nothing, so hydrating through it would drop the replies `Thread.reload()`
+          // just fetched, and the panel would stay empty until something else queried them.
           const thread = createMinimalThread();
           expect(thread.messagePaginator.state.getLatestValue().items).to.be.undefined;
 
@@ -581,14 +614,14 @@ describe('Threads 2.0', () => {
           });
           expect(thread.messagePaginator.state.getLatestValue().hasMoreTail).to.be.false;
 
-          // Reconnect hydrate (Thread.reload → hydrateState → mergeNewestPage) must RE-DERIVE the cursor
-          // from the merged reply window so pagination works again.
+          // Reconnect hydrate (Thread.reload → hydrateState → reconcileNewestMessages) must
+          // RE-DERIVE the cursor from the merged reply window so pagination works again.
           const threadData = createGetThreadResponse({
             latest_replies: [existingReply],
             reply_count: 10,
           }).thread;
           thread.hydrateState(threadData, {
-            reconcile: { candidateIds: new Set([existingReply.id]) },
+            reconcile: { headIntervalItemIdsAtRequest: new Set([existingReply.id]) },
           });
 
           expect(thread.messagePaginator.state.getLatestValue().hasMoreTail).to.be.true;
@@ -625,7 +658,7 @@ describe('Threads 2.0', () => {
           }).thread;
 
           thread.hydrateState(threadData, {
-            reconcile: { candidateIds: new Set([existingReply.id]) },
+            reconcile: { headIntervalItemIdsAtRequest: new Set([existingReply.id]) },
           });
 
           const paginatorState = thread.messagePaginator.state.getLatestValue();
@@ -785,8 +818,8 @@ describe('Threads 2.0', () => {
         });
 
         it('applies the fetched replies to a registered thread', async () => {
-          // Stubs `getThread`, not `getThreadAndHydrate`: the registry lookup is what used to hand
-          // the thread back to itself, with nothing applied.
+          // Stubs the raw `getThread`, so the reload runs against a thread `client.threads` holds:
+          // the registered instance must apply the response to itself.
           const r1 = makeReply({
             id: 'r1',
             created_at: convertDateToTimestamp('2020-01-01T00:00:01.000Z'),
@@ -817,9 +850,9 @@ describe('Threads 2.0', () => {
 
         it('merges the fetched page into a thread whose only reply was ingested live', async () => {
           // A thread created this session has an EMPTY first reply page, so nothing anchors its
-          // window and the sent reply lands in a LOGICAL head. `mergeNewestPage` used to require an
-          // ANCHORED head, silently discarding every reply the server returned on reconnect — and
-          // re-entering never healed it, since the instance is reused with `items` already defined.
+          // window and the sent reply lands in a LOGICAL head. Reconciling on reconnect must still
+          // take in every reply the server returns: re-entering the thread would not heal a dropped
+          // page, since the instance is reused with `items` already defined.
           const thread = createMinimalThread();
           expect(thread.messagePaginator.state.getLatestValue().items).to.be.undefined;
 
@@ -865,6 +898,7 @@ describe('Threads 2.0', () => {
           // Same rule as the jumped-away branch: anchor for later, never switch the active window
           // out from under someone reading an older island.
           const thread = createMinimalThread();
+          thread.activate();
           const mine = formatMessage(
             makeReply({
               id: 'mine',
@@ -1052,13 +1086,9 @@ describe('Threads 2.0', () => {
           expect(repliesOf(thread).map((reply) => reply.id)).to.eql(['r1', 'r2', 'r4']);
         });
 
-        it('preserves a failed (unsent) reply across a rebuild', async () => {
-          // The failed reply is read out of the reply PAGINATOR, not out of `failedRepliesMap`. That
-          // map is only written by `upsertReplyLocally`, whose callers are this thread's own
-          // subscriptions and the offline-DB path keyed on `ThreadManager.threadsById` — so for a
-          // thread constructed directly and never registered (what the React Native SDK does via
-          // `threadsById[id] ?? new Thread(...)`) it is always empty, and relying on it would drop the
-          // user's unsent reply on every reconnect.
+        it('shows the reloaded page past a gap with the failed (unsent) reply', async () => {
+          // A thread constructed directly and never registered, as the React Native SDK does: its
+          // failed reply lives only in the reply paginator.
           const r1 = makeReply({
             id: 'r1',
             created_at: convertDateToTimestamp('2020-01-01T00:00:01.000Z'),
@@ -1078,8 +1108,8 @@ describe('Threads 2.0', () => {
           thread.messagePaginator.ingestItem(failed);
           expect(repliesOf(thread).map((reply) => reply.id)).to.contain('failed-1');
 
-          // Server page is disjoint from the loaded window, which forces a rebuild — the one case the
-          // reconcile's provenance guard does not cover.
+          // a full page of 2 does not prove the thread start: sharing no reply, it is past a gap
+          thread.messagePaginator.pageSize = 2;
           const far1 = makeReply({
             id: 'far1',
             created_at: convertDateToTimestamp('2021-06-01T00:00:01.000Z'),
@@ -1096,7 +1126,238 @@ describe('Threads 2.0', () => {
 
           await thread.reload();
 
-          expect(repliesOf(thread).map((reply) => reply.id)).to.contain('failed-1');
+          // the page replaces the loaded window and keeps the failed reply
+          expect(repliesOf(thread).map((reply) => reply.id)).to.eql([
+            'far1',
+            'far2',
+            'failed-1',
+          ]);
+          expect(
+            thread.messagePaginator.anchoredHeadItems.map((reply) => reply.id),
+          ).to.eql(['far1', 'far2', 'failed-1']);
+          expect(thread.messagePaginator.getItem('r1')).to.equal(undefined);
+        });
+
+        it('keeps the jumped-to older reply window of an open, registered thread active when the reloaded page is past a gap', async () => {
+          const reply = (n: number) =>
+            makeReply({
+              id: `r${n}`,
+              created_at: convertDateToTimestamp(
+                `2020-01-01T00:00:${String(n).padStart(2, '0')}.000Z`,
+              ),
+            });
+          const thread = createTestThread({
+            latest_replies: [reply(8), reply(9), reply(10)],
+            reply_count: 10,
+          });
+          subscribeThread(thread);
+          const release = thread.activate();
+          expect(client.threads.get(thread.id)).to.equal(thread);
+          const paginator = thread.messagePaginator;
+          paginator.pageSize = 3;
+          const getReplies = sinon.stub(thread.channel.getClient(), 'getReplies');
+          getReplies.resolves({
+            messages: [reply(1), reply(2), reply(3)],
+            duration: '',
+          } as unknown as ReturnType<StreamChat['getReplies']>);
+          await paginator.jumpToMessage('r2');
+          // r11–r14 arrived while offline: a full page of the newest 3 shares nothing with r8–r10
+          sinon.stub(client, 'getThread').resolves(
+            createGetThreadResponse({
+              latest_replies: [reply(12), reply(13), reply(14)],
+              reply_count: 14,
+            }),
+          );
+
+          await thread.reload();
+
+          expect(repliesOf(thread).map((r) => r.id)).to.eql(['r1', 'r2', 'r3']);
+          expect(paginator.hasMoreHead).to.equal(true);
+          expect(paginator.anchoredHeadItems.map((r) => r.id)).to.eql([
+            'r12',
+            'r13',
+            'r14',
+          ]);
+          expect(paginator.getItem('r9')).to.equal(undefined);
+
+          // the stored page is shown on a jump to the latest reply, without a request
+          getReplies.resetHistory();
+          await paginator.jumpToTheLatestMessage();
+          expect(repliesOf(thread).map((r) => r.id)).to.eql(['r12', 'r13', 'r14']);
+          expect(getReplies.called).to.equal(false);
+          release();
+          thread.unregisterSubscriptions();
+        });
+
+        it('shows the reloaded page past a gap when the thread is not active, its channel is', async () => {
+          const reply = (n: number) =>
+            makeReply({
+              id: `r${n}`,
+              created_at: convertDateToTimestamp(
+                `2020-01-01T00:00:${String(n).padStart(2, '0')}.000Z`,
+              ),
+            });
+          const thread = createTestThread({
+            latest_replies: [reply(8), reply(9), reply(10)],
+            reply_count: 10,
+          });
+          // the channel being open says nothing about the thread: only the thread's own flag counts
+          thread.channel.activate();
+          const paginator = thread.messagePaginator;
+          paginator.pageSize = 3;
+          sinon.stub(thread.channel.getClient(), 'getReplies').resolves({
+            messages: [reply(1), reply(2), reply(3)],
+            duration: '',
+          } as unknown as ReturnType<StreamChat['getReplies']>);
+          await paginator.jumpToMessage('r2');
+          sinon.stub(client, 'getThread').resolves(
+            createGetThreadResponse({
+              latest_replies: [reply(12), reply(13), reply(14)],
+              reply_count: 14,
+            }),
+          );
+
+          await thread.reload();
+
+          expect(repliesOf(thread).map((r) => r.id)).to.eql(['r12', 'r13', 'r14']);
+        });
+
+        it('puts back a failed reply the placement of the reloaded page lost, without an offline DB', async () => {
+          const r1 = makeReply({
+            id: 'r1',
+            created_at: convertDateToTimestamp('2020-01-01T00:00:01.000Z'),
+          });
+          const thread = createTestThread({ latest_replies: [r1], reply_count: 1 });
+          const failed = formatMessage(
+            makeReply({
+              id: 'failed-1',
+              created_at: convertDateToTimestamp('2020-01-01T00:00:02.000Z'),
+            }),
+          );
+          failed.status = 'failed';
+          thread.messagePaginator.ingestItem(failed);
+          // a placement that loses the unsent reply, which no offline DB could restore
+          const paginator = thread.messagePaginator;
+          const reconcile = paginator.reconcileNewestMessages;
+          vi.spyOn(paginator, 'reconcileNewestMessages').mockImplementation(
+            (page, options) => {
+              reconcile(page, options);
+              paginator.removeItem({ id: 'failed-1' });
+            },
+          );
+          sinon
+            .stub(client, 'getThread')
+            .resolves(createGetThreadResponse({ latest_replies: [r1], reply_count: 1 }));
+
+          await thread.reload();
+
+          expect(repliesOf(thread).map((reply) => reply.id)).to.eql(['r1', 'failed-1']);
+        });
+
+        it('keeps a failed reply resent and confirmed above the reloaded page during the reload', async () => {
+          const r1 = makeReply({
+            id: 'r1',
+            created_at: convertDateToTimestamp('2020-01-01T00:00:01.000Z'),
+          });
+          const thread = createTestThread({ latest_replies: [r1], reply_count: 1 });
+          const failed = formatMessage(
+            makeReply({
+              id: 'failed-1',
+              created_at: convertDateToTimestamp('2020-01-01T00:00:02.000Z'),
+            }),
+          );
+          failed.status = 'failed';
+          thread.messagePaginator.ingestItem(failed);
+          const offlineDb = new MockOfflineDB({ client });
+          client.setOfflineDBApi(offlineDb);
+          vi.spyOn(offlineDb, 'getFailedMessages').mockResolvedValue([failed]);
+          const hardDeleteMessages = vi
+            .spyOn(offlineDb, 'hardDeleteMessages')
+            .mockResolvedValue(undefined);
+          sinon.stub(client, 'getThread').callsFake(async () => {
+            // resent while the reload runs, confirmed after the server produced the page
+            thread.messagePaginator.ingestItem({
+              ...failed,
+              status: 'received',
+              created_at: convertDateToTimestamp('2020-01-01T00:00:03.000Z'),
+            });
+            return createGetThreadResponse({ latest_replies: [r1], reply_count: 1 });
+          });
+
+          await thread.reload();
+
+          expect(repliesOf(thread).map((reply) => reply.id)).to.eql(['r1', 'failed-1']);
+          expect(thread.messagePaginator.getItem('failed-1')?.status).to.equal(
+            'received',
+          );
+          expect(hardDeleteMessages).not.toHaveBeenCalled();
+        });
+
+        it('puts back a failed reply the offline DB holds and memory does not', async () => {
+          const r1 = makeReply({
+            id: 'r1',
+            created_at: convertDateToTimestamp('2020-01-01T00:00:01.000Z'),
+          });
+          const thread = createTestThread({ latest_replies: [r1], reply_count: 1 });
+          const failed = formatMessage(
+            makeReply({
+              id: 'failed-1',
+              created_at: convertDateToTimestamp('2020-01-01T00:00:02.000Z'),
+            }),
+          );
+          failed.status = 'failed';
+          const otherThreadReply = formatMessage(
+            makeReply({ id: 'other-thread', parent_id: 'another-parent' }),
+          );
+          otherThreadReply.status = 'failed';
+          const offlineDb = new MockOfflineDB({ client });
+          client.setOfflineDBApi(offlineDb);
+          vi.spyOn(offlineDb, 'getFailedMessages').mockResolvedValue([
+            failed,
+            otherThreadReply,
+          ]);
+          sinon
+            .stub(client, 'getThread')
+            .resolves(createGetThreadResponse({ latest_replies: [r1], reply_count: 1 }));
+
+          await thread.reload();
+
+          expect(offlineDb.getFailedMessages).toHaveBeenCalledWith({
+            cid: channel.cid,
+          });
+          expect(repliesOf(thread).map((reply) => reply.id)).to.eql(['r1', 'failed-1']);
+          // the channel's rows include other threads' replies, which this list does not take
+          expect(
+            thread.messagePaginator
+              .getFailedMessagesToRestore([failed, otherThreadReply])
+              .map((reply) => reply.id),
+          ).to.eql(['failed-1']);
+        });
+
+        it('reloads when the offline DB fails to read the failed replies', async () => {
+          const r1 = makeReply({
+            id: 'r1',
+            created_at: convertDateToTimestamp('2020-01-01T00:00:01.000Z'),
+          });
+          const r2 = makeReply({
+            id: 'r2',
+            created_at: convertDateToTimestamp('2020-01-01T00:00:02.000Z'),
+          });
+          const thread = createTestThread({ latest_replies: [r1], reply_count: 1 });
+          const offlineDb = new MockOfflineDB({ client });
+          client.setOfflineDBApi(offlineDb);
+          vi.spyOn(offlineDb, 'getFailedMessages').mockRejectedValue(
+            new Error('db read failed'),
+          );
+          sinon
+            .stub(client, 'getThread')
+            .resolves(
+              createGetThreadResponse({ latest_replies: [r1, r2], reply_count: 2 }),
+            );
+
+          await thread.reload();
+
+          expect(repliesOf(thread).map((reply) => reply.id)).to.eql(['r1', 'r2']);
         });
 
         it('rethrows a reload failure and releases isLoading', async () => {
@@ -2492,9 +2753,12 @@ describe('Threads 2.0', () => {
     ) => createGetThreadResponse(overrides).thread as ThreadStateResponse;
     /** Replaces a loaded list through a real reload. */
     const replaceList = async (manager: ThreadManager, threads: Thread[]) => {
-      const query = sinon.stub(manager.paginator, 'query').resolves({ items: threads });
+      const fetchQueryResponse = sinon
+        // @ts-expect-error stubbing the protected fetching step
+        .stub(manager.paginator, 'fetchQueryResponse')
+        .resolves({ items: threads });
       await manager.paginator.reload();
-      query.restore();
+      fetchQueryResponse.restore();
     };
     /** The unsubscribe of every disposal listener the manager opens on `channel`. */
     const trackDisposalListeners = (channel: Channel) => {

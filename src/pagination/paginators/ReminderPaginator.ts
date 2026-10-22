@@ -86,7 +86,7 @@ export class ReminderPaginator extends BasePaginator<
     };
   }
 
-  query = async ({
+  protected override fetchQueryResponse = async ({
     direction,
     queryShape,
   }: PaginationQueryParams<QueryRemindersRequest>): Promise<
@@ -102,5 +102,11 @@ export class ReminderPaginator extends BasePaginator<
     return { items, headward: prev, tailward: next };
   };
 
-  filterQueryResults = (items: ReminderResponseData[]) => items;
+  /** The extracting step of the query pipeline: the response is the page. */
+  protected override extractQueryPage(
+    response: PaginationQueryReturnValue<ReminderResponseData>,
+    _params: PaginationQueryParams<QueryRemindersRequest>,
+  ) {
+    return response;
+  }
 }

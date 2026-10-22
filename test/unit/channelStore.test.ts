@@ -307,7 +307,7 @@ describe('ChannelManager channel store', () => {
       const { created, stored } = setup();
       respond([generateMsg({ cid: REAL_CID, id: 'from-server' })]);
 
-      await created.query({}, 'latest');
+      await created.create();
 
       expect(client.channelManager.values()).toEqual([stored]);
       expect(stored.data?.custom?.name).toBe('Fresh');
@@ -322,7 +322,7 @@ describe('ChannelManager channel store', () => {
       created.messageComposer.textComposer.setText('draft');
       respond();
 
-      await created.query({}, 'latest');
+      await created.create();
 
       expect(client.channelManager.get(REAL_CID)).toBe(created);
       expect(created.supersededBy).toBeUndefined();
@@ -335,7 +335,7 @@ describe('ChannelManager channel store', () => {
       stored.messagePaginator.ingestItem(message('failed', { status: 'failed' }));
       respond([generateMsg({ cid: REAL_CID, id: 'from-server' })]);
 
-      await created.query({}, 'latest');
+      await created.create();
 
       expect(stored.messagePaginator.getItem('failed')?.status).toBe('failed');
     });
@@ -354,7 +354,7 @@ describe('ChannelManager channel store', () => {
       );
       respond();
 
-      await created.query({}, 'latest');
+      await created.create();
 
       expect(stored.messagePaginator.getItem('sending')?.status).toBe('sending');
       expect(stored.messagePaginator.getItem('both')?.text).toBe('mine');
@@ -366,7 +366,7 @@ describe('ChannelManager channel store', () => {
       created.messageComposer.textComposer.setText('hello');
       respond();
 
-      await created.query({}, 'latest');
+      await created.create();
 
       expect(stored.messageComposer.textComposer.text).toBe('hello');
       expect(created.messageComposer.textComposer.text).toBe('');
@@ -393,7 +393,7 @@ describe('ChannelManager channel store', () => {
       await vi.waitFor(() => expect(signal).toBeDefined());
       respond();
 
-      await created.query({}, 'latest');
+      await created.create();
 
       expect(signal?.aborted).toBe(false);
       expect(created.messageComposer.attachmentManager.attachments).toEqual([]);
@@ -425,7 +425,7 @@ describe('ChannelManager channel store', () => {
       stored.messageComposer.textComposer.setText('mine');
       respond();
 
-      await created.query({}, 'latest');
+      await created.create();
 
       expect(stored.messageComposer.textComposer.text).toBe('mine');
       expect(created.messageComposer.textComposer.text).toBe('theirs');
@@ -435,7 +435,7 @@ describe('ChannelManager channel store', () => {
       const { created } = setup();
       const release = created.activate();
       respond();
-      await created.query({}, 'latest');
+      await created.create();
 
       release();
 
@@ -446,7 +446,7 @@ describe('ChannelManager channel store', () => {
     it('disconnects a superseded instance nobody released on disconnectUser', async () => {
       const { created } = setup();
       respond();
-      await created.query({}, 'latest');
+      await created.create();
 
       await client.disconnectUser();
 

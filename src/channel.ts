@@ -15,6 +15,7 @@ import {
   generateChannelTempCid,
   getMemberUserId,
   invokeEventListener,
+  isThreadOnlyReply,
   logChatPromiseExecution,
   sanitizeOutgoingAttachments,
 } from './utils';
@@ -43,6 +44,7 @@ import type {
   ChannelInput,
   ChannelMemberResponse,
   ChannelResponse,
+  ChannelStateResponse,
   ChannelStateResponseFields,
   Command,
   Event,
@@ -55,9 +57,7 @@ import type {
   LocalMessage,
   MarkReadRequest,
   MarkReadResponse,
-  MessagePaginationParams,
   MessageResponse,
-  MessageSetType,
   QueryMembersPayload,
   RemoveMembersRequest,
   SharedLocation,
@@ -193,6 +193,7 @@ export class Channel extends ChannelApi {
   private _reloading = false;
   /** Refcount behind the `active` flag: several consumers can hold one instance. */
   private _activeRefCount = 0;
+  /** Stops releaseUnusedChannels() from removing a channel while a query for it is still running. */
   private _channelQueriesInFlight = 0;
   /**
    * The watch {@link Channel.ensureWatched} started and is awaiting. Later `ensureWatched()` calls with
@@ -439,8 +440,6 @@ export class Channel extends ChannelApi {
    * @returns The server response.
    */
   override async sendMessage(...args: Parameters<ChannelApi['sendMessage']>) {
-    this._checkHasId();
-
     const [request, requestOptions] = args;
 
     return await super.sendMessage(
@@ -540,25 +539,12 @@ export class Channel extends ChannelApi {
     requestOptions?: StreamRequestOptions,
   ) {
     this._checkHasId();
-    const payload = {
-      type: this.type,
-      // TODO: these should be probably optional in the OAPI spec
-      // filter_conditions: ...
-    } as QueryMembersPayload;
 
-    if (this.id) {
-      payload.id = this.id;
-    } else if (Array.isArray(this.data?.members)) {
-      payload.members = this.data.members.map((m) => ({
-        ...m,
-        // TODO: this should not be needed Gen_QueryMembersResponse should not come with user_id as optinal
-        user_id: (m.user_id ?? m.user?.id) as string,
-      }));
-    }
     return await this.getClient().queryMembers(
       {
         payload: {
-          ...payload,
+          // TODO: filter_conditions should probably be optional in the OAPI spec
+          ...({ type: this.type, id: this.id } as QueryMembersPayload),
           ...request?.payload,
         },
       },
@@ -674,7 +660,6 @@ export class Channel extends ChannelApi {
     payload: UpdateLiveLocationRequest,
     requestOptions?: StreamRequestOptions,
   ) {
-    this._checkHasId();
     // Picked, not spread: callers pass a whole shared location whose extra fields must not be sent.
     const { latitude, longitude, message_id } = payload;
     const location = await this.getClient().updateLiveLocation(
@@ -1253,8 +1238,9 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Whether a query for this channel (`watch()`, `query()`, `create()`) awaits its response. The
-   * channel store keeps the channel meanwhile.
+   * Whether a query for this channel (`watch()`, `query()`, `create()` or one of the message
+   * paginator's own queries, see {@link runTrackedQuery}) awaits its response. The channel store
+   * keeps the channel meanwhile.
    *
    * @internal
    */
@@ -1272,9 +1258,10 @@ export class Channel extends ChannelApi {
    * Refcounted: the channel stays active until the last consumer releases, and releasing twice is a
    * no-op.
    *
-   * While active, channel-list hydration does not re-seed the message list (`channel.reload()` owns
-   * it) and the channel stays in the channel store. A disposed channel is not activated: a warning is
-   * logged and the returned release does nothing.
+   * While active, channel-list hydration places no page in the message list (`channel.reload()`
+   * owns it), the message list keeps its active interval (otherwise a fresh newest page from a
+   * query the list did not run is shown), and the channel stays in the channel store. A disposed
+   * channel is not activated: a warning is logged and the returned release does nothing.
    */
   activate = (): (() => void) => {
     if (this.pendingDisposal) {
@@ -1324,6 +1311,12 @@ export class Channel extends ChannelApi {
    * `message.read_locally` event, handled like `message.read` minus the delivery-report sync. With
    * offline support the reset is persisted.
    *
+   * The event's `last_read_message_id` is the newest server-confirmed message, whatever its type,
+   * of the interval holding the channel's newest messages
+   * (`messagePaginator.anchoredHeadServerConfirmedItem`). While that interval is not loaded (e.g.
+   * only a jumped-to interval is), the event carries none and the read covers everything up to its
+   * `created_at`.
+   *
    * @returns The dispatched `message.read_locally` event, or `undefined` if there is no connected
    *   user.
    */
@@ -1336,7 +1329,7 @@ export class Channel extends ChannelApi {
       channel_type: this.type,
       cid: this.cid,
       created_at: nowNs(),
-      last_read_message_id: this.messagePaginator.headmostItem?.id,
+      last_read_message_id: this.messagePaginator.anchoredHeadServerConfirmedItem?.id,
       team: this.data?.team,
       type: 'message.read_locally',
       user: client.user as UserResponse,
@@ -1412,8 +1405,9 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Loads the initial state and watches for changes. The latest message page is loaded when this
-   * resolves.
+   * Loads the initial state and watches for changes. The message paginator places the page of
+   * messages it fetched before this resolves (a page at a cursor or around a message is only
+   * stored; show it with `messagePaginator.jumpToMessage()`).
    *
    * @param options - Additional options for the query endpoint (optional).
    * @param requestOptions - Per-request options such as an abort `signal` (optional). The signal
@@ -1434,7 +1428,9 @@ export class Channel extends ChannelApi {
 
     // `ApiClient` holds a request that watches or subscribes to presence until the handshake yields a
     // connection ID, so `watch: true` binds to a current one and `watchStatus = Watching` is truthful.
-    const state = await this.query(combined, 'latest', requestOptions);
+    const state = await this.runChannelQuery(combined, requestOptions, {
+      placeMessages: true,
+    });
     this.data = state.channel;
 
     logger.withExtraTags('watch', this.cid).info('Started watching the channel.');
@@ -1442,49 +1438,36 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Re-watches the channel and refreshes its whole loaded message window (the channel analog of
+   * Re-watches the channel and refreshes its whole loaded message interval (the channel analogue of
    * {@link Thread.reload}). Used on reconnect. Hard deletes reach other clients through no event, so
-   * `query()` (`seedFirstPageSync`) reconciles them by diffing the re-queried page.
+   * the watch query reconciles the loaded newest messages with the re-queried page
+   * (`messagePaginator.reconcileNewestMessages`, against the loaded IDs captured before its await).
    *
-   * Failed (unsent) messages are kept: any that fell out of the window are re-ingested. The offline DB
-   * is read too, since a failed message can be absent from memory (cold boot, eviction).
+   * Failed (unsent) messages are kept: those loaded or in the offline DB (cold boot, eviction)
+   * before the request that are no longer loaded after it are ingested again. The offline DB is
+   * read on a best-effort basis.
    */
   async reload() {
     if (this._reloading || (!this.initialized && !this.offlineMode)) return;
     this._reloading = true;
     try {
       const paginator = this.messagePaginator;
-      const headItems = paginator.headItems;
+      // The reload refreshes the interval that reaches the newest message, sized to what it holds.
       const requestedLimit =
-        Math.max(headItems.length, paginator.pageSize ?? 0) || undefined;
+        Math.max(paginator.anchoredHeadItems.length, paginator.pageSize ?? 0) ||
+        undefined;
       const offlineDb = this.getClient().offlineDb;
-      const failedInMemory = headItems.filter((message) => message.status === 'failed');
-      // Read before the watch: a message that fails during the reload is already in the paginator.
+      // best effort: a failing read must not fail the reload
       const failedInDb = offlineDb
-        ? await offlineDb.getFailedMessages({ cid: this.cid })
+        ? await offlineDb.getFailedMessages({ cid: this.cid }).catch(() => [])
         : [];
-      const failedById = new Map<string, LocalMessage>();
-      for (const message of [...failedInDb, ...failedInMemory]) {
-        // In-memory wins: it is at least as fresh as the persisted row.
-        failedById.set(message.id, message);
-      }
-      const failedBefore = [...failedById.values()];
+      // after the read: a message that fails meanwhile is loaded by then
+      const failedBefore = paginator.getFailedMessagesToRestore(failedInDb);
 
       await this.watch({ messages: { limit: requestedLimit } });
       this.offlineMode = false;
 
-      if (failedBefore.length) {
-        // Re-ingest the failed messages the watch() query dropped.
-        const visible = new Set((paginator.items ?? []).map((message) => message.id));
-        paginator.batch(
-          () => {
-            for (const failed of failedBefore) {
-              if (!visible.has(failed.id)) paginator.ingestItem(failed);
-            }
-          },
-          { coalesce: true },
-        );
-      }
+      paginator.restoreFailedMessages(failedBefore);
     } finally {
       this._reloading = false;
     }
@@ -1537,7 +1520,7 @@ export class Channel extends ChannelApi {
   _countMessageAsUnread(message: LocalMessage | MessageResponse) {
     if (message.shadowed) return false;
     if (message.silent) return false;
-    if (message.parent_id && !message.show_in_channel) return false;
+    if (isThreadOnlyReply(message)) return false;
     if (message.user?.id === this.getClient().userId) return false;
     if (message.user?.id && this.getClient().userMuteStatus(message.user.id))
       return false;
@@ -1556,6 +1539,9 @@ export class Channel extends ChannelApi {
   /**
    * Counts the unread messages.
    *
+   * Counting from `lastRead` counts within the channel's newest messages that are loaded (see
+   * {@link newestKnownMessages}).
+   *
    * @param lastRead - The time the user read a message, in unix nanoseconds (optional). Defaults to
    *   the current user's read state.
    * @returns The unread count.
@@ -1564,7 +1550,7 @@ export class Channel extends ChannelApi {
     // Nullish, not falsy: `0` is a valid timestamp.
     if (lastRead == null) return this.state.unreadCount;
     let count = 0;
-    const latestMessages = this.messagePaginator.headItems;
+    const latestMessages = this.newestKnownMessages();
     for (let i = 0; i < latestMessages.length; i += 1) {
       const message = latestMessages[i];
       if (message.created_at > lastRead && this._countMessageAsUnread(message)) {
@@ -1575,7 +1561,21 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Counts the unread messages that mention the current user.
+   * The channel's newest messages that are loaded: the interval that reaches the newest message (the
+   * paginator's anchored head), or, while that interval is not loaded, the messages received live
+   * since. An interval reached by a jump is never part of it, as the messages between it and the
+   * newest are unknown.
+   */
+  private newestKnownMessages() {
+    const paginator = this.messagePaginator;
+    return paginator.anchoredHeadItem !== undefined
+      ? paginator.anchoredHeadItems
+      : paginator.logicalHeadItems;
+  }
+
+  /**
+   * Counts the unread messages that mention the current user, within the channel's newest messages
+   * that are loaded (see {@link newestKnownMessages}).
    *
    * @returns The unread mentions count.
    */
@@ -1584,7 +1584,7 @@ export class Channel extends ChannelApi {
     const userId = this.getClient().userId;
 
     let count = 0;
-    const latestMessages = this.messagePaginator.headItems;
+    const latestMessages = this.newestKnownMessages();
     for (let i = 0; i < latestMessages.length; i += 1) {
       const message = latestMessages[i];
       if (
@@ -1611,7 +1611,10 @@ export class Channel extends ChannelApi {
       state: false,
       presence: false,
     };
-    return await this.query(defaultOptions, 'latest');
+    // It asks for no channel state (`state: false`), so it brings no page of messages to place.
+    return await this.runChannelQuery(defaultOptions, undefined, {
+      placeMessages: false,
+    });
   };
 
   /**
@@ -1661,66 +1664,115 @@ export class Channel extends ChannelApi {
   /**
    * Queries the API for messages, members and other channel fields.
    *
-   * @param options - The query options. Defaults to `{}`.
-   * @param messageSetToAddToIfDoesNotExist - `'latest'` is what the open paths (`watch`,
-   *   `create`) pass: it seeds the message paginator with the fetched page. Other values do not
-   *   seed it. Defaults to `'current'`.
+   * The returned messages are not added to {@link Channel.messagePaginator}: the paginator loads its
+   * own pages, and {@link Channel.watch} / {@link Channel.create} place the page they query.
+   *
+   * @param options - The query options (optional, defaults to `{}`).
    * @param requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
    * @returns The query response.
    */
   async query(
     options: ChannelGetOrCreateRequest = {},
-    messageSetToAddToIfDoesNotExist: MessageSetType = 'current',
     requestOptions?: StreamRequestOptions,
   ) {
-    // Refused: a watch would register events that go to the instance now stored for the cid.
+    return await this.runChannelQuery(options, requestOptions, { placeMessages: false });
+  }
+
+  /**
+   * The query behind `query()`, `watch()` and `create()`, in three steps: sends the request
+   * ({@link requestChannelState}), has the message paginator place the returned page when
+   * `placeMessages` is set (`watch()`), then applies the rest of the response
+   * ({@link applyChannelStateFromResponse}), all as a tracked query ({@link runTrackedQuery}).
+   *
+   * The page is placed before the rest is applied, because the rest reads the loaded messages: read
+   * and delivery positions that come without a message id are looked up among them, and the latest
+   * message is reported as delivered. A first page then takes the unread snapshot, from the read
+   * state the rest brought. The message paginator's own queries keep the same order: they place
+   * their page, then apply the rest with {@link applyChannelStateFromResponse}.
+   */
+  private async runChannelQuery(
+    options: ChannelGetOrCreateRequest,
+    requestOptions: StreamRequestOptions | undefined,
+    { placeMessages }: { placeMessages: boolean },
+  ) {
+    return await this.runTrackedQuery(async () => {
+      const externalQuery = placeMessages
+        ? this.messagePaginator.prepareExternalQuery(options.messages)
+        : undefined;
+      const state = await this.requestChannelState(
+        externalQuery
+          ? { ...options, messages: externalQuery.messagePaginationParams }
+          : options,
+        requestOptions,
+        { placesNewestPage: externalQuery?.isNewestPage ?? false },
+      );
+      let placedFirstPage = false;
+      try {
+        if (externalQuery && Array.isArray(state.messages)) {
+          placedFirstPage = externalQuery.placePage(state.messages.map(formatMessage));
+        }
+      } finally {
+        // The rest of a response that arrived is applied even when placing its page failed: a
+        // watch the server registered is recorded, and the read state is taken in.
+        // Only the newest page is the latest message set, for the offline database to store.
+        this.applyChannelStateFromResponse(state, {
+          isLatestMessageSet: externalQuery?.isNewestPage ?? false,
+          watch: options.watch,
+        });
+      }
+      if (placedFirstPage) this.messagePaginator.seedUnreadSnapshot();
+      return state;
+    });
+  }
+
+  /**
+   * Runs `run`, a query of this channel, as a tracked query: refused for a disposed instance, and
+   * the channel counts as being queried until `run` settles ({@link isQueryingChannel}), so the
+   * channel store keeps it meanwhile. Used by {@link runChannelQuery} and by the message
+   * paginator's own queries.
+   *
+   * `run` starts synchronously: a paginator query publishes its loading flag before anything is
+   * awaited, which keeps a second query in the same tick from starting.
+   *
+   * @internal
+   */
+  async runTrackedQuery<T>(run: () => Promise<T>): Promise<T> {
+    // A disposed instance is done for good: its query would load it again and, for a watch,
+    // register a watch whose events go to the instance now stored for the cid. So it is refused.
     if (this.pendingDisposal) throw this.disposedError();
-    // Counted until the response is applied, so the channel store keeps a channel being loaded.
+    // a count, not a flag: queries of one channel overlap (a watch while the paginator loads more)
     this._channelQueriesInFlight += 1;
     try {
-      return await this.runQuery(
-        options,
-        messageSetToAddToIfDoesNotExist,
-        requestOptions,
-      );
+      return await run();
     } finally {
       this._channelQueriesInFlight -= 1;
     }
   }
 
-  private async runQuery(
+  /**
+   * Sends the channel query and takes in what the response says about the channel itself: its id,
+   * the cid it is stored under, its config, and its `last_message_at`, against which the message
+   * paginator's head interval is checked before any page is placed (see
+   * `MessagePaginator.unmarkStaleHead`). The request of {@link runChannelQuery} and of the message
+   * paginator's own queries, which run it as a tracked query ({@link runTrackedQuery}); it does not
+   * track the query itself. Refused for a disposed instance, before anything is sent.
+   *
+   * `placesNewestPage`: the caller places the newest page with this response, which brings the
+   * newest messages up to date, so the head interval is not checked.
+   *
+   * @internal
+   */
+  async requestChannelState(
     options: ChannelGetOrCreateRequest,
-    messageSetToAddToIfDoesNotExist: MessageSetType,
-    requestOptions?: StreamRequestOptions,
-  ) {
-    // Loaded IDs snapshotted before the await, for a latest-window (re)seed: `seedFirstPageSync`
-    // tells an offline hard delete (in the snapshot, absent from the page) from a message that
-    // arrived during the fetch (not in the snapshot).
-    // TODO(perf/cleanup): `headItems` materializes full message objects (intervalToItems) just to map
-    // them down to ids. A cheaper, clearer equivalent is a straight copy of the paginator index's own
-    // id set — expose `memberIds` on StoreBackedItemIndex (e.g. `snapshotMembers()` returning
-    // `new Set(this.memberIds)`) and use it here AND in client.queryChannelsAndHydrate. The broader
-    // scope (all intervals vs just the head) is inert: the reconcile only consults head ids, older
-    // island ids are never at/above-newest, and local messages are guarded by isServerConfirmedMessage.
-    const candidateIds =
-      messageSetToAddToIfDoesNotExist === 'latest'
-        ? new Set(this.messagePaginator.headItems.map((message) => message.id))
-        : undefined;
-
-    // An open query asks for the paginator's pageSize, not the server's default. An explicit
-    // `messages.limit` wins (`reload` sizes it to the loaded window).
-    const requestedPageSize = options?.messages?.limit ?? this.messagePaginator.pageSize;
-
+    requestOptions: StreamRequestOptions | undefined,
+    { placesNewestPage = false }: { placesNewestPage?: boolean } = {},
+  ): Promise<StreamResponse<ChannelStateResponse>> {
+    if (this.pendingDisposal) throw this.disposedError();
     const queryPayload: ChannelGetOrCreateRequest = {
       data: this._data,
       state: true,
       ...options,
-      messages:
-        options?.messages ??
-        (messageSetToAddToIfDoesNotExist === 'latest'
-          ? { limit: requestedPageSize }
-          : undefined),
     };
 
     const state = this.id
@@ -1747,36 +1799,55 @@ export class Channel extends ChannelApi {
     // re-enable a feature the integrator turned off.
     this.messageComposer.applyServerRestrictions();
 
-    // Seeded before `_initializeState`: `MessageReceiptsTracker` resolves read/delivered cursors
-    // against this paginator, so it must be populated first. Pagination queries pass 'current'.
-    if (messageSetToAddToIfDoesNotExist === 'latest' && Array.isArray(state.messages)) {
-      // The query's pagination options go through: an around-message query returns a jump window, which
-      // the paginator reconciles with jump semantics.
-      this.messagePaginator.seedFirstPageSync(
-        state.messages.map(formatMessage),
-        requestedPageSize,
-        options?.messages,
-        // Re-seeding a loaded window reconciles it instead of blanking it.
-        { candidateIds, reconcile: true },
-      );
+    // This response's `last_message_at`, before any page is placed: the paginator tells from it whether
+    // a page reaches the newest message (`_initializeState` sets it too, after).
+    this.messagePaginator.setQueriedLatestMessageAt(channel.last_message_at);
+    // Checked before any page is placed, as a page that reaches the newest message marks its own
+    // interval as the head.
+    if (!placesNewestPage && this.isHeadLeftWithoutRefresh(queryPayload)) {
+      this.messagePaginator.unmarkStaleHead();
     }
+
+    return state;
+  }
+
+  /**
+   * Whether nothing but this query brings the head interval up to date, so its `last_message_at` may
+   * show the interval stale: the watch was stopped (`NotWatching`), or this query itself watches
+   * again after a dropped connection (`WasWatching`), leaving nothing to re-watch with the newest
+   * page. While the channel is watched, a message the interval lacks is still on its way; after a
+   * dropped connection, the re-watch that follows places the newest page (see
+   * `ConnectionRecoveryManager`).
+   */
+  private isHeadLeftWithoutRefresh(query: ChannelGetOrCreateRequest): boolean {
+    if (this.watchStatus === ChannelWatchStatus.NotWatching) return true;
+    return this.watchStatus === ChannelWatchStatus.WasWatching && !!query.watch;
+  }
+
+  /**
+   * Applies a channel query response: watch status, read/members state, polls, reminders, composer,
+   * channel data, and the `channels.queried` event and offline write. Called once the response's
+   * page of messages, if any, is placed (see {@link runChannelQuery}).
+   *
+   * @internal
+   */
+  applyChannelStateFromResponse(
+    state: ChannelStateResponseFields,
+    { isLatestMessageSet, watch }: { isLatestMessageSet: boolean; watch?: boolean },
+  ) {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const channel = state.channel!;
 
     if (this.supersededBy) {
       // The stored instance took over the watch (`supersedeChannel`), so this one receives no events.
       this.watchStatus = ChannelWatchStatus.NotWatching;
-    } else if (queryPayload.watch) {
+    } else if (watch) {
       // Set only here: a `watch: false` query does not unwatch server-side, so it must not clear it.
       this.watchStatus = ChannelWatchStatus.Watching;
     }
 
     // Seeds read, members, pinned and thread-cleanup state (messages live in the paginator).
     this._initializeState(state);
-    // The queried page is the latest set unless this was a jump/around query.
-    const isLatestMessageSet =
-      messageSetToAddToIfDoesNotExist === 'latest' &&
-      !options?.messages?.id_around &&
-      !(options?.messages as MessagePaginationParams | undefined)?.created_at_around;
-
     this.getClient().polls.hydratePollCache(state.messages, true);
     this.getClient().reminders.hydrateState(state.messages);
 
@@ -1820,7 +1891,6 @@ export class Channel extends ChannelApi {
     );
 
     this.getClient().syncDeliveredCandidates([this]);
-    return state;
   }
 
   /**
@@ -1838,30 +1908,6 @@ export class Channel extends ChannelApi {
       target_user_id: targetUserId,
       channel_cid: this.cid,
     });
-  }
-
-  /**
-   * Hides the channel from `queryChannels` for the user until a message is added.
-   *
-   * @param ...args - `[request, requestOptions]`. Pass `request: { clear_history: true }` to clear
-   *   message history for the user; `requestOptions` carries per-request options such as an abort
-   *   `signal` and is never serialized into the request.
-   * @returns The server response.
-   */
-  override async hide(...args: Parameters<ChannelApi['hide']>) {
-    return await super.hide(...args);
-  }
-
-  /**
-   * Removes the hidden status of the channel.
-   *
-   * @param ...args - `[request, requestOptions]`. `request` is the show-channel payload;
-   *   `requestOptions` carries per-request options such as an abort `signal` and is never
-   *   serialized into the request.
-   * @returns The server response.
-   */
-  override async show(...args: Parameters<ChannelApi['show']>) {
-    return await super.show(...args);
   }
 
   /**
@@ -2274,16 +2320,14 @@ export class Channel extends ChannelApi {
         if (event.message) {
           this._extendEventWithOwnReactions(event);
           const formattedMessage = formatMessage(event.message);
-          const isThreadReply =
-            !!event.message.parent_id && !event.message.show_in_channel;
           // Thread-only replies are handled by the Thread object; the channel owns the main list.
-          if (!isThreadReply) {
+          if (!isThreadOnlyReply(event.message)) {
             if (event.hard_delete) {
               this.messagePaginator.removeItem({ id: event.message.id });
               this.pinnedMessagesPaginator.removeItem({ id: event.message.id });
             } else {
               // A soft delete changes neither `created_at` nor `pinned`: one store write reaches every
-              // holder, where an `ingestItem` per collection would re-emit each window.
+              // holder, where an `ingestItem` per collection would re-emit each active interval.
               const store = this.getClient().messageStore;
               if (store.has(event.message.id)) store.upsert(formattedMessage);
             }
@@ -2312,12 +2356,10 @@ export class Channel extends ChannelApi {
         if (event.message) {
           const client = this.getClient();
           const ownMessage = event.user?.id === client.user?.id;
-          const isThreadMessage =
-            event.message.parent_id && !event.message.show_in_channel;
-
+          const isThreadMessage = isThreadOnlyReply(event.message);
           if (!isThreadMessage) {
             // `ingestItem` advances the tracked latest message. A message arriving while the viewer
-            // is in an older window lands in the head interval, leaving the view as it is.
+            // is in an older interval lands in the head interval, leaving the view as it is.
             const formattedMessage = formatMessage(event.message);
             this.messagePaginator.ingestItem(formattedMessage);
             // Added only when pinned (`matchesFilter`).
@@ -2399,13 +2441,12 @@ export class Channel extends ChannelApi {
         if (event.message) {
           this._extendEventWithOwnReactions(event);
           const formattedMessage = formatMessage(event.message);
-          const { parent_id: parentId, show_in_channel: shownInChannel } = event.message;
-          const isThreadReply = !!parentId && !shownInChannel;
+          const { parent_id: parentId } = event.message;
           const { threads } = this.getClient();
           // to avoid double state publish
           const isAppliedByThread =
             !!parentId && threads.hasSubscriptions && !!threads.get(parentId);
-          if (!isThreadReply && !isAppliedByThread) {
+          if (!isThreadOnlyReply(event.message) && !isAppliedByThread) {
             this.messagePaginator.ingestItem(formattedMessage);
             this.messagePaginator.reflectQuotedMessageUpdate(formattedMessage);
             // Added on pin, removed on unpin (`matchesFilter`).
@@ -2644,11 +2685,14 @@ export class Channel extends ChannelApi {
       }
     }
 
-    // The first-page seed also advances `lastMessageAt` (one monotonic max). This covers the path where
-    // that seed is skipped: an already-loaded channel the viewer jumped away from.
-    this.messagePaginator.seedLastMessageAt(state.channel?.last_message_at);
+    // Each channel response's `last_message_at` replaces the queried `latestMessageAt`. Callers
+    // that place a message page set it before placing it, so the paginator can tell whether
+    // the page reaches the newest message; this covers the responses whose page is not placed, such
+    // as a channel-list query for a channel the viewer has jumped away from.
+    this.messagePaginator.setQueriedLatestMessageAt(state.channel?.last_message_at);
 
-    this.pinnedMessagesPaginator.seedFirstPageSync(
+    // The pinned list's first page comes with the channel's state.
+    this.pinnedMessagesPaginator.placeExternalQueryPage(
       (state.pinned_messages || []).map(formatMessage),
       this.pinnedMessagesPaginator.pageSize,
     );
@@ -2667,11 +2711,11 @@ export class Channel extends ChannelApi {
       }
     }
 
-    // Initialized to the last message (or now, if empty) so nothing up to here counts as unread. A
-    // member's entry is overwritten below.
+    // Initialized to the latest message (or now, if empty) so nothing up to here counts as
+    // unread. A member's entry is overwritten below.
     const readUpdates: ChannelState['read'] = {};
     if (userID != null) {
-      const last_read = this.messagePaginator.lastMessageAt ?? nowNs();
+      const last_read = this.messagePaginator.latestMessageAt ?? nowNs();
       if (user) {
         readUpdates[user.id] = {
           user: user as UserResponse,

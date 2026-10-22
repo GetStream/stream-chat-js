@@ -386,8 +386,8 @@ paginators (owner-approved).
 - Removed the dead `MessageSet` object-shape type from `types.ts` (public via `export * from './types'`
   → **breaking**) and the internal-only `DEFAULT_MESSAGE_SET_PAGINATION` from `constants.ts`
   (not re-exported → non-breaking).
-- **Kept** `MessageSetType` — still the type of `channel.query`'s `messageSetToAddToIfDoesNotExist`
-  param, which drives paginator seeding (`'latest'` seeds the first page; `'current'`/`'new'` do not).
+- `MessageSetType` was later removed with `channel.query`'s `messageSetToAddToIfDoesNotExist` param
+  (REACT-1075): `watch()`/`create()` seed the first page, and `query()` never does.
 - **Kept** `isLatestMessageSet` / `isLatestMessagesSet` — live flags on the `channels.queried` event
   and the offline `upsertChannels` payload ("is this the latest page"), not the removed storage.
 - **Kept** `binarySearchByDateEqualOrNearestGreater` (public util, now internally unused): removing it

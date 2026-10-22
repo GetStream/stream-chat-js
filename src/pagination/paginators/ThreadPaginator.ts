@@ -96,7 +96,7 @@ export class ThreadPaginator extends BasePaginator<Thread, QueryThreadsRequest> 
     };
   }
 
-  query = async ({
+  protected override fetchQueryResponse = async ({
     queryShape,
   }: PaginationQueryParams<QueryThreadsRequest>): Promise<
     PaginationQueryReturnValue<Thread>
@@ -108,7 +108,13 @@ export class ThreadPaginator extends BasePaginator<Thread, QueryThreadsRequest> 
     };
   };
 
-  filterQueryResults = (threads: Thread[]) => threads;
+  /** The extracting step of the query pipeline: the response is the page. */
+  protected override extractQueryPage(
+    response: PaginationQueryReturnValue<Thread>,
+    _params: PaginationQueryParams<QueryThreadsRequest>,
+  ) {
+    return response;
+  }
 
   /**
    * Re-queries the first page and replaces the list in server order; also the first load. The
@@ -121,11 +127,15 @@ export class ThreadPaginator extends BasePaginator<Thread, QueryThreadsRequest> 
     if (isFirstLoad) this.state.partialNext({ isLoading: true });
     let replaced = false;
     try {
-      const results = await this.runQueryRetryable({
+      const fetchParams = {
         queryShape: { ...DEFAULT_THREAD_QUERY, limit },
         retryCount: this.config.retryCount,
-      });
-      if (!results) return;
+      };
+      const response = await this.fetchQueryResponseWithRetries(fetchParams);
+      if (!response) return;
+      // The query pipeline's steps (see `executeQuery`) with a placing step of its own, below. A
+      // thread list's response is its page, so nothing else is left to apply.
+      const results = this.extractQueryPage(response, fetchParams);
 
       // Replace rather than merge (the order is server-driven): IDs absent from the response go.
       const nextIds = new Set(results.items.map((thread) => thread.id));

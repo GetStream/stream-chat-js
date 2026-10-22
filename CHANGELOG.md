@@ -1,3 +1,19 @@
+## [10.0.0-rc.24](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.23...v10.0.0-rc.24) (2026-10-22)
+
+### ⚠ BREAKING CHANGES
+
+* remove messageSetToAddToIfDoesNotExist and let the message paginator place every page (#1926)
+* open api hot fixes (#1927)
+
+### Bug Fixes
+
+* apply thread reloads and queries to the registered thread ([#1929](https://github.com/GetStream/stream-chat-js/issues/1929)) ([acb33c4](https://github.com/GetStream/stream-chat-js/commit/acb33c4909829bbbb7f9ba5810ae8d3514decf80)), closes [#1913](https://github.com/GetStream/stream-chat-js/issues/1913)
+* open api hot fixes ([#1927](https://github.com/GetStream/stream-chat-js/issues/1927)) ([4fb4b52](https://github.com/GetStream/stream-chat-js/commit/4fb4b52662d5c03c28ee07ae94aac2edb9b5ea19))
+
+### Features
+
+* remove messageSetToAddToIfDoesNotExist and let the message paginator place every page ([#1926](https://github.com/GetStream/stream-chat-js/issues/1926)) ([2b7960d](https://github.com/GetStream/stream-chat-js/commit/2b7960db6700137a7d36370fa406f3bbc7e132c5))
+
 ## [10.0.0-rc.23](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.22...v10.0.0-rc.23) (2026-10-20)
 
 ### Bug Fixes

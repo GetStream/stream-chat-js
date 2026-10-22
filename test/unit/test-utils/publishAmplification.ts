@@ -130,8 +130,6 @@ const makeChannel = (store: EntityStore<LocalMessage>, cid: string): Channel =>
     query: vi.fn(),
     getClient: () =>
       ({ messageStore: store, user: { id: 'me' } }) as unknown as StreamChat,
-    // `postQueryReconcile` seeds the unread snapshot from the own-user read state.
-    state: { read: {} },
   }) as unknown as Channel;
 
 /**
