@@ -204,6 +204,8 @@ import type {
   QueryReactionsOptions,
   QueryRemindersOptions,
   QueryRemindersResponse,
+  QueryScheduledMessagesOptions,
+  QueryScheduledMessagesResponse,
   QuerySegmentsOptions,
   QuerySegmentTargetsFilter,
   QueryTeamUsageStatsOptions,
@@ -225,6 +227,7 @@ import type {
   RequestOptions,
   ReviewFlagReportOptions,
   ReviewFlagReportResponse,
+  ScheduledMessageAPIResponse,
   SdkIdentifier,
   SearchAPIResponse,
   SearchMessageSortBase,
@@ -266,6 +269,7 @@ import type {
   UpdatePollOptionAPIResponse,
   UpdatePredefinedFilterOptions,
   UpdateReminderOptions,
+  UpdateScheduledMessageOptions,
   UpdateSegmentData,
   UpdateUserGroupOptions,
   UpdateUserGroupResponse,
@@ -294,6 +298,7 @@ import { ChannelManager } from './channel_manager';
 import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
 import { ReminderManager } from './reminders';
+import { ScheduledMessageManager } from './scheduledMessages';
 import { StateStore } from './store';
 import type { MessageComposer } from './messageComposer';
 import type { AbstractOfflineDB } from './offline-support';
@@ -350,6 +355,7 @@ export class StreamChat {
   offlineDb?: AbstractOfflineDB;
   notifications: NotificationManager;
   reminders: ReminderManager;
+  scheduledMessages: ScheduledMessageManager;
   anonymous: boolean;
   persistUserOnConnectionFailure?: boolean;
   axiosInstance: AxiosInstance;
@@ -586,6 +592,7 @@ export class StreamChat {
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
     this.reminders = new ReminderManager({ client: this });
+    this.scheduledMessages = new ScheduledMessageManager({ client: this });
     this.messageDeliveryReporter = new MessageDeliveryReporter({ client: this });
     this.messageComposerCache = new FixedSizeQueueCache<string, MessageComposer>(64);
   }
@@ -1135,6 +1142,8 @@ export class StreamChat {
     this.state = new ClientState({ client: this });
     // reset thread manager
     this.threads.resetState();
+    // scheduled messages are private to the user
+    this.scheduledMessages.resetState();
     this.uploadManager.reset();
     this.messageComposerCache.clear();
 
@@ -2233,7 +2242,8 @@ export class StreamChat {
    * @param {ChannelFilters} filterConditions object MongoDB style filters
    * @param {ChannelSort} [sort] Sort options, for instance {created_at: -1}.
    * When using multiple fields, make sure you use array of objects to guarantee field order, for instance [{last_updated: -1}, {created_at: 1}]
-   * @param {ChannelOptions} [options] Options object
+   * @param {ChannelOptions} [options] Options object. With `include_scheduled_messages: true`, the
+   * scheduled messages returned with each channel replace that channel's entries in `client.scheduledMessages`.
    * @param {ChannelStateOptions} [stateOptions] State options object. These options will only be used for state management and won't be sent in the request.
    * - stateOptions.skipInitialization - Skips the initialization of the state for the channels matching the ids in the list.
    * - stateOptions.skipHydration - Skips returning the channels as instances of the Channel class and rather returns the raw query response.
@@ -2260,6 +2270,7 @@ export class StreamChat {
     options: ChannelOptions = {},
     stateOptions: ChannelStateOptions = {},
   ): Promise<Channel[] | QueryChannelsResponseWithChannels> {
+    const scheduledMessagesToken = this.scheduledMessages.snapshotToken();
     const queryChannelsResponse = await this.queryChannelsRequestWithResponse(
       filterConditions,
       sort,
@@ -2283,6 +2294,15 @@ export class StreamChat {
       });
     }
 
+    // Not in hydrateActiveChannels: it also hydrates channels from the offline DB,
+    // which are not a fresh server snapshot of the scheduled messages.
+    for (const channelState of channels ?? []) {
+      this.scheduledMessages.hydrateChannelState(
+        channelState.channel.cid,
+        channelState.scheduled_messages,
+        scheduledMessagesToken,
+      );
+    }
     const hydratedChannels = this.hydrateActiveChannels(channels, stateOptions, options);
 
     if (stateOptions.withResponse) {
@@ -5242,6 +5262,64 @@ export class StreamChat {
       sort: sort && normalizeQuerySort(sort),
       ...rest,
     });
+  }
+
+  /**
+   * updateScheduledMessage - Edits a scheduled message. Only messages with status
+   * `scheduled` can be edited. Messages are scheduled with `channel.sendMessage(message, { scheduled_at })`.
+   *
+   * @param {string} id The ID of the scheduled message
+   * @param {UpdateScheduledMessageOptions} options `message` replaces the scheduled message as a whole; `scheduled_at` moves the send time. At least one is required.
+   * @returns {Promise<ScheduledMessageAPIResponse>} The scheduled message as stored after the change
+   */
+  async updateScheduledMessage(id: string, options: UpdateScheduledMessageOptions) {
+    return await this.patch<ScheduledMessageAPIResponse>(
+      `${this.baseURL}/scheduled_messages/${encodeURIComponent(id)}`,
+      options,
+    );
+  }
+
+  /**
+   * deleteScheduledMessage - Cancels a scheduled message, or removes a failed one.
+   *
+   * @param {string} id The ID of the scheduled message
+   * @returns {Promise<ScheduledMessageAPIResponse>} The scheduled message as stored after the change
+   */
+  async deleteScheduledMessage(id: string) {
+    return await this.delete<ScheduledMessageAPIResponse>(
+      `${this.baseURL}/scheduled_messages/${encodeURIComponent(id)}`,
+    );
+  }
+
+  /**
+   * sendScheduledMessageNow - Sends a scheduled message now instead of at its scheduled time.
+   * The send happens asynchronously: the `scheduled_message.sent` (or `scheduled_message.failed`)
+   * event reports the outcome.
+   *
+   * @param {string} id The ID of the scheduled message
+   * @returns {Promise<ScheduledMessageAPIResponse>} The scheduled message as stored after the change
+   */
+  async sendScheduledMessageNow(id: string) {
+    return await this.post<ScheduledMessageAPIResponse>(
+      `${this.baseURL}/scheduled_messages/${encodeURIComponent(id)}/send_now`,
+    );
+  }
+
+  /**
+   * queryScheduledMessages - Lists the scheduled messages of the current user (or, server-side, of `user_id`).
+   * Pending messages come first, then failed ones, each ordered by `scheduled_at`.
+   *
+   * @param {QueryScheduledMessagesOptions} options filter (`cid`, `status`), sort (only `scheduled_at` ascending), limit (1-100, default 20) and `next` cursor
+   * @returns {Promise<QueryScheduledMessagesResponse>}
+   */
+  async queryScheduledMessages({ sort, ...rest }: QueryScheduledMessagesOptions = {}) {
+    return await this.post<QueryScheduledMessagesResponse>(
+      `${this.baseURL}/scheduled_messages/query`,
+      {
+        ...rest,
+        sort: sort && normalizeQuerySort(sort),
+      },
+    );
   }
 
   /**
