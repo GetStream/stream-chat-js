@@ -47,7 +47,7 @@ export class StoreBackedItemIndex<T> implements ItemIndexApi<T> {
         owner?.onIdChanged?.(oldId, newId);
       },
       onEntityRemoved: (id, entity) => {
-        // Owner first: dropping the item from its windows still reads it through this index.
+        // Owner first: dropping the item from its intervals still reads it through this index.
         owner?.onEntityRemoved?.(id, entity);
         this.memberIds.delete(id);
       },

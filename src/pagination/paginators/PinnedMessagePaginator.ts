@@ -120,8 +120,8 @@ export class PinnedMessagePaginator extends MessageIntervalPaginator {
 
   /**
    * The newest page (no cursor, not around a message) holds the most recently pinned messages, so
-   * it reaches the head: its window becomes the only newest window, and an older window that was
-   * the newest one can load newer pins (see `makeOnlyHead`). A newest page comes from this
+   * it reaches the head: its interval becomes the only newest interval, and an older interval that
+   * was the newest one can load newer pins (see `makeOnlyHead`). A newest page comes from this
    * paginator's own query or with a channel response.
    */
   protected override pageReachesHead(

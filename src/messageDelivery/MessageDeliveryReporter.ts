@@ -191,8 +191,8 @@ export class MessageDeliveryReporter {
     const ownUserId = this.client.user?.id;
     if (!ownUserId) return;
 
-    // The newest message the collection knows, whether or not the window holding it is loaded: a
-    // message received live while an older window is active is still delivered.
+    // The newest message the collection knows, whether or not the interval holding it is loaded: a
+    // message received live while an older interval is active is still delivered.
     let latestMessage: LocalMessage | null = null;
     // Unix nanoseconds, comparable with a message's `created_at`.
     let lastDeliveredAt: TimestampNS | undefined;

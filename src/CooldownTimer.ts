@@ -93,9 +93,9 @@ export class CooldownTimer extends WithSubscriptions {
     const canSkipCooldown = (own_capabilities ?? []).includes('skip-slow-mode');
 
     const paginator = this.channel.messagePaginator;
-    // The newest messages: the window that reaches the newest message, and the live messages received
-    // while it was not loaded. Without that window an own message may sit in the part not loaded, so
-    // the timestamp already known is kept rather than cleared.
+    // The newest messages: the interval that reaches the newest message, and the live messages
+    // received while it was not loaded. Without that interval an own message may sit in the part
+    // not loaded, so the timestamp already known is kept rather than cleared.
     const ownLatestMessageTimestamp =
       this.findOwnLatestMessageTimestamp({
         messages: [...paginator.anchoredHeadItems, ...paginator.logicalHeadItems],

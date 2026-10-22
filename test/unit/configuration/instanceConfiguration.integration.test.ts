@@ -177,10 +177,10 @@ describe('instance configuration — cross-instance', () => {
       const channel = openChannel();
       const internals = channel.messagePaginator as unknown as {
         _executeQueryDebounced: unknown;
-        _windowPublishThrottle: unknown;
+        _activeIntervalPublishThrottle: unknown;
       };
       const debounceBefore = internals._executeQueryDebounced;
-      const throttleBefore = internals._windowPublishThrottle;
+      const throttleBefore = internals._activeIntervalPublishThrottle;
 
       client.config.setConfig('channel', { messagePaginator: { debounceMs: 900 } });
 
@@ -191,7 +191,7 @@ describe('instance configuration — cross-instance', () => {
       // The throttle is *not*, because 250 did not move. The old code rebuilt it on every derivation
       // regardless, flushing pending publishes each time for nothing.
       expect(channel.messagePaginator.config.stateThrottleMs).toBe(250);
-      expect(internals._windowPublishThrottle).toBe(throttleBefore);
+      expect(internals._activeIntervalPublishThrottle).toBe(throttleBefore);
     });
   });
 

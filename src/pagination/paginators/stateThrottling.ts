@@ -13,7 +13,7 @@ const isTestRunner = (): boolean => {
 };
 
 /**
- * Global switch for the `state` publish throttle (see `BasePaginator.scheduleWindowPublish`). On by
+ * Global switch for the `state` publish throttle (see `BasePaginator.scheduleActiveIntervalPublish`). On by
  * default, off under test runners (Vitest / Jest) so every mutation publishes synchronously. Tests
  * of the throttle itself turn it on with {@link setStateThrottlingEnabled}.
  */

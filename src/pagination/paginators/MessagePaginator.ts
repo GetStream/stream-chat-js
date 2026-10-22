@@ -29,7 +29,7 @@ export type {
 export { MessageIntervalPaginator } from './MessageIntervalPaginator';
 
 /**
- * Whole-collection aggregates, independent of the active pagination window. `latestMessageAt` is
+ * Whole-collection aggregates, independent of the active pagination interval. `latestMessageAt` is
  * the time of the channel's latest message and orders the channel list
  * (`channel.messagePaginator.latestMessageAt`): the later of
  * {@link MessagePaginatorAggregateState.latestMessage}'s `created_at` and the `last_message_at` of
@@ -37,9 +37,9 @@ export { MessageIntervalPaginator } from './MessageIntervalPaginator';
  */
 export type MessagePaginatorAggregateState = {
   /**
-   * The newest message the client holds that counts as the channel's latest, from any loaded window
-   * or from an event. Not necessarily the server's latest message: when the client does not hold
-   * that one, {@link MessagePaginator.latestMessageAt} is later than its `created_at` (see
+   * The newest message the client holds that counts as the channel's latest, from any loaded
+   * interval or from an event. Not necessarily the server's latest message: when the client does
+   * not hold that one, {@link MessagePaginator.latestMessageAt} is later than its `created_at` (see
    * {@link MessagePaginator.latestMessage}). For display (latest-message preview, latest-reply
    * avatar). A live reference: it advances to a strictly newer message, is refreshed in place on
    * edit, soft-delete or reaction, and is recomputed when hard-removed. Follows
@@ -47,7 +47,7 @@ export type MessagePaginatorAggregateState = {
    * and thread-only replies). `null` until one is ingested.
    *
    * It lives outside pagination `state`, which only emits when the active interval is affected: a
-   * message landing in the head interval while an older window is active would go stale there.
+   * message landing in the head interval while an older interval is active would go stale there.
    */
   latestMessage: LocalMessage | null;
   /**
@@ -186,17 +186,17 @@ export class MessagePaginator extends MessageIntervalPaginator {
 
   /**
    * The newest message the client holds that counts as the channel's latest (see
-   * {@link shouldAdvanceLatestMessage}), from any loaded window or from an event. Not necessarily
+   * {@link shouldAdvanceLatestMessage}), from any loaded interval or from an event. Not necessarily
    * the server's latest message: {@link latestMessageAt} is later than its `created_at` when the
    * server has newer messages the client does not hold. `null` until a message is ingested (a
    * `last_message_at` from a query sets {@link latestMessageAt} but leaves this `null`).
    * Convenience read of {@link aggregateState}; subscribe to `aggregateState` for reactivity.
    *
-   * It differs from {@link anchoredHeadItem}, the newest message of the window known to reach the
+   * It differs from {@link anchoredHeadItem}, the newest message of the interval known to reach the
    * server's latest message, in two ways:
    * - It skips messages that do not count. With system messages skipped, a system message can be
    *   `anchoredHeadItem` but never `latestMessage`.
-   * - It does not need that window. A channel opened at its first unread message loads m40–m60
+   * - It does not need that interval. A channel opened at its first unread message loads m40–m60
    *   while the server's newest is m95: `latestMessage` is m60, `latestMessageAt` is m95's time and
    *   `anchoredHeadItem` is `undefined`.
    */
@@ -205,9 +205,9 @@ export class MessagePaginator extends MessageIntervalPaginator {
   }
 
   /**
-   * The newest server-confirmed message of the window that reaches the newest message (see
-   * {@link anchoredHeadItems}). Any message the window holds counts, system messages included, but
-   * not an unsent one: its id is local. `undefined` while that window is not loaded or holds no
+   * The newest server-confirmed message of the interval that reaches the newest message (see
+   * {@link anchoredHeadItems}). Any message the interval holds counts, system messages included, but
+   * not an unsent one: its id is local. `undefined` while that interval is not loaded or holds no
    * server-confirmed message.
    *
    * @internal
@@ -237,7 +237,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
    * Advances {@link latestMessage} (and so {@link latestMessageAt}) to `message` when it is newer
    * and {@link shouldAdvanceLatestMessage} permits. Writes {@link aggregateState} only, so it is
    * safe inside a `state.next` updater (`ingestPage`). Returns `true` when the value moved. Public
-   * for callers that advance it without an in-window ingest, e.g. offline pending-message replay.
+   * for callers that advance it without an in-interval ingest, e.g. offline pending-message replay.
    */
   trackLatestMessage(message: LocalMessage): boolean {
     if (!this.shouldAdvanceLatestMessage(message)) return false;
@@ -251,7 +251,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
       return true;
     }
     // Otherwise only a strictly newer message advances. Compare against the current message's own
-    // timestamp, not `latestMessageAt`: a queried `last_message_at` newer than the loaded window
+    // timestamp, not `latestMessageAt`: a queried `last_message_at` newer than the loaded interval
     // would reject the message.
     const currentTs = current ? getMessageCreatedAtTimestamp(current) : null;
     if (currentTs !== null && incoming <= currentTs) return false;
@@ -276,23 +276,23 @@ export class MessagePaginator extends MessageIntervalPaginator {
   }
 
   /**
-   * Clears the head mark of the head window when it is stale (see {@link unmarkHead}). It is stale
+   * Clears the head mark of the head interval when it is stale (see {@link unmarkHead}). It is stale
    * when its newest message is older than the `last_message_at` the latest query returned (see
-   * {@link setQueriedLatestMessageAt}): the channel has newer messages the window lacks. The window
-   * then stops being the head window ({@link anchoredHeadItem} becomes `undefined`) and can load
-   * newer messages, and a message that then arrives from an event starts a separate head window
-   * instead of joining it across the gap. Messages that exist only locally, such as a failed send,
-   * are left out of the comparison: they carry the device's clock.
+   * {@link setQueriedLatestMessageAt}): the channel has newer messages the interval lacks. The
+   * interval then stops being the head interval ({@link anchoredHeadItem} becomes `undefined`) and
+   * can load newer messages, and a message that then arrives from an event starts a separate head
+   * interval instead of joining it across the gap. Messages that exist only locally, such as a
+   * failed send, are left out of the comparison: they carry the device's clock.
    *
-   * For example, the window holds m1–m20 and the channel is not watched while m21–m25 are sent. A
-   * query returns m25's time: the window can now load m21–m25, and m26 from an event does not land
+   * For example, the interval holds m1–m20 and the channel is not watched while m21–m25 are sent. A
+   * query returns m25's time: the interval can now load m21–m25, and m26 from an event does not land
    * right after m20.
    *
    * Call it with each response that does not bring the newest messages up to date, before any page
-   * the response carries is placed: a page that reaches the newest message marks its own window as
+   * the response carries is placed: a page that reaches the newest message marks its own interval as
    * the head. Call it only when no events were arriving before the response and nothing else
-   * brings the newest messages: while the channel is watched, a message the window lacks is still
-   * on its way, and a re-watch that places the newest page settles the window itself.
+   * brings the newest messages: while the channel is watched, a message the interval lacks is still
+   * on its way, and a re-watch that places the newest page settles the interval itself.
    */
   unmarkStaleHead() {
     const head = this.anchoredHeadInterval;
@@ -328,10 +328,10 @@ export class MessagePaginator extends MessageIntervalPaginator {
 
   /**
    * Ingests a single message, from an event or an operation such as a send. A message that starts
-   * the newest window is placed by {@link ingestAsNewestInterval}. Any other goes into the window
-   * it belongs to and the active interval stays active, except for the current user's new send (see
-   * {@link isOwnSendWhileOlderWindowIsActive}): the newest window holding it is shown, so the user
-   * sees what they sent.
+   * the newest interval is placed by {@link ingestAsNewestInterval}. Any other goes into the
+   * interval it belongs to and the active interval stays active, except for the current user's new
+   * send (see {@link isOwnSendWhileOlderIntervalIsActive}): the newest interval holding it is
+   * shown, so the user sees what they sent.
    */
   ingestItem(item: LocalMessage): boolean {
     // Only items passing the filter advance the aggregate (`ingestItem` also removes the others).
@@ -340,21 +340,21 @@ export class MessagePaginator extends MessageIntervalPaginator {
       this.trackLatestMessage(item);
     }
     // judged before ingesting, while the message is not held yet
-    const showsNewestWindow = this.isOwnSendWhileOlderWindowIsActive(item);
+    const showsNewestInterval = this.isOwnSendWhileOlderIntervalIsActive(item);
     const ingested = super.ingestItem(item);
     const newest = this.anchoredHeadInterval;
-    if (ingested && showsNewestWindow && newest?.itemIds.includes(item.id)) {
-      this.showWindowOfOwnSend(newest);
+    if (ingested && showsNewestInterval && newest?.itemIds.includes(item.id)) {
+      this.showIntervalOfOwnSend(newest);
     }
     return ingested;
   }
 
   /**
    * Whether `message` is the current user's own send (see {@link isOwnSend}) that the paginator
-   * does not hold yet, while the newest window is loaded but another window is active. A message
+   * does not hold yet, while the newest interval is loaded but another interval is active. A message
    * already held (a retry of a failed send, a replayed send, its server confirmation) is not new.
    */
-  private isOwnSendWhileOlderWindowIsActive(message: LocalMessage): boolean {
+  private isOwnSendWhileOlderIntervalIsActive(message: LocalMessage): boolean {
     const newest = this.anchoredHeadInterval;
     return (
       !!newest &&
@@ -365,18 +365,19 @@ export class MessagePaginator extends MessageIntervalPaginator {
   }
 
   /**
-   * Shows the window holding the current user's own send. The send decides the window shown, so it
-   * claims the active interval as a jump does: a page a query claimed earlier is then only stored.
+   * Shows the interval holding the current user's own send. The send decides the interval shown, so
+   * it claims the active interval as a jump does: a page a query claimed earlier is then only
+   * stored.
    */
-  private showWindowOfOwnSend(interval: Interval) {
+  private showIntervalOfOwnSend(interval: Interval) {
     this.claimActiveInterval();
     this.showLoadedInterval(interval);
   }
 
   /**
    * A message the paginator does not hold yet, at or after {@link latestMessageAt} (as known before
-   * it arrives), while no loaded window reaches the newest message. It is then the newest message,
-   * so it starts the newest window, as a page holding it would (see {@link pageReachesHead}).
+   * it arrives), while no loaded interval reaches the newest message. It is then the newest message,
+   * so it starts the newest interval, as a page holding it would (see {@link pageReachesHead}).
    */
   private isNewNewestMessage(message: LocalMessage): boolean {
     if (this.anchoredHeadItem !== undefined || this.getItem(message.id)) return false;
@@ -404,12 +405,12 @@ export class MessagePaginator extends MessageIntervalPaginator {
   }
 
   /**
-   * Starts the newest window with `message`, together with the
+   * Starts the newest interval with `message`, together with the
    * {@link logicalHeadItemsSinceQueriedLatestMessageAt} ingested before it. It can load older
    * messages unless none are left to load (see {@link hasNoMessagesBeforeLiveMessages}). It becomes
-   * the active window when no window was active, when the logical head it takes items from was, or
-   * when `message` is the current user's own send (see {@link isOwnSend}), as every own send shows
-   * the newest window (see {@link ingestItem}).
+   * the active interval when no interval was active, when the logical head it takes items from was,
+   * or when `message` is the current user's own send (see {@link isOwnSend}), as every own send
+   * shows the newest interval (see {@link ingestItem}).
    */
   private ingestAsNewestInterval(message: LocalMessage): boolean {
     const liveHead = this.liveHeadLogical;
@@ -422,7 +423,7 @@ export class MessagePaginator extends MessageIntervalPaginator {
     if (!interval) return false;
 
     if (this.isOwnSend(message)) {
-      this.showWindowOfOwnSend(interval);
+      this.showIntervalOfOwnSend(interval);
     } else if (
       !this._activeIntervalId ||
       (!!liveHead && this.isActiveInterval(liveHead))
@@ -433,9 +434,9 @@ export class MessagePaginator extends MessageIntervalPaginator {
   }
 
   /**
-   * Whether no message older than the live messages is left to load: no window of queried messages
+   * Whether no message older than the live messages is left to load: no interval of queried messages
    * is loaded and the list reports no older messages, as after a newest page that came back empty.
-   * A list never queried, or one holding a window (a jumped-to one, or one whose head mark was
+   * A list never queried, or one holding an interval (a jumped-to one, or one whose head mark was
    * cleared), has older messages to load.
    */
   private get hasNoMessagesBeforeLiveMessages(): boolean {
@@ -541,9 +542,9 @@ export class MessagePaginator extends MessageIntervalPaginator {
 
   /**
    * The still-loaded message with the greatest `created_at` that passes
-   * {@link shouldAdvanceLatestMessage} (skips system / thread-only per config), from the window
+   * {@link shouldAdvanceLatestMessage} (skips system / thread-only per config), from the interval
    * that reaches the newest message and the {@link logicalHeadItemsSinceQueriedLatestMessageAt}.
-   * A window reached by a jump is not searched, nor an out-of-order older message: neither is the
+   * An interval reached by a jump is not searched, nor an out-of-order older message: neither is the
    * channel's previous message. Used to recompute the tracked latest after the current one is
    * removed; `serverConfirmedOnly` skips unsent messages. `null` when nothing loaded qualifies.
    * It compares timestamps rather than positions, so it holds for any `itemOrder` / `requestSort`.
@@ -611,8 +612,8 @@ export class MessagePaginator extends MessageIntervalPaginator {
    *
    * Resolution order:
    * 1. an explicit first-unread ID (snapshot or read state): jump to it;
-   * 2. the last-read timestamp: infer the first unread message from the loaded window, or from a
-   *    `created_at_around` query when the window does not straddle the boundary, and jump to it;
+   * 2. the last-read timestamp: infer the first unread message from the loaded interval, or from a
+   *    `created_at_around` query when the interval does not straddle the boundary, and jump to it;
    * 3. the last-read ID, when no timestamp is known.
    *
    * The inference is not written to the snapshot: `firstUnreadMessageId` is reserved for an explicit
