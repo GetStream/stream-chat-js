@@ -229,13 +229,15 @@ describe('paginator initializeConfig', () => {
 
     it('rebuilds the publish throttles on a plain updateConfig', () => {
       const paginator = new MessagePaginator({ channel });
-      const internals = paginator as unknown as { _windowPublishThrottle: unknown };
-      const before = internals._windowPublishThrottle;
+      const internals = paginator as unknown as {
+        _activeIntervalPublishThrottle: unknown;
+      };
+      const before = internals._activeIntervalPublishThrottle;
 
       paginator.updateConfig({ stateThrottleMs: 111 });
 
       expect(paginator.config.stateThrottleMs).toBe(111);
-      expect(internals._windowPublishThrottle).not.toBe(before);
+      expect(internals._activeIntervalPublishThrottle).not.toBe(before);
     });
 
     it('drops the throttles when the interval is cleared', () => {
@@ -244,8 +246,8 @@ describe('paginator initializeConfig', () => {
       paginator.updateConfig({ stateThrottleMs: undefined });
 
       expect(
-        (paginator as unknown as { _windowPublishThrottle: unknown })
-          ._windowPublishThrottle,
+        (paginator as unknown as { _activeIntervalPublishThrottle: unknown })
+          ._activeIntervalPublishThrottle,
       ).toBeUndefined();
     });
   });

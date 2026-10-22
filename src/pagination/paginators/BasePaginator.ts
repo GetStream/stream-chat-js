@@ -287,9 +287,9 @@ export type PaginatorState<T> = {
  * {@link BasePaginator.logicalHeadItems}, {@link BasePaginator.logicalTailItems}.
  */
 export type PaginatorIntervalViews<T> = {
-  /** Out-of-order items above the loaded window. */
+  /** Out-of-order items above the loaded interval. */
   logicalHead: T[];
-  /** Out-of-order items below the loaded window. */
+  /** Out-of-order items below the loaded interval. */
   logicalTail: T[];
   /** The loaded page bounded at the dataset head (`isHead`); empty when the head is not loaded. */
   anchoredHead: T[];
@@ -388,7 +388,7 @@ export type PaginatorOptions<T, Q> = {
    */
   lockItemOrder?: boolean;
   /**
-   * Caps the loaded items: when the head window exceeds it, the oldest are released as new ones
+   * Caps the loaded items: when the head interval exceeds it, the oldest are released as new ones
    * arrive and the tailward edge re-opens, so scrolling back re-fetches. Unset: unbounded. Values
    * below `pageSize` are clamped up to it. See {@link BasePaginator.pruneTailToLimit}.
    */
@@ -445,6 +445,27 @@ export const DEFAULT_PAGINATION_OPTIONS: BasePaginatorConfig<any, any> = deepFre
   } as const,
 );
 
+/**
+ * Loads a sorted dataset page by page and keeps what it loaded as intervals.
+ *
+ * Terms used across the paginators, their names and their docs:
+ * - **interval**: a contiguous run of loaded items, with nothing missing between them
+ *   ({@link Interval}). A page that connects to a loaded interval merges into it
+ *   ({@link IntervalMergePolicy}); one that does not is kept as an interval of its own, so several
+ *   intervals can be loaded at once.
+ * - **head / tail**: the two ends of the dataset in its sort order, and the matching ends of an
+ *   interval. "Headward" and "tailward" are the directions toward them.
+ * - **active interval**: the interval whose items `state.items` exposes. The paginator's own
+ *   navigation (loading toward the head or tail, jumping to an item) moves it; a page placed from
+ *   outside moves it only where a subclass's placement rules say so.
+ * - **anchored head interval**: the loaded interval that reaches the head of the dataset
+ *   (`isHead`); see {@link BasePaginator.anchoredHeadItems}. An interval reached by a jump is not
+ *   anchored until it loads up to the head.
+ * - **logical head / tail interval**: items that arrived beyond the loaded head or tail and wait
+ *   there until a page covers them ({@link LogicalInterval}).
+ *
+ * Say "interval", never "window": "window" is kept for the browser global and for time spans.
+ */
 export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
   state: StateStore<PaginatorState<T>>;
   /**
@@ -464,12 +485,12 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     'createItemIndex' | 'declarativeConfig' | 'itemIndex'
   >;
 
-  /** Throttle for the active-window `state.items` publish. Set only with `stateThrottleMs`. */
-  private _windowPublishThrottle?: Throttled<[]>;
+  /** Throttle for the active-interval `state.items` publish. Set only with `stateThrottleMs`. */
+  private _activeIntervalPublishThrottle?: Throttled<[]>;
 
   /**
-   * Throttle for interval-view publishes. Independent of {@link _windowPublishThrottle} so a view
-   * refresh lands on its own trailing edge even when `state.items` is quiet. Created with it.
+   * Throttle for interval-view publishes. Independent of {@link _activeIntervalPublishThrottle} so
+   * a view refresh lands on its own trailing edge even when `state.items` is quiet. Created with it.
    */
   private _viewPublishThrottle?: Throttled<[]>;
 
@@ -478,17 +499,17 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
 
   /**
    * Depth of active {@link batch} `coalesce` scopes. While > 0, `ingestItem`/`removeItem` record
-   * the changed window ({@link _staleWindowState}) instead of publishing.
+   * the changed interval ({@link _staleActiveIntervalState}) instead of publishing.
    */
-  private _windowPublishSuspendDepth = 0;
+  private _activeIntervalPublishSuspendDepth = 0;
   /**
    * The interval a prune just shortened. Its `hasMoreTail` and `cursor` ride on the next
    * `state.items` publish, which can be a throttle interval late, so
    * {@link consumePendingPrunePaginationState} rereads them from the interval by ID when it fires.
    */
   private _prunedIntervalId?: string;
-  /** The state shown when a suspended op last changed the active window (see {@link batch}). */
-  private _staleWindowState?: PaginatorState<T>;
+  /** The state shown when a suspended op last changed the active interval (see {@link batch}). */
+  private _staleActiveIntervalState?: PaginatorState<T>;
 
   /** Disconnected ranges of items, e.g. after jumping to non-sequential pages. */
   protected _itemIntervals: Map<string, AnyInterval> = new Map();
@@ -611,8 +632,8 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
   }
 
   /**
-   * True once a query has run or a non-empty window was loaded without one (`setItems`, or a
-   * subclass calling `recordLoadedWindowQueryShape`). Cleared by `resetState`.
+   * True once a query has run or a non-empty interval was loaded without one (`setItems`, or a
+   * subclass calling `recordLoadedIntervalQueryShape`). Cleared by `resetState`.
    */
   get isInitialized() {
     return typeof this._lastQueryShape !== 'undefined';
@@ -718,19 +739,20 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     return itv && isLiveTailInterval(itv) ? itv : undefined;
   }
 
-  /** `intervalViews.logicalHead`: out-of-order items above the loaded window. */
+  /** `intervalViews.logicalHead`: out-of-order items above the loaded interval. */
   get logicalHeadItems(): T[] {
     return this.intervalViews.getLatestValue().logicalHead;
   }
 
-  /** `intervalViews.logicalTail`: out-of-order items below the loaded window. */
+  /** `intervalViews.logicalTail`: out-of-order items below the loaded interval. */
   get logicalTailItems(): T[] {
     return this.intervalViews.getLatestValue().logicalTail;
   }
 
   /**
-   * The anchored head interval: the loaded window that reaches the head of the dataset (`isHead`).
-   * `undefined` while that window is not loaded, for example when only a window reached by a jump is.
+   * The anchored head interval: the loaded interval that reaches the head of the dataset (`isHead`).
+   * `undefined` while that interval is not loaded, for example when only an interval reached by a
+   * jump is.
    */
   protected get anchoredHeadInterval(): Interval | undefined {
     for (const interval of this._itemIntervals.values()) {
@@ -740,7 +762,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
   }
 
   /**
-   * The items of the anchored head interval; empty while it is not loaded (a window reached by a
+   * The items of the anchored head interval; empty while it is not loaded (an interval reached by a
    * jump never counts). Reactive counterpart: `intervalViews.anchoredHead`.
    */
   get anchoredHeadItems(): T[] {
@@ -750,8 +772,8 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
 
   /**
    * The item at the head edge of the anchored head interval (see {@link anchoredHeadItems}).
-   * `undefined` while that window is not loaded, including once a window is known to lack items
-   * toward the head (see {@link unmarkHead}). A loaded window always holds an item, so this also
+   * `undefined` while that interval is not loaded, including once an interval is known to lack items
+   * toward the head (see {@link unmarkHead}). A loaded interval always holds an item, so this also
    * tells whether it is loaded.
    */
   get anchoredHeadItem(): T | undefined {
@@ -888,7 +910,8 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
 
   /**
    * Drops every loaded interval and item without publishing `state`, so the next ingest starts from
-   * empty storage while `state.items` keeps showing the previous window until the caller publishes.
+   * empty storage while `state.items` keeps showing the previous interval until the caller
+   * publishes.
    */
   protected clearItemStorage() {
     this.setIntervals([]);
@@ -996,28 +1019,28 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
   protected get isStateThrottled(): boolean {
     return (
       isStateThrottlingEnabled() &&
-      !!this._windowPublishThrottle &&
+      !!this._activeIntervalPublishThrottle &&
       !this.config.lockItemOrder
     );
   }
 
-  protected get isWindowPublishSuspended(): boolean {
-    return this._windowPublishSuspendDepth > 0;
+  protected get isActiveIntervalPublishSuspended(): boolean {
+    return this._activeIntervalPublishSuspendDepth > 0;
   }
 
-  /** Re-projects the active window from its live interval; `undefined` when none is active. */
-  private projectActiveWindow(): T[] | undefined {
+  /** Re-projects the items of the active interval; `undefined` when none is active. */
+  private projectActiveInterval(): T[] | undefined {
     if (!this._activeIntervalId) return undefined;
     const active = this._itemIntervals.get(this._activeIntervalId);
     return active ? this.intervalToItems(active) : undefined;
   }
 
   /**
-   * Publishes the active window to `state`, re-projected from the active interval at call time.
-   * Clears the visible window when the active interval is gone.
+   * Publishes the active interval to `state`, re-projected at call time. Clears the shown interval
+   * when the active interval is gone.
    */
-  private flushWindowPublish(): void {
-    const items = this.projectActiveWindow();
+  private flushActiveIntervalPublish(): void {
+    const items = this.projectActiveInterval();
     if (items) {
       this.state.partialNext({ items, ...this.consumePendingPrunePaginationState() });
       return;
@@ -1029,33 +1052,33 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
 
   /**
    * Publishes the active interval's items with `state` and any pending prune changes, at once.
-   * Inside a coalescing {@link batch}, call it after the batch's last window change: the batch then
-   * publishes nothing more.
+   * Inside a coalescing {@link batch}, call it after the batch's last interval change: the batch
+   * then publishes nothing more.
    */
   protected publishActiveInterval(state: Partial<PaginatorState<T>> = {}) {
     this.state.partialNext({
-      items: this.projectActiveWindow(),
+      items: this.projectActiveInterval(),
       ...this.consumePendingPrunePaginationState(),
       ...state,
     });
   }
 
   /**
-   * Schedules a throttled (leading and trailing) active-window publish. Live mutations call it
+   * Schedules a throttled (leading and trailing) active-interval publish. Live mutations call it
    * instead of publishing inline when {@link isStateThrottled}. Repeated calls coalesce.
    */
-  protected scheduleWindowPublish(): void {
-    this._windowPublishThrottle?.throttledFn();
+  protected scheduleActiveIntervalPublish(): void {
+    this._activeIntervalPublishThrottle?.throttledFn();
   }
 
   /**
-   * Runs `fn` with window publishes suspended and emits once on exit (a replace is
-   * remove-then-insert, which would emit twice), unless the window was published after its last
+   * Runs `fn` with active-interval publishes suspended and emits once on exit (a replace is
+   * remove-then-insert, which would emit twice), unless the interval was published after its last
    * change. Only the outermost scope emits. `exit: 'auto'` rides the throttle when there is one,
    * `'sync'` always flushes ({@link batch}). Skipped for `lockItemOrder` lists, whose emit
    * republishes the last array and must not be re-derived from the interval.
    */
-  protected withSingleWindowPublish(
+  protected withSingleActiveIntervalPublish(
     fn: () => void,
     { exit = 'auto' }: { exit?: 'auto' | 'sync' } = {},
   ): void {
@@ -1063,25 +1086,25 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       fn();
       return;
     }
-    const isOutermost = this._windowPublishSuspendDepth === 0;
-    this._windowPublishSuspendDepth += 1;
+    const isOutermost = this._activeIntervalPublishSuspendDepth === 0;
+    this._activeIntervalPublishSuspendDepth += 1;
     try {
       fn();
     } finally {
-      this._windowPublishSuspendDepth -= 1;
+      this._activeIntervalPublishSuspendDepth -= 1;
     }
-    const staleState = this._staleWindowState;
+    const staleState = this._staleActiveIntervalState;
     if (!isOutermost || !staleState) return;
-    this._staleWindowState = undefined;
-    // the window was published after its last change
+    this._staleActiveIntervalState = undefined;
+    // the interval was published after its last change
     if (this.items !== staleState.items) return;
-    if (exit === 'auto' && this.isStateThrottled) this.scheduleWindowPublish();
-    else this.flushWindowPublish();
+    if (exit === 'auto' && this.isStateThrottled) this.scheduleActiveIntervalPublish();
+    else this.flushActiveIntervalPublish();
   }
 
-  /** Immediately flushes the pending throttled window and interval-view publishes. */
+  /** Immediately flushes the pending throttled active-interval and interval-view publishes. */
   protected flushPendingPublishes(): void {
-    this._windowPublishThrottle?.flush();
+    this._activeIntervalPublishThrottle?.flush();
     this._viewPublishThrottle?.flush();
   }
 
@@ -1102,7 +1125,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
   }
 
   /**
-   * The window cap, or `undefined` when unbounded. Clamped up to `pageSize`: a smaller cap would
+   * The interval cap, or `undefined` when unbounded. Clamped up to `pageSize`: a smaller cap would
    * prune each tailward page as it lands and `onEndReached` would refetch it in a loop.
    */
   protected get effectiveMaxLoadedItems(): number | undefined {
@@ -1120,7 +1143,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
    * suspended ({@link isPruningSuspended}) and the interval is the anchored, active head interval
    * and over the cap. Assumes cursor pagination (`removeItem` is bypassed, so
    * {@link shrinkOffsetAfterRemoval} never runs). Items the server does not know
-   * ({@link isPaginationAnchorable}) are skipped, so the window may sit a few items above the cap.
+   * ({@link isPaginationAnchorable}) are skipped, so the interval may sit a few items above the cap.
    */
   protected pruneTailToLimit(interval: AnyInterval): boolean {
     const limit = this.effectiveMaxLoadedItems;
@@ -1167,7 +1190,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       for (const id of dropped) this._itemIndex.remove(id);
     });
 
-    // Older items exist on the server again: re-open the tail edge, even if the window had reached
+    // Older items exist on the server again: re-open the tail edge, even if the interval had reached
     // it (a stale `isTail` would also mislead interval merging).
     interval.isTail = false;
     interval.hasMoreTail = true;
@@ -1200,9 +1223,9 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
 
   /**
    * Returns the `state` pagination fields a prune moved, derived from the committed active interval
-   * at call time, and clears the pending prune. Publishes of the active window spread it in. Only
+   * at call time, and clears the pending prune. Publishes of the active interval spread it in. Only
    * changed fields are returned, so an unchanged `cursor` keeps its identity. Left alone: another
-   * window than the pruned one, `cursor.headward` (a `deriveCursor` verdict survives), and a null
+   * interval than the pruned one, `cursor.headward` (a `deriveCursor` verdict survives), and a null
    * tail edge (every item is locally created: `null` would read as exhausted, so the cursor stays).
    */
   private consumePendingPrunePaginationState(): Partial<PaginatorState<T>> {
@@ -1276,12 +1299,12 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
   }
 
   /**
-   * Reconciles the window and interval views after another holder swapped the shared item objects
-   * they reference: refreshes views holding a changed ID and re-projects (or slot-swaps) the active
-   * window, coalesced through the publish throttles when throttling is on.
+   * Reconciles the active interval and interval views after another holder swapped the shared item
+   * objects they reference: refreshes views holding a changed ID and re-projects (or slot-swaps) the
+   * active interval, coalesced through the publish throttles when throttling is on.
    */
   protected reconcileChangedIds(changedIds: ReadonlySet<string>): void {
-    // Views refresh independently of the active window (they can hold IDs it does not). Throttled:
+    // Views refresh independently of the active interval (they can hold IDs it does not). Throttled:
     // buffer the IDs so refreshes coalesce.
     if (this.isStateThrottled) {
       for (const id of changedIds) this._pendingViewChangedIds.add(id);
@@ -1295,13 +1318,13 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     if (!activeInterval) return;
 
     // Throttled: `this.items` lags the intervals, so no slot swap. Schedule a re-projection, but
-    // only if something changed (a sibling may have written the object the window already shows).
+    // only if something changed (a sibling may have written the object the interval already shows).
     if (this.isStateThrottled) {
       const currentItems = this.items;
       if (!currentItems || currentItems.length !== activeInterval.itemIds.length) {
         // Positions only line up when the lengths match: gate on membership alone.
         if (this.intervalHoldsAnyChangedId(activeInterval, changedIds)) {
-          this.scheduleWindowPublish();
+          this.scheduleActiveIntervalPublish();
         }
         return;
       }
@@ -1310,16 +1333,16 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
         if (!changedIds.has(id)) continue;
         const updated = this._itemIndex.get(id);
         if (!updated || updated !== currentItems[i]) {
-          this.scheduleWindowPublish();
+          this.scheduleActiveIntervalPublish();
           return;
         }
       }
       return;
     }
 
-    // Fast path: an in-place update keeps membership and order, so when the window lines up with
+    // Fast path: an in-place update keeps membership and order, so when the interval lines up with
     // the interval, swap only the changed slots (unchanged item references survive). Skipped when a
-    // boost is active: it can reorder the window, which the full projection below applies.
+    // boost is active: it can reorder the interval, which the full projection below applies.
     const currentItems = this.items;
     this.clearExpiredBoosts();
     if (
@@ -1348,7 +1371,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       }
     }
 
-    // Fallback (membership or order drifted, no window to patch, or a boost is active): re-project
+    // Fallback (membership or order drifted, no interval to patch, or a boost is active): re-project
     // only if a changed ID is in the active interval.
     if (this.intervalHoldsAnyChangedId(activeInterval, changedIds)) {
       this.state.partialNext({ items: this.intervalToItems(activeInterval) });
@@ -2017,7 +2040,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
   }
 
   /**
-   * Moves items the loaded window proves are parked on the wrong side: an item in the live head
+   * Moves items the loaded interval proves are parked on the wrong side: an item in the live head
    * that sorts past the tail edge of everything loaded belongs to the live tail, and vice versa.
    * Compared against the outermost anchored interval, not the page just ingested: an item between
    * two loaded pages is a gap item and stays.
@@ -2308,7 +2331,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
    */
   ingestItem(ingestedItem: T): boolean {
     let ingested = false;
-    this.withSingleWindowPublish(() => {
+    this.withSingleActiveIntervalPublish(() => {
       ingested = this.applyItemIngestion(ingestedItem);
     });
     return ingested;
@@ -2341,10 +2364,14 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     if (!this.matchesFilter(ingestedItem)) {
       // It left the result set, not just this list.
       this.shrinkOffsetAfterRemoval(removedItemCoordinates);
-      // Throttled: the removal deferred its emit, so publish the settled window once. Suspended
+      // Throttled: the removal deferred its emit, so publish the settled interval once. Suspended
       // (coalescing batch): `removeItemAtCoordinates` recorded it and `batch()` emits on exit.
-      if (!this.isWindowPublishSuspended && this.isStateThrottled && itemHasBeenRemoved)
-        this.scheduleWindowPublish();
+      if (
+        !this.isActiveIntervalPublishSuspended &&
+        this.isStateThrottled &&
+        itemHasBeenRemoved
+      )
+        this.scheduleActiveIntervalPublish();
       return itemHasBeenRemoved;
     }
 
@@ -2371,7 +2398,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
 
     if (!targetInterval) {
       // No anchored interval contains the new snapshot: place it relative to the loaded intervals
-      // (logical head or tail, the head-anchored window it slid out of, or nowhere if its page is
+      // (logical head or tail, the head-anchored interval it slid out of, or nowhere if its page is
       // unloaded).
       if (this._itemIntervals.size === 0) {
         // No pages yet: keep it in the logical head.
@@ -2399,17 +2426,17 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
               };
         } else if (tailEdges && this.aIsMoreTailwardThanB(ingestedItem, tailEdges.tail)) {
           // After the loaded tail: normally the item moved to an unloaded page, so it waits in the
-          // logical tail. Not when it slid out of a head-anchored window (the "first N items"): it
+          // logical tail. Not when it slid out of a head-anchored interval (the "first N items"): it
           // is still one of them, and exiling it looked like a deletion. Its rank is approximate
           // until the next page settles it.
-          const slidOutOfHeadAnchoredWindow =
+          const slidOutOfHeadAnchoredInterval =
             !!previousInterval &&
             !isLogicalInterval(previousInterval) &&
             previousInterval.isHead &&
             previousInterval.id === tailInterval?.id &&
             (previousCoords?.interval?.currentIndex ?? -1) > -1;
 
-          targetInterval = slidOutOfHeadAnchoredWindow
+          targetInterval = slidOutOfHeadAnchoredInterval
             ? this.insertItemIdIntoInterval(previousInterval, ingestedItem)
             : liveTailLogical
               ? this.insertItemIdIntoInterval(liveTailLogical, ingestedItem)
@@ -2421,11 +2448,11 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
           // Inside the global bounds but on an unloaded page: it stays invisible until that page is
           // fetched.
           if (
-            !this.isWindowPublishSuspended &&
+            !this.isActiveIntervalPublishSuspended &&
             this.isStateThrottled &&
             itemHasBeenRemoved
           )
-            this.scheduleWindowPublish();
+            this.scheduleActiveIntervalPublish();
           return itemHasBeenRemoved;
         }
       }
@@ -2444,7 +2471,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     ) {
       this.setActiveInterval(
         targetInterval,
-        this.isWindowPublishSuspended ? { updateState: false } : undefined,
+        this.isActiveIntervalPublishSuspended ? { updateState: false } : undefined,
       );
     }
 
@@ -2465,11 +2492,11 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
         this._activeIntervalId,
       )
     ) {
-      if (this.isWindowPublishSuspended) {
-        // Coalescing batch: record the change; batch() emits the settled window once on exit.
-        this._staleWindowState = this.state.getLatestValue();
+      if (this.isActiveIntervalPublishSuspended) {
+        // Coalescing batch: record the change; batch() emits the settled interval once on exit.
+        this._staleActiveIntervalState = this.state.getLatestValue();
       } else if (this.isStateThrottled) {
-        this.scheduleWindowPublish();
+        this.scheduleActiveIntervalPublish();
       } else {
         const items = this.items ?? [];
         // With `lockItemOrder`, `state.items` can keep an item the intervals moved elsewhere, so
@@ -2507,17 +2534,20 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
 
   /**
    * Runs `fn` as one batched mutation: per-item store notifications fold into one flush, so sibling
-   * holders of the same IDs re-project once. With `coalesce: true` the active window also emits
-   * exactly once on exit ({@link flushWindowPublish}), independent of throttling: for one-shot
-   * operations. Omit it in WS event handlers so events ride the throttle. If `fn` publishes the
-   * window after its last change (see {@link publishActiveInterval}), `batch` publishes nothing.
+   * holders of the same IDs re-project once. With `coalesce: true` the active interval also emits
+   * exactly once on exit ({@link flushActiveIntervalPublish}), independent of throttling: for
+   * one-shot operations. Omit it in WS event handlers so events ride the throttle. If `fn`
+   * publishes the interval after its last change (see {@link publishActiveInterval}), `batch`
+   * publishes nothing.
    */
   batch(fn: () => void, { coalesce = false }: { coalesce?: boolean } = {}): void {
     if (!coalesce) {
       this._itemIndex.batch(fn);
       return;
     }
-    this.withSingleWindowPublish(() => this._itemIndex.batch(fn), { exit: 'sync' });
+    this.withSingleActiveIntervalPublish(() => this._itemIndex.batch(fn), {
+      exit: 'sync',
+    });
   }
 
   protected removeItemAtCoordinates(coords: ItemCoordinates): ItemCoordinates {
@@ -2543,8 +2573,8 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     }
 
     if (stateLocation && stateLocation.currentIndex > -1) {
-      if (this.isWindowPublishSuspended) {
-        this._staleWindowState = this.state.getLatestValue();
+      if (this.isActiveIntervalPublishSuspended) {
+        this._staleActiveIntervalState = this.state.getLatestValue();
       } else if (!this.isStateThrottled) {
         const newItems = [...(this.items ?? [])];
         newItems.splice(stateLocation.currentIndex, 1);
@@ -2564,12 +2594,12 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
 
   /**
    * Keeps `offset` addressing the same position in the *server's* result set after an item left the
-   * loaded window.
+   * loaded interval.
    */
   protected shrinkOffsetAfterRemoval(coordinates?: ItemCoordinates) {
     // cursor pagination does not address items by position, so nothing can drift
     if (this.isCursorPagination) return;
-    // not part of the loaded window, so no page ever counted it
+    // not part of the loaded interval, so no page ever counted it
     if ((coordinates?.state?.currentIndex ?? -1) < 0) return;
 
     const { offset } = this.state.getLatestValue();
@@ -2595,9 +2625,9 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       const result = this.removeItemAtCoordinates(coords);
       this._itemIndex.remove(this.getItemId(item));
       this.shrinkOffsetAfterRemoval(result);
-      // Throttled: the removal deferred its emit, so publish the settled window once.
-      if (!this.isWindowPublishSuspended && this.isStateThrottled)
-        this.scheduleWindowPublish();
+      // Throttled: the removal deferred its emit, so publish the settled interval once.
+      if (!this.isActiveIntervalPublishSuspended && this.isStateThrottled)
+        this.scheduleActiveIntervalPublish();
       return result;
     }
 
@@ -2642,17 +2672,17 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       return newState;
     });
 
-    this.recordLoadedWindowQueryShape();
+    this.recordLoadedIntervalQueryShape();
   }
 
   /**
-   * Records the query shape of the loaded window so the next pagination continues it. Data that
+   * Records the query shape of the loaded interval so the next pagination continues it. Data that
    * arrives without the paginator's own query (`setItems`, a page from a query it did not run, a
-   * subclass reconciling a loaded window) would otherwise make the next query a first page that
-   * publishes `items: undefined` first, and an empty response then loses the window. Needs items:
-   * an empty window has no shape to continue from.
+   * subclass reconciling a loaded interval) would otherwise make the next query a first page that
+   * publishes `items: undefined` first, and an empty response then loses the interval. Needs items:
+   * an empty interval has no shape to continue from.
    */
-  protected recordLoadedWindowQueryShape() {
+  protected recordLoadedIntervalQueryShape() {
     if (
       typeof this._lastQueryShape === 'undefined' &&
       (this.state.getLatestValue().items?.length ?? 0) > 0
@@ -2677,14 +2707,15 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
   private rebuildStatePublishThrottles(stateThrottleMs?: number) {
     this.flushPendingPublishes();
 
-    this._windowPublishThrottle = undefined;
+    this._activeIntervalPublishThrottle = undefined;
     this._viewPublishThrottle = undefined;
 
     if (!stateThrottleMs) return;
 
-    // The trailing edge re-projects the active window, so a burst emits about once per interval.
-    this._windowPublishThrottle = throttle(
-      () => this.flushWindowPublish(),
+    // The trailing edge re-projects the active interval, so a burst emits about once per throttle
+    // interval.
+    this._activeIntervalPublishThrottle = throttle(
+      () => this.flushActiveIntervalPublish(),
       stateThrottleMs,
       {
         leading: true,
@@ -2743,7 +2774,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
   isFirstPageQuery = (
     params: { queryShape?: unknown } & Pick<PaginationQueryParams<Q>, 'reset'>,
   ): boolean => {
-    // No loaded window: first page. Items without a loaded page (a live event ingested one into a
+    // No loaded interval: first page. Items without a loaded page (a live event ingested one into a
     // never-queried list) have no recorded query shape, so `shouldResetStateBeforeQuery` reports a
     // first page for them too.
     if (typeof this.items === 'undefined') return true;
@@ -2758,7 +2789,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       ...this.initialState,
       isLoading: true,
     };
-    // Offset pagination: the head is loaded exactly when the window starts at offset 0, so
+    // Offset pagination: the head is loaded exactly when the interval starts at offset 0, so
     // `hasMoreHead` is anchored here, not re-derived per page (the growing offset would read as
     // "more headward"). Cursor pagination learns it from the response.
     if (!this.isCursorPagination) {
@@ -2785,12 +2816,12 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
    * does not say (a `null` {@link PaginationQueryReturnValue.headward} does), with the page sorted in
    * item order, before it is ingested.
    *
-   * - `true`: the page reaches the head; the window it lands in is marked as the head.
+   * - `true`: the page reaches the head; the interval it lands in is marked as the head.
    * - `false`: the page does not reach the head.
    * - `undefined` (the default): not known.
    *
    * Only `true` acts. On `false` or `undefined` the query shape and the cursor derivation decide, so a
-   * window they mark as the head stays marked — for example a newest page that a live item joins.
+   * interval they mark as the head stays marked — for example a newest page that a live item joins.
    */
   protected pageReachesHead(_page: T[], _queryShape: Q | undefined): boolean | undefined {
     return undefined;
@@ -2997,9 +3028,9 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
 
     // Reset before the query shape is built: `getNextQueryShape()` reads the position (offset,
     // cursor) from state, so a `reload()` at offset 20 would otherwise fetch the third page.
-    // A forced reset also clears the loaded windows, so the page cannot merge into stale ones.
+    // A forced reset also clears the loaded intervals, so the page cannot merge into stale ones.
     // Other first pages keep them: with cursors every page looks like a first page, and filter or
-    // sort changes clear the windows themselves (`resetState()`).
+    // sort changes clear the intervals themselves (`resetState()`).
     const isForcedReset = reset === 'yes' && !keepPreviousItems;
     if (isForcedReset) {
       this.clearItemStorage();
@@ -3055,7 +3086,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       }
     } else if (!silent) {
       // A next page, or a refresh keeping the items: loading shows without blanking the list, and
-      // the page merges into the loaded windows in `placeQueryPage`.
+      // the page merges into the loaded intervals in `placeQueryPage`.
       this.state.partialNext({ isLoading: true });
     }
 
@@ -3132,12 +3163,12 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
   }
 
   /**
-   * Places a page in the paginator's windows — in the window it continues, or in a window of its
-   * own merged with the windows it overlaps — and derives the cursors and the more-pages flags.
-   * With `updateState` (the default), its window becomes the shown one and the state is published.
-   * Without it, the page is only stored, and published only if it landed in the active interval,
-   * so the shown items never go stale. A page proven to reach the head of the dataset makes its
-   * interval the only head (see {@link makeOnlyHead}). Where cursors are derived from the
+   * Places a page in the paginator's intervals — in the interval it continues, or in an interval of
+   * its own merged with the intervals it overlaps — and derives the cursors and the more-pages
+   * flags. With `updateState` (the default), its interval becomes the shown one and the state is
+   * published. Without it, the page is only stored, and published only if it landed in the active
+   * interval, so the shown items never go stale. A page proven to reach the head of the dataset
+   * makes its interval the only head (see {@link makeOnlyHead}). Where cursors are derived from the
    * interval (`config.deriveCursor`), an interval a headward page joins to the head interval
    * reaches the head, whatever the page says (see {@link inheritsHeadMark}).
    *
@@ -3176,8 +3207,8 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     const reachesHead =
       headward === null || this.pageReachesHead(items, queryShape) === true;
     const reachesTail = tailward === null;
-    // A non-destructive refresh merges page 1 into the window it kept, so the ids that window held
-    // have to be read before the ingest below adds the page to it.
+    // A non-destructive refresh merges page 1 into the interval it kept, so the ids that interval
+    // held have to be read before the ingest below adds the page to it.
     const keptItemIds =
       isFirstPage && keepPreviousItems && !this.isCursorPagination && this.items?.length
         ? new Set(this.items.map((item) => this.getItemId(item)))
@@ -3219,9 +3250,10 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
 
     // The cursor comes from `config.deriveCursor` (derived from the ingested interval) or from the
     // extracted page (`headward`/`tailward`, `null` meaning the edge was hit).
-    // The flags the derivation starts from. A page in the active window continues that window's
-    // flags; a page in a window of its own (a jump, or a page whose place relative to the active
-    // window is unknown) starts from that window's own, as the active window says nothing about it.
+    // The flags the derivation starts from. A page in the active interval continues that interval's
+    // flags; a page in an interval of its own (a jump, or a page whose place relative to the active
+    // interval is unknown) starts from that interval's own, as the active interval says nothing
+    // about it.
     const continuesActiveIntervalFlags =
       !isSeparateInterval || (!!interval && this.isActiveInterval(interval));
     const knownFlags =
@@ -3287,8 +3319,8 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       // todo: we could keep the offset in two directions (initial tailward offset would be taken from config.initialOffset)
       const startOffset = this.offset ?? 0;
       stateUpdate.offset = startOffset + items.length;
-      // After a `keepPreviousItems` refresh whose page connects to the kept window, continue from
-      // the window's end instead of re-fetching it.
+      // After a `keepPreviousItems` refresh whose page connects to the kept interval, continue from
+      // the interval's end instead of re-fetching it.
       const lastPageItem = items[items.length - 1];
       if (
         interval &&
@@ -3328,10 +3360,10 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
       this.syncAnchoredHeadAfterHeadFlip(interval, wasHead);
       if (reachesHead && interval.isHead) this.makeOnlyHead(interval);
     } else if (!items.length && direction && !isSeparateInterval) {
-      // An empty directional response continuing the active window means the dataset edge was
+      // An empty directional response continuing the active interval means the dataset edge was
       // reached, but `ingestPage` returns no interval for an empty page: flag the active interval,
       // or its `isHead`/`isTail` stay stale and the head never reads as loaded. An empty page whose
-      // place relative to the active window is unknown says nothing about it.
+      // place relative to the active interval is unknown says nothing about it.
       const activeInterval = this._activeIntervalId
         ? this._itemIntervals.get(this._activeIntervalId)
         : undefined;
@@ -3409,7 +3441,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
    * teardown, not a reset: the owner is not reused.
    */
   dispose(): void {
-    this._windowPublishThrottle?.cancelTimer();
+    this._activeIntervalPublishThrottle?.cancelTimer();
     this._viewPublishThrottle?.cancelTimer();
     this._pendingViewChangedIds.clear();
     this._itemIndex.clear();

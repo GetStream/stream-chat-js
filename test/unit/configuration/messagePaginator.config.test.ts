@@ -294,29 +294,29 @@ describe("the shared 'messagePaginator' configuration key", () => {
     // controller's change hook, so every route gets it.
     const channel = openChannel();
     const internals = channel.messagePaginator as unknown as {
-      _windowPublishThrottle: unknown;
+      _activeIntervalPublishThrottle: unknown;
     };
-    const before = internals._windowPublishThrottle;
+    const before = internals._activeIntervalPublishThrottle;
 
     client.config.set({ messagePaginator: { stateThrottleMs: 350 } });
 
     expect(channel.messagePaginator.config.stateThrottleMs).toBe(350);
-    expect(internals._windowPublishThrottle).not.toBe(before);
+    expect(internals._activeIntervalPublishThrottle).not.toBe(before);
   });
 
   it('does not rebuild a read-once field whose value did not move', () => {
     const channel = openChannel();
     const internals = channel.messagePaginator as unknown as {
-      _windowPublishThrottle: unknown;
+      _activeIntervalPublishThrottle: unknown;
     };
-    const before = internals._windowPublishThrottle;
+    const before = internals._activeIntervalPublishThrottle;
 
     client.config.set({ messagePaginator: { pageSize: 33 } });
 
     expect(channel.messagePaginator.config.pageSize).toBe(33);
     // The old code re-ran the rebuild on every derivation regardless; flushing and swapping a throttle
     // that nothing changed is pure churn on a path that runs per channel, per registration.
-    expect(internals._windowPublishThrottle).toBe(before);
+    expect(internals._activeIntervalPublishThrottle).toBe(before);
   });
 
   describe('interaction with setup functions', () => {

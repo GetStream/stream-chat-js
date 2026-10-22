@@ -286,7 +286,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
    * keeps the items.
    */
   private _itemsLoadedFromOfflineDB = false;
-  /** The query in flight refreshes a cache-only window, so its response replaces the window. */
+  /** The query in flight refreshes a cache-only interval, so its response replaces the interval. */
   private _replaceOfflineSeedOnResponse = false;
   /** The query handed to the sync manager, from the cache read until it runs. See `executeQuery`. */
   private _queryAwaitingSync: ChannelQueryShape | undefined;

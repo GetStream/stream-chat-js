@@ -72,7 +72,7 @@ describe('BasePaginator.setStateThrottleOptions', () => {
     const paginator = new MessagePaginator({ channel });
     const internals = paginator as unknown as {
       flushPendingPublishes: () => void;
-      scheduleWindowPublish: () => void;
+      scheduleActiveIntervalPublish: () => void;
     };
     const flush = vi.spyOn(internals, 'flushPendingPublishes');
 

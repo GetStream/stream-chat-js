@@ -208,8 +208,8 @@ export class Thread extends WithSubscriptions {
       { pageSize: DEFAULT_PAGE_LIMIT },
     );
 
-    // Seeds the first reply page without a fetch. `latest_replies` is the newest window: it reaches
-    // the head, and the tail only if it holds every reply.
+    // Seeds the first reply page without a fetch. `latest_replies` is the newest interval: it
+    // reaches the head, and the tail only if it holds every reply.
     if (threadData?.latest_replies?.length) {
       const replies = threadData.latest_replies.map(formatMessage);
       const isLastPage = holdsEveryReply(replies, threadData);
@@ -326,7 +326,7 @@ export class Thread extends WithSubscriptions {
   };
 
   /**
-   * Re-queries the replies, sized to the loaded window, and reconciles them in place (the thread
+   * Re-queries the replies, sized to the loaded interval, and reconciles them in place (the thread
    * analogue of {@link Channel.reload}; recovery calls it for active threads). The thread applies
    * the response to itself ({@link Thread.hydrateState}), whether or not it is registered in
    * `client.threads`. Failed replies are kept: those loaded in the reply paginator or in the
@@ -386,7 +386,7 @@ export class Thread extends WithSubscriptions {
 
   /**
    * Updates the thread's state and its channel's members and custom data, and merges the replies
-   * into the loaded window (with `reconcile`) or replaces it (without).
+   * into the loaded interval (with `reconcile`) or replaces it (without).
    */
   public hydrateState = (
     threadData: ThreadStateResponse,
@@ -416,7 +416,7 @@ export class Thread extends WithSubscriptions {
     this.messagePaginator.setQueriedLatestMessageAt(threadData.last_message_at);
     if (typeof this.messagePaginator.items === 'undefined') {
       // Nothing loaded yet (e.g. a thread opened from a message): `reconcileNewestMessages` no-ops
-      // without a loaded window and would drop the fetched replies, so set them as the constructor
+      // without a loaded interval and would drop the fetched replies, so set them as the constructor
       // does.
       const isLastPage = holdsEveryReply(incomingReplies, threadData);
       this.messagePaginator.setItems({

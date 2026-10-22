@@ -1577,8 +1577,8 @@ export class StreamChat extends ChatApi {
       }
       // from the read state the response brought, as `channel.watch()` does
       if (placedFirstPage) c.messagePaginator.seedUnreadSnapshot();
-      // Unless the newest page was placed, which brings the window up to date, the head window is
-      // checked against this response's `last_message_at`, as `Channel.requestChannelState` does
+      // Unless the newest page was placed, which brings the interval up to date, the head interval
+      // is checked against this response's `last_message_at`, as `Channel.requestChannelState` does
       // for a channel query; an on-screen channel is left to its own `channel.reload()`, as above.
       if (
         willInitialize &&

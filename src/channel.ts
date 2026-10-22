@@ -1312,9 +1312,9 @@ export class Channel extends ChannelApi {
    * offline support the reset is persisted.
    *
    * The event's `last_read_message_id` is the newest server-confirmed message, whatever its type,
-   * of the window holding the channel's newest messages
-   * (`messagePaginator.anchoredHeadServerConfirmedItem`). While that window is not loaded (e.g.
-   * only a jumped-to window is), the event carries none and the read covers everything up to its
+   * of the interval holding the channel's newest messages
+   * (`messagePaginator.anchoredHeadServerConfirmedItem`). While that interval is not loaded (e.g.
+   * only a jumped-to interval is), the event carries none and the read covers everything up to its
    * `created_at`.
    *
    * @returns The dispatched `message.read_locally` event, or `undefined` if there is no connected
@@ -1438,7 +1438,7 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Re-watches the channel and refreshes its whole loaded message window (the channel analogue of
+   * Re-watches the channel and refreshes its whole loaded message interval (the channel analogue of
    * {@link Thread.reload}). Used on reconnect. Hard deletes reach other clients through no event, so
    * the watch query reconciles the loaded newest messages with the re-queried page
    * (`messagePaginator.reconcileNewestMessages`, against the loaded IDs captured before its await).
@@ -1452,7 +1452,7 @@ export class Channel extends ChannelApi {
     this._reloading = true;
     try {
       const paginator = this.messagePaginator;
-      // The reload refreshes the window that reaches the newest message, sized to what it holds.
+      // The reload refreshes the interval that reaches the newest message, sized to what it holds.
       const requestedLimit =
         Math.max(paginator.anchoredHeadItems.length, paginator.pageSize ?? 0) ||
         undefined;
@@ -1561,10 +1561,10 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * The channel's newest messages that are loaded: the window that reaches the newest message (the
-   * paginator's anchored head), or, while that window is not loaded, the messages received live since.
-   * A window reached by a jump is never part of it, as the messages between it and the newest are
-   * unknown.
+   * The channel's newest messages that are loaded: the interval that reaches the newest message (the
+   * paginator's anchored head), or, while that interval is not loaded, the messages received live
+   * since. An interval reached by a jump is never part of it, as the messages between it and the
+   * newest are unknown.
    */
   private newestKnownMessages() {
     const paginator = this.messagePaginator;
@@ -1753,13 +1753,13 @@ export class Channel extends ChannelApi {
   /**
    * Sends the channel query and takes in what the response says about the channel itself: its id,
    * the cid it is stored under, its config, and its `last_message_at`, against which the message
-   * paginator's head window is checked before any page is placed (see
+   * paginator's head interval is checked before any page is placed (see
    * `MessagePaginator.unmarkStaleHead`). The request of {@link runChannelQuery} and of the message
    * paginator's own queries, which run it as a tracked query ({@link runTrackedQuery}); it does not
    * track the query itself. Refused for a disposed instance, before anything is sent.
    *
    * `placesNewestPage`: the caller places the newest page with this response, which brings the
-   * newest messages up to date, so the head window is not checked.
+   * newest messages up to date, so the head interval is not checked.
    *
    * @internal
    */
@@ -1803,7 +1803,7 @@ export class Channel extends ChannelApi {
     // a page reaches the newest message (`_initializeState` sets it too, after).
     this.messagePaginator.setQueriedLatestMessageAt(channel.last_message_at);
     // Checked before any page is placed, as a page that reaches the newest message marks its own
-    // window as the head.
+    // interval as the head.
     if (!placesNewestPage && this.isHeadLeftWithoutRefresh(queryPayload)) {
       this.messagePaginator.unmarkStaleHead();
     }
@@ -1812,10 +1812,10 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Whether nothing but this query brings the head window up to date, so its `last_message_at` may
-   * show the window stale: the watch was stopped (`NotWatching`), or this query itself watches
+   * Whether nothing but this query brings the head interval up to date, so its `last_message_at` may
+   * show the interval stale: the watch was stopped (`NotWatching`), or this query itself watches
    * again after a dropped connection (`WasWatching`), leaving nothing to re-watch with the newest
-   * page. While the channel is watched, a message the window lacks is still on its way; after a
+   * page. While the channel is watched, a message the interval lacks is still on its way; after a
    * dropped connection, the re-watch that follows places the newest page (see
    * `ConnectionRecoveryManager`).
    */
@@ -2327,7 +2327,7 @@ export class Channel extends ChannelApi {
               this.pinnedMessagesPaginator.removeItem({ id: event.message.id });
             } else {
               // A soft delete changes neither `created_at` nor `pinned`: one store write reaches every
-              // holder, where an `ingestItem` per collection would re-emit each window.
+              // holder, where an `ingestItem` per collection would re-emit each active interval.
               const store = this.getClient().messageStore;
               if (store.has(event.message.id)) store.upsert(formattedMessage);
             }
@@ -2359,7 +2359,7 @@ export class Channel extends ChannelApi {
           const isThreadMessage = isThreadOnlyReply(event.message);
           if (!isThreadMessage) {
             // `ingestItem` advances the tracked latest message. A message arriving while the viewer
-            // is in an older window lands in the head interval, leaving the view as it is.
+            // is in an older interval lands in the head interval, leaving the view as it is.
             const formattedMessage = formatMessage(event.message);
             this.messagePaginator.ingestItem(formattedMessage);
             // Added only when pinned (`matchesFilter`).
