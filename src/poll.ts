@@ -158,7 +158,15 @@ export class Poll {
     const { id: _id, ...pollData } = extractPollData(event.poll);
     if (pollData.is_closed) this.closeConfirmed = true;
     // @ts-expect-error type mismatch
-    this.state.partialNext({ ...pollData, lastActivityAt: event.created_at });
+    this.state.partialNext({
+      ...pollData,
+      // Server-owned translations, which `extractPollData` (an update request) leaves out. Copied
+      // even when absent: the event carries the whole poll, and a change made under channel-only
+      // translation drops the stale ones.
+      description_i18n: event.poll.description_i18n,
+      lastActivityAt: event.created_at,
+      name_i18n: event.poll.name_i18n,
+    });
     this.upsertOfflineDb();
   };
 
