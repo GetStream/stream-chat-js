@@ -757,6 +757,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     const shape = this.getNextQueryShape();
     let interval: AnyInterval | null = null;
     let offset = 0;
+    let pageCount = 0;
     do {
       this._lastPageCids = undefined;
       // the list's own query path, without publishing as the list is published once, below
@@ -783,6 +784,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
         this.setActiveInterval(interval, { updateState: offset === 0 });
       }
       if (!page.length) break;
+      pageCount++;
       for (const channel of result.stateCandidate.items ?? [])
         returnedCids.add(channel.cid);
       offset += page.length;
@@ -796,7 +798,8 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       },
       { coalesce: true },
     );
-    if (interval) this.setActiveInterval(interval);
+    // the first page was published as it landed, so only later pages are left to show
+    if (interval && pageCount > 1) this.setActiveInterval(interval);
     this.state.partialNext({
       offset: this.items?.length ?? 0,
       // optimistically assume we have more pages, at worst it's one extra pagination attempt

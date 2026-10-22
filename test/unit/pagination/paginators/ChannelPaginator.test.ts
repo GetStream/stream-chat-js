@@ -2588,7 +2588,7 @@ describe('ChannelPaginator', () => {
         },
       });
 
-    const setup = async () => {
+    const setup = async ({ pages = 2 } = {}) => {
       let serverChannels = [
         channelResponse('c1', '2024-01-04T00:00:00.000Z'),
         channelResponse('c2', '2024-01-03T00:00:00.000Z'),
@@ -2611,8 +2611,7 @@ describe('ChannelPaginator', () => {
         sort: [{ field: 'updated_at', direction: -1 }],
         paginatorOptions: { pageSize: SERVER_PAGE_CAP },
       });
-      await paginator.toTail();
-      await paginator.toTail();
+      for (let page = 0; page < pages; page++) await paginator.toTail();
       const setServerChannels = (next: typeof serverChannels) => (serverChannels = next);
       return { paginator, queryChannels, serverChannels, setServerChannels };
     };
@@ -2781,6 +2780,37 @@ describe('ChannelPaginator', () => {
       expect(paginator.hasMoreTail).toBe(true);
       await paginator.toTail();
       expect(paginator.items).toHaveLength(160);
+    });
+
+    it('publishes a list it recovers in one page once', async () => {
+      const { paginator } = await setup({ pages: 1 });
+      const setActiveInterval = vi.spyOn(paginator, 'setActiveInterval');
+
+      await paginator.recoverLoadedItems();
+
+      const publishing = setActiveInterval.mock.calls.filter(
+        ([, options]) => options?.updateState !== false,
+      );
+      expect(publishing).toHaveLength(1);
+    });
+
+    it('shows a reorder on a later page once the last page is in', async () => {
+      const { paginator, serverChannels, setServerChannels } = await setup();
+      // while away, c4 moved above c3: both stay on the second page and nothing leaves the list
+      setServerChannels([
+        ...serverChannels.slice(0, 2),
+        channelResponse('c4', '2024-01-02T12:00:00.000Z'),
+        channelResponse('c3', '2024-01-02T00:00:00.000Z'),
+      ]);
+
+      await paginator.recoverLoadedItems();
+
+      expect(paginator.items!.map((channel) => channel.id)).toEqual([
+        'c1',
+        'c2',
+        'c4',
+        'c3',
+      ]);
     });
   });
 });
