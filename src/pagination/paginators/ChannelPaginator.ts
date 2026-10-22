@@ -1,4 +1,5 @@
 import type {
+  AnyInterval,
   ItemCoordinates,
   PaginationQueryParams,
   PaginationQueryReturnValue,
@@ -757,38 +758,47 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     }
 
     const loadedCids = new Set((this.items ?? []).map((channel) => channel.cid));
-    this._lastPageCids = undefined;
-    await this.toTail({ keepPreviousItems: true, reset: 'yes' });
-    const firstPage = this.getLastPageCids();
-    if (!firstPage) return;
-
-    const returnedCids = new Set<string>(firstPage);
-    const { stateOptions, ...request } = this.getNextQueryShape();
-    let offset = firstPage.length;
-    while (firstPage.length && offset < loadedCids.size) {
-      let page: Channel[];
-      try {
-        page = await this.client.queryChannelsAndHydrate(
-          { ...request, offset, limit: loadedCids.size - offset },
-          stateOptions,
-        );
-      } catch (error) {
-        chatLoggerSystem
-          .getLogger('channel')
-          .warn('Recovering the loaded channels failed.', { error });
-        return;
+    const returnedCids = new Set<string>();
+    const shape = this.getNextQueryShape();
+    let interval: AnyInterval | null = null;
+    let offset = 0;
+    do {
+      this._lastPageCids = undefined;
+      // the list's own query path, without publishing as the list is published once, below
+      const result = await this.executeQuery({
+        keepPreviousItems: true,
+        queryShape: {
+          ...shape,
+          offset,
+          limit:
+            offset === 0
+              ? Math.max(this.pageSize, loadedCids.size)
+              : loadedCids.size - offset,
+        },
+        reset: offset === 0 ? 'yes' : undefined,
+        silent: true,
+        updateState: false,
+      });
+      const page = this.getLastPageCids();
+      if (!result || !page) return;
+      if (result.targetInterval) {
+        interval = result.targetInterval;
+        this.setActiveInterval(interval, { updateState: false });
       }
       if (!page.length) break;
-      for (const channel of page) {
-        returnedCids.add(channel.cid);
-        this.ingestItem(channel);
-      }
+      for (const cid of page) returnedCids.add(cid);
       offset += page.length;
-    }
+    } while (offset < loadedCids.size);
 
-    for (const cid of loadedCids) {
-      if (!returnedCids.has(cid)) this.removeItem({ id: cid });
-    }
+    this.batch(
+      () => {
+        for (const cid of loadedCids) {
+          if (!returnedCids.has(cid)) this.removeItem({ id: cid });
+        }
+      },
+      { coalesce: true },
+    );
+    if (interval) this.setActiveInterval(interval);
     this.state.partialNext({ offset: this.items?.length ?? 0 });
   };
 

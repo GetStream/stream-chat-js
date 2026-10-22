@@ -14,6 +14,7 @@ import {
 } from '../../../../src';
 import { getClientWithUser } from '../../test-utils/getClient';
 import { generateMsg } from '../../test-utils/generateMessage';
+import { generateChannel } from '../../test-utils/generateChannel';
 import type { FieldToDataResolver } from '../../../../src/pagination/types.normalization';
 import { MockOfflineDB } from '../../offline-support/MockOfflineDB';
 import * as utils from '../../../../src/utils';
@@ -2572,5 +2573,79 @@ describe('ChannelPaginator', () => {
     channel1.state.membership = { user };
 
     expect(paginator.matchesFilter(channel1)).toBeTruthy();
+  });
+
+  describe('recoverLoadedItems', () => {
+    // The server caps a page below what the list asks for, as the real API caps at 30.
+    const SERVER_PAGE_CAP = 2;
+    const channelResponse = (id: string, updatedAt: string, name = id) =>
+      generateChannel({
+        channel: {
+          id,
+          name,
+          type: 'messaging',
+          updated_at: convertDateToTimestamp(updatedAt),
+        },
+      });
+
+    const setup = async () => {
+      let serverChannels = [
+        channelResponse('c1', '2024-01-04T00:00:00.000Z'),
+        channelResponse('c2', '2024-01-03T00:00:00.000Z'),
+        channelResponse('c3', '2024-01-02T00:00:00.000Z'),
+        channelResponse('c4', '2024-01-01T00:00:00.000Z'),
+      ];
+      const queryChannels = vi
+        .spyOn(client, 'queryChannels')
+        .mockImplementation(async (options) => {
+          const offset = options?.offset ?? 0;
+          const limit = Math.min(options?.limit ?? SERVER_PAGE_CAP, SERVER_PAGE_CAP);
+          return {
+            channels: serverChannels.slice(offset, offset + limit),
+            duration: '0ms',
+          } as never;
+        });
+      const paginator = new ChannelPaginator({
+        client,
+        filters: {},
+        sort: [{ field: 'updated_at', direction: -1 }],
+        paginatorOptions: { pageSize: SERVER_PAGE_CAP },
+      });
+      await paginator.toTail();
+      await paginator.toTail();
+      const setServerChannels = (next: typeof serverChannels) => (serverChannels = next);
+      return { paginator, queryChannels, serverChannels, setServerChannels };
+    };
+
+    it('rehydrates every loaded channel, including the ones that did not move, without a new list', async () => {
+      const { paginator, serverChannels, setServerChannels } = await setup();
+      const itemsBefore = paginator.items!;
+      const c3 = itemsBefore[2];
+      expect(itemsBefore.map((channel) => channel.id)).toEqual(['c1', 'c2', 'c3', 'c4']);
+      // While away, `c3` changed in place: same position, new data.
+      setServerChannels(
+        serverChannels.map((response) =>
+          response.channel.id === 'c3'
+            ? channelResponse('c3', '2024-01-02T00:00:00.000Z', 'c3 renamed')
+            : response,
+        ),
+      );
+      const publishedItems: Channel[][] = [];
+      const unsubscribe = paginator.state.subscribeWithSelector(
+        ({ items }) => ({ items }),
+        ({ items }) => publishedItems.push(items!),
+      );
+      publishedItems.length = 0;
+
+      await paginator.recoverLoadedItems();
+      unsubscribe();
+
+      // The instance the list holds carries the new data, though it sits on the second page.
+      expect(paginator.items![2]).toBe(c3);
+      expect(c3.data?.name).toBe('c3 renamed');
+      // Nothing moved, so the list keeps its array: no publish hands out a new one.
+      expect(paginator.items).toBe(itemsBefore);
+      expect(publishedItems).toEqual([]);
+    });
   });
 });
