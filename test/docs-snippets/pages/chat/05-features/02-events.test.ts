@@ -122,7 +122,7 @@ describe('_default/05-features/02-events.md', () => {
         members: [{ user_id: johnId }, { user_id: jackId }],
       });
 
-      const state = await channel.watch({ presence: true });
+      await channel.watch({ presence: true });
 
       // Listen for user presence changes
       client.on('user.presence.changed', (event) => {
@@ -133,8 +133,8 @@ describe('_default/05-features/02-events.md', () => {
       // #endregion snippet
 
       presenceListener = onSpy.mock.results[0]?.value as { unsubscribe: () => void };
-      expect(state.channel?.id).toBe(channelId);
-      expect(state.members.map((m) => m.user_id).sort()).toEqual([johnId, jackId].sort());
+      expect(channel.data?.id).toBe(channelId);
+      expect(Object.keys(channel.state.members).sort()).toEqual([johnId, jackId].sort());
 
       // Jack comes online, then goes offline.
       otherClient = await getClientSideClient({ id: jackId, name: 'Jack' });

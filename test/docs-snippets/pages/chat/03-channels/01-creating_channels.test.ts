@@ -77,13 +77,13 @@ describe('_default/03-channels/01-creating_channels.md', () => {
     // COPY: travelChannel="travel-channel"
     const channel = client.channel('messaging', travelChannel);
 
-    const state = await channel.watch();
+    await channel.watch();
     // #endregion snippet
 
-    // get-or-create: the channel didn't exist before.
-    expect(state.channel?.id).toBe(travelChannel);
-    expect(state.channel?.created_by?.id).toBe(thierry);
-    expect(Array.isArray(state.messages)).toBe(true);
+    // get-or-create: the channel didn't exist before. `watch()` loaded it into the instance.
+    expect(channel.data?.id).toBe(travelChannel);
+    expect(channel.data?.created_by?.id).toBe(thierry);
+    expect(Array.isArray(channel.messagePaginator.items)).toBe(true);
     // Watched: events of the channel now reach this client over the WebSocket.
     const received = new Promise<string | undefined>((resolve) => {
       const { unsubscribe } = channel.on('message.new', (event) => {

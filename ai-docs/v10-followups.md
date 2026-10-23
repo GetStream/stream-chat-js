@@ -344,7 +344,7 @@ These are full items in [Dead code and leftovers](#dead-code); listed here so th
 `bug` · confidence: low · pre-release: no · channel manager
 
 - **Where:** `src/ChannelManager.ts:231-236` via `updateLists` `:152-175`
-- **What:** No current-user guard (v9 ignored other members' updates, v9 `src/channel_manager.ts:737-744). For a cached channel every member's role or name change re-ingests it into every paginator; for an uncached cid it calls `ensure().ensureWatched()`.
+- **What:** No current-user guard (v9 ignored other members' updates, v9 `src/channel_manager.ts:737-744). For a cached channel every member's role or name change re-ingests it into every paginator; for an uncached cid it calls `ensure().watch()`.
 - **Evidence / scenario:** Downgraded from medium: the watch request needs the server to deliver `member.updated` for a channel this connection does not watch, which is unverified. The re-routing cost for cached channels holds.
 - **Suggested change:** Guard on own membership unless a paginator filters or sorts on member fields; never fetch for unknown channels on this event.
 
@@ -669,7 +669,7 @@ Unused in `src` and not used downstream. Most are v10-only. The ones marked "v9 
   - `src/pagination/utility.search.ts:25, 62`: `locateOnPlateauAlternating`, `locateOnPlateauScanOneSide` referenced nowhere in `src` or `test`.
   - `src/pagination/utility.normalization.ts:89`: `normalizeStringAccentInsensitive` never called.
   - `src/channel.ts:2460, 2515`: `void userReadState;` after `_upsertReadState(...)`; the value is unused.
-  - `src/ChannelManager.ts:165`: `if (!channel) return;` after `await ...ensureWatched()`, typed `Promise<Channel>` (`src/channel.ts:1595`).
+  - `src/ChannelManager.ts` (`updateLists`): `if (!channel) return;` after `await ...watch()`, typed `Promise<Channel>` (`Channel.watch` in `src/channel.ts`).
   - `src/messageDelivery/MessageDeliveryReporter.ts:248-262`: thread branch of `getNextDeliveryReportCandidate` computes `latestMessages`, `lastReadAt`, `lastDeliveredAt` (behind a `@ts-expect-error`) and `key`, then returns `undefined` (same in v9).
   - `src/utils.ts:572`: `FIXME: we are returning an object that does not match LocalMessage` in `toDeletedMessage`'s hard-delete branch.
 - **Suggested change:** Delete the helpers and dead statements; replace the delivery branch with an early `return` plus a short TODO; type the hard-deleted shape (`satisfies Partial<LocalMessage>`) and drop the FIXME.
