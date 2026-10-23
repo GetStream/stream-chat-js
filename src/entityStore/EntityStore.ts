@@ -296,7 +296,8 @@ export class EntityStore<T> {
    * // A channel created from members has no id until the server creates it, so it is stored under a
    * // temporary cid built from its member ids.
    * store.getOrCreate('messaging:!members-ann,bob', () => channel);
-   * // `channel.watch()` returns the cid the server assigned; the entry moves there, holders included.
+   * // The channel's first query brings the cid the server assigned; the entry moves there, holders
+   * // included.
    * store.changeId('messaging:!members-ann,bob', 'messaging:!members-kL9pQ2vX7wZ');
    */
   changeId(

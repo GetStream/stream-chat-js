@@ -1608,7 +1608,7 @@ export class StreamChat extends ChatApi {
    *
    * For a distinct channel between users, leave out the ID and pass the members:
    * `client.channel('messaging', { members: [{ user_id: 'tommaso' }, { user_id: 'thierry' }] })`.
-   * It has no ID until `channel.watch()`, `query()` or `create()` returns one.
+   * It has no ID until the response of `channel.watch()`, `query()` or `create()` brings one.
    *
    * @param channelType - The channel type.
    * @param channelId - The channel ID; leave it out for a distinct channel created from members
