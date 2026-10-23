@@ -155,7 +155,7 @@ describe('ChannelManager channel store', () => {
       expect(stored.pendingDisposal).toBe(false);
     });
 
-    it('ensureWatched() resolves with the instance superseding it during its watch', async () => {
+    it('watch() resolves with the instance superseding it during its watch', async () => {
       const stored = client.channelManager.ensure({
         type: 'messaging',
         id: '!members-xyz',
@@ -167,13 +167,34 @@ describe('ChannelManager channel store', () => {
       });
       respondWith('!members-xyz');
 
-      const watched = await created.ensureWatched();
+      const watched = await created.watch();
 
       expect(created.supersededBy).toBe(stored);
       expect(watched).toBe(stored);
     });
 
-    it('ensureWatched() on a superseded instance resolves with its successor', async () => {
+    it('watch() resolves with the instance superseding it during its watch as it is, sending it no query', async () => {
+      const stored = client.channelManager.ensure({
+        type: 'messaging',
+        id: '!members-xyz',
+      });
+      const created = client.channelManager.ensure({
+        type: 'messaging',
+        data: { members: [{ user_id: 'ann' }, { user_id: 'bob' }] },
+      });
+      respondWith('!members-xyz');
+      const storedWatchQuery = vi.spyOn(
+        stored as unknown as { runWatchQuery: () => Promise<unknown> },
+        'runWatchQuery',
+      );
+
+      // without a watch, the successor is not watched after taking in the response
+      expect(await created.watch({ watch: false })).toBe(stored);
+
+      expect(storedWatchQuery).not.toHaveBeenCalled();
+    });
+
+    it('watch() on a superseded instance resolves with its successor, sending nothing', async () => {
       const stored = client.channelManager.ensure({
         type: 'messaging',
         id: '!members-xyz',
@@ -185,12 +206,17 @@ describe('ChannelManager channel store', () => {
       });
       respondWith('!members-xyz');
       await created.query({});
-      const watch = vi.spyOn(created, 'watch');
-      const storedWatch = vi.spyOn(stored, 'watch');
+      const watchQuery = (channel: Channel) =>
+        vi.spyOn(
+          channel as unknown as { runWatchQuery: () => Promise<unknown> },
+          'runWatchQuery',
+        );
+      const createdWatchQuery = watchQuery(created);
+      const storedWatchQuery = watchQuery(stored);
 
-      expect(await created.ensureWatched()).toBe(stored);
-      expect(watch).not.toHaveBeenCalled();
-      expect(storedWatch).not.toHaveBeenCalled();
+      expect(await created.watch()).toBe(stored);
+      expect(createdWatchQuery).not.toHaveBeenCalled();
+      expect(storedWatchQuery).not.toHaveBeenCalled();
     });
 
     it('is not watched once its watch supersedes it; the stored instance is', async () => {

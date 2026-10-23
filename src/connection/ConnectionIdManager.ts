@@ -1,3 +1,4 @@
+import { waitUnlessAborted } from '../utils/abort';
 import { chatLoggerSystem } from '../logger';
 
 const logger = chatLoggerSystem.getLogger('connection');
@@ -95,15 +96,10 @@ export class ConnectionIdManager {
       );
     }
 
-    if (!signal) return pending;
-    if (signal.aborted) return Promise.reject(abortError(signal));
-
-    return new Promise<string>((resolve, reject) => {
-      const onAbort = () => reject(abortError(signal));
-      signal.addEventListener('abort', onAbort, { once: true });
-      pending
-        .then(resolve, reject)
-        .finally(() => signal.removeEventListener('abort', onAbort));
+    return waitUnlessAborted({
+      abortMessage: 'The wait for a connection id was aborted.',
+      promise: pending,
+      signal,
     });
   };
 
@@ -113,12 +109,3 @@ export class ConnectionIdManager {
     this.reject = undefined;
   };
 }
-
-/** The rejection for an aborted wait, shaped like the one `fetch` and `axios` raise. */
-const abortError = (signal: AbortSignal) => {
-  const reason: unknown = signal.reason;
-  if (reason instanceof Error) return reason;
-  const error = new Error('The wait for a connection id was aborted.');
-  error.name = 'AbortError';
-  return error;
-};

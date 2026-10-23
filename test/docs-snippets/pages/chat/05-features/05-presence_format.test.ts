@@ -60,7 +60,7 @@ describe('_default/05-features/05-presence_format.md', () => {
       custom: { color: 'green' },
     });
 
-    const state = await channel.watch({ presence: true });
+    await channel.watch({ presence: true });
 
     // queryChannelsAndHydrate allows you to listen to the members of the channels that are returned
     // so this does the same thing as above and listens to online status changes for john and jack
@@ -71,7 +71,7 @@ describe('_default/05-features/05-presence_format.md', () => {
     });
     // #endregion snippet
 
-    expect(state.members.map((m) => m.user_id).sort()).toEqual([johnId, jackId].sort());
+    expect(Object.keys(channel.state.members).sort()).toEqual([johnId, jackId].sort());
     expect(channels.map((c) => c.cid)).toEqual([`messaging:${channelId}`]);
 
     const { events, unsubscribe } = recordPresence(jackId);

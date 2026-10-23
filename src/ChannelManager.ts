@@ -118,14 +118,14 @@ export const ignoreEventsForUnknownChannels: EventHandlerPipelineHandler<
 /**
  * Re-watches a channel whose watch a dropped socket ended (`WasWatching`). Recovery re-watches only
  * the first page of each list and the active channel, so the others re-watch when an event proves
- * them relevant. `ensureWatched()` joins an in-flight watch, so a burst sends one request.
+ * them relevant. `watch()` joins an in-flight watch, so a burst sends one request.
  */
 const restoreInterruptedWatch = (channel: Channel) => {
   // A disposed channel refuses requests.
   if (channel.pendingDisposal) return;
   if (channel.watchStatus !== ChannelWatchStatus.WasWatching) return;
 
-  runDetached(channel.ensureWatched(), {
+  runDetached(channel.watch(), {
     context: `restoreInterruptedWatch(${channel.cid})`,
   });
 };
@@ -140,7 +140,7 @@ const updateLists: EventHandlerPipelineHandler<EventHandlerContext> = async ({
     const [type, id] = getCidFromEvent(event)?.split(':') ?? [];
     if (!type) return;
 
-    channel = await channelManager.ensure({ id, type }).ensureWatched();
+    channel = await channelManager.ensure({ id, type }).watch();
   }
 
   if (!channel) return;
@@ -452,33 +452,18 @@ export class ChannelManager extends WithSubscriptions {
   }
 
   /**
-   * Returns the channel for `type` and `id`, creating it if it is not stored yet (one instance per
-   * cid; a stored `pendingDisposal` channel is replaced by a fresh one). Use it instead of
-   * `new Channel()`.
+   * Returns the stored channel for `type` and `id`, or creates and stores it (one instance per cid;
+   * a stored `pendingDisposal` channel is replaced by a fresh one). Without `id`, the distinct
+   * channel between `data.members` (see {@link StreamChat.channel}, which documents both).
    *
-   * Leave out `id` and pass `data.members` for a distinct channel between those members. It is
-   * stored under a temporary cid until `watch()`, `query()` or `create()` returns the real one; a
-   * stored distinct channel with the same loaded members is returned instead. If another instance
-   * holds the real cid by then, it stays stored and this one is left unstored. A group with the
-   * same members as another needs its own `id`.
-   *
-   * A channel created from members is {@link Channel.isProvisional} until its query is answered: it
-   * has no ID yet, so nothing but that query can be sent for it.
-   *
-   * ```ts
-   * const general = client.channelManager.ensure({ type: 'messaging', id: 'general' });
-   * const dm = client.channelManager.ensure({
-   *   type: 'messaging',
-   *   data: { members: [{ user_id: 'ann' }, { user_id: 'bob' }] },
-   * });
-   * await dm.watch();
-   * ```
+   * Apps call {@link StreamChat.channel}, the public equivalent.
    *
    * @param params.type - The channel type.
    * @param params.id - The channel ID; leave it out for a distinct channel created from members.
    * @param params.data - Data for a new channel (members, custom fields). For a stored channel only
    *   `data.custom` is applied.
    * @returns The channel; initialize it with `channel.watch()`.
+   * @internal
    */
   ensure({
     data = {},

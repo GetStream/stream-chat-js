@@ -455,15 +455,18 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 		expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
 	});
 
-	it('abandons the wait when the caller aborts', async () => {
-		// The signal reaches the wait for a connection id, not only the request it precedes.
+	it('abandons the wait for a socket when the caller aborts', async () => {
+		// The abort reaches the wait for a connection id, not only the request it precedes: the
+		// query stops counting as in flight although no socket came up.
 		socketDown();
 		const controller = new AbortController();
 
 		const watching = channel.watch({}, { signal: controller.signal });
+		expect(channel.isQueryingChannel).toBe(true);
 		controller.abort();
 
 		await expect(watching).rejects.toThrow();
+		await vi.waitFor(() => expect(channel.isQueryingChannel).toBe(false));
 	});
 
 	it('does not wait for a socket when the caller asked for no watch and no presence', async () => {
@@ -656,23 +659,31 @@ describe('Channel watch status (channel.state.watchStatus)', function () {
 	});
 });
 
-describe('Channel.ensureWatched', () => {
+describe('Channel.watch', () => {
 	let client;
 	let channel;
-	// each `watch()` call gets its own pending result, settled by the test
+	// each watch query gets its own pending result, settled by the test
 	let pending;
+
+	// what a watch query leaves behind: the channel watched, its state and a page of messages
+	// (here an empty channel's empty newest page) loaded
+	const loadAsWatched = () => {
+		channel.watchStatus = ChannelWatchStatus.Watching;
+		channel.initialized = true;
+		channel.messagePaginator.placeExternalQueryPage([], 25);
+	};
 
 	beforeEach(() => {
 		client = getClientWithUser({ id: 'ann' });
 		channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
 		pending = [];
-		vi.spyOn(channel, 'watch').mockImplementation(
+		vi.spyOn(channel, 'runWatchQuery').mockImplementation(
 			() =>
 				new Promise((resolve, reject) => {
 					pending.push({
 						reject,
 						resolve: () => {
-							channel.watchStatus = ChannelWatchStatus.Watching;
+							loadAsWatched();
 							resolve({});
 						},
 					});
@@ -681,73 +692,278 @@ describe('Channel.ensureWatched', () => {
 	});
 
 	it('sends one request for calls made while its watch is in flight', async () => {
-		const first = channel.ensureWatched();
-		const second = channel.ensureWatched();
+		const first = channel.watch();
+		const second = channel.watch();
 
-		expect(channel.watch).toHaveBeenCalledTimes(1);
+		expect(channel.runWatchQuery).toHaveBeenCalledTimes(1);
 		pending[0].resolve();
 		await Promise.all([first, second]);
 		expect(channel.watchStatus).to.equal(ChannelWatchStatus.Watching);
 	});
 
-	it('sends nothing for a channel already watched', async () => {
+	it('sends nothing for a channel already watched and loaded', async () => {
+		loadAsWatched();
+
+		await channel.watch();
+
+		expect(channel.runWatchQuery).not.toHaveBeenCalled();
+	});
+
+	it('loads a channel watched without its state, as a thread query leaves it', async () => {
 		channel.watchStatus = ChannelWatchStatus.Watching;
 
-		await channel.ensureWatched();
+		const watching = channel.watch();
 
-		expect(channel.watch).not.toHaveBeenCalled();
+		expect(channel.runWatchQuery).toHaveBeenCalledTimes(1);
+		pending[0].resolve();
+		expect(await watching).toBe(channel);
+		expect(channel.initialized).toBe(true);
+	});
+
+	it('loads the messages of a watched channel whose state alone was loaded, as query() leaves it', async () => {
+		channel.watchStatus = ChannelWatchStatus.Watching;
+		channel.initialized = true;
+
+		const watching = channel.watch();
+
+		expect(channel.runWatchQuery).toHaveBeenCalledTimes(1);
+		pending[0].resolve();
+		expect(await watching).toBe(channel);
+	});
+
+	it('loads the state of a watched channel whose messages alone were loaded, as a custom doRequest leaves it', async () => {
+		channel.watchStatus = ChannelWatchStatus.Watching;
+		channel.messagePaginator.placeExternalQueryPage([], 25);
+
+		const watching = channel.watch();
+
+		expect(channel.runWatchQuery).toHaveBeenCalledTimes(1);
+		pending[0].resolve();
+		expect(await watching).toBe(channel);
+	});
+
+	it('rejects a signal aborted already, also for a channel watched and loaded', async () => {
+		loadAsWatched();
+		const controller = new AbortController();
+		controller.abort();
+
+		await expect(
+			channel.watch(undefined, { signal: controller.signal }),
+		).rejects.toMatchObject({ name: 'AbortError' });
 	});
 
 	it('resolves with the channel, whether it watched, joined a watch or sent nothing', async () => {
-		const watching = channel.ensureWatched();
-		const joining = channel.ensureWatched();
+		const watching = channel.watch();
+		const joining = channel.watch();
 		pending[0].resolve();
 
 		expect(await watching).toBe(channel);
 		expect(await joining).toBe(channel);
-		expect(await channel.ensureWatched()).toBe(channel);
+		expect(await channel.watch()).toBe(channel);
 	});
 
 	it('joins a watch with the same options in another key order', () => {
-		void channel.ensureWatched({
+		void channel.watch({
 			messages: { id_around: 'm1', limit: 20 },
 			presence: true,
 		});
-		void channel.ensureWatched({
+		void channel.watch({
 			presence: true,
 			messages: { limit: 20, id_around: 'm1' },
 		});
 
-		expect(channel.watch).toHaveBeenCalledTimes(1);
+		expect(channel.runWatchQuery).toHaveBeenCalledTimes(1);
 	});
 
 	it('does not join a watch with other options', () => {
-		void channel.ensureWatched();
-		void channel.ensureWatched({ messages: { id_around: 'm1' } });
+		void channel.watch();
+		void channel.watch({ messages: { id_around: 'm1' } });
 
-		expect(channel.watch).toHaveBeenCalledTimes(2);
-		expect(channel.watch).toHaveBeenLastCalledWith({ messages: { id_around: 'm1' } });
+		expect(channel.runWatchQuery).toHaveBeenCalledTimes(2);
+		expect(channel.runWatchQuery).toHaveBeenLastCalledWith(
+			{ messages: { id_around: 'm1' } },
+			expect.objectContaining({ signal: expect.any(AbortSignal) }),
+		);
 	});
 
-	it('leaves watch() as it is: a watch() call still sends its own request', () => {
-		void channel.ensureWatched();
-		void channel.watch();
+	it('joins each of two watches with different options that are in flight at once', async () => {
+		const newest = channel.watch();
+		const around = channel.watch({ messages: { id_around: 'm1' } });
+		const newestAgain = channel.watch();
+		const aroundAgain = channel.watch({ messages: { id_around: 'm1' } });
 
-		expect(channel.watch).toHaveBeenCalledTimes(2);
+		expect(channel.runWatchQuery).toHaveBeenCalledTimes(2);
+		pending[0].resolve();
+		pending[1].resolve();
+		expect(await Promise.all([newest, around, newestAgain, aroundAgain])).toEqual([
+			channel,
+			channel,
+			channel,
+			channel,
+		]);
+	});
+
+	it('leaves reload() as it is: a reload of a watched channel still sends its own request', async () => {
+		const watching = channel.watch();
+		pending[0].resolve();
+		await watching;
+
+		const reloading = channel.reload();
+		expect(channel.runWatchQuery).toHaveBeenCalledTimes(2);
+		pending[1].resolve();
+		await reloading;
 	});
 
 	it('rejects every caller waiting for a failed watch, and the next call sends a new request', async () => {
-		const first = channel.ensureWatched();
-		const second = channel.ensureWatched();
+		const first = channel.watch();
+		const second = channel.watch();
 		pending[0].reject(new Error('watch failed'));
 
 		await expect(first).rejects.toThrow('watch failed');
 		await expect(second).rejects.toThrow('watch failed');
 
-		const retry = channel.ensureWatched();
-		expect(channel.watch).toHaveBeenCalledTimes(2);
+		const retry = channel.watch();
+		expect(channel.runWatchQuery).toHaveBeenCalledTimes(2);
 		pending[1].resolve();
 		await retry;
+	});
+
+	it('sends nothing on a channel watched and loaded, whatever options it is given', async () => {
+		loadAsWatched();
+
+		expect(await channel.watch({ messages: { id_around: 'm1', limit: 20 } })).toBe(
+			channel,
+		);
+
+		expect(channel.runWatchQuery).not.toHaveBeenCalled();
+	});
+
+	describe('request options', () => {
+		// Stubbed below `runWatchQuery`, at the request it sends: each request stays pending until the
+		// test settles it, and rejects as axios does when its signal aborts.
+		let requests;
+
+		beforeEach(() => {
+			channel.runWatchQuery.mockRestore();
+			requests = [];
+			vi.spyOn(channel, 'getOrCreate').mockImplementation(
+				(request, requestOptions) =>
+					new Promise((resolve, reject) => {
+						requests.push({
+							requestOptions,
+							resolve: () =>
+								resolve(
+									generateChannel({ channel: { id: channel.id, type: channel.type } }),
+								),
+						});
+						requestOptions?.signal?.addEventListener('abort', () =>
+							reject(requestOptions.signal.reason),
+						);
+					}),
+			);
+		});
+
+		it('cancels the request and rejects when its only caller aborts', async () => {
+			const controller = new AbortController();
+			const watching = channel.watch(undefined, { signal: controller.signal });
+			await vi.waitFor(() => expect(requests).toHaveLength(1));
+
+			controller.abort();
+
+			await expect(watching).rejects.toMatchObject({ name: 'AbortError' });
+			expect(requests[0].requestOptions.signal.aborted).toBe(true);
+			expect(channel.watchStatus).to.equal(ChannelWatchStatus.NotWatching);
+		});
+
+		it('rejects only the caller that aborted while another caller waits for the request', async () => {
+			const controller = new AbortController();
+			const aborting = channel.watch(undefined, { signal: controller.signal });
+			const waiting = channel.watch();
+			await vi.waitFor(() => expect(requests).toHaveLength(1));
+
+			controller.abort();
+
+			await expect(aborting).rejects.toMatchObject({ name: 'AbortError' });
+			expect(requests[0].requestOptions.signal.aborted).toBe(false);
+			requests[0].resolve();
+			expect(await waiting).toBe(channel);
+			expect(channel.watchStatus).to.equal(ChannelWatchStatus.Watching);
+		});
+
+		it('cancels the request once every caller waiting for it aborted', async () => {
+			const first = new AbortController();
+			const second = new AbortController();
+			const watching = channel.watch(undefined, { signal: first.signal });
+			const joining = channel.watch(undefined, { signal: second.signal });
+			await vi.waitFor(() => expect(requests).toHaveLength(1));
+
+			first.abort();
+			await expect(watching).rejects.toMatchObject({ name: 'AbortError' });
+			expect(requests[0].requestOptions.signal.aborted).toBe(false);
+
+			second.abort();
+			await expect(joining).rejects.toMatchObject({ name: 'AbortError' });
+			expect(requests[0].requestOptions.signal.aborted).toBe(true);
+		});
+
+		it('sends a new request for a watch after every caller of the previous one aborted', async () => {
+			const controller = new AbortController();
+			const aborted = channel.watch(undefined, { signal: controller.signal });
+			await vi.waitFor(() => expect(requests).toHaveLength(1));
+			controller.abort();
+			// at once, while the cancelled request has not settled yet
+			const watching = channel.watch();
+			await expect(aborted).rejects.toMatchObject({ name: 'AbortError' });
+
+			await vi.waitFor(() => expect(requests).toHaveLength(2));
+			requests[1].resolve();
+
+			expect(await watching).toBe(channel);
+			expect(channel.watchStatus).to.equal(ChannelWatchStatus.Watching);
+		});
+
+		it('rejects with the reason the caller aborted with', async () => {
+			const controller = new AbortController();
+			const watching = channel.watch(undefined, { signal: controller.signal });
+			const reason = new Error('left the channel');
+
+			controller.abort(reason);
+
+			await expect(watching).rejects.toBe(reason);
+		});
+
+		it('rejects and sends nothing for a signal aborted already', async () => {
+			const controller = new AbortController();
+			controller.abort();
+
+			await expect(
+				channel.watch(undefined, { signal: controller.signal }),
+			).rejects.toMatchObject({ name: 'AbortError' });
+
+			expect(channel.getOrCreate).not.toHaveBeenCalled();
+		});
+
+		it('leaves out the request options of a caller that joins a request in flight', async () => {
+			const watching = channel.watch(undefined, { timeout: 1234 });
+			const joining = channel.watch(undefined, { timeout: 99 });
+			await vi.waitFor(() => expect(requests).toHaveLength(1));
+
+			requests[0].resolve();
+			await Promise.all([watching, joining]);
+
+			expect(requests).toHaveLength(1);
+			expect(requests[0].requestOptions).toMatchObject({ timeout: 1234 });
+		});
+
+		it('passes a timeout to the request it sends', async () => {
+			const watching = channel.watch(undefined, { timeout: 1234 });
+			await vi.waitFor(() => expect(requests).toHaveLength(1));
+
+			requests[0].resolve();
+			await watching;
+
+			expect(requests[0].requestOptions).toMatchObject({ timeout: 1234 });
+		});
 	});
 });
 
@@ -3971,7 +4187,7 @@ describe('Channel.query', async () => {
 			await channel.watch();
 
 			respond([1, 2, 3], 10);
-			await channel.watch({ messages: { id_lt: 'm4', limit: 3 } });
+			await channel.runWatchQuery({ messages: { id_lt: 'm4', limit: 3 } });
 
 			expect(ids(channel.messagePaginator.items)).toEqual(['m8', 'm9', 'm10']);
 			expect(channel.messagePaginator.getItem('m1')).toBeDefined();
@@ -4001,7 +4217,7 @@ describe('Channel.query', async () => {
 			expect(channel.messagePaginator.hasMoreTail).toBe(true);
 
 			respond([], 10);
-			await channel.watch({ messages: { id_lt: 'm1', limit: 3 } });
+			await channel.runWatchQuery({ messages: { id_lt: 'm1', limit: 3 } });
 
 			// the window's own flags, as showing it again publishes them
 			await channel.messagePaginator.jumpToMessage('m9');
@@ -4031,7 +4247,7 @@ describe('Channel.query', async () => {
 			await channel.watch();
 
 			respond([4, 5, 6], 10);
-			await channel.watch({ messages: { id_around: 'm5', limit: 3 } });
+			await channel.runWatchQuery({ messages: { id_around: 'm5', limit: 3 } });
 
 			expect(ids(channel.messagePaginator.items)).toEqual(['m8', 'm9', 'm10']);
 			expect(channel.messagePaginator.getItem('m5')).toBeDefined();
@@ -4081,7 +4297,7 @@ describe('Channel.query', async () => {
 			await new Promise((resolve) => setTimeout(resolve, 0));
 
 			getOrCreate.mockResolvedValueOnce(response([1, 2, 3]));
-			await channel.watch({ messages: { id_around: 'm2', limit: 3 } });
+			await channel.runWatchQuery({ messages: { id_around: 'm2', limit: 3 } });
 			expect(channel.messagePaginator.isLoading).toBe(true);
 
 			respondOlder();
@@ -4112,7 +4328,7 @@ describe('Channel.query', async () => {
 
 			// a page past the shown window that reaches the newest message
 			respond([42, 43, 44]);
-			await channel.watch({ messages: { id_gt: 'm41', limit: 3 } });
+			await channel.runWatchQuery({ messages: { id_gt: 'm41', limit: 3 } });
 
 			expect(ids(paginator.items)).toEqual(['m38', 'm39', 'm40', 'failed']);
 			expect(paginator.hasMoreHead).toBe(true);
@@ -4130,7 +4346,7 @@ describe('Channel.query', async () => {
 			await channel.watch();
 
 			respond([7, 8, 9], 10);
-			await channel.watch({ messages: { id_lt: 'm10', limit: 3 } });
+			await channel.runWatchQuery({ messages: { id_lt: 'm10', limit: 3 } });
 
 			expect(ids(channel.messagePaginator.items)).toEqual(['m7', 'm8', 'm9', 'm10']);
 			expect(channel.messagePaginator.hasMoreTail).toBe(true);
@@ -4143,7 +4359,7 @@ describe('Channel.query', async () => {
 			await channel.watch();
 			// a page watched at a cursor is stored, for a jump to show later
 			const getOrCreate = respond([1, 2, 3], 10);
-			await channel.watch({ messages: { id_lt: 'm4', limit: 3 } });
+			await channel.runWatchQuery({ messages: { id_lt: 'm4', limit: 3 } });
 			const response = (minutes) =>
 				generateChannel({
 					channel: {
@@ -4188,7 +4404,7 @@ describe('Channel.query', async () => {
 			await channel.watch();
 
 			respond([], 10);
-			await channel.watch({ messages: { limit: 0 } });
+			await channel.runWatchQuery({ messages: { limit: 0 } });
 
 			expect(ids(channel.messagePaginator.items)).toEqual(['m8', 'm9', 'm10']);
 		});
@@ -4247,7 +4463,7 @@ describe('Channel.query', async () => {
 			loaded.respond([38, 39, 40]);
 			await loaded.channel.watch();
 			loaded.respond([1, 2, 3]);
-			await loaded.channel.watch({ messages: { id_lt: 'm4', limit: 3 } });
+			await loaded.channel.runWatchQuery({ messages: { id_lt: 'm4', limit: 3 } });
 			return loaded;
 		};
 		const nextTick = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -4334,7 +4550,7 @@ describe('Channel.query', async () => {
 				const paginator = channel.messagePaginator;
 				// another stored window, and a newer latest message than the newest window holds
 				respond([10, 11, 12], 42);
-				await channel.watch({ messages: { id_around: 'm11', limit: 3 } });
+				await channel.runWatchQuery({ messages: { id_around: 'm11', limit: 3 } });
 				paginator.unmarkStaleHead();
 				await paginator.jumpToMessage('m2');
 				const answerNewest = respondLater([41, 42], 42);
@@ -4382,7 +4598,7 @@ describe('Channel.query', async () => {
 				const paginator = channel.messagePaginator;
 				// the newest window no longer marked as the newest, so jumping to it needs a query
 				respond([10, 11, 12], 42);
-				await channel.watch({ messages: { id_around: 'm11', limit: 3 } });
+				await channel.runWatchQuery({ messages: { id_around: 'm11', limit: 3 } });
 				paginator.unmarkStaleHead();
 				const answerJump = respondLater([19, 20, 21], 42);
 				const jump = paginator.jumpToMessage('m20');
@@ -4438,7 +4654,7 @@ describe('Channel.query', async () => {
 				const { channel, ids, respond, respondLater } = await setup();
 				const paginator = channel.messagePaginator;
 				respond([34, 35, 36]);
-				await channel.watch({ messages: { id_lt: 'm37', limit: 3 } });
+				await channel.runWatchQuery({ messages: { id_lt: 'm37', limit: 3 } });
 				const answerOlder = respondLater([35, 36, 37]);
 				const older = paginator.toTail();
 				await nextTick();
@@ -5324,9 +5540,10 @@ describe('Channel.query — initial page size', () => {
 		await channel.watch();
 
 		// The initial open asks the server for exactly pageSize messages (not its larger default).
+		// The request carries the signal `watch()` cancels it with.
 		expect(getOrCreate).toHaveBeenCalledWith(
 			expect.objectContaining({ messages: { limit: 25 } }),
-			undefined,
+			{ signal: expect.any(AbortSignal) },
 		);
 	});
 
@@ -5338,8 +5555,9 @@ describe('Channel.query — initial page size', () => {
 				generateChannel({ channel: { id: channel.id, type: channel.type } }),
 			);
 
-		// e.g. channel.reload → watch({ messages: { limit: items.length } }) — passed through as-is.
-		await channel.watch({ messages: { limit: 80 } });
+		// e.g. channel.reload → runWatchQuery({ messages: { limit: items.length } }) — passed through
+		// as-is.
+		await channel.runWatchQuery({ messages: { limit: 80 } });
 
 		expect(getOrCreate).toHaveBeenCalledWith(
 			expect.objectContaining({ messages: { limit: 80 } }),
@@ -5379,7 +5597,7 @@ describe('Channel.reload', () => {
 		seedLatestWindow(channel, [msg('m1', 1), msg('m2', 2), msg('m3', 3)]);
 		expect(channel.messagePaginator.items.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
 
-		// reload() is watch() with the full-window limit: the newest page reconciles the loaded newest
+		// reload() is a watch query with the full-window limit: the newest page reconciles the loaded newest
 		// messages (reconcileNewestMessages, shared with the channel-list re-hydrate and connection
 		// recovery). The loaded ids are read BEFORE this fetch, so a
 		// brand-new message that lands via WS DURING it (below) — absent from the server page — must
@@ -5403,7 +5621,9 @@ describe('Channel.reload', () => {
 		const wide = channel.messagePaginator.pageSize + 7;
 		const loaded = Array.from({ length: wide }, (_, i) => msg(`m${i}`, i));
 		seedLatestWindow(channel, loaded);
-		const watchSpy = vi.spyOn(channel, 'watch').mockResolvedValue({ messages: loaded });
+		const watchSpy = vi
+			.spyOn(channel, 'runWatchQuery')
+			.mockResolvedValue({ messages: loaded });
 
 		await channel.reload();
 
@@ -5416,7 +5636,7 @@ describe('Channel.reload', () => {
 		// exactly what we already hold: messages that arrived while offline can never come back.
 		seedLatestWindow(channel, [msg('m1', 1), msg('m2', 2), msg('m3', 3)]);
 		const watchSpy = vi
-			.spyOn(channel, 'watch')
+			.spyOn(channel, 'runWatchQuery')
 			.mockResolvedValue({ messages: [msg('m1', 1), msg('m2', 2), msg('m3', 3)] });
 
 		await channel.reload();
@@ -6099,7 +6319,7 @@ describe('Channel.reload', () => {
 
 	it('reloads without consulting the DB when offline support is disabled', async () => {
 		seedLatestWindow(channel, [msg('m1', 1)]);
-		vi.spyOn(channel, 'watch').mockResolvedValue({ messages: [msg('m1', 1)] });
+		vi.spyOn(channel, 'runWatchQuery').mockResolvedValue({ messages: [msg('m1', 1)] });
 
 		// Guards the `offlineDb ? ... : []` branch: no offline DB must not mean a crash or a stray await.
 		await expect(channel.reload()).resolves.toBeUndefined();
@@ -6114,7 +6334,7 @@ describe('Channel.reload', () => {
 		channel.messagePaginator.ingestItem(channel.state.formatMessage(mine));
 		expect(channel.messagePaginator.items.map((m) => m.id)).toEqual(['mine']);
 
-		// Mock the transport, not `watch`: mocking `watch` skips reconciling the page, so no fold runs.
+		// Mock the transport, not `runWatchQuery`: mocking it skips reconciling the page, so no fold runs.
 		vi.spyOn(channel, 'getOrCreate').mockImplementation(async () =>
 			generateChannel({
 				channel: { id: channel.id, type: channel.type },
@@ -6134,14 +6354,14 @@ describe('Channel.reload', () => {
 	it('ignores a re-entrant reload while one is already in flight', async () => {
 		seedLatestWindow(channel, [msg('m1', 1)]);
 		let resolveWatch;
-		const watchSpy = vi.spyOn(channel, 'watch').mockReturnValue(
+		const watchSpy = vi.spyOn(channel, 'runWatchQuery').mockReturnValue(
 			new Promise((resolve) => {
 				resolveWatch = () => resolve({ messages: [msg('m1', 1)] });
 			}),
 		);
 
 		const inFlight = channel.reload();
-		await channel.reload(); // guarded — returns immediately, must not call watch again
+		await channel.reload(); // guarded — returns immediately, must not send another watch query
 		resolveWatch();
 		await inFlight;
 
@@ -6172,7 +6392,7 @@ describe('Channel.reload', () => {
 			// later reconnect could ever refresh it again.
 			seedLatestWindow(channel, [msg('m1', 1)]);
 			const watchSpy = vi
-				.spyOn(channel, 'watch')
+				.spyOn(channel, 'runWatchQuery')
 				.mockRejectedValueOnce(new Error('watch failed'));
 			await expect(channel.reload()).rejects.toThrow();
 
@@ -7233,15 +7453,20 @@ describe('Unread snapshot of a channel response placing the first page', () => {
 
 	// A refresh reconciles the loaded messages and keeps the snapshot: retaking it would drop an
 	// explicit mark-unread on every reconnect or list refresh.
-	it('leaves it alone when watch() refreshes the loaded messages', async () => {
-		vi.spyOn(channel, 'getOrCreate').mockResolvedValue(channelResponse());
+	it('leaves it alone when a watch query refreshes the loaded messages', async () => {
+		const getOrCreate = vi
+			.spyOn(channel, 'getOrCreate')
+			.mockResolvedValue(channelResponse());
 		await channel.watch();
 		channel.messagePaginator.setUnreadSnapshot({
 			firstUnreadMessageId: 'marked',
 			unreadCount: 7,
 		});
 
-		await channel.watch();
+		// The query `reload()` sends: `watch()` sends nothing for a watched channel.
+		await channel.runWatchQuery();
+
+		expect(getOrCreate).toHaveBeenCalledTimes(2);
 
 		expect(unreadSnapshot()).toMatchObject({
 			firstUnreadMessageId: 'marked',
