@@ -1226,7 +1226,7 @@ export class Channel extends ChannelApi {
 
   /**
    * See {@link ChannelLifecycleState.pendingDisposal}. Set only by {@link Channel.disconnect} and never
-   * reverted: `getClient()` throws, `client.channelManager.ensure()` returns a fresh instance for the
+   * reverted: `getClient()` throws, `client.channel()` returns a fresh instance for the
    * cid, and lists and recovery skip it.
    */
   get pendingDisposal() {

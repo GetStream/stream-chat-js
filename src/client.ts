@@ -1602,18 +1602,30 @@ export class StreamChat extends ChatApi {
   }
 
   /**
-   * Returns the channel with the given type, ID and custom data: a shorthand for
-   * {@link ChannelManager.ensure}, so it returns the stored instance for the cid or creates and
-   * stores it.
+   * Returns the channel with the given type and ID: the stored instance for the cid, or a new one,
+   * stored (one instance per cid; a channel disposed with `disconnect()` is replaced by a fresh
+   * one). Use it instead of `new Channel()`.
    *
-   * For a distinct channel between users, leave out the ID and pass the members:
-   * `client.channel('messaging', { members: [{ user_id: 'tommaso' }, { user_id: 'thierry' }] })`.
-   * It has no ID until the response of `channel.watch()`, `query()` or `create()` brings one.
+   * For a distinct channel between users, leave out the ID and pass the members. It is stored under
+   * a temporary cid until the response of `channel.watch()`, `query()` or `create()` brings the
+   * real one; a stored distinct channel with the same loaded members is returned instead. If
+   * another instance holds the real cid by then, it stays stored and takes over from this one
+   * (`channel.supersededBy`; `watch()` resolves with it). A group with the same members as another
+   * needs its own ID. Until its query is answered such a channel is
+   * {@link Channel.isProvisional}: it has no ID yet, so nothing but that query can be sent for it.
+   *
+   * ```ts
+   * const general = client.channel('messaging', 'general');
+   * const dm = await client
+   *   .channel('messaging', { members: [{ user_id: 'ann' }, { user_id: 'bob' }] })
+   *   .watch();
+   * ```
    *
    * @param channelType - The channel type.
    * @param channelId - The channel ID; leave it out for a distinct channel created from members
    *   (optional).
-   * @param custom - Data for a new channel, e.g. `members` or `custom`. Defaults to `{}`.
+   * @param custom - Data for a new channel, e.g. `members` or `custom`; for a stored channel only
+   *   `custom` is applied. Defaults to `{}`.
    * @returns The channel; initialize it with `channel.watch()`.
    */
   channel(channelType: string, channelId?: string | null, custom?: ChannelInput): Channel;

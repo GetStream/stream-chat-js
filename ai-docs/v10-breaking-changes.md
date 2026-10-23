@@ -508,7 +508,7 @@ Common rules for every generated or rewritten `StreamChat` method: path paramete
 **Kind:** signature · **Impact:** medium · **PR:** #1901
 
 - **v9:** `channel(type, id?, custom?: ChannelData)` / `channel(type, custom)`, deduped via `activeChannels` (`getChannelById` / `getChannelByMembers`, both `@private` arrow properties).
-- **v10:** `channel(type, id?, custom?: ChannelInput)` / `channel(type, custom?)` is a shorthand for `client.channelManager.ensure({ type, id, data })`. `getChannelById` / `getChannelByMembers` removed. `ChannelInput` puts custom fields under `custom` and members as `{ user_id }` objects. Identity, provisional channels and `supersededBy`: [channel store](#active-channels).
+- **v10:** `channel(type, id?, custom?: ChannelInput)` / `channel(type, custom?)` returns the stored instance for the cid or creates and stores it (through the internal `client.channelManager.ensure({ type, id, data })`). `getChannelById` / `getChannelByMembers` removed. `ChannelInput` puts custom fields under `custom` and members as `{ user_id }` objects. Identity, provisional channels and `supersededBy`: [channel store](#active-channels).
 - **Migrate:** `client.channel('messaging', id, { custom: { name } })`; replace `getChannelById(type, id, data)` with `client.channel(type, id, data)`; spies on channel creation target `channelManager.ensure`.
 - **Source:** `src/client.ts:1773-1789` (v10); `src/client.ts:2610-2770` (v9)
 
@@ -542,7 +542,7 @@ Common rules for every generated or rewritten `StreamChat` method: path paramete
 
 - **v9:** cleared the user, `activeChannels`, `ClientState`, threads, uploads, the composer cache; token manager reset after close.
 - **v10:** additionally resets every channel list (paginators stay registered), clears the channel store, clears `mutedChannels`, runs the `'client'` setup function's teardown (re-armed on next connect), and rejects requests waiting for a connection id with "Connection was closed because disconnectUser() was called"; the token manager resets only if no new user connected meanwhile.
-- **Migrate:** re-query lists after reconnecting as another user (they are empty, not stale). Clearing the channel store disposes every `Channel` instance, including ones the app still holds in its own state (an "active channel", a cached list): any later call on them throws "Channel <cid> is pending disposal and cannot be used" ([pendingDisposal](#channel-pending-disposal)). Drop held channel references on logout or user switch, or re-acquire them after the next `connectUser()` with `client.channelManager.ensure({ type, id })`. v9 also threw from `getClient()` on channels disconnected this way; a dev-mode hot reload that re-runs `connectUser` after the old cleanup's `disconnectUser()` hits it too.
+- **Migrate:** re-query lists after reconnecting as another user (they are empty, not stale). Clearing the channel store disposes every `Channel` instance, including ones the app still holds in its own state (an "active channel", a cached list): any later call on them throws "Channel <cid> is pending disposal and cannot be used" ([pendingDisposal](#channel-pending-disposal)). Drop held channel references on logout or user switch, or re-acquire them after the next `connectUser()` with `client.channel(type, id)`. v9 also threw from `getClient()` on channels disconnected this way; a dev-mode hot reload that re-runs `connectUser` after the old cleanup's `disconnectUser()` hits it too.
 - **Source:** `src/client.ts:828-889` (v10); `src/client.ts:1110-1148` (v9)
 
 <a id="client-state"></a>
@@ -1172,7 +1172,7 @@ Common pattern for every generated or overridden `Channel` method: the trailing 
 
 - **v9:** `new Channel(client, type, id, data: ChannelData)`; plain class; `type` / `id` / `cid` writable fields; a members-only channel had `cid === 'type:undefined'` until queried.
 - **v10:** `new Channel(client, type, id, data: ChannelInput)` (ctor input changed); `class Channel extends ChannelApi` (generated); `type` is `readonly`; a members-only channel's `cid` is the temporary `type:!members-<sorted ids>` until the server answers, and `isProvisional` is true while it has no id. A constructed instance is not stored anywhere (no events reach it) unless created through `client.channelManager.ensure()` / `client.channel()`.
-- **Migrate:** never `new Channel(...)`; use `client.channelManager.ensure({ type, id, data })` or `client.channel()`. `data.members` must be `[{ user_id }]` objects and custom fields go under `data.custom`. Do not assign `channel.type`.
+- **Migrate:** never `new Channel(...)`; use `client.channel(type, id, data)`. `data.members` must be `[{ user_id }]` objects and custom fields go under `data.custom`. Do not assign `channel.type`.
 - **Source:** `src/channel.ts:227,286-316`, `src/gen/chat/ChannelApi.ts:41-46`, `src/ChannelManager.ts:532-551` (v10); `src/channel.ts:90-187` (v9)
 
 <a id="channel-data"></a>
@@ -1194,7 +1194,7 @@ Common pattern for every generated or overridden `Channel` method: the trailing 
 
 - **v9:** writable `disconnected: boolean`; `_disconnect()` set it, cleared the cooldown timer and called `state.setIsUpToDate(false)`; `getClient()` then threw "You can't use a channel after client.disconnect() was called".
 - **v10:** read-only reactive getter `pendingDisposal` (slice of `channel.state`), set only by public `disconnect()`. `disconnect()` also unsubscribes configuration, stops the receipts tracker and cooldown timer, disposes `messagePaginator` / `pinnedMessagesPaginator`, and sets `watchStatus: NotWatching`; it is idempotent and sends no request. Afterwards `getClient()` throws "Channel <cid> is pending disposal ... use client.channelManager.ensure()", `query()` / `watch()` reject, `activate()` warns and no-ops. The instance stays in the channel store until `releaseUnusedChannels()`, but `ensure()` returns a fresh instance for its cid.
-- **Migrate:** `channel.disconnected` -> `channel.pendingDisposal`; `channel._disconnect()` -> `channel.disconnect()`; never assign it. Re-acquire with `client.channelManager.ensure({ type, id })`.
+- **Migrate:** `channel.disconnected` -> `channel.pendingDisposal`; `channel._disconnect()` -> `channel.disconnect()`; never assign it. Re-acquire with `client.channel(type, id)`.
 - **Source:** `src/channel.ts:505-515,1423-1425,1477-1481,1916,3074-3102` (v10); `src/channel.ts:118,187-192,2546-2559` (v9)
 
 <a id="channel-initialized"></a>
