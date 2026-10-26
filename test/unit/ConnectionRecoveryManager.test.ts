@@ -664,6 +664,56 @@ describe('ConnectionRecoveryManager', () => {
       expect(reload).toHaveBeenCalledTimes(1);
     });
 
+    it('recovers the channel lists only after pending-task replay and sync', async () => {
+      // A list query ahead of the replay would hand back state the pending tasks are about to change.
+      const order: string[] = [];
+      await attachDb();
+      vi.spyOn(client.channelManager, 'recover').mockImplementation(async () => {
+        order.push('lists');
+        return [];
+      });
+      vi.spyOn(client, 'sync').mockImplementation(async () => {
+        order.push('sync');
+        return { events: [] } as never;
+      });
+      db.getAllChannelCids.mockResolvedValue(['messaging:cached']);
+      db.executePendingTasks = vi.fn().mockImplementation(async () => {
+        order.push('executePendingTasks');
+      });
+
+      online();
+
+      await vi.waitFor(() => expect(order).to.contain('lists'));
+      expect(order).to.deep.equal(['executePendingTasks', 'sync', 'lists']);
+    });
+
+    it('does not recover the channel lists off the reconnect itself once the DB is initialized', async () => {
+      await attachDb();
+      const recoverLists = vi
+        .spyOn(client.channelManager, 'recover')
+        .mockResolvedValue([]);
+      // Never resolve the sync, so the edge never arrives.
+      db.executePendingTasks = vi.fn().mockImplementation(() => new Promise(() => {}));
+
+      online();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(recoverLists).not.toHaveBeenCalled();
+    });
+
+    it('recovers the channel lists exactly once per reconnect', async () => {
+      await attachDb();
+      const recoverLists = vi
+        .spyOn(client.channelManager, 'recover')
+        .mockResolvedValue([]);
+
+      online();
+      await vi.waitFor(() => expect(recoverLists).toHaveBeenCalledTimes(1));
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      expect(recoverLists).toHaveBeenCalledTimes(1);
+    });
+
     it('recovers again on a second reconnect', async () => {
       await attachDb();
       const { reload } = activeChannel('active');

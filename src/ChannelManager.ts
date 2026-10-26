@@ -1029,7 +1029,7 @@ export class ChannelManager extends WithSubscriptions {
       this.paginators
         .filter((paginator) => paginator.isInitialized)
         .map(async (paginator) => {
-          await paginator.toTail({ keepPreviousItems: true, reset: 'yes' });
+          await paginator.recoverLoadedItems();
         }),
     );
 }

@@ -14,6 +14,7 @@ import {
 } from '../../../../src';
 import { getClientWithUser } from '../../test-utils/getClient';
 import { generateMsg } from '../../test-utils/generateMessage';
+import { generateChannel } from '../../test-utils/generateChannel';
 import type { FieldToDataResolver } from '../../../../src/pagination/types.normalization';
 import { MockOfflineDB } from '../../offline-support/MockOfflineDB';
 import * as utils from '../../../../src/utils';
@@ -2606,5 +2607,279 @@ describe('ChannelPaginator', () => {
     channel1.state.membership = { user };
 
     expect(paginator.matchesFilter(channel1)).toBeTruthy();
+  });
+
+  describe('recoverLoadedItems', () => {
+    // The server caps a page below what the list asks for, as the real API caps at 30.
+    const SERVER_PAGE_CAP = 2;
+    const channelResponse = (id: string, updatedAt: string, name = id) =>
+      generateChannel({
+        channel: {
+          id,
+          name,
+          type: 'messaging',
+          updated_at: convertDateToTimestamp(updatedAt),
+        },
+      });
+
+    const setup = async ({ pages = 2 } = {}) => {
+      let serverChannels = [
+        channelResponse('c1', '2024-01-04T00:00:00.000Z'),
+        channelResponse('c2', '2024-01-03T00:00:00.000Z'),
+        channelResponse('c3', '2024-01-02T00:00:00.000Z'),
+        channelResponse('c4', '2024-01-01T00:00:00.000Z'),
+      ];
+      const queryChannels = vi
+        .spyOn(client, 'queryChannels')
+        .mockImplementation(async (options) => {
+          const offset = options?.offset ?? 0;
+          const limit = Math.min(options?.limit ?? SERVER_PAGE_CAP, SERVER_PAGE_CAP);
+          return {
+            channels: serverChannels.slice(offset, offset + limit),
+            duration: '0ms',
+          } as never;
+        });
+      const paginator = new ChannelPaginator({
+        client,
+        filters: {},
+        sort: [{ field: 'updated_at', direction: -1 }],
+        paginatorOptions: { pageSize: SERVER_PAGE_CAP },
+      });
+      for (let page = 0; page < pages; page++) await paginator.toTail();
+      const setServerChannels = (next: typeof serverChannels) => (serverChannels = next);
+      return { paginator, queryChannels, serverChannels, setServerChannels };
+    };
+
+    it('rehydrates every loaded channel, including the ones that did not move, without a new list', async () => {
+      const { paginator, serverChannels, setServerChannels } = await setup();
+      const itemsBefore = paginator.items!;
+      const c3 = itemsBefore[2];
+      expect(itemsBefore.map((channel) => channel.id)).toEqual(['c1', 'c2', 'c3', 'c4']);
+      // While away, `c3` changed in place: same position, new data.
+      setServerChannels(
+        serverChannels.map((response) =>
+          response.channel.id === 'c3'
+            ? channelResponse('c3', '2024-01-02T00:00:00.000Z', 'c3 renamed')
+            : response,
+        ),
+      );
+      const publishedItems: Channel[][] = [];
+      const unsubscribe = paginator.state.subscribeWithSelector(
+        ({ items }) => ({ items }),
+        ({ items }) => publishedItems.push(items!),
+      );
+      publishedItems.length = 0;
+
+      await paginator.recoverLoadedItems();
+      unsubscribe();
+
+      // The instance the list holds carries the new data, though it sits on the second page.
+      expect(paginator.items![2]).toBe(c3);
+      expect(c3.data?.name).toBe('c3 renamed');
+      // Nothing moved, so the list keeps its array: no publish hands out a new one.
+      expect(paginator.items).toBe(itemsBefore);
+      expect(publishedItems).toEqual([]);
+    });
+
+    it('drops a loaded channel that another list owns now, though its own query still returns it', async () => {
+      const { paginator, serverChannels, setServerChannels } = await setup();
+      const owner = new ChannelPaginator({ client, filters: {} });
+      // `c3` belongs to `owner` once its data says so; every other channel stays with this list.
+      client.channelManager.setOwnershipResolver(({ channel }) =>
+        channel.data?.name === 'c3 for the owner' ? [owner.id] : [paginator.id],
+      );
+      client.channelManager.setPaginators([paginator, owner]);
+      setServerChannels(
+        serverChannels.map((response) =>
+          response.channel.id === 'c3'
+            ? channelResponse('c3', '2024-01-02T00:00:00.000Z', 'c3 for the owner')
+            : response,
+        ),
+      );
+
+      await paginator.recoverLoadedItems();
+
+      expect(paginator.items!.map((channel) => channel.id)).toEqual(['c1', 'c2', 'c4']);
+    });
+
+    it('leaves pagination open, so the next page finds the end of the list itself', async () => {
+      const { paginator, queryChannels } = await setup();
+      // the list is loaded to its end: the next page came back empty
+      await paginator.toTail();
+      expect(paginator.hasMoreTail).toBe(false);
+
+      await paginator.recoverLoadedItems();
+      expect(paginator.hasMoreTail).toBe(true);
+      const requests = queryChannels.mock.calls.length;
+      await paginator.toTail();
+
+      expect(queryChannels.mock.calls.length).toBe(requests + 1);
+      expect(paginator.hasMoreTail).toBe(false);
+    });
+
+    it('keeps paginating when the last recovery request asked for less than a page', async () => {
+      const { paginator, serverChannels, setServerChannels } = await setup();
+      setServerChannels([
+        ...serverChannels,
+        channelResponse('c5', '2023-12-31T00:00:00.000Z'),
+      ]);
+      // a short third page: 5 loaded, and the list believes it reached its end
+      await paginator.toTail();
+      expect(paginator.hasMoreTail).toBe(false);
+      setServerChannels([
+        ...serverChannels,
+        channelResponse('c5', '2023-12-31T00:00:00.000Z'),
+        channelResponse('c6', '2023-12-30T00:00:00.000Z'),
+      ]);
+
+      // the recovery's last request asks for the 1 channel still to cover, less than a page
+      await paginator.recoverLoadedItems();
+      await paginator.toTail();
+
+      expect(paginator.items!.map((channel) => channel.id)).toEqual([
+        'c1',
+        'c2',
+        'c3',
+        'c4',
+        'c5',
+        'c6',
+      ]);
+    });
+
+    it('shows the first page in its new order before the later pages arrive', async () => {
+      const { paginator, queryChannels, serverChannels, setServerChannels } =
+        await setup();
+      // while away, c3 got a message and is now the first channel
+      setServerChannels([
+        channelResponse('c3', '2024-01-05T00:00:00.000Z'),
+        ...serverChannels.filter((response) => response.channel.id !== 'c3'),
+      ]);
+      const answer = queryChannels.getMockImplementation()!;
+      let releaseSecondPage = () => {};
+      queryChannels.mockImplementation((options) => {
+        if (!options?.offset) return answer(options);
+        return new Promise(
+          (resolve) => (releaseSecondPage = () => resolve(answer(options))),
+        );
+      });
+
+      const recovery = paginator.recoverLoadedItems();
+      await vi.waitFor(() => expect(queryChannels.mock.lastCall?.[0]?.offset).toBe(2));
+
+      expect(paginator.items!.map((channel) => channel.id)).toEqual([
+        'c3',
+        'c1',
+        'c2',
+        'c4',
+      ]);
+      releaseSecondPage();
+      await recovery;
+    });
+
+    it('re-queries at most 150 channels and drops the rest, which load again on scroll', async () => {
+      const serverChannels = Array.from({ length: 160 }, (_, i) =>
+        channelResponse(
+          `d${i}`,
+          new Date(Date.UTC(2024, 0, 1) - i * 60_000).toISOString(),
+        ),
+      );
+      const queryChannels = vi
+        .spyOn(client, 'queryChannels')
+        .mockImplementation(async (options) => {
+          const offset = options?.offset ?? 0;
+          const limit = Math.min(options?.limit ?? 30, 30);
+          return {
+            channels: serverChannels.slice(offset, offset + limit),
+            duration: '0ms',
+          } as never;
+        });
+      const paginator = new ChannelPaginator({
+        client,
+        filters: {},
+        sort: [{ field: 'updated_at', direction: -1 }],
+        paginatorOptions: { pageSize: 30 },
+      });
+      while (paginator.hasMoreTail) await paginator.toTail();
+      expect(paginator.items).toHaveLength(160);
+      queryChannels.mockClear();
+
+      await paginator.recoverLoadedItems();
+
+      expect(queryChannels.mock.calls.map(([options]) => options?.offset)).toEqual([
+        0, 30, 60, 90, 120,
+      ]);
+      expect(paginator.items!.map((channel) => channel.id)).toEqual(
+        serverChannels.slice(0, 150).map((response) => response.channel.id),
+      );
+      expect(paginator.hasMoreTail).toBe(true);
+      await paginator.toTail();
+      expect(paginator.items).toHaveLength(160);
+    });
+
+    it('publishes a list it recovers in one page once', async () => {
+      const { paginator } = await setup({ pages: 1 });
+      const setActiveInterval = vi.spyOn(paginator, 'setActiveInterval');
+
+      await paginator.recoverLoadedItems();
+
+      const publishing = setActiveInterval.mock.calls.filter(
+        ([, options]) => options?.updateState !== false,
+      );
+      expect(publishing).toHaveLength(1);
+    });
+
+    it('shows a reorder on a later page once the last page is in', async () => {
+      const { paginator, serverChannels, setServerChannels } = await setup();
+      // while away, c4 moved above c3: both stay on the second page and nothing leaves the list
+      setServerChannels([
+        ...serverChannels.slice(0, 2),
+        channelResponse('c4', '2024-01-02T12:00:00.000Z'),
+        channelResponse('c3', '2024-01-02T00:00:00.000Z'),
+      ]);
+
+      await paginator.recoverLoadedItems();
+
+      expect(paginator.items!.map((channel) => channel.id)).toEqual([
+        'c1',
+        'c2',
+        'c4',
+        'c3',
+      ]);
+    });
+
+    it('shows a first page that shares no channel with the loaded list', async () => {
+      const { paginator, setServerChannels } = await setup();
+      // while away, c1 and c2 left and two channels the list never loaded took the top
+      setServerChannels([
+        channelResponse('y1', '2024-01-06T00:00:00.000Z'),
+        channelResponse('y2', '2024-01-05T00:00:00.000Z'),
+        channelResponse('c3', '2024-01-02T00:00:00.000Z'),
+        channelResponse('c4', '2024-01-01T00:00:00.000Z'),
+      ]);
+
+      await paginator.recoverLoadedItems();
+
+      expect(paginator.items!.map((channel) => channel.id)).toEqual([
+        'y1',
+        'y2',
+        'c3',
+        'c4',
+      ]);
+    });
+
+    it('shows the channels a list that was empty at the reconnect gained', async () => {
+      const { paginator, setServerChannels } = await setup({ pages: 0 });
+      setServerChannels([]);
+      await paginator.toTail();
+      expect(paginator.items).toEqual([]);
+      setServerChannels([
+        channelResponse('e1', '2024-01-02T00:00:00.000Z'),
+        channelResponse('e2', '2024-01-01T00:00:00.000Z'),
+      ]);
+
+      await paginator.recoverLoadedItems();
+
+      expect(paginator.items!.map((channel) => channel.id)).toEqual(['e1', 'e2']);
+    });
   });
 });

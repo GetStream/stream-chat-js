@@ -1,4 +1,5 @@
 import type {
+  AnyInterval,
   ItemCoordinates,
   PaginationQueryParams,
   PaginationQueryReturnValue,
@@ -38,6 +39,12 @@ const hasSameItems = (current: Channel[] | undefined, next: Channel[] | undefine
   for (let i = 0; i < next.length; i++) if (current[i] !== next[i]) return false;
   return true;
 };
+
+/**
+ * The most loaded channels a reconnect re-queries (`recoverLoadedItems`). Those loaded past it are
+ * dropped, and load again when the list is scrolled to them.
+ */
+const MAX_RECOVERED_ITEMS = 150;
 
 const DEFAULT_BACKEND_SORT: SortParamRequest[] = [
   { direction: -1, field: 'last_message_at' },
@@ -290,6 +297,8 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   private _replaceOfflineSeedOnResponse = false;
   /** The query handed to the sync manager, from the cache read until it runs. See `executeQuery`. */
   private _queryAwaitingSync: ChannelQueryShape | undefined;
+  /** The cids of the page the latest query returned, `undefined` when it failed. */
+  private _lastPageCids: string[] | undefined;
   protected _sortComparatorFactory: ChannelSortComparatorFactory | undefined;
   sortComparator: (a: Channel, b: Channel) => number;
   filterBuilder: FilterBuilder<ChannelFilters>;
@@ -491,6 +500,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
    * the page using `matchesFilter` and the comparator this metadata feeds.
    */
   override placeQueryPage(params: PlaceQueryPageParams<Channel, ChannelQueryShape>) {
+    this._lastPageCids = params.results?.items.map((channel) => channel.cid);
     const pendingPredefinedFilter = this._pendingPredefinedFilter;
     this._pendingPredefinedFilter = undefined;
     if (params.isFirstPage && params.results) {
@@ -727,6 +737,69 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       this._pendingPredefinedFilter = response.predefined_filter;
     }
     return { items };
+  };
+
+  private getLastPageCids() {
+    return this._lastPageCids;
+  }
+
+  /**
+   * The reconnect refresh. Re-queries every loaded page, then drops the loaded channels no page
+   * returned: they were deleted, left, hidden, or no longer match the filter.
+   *
+   * Each page asks for everything still to cover and the next one starts where it ended, so the
+   * server's page cap decides the step. A failed page removes nothing. At most
+   * {@link MAX_RECOVERED_ITEMS} channels are re-queried: the rest are dropped.
+   */
+  recoverLoadedItems = async () => {
+    const loadedCids = new Set((this.items ?? []).map((channel) => channel.cid));
+    const recoveredCount = Math.min(loadedCids.size, MAX_RECOVERED_ITEMS);
+    const returnedCids = new Set<string>();
+    const shape = this.getNextQueryShape();
+    let interval: AnyInterval | null = null;
+    let offset = 0;
+    let pageCount = 0;
+    do {
+      this._lastPageCids = undefined;
+      // the list's own query path, without publishing as the list is published once, below
+      const result = await this.executeQuery({
+        keepPreviousItems: true,
+        queryShape:
+          offset === 0 ? undefined : { ...shape, offset, limit: recoveredCount - offset },
+        reset: offset === 0 ? 'yes' : undefined,
+        silent: true,
+        updateState: false,
+      });
+      const page = this.getLastPageCids();
+      if (!result || !page) return;
+      if (result.targetInterval) {
+        interval = result.targetInterval;
+        // we update immediately for the first page as most of the stuff that is going
+        // to move is going to do it to this page
+        this.setActiveInterval(interval, { updateState: offset === 0 });
+      }
+      if (!page.length) break;
+      pageCount++;
+      for (const channel of result.stateCandidate.items ?? [])
+        returnedCids.add(channel.cid);
+      offset += page.length;
+    } while (offset < recoveredCount);
+
+    this.batch(
+      () => {
+        for (const cid of loadedCids) {
+          if (!returnedCids.has(cid)) this.removeItem({ id: cid });
+        }
+      },
+      { coalesce: true },
+    );
+    // the first page was published as it landed, so only later pages are left to show
+    if (interval && pageCount > 1) this.setActiveInterval(interval);
+    this.state.partialNext({
+      offset: this.items?.length ?? 0,
+      // optimistically assume we have more pages, at worst it's one extra pagination attempt
+      hasMoreTail: true,
+    });
   };
 
   /** The extracting step of the query pipeline: the response is the page. */
