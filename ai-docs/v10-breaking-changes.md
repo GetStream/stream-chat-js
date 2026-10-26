@@ -1594,6 +1594,17 @@ Common pattern for every generated or overridden `Channel` method: the trailing 
 - **Migrate:** subscribe with `channel.state.subscribeWithSelector((s) => ({ read: s.read }), ...)` (React: `useStateStore(channel.state, selector)`); replace in-place writes with whole-object assignment or `partialNext`; never assign `unreadCount` (use `markRead` / `markReadLocally`).
 - **Source:** `src/channel_state.ts:201-374` (`formatMessage` `:338-344`) (v10); `src/channel_state.ts:70-122` (v9)
 
+<a id="channel-state-members-merge"></a>
+
+### A channel response merges a page of members into `state.members`
+
+**Kind:** behavior · **Impact:** low
+
+- **v9:** every channel response (`watch()`, `query()`, the channel list) replaced `channel.state.members` with the members it carried, so a response with a smaller member page dropped members loaded before.
+- **v10:** a response that lists every member (its `members` match `channel.member_count`, which counts the same memberships the server pages) still replaces `state.members`, which drops members who left. A page of a larger member list, or a response whose count is missing or doesn't match, is merged in: members it carries are added or updated, members loaded before stay.
+- **Migrate:** nothing for reading members. Code that relied on a small member page clearing `state.members` reads the page from the response (`channel.query()`) or uses `channel.queryMembers()`.
+- **Source:** `src/channel.ts` (`_initializeState`, `holdsEveryMember`, `_hydrateMembers`) (v10)
+
 <a id="message-paginator"></a>
 
 ### Message storage moved from `ChannelState` to `channel.messagePaginator`
@@ -3485,6 +3496,7 @@ Changes where code written for v9 can type-check (or run untyped) against v10 an
 | Channel           | overrides of and spies on `query()` do not see `watch()` or the message paginator's queries                                                     | [channel-query](#channel-query)                                                   |
 | Channel           | `watch()` stores a page at a cursor or around a message without showing it; a newest page never moves a reader of an older window               | [channel-watch](#channel-watch)                                                   |
 | Channel           | `watch()` on a channel watched and loaded sends no request unless its options differ from the last watch's; refresh with `reload()`             | [channel-watch-returns-channel](#channel-watch-returns-channel)                   |
+| Channel           | a channel response with a page of members merges it into `state.members` instead of replacing them                                              | [channel-state-members-merge](#channel-state-members-merge)                       |
 | Channel           | id-less channels throw synchronously; server-auth bypass gone                                                                                   | [channel-id-guards](#channel-id-guards)                                           |
 | Channel           | `queryMembers()` on an id-less (members-only) channel rejects instead of sending `members`                                                      | [channel-query-members](#channel-query-members)                                   |
 | Channel           | `markRead()` is now the direct request (reporter path is `markReadViaReporter`)                                                                 | [channel-mark-read](#channel-mark-read)                                           |

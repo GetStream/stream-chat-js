@@ -3217,7 +3217,8 @@ describe('Channel _handleChannelEvent', function () {
 
 			await channel.query();
 
-			expect(Object.keys(channel.state.members).length).to.be.eq(1);
+			// the response holds 1 of the channel's 2 members: a page, merged into the stored ones
+			expect(Object.keys(channel.state.members).length).to.be.eq(2);
 			expect(Object.keys(channel.state.watchers).length).to.be.eq(1);
 			expect(Object.keys(channel.state.read).length).to.be.eq(1);
 			expect(channel.messagePaginator.anchoredHeadItems.length).to.be.eq(1);
@@ -4013,7 +4014,7 @@ describe('Channel last_message_at', () => {
 });
 
 describe('Channel _initializeState', () => {
-	it('should not keep members that have unwatched since last watch', async () => {
+	it('drops members who left when a response lists every member', async () => {
 		const client = await getClientWithUser();
 		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
 
@@ -4046,9 +4047,73 @@ describe('Channel _initializeState', () => {
 			],
 		};
 
-		channel._initializeState(secondState);
+		channel._initializeState({ ...secondState, channel: { member_count: 1 } });
 
 		expect(Object.keys(channel.state.members)).deep.to.be.equal(['alice']);
+	});
+
+	it('merges the members of a response whose member count does not match its member page', async () => {
+		const client = await getClientWithUser();
+		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
+		channel._initializeState({
+			channel: { member_count: 2 },
+			members: [{ user: { id: 'alice' } }, { user: { id: 'bob' } }],
+		});
+
+		// a channel whose stored count was left at 0
+		channel._initializeState({
+			channel: { member_count: 0 },
+			members: [{ user: { id: 'carol' } }],
+		});
+
+		expect(Object.keys(channel.state.members).sort()).deep.to.be.equal([
+			'alice',
+			'bob',
+			'carol',
+		]);
+	});
+
+	it('empties the members when a response says the channel has none', async () => {
+		const client = await getClientWithUser();
+		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
+		channel._initializeState({
+			channel: { member_count: 1 },
+			members: [{ user: { id: 'alice' } }],
+		});
+
+		channel._initializeState({ channel: { member_count: 0 }, members: [] });
+
+		expect(Object.keys(channel.state.members)).deep.to.be.equal([]);
+	});
+
+	it('merges the members of a response that does not say how many the channel has', async () => {
+		const client = await getClientWithUser();
+		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
+		channel._initializeState({ members: [{ user: { id: 'alice' } }] });
+
+		channel._initializeState({ members: [{ user: { id: 'bob' } }] });
+
+		expect(Object.keys(channel.state.members).sort()).deep.to.be.equal(['alice', 'bob']);
+	});
+
+	it('merges a page of a larger member list into the stored members', async () => {
+		const client = await getClientWithUser();
+		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
+		channel._initializeState({
+			channel: { member_count: 2 },
+			members: [{ user: { id: 'alice' } }, { user: { id: 'bob' } }],
+		});
+
+		channel._initializeState({
+			channel: { member_count: 3 },
+			members: [{ user: { id: 'carol', name: 'Carol' } }],
+		});
+
+		expect(Object.keys(channel.state.members).sort()).deep.to.be.equal([
+			'alice',
+			'bob',
+			'carol',
+		]);
 	});
 
 	it('should merge read state without overwriting existing users', async () => {
