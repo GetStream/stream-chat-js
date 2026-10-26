@@ -19,23 +19,23 @@ import { convertDateToTimestamp } from './test-utils/time';
 describe('ChannelManager', () => {
   let client: StreamChat;
 
-  // the channel manager watches the channels events bring in through `ensureWatched()`; its request
+  // the channel manager watches the channels events bring in through `watch()`; its request
   // is not under test here
-  let ensureWatched: MockInstance<Channel['ensureWatched']>;
-  const ensureWatchedOn = () => ensureWatched.mock.contexts.map((channel) => channel.cid);
+  let watchSpy: MockInstance<Channel['watch']>;
+  const watchCalledOn = () => watchSpy.mock.contexts.map((channel) => channel.cid);
 
   beforeEach(() => {
     client = getClientWithUser();
     vi.clearAllMocks();
-    ensureWatched = vi
-      .spyOn(Channel.prototype, 'ensureWatched')
-      .mockImplementation(function (this: Channel) {
-        return Promise.resolve(this);
-      });
+    watchSpy = vi.spyOn(Channel.prototype, 'watch').mockImplementation(function (
+      this: Channel,
+    ) {
+      return Promise.resolve(this);
+    });
   });
 
   afterEach(() => {
-    ensureWatched.mockRestore();
+    watchSpy.mockRestore();
   });
 
   // The client's own manager, configured for the test: it owns the channel store that
@@ -1158,7 +1158,7 @@ describe('ChannelManager', () => {
 
       client.dispatchEvent({ type: 'message.new', cid: ch.cid });
 
-      await vi.waitFor(() => expect(ensureWatched.mock.contexts).toContain(ch));
+      await vi.waitFor(() => expect(watchSpy.mock.contexts).toContain(ch));
     });
 
     it('leaves a channel that was never watched, or deliberately unwatched, alone', async () => {
@@ -1171,7 +1171,7 @@ describe('ChannelManager', () => {
       client.dispatchEvent({ type: 'message.new', cid: ch.cid });
 
       await vi.waitFor(() => expect(ingestItem).toHaveBeenCalledWith(ch));
-      expect(ensureWatched).not.toHaveBeenCalled();
+      expect(watchSpy).not.toHaveBeenCalled();
     });
 
     it('gives an event for a channel the app disconnected a live instance, never the disconnected one', async () => {
@@ -1188,7 +1188,7 @@ describe('ChannelManager', () => {
       expect(fresh?.pendingDisposal).toBe(false);
       expect(ingestItem).toHaveBeenCalledWith(fresh);
       expect(ingestItem).not.toHaveBeenCalledWith(ch);
-      expect(ensureWatched.mock.contexts).toEqual([fresh]);
+      expect(watchSpy.mock.contexts).toEqual([fresh]);
     });
 
     it('does not list a channel the app disconnected', () => {
@@ -1215,7 +1215,7 @@ describe('ChannelManager', () => {
       await vi.waitFor(() =>
         expect(removeItem).toHaveBeenCalledWith(expect.objectContaining({ item: ch })),
       );
-      expect(ensureWatched).not.toHaveBeenCalled();
+      expect(watchSpy).not.toHaveBeenCalled();
     });
 
     it('places the channel in the list without waiting for the watch to resolve', async () => {
@@ -1224,7 +1224,7 @@ describe('ChannelManager', () => {
       const ch = makeChannel('messaging:ordering');
       ch.watchStatus = ChannelWatchStatus.WasWatching;
       let resolveWatch: () => void = () => {};
-      ensureWatched.mockImplementationOnce(
+      watchSpy.mockImplementationOnce(
         () => new Promise<Channel>((resolve) => (resolveWatch = () => resolve(ch))),
       );
       client.channelManager.getOrCreateChannel(ch.cid, () => ch);
@@ -1479,7 +1479,7 @@ describe('ChannelManager', () => {
       });
 
       await vi.waitFor(() => {
-        expect(ensureWatchedOn()).toContain('messaging:added-1');
+        expect(watchCalledOn()).toContain('messaging:added-1');
         expect(paginator.items?.map((c) => c.cid)).toEqual([cid]);
       });
     });
@@ -1492,7 +1492,7 @@ describe('ChannelManager', () => {
       client.dispatchEvent({ type: 'notification.added_to_channel' } as never);
 
       await vi.waitFor(() => {
-        expect(ensureWatched).not.toHaveBeenCalled();
+        expect(watchSpy).not.toHaveBeenCalled();
         expect(paginator.items).toBeUndefined();
       });
     });
@@ -1597,7 +1597,7 @@ describe('ChannelManager', () => {
         client.dispatchEvent({ type: eventType, cid: 'messaging:unknown' });
         await new Promise((resolve) => setTimeout(resolve, 0));
 
-        expect(ensureWatched).not.toHaveBeenCalled();
+        expect(watchSpy).not.toHaveBeenCalled();
         expect(ingestItemSpy).not.toHaveBeenCalled();
       });
     },
@@ -1692,7 +1692,7 @@ describe('ChannelManager', () => {
       });
 
       await vi.waitFor(() => {
-        expect(ensureWatchedOn()).toContain('messaging:6');
+        expect(watchCalledOn()).toContain('messaging:6');
         const ch = makeChannel('messaging:6');
         expect(ingestItemSpy).toHaveBeenCalledWith(ch);
         expect(removeItemSpy).not.toHaveBeenCalled();
@@ -2346,7 +2346,7 @@ describe('ChannelManager', () => {
       });
 
       await vi.waitFor(() => {
-        expect(ensureWatched).not.toHaveBeenCalled();
+        expect(watchSpy).not.toHaveBeenCalled();
         expect(paginator.items).toHaveLength(1);
       });
     });

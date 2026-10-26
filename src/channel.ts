@@ -20,6 +20,7 @@ import {
   sanitizeOutgoingAttachments,
 } from './utils';
 import { asTimestampNS, msToNs, nowNs } from './utils/time';
+import { abortError, waitUnlessAborted } from './utils/abort';
 import { normalizeUploadFile } from './upload-utils';
 import type { StreamChat } from './client';
 import { chatLoggerSystem } from './logger';
@@ -84,6 +85,16 @@ import type { ChatApi } from './gen/chat/ChatApi';
 import { ChannelApi } from './gen/chat/ChannelApi';
 
 const logger = chatLoggerSystem.getLogger('channel');
+
+const WATCH_WAIT_ABORTED = 'The wait for the channel watch was aborted.';
+
+/** A watch query {@link Channel.watch} sent; cancelled once none of its callers waits. */
+type WatchQueryInFlight = {
+  options: ChannelGetOrCreateRequest;
+  promise: Promise<void>;
+  abortController: AbortController;
+  waitingCount: number;
+};
 
 /** Re-exported here because `src/messageOperations` is not in the root barrel. */
 export type {
@@ -195,14 +206,13 @@ export class Channel extends ChannelApi {
   private _activeRefCount = 0;
   /** Stops releaseUnusedChannels() from removing a channel while a query for it is still running. */
   private _channelQueriesInFlight = 0;
+  /** The watch queries {@link Channel.watch} callers wait for, joined by equal options. */
+  private _watchQueriesInFlight: WatchQueryInFlight[] = [];
   /**
-   * The watch {@link Channel.ensureWatched} started and is awaiting. Later `ensureWatched()` calls with
-   * the same options wait for it. `watch()` calls are not recorded here.
+   * The options of the last {@link Channel.watch} query that succeeded during the current watch: a
+   * `watch()` with these options has nothing to send. Cleared when the watch ends.
    */
-  private _ensureWatchedInFlight?: {
-    options: ChannelGetOrCreateRequest;
-    promise: Promise<unknown>;
-  };
+  private _lastWatchOptions?: ChannelGetOrCreateRequest;
   push_preferences?: Gen_ChannelPushPreferencesResponse;
   private readonly configController: ConfigController<ChannelConfig>;
   public readonly messageComposer: MessageComposer;
@@ -409,7 +419,7 @@ export class Channel extends ChannelApi {
 
   private disposedError() {
     return new Error(
-      `Channel ${this.cid} is pending disposal and cannot be used. Get a fresh instance via client.channelManager.ensure().`,
+      `Channel ${this.cid} is pending disposal and cannot be used. Get a fresh instance with client.channel('${this.type}', '${this.id}').`,
     );
   }
 
@@ -1163,7 +1173,7 @@ export class Channel extends ChannelApi {
 
   /**
    * See {@link ChannelLifecycleState.supersededBy}. A superseded instance receives no events and
-   * reports `watchStatus: NotWatching`: use its successor (`ensureWatched()` resolves with it). The SDK
+   * reports `watchStatus: NotWatching`: use its successor (`watch()` resolves with it). The SDK
    * does not disconnect it before logout, so call {@link Channel.disconnect} once nothing uses it.
    */
   get supersededBy() {
@@ -1221,7 +1231,7 @@ export class Channel extends ChannelApi {
 
   /**
    * See {@link ChannelLifecycleState.pendingDisposal}. Set only by {@link Channel.disconnect} and never
-   * reverted: `getClient()` throws, `client.channelManager.ensure()` returns a fresh instance for the
+   * reverted: `getClient()` throws, `client.channel()` returns a fresh instance for the
    * cid, and lists and recovery skip it.
    */
   get pendingDisposal() {
@@ -1234,6 +1244,8 @@ export class Channel extends ChannelApi {
   }
 
   set watchStatus(watchStatus: ChannelWatchStatus) {
+    // what the ended watch was asked for does not carry over to the next one
+    if (watchStatus !== ChannelWatchStatus.Watching) this._lastWatchOptions = undefined;
     this.state.partialNext({ watchStatus });
   }
 
@@ -1365,59 +1377,109 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Watches the channel unless it is watched already. A call made while an earlier `ensureWatched()`
-   * with the same options is in flight waits for that request instead of sending another. `watch()` and
-   * `query()` always send theirs. An already watched channel sends nothing, so `options` (such as a
-   * message window) apply only when the call watches it.
+   * Watches the channel and loads its state and messages. Sends nothing when that is done already
+   * (`Watching`, `initialized` and `messagePaginator.hasResults`) and the call asks for nothing
+   * new: it passes no options, or the same options as the last `watch()` that succeeded during the
+   * current watch. Other options, e.g. `presence: true`, send a query. A `watch()` already in
+   * flight with the same options is joined, not repeated.
+   * Refresh a watched channel with {@link Channel.reload}. Rejects with the query's error.
    *
-   * Rejects as the watch does, for every caller waiting on it. The next call sends a new request.
-   *
-   * @param options - Options for the watch request (optional). Calls join only a watch with the same
-   *   options.
-   * @returns The instance to use: this one, or the one that superseded it
-   *   ({@link Channel.supersededBy}).
-   */
-  async ensureWatched(options?: ChannelGetOrCreateRequest): Promise<Channel> {
-    if (this.supersededBy) return this.supersededBy.ensureWatched(options);
-    if (this.watchStatus === ChannelWatchStatus.Watching) return this;
-    const requested = options ?? {};
-    // Deep equality: key order doesn't matter.
-    if (
-      this._ensureWatchedInFlight &&
-      isEqual(this._ensureWatchedInFlight.options, requested)
-    ) {
-      await this._ensureWatchedInFlight.promise;
-      return this.afterEnsuredWatch(options);
-    }
-    const promise = this.watch(options);
-    this._ensureWatchedInFlight = { options: requested, promise };
-    try {
-      await promise;
-    } finally {
-      if (this._ensureWatchedInFlight?.promise === promise)
-        this._ensureWatchedInFlight = undefined;
-    }
-    return this.afterEnsuredWatch(options);
-  }
-
-  private afterEnsuredWatch(options?: ChannelGetOrCreateRequest) {
-    return this.supersededBy ? this.supersededBy.ensureWatched(options) : this;
-  }
-
-  /**
-   * Loads the initial state and watches for changes. The message paginator places the page of
-   * messages it fetched before this resolves (a page at a cursor or around a message is only
-   * stored; show it with `messagePaginator.jumpToMessage()`).
-   *
-   * @param options - Additional options for the query endpoint (optional).
-   * @param requestOptions - Per-request options such as an abort `signal` (optional). The signal
-   *   also ends the wait for a live socket.
-   * @returns The server response.
+   * @param options - Options for the watch query (optional).
+   * @param requestOptions - Per-request options (optional). Aborting `signal` ends this caller's
+   *   wait (at once if aborted already); the query is cancelled once every waiting caller has
+   *   aborted. The other options apply only when this call sends the query.
+   * @returns The instance to use: this one, or the one that superseded it ({@link supersededBy}).
    */
   async watch(
     options?: ChannelGetOrCreateRequest,
     requestOptions?: StreamRequestOptions,
-  ) {
+  ): Promise<Channel> {
+    // The caller's signal ends only its own wait; the query it may share has its own.
+    const { signal, ...queryRequestOptions } = requestOptions ?? {};
+    if (signal?.aborted) throw abortError(signal, WATCH_WAIT_ABORTED);
+    if (this.supersededBy) return this.supersededBy.watch(options, requestOptions);
+
+    // a copy: later changes to the caller's object must not change what is remembered or joined
+    const requested = structuredClone(options ?? {});
+    // Each part holds without the others: a thread query watches a channel without loading it,
+    // `query()` / `create()` load no messages, a custom `doRequest` can load messages but no state.
+    const isWatchedAndLoaded =
+      this.watchStatus === ChannelWatchStatus.Watching &&
+      this.initialized &&
+      this.messagePaginator.hasResults;
+    const repeatsLastWatch =
+      !Object.keys(requested).length || isEqual(this._lastWatchOptions, requested);
+    if (isWatchedAndLoaded && repeatsLastWatch) return this;
+
+    const existingJoinableQuery = this._watchQueriesInFlight.find((inFlight) =>
+      isEqual(inFlight.options, requested),
+    );
+    const watchQuery =
+      existingJoinableQuery ?? this.sendWatchQuery(requested, queryRequestOptions);
+    watchQuery.waitingCount += 1;
+    await waitUnlessAborted({
+      abortMessage: WATCH_WAIT_ABORTED,
+      onAbort: () => this.leaveWatchQuery(watchQuery),
+      promise: watchQuery.promise,
+      signal,
+    });
+    // The query may have handed the channel to an instance stored under the server's cid, which
+    // has taken in the response already.
+    return this.state.getLatestValue().supersededBy ?? this;
+  }
+
+  /**
+   * Sends the query {@link Channel.watch} callers wait for. It is cancelled through an abort
+   * controller of its own, once no caller waits any more ({@link leaveWatchQuery}).
+   */
+  private sendWatchQuery(
+    options: ChannelGetOrCreateRequest,
+    requestOptions: Omit<StreamRequestOptions, 'signal'>,
+  ): WatchQueryInFlight {
+    const abortController = new AbortController();
+    const promise = this.runWatchQuery(options, {
+      ...requestOptions,
+      signal: abortController.signal,
+    });
+    const watchQuery = { abortController, options, promise, waitingCount: 0 };
+    this._watchQueriesInFlight.push(watchQuery);
+    const forget = () => this.forgetWatchQuery(watchQuery);
+    // callers get the rejection through `promise`; this only clears the entry
+    promise.then(() => {
+      forget();
+      // what the query watched: this instance, or the one that took the channel over
+      const watched = this.state.getLatestValue().supersededBy ?? this;
+      if (watched.watchStatus === ChannelWatchStatus.Watching) {
+        watched._lastWatchOptions = options;
+      }
+    }, forget);
+    return watchQuery;
+  }
+
+  /** A caller stops waiting; the last one cancels and forgets the query, so the next is new. */
+  private leaveWatchQuery(watchQuery: WatchQueryInFlight) {
+    watchQuery.waitingCount -= 1;
+    if (watchQuery.waitingCount) return;
+    this.forgetWatchQuery(watchQuery);
+    watchQuery.abortController.abort();
+  }
+
+  /** Stops offering `watchQuery` to {@link Channel.watch} callers. */
+  private forgetWatchQuery(watchQuery: WatchQueryInFlight) {
+    this._watchQueriesInFlight = this._watchQueriesInFlight.filter(
+      (inFlight) => inFlight !== watchQuery,
+    );
+  }
+
+  /**
+   * Sends a watch query, watched or not, and places the page it fetched (a page at a cursor or
+   * around a message is only stored; `messagePaginator.jumpToMessage()` shows it).
+   * `requestOptions.signal` also ends the wait for a live socket.
+   */
+  private async runWatchQuery(
+    options?: ChannelGetOrCreateRequest,
+    requestOptions?: StreamRequestOptions,
+  ): Promise<void> {
     const defaultOptions = {
       state: true,
       watch: true,
@@ -1434,7 +1496,6 @@ export class Channel extends ChannelApi {
     this.data = state.channel;
 
     logger.withExtraTags('watch', this.cid).info('Started watching the channel.');
-    return state;
   }
 
   /**
@@ -1464,7 +1525,7 @@ export class Channel extends ChannelApi {
       // after the read: a message that fails meanwhile is loaded by then
       const failedBefore = paginator.getFailedMessagesToRestore(failedInDb);
 
-      await this.watch({ messages: { limit: requestedLimit } });
+      await this.runWatchQuery({ messages: { limit: requestedLimit } });
       this.offlineMode = false;
 
       paginator.restoreFailedMessages(failedBefore);
@@ -1682,7 +1743,7 @@ export class Channel extends ChannelApi {
   /**
    * The query behind `query()`, `watch()` and `create()`, in three steps: sends the request
    * ({@link requestChannelState}), has the message paginator place the returned page when
-   * `placeMessages` is set (`watch()`), then applies the rest of the response
+   * `placeMessages` is set (a watch query), then applies the rest of the response
    * ({@link applyChannelStateFromResponse}), all as a tracked query ({@link runTrackedQuery}).
    *
    * The page is placed before the rest is applied, because the rest reads the loaded messages: read
@@ -2834,6 +2895,7 @@ export class Channel extends ChannelApi {
     this.pinnedMessagesPaginator.dispose();
 
     // One update, last, so subscribers see both together. A deleted channel must not be re-watched.
+    this._lastWatchOptions = undefined;
     this.state.partialNext({
       pendingDisposal: true,
       watchStatus: ChannelWatchStatus.NotWatching,

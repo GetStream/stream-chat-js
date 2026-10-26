@@ -178,22 +178,20 @@ describe('client.queryChannels and the WebSocket', () => {
   });
 
   describe('composition with what already exists', () => {
-    it('two concurrent ensureWatched() calls for one channel still make one request', async () => {
-      // `ensureWatched()` joins a watch it already has in flight, so concurrent callers share one
-      // request. With the wait for a socket, N concurrent openers of the same channel become one wait
-      // and one watched request.
+    it('two concurrent watch() calls for one channel still make one request', async () => {
+      // `watch()` joins a watch it already has in flight, so concurrent openers of the same channel
+      // share one watch request.
       const channel = client.channelManager.ensure({ type: 'messaging', id: 'shared' });
-      client.wsConnection._setStatus({ isHealthy: false });
-      client.wsConnection.connection = new StableWSConnection({
-        wsConnection: client.wsConnection,
+      request.mockResolvedValue({
+        data: generateChannel({ channel: { id: 'shared', type: 'messaging' } }),
       });
-      vi.spyOn(channel, 'watch').mockResolvedValue(undefined as never);
 
-      const both = Promise.all([channel.ensureWatched(), channel.ensureWatched()]);
-      client.wsConnection._setStatus({ isHealthy: true, connectionId: 'shared-id' });
-      await both;
+      const [first, second] = await Promise.all([channel.watch(), channel.watch()]);
 
-      expect(channel.watch).toHaveBeenCalledTimes(1);
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(request.mock.calls[0][0].data).toMatchObject({ watch: true });
+      expect(first).toBe(channel);
+      expect(second).toBe(channel);
     });
 
     it('a channel whose watch failed is still recovered on the next reconnect', async () => {
