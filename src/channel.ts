@@ -419,7 +419,7 @@ export class Channel extends ChannelApi {
 
   private disposedError() {
     return new Error(
-      `Channel ${this.cid} is pending disposal and cannot be used. Get a fresh instance via client.channelManager.ensure().`,
+      `Channel ${this.cid} is pending disposal and cannot be used. Get a fresh instance with client.channel('${this.type}', '${this.id}').`,
     );
   }
 
