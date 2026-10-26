@@ -1,3 +1,34 @@
+## [10.0.0-rc.25](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.24...v10.0.0-rc.25) (2026-10-26)
+
+### ⚠ BREAKING CHANGES
+
+* Channel.watch() resolves with the channel instance to use (the channel, or the instance that superseded it) instead of the server response.
+- watch() sends no query for a channel that is already watched and loaded (watchStatus Watching, initialized, and messagePaginator.hasResults) when it passes no options or the same options as the last successful watch() during the current watch; other options send a query. It no longer refreshes a watched channel: use channel.reload(), and load other messages through channel.messagePaginator (jumpToMessage(), toTail(), toHead()).
+- A watch() while another with the same options is in flight joins it instead of sending a request.
+- Aborting requestOptions.signal ends only that caller's wait; the request is cancelled once every caller waiting for it has aborted.
+- Channel.ensureWatched() is removed (v10 release candidates only); call watch().
+```
+
+## Changelog
+
+- `Channel.watch()` resolves with the channel and sends no query for a
+channel already watched and loaded, unless it asks for options the
+current watch was not sent with. `Channel.ensureWatched()` is removed.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+### Bug Fixes
+
+* channel list reconciliation ([#1942](https://github.com/GetStream/stream-chat-js/issues/1942)) ([f7f9ec8](https://github.com/GetStream/stream-chat-js/commit/f7f9ec8b8b39a82bd141ea2675b894ce22d46800))
+* count hidden messages on each side of a jump page ([#1940](https://github.com/GetStream/stream-chat-js/issues/1940)) ([487ac3d](https://github.com/GetStream/stream-chat-js/commit/487ac3d8ffef20d03807b524e94913496b5940c3))
+* **poll:** keep translations from poll.updated in the poll state ([#1937](https://github.com/GetStream/stream-chat-js/issues/1937)) ([e47b75a](https://github.com/GetStream/stream-chat-js/commit/e47b75a0fca4baea926265708033dbc7ebe24749)), closes [#1878](https://github.com/GetStream/stream-chat-js/issues/1878)
+
+### Refactors
+
+* call the paginator intervals intervals, not windows ([#1939](https://github.com/GetStream/stream-chat-js/issues/1939)) ([69aa18a](https://github.com/GetStream/stream-chat-js/commit/69aa18af74554e1e36f7660c871521a0cbc792f0))
+* **channel:** remove no-op overrides, dead branch and redundant id guards ([#1936](https://github.com/GetStream/stream-chat-js/issues/1936)) ([050953e](https://github.com/GetStream/stream-chat-js/commit/050953e0873a41f8c2667302fe2739c724b18932)), closes [#1870](https://github.com/GetStream/stream-chat-js/issues/1870)
+* make Channel.watch() watch a channel only when it is not watched and loaded ([#1943](https://github.com/GetStream/stream-chat-js/issues/1943)) ([3c363cb](https://github.com/GetStream/stream-chat-js/commit/3c363cbd84d2f33a2916f0f52b72f32d1428aac1))
+
 ## [10.0.0-rc.24](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.23...v10.0.0-rc.24) (2026-10-22)
 
 ### ⚠ BREAKING CHANGES
