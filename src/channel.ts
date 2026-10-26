@@ -88,16 +88,6 @@ const logger = chatLoggerSystem.getLogger('channel');
 
 const WATCH_WAIT_ABORTED = 'The wait for the channel watch was aborted.';
 
-/**
- * Whether a channel response lists every member of the channel: its member page holds exactly
- * `member_count` members (the server counts the same memberships it pages). Such a list replaces
- * the stored one, which drops members who left; a page of a larger list, or one that doesn't match
- * the count, is merged in, keeping the members loaded before.
- */
-const holdsEveryMember = ({ channel, members }: ChannelStateResponseFields) =>
-  typeof channel?.member_count === 'number' &&
-  (members?.length ?? 0) === channel.member_count;
-
 /** A watch query {@link Channel.watch} sent; cancelled once none of its callers waits. */
 type WatchQueryInFlight = {
   options: ChannelGetOrCreateRequest;
@@ -2745,10 +2735,7 @@ export class Channel extends ChannelApi {
     const { state: clientState, user, userID } = this.getClient();
 
     if (state.members) {
-      this._hydrateMembers({
-        members: state.members,
-        overrideCurrentState: holdsEveryMember(state),
-      });
+      this._hydrateMembers({ members: state.members });
     }
 
     if (state.membership) {
