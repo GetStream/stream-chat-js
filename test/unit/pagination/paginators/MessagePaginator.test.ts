@@ -369,13 +369,13 @@ describe('MessagePaginator', () => {
         itemOrder: [{ field: 'created_at', direction: 1 }],
       });
       const result = await fetchAndExtractQueryPage(paginator, {
-        queryShape: { id_gt: 'from-cursor', limit: 30 },
+        queryShape: { id_lt: 'from-cursor', limit: 30 },
       });
 
       expect(channel.getReplies).toHaveBeenCalledWith(
         { parent_id: 'parent-1' },
         {
-          id_gt: 'from-cursor',
+          id_lt: 'from-cursor',
           limit: 30,
           sort: [{ field: 'created_at', direction: -1 }],
         },
@@ -387,6 +387,33 @@ describe('MessagePaginator', () => {
       ]);
       expect(result.tailward).toBe('oldest-reply');
       expect(result.headward).toBe('newest-reply');
+    });
+
+    it('requests newer replies oldest first even if the request sort is descending', async () => {
+      (channel.getReplies as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+        messages: [],
+      });
+      const paginator = new MessagePaginator({
+        channel,
+        itemIndex,
+        parentMessageId: 'parent-1',
+        requestSort: [{ field: 'created_at', direction: -1 }],
+        itemOrder: [{ field: 'created_at', direction: 1 }],
+      });
+      await fetchAndExtractQueryPage(paginator, {
+        queryShape: { id_gt: 'from-cursor', limit: 30 },
+      });
+
+      // Newest first would return the newest replies, not the ones right after the cursor
+      expect(channel.getReplies).toHaveBeenCalledWith(
+        { parent_id: 'parent-1' },
+        {
+          id_gt: 'from-cursor',
+          limit: 30,
+          sort: [{ field: 'created_at', direction: 1 }],
+        },
+      );
+      expect(paginator.requestSort).toEqual([{ field: 'created_at', direction: -1 }]);
     });
   });
 
