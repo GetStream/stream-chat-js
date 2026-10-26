@@ -52,7 +52,7 @@ const createChannelMock = ({
       },
       // The tracker ingests every member's read state, own user included, so it needs to know
       // which one is us before reporting how far *others* have got.
-      getClient: () => ({ userID: ownUserId }),
+      getClient: () => ({ userId: ownUserId }),
     } as unknown as Channel,
     readStore,
   };
