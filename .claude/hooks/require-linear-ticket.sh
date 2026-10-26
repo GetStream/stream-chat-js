@@ -8,14 +8,14 @@
 #     (e.g. mcp__github__create_pull_request)
 # Every other tool call exits 0.
 #
-# Team keys default to REACT (React/JS), RN (React Native) and CHAT; override with LINEAR_TEAM_KEYS="A B C".
+# Team keys default to REACT, RN, CHAT and VID; override with LINEAR_TEAM_KEYS="A B C".
 # If LINEAR_API_KEY is set, the ticket is also verified against Linear's API.
 #
 # Requires: bash, jq, curl.
 
 set -uo pipefail
 
-TEAM_KEYS="${LINEAR_TEAM_KEYS:-REACT RN CHAT}"
+TEAM_KEYS="${LINEAR_TEAM_KEYS:-REACT RN CHAT VID}"
 KEYS_ALT="$(echo "$TEAM_KEYS" | tr -s ' ,' '|' | sed 's/^|//; s/|$//')"
 MCP_PR_TOOL_RE='^mcp__.*(create_pull_request|create_pr|pull_request_create|open_pull_request)'
 GH_PR_CREATE_RE='(^|[;&|(`]|\$\()[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*gh[[:space:]]+pr[[:space:]]+(create|new)([[:space:]]|$)'
@@ -70,11 +70,11 @@ if [ -z "$ids" ]; then
 Blocked: no Linear ticket ID found for this pull request.
 
 Checked the PR title and PR body for an ID matching one of the team keys:
-${TEAM_KEYS} (e.g. REACT-123, RN-45, CHAT-678). The branch name does not count.
+${TEAM_KEYS} (e.g. REACT-123, RN-45, CHAT-678, VID-910). The branch name does not count.
 
 Before opening the PR:
   1. Find the existing Linear ticket for this work, or create one in the REACT team
-     (or RN if the change is for the React Native SDK, or CHAT).
+     (or RN if the change is for the React Native SDK).
   2. Put its ID in the PR title or PR body
      (e.g. 'Ticket: https://linear.app/stream/issue/REACT-123').
   3. Retry creating the PR.
