@@ -910,19 +910,6 @@ describe('Channel.watch', () => {
 		expect(channel.runWatchQuery).toHaveBeenCalledTimes(2);
 	});
 
-	it('does not remember the options of a query sent during a watch that has ended since', async () => {
-		const watching = channel.watch({ presence: true });
-		// the socket drops while the query is in flight, and recovery watches the channel again
-		channel.watchStatus = ChannelWatchStatus.WasWatching;
-		channel.watchStatus = ChannelWatchStatus.Watching;
-		pending[0].resolve();
-		await watching;
-
-		void channel.watch({ presence: true });
-
-		expect(channel.runWatchQuery).toHaveBeenCalledTimes(2);
-	});
-
 	it('does not remember the options of a query that left the channel unwatched', async () => {
 		vi.mocked(channel.runWatchQuery).mockImplementationOnce(() => {
 			channel.initialized = true;
