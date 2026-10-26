@@ -88,6 +88,10 @@ const logger = chatLoggerSystem.getLogger('channel');
 
 const WATCH_WAIT_ABORTED = 'The wait for the channel watch was aborted.';
 
+/** Whether a {@link Channel.watch} call passes options, which ask for more than the watch alone. */
+const hasWatchOptions = (options: ChannelGetOrCreateRequest) =>
+  Object.keys(options).length > 0;
+
 /** A watch query {@link Channel.watch} sent; cancelled once none of its callers waits. */
 type WatchQueryInFlight = {
   options: ChannelGetOrCreateRequest;
@@ -208,6 +212,13 @@ export class Channel extends ChannelApi {
   private _channelQueriesInFlight = 0;
   /** The watch queries {@link Channel.watch} callers wait for, joined by equal options. */
   private _watchQueriesInFlight: WatchQueryInFlight[] = [];
+  /**
+   * The options of the last {@link Channel.watch} query that succeeded during the current watch: a
+   * `watch()` with these options has nothing to send. Cleared when the watch ends.
+   */
+  private _lastWatchOptions?: ChannelGetOrCreateRequest;
+  /** Counts the watches that ended, so a query sent during an earlier watch is not remembered. */
+  private _endedWatchCount = 0;
   push_preferences?: Gen_ChannelPushPreferencesResponse;
   private readonly configController: ConfigController<ChannelConfig>;
   public readonly messageComposer: MessageComposer;
@@ -1239,6 +1250,7 @@ export class Channel extends ChannelApi {
   }
 
   set watchStatus(watchStatus: ChannelWatchStatus) {
+    if (watchStatus !== ChannelWatchStatus.Watching) this.endWatch();
     this.state.partialNext({ watchStatus });
   }
 
@@ -1370,11 +1382,12 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Watches the channel and loads its state and messages, unless that is done already (`Watching`,
-   * `initialized` and `messagePaginator.hasResults`): then it sends nothing, so `options`, which
-   * only shape the query, take no effect (refresh with {@link Channel.reload}, load other messages
-   * through `messagePaginator`). A `watch()` with the same options already in flight is joined,
-   * not repeated. Rejects with the query's error.
+   * Watches the channel and loads its state and messages. Sends nothing when that is done already
+   * (`Watching`, `initialized` and `messagePaginator.hasResults`) and the call asks for nothing
+   * new: it passes no options, or the same options as the last `watch()` that succeeded during the
+   * current watch. Other options, e.g. `presence: true`, send a query. A `watch()` already in
+   * flight with the same options is joined, not repeated.
+   * Refresh a watched channel with {@link Channel.reload}. Rejects with the query's error.
    *
    * @param options - Options for the watch query (optional).
    * @param requestOptions - Per-request options (optional). Aborting `signal` ends this caller's
@@ -1390,8 +1403,9 @@ export class Channel extends ChannelApi {
     const { signal, ...queryRequestOptions } = requestOptions ?? {};
     if (signal?.aborted) throw abortError(signal, WATCH_WAIT_ABORTED);
     if (this.supersededBy) return this.supersededBy.watch(options, requestOptions);
-    if (this.isWatchedAndLoaded) return this;
-    const requested = options ?? {};
+    // a copy: later changes to the caller's object must not change what is remembered or joined
+    const requested = structuredClone(options ?? {});
+    if (this.hasNothingToSend(requested)) return this;
     const watchQuery =
       this.findJoinableWatchQuery(requested) ??
       this.sendWatchQuery(requested, queryRequestOptions);
@@ -1420,7 +1434,20 @@ export class Channel extends ChannelApi {
     );
   }
 
-  /** The watch query in flight a {@link Channel.watch} with these options can join. */
+  /** Whether a {@link Channel.watch} with `options` has nothing to send. */
+  private hasNothingToSend(options: ChannelGetOrCreateRequest) {
+    return this.isWatchedAndLoaded && this.asksNothingNew(options);
+  }
+
+  /**
+   * Whether a {@link Channel.watch} with `options` asks for nothing the current watch lacks: a call
+   * without options asks for the watch alone; any other must repeat the last successful one.
+   */
+  private asksNothingNew(options: ChannelGetOrCreateRequest) {
+    return !hasWatchOptions(options) || isEqual(this._lastWatchOptions, options);
+  }
+
+  /** The watch query in flight, sent with these options, that a {@link Channel.watch} can join. */
   private findJoinableWatchQuery(options: ChannelGetOrCreateRequest) {
     return this._watchQueriesInFlight.find((watchQuery) =>
       isEqual(watchQuery.options, options),
@@ -1442,9 +1469,18 @@ export class Channel extends ChannelApi {
     });
     const watchQuery = { abortController, options, promise, waitingCount: 0 };
     this._watchQueriesInFlight.push(watchQuery);
+    const endedWatchCountAtSend = this._endedWatchCount;
     const forget = () => this.forgetWatchQuery(watchQuery);
     // callers get the rejection through `promise`; this only clears the entry
-    promise.then(forget, forget);
+    promise.then(() => {
+      forget();
+      const successor = this.state.getLatestValue().supersededBy;
+      // the instance that took the channel over also took in this response
+      if (successor) successor.rememberWatchOptions(options);
+      else if (this._endedWatchCount === endedWatchCountAtSend) {
+        this.rememberWatchOptions(options);
+      }
+    }, forget);
     return watchQuery;
   }
 
@@ -1454,6 +1490,18 @@ export class Channel extends ChannelApi {
     if (watchQuery.waitingCount) return;
     this.forgetWatchQuery(watchQuery);
     watchQuery.abortController.abort();
+  }
+
+  /** Notes what a successful {@link Channel.watch} query asked for, if the channel is watched. */
+  private rememberWatchOptions(options: ChannelGetOrCreateRequest) {
+    if (this.watchStatus === ChannelWatchStatus.Watching)
+      this._lastWatchOptions = options;
+  }
+
+  /** The watch ended: what it was asked for does not carry over to the next one. */
+  private endWatch() {
+    this._lastWatchOptions = undefined;
+    this._endedWatchCount += 1;
   }
 
   /** Stops offering `watchQuery` to {@link Channel.watch} callers. */
@@ -2887,6 +2935,7 @@ export class Channel extends ChannelApi {
     this.pinnedMessagesPaginator.dispose();
 
     // One update, last, so subscribers see both together. A deleted channel must not be re-watched.
+    this.endWatch();
     this.state.partialNext({
       pendingDisposal: true,
       watchStatus: ChannelWatchStatus.NotWatching,

@@ -828,14 +828,113 @@ describe('Channel.watch', () => {
 		await retry;
 	});
 
-	it('sends nothing on a channel watched and loaded, whatever options it is given', async () => {
-		loadAsWatched();
+	describe('on a channel watched and loaded', () => {
+		beforeEach(() => {
+			loadAsWatched();
+		});
 
-		expect(await channel.watch({ messages: { id_around: 'm1', limit: 20 } })).toBe(
-			channel,
-		);
+		it('sends nothing when called without options', async () => {
+			expect(await channel.watch()).toBe(channel);
+			expect(await channel.watch({})).toBe(channel);
 
-		expect(channel.runWatchQuery).not.toHaveBeenCalled();
+			expect(channel.runWatchQuery).not.toHaveBeenCalled();
+		});
+
+		it('sends a query for options the last watch did not ask for', async () => {
+			const watching = channel.watch({ presence: true });
+
+			expect(channel.runWatchQuery).toHaveBeenCalledTimes(1);
+			pending[0].resolve();
+			expect(await watching).toBe(channel);
+		});
+
+		it('sends nothing for the options of the last successful watch, and nothing without options', async () => {
+			const watching = channel.watch({ presence: true });
+			pending[0].resolve();
+			await watching;
+
+			await channel.watch({ presence: true });
+			await channel.watch();
+
+			expect(channel.runWatchQuery).toHaveBeenCalledTimes(1);
+		});
+
+		it('sends again for the same options once the watch they were sent with has ended', async () => {
+			const watching = channel.watch({ presence: true });
+			pending[0].resolve();
+			await watching;
+			// the socket dropped and recovery watched the channel again
+			channel.watchStatus = ChannelWatchStatus.WasWatching;
+			channel.watchStatus = ChannelWatchStatus.Watching;
+
+			const rewatching = channel.watch({ presence: true });
+
+			expect(channel.runWatchQuery).toHaveBeenCalledTimes(2);
+			pending[1].resolve();
+			await rewatching;
+		});
+
+		it('does not remember the options of a failed watch', async () => {
+			const failing = channel.watch({ presence: true });
+			pending[0].reject(new Error('network'));
+			await expect(failing).rejects.toThrow('network');
+
+			const retry = channel.watch({ presence: true });
+
+			expect(channel.runWatchQuery).toHaveBeenCalledTimes(2);
+			pending[1].resolve();
+			await retry;
+		});
+	});
+
+	it('sends its own query while a watch with other options is in flight', async () => {
+		// a page around a message would not load the newest one a plain watch() must leave behind
+		const around = channel.watch({ messages: { id_around: 'm1' } });
+		const plain = channel.watch();
+
+		expect(channel.runWatchQuery).toHaveBeenCalledTimes(2);
+		pending[0].resolve();
+		pending[1].resolve();
+		expect(await Promise.all([around, plain])).toEqual([channel, channel]);
+	});
+
+	it('compares with the options as they were passed, not as the caller changed them later', async () => {
+		const options = { presence: true };
+		const watching = channel.watch(options);
+		pending[0].resolve();
+		await watching;
+		options.members = { limit: 50 };
+
+		void channel.watch(options);
+
+		expect(channel.runWatchQuery).toHaveBeenCalledTimes(2);
+	});
+
+	it('does not remember the options of a query sent during a watch that has ended since', async () => {
+		const watching = channel.watch({ presence: true });
+		// the socket drops while the query is in flight, and recovery watches the channel again
+		channel.watchStatus = ChannelWatchStatus.WasWatching;
+		channel.watchStatus = ChannelWatchStatus.Watching;
+		pending[0].resolve();
+		await watching;
+
+		void channel.watch({ presence: true });
+
+		expect(channel.runWatchQuery).toHaveBeenCalledTimes(2);
+	});
+
+	it('does not remember the options of a query that left the channel unwatched', async () => {
+		vi.mocked(channel.runWatchQuery).mockImplementationOnce(() => {
+			channel.initialized = true;
+			channel.messagePaginator.placeExternalQueryPage([], 25);
+			return Promise.resolve();
+		});
+		await channel.watch({ watch: false });
+		channel.watchStatus = ChannelWatchStatus.Watching;
+
+		void channel.watch({ watch: false });
+
+		expect(channel.runWatchQuery).toHaveBeenCalledTimes(2);
 	});
 
 	describe('request options', () => {

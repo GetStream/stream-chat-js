@@ -194,6 +194,27 @@ describe('ChannelManager channel store', () => {
       expect(storedWatchQuery).not.toHaveBeenCalled();
     });
 
+    it('watch() remembers its options on the instance superseding it during its watch', async () => {
+      const stored = client.channelManager.ensure({
+        type: 'messaging',
+        id: '!members-xyz',
+      });
+      const created = client.channelManager.ensure({
+        type: 'messaging',
+        data: { members: [{ user_id: 'ann' }, { user_id: 'bob' }] },
+      });
+      respondWith('!members-xyz');
+      await created.watch({ presence: true });
+      const storedWatchQuery = vi.spyOn(
+        stored as unknown as { runWatchQuery: () => Promise<unknown> },
+        'runWatchQuery',
+      );
+
+      expect(await stored.watch({ presence: true })).toBe(stored);
+
+      expect(storedWatchQuery).not.toHaveBeenCalled();
+    });
+
     it('watch() on a superseded instance resolves with its successor, sending nothing', async () => {
       const stored = client.channelManager.ensure({
         type: 'messaging',
