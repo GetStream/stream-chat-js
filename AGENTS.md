@@ -89,6 +89,8 @@ yarn lint-fix
 - Follow the project’s “zero warnings” policy—fix new warnings and avoid introducing any.
 - Use Conventional Commits (enforced via commitlint in CI). Examples: feat: …, fix: …, docs: …, refactor: …, chore: ….
 - Ensure public API changes include docs.
+- Every PR needs a Linear ticket. Before opening one, find the ticket for the work (or create one) and put its ID in the PR title or PR body, e.g. `Ticket: https://linear.app/stream/issue/REACT-123`. File tickets in the `REACT` team, or in `RN` when the change is driven by the React Native SDK. `CHAT` tickets are accepted too.
+- A Claude Code PreToolUse hook (`.claude/hooks/require-linear-ticket.sh`) blocks `gh pr create` and MCP PR-creation tools unless a `REACT-…`, `RN-…` or `CHAT-…` ID appears in the PR title or PR body. The branch name does not count. If `LINEAR_API_KEY` is set, it also checks that the ticket exists.
 
 #### Testing policy
 
