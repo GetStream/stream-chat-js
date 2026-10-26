@@ -742,10 +742,10 @@ export class MessageIntervalPaginator extends BasePaginator<
   }
 
   /**
-   * Prepares an external query for a page of these messages: the channel query `channel.watch()`
-   * sends with the `messages` options its caller gave. Call it before
-   * sending the query, and place the returned page with `placePage` before the response's read
-   * state is applied: the read state is resolved against the loaded messages.
+   * Prepares an external query for a page of these messages: the watch query the channel sends
+   * (`channel.watch()`, `channel.reload()`) with the `messages` options its caller gave. Call it
+   * before sending the query, and place the returned page with `placePage` before the response's
+   * read state is applied: the read state is resolved against the loaded messages.
    *
    * - `messagePaginationParams`: the options to send as the query's `messages`, with `limit` set to
    *   the page size when not given.

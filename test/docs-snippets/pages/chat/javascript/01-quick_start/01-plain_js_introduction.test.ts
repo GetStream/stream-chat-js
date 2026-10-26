@@ -59,12 +59,12 @@ describe(PAGE, () => {
     });
 
     // fetch the channel state, subscribe to future updates
-    const state = await channel.watch();
+    await channel.watch();
     // #endregion snippet
 
     expect(client.userID).toBe(userId);
-    expect(state.channel?.id).toBe(channelId);
-    expect(state.channel?.custom.name).toBe('Awesome channel about traveling');
+    expect(channel.data?.id).toBe(channelId);
+    expect(channel.data?.custom?.name).toBe('Awesome channel about traveling');
     expect(channel.initialized).toBe(true);
 
     // #region snippet docs="chat/javascript/01-quick_start/01-plain_js_introduction.md" heading="Messages" tab="JavaScript" index=1
