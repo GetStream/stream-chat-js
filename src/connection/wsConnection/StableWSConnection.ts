@@ -43,13 +43,13 @@ export class StableWSConnection {
 
   connectionOpen?: ConnectAPIResponse;
   consecutiveFailures: number;
-  healthCheckTimeoutRef?: NodeJS.Timeout;
+  healthCheckTimeoutRef?: ReturnType<typeof setTimeout>;
   isConnecting: boolean;
   isDisconnected: boolean;
   isHealthy: boolean;
   isResolved?: boolean;
   lastEvent: Date | null;
-  connectionCheckTimeoutRef?: NodeJS.Timeout;
+  connectionCheckTimeoutRef?: ReturnType<typeof setTimeout>;
   rejectPromise?: (
     reason?: Error & {
       code?: string | number;

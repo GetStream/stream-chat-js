@@ -14,7 +14,7 @@ import { DEFAULT_NOTIFICATION_MANAGER_CONFIG } from './configuration';
 
 export class NotificationManager {
   store: StateStore<NotificationState>;
-  private timeouts: Map<string, NodeJS.Timeout> = new Map();
+  private timeouts: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
   private readonly configController: ConfigController<NotificationManagerConfig>;
   get configState(): StateStore<NotificationManagerConfig> {
