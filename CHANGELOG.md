@@ -1,3 +1,12 @@
+## [9.54.1](https://github.com/GetStream/stream-chat-js/compare/v9.54.0...v9.54.1) (2026-10-27)
+
+### Bug Fixes
+
+* **poll:** keep translations from poll.updated in the poll state ([#1938](https://github.com/GetStream/stream-chat-js/issues/1938)) ([3c1a18a](https://github.com/GetStream/stream-chat-js/commit/3c1a18a0be4d5086cce007b9e98ebab435bf386a)), closes [#1878](https://github.com/GetStream/stream-chat-js/issues/1878)
+* refresh the token before reconnecting when the server reports it expired ([#1944](https://github.com/GetStream/stream-chat-js/issues/1944)) ([2910396](https://github.com/GetStream/stream-chat-js/commit/291039695ca65ce7ec269daca486a5638e903568)), closes [GetStream/chat#19359](https://github.com/GetStream/chat/issues/19359)
+* type fixes from docs check; add docs snippet runner ([#1902](https://github.com/GetStream/stream-chat-js/issues/1902)) ([2095fc1](https://github.com/GetStream/stream-chat-js/commit/2095fc155912e34a7c0540c546be3c862d66d617))
+* type issues from platform docs check; add docs snippet test for the platform docs ([#1914](https://github.com/GetStream/stream-chat-js/issues/1914)) ([c7706d2](https://github.com/GetStream/stream-chat-js/commit/c7706d223873895204562857d9a7ad329a237ad0))
+
 ## [9.54.0](https://github.com/GetStream/stream-chat-js/compare/v9.53.0...v9.54.0) (2026-10-05)
 
 ### Bug Fixes
