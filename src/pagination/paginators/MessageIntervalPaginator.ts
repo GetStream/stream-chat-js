@@ -533,7 +533,7 @@ export class MessageIntervalPaginator extends BasePaginator<
         .getClient()
         .getReplies(
           { parent_id: this.parentMessageId },
-          { ...options, sort: this.requestSort },
+          { ...options, sort: this.getRepliesRequestSort(options) },
         );
       return { repliesResponse, source: 'replies' };
     }
@@ -2081,6 +2081,17 @@ export class MessageIntervalPaginator extends BasePaginator<
 
   override filterQueryResults(items: LocalMessage[]) {
     return items.filter(this.shouldIncludeMessageInInterval.bind(this));
+  }
+
+  /**
+   * The sort of a replies request. A page newer than a cursor (`id_gt`, `created_at_after`, ...)
+   * must hold the replies right after the cursor, so it is requested oldest first: newest first
+   * returns the newest replies and skips the ones in between. The page is put in item order
+   * afterwards, so the request sort only decides which replies the page holds.
+   */
+  private getRepliesRequestSort(options: MessageQueryShape): MessagePaginatorSort {
+    if (getLinearQueryDirection(options) !== 'headward') return this.requestSort;
+    return this.requestSort.map((sort) => ({ ...sort, direction: 1 }));
   }
 
   private getCanonicalQueryItems(items: LocalMessage[]): LocalMessage[] {
