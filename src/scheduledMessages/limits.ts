@@ -1,5 +1,6 @@
 import type { Channel } from '../channel';
-import type { ScheduledMessageLimits, ScheduledMessagesChannelConfig } from '../types';
+import type { ScheduledMessagesChannelConfig } from '../types';
+import type { ScheduledMessageLimits } from './types';
 
 export const DEFAULT_SCHEDULED_MESSAGE_LIMITS: ScheduledMessageLimits = {
   maxLeadTimeSeconds: 120 * 24 * 60 * 60,

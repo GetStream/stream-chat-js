@@ -15,39 +15,17 @@ import type {
   ScheduledMessageResponse,
   UpdateScheduledMessageOptions,
 } from '../types';
+import type {
+  ScheduledMessageEvent,
+  ScheduledMessageHandler,
+  ScheduledMessageManagerOptions,
+  ScheduledMessageManagerState,
+  ScheduledMessageMap,
+  ScheduledMessagePredicate,
+  ScheduledMessageQueryResultHandler,
+} from './types';
 
 export const SCHEDULED_MESSAGES_LOAD_LIMIT = 100;
-
-export type ScheduledMessageMap = Map<string, ScheduledMessageResponse>;
-
-export type ScheduledMessageManagerState = {
-  isDisabled: boolean;
-  isLoaded: boolean;
-  isLoading: boolean;
-  scheduledMessages: ScheduledMessageMap;
-  lastQueryError?: Error;
-  next?: string;
-};
-
-export type ScheduledMessageManagerOptions = {
-  client: StreamChat;
-};
-
-export type ScheduledMessageEvent = Event & {
-  scheduled_message: ScheduledMessageResponse;
-};
-
-export type ScheduledMessageHandler = (
-  scheduledMessage: ScheduledMessageResponse,
-) => void;
-
-export type ScheduledMessagePredicate = (
-  scheduledMessage: ScheduledMessageResponse,
-) => boolean;
-
-export type ScheduledMessageQueryResultHandler = (
-  response: QueryScheduledMessagesResponse,
-) => Partial<ScheduledMessageManagerState> | void;
 
 const UPSERT_EVENT_TYPES: EventTypes[] = [
   ScheduledMessageEventType.Created,

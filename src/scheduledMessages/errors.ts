@@ -1,7 +1,6 @@
 import { ErrorFromResponse, ScheduledMessageErrorReason } from '../types';
 import type { APIErrorResponse } from '../types';
-
-export type ScheduledMessageAPIError = ErrorFromResponse<APIErrorResponse>;
+import type { ScheduledMessageAPIError } from './types';
 
 const REASON_BY_ERROR_CODE: Record<number, ScheduledMessageErrorReason> = {
   114: ScheduledMessageErrorReason.Disabled,

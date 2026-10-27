@@ -4945,13 +4945,6 @@ export type ScheduledMessagesChannelConfig = {
   scheduled_messages_min_lead_time_seconds?: number;
 };
 
-export type ScheduledMessageLimits = {
-  maxLeadTimeSeconds: number;
-  maxPerChannel: number;
-  maxPerUser: number;
-  minLeadTimeSeconds: number;
-};
-
 export type ScheduledMessageLocation = {
   created_by_device_id: string;
   end_at?: string;
