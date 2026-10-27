@@ -1467,6 +1467,19 @@ describe('MessageComposer', () => {
       expect(spyClear).toHaveBeenCalled();
     });
 
+    it('composes custom message data under custom', async () => {
+      const { messageComposer } = setup();
+      messageComposer.textComposer.setText('Test message');
+      const data = { priority: 'high' };
+      messageComposer.customDataManager.setMessageData(data);
+
+      const result = await messageComposer.compose();
+
+      expect(result?.message.custom).toEqual({ priority: 'high' });
+      expect(result?.localMessage.custom).toEqual({ priority: 'high' });
+      expect(result?.message).not.toHaveProperty('priority');
+    });
+
     it('should compose message', async () => {
       const { messageComposer } = setup();
       messageComposer.textComposer.setText('Test message');

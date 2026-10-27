@@ -18,17 +18,17 @@ export const createCustomDataCompositionMiddleware = (
       forward,
     }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
       const data = composer.customDataManager.customMessageData;
-      if (!data) return forward();
+      if (!data || !Object.keys(data).length) return forward();
 
       return next({
         ...state,
         localMessage: {
           ...state.localMessage,
-          ...data,
+          custom: { ...state.localMessage.custom, ...data },
         },
         message: {
           ...state.message,
-          ...data,
+          custom: { ...state.message.custom, ...data },
         },
       });
     },
@@ -46,13 +46,13 @@ export const createDraftCustomDataCompositionMiddleware = (
       forward,
     }: MiddlewareHandlerParams<MessageDraftComposerMiddlewareValueState>) => {
       const data = composer.customDataManager.customMessageData;
-      if (!data) return forward();
+      if (!data || !Object.keys(data).length) return forward();
 
       return next({
         ...state,
         draft: {
           ...state.draft,
-          ...data,
+          custom: { ...state.draft.custom, ...data },
         },
       });
     },

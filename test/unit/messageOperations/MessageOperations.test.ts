@@ -743,6 +743,40 @@ describe('MessageOperations — a replacing request can delegate to the default'
     expect(defaults.update.mock.calls[0][0]).toMatchObject({ id: 'm1', text: 'tweaked' });
   });
 
+  it('update: the default receives the options the handler passes on', async () => {
+    const { defaults, ops } = setup({
+      update: (p, defaultRequest) =>
+        defaultRequest({ ...p, options: { ...p.options, skip_push: true } }),
+    });
+
+    await ops.update({
+      localMessage: makeLocalMessage({ id: 'm1', status: 'received' }),
+      options: { skip_enrich_url: true },
+    });
+
+    expect(defaults.update.mock.calls[0][1]).toEqual({
+      skip_enrich_url: true,
+      skip_push: true,
+    });
+  });
+
+  it('update: options the handler passes on are still limited to the supported ones', async () => {
+    const { defaults, ops } = setup({
+      update: (p, defaultRequest) =>
+        defaultRequest({
+          ...p,
+          // @ts-expect-error extra fields should be dropped by MessageOperations.update
+          options: { force_moderation: true, skip_push: true },
+        }),
+    });
+
+    await ops.update({
+      localMessage: makeLocalMessage({ id: 'm1', status: 'received' }),
+    });
+
+    expect(defaults.update.mock.calls[0][1]).toEqual({ skip_push: true });
+  });
+
   it('delete: the default receives the options the handler passes on', async () => {
     const { defaults, ops } = setup({
       delete: (p, defaultRequest) => defaultRequest({ ...p, options: { hard: true } }),

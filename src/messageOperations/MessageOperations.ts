@@ -35,6 +35,18 @@ export const DEFAULT_MESSAGE_OPERATIONS_CONFIG: MessageOperationsConfig =
     failedSendCacheTtlMs: 5 * 60 * 1000,
   });
 
+/** Keeps only the options the update request takes, `skip_enrich_url` and `skip_push`. */
+const pickUpdateOptions = (
+  options: UpdateMessageOptions | undefined,
+): UpdateMessageOptions | undefined => {
+  if (!options) return undefined;
+  const picked: UpdateMessageOptions = {};
+  if (typeof options.skip_enrich_url === 'boolean')
+    picked.skip_enrich_url = options.skip_enrich_url;
+  if (typeof options.skip_push === 'boolean') picked.skip_push = options.skip_push;
+  return picked;
+};
+
 /**
  * Every optimistic operation on a message. Send, retry, update and delete have a status lifecycle and
  * share {@link run} and {@link MessageOperationStatePolicy}. Reactions apply their change, send their
@@ -268,21 +280,14 @@ export class MessageOperations {
     this.failedSendCache.rewriteWithEdit(params.localMessage);
 
     const handlers = this.ctx.handlers();
-    let updateOptions: UpdateMessageOptions | undefined;
-    if (params.options) {
-      updateOptions = {};
-      if (typeof params.options.skip_enrich_url === 'boolean')
-        updateOptions.skip_enrich_url = params.options.skip_enrich_url;
-      if (typeof params.options.skip_push === 'boolean')
-        updateOptions.skip_push = params.options.skip_push;
-    }
 
     return await this.run<'update'>(
       'update',
       params,
       this.resolveRequest(
         handlers.update,
-        async (p) => await this.ctx.defaults.update(p.localMessage, updateOptions),
+        async (p) =>
+          await this.ctx.defaults.update(p.localMessage, pickUpdateOptions(p.options)),
       ),
     );
   }

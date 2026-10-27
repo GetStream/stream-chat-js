@@ -645,7 +645,7 @@ export class MessageReceiptsTracker extends WithSubscriptions {
     sorted: UserProgress[],
     refOf: (progress: UserProgress) => MsgRef,
   ): MsgRef | null {
-    const ownUserId = this.channel.getClient().userID;
+    const ownUserId = this.channel.getClient().userId;
 
     for (let i = sorted.length - 1; i >= 0; i -= 1) {
       if (sorted[i].user.id === ownUserId) continue;
