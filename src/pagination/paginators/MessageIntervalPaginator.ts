@@ -1936,8 +1936,11 @@ export class MessageIntervalPaginator extends BasePaginator<
     if (fallback) {
       this.setActiveInterval(fallback);
     } else {
-      // Nothing loaded survived the truncation.
-      this.state.partialNext({ items: [] });
+      // Nothing loaded survived the truncation. Drop the stale active id too: the next ingested
+      // message lands in a logical head interval, which is only activated (and published) when no
+      // interval is active.
+      this.setActiveInterval(undefined);
+      this.state.partialNext({ items: [], hasMoreTail: false });
     }
   }
 
