@@ -7,6 +7,7 @@ import {
 } from '../../../src';
 import { getClientWithUser } from '../test-utils/getClient';
 import { generateAPIError } from '../test-utils/generateAPIError';
+import { mockChannelQueryResponse } from '../test-utils/mockChannelQueryResponse';
 
 const cid = 'messaging:general';
 const otherCid = 'messaging:random';
@@ -601,6 +602,117 @@ describe('ScheduledMessageManager', () => {
       await manager.load();
 
       expect(manager.getFromState(gone.id)).toBeUndefined();
+    });
+  });
+
+  describe('integration', () => {
+    const channelResponse = (
+      id: string,
+      scheduled_messages?: ScheduledMessageResponse[],
+    ) => ({
+      ...mockChannelQueryResponse,
+      channel: { ...mockChannelQueryResponse.channel, id, cid: `messaging:${id}` },
+      ...(scheduled_messages ? { scheduled_messages } : {}),
+    });
+
+    it('hydrates the store per channel from queryChannels', async () => {
+      const { client, manager } = setup();
+      const inA = generateScheduledMessage({ cid: 'messaging:a' });
+      vi.spyOn(client, 'post').mockResolvedValue({
+        channels: [channelResponse('a', [inA]), channelResponse('b', [])],
+      });
+
+      await client.queryChannels({}, [], { include_scheduled_messages: true });
+
+      expect(manager.getForChannel('messaging:a')).toEqual([inA]);
+      expect(manager.getForChannel('messaging:b')).toEqual([]);
+    });
+
+    it('empties a channel whose scheduled_messages is an empty list', async () => {
+      const { client, manager } = setup();
+      const stale = generateScheduledMessage({ cid: 'messaging:a' });
+      const other = generateScheduledMessage({ cid: 'messaging:other' });
+      manager.upsertToState(stale);
+      manager.upsertToState(other);
+      vi.spyOn(client, 'post').mockResolvedValue({
+        channels: [channelResponse('a', [])],
+      });
+
+      await client.queryChannels({}, [], { include_scheduled_messages: true });
+
+      expect(manager.getForChannel('messaging:a')).toEqual([]);
+      expect(manager.getForChannel('messaging:other')).toEqual([other]);
+    });
+
+    it('keeps the store when scheduled_messages is absent', async () => {
+      const { client, manager } = setup();
+      const known = generateScheduledMessage({ cid: 'messaging:a' });
+      manager.upsertToState(known);
+      vi.spyOn(client, 'post').mockResolvedValue({
+        channels: [channelResponse('a')],
+      });
+
+      await client.queryChannels({}, [], { include_scheduled_messages: true });
+
+      expect(manager.getForChannel('messaging:a')).toEqual([known]);
+    });
+
+    it('hydrates the store from channel.query', async () => {
+      const { client, manager } = setup();
+      const { cid: channelCid, id, type } = mockChannelQueryResponse.channel;
+      const channel = client.channel(type, id);
+      const inChannel = generateScheduledMessage({ cid: channelCid });
+      vi.spyOn(client, 'post').mockResolvedValue({
+        ...mockChannelQueryResponse,
+        scheduled_messages: [inChannel],
+      });
+
+      await channel.query({ include_scheduled_messages: true });
+
+      expect(manager.getForChannel(channelCid)).toEqual([inChannel]);
+    });
+
+    it('stores the scheduled message of a scheduled sendMessage', async () => {
+      const { client, manager } = setup();
+      const channel = client.channel('messaging', 'general');
+      const sm = generateScheduledMessage();
+      vi.spyOn(client, 'post').mockResolvedValue({
+        message: { id: sm.id, text: 'see you tomorrow' },
+        scheduled_message: sm,
+      });
+
+      await channel.sendMessage(
+        { id: sm.id, text: 'see you tomorrow' },
+        { scheduled_at: sm.scheduled_at },
+      );
+
+      expect(manager.getFromState(sm.id)).toEqual(sm);
+      expect(channel.state.messages).toHaveLength(0);
+    });
+
+    it('stores nothing when a scheduled send is sent immediately', async () => {
+      const { client, manager } = setup();
+      const channel = client.channel('messaging', 'general');
+      vi.spyOn(client, 'post').mockResolvedValue({
+        message: { id: 'm-1', text: 'too late to schedule' },
+      });
+
+      await channel.sendMessage(
+        { id: 'm-1', text: 'too late to schedule' },
+        { scheduled_at: new Date(Date.now() - 60 * 1000).toISOString() },
+      );
+
+      expect(manager.scheduledMessages.size).toBe(0);
+    });
+
+    it('does not touch the store for a sendMessage without scheduled_at', async () => {
+      const { client, manager } = setup();
+      const channel = client.channel('messaging', 'general');
+      vi.spyOn(client, 'post').mockResolvedValue({ message: { id: 'm-1' } });
+
+      await channel.sendMessage({ text: 'now' });
+
+      expect(manager.scheduledMessages.size).toBe(0);
     });
   });
 });
