@@ -3213,6 +3213,29 @@ describe('MessagePaginator', () => {
         expect(paginator.items?.map((m) => m.id)).toEqual(['m8', 'm9']);
       });
 
+      it('shows messages ingested after a truncation that removed every loaded message', () => {
+        const paginator = new MessagePaginator({ channel, itemIndex });
+        paginator.ingestPage({
+          page: [msg('m1', '01'), msg('m2', '02')],
+          isHead: true,
+          isTail: true,
+          setActive: true,
+        });
+
+        paginator.truncate({
+          truncatedAt: convertDateToTimestamp('2020-01-05T00:00:00.000Z'),
+        });
+        expect(paginator.items).toEqual([]);
+        expect(paginator.hasMoreTail).toBe(false);
+
+        // the channel.truncated system message, then its message.new duplicate, then a new message
+        paginator.ingestItem(msg('sys', '05'));
+        paginator.ingestItem(msg('sys', '05'));
+        paginator.ingestItem(msg('m6', '06'));
+
+        expect(paginator.items?.map((m) => m.id)).toEqual(['sys', 'm6']);
+      });
+
       it('falls back to the nearest (tail-most) surviving window when several survive', () => {
         const paginator = new MessagePaginator({ channel, itemIndex });
         paginator.ingestPage({
