@@ -29,8 +29,6 @@ export const APIErrorCodes: Record<string, { name: string; retryable: boolean }>
   '70': { name: 'ErrQueryChannelPermissions', retryable: false },
   '71': { name: 'ErrTooManyConnections', retryable: true },
   '99': { name: 'AppSuspendedError', retryable: false },
-  // Scheduled messages. The response's `exception_fields.reason` carries the
-  // snake_case name of these errors too.
   '114': { name: 'ScheduledMessagesDisabledError', retryable: false },
   '115': { name: 'ScheduledAtTooSoonError', retryable: false },
   '116': { name: 'ScheduledAtTooFarError', retryable: false },
@@ -40,6 +38,8 @@ export const APIErrorCodes: Record<string, { name: string; retryable: boolean }>
   '120': { name: 'ScheduledMessageNotEditableError', retryable: false },
   '121': { name: 'ScheduledMessageSendingError', retryable: false },
   '122': { name: 'ScheduledMessageConflictError', retryable: true },
+  '123': { name: 'ScheduledMessageAlreadySentError', retryable: false },
+  '124': { name: 'ScheduledMessageCanceledError', retryable: false },
 };
 
 export type APIError = Error & {

@@ -103,7 +103,6 @@ describe('ScheduledMessageManager', () => {
       manager.upsertToState(sm);
       manager.removeFromState(sm.id);
 
-      // e.g. the send_now response arriving after the scheduled_message.sent event
       manager.upsertToState(sm);
 
       expect(manager.getFromState(sm.id)).toBeUndefined();
@@ -329,6 +328,27 @@ describe('ScheduledMessageManager', () => {
       expect(querySpy).toHaveBeenLastCalledWith({ limit: 100, next: 'cursor' });
       expect(manager.scheduledMessages.size).toBe(2);
       expect(manager.state.getLatestValue().hasMore).toBe(false);
+    });
+
+    it('adds a loaded page to the store in a single update', async () => {
+      const { client, manager } = setup();
+      vi.spyOn(client, 'queryScheduledMessages')
+        .mockResolvedValueOnce({ scheduled_messages: [], next: 'cursor', duration: '' })
+        .mockResolvedValueOnce({
+          scheduled_messages: [generateScheduledMessage(), generateScheduledMessage()],
+          duration: '',
+        });
+      await manager.load();
+      const stores: Array<Map<string, ScheduledMessageResponse>> = [];
+      const unsubscribe = manager.state.subscribeWithSelector(
+        ({ scheduledMessages }) => ({ scheduledMessages }),
+        ({ scheduledMessages }) => stores.push(scheduledMessages),
+      );
+
+      await manager.loadMore();
+      unsubscribe();
+
+      expect(stores.map((store) => store.size)).toEqual([0, 2]);
     });
 
     it('keeps the error of a failed load', async () => {

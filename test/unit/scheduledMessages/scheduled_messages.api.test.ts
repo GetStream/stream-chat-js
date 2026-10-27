@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ScheduledMessageResponse, StreamChat } from '../../../src';
+import {
+  DEFAULT_SCHEDULED_MESSAGE_LIMITS,
+  getScheduledMessageErrorReason,
+  getScheduledMessageLimits,
+  ScheduledMessageResponse,
+  StreamChat,
+} from '../../../src';
 import { APIErrorCodes } from '../../../src/errors';
 import { getClientWithUser } from '../test-utils/getClient';
 import { mockChannelQueryResponse } from '../test-utils/mockChannelQueryResponse';
@@ -105,6 +111,14 @@ describe('scheduled messages API', () => {
       expect(APIErrorCodes['122']).toEqual({
         name: 'ScheduledMessageConflictError',
         retryable: true,
+      });
+      expect(APIErrorCodes['123']).toEqual({
+        name: 'ScheduledMessageAlreadySentError',
+        retryable: false,
+      });
+      expect(APIErrorCodes['124']).toEqual({
+        name: 'ScheduledMessageCanceledError',
+        retryable: false,
       });
     });
   });
@@ -290,6 +304,96 @@ describe('scheduled messages API', () => {
         expect.objectContaining({ include_scheduled_messages: true }),
       );
       expect(client.scheduledMessages.getForChannel(cid)).toEqual([inChannel]);
+    });
+  });
+
+  describe('getScheduledMessageErrorReason', () => {
+    const apiError = (code: number, reason?: string) =>
+      Object.assign(new Error('failed'), {
+        code,
+        response: { data: { code, exception_fields: reason ? { reason } : undefined } },
+      });
+
+    it('reads the reason from exception_fields', () => {
+      expect(
+        getScheduledMessageErrorReason(apiError(124, 'scheduled_message_canceled')),
+      ).toBe('scheduled_message_canceled');
+    });
+
+    it('falls back to the error code', () => {
+      expect(getScheduledMessageErrorReason(apiError(114))).toBe(
+        'scheduled_messages_disabled',
+      );
+      expect(getScheduledMessageErrorReason(apiError(123))).toBe(
+        'scheduled_message_already_sent',
+      );
+    });
+
+    it('ignores an unknown reason and uses the code', () => {
+      expect(getScheduledMessageErrorReason(apiError(117, 'something_else'))).toBe(
+        'scheduled_limit_channel',
+      );
+    });
+
+    it('returns undefined for errors that are not scheduled message errors', () => {
+      expect(getScheduledMessageErrorReason(apiError(4))).toBeUndefined();
+      expect(getScheduledMessageErrorReason(new Error('network'))).toBeUndefined();
+      expect(getScheduledMessageErrorReason(undefined)).toBeUndefined();
+      expect(getScheduledMessageErrorReason('scheduled_at_too_far')).toBeUndefined();
+    });
+  });
+
+  describe('getScheduledMessageLimits', () => {
+    it('returns the defaults when the channel config has no limits', () => {
+      const client = setup();
+      const channel = client.channel('messaging', 'general');
+
+      expect(getScheduledMessageLimits(channel)).toEqual(
+        DEFAULT_SCHEDULED_MESSAGE_LIMITS,
+      );
+      expect(DEFAULT_SCHEDULED_MESSAGE_LIMITS).toEqual({
+        maxLeadTimeSeconds: 10368000,
+        maxPerChannel: 10,
+        maxPerUser: 100,
+        minLeadTimeSeconds: 60,
+      });
+    });
+
+    it('reads the limits from the channel config', () => {
+      const client = setup();
+      const channel = client.channel('messaging', 'general');
+      client.configs[channel.cid] = {
+        reminders: false,
+        created_at: '',
+        updated_at: '',
+        scheduled_messages_max_lead_time_seconds: 3600,
+        scheduled_messages_max_per_channel: 5,
+        scheduled_messages_max_per_user: 50,
+        scheduled_messages_min_lead_time_seconds: 120,
+      };
+
+      expect(getScheduledMessageLimits(channel)).toEqual({
+        maxLeadTimeSeconds: 3600,
+        maxPerChannel: 5,
+        maxPerUser: 50,
+        minLeadTimeSeconds: 120,
+      });
+    });
+
+    it('falls back per field when the config is partial', () => {
+      const client = setup();
+      const channel = client.channel('messaging', 'general');
+      client.configs[channel.cid] = {
+        reminders: false,
+        created_at: '',
+        updated_at: '',
+        scheduled_messages_max_per_channel: 3,
+      };
+
+      expect(getScheduledMessageLimits(channel)).toEqual({
+        ...DEFAULT_SCHEDULED_MESSAGE_LIMITS,
+        maxPerChannel: 3,
+      });
     });
   });
 });

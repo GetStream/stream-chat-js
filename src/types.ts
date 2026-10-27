@@ -398,12 +398,6 @@ export type ChannelAPIResponse = {
   watcher_count?: number;
   watchers?: UserResponse[];
   active_live_locations?: SharedLocationResponse[];
-  /**
-   * The current user's own scheduled, sending and failed messages in this channel.
-   * Set only when the channel was queried with `include_scheduled_messages: true`.
-   * Absent when not requested or not known (e.g. more than 100); use
-   * `client.queryScheduledMessages` then.
-   */
   scheduled_messages?: ScheduledMessageResponse[];
 };
 
@@ -1015,11 +1009,6 @@ export type SendFileAPIResponse = APIResponse & { file: string; thumb_url?: stri
 export type SendMessageAPIResponse = APIResponse & {
   message: MessageResponse;
   pending_message_metadata?: Record<string, string> | null;
-  /**
-   * Set only when the message was sent with `scheduled_at`. `message` then holds the
-   * content as it will be sent (with hydrated `mentioned_users`); it is not in the
-   * channel and its `id` is the scheduled message ID, not the ID the message gets when sent.
-   */
   scheduled_message?: ScheduledMessageResponse;
 };
 
@@ -1157,12 +1146,6 @@ export type BanUserOptions = UnBanUserOptions & {
 };
 
 export type ChannelOptions = {
-  /**
-   * Client-side only. Adds the current user's scheduled messages to each returned
-   * channel (`scheduled_messages`). The field is absent on every channel when they
-   * are not known (e.g. more than 100 across the returned channels); use
-   * `client.queryScheduledMessages` then.
-   */
   include_scheduled_messages?: boolean;
   limit?: number;
   member_limit?: number;
@@ -1212,10 +1195,6 @@ export type ChannelQueryOptions = {
   created_by_id?: UserResponse['id'];
   data?: ChannelResponse;
   hide_for_creator?: boolean;
-  /**
-   * Client-side only. Adds the current user's scheduled messages in this channel
-   * to the response (`scheduled_messages`).
-   */
   include_scheduled_messages?: boolean;
   members?: PaginationOptions;
   messages?: MessagePaginationOptions;
@@ -2700,7 +2679,8 @@ export type ChannelConfigFields = {
 };
 
 export type ChannelConfigWithInfo = ChannelConfigFields &
-  CreatedAtUpdatedAt & {
+  CreatedAtUpdatedAt &
+  ScheduledMessagesChannelConfig & {
     commands?: CommandResponse[];
   };
 
@@ -3096,11 +3076,6 @@ export type SendMessageOptions = {
   keep_channel_hidden?: boolean;
   pending?: boolean;
   pending_message_metadata?: Record<string, string>;
-  /**
-   * When set, the message is not sent now: it is stored and sent at this time.
-   * Must be at least 1 minute and at most the app's maximum lead time from now.
-   * The response then carries `scheduled_message`. Cannot be combined with `pending: true`.
-   */
   scheduled_at?: string | Date;
   skip_enrich_url?: boolean;
   skip_push?: boolean;
@@ -4902,19 +4877,6 @@ export type QueryRemindersResponse = {
   next?: string;
 };
 
-/**
- * Scheduled messages
- */
-
-/**
- * Status of a scheduled message.
- * - `scheduled`: waiting for its send time; can be edited, sent now or deleted
- * - `sending`: being sent, or a send was tried and is waiting to be retried; cannot be
- *   edited, sent now or deleted until the send finishes (409 `scheduled_message_sending`)
- * - `failed`: the send failed (see `failure_reason`); can only be deleted
- * - `canceled`: deleted by its owner (reported by the delete endpoint and event only)
- * - `sent`: sent (reported by the `scheduled_message.sent` event only)
- */
 export type ScheduledMessageStatus =
   | 'scheduled'
   | 'sending'
@@ -4922,7 +4884,6 @@ export type ScheduledMessageStatus =
   | 'canceled'
   | 'sent';
 
-/** Why a scheduled message failed to send. Only set when the status is `failed`. */
 export type ScheduledMessageFailureReason =
   | 'banned'
   | 'no_permission'
@@ -4936,7 +4897,33 @@ export type ScheduledMessageFailureReason =
   | 'invalid_message'
   | 'pending_not_supported';
 
-/** The location a scheduled message will share. */
+export type ScheduledMessageErrorReason =
+  | 'scheduled_messages_disabled'
+  | 'scheduled_at_too_soon'
+  | 'scheduled_at_too_far'
+  | 'scheduled_limit_channel'
+  | 'scheduled_limit_user'
+  | 'scheduled_message_id_taken'
+  | 'scheduled_message_not_editable'
+  | 'scheduled_message_sending'
+  | 'scheduled_message_conflict'
+  | 'scheduled_message_already_sent'
+  | 'scheduled_message_canceled';
+
+export type ScheduledMessagesChannelConfig = {
+  scheduled_messages_max_lead_time_seconds?: number;
+  scheduled_messages_max_per_channel?: number;
+  scheduled_messages_max_per_user?: number;
+  scheduled_messages_min_lead_time_seconds?: number;
+};
+
+export type ScheduledMessageLimits = {
+  maxLeadTimeSeconds: number;
+  maxPerChannel: number;
+  maxPerUser: number;
+  minLeadTimeSeconds: number;
+};
+
 export type ScheduledMessageLocation = {
   created_by_device_id: string;
   end_at?: string;
@@ -4944,12 +4931,6 @@ export type ScheduledMessageLocation = {
   longitude?: number;
 };
 
-/**
- * The message a scheduled message will send. It has no `id`: the ID of the
- * sent message is only revealed by the `scheduled_message.sent` event
- * (`message_id`). `mentioned_users` holds user IDs, not user objects.
- * Custom message fields are returned at the top level, as on messages.
- */
 export type ScheduledMessageContent = CustomMessageData & {
   text: string;
   attachments?: Attachment[];
@@ -4972,7 +4953,6 @@ export type ScheduledMessageContent = CustomMessageData & {
   type?: MessageLabel;
 };
 
-/** Enough of a channel to list a scheduled message without loading the channel. */
 export type ScheduledMessageChannelResponse = {
   cid: string;
   id: string;
@@ -4982,21 +4962,15 @@ export type ScheduledMessageChannelResponse = {
 };
 
 export type ScheduledMessageResponse = {
-  /** Public handle of the scheduled message. Not the ID the message gets when sent. */
   id: string;
-  /** CID of the channel the message will be sent to. */
   cid: string;
   created_at: string;
   message: ScheduledMessageContent;
-  /** Date/time (ISO string) the message is scheduled to be sent. */
   scheduled_at: string;
   status: ScheduledMessageStatus;
   updated_at: string;
-  /** The user who scheduled the message. */
   user: UserResponse;
-  /** Set only in `queryScheduledMessages` results. */
   channel?: ScheduledMessageChannelResponse;
-  /** Set only when `status` is `failed`. */
   failure_reason?: ScheduledMessageFailureReason;
 };
 
@@ -5005,33 +4979,25 @@ export type ScheduledMessageAPIResponse = APIResponse & {
 };
 
 export type UpdateScheduledMessageOptions = {
-  /** Replaces the scheduled message as a whole. */
   message?: Message;
-  /** New send time. Must be at least 1 minute and at most the app's maximum lead time from now. */
   scheduled_at?: string | Date;
 };
 
 export type ScheduledMessageFilters = {
-  /** Only scheduled messages of this channel. */
   cid?: string;
-  /** Only these statuses, matched against the reported `status`. */
   status?: Array<Extract<ScheduledMessageStatus, 'scheduled' | 'sending' | 'failed'>>;
 };
 
-/** Only `scheduled_at` ascending is supported. */
-export type ScheduledMessageSort = Sort<{ scheduled_at: AscDesc }>;
+export type ScheduledMessageSort = { scheduled_at: 1 };
 
 export type QueryScheduledMessagesOptions = Omit<Pager, 'prev'> & {
   filter?: ScheduledMessageFilters;
   sort?: ScheduledMessageSort | ScheduledMessageSort[];
-  /** Server-side only: the user whose scheduled messages to list. */
   user_id?: string;
 };
 
 export type QueryScheduledMessagesResponse = APIResponse & {
-  /** Pending messages first (`scheduled`, `sending`), then `failed` ones, each by `scheduled_at`. */
   scheduled_messages: ScheduledMessageResponse[];
-  /** Cursor of the next page; absent on the last page. */
   next?: string;
 };
 

@@ -216,7 +216,7 @@ export class Channel {
    *
    * @return {Promise<SendMessageAPIResponse>} The Server Response
    */
-  async _sendMessage(rawMessage: Message, options?: SendMessageOptions) {
+  async _sendMessage(rawMessage: Message, options: SendMessageOptions = {}) {
     const client = this.getClient();
     const message = sanitizeOutgoingAttachments({
       client,
@@ -225,7 +225,7 @@ export class Channel {
 
     const scheduledMessagesToken = client.scheduledMessages.snapshotToken();
     const response = await client.post<SendMessageAPIResponse>(
-      this._channelURL() + '/message',
+      `${this._channelURL()}/message`,
       {
         message,
         ...options,
@@ -241,8 +241,6 @@ export class Channel {
   }
 
   async sendMessage(message: Message, options?: SendMessageOptions) {
-    // A scheduled send is not queued offline: replaying the queued task adds the
-    // response message to the channel state as if it had been sent.
     if (options?.scheduled_at) {
       return await this._sendMessage(message, options);
     }
