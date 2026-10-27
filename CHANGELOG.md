@@ -1,3 +1,12 @@
+## [10.0.0-rc.26](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.25...v10.0.0-rc.26) (2026-10-27)
+
+### Bug Fixes
+
+* add messages received after truncate to state ([#1950](https://github.com/GetStream/stream-chat-js/issues/1950)) ([b178379](https://github.com/GetStream/stream-chat-js/commit/b1783797eb771701acfc5b96670633a8ae7da286))
+* avoid types from NodeJS namespace ([#1947](https://github.com/GetStream/stream-chat-js/issues/1947)) ([68fb042](https://github.com/GetStream/stream-chat-js/commit/68fb042586b0039827a552edc270d0ae557c2fc3))
+* docs fixes ([#1949](https://github.com/GetStream/stream-chat-js/issues/1949)) ([4c3e46d](https://github.com/GetStream/stream-chat-js/commit/4c3e46dd3287eac544e172ac7a2fda60c60d2daa))
+* jump to thread reply bug ([#1948](https://github.com/GetStream/stream-chat-js/issues/1948)) ([5ec1b07](https://github.com/GetStream/stream-chat-js/commit/5ec1b0757bf1891effb53984d64d8939e01af40e))
+
 ## [10.0.0-rc.25](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.24...v10.0.0-rc.25) (2026-10-26)
 
 ### ⚠ BREAKING CHANGES
