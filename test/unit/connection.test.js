@@ -341,6 +341,31 @@ describe('connection', function () {
 			expect(c.tokenExpiredByServer).to.be.false;
 		});
 
+		it('lets only one of two concurrent refreshing reconnects connect and recover', async () => {
+			const client = newStreamChat();
+			client.tokenManager = await providerTokenManager(() =>
+				sleep(10).then(() => 'token'),
+			);
+			client.recoverState = sinon.spy(() => Promise.resolve());
+			const c = new StableWSConnection({ client });
+			// Mirrors the real _connect: a second call while connecting returns early.
+			c._connect = sinon.spy(async () => {
+				if (c.isConnecting) return;
+				c.isConnecting = true;
+				await sleep(10);
+				c.isConnecting = false;
+				c.isHealthy = true;
+			});
+
+			await Promise.all([
+				c._reconnect({ interval: 1, refreshToken: true }),
+				c._reconnect({ interval: 1, refreshToken: true }),
+			]);
+
+			expect(c._connect.calledOnce).to.be.true;
+			expect(client.recoverState.calledOnce).to.be.true;
+		});
+
 		it('reconnects with a new token from the tokenProvider', async () => {
 			const authorizations = [];
 			const server = new WsServer({ port: 9998 });

@@ -417,6 +417,13 @@ export class StableWSConnection {
 
     if (options.refreshToken) {
       await this.client.tokenManager.loadToken();
+
+      // Another reconnect may have started while the token was loading, e.g. when
+      // the socket fires both an error and a close event.
+      if (this.isConnecting || this.isHealthy) {
+        this._log('_reconnect() - Abort (4) since already connecting or healthy');
+        return;
+      }
     }
 
     try {
