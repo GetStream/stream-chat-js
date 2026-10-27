@@ -1,5 +1,11 @@
 import { StateStore } from '../store';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
+import {
+  ScheduledMessageErrorReason,
+  ScheduledMessageEventType,
+  ScheduledMessageStatus,
+} from '../types';
+import { getScheduledMessageErrorReason } from './errors';
 import type { StreamChat } from '../client';
 import type {
   Event,
@@ -12,17 +18,13 @@ import type {
 
 export const SCHEDULED_MESSAGES_LOAD_LIMIT = 100;
 
-export type ScheduledMessageEvent = Event & {
-  cid: string;
-  scheduled_message: ScheduledMessageResponse;
-  type: EventTypes;
-};
+export type ScheduledMessageMap = Map<string, ScheduledMessageResponse>;
 
 export type ScheduledMessageManagerState = {
-  scheduledMessages: Map<string, ScheduledMessageResponse>;
-  hasMore: boolean;
-  isLoading: boolean;
+  isDisabled: boolean;
   isLoaded: boolean;
+  isLoading: boolean;
+  scheduledMessages: ScheduledMessageMap;
   lastQueryError?: Error;
   next?: string;
 };
@@ -31,260 +33,360 @@ export type ScheduledMessageManagerOptions = {
   client: StreamChat;
 };
 
-export type ScheduledMessageSnapshotToken = { epoch: number; seq: number };
+export type ScheduledMessageEvent = Event & {
+  scheduled_message: ScheduledMessageResponse;
+};
 
-const isNewer = (a: ScheduledMessageResponse, b: ScheduledMessageResponse) =>
-  Date.parse(a.updated_at) > Date.parse(b.updated_at);
+export type ScheduledMessageHandler = (
+  scheduledMessage: ScheduledMessageResponse,
+) => void;
+
+export type ScheduledMessagePredicate = (
+  scheduledMessage: ScheduledMessageResponse,
+) => boolean;
+
+export type ScheduledMessageQueryResultHandler = (
+  response: QueryScheduledMessagesResponse,
+) => Partial<ScheduledMessageManagerState> | void;
+
+const UPSERT_EVENT_TYPES: EventTypes[] = [
+  ScheduledMessageEventType.Created,
+  ScheduledMessageEventType.Failed,
+  ScheduledMessageEventType.Updated,
+];
+
+const REMOVE_EVENT_TYPES: EventTypes[] = [
+  ScheduledMessageEventType.Deleted,
+  ScheduledMessageEventType.Sent,
+];
+
+const FINISHED_STATUSES = new Set<ScheduledMessageStatus>([
+  ScheduledMessageStatus.Canceled,
+  ScheduledMessageStatus.Sent,
+]);
+
+const isFinished = ({ status }: ScheduledMessageResponse) =>
+  FINISHED_STATUSES.has(status);
+
+const isNewerThan = (
+  current: ScheduledMessageResponse,
+  incoming: ScheduledMessageResponse,
+) => Date.parse(current.updated_at) > Date.parse(incoming.updated_at);
 
 const byScheduledAt = (a: ScheduledMessageResponse, b: ScheduledMessageResponse) =>
   Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at) || a.id.localeCompare(b.id);
 
-const isTerminal = (scheduledMessage: ScheduledMessageResponse) =>
-  scheduledMessage.status === 'canceled' || scheduledMessage.status === 'sent';
+const isChannelMessage = (scheduledMessage: ScheduledMessageResponse, cid: string) => {
+  const { cid: messageCid, message } = scheduledMessage;
+
+  return messageCid === cid && !message.parent_id;
+};
+
+const isThreadReply = (scheduledMessage: ScheduledMessageResponse, parentId: string) => {
+  const { message } = scheduledMessage;
+
+  return message.parent_id === parentId;
+};
+
+const createInitialState = (): ScheduledMessageManagerState => ({
+  isDisabled: false,
+  isLoaded: false,
+  isLoading: false,
+  lastQueryError: undefined,
+  next: undefined,
+  scheduledMessages: new Map(),
+});
 
 export class ScheduledMessageManager extends WithSubscriptions {
   private client: StreamChat;
   private removedIds = new Set<string>();
-  private epoch = 0;
-  private seq = 0;
-  private touchedAt = new Map<string, number>();
-  state: StateStore<ScheduledMessageManagerState>;
+
+  public state: StateStore<ScheduledMessageManagerState>;
 
   constructor({ client }: ScheduledMessageManagerOptions) {
     super();
+
     this.client = client;
-    this.state = new StateStore<ScheduledMessageManagerState>(this.initialState);
+    this.state = new StateStore<ScheduledMessageManagerState>(createInitialState());
   }
 
-  get initialState(): ScheduledMessageManagerState {
-    return {
-      scheduledMessages: new Map(),
-      hasMore: false,
-      isLoading: false,
-      isLoaded: false,
-      lastQueryError: undefined,
-      next: undefined,
-    };
-  }
+  private isOutdated = (
+    incoming: ScheduledMessageResponse,
+    scheduledMessages: ScheduledMessageMap,
+  ) => {
+    const { id } = incoming;
+    const current = scheduledMessages.get(id);
 
-  get scheduledMessages() {
-    return this.state.getLatestValue().scheduledMessages;
-  }
+    const isRemoved = this.removedIds.has(id);
+    const isOlderThanCurrent = !!current && isNewerThan(current, incoming);
 
-  getFromState(id: string) {
-    return this.scheduledMessages.get(id);
-  }
-
-  getForChannel = (cid: string, { parentId }: { parentId?: string | null } = {}) =>
-    Array.from(this.scheduledMessages.values())
-      .filter(
-        (sm) =>
-          sm.cid === cid &&
-          (parentId === undefined || (sm.message.parent_id ?? null) === parentId),
-      )
-      .sort(byScheduledAt);
-
-  snapshotToken = (): ScheduledMessageSnapshotToken => ({
-    epoch: this.epoch,
-    seq: this.seq,
-  });
-
-  private touch = (id: string) => {
-    this.touchedAt.set(id, ++this.seq);
+    return isRemoved || isOlderThanCurrent;
   };
 
   private applySnapshot = (
-    snapshot: ScheduledMessageResponse[],
-    inScope: (sm: ScheduledMessageResponse) => boolean,
-    token: ScheduledMessageSnapshotToken,
+    snapshotMessages: ScheduledMessageResponse[],
+    isInScope: ScheduledMessagePredicate,
   ) => {
-    const changedSince = (id: string) => (this.touchedAt.get(id) ?? 0) > token.seq;
-    const next = new Map(this.scheduledMessages);
-    for (const [id, sm] of next) {
-      if (inScope(sm) && !changedSince(id)) next.delete(id);
-    }
-    for (const sm of snapshot) {
-      if (this.removedIds.has(sm.id)) continue;
-      const current = next.get(sm.id);
-      if (current && isNewer(current, sm)) continue;
-      next.set(sm.id, sm);
-    }
-    this.state.partialNext({ scheduledMessages: next });
-  };
-
-  upsertResponseToState = (
-    scheduledMessage: ScheduledMessageResponse,
-    token: ScheduledMessageSnapshotToken,
-  ) => {
-    if (token.epoch !== this.epoch) return;
-    this.upsertToState(scheduledMessage);
-  };
-
-  upsertToState = (scheduledMessage: ScheduledMessageResponse) => {
-    this.upsertManyToState([scheduledMessage]);
-  };
-
-  upsertManyToState = (scheduledMessages: ScheduledMessageResponse[]) => {
     if (!this.client._cacheEnabled()) return;
-    const next = new Map(this.scheduledMessages);
-    let changed = false;
-    for (const sm of scheduledMessages) {
-      if (isTerminal(sm)) {
-        this.markRemoved(sm.id);
-        changed = next.delete(sm.id) || changed;
+
+    const currentMessages = Array.from(this.scheduledMessages.values());
+
+    const isOutOfScope = (scheduledMessage: ScheduledMessageResponse) =>
+      !isInScope(scheduledMessage);
+    const isActive = (scheduledMessage: ScheduledMessageResponse) =>
+      !isFinished(scheduledMessage) && !this.removedIds.has(scheduledMessage.id);
+    const pickNewest = (incoming: ScheduledMessageResponse) => {
+      const current = this.scheduledMessages.get(incoming.id);
+
+      return current && isNewerThan(current, incoming) ? current : incoming;
+    };
+
+    const keptMessages = currentMessages.filter(isOutOfScope);
+    const snapshotMessagesToStore = snapshotMessages.filter(isActive).map(pickNewest);
+
+    const nextScheduledMessages: ScheduledMessageMap = new Map();
+    [...keptMessages, ...snapshotMessagesToStore].forEach((scheduledMessage) =>
+      nextScheduledMessages.set(scheduledMessage.id, scheduledMessage),
+    );
+
+    this.state.partialNext({ scheduledMessages: nextScheduledMessages });
+  };
+
+  private upsertManyToState = (incomingMessages: ScheduledMessageResponse[]) => {
+    if (!this.client._cacheEnabled()) return;
+
+    const nextScheduledMessages = new Map(this.scheduledMessages);
+    let hasChanges = false;
+
+    for (const scheduledMessage of incomingMessages) {
+      const { id } = scheduledMessage;
+
+      if (isFinished(scheduledMessage)) {
+        this.removedIds.add(id);
+        hasChanges = nextScheduledMessages.delete(id) || hasChanges;
         continue;
       }
-      if (this.removedIds.has(sm.id)) continue;
-      const current = next.get(sm.id);
-      if (current && isNewer(current, sm)) continue;
-      this.touch(sm.id);
-      next.set(sm.id, sm);
-      changed = true;
+
+      if (this.isOutdated(scheduledMessage, nextScheduledMessages)) continue;
+
+      nextScheduledMessages.set(id, scheduledMessage);
+      hasChanges = true;
     }
-    if (changed) this.state.partialNext({ scheduledMessages: next });
+
+    if (hasChanges) this.state.partialNext({ scheduledMessages: nextScheduledMessages });
   };
 
-  private markRemoved = (id: string) => {
-    this.removedIds.add(id);
-    this.touch(id);
-  };
-
-  removeFromState = (id: string) => {
-    this.markRemoved(id);
-    if (!this.scheduledMessages.has(id)) return;
-    const scheduledMessages = new Map(this.scheduledMessages);
-    scheduledMessages.delete(id);
-    this.state.partialNext({ scheduledMessages });
-  };
-
-  hydrateChannelState = (
-    cid: string,
-    scheduledMessages: ScheduledMessageResponse[] | undefined,
-    token: ScheduledMessageSnapshotToken = this.snapshotToken(),
+  private subscribeToEvents = (
+    eventTypes: EventTypes[],
+    handleScheduledMessage: ScheduledMessageHandler,
   ) => {
-    if (!this.client._cacheEnabled() || !Array.isArray(scheduledMessages)) return;
-    if (token.epoch !== this.epoch) return;
-    this.applySnapshot(scheduledMessages, (sm) => sm.cid === cid, token);
+    const handleEvent = (event: Event) => {
+      if (!ScheduledMessageManager.isScheduledMessageEvent(event)) return;
+
+      handleScheduledMessage(event.scheduled_message);
+    };
+
+    const unsubscribeFunctions = eventTypes.map(
+      (eventType) => this.client.on(eventType, handleEvent).unsubscribe,
+    );
+
+    const unsubscribeAll = () =>
+      unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
+
+    return unsubscribeAll;
   };
 
-  resetState = () => {
-    this.epoch++;
-    this.touchedAt.clear();
+  private subscribeConnectionRecovered = () => {
+    const reloadAfterRecovery = () => {
+      const { isLoaded } = this.state.getLatestValue();
+
+      if (!isLoaded) return;
+
+      this.load().catch((error) =>
+        this.client.logger('warn', 'scheduledMessages: reload after recovery failed', {
+          error,
+          tags: ['scheduled_messages'],
+        }),
+      );
+    };
+
+    return this.client.on('connection.recovered', reloadAfterRecovery).unsubscribe;
+  };
+
+  private query = async (
+    options: QueryScheduledMessagesOptions,
+    handleResult: ScheduledMessageQueryResultHandler,
+  ): Promise<QueryScheduledMessagesResponse> => {
+    this.state.partialNext({ isLoading: true });
+
+    try {
+      const response = await this.client.queryScheduledMessages(options);
+      const { next } = response;
+
+      const resultState = handleResult(response);
+
+      this.state.partialNext({
+        ...resultState,
+        isDisabled: false,
+        lastQueryError: undefined,
+        next,
+      });
+
+      return response;
+    } catch (error) {
+      const lastQueryError = error as Error;
+      const errorReason = getScheduledMessageErrorReason(lastQueryError);
+
+      const isDisabled = errorReason === ScheduledMessageErrorReason.Disabled;
+
+      this.state.partialNext({ isDisabled, lastQueryError });
+
+      throw error;
+    } finally {
+      this.state.partialNext({ isLoading: false });
+    }
+  };
+
+  public static isScheduledMessageEvent = (
+    event: Event,
+  ): event is ScheduledMessageEvent => !!event.scheduled_message;
+
+  public get scheduledMessages() {
+    return this.state.getLatestValue().scheduledMessages;
+  }
+
+  public getFromState = (id: string) => this.scheduledMessages.get(id);
+
+  public getForChannel = (cid: string) => {
+    const allScheduledMessages = Array.from(this.scheduledMessages.values());
+
+    const channelScheduledMessages = allScheduledMessages
+      .filter((scheduledMessage) => isChannelMessage(scheduledMessage, cid))
+      .sort(byScheduledAt);
+
+    return channelScheduledMessages;
+  };
+
+  public getCountForChannel = (cid: string) => {
+    const allScheduledMessages = Array.from(this.scheduledMessages.values());
+
+    const channelScheduledMessageCount = allScheduledMessages.filter((scheduledMessage) =>
+      isChannelMessage(scheduledMessage, cid),
+    ).length;
+
+    return channelScheduledMessageCount;
+  };
+
+  public getForThread = (parentId: string) => {
+    const allScheduledMessages = Array.from(this.scheduledMessages.values());
+
+    const threadScheduledMessages = allScheduledMessages
+      .filter((scheduledMessage) => isThreadReply(scheduledMessage, parentId))
+      .sort(byScheduledAt);
+
+    return threadScheduledMessages;
+  };
+
+  public upsertToState = (scheduledMessage: ScheduledMessageResponse) =>
+    this.upsertManyToState([scheduledMessage]);
+
+  public removeFromState = (id: string) => {
+    this.removedIds.add(id);
+
+    if (!this.scheduledMessages.has(id)) return;
+
+    const nextScheduledMessages = new Map(this.scheduledMessages);
+    nextScheduledMessages.delete(id);
+
+    this.state.partialNext({ scheduledMessages: nextScheduledMessages });
+  };
+
+  public hydrateChannelState = (
+    cid: string,
+    scheduledMessages?: ScheduledMessageResponse[],
+  ) => {
+    if (!Array.isArray(scheduledMessages)) return;
+
+    const isInChannel = (scheduledMessage: ScheduledMessageResponse) =>
+      scheduledMessage.cid === cid;
+
+    this.applySnapshot(scheduledMessages, isInChannel);
+  };
+
+  public resetState = () => {
     this.removedIds.clear();
-    this.state.next(this.initialState);
+    this.state.next(createInitialState());
   };
-
-  static isScheduledMessageEvent = (event: Event): event is ScheduledMessageEvent =>
-    !!event.scheduled_message && event.type.startsWith('scheduled_message.');
 
   public registerSubscriptions = () => {
     if (this.hasSubscriptions) return;
+
+    const removeScheduledMessage = ({ id }: ScheduledMessageResponse) =>
+      this.removeFromState(id);
+
     this.addUnsubscribeFunction(
-      this.subscribeToEvents(
-        [
-          'scheduled_message.created',
-          'scheduled_message.updated',
-          'scheduled_message.failed',
-        ],
-        this.upsertToState,
-      ),
+      this.subscribeToEvents(UPSERT_EVENT_TYPES, this.upsertToState),
     );
     this.addUnsubscribeFunction(
-      this.subscribeToEvents(
-        ['scheduled_message.sent', 'scheduled_message.deleted'],
-        (scheduledMessage) => this.removeFromState(scheduledMessage.id),
-      ),
+      this.subscribeToEvents(REMOVE_EVENT_TYPES, removeScheduledMessage),
     );
     this.addUnsubscribeFunction(this.subscribeConnectionRecovered());
   };
 
-  private subscribeToEvents = (
-    types: EventTypes[],
-    handle: (scheduledMessage: ScheduledMessageResponse) => void,
-  ) => {
-    const subscriptions = types.map(
-      (type) =>
-        this.client.on(type, (event) => {
-          if (!ScheduledMessageManager.isScheduledMessageEvent(event)) return;
-          handle(event.scheduled_message);
-        }).unsubscribe,
-    );
-    return () => subscriptions.forEach((unsubscribe) => unsubscribe());
-  };
+  public load = (): Promise<QueryScheduledMessagesResponse> => {
+    const options = { limit: SCHEDULED_MESSAGES_LOAD_LIMIT };
 
-  private subscribeConnectionRecovered = () =>
-    this.client.on('connection.recovered', () => {
-      if (!this.state.getLatestValue().isLoaded) return;
-      void this.load().catch((error) => {
-        this.client.logger('warn', 'scheduledMessages: reload after recovery failed', {
-          tags: ['scheduled_messages'],
-          error,
-        });
-      });
-    }).unsubscribe;
+    const replaceStore = ({
+      scheduled_messages = [],
+    }: QueryScheduledMessagesResponse) => {
+      this.applySnapshot(scheduled_messages, () => true);
 
-  private query = async (
-    options: QueryScheduledMessagesOptions,
-    apply: (
-      response: QueryScheduledMessagesResponse,
-      token: ScheduledMessageSnapshotToken,
-    ) => Partial<ScheduledMessageManagerState> | void,
-  ): Promise<QueryScheduledMessagesResponse> => {
-    const token = this.snapshotToken();
-    const isSameUser = () => token.epoch === this.epoch;
-    this.state.partialNext({ isLoading: true });
-    try {
-      const response = await this.client.queryScheduledMessages(options);
-      if (!isSameUser()) return response;
-      this.state.partialNext({
-        ...apply(response, token),
-        hasMore: !!response.next,
-        lastQueryError: undefined,
-        next: response.next,
-      });
-      return response;
-    } catch (error) {
-      if (isSameUser()) this.state.partialNext({ lastQueryError: error as Error });
-      throw error;
-    } finally {
-      if (isSameUser()) this.state.partialNext({ isLoading: false });
-    }
-  };
-
-  load = (): Promise<QueryScheduledMessagesResponse> =>
-    this.query({ limit: SCHEDULED_MESSAGES_LOAD_LIMIT }, (response, token) => {
-      if (this.client._cacheEnabled()) {
-        this.applySnapshot(response.scheduled_messages, () => true, token);
-      }
       return { isLoaded: true };
-    });
+    };
 
-  loadMore = async (): Promise<QueryScheduledMessagesResponse | undefined> => {
-    const { next, isLoading } = this.state.getLatestValue();
+    return this.query(options, replaceStore);
+  };
+
+  public loadMore = async (): Promise<QueryScheduledMessagesResponse | undefined> => {
+    const { isLoading, next } = this.state.getLatestValue();
+
     if (!next || isLoading) return;
-    return await this.query({ limit: SCHEDULED_MESSAGES_LOAD_LIMIT, next }, (response) =>
-      this.upsertManyToState(response.scheduled_messages),
-    );
+
+    const options = { limit: SCHEDULED_MESSAGES_LOAD_LIMIT, next };
+
+    const addPage = ({ scheduled_messages = [] }: QueryScheduledMessagesResponse) =>
+      this.upsertManyToState(scheduled_messages);
+
+    return await this.query(options, addPage);
   };
 
-  updateScheduledMessage = async (id: string, options: UpdateScheduledMessageOptions) => {
-    const token = this.snapshotToken();
-    const { scheduled_message } = await this.client.updateScheduledMessage(id, options);
-    this.upsertResponseToState(scheduled_message, token);
-    return scheduled_message;
+  public updateScheduledMessage = async (
+    id: string,
+    options: UpdateScheduledMessageOptions,
+  ) => {
+    const { scheduled_message: scheduledMessage } =
+      await this.client.updateScheduledMessage(id, options);
+
+    this.upsertToState(scheduledMessage);
+
+    return scheduledMessage;
   };
 
-  deleteScheduledMessage = async (id: string) => {
-    const { epoch } = this;
-    const { scheduled_message } = await this.client.deleteScheduledMessage(id);
-    if (epoch === this.epoch) this.removeFromState(id);
-    return scheduled_message;
+  public deleteScheduledMessage = async (id: string) => {
+    const { scheduled_message: scheduledMessage } =
+      await this.client.deleteScheduledMessage(id);
+
+    this.removeFromState(id);
+
+    return scheduledMessage;
   };
 
-  sendScheduledMessageNow = async (id: string) => {
-    const token = this.snapshotToken();
-    const { scheduled_message } = await this.client.sendScheduledMessageNow(id);
-    this.upsertResponseToState(scheduled_message, token);
-    return scheduled_message;
+  public sendScheduledMessageNow = async (id: string) => {
+    const { scheduled_message: scheduledMessage } =
+      await this.client.sendScheduledMessageNow(id);
+
+    this.upsertToState(scheduledMessage);
+
+    return scheduledMessage;
   };
 }

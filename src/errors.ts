@@ -37,7 +37,7 @@ export const APIErrorCodes: Record<string, { name: string; retryable: boolean }>
   '119': { name: 'ScheduledMessageIDTakenError', retryable: false },
   '120': { name: 'ScheduledMessageNotEditableError', retryable: false },
   '121': { name: 'ScheduledMessageSendingError', retryable: false },
-  '122': { name: 'ScheduledMessageConflictError', retryable: true },
+  '122': { name: 'ScheduledMessageConflictError', retryable: false },
   '123': { name: 'ScheduledMessageAlreadySentError', retryable: false },
   '124': { name: 'ScheduledMessageCanceledError', retryable: false },
 };

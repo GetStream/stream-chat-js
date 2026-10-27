@@ -1,5 +1,5 @@
 import type { Channel } from '../channel';
-import type { ScheduledMessageLimits } from '../types';
+import type { ScheduledMessageLimits, ScheduledMessagesChannelConfig } from '../types';
 
 export const DEFAULT_SCHEDULED_MESSAGE_LIMITS: ScheduledMessageLimits = {
   maxLeadTimeSeconds: 120 * 24 * 60 * 60,
@@ -9,19 +9,17 @@ export const DEFAULT_SCHEDULED_MESSAGE_LIMITS: ScheduledMessageLimits = {
 };
 
 export const getScheduledMessageLimits = (channel: Channel): ScheduledMessageLimits => {
-  const config = channel.getConfig();
-  return {
-    maxLeadTimeSeconds:
-      config?.scheduled_messages_max_lead_time_seconds ??
-      DEFAULT_SCHEDULED_MESSAGE_LIMITS.maxLeadTimeSeconds,
-    maxPerChannel:
-      config?.scheduled_messages_max_per_channel ??
-      DEFAULT_SCHEDULED_MESSAGE_LIMITS.maxPerChannel,
-    maxPerUser:
-      config?.scheduled_messages_max_per_user ??
-      DEFAULT_SCHEDULED_MESSAGE_LIMITS.maxPerUser,
-    minLeadTimeSeconds:
-      config?.scheduled_messages_min_lead_time_seconds ??
-      DEFAULT_SCHEDULED_MESSAGE_LIMITS.minLeadTimeSeconds,
-  };
+  const config: ScheduledMessagesChannelConfig = channel.getConfig() ?? {};
+  const {
+    scheduled_messages_max_lead_time_seconds:
+      maxLeadTimeSeconds = DEFAULT_SCHEDULED_MESSAGE_LIMITS.maxLeadTimeSeconds,
+    scheduled_messages_max_per_channel:
+      maxPerChannel = DEFAULT_SCHEDULED_MESSAGE_LIMITS.maxPerChannel,
+    scheduled_messages_max_per_user:
+      maxPerUser = DEFAULT_SCHEDULED_MESSAGE_LIMITS.maxPerUser,
+    scheduled_messages_min_lead_time_seconds:
+      minLeadTimeSeconds = DEFAULT_SCHEDULED_MESSAGE_LIMITS.minLeadTimeSeconds,
+  } = config;
+
+  return { maxLeadTimeSeconds, maxPerChannel, maxPerUser, minLeadTimeSeconds };
 };

@@ -211,8 +211,6 @@ export class Channel {
    * @param {boolean} [options.pending] Make this message pending
    * @param {Record<string,string>} [options.pending_message_metadata] Metadata for the pending message
    * @param {boolean} [options.force_moderation] Apply force moderation for server-side requests
-   * @param {string | Date} [options.scheduled_at] Do not send the message now but schedule it to be sent at this time.
-   * The response then carries `scheduled_message`, and `message` is not added to the channel.
    *
    * @return {Promise<SendMessageAPIResponse>} The Server Response
    */
@@ -223,7 +221,6 @@ export class Channel {
       message: rawMessage,
     });
 
-    const scheduledMessagesToken = client.scheduledMessages.snapshotToken();
     const response = await client.post<SendMessageAPIResponse>(
       `${this._channelURL()}/message`,
       {
@@ -232,10 +229,7 @@ export class Channel {
       },
     );
     if (response.scheduled_message) {
-      client.scheduledMessages.upsertResponseToState(
-        response.scheduled_message,
-        scheduledMessagesToken,
-      );
+      client.scheduledMessages.upsertToState(response.scheduled_message);
     }
     return response;
   }
@@ -1601,7 +1595,6 @@ export class Channel {
       );
     }
 
-    const scheduledMessagesToken = this.getClient().scheduledMessages.snapshotToken();
     let queryURL = `${this.getClient().baseURL}/channels/${encodeURIComponent(
       this.type,
     )}`;
@@ -1677,7 +1670,6 @@ export class Channel {
     this.getClient().scheduledMessages.hydrateChannelState(
       this.cid,
       state.scheduled_messages,
-      scheduledMessagesToken,
     );
 
     this.messageComposer.initStateFromChannelResponse(state);

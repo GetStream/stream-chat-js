@@ -4877,38 +4877,66 @@ export type QueryRemindersResponse = {
   next?: string;
 };
 
+export const ScheduledMessageStatus = {
+  Canceled: 'canceled',
+  Failed: 'failed',
+  Scheduled: 'scheduled',
+  Sending: 'sending',
+  Sent: 'sent',
+} as const;
+
 export type ScheduledMessageStatus =
-  | 'scheduled'
-  | 'sending'
-  | 'failed'
-  | 'canceled'
-  | 'sent';
+  (typeof ScheduledMessageStatus)[keyof typeof ScheduledMessageStatus];
+
+export type ActiveScheduledMessageStatus = Exclude<
+  ScheduledMessageStatus,
+  typeof ScheduledMessageStatus.Canceled | typeof ScheduledMessageStatus.Sent
+>;
+
+export const ScheduledMessageFailureReason = {
+  Banned: 'banned',
+  ChannelDeleted: 'channel_deleted',
+  ChannelFrozen: 'channel_frozen',
+  Expired: 'expired',
+  HookRejected: 'hook_rejected',
+  InternalError: 'internal_error',
+  InvalidMessage: 'invalid_message',
+  ModerationBlocked: 'moderation_blocked',
+  NoPermission: 'no_permission',
+  PendingNotSupported: 'pending_not_supported',
+  UserDeleted: 'user_deleted',
+} as const;
 
 export type ScheduledMessageFailureReason =
-  | 'banned'
-  | 'no_permission'
-  | 'channel_frozen'
-  | 'channel_deleted'
-  | 'user_deleted'
-  | 'moderation_blocked'
-  | 'hook_rejected'
-  | 'expired'
-  | 'internal_error'
-  | 'invalid_message'
-  | 'pending_not_supported';
+  (typeof ScheduledMessageFailureReason)[keyof typeof ScheduledMessageFailureReason];
+
+export const ScheduledMessageErrorReason = {
+  AlreadySent: 'scheduled_message_already_sent',
+  Canceled: 'scheduled_message_canceled',
+  ChannelLimit: 'scheduled_limit_channel',
+  Conflict: 'scheduled_message_conflict',
+  Disabled: 'scheduled_messages_disabled',
+  IdTaken: 'scheduled_message_id_taken',
+  NotEditable: 'scheduled_message_not_editable',
+  Sending: 'scheduled_message_sending',
+  TooFar: 'scheduled_at_too_far',
+  TooSoon: 'scheduled_at_too_soon',
+  UserLimit: 'scheduled_limit_user',
+} as const;
 
 export type ScheduledMessageErrorReason =
-  | 'scheduled_messages_disabled'
-  | 'scheduled_at_too_soon'
-  | 'scheduled_at_too_far'
-  | 'scheduled_limit_channel'
-  | 'scheduled_limit_user'
-  | 'scheduled_message_id_taken'
-  | 'scheduled_message_not_editable'
-  | 'scheduled_message_sending'
-  | 'scheduled_message_conflict'
-  | 'scheduled_message_already_sent'
-  | 'scheduled_message_canceled';
+  (typeof ScheduledMessageErrorReason)[keyof typeof ScheduledMessageErrorReason];
+
+export const ScheduledMessageEventType = {
+  Created: 'scheduled_message.created',
+  Deleted: 'scheduled_message.deleted',
+  Failed: 'scheduled_message.failed',
+  Sent: 'scheduled_message.sent',
+  Updated: 'scheduled_message.updated',
+} as const;
+
+export type ScheduledMessageEventType =
+  (typeof ScheduledMessageEventType)[keyof typeof ScheduledMessageEventType];
 
 export type ScheduledMessagesChannelConfig = {
   scheduled_messages_max_lead_time_seconds?: number;
@@ -4985,7 +5013,7 @@ export type UpdateScheduledMessageOptions = {
 
 export type ScheduledMessageFilters = {
   cid?: string;
-  status?: Array<Extract<ScheduledMessageStatus, 'scheduled' | 'sending' | 'failed'>>;
+  status?: ActiveScheduledMessageStatus[];
 };
 
 export type ScheduledMessageSort = { scheduled_at: 1 };

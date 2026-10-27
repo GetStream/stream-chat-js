@@ -2268,7 +2268,6 @@ export class StreamChat {
     options: ChannelOptions = {},
     stateOptions: ChannelStateOptions = {},
   ): Promise<Channel[] | QueryChannelsResponseWithChannels> {
-    const scheduledMessagesToken = this.scheduledMessages.snapshotToken();
     const queryChannelsResponse = await this.queryChannelsRequestWithResponse(
       filterConditions,
       sort,
@@ -2296,7 +2295,6 @@ export class StreamChat {
       this.scheduledMessages.hydrateChannelState(
         channelState.channel.cid,
         channelState.scheduled_messages,
-        scheduledMessagesToken,
       );
     }
     const hydratedChannels = this.hydrateActiveChannels(channels, stateOptions, options);

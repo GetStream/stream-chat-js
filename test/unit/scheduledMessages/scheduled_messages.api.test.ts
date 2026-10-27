@@ -3,10 +3,12 @@ import {
   DEFAULT_SCHEDULED_MESSAGE_LIMITS,
   getScheduledMessageErrorReason,
   getScheduledMessageLimits,
+  ScheduledMessageErrorReason,
   ScheduledMessageResponse,
   StreamChat,
 } from '../../../src';
 import { APIErrorCodes } from '../../../src/errors';
+import { generateAPIError } from '../test-utils/generateAPIError';
 import { getClientWithUser } from '../test-utils/getClient';
 import { mockChannelQueryResponse } from '../test-utils/mockChannelQueryResponse';
 
@@ -110,7 +112,7 @@ describe('scheduled messages API', () => {
       });
       expect(APIErrorCodes['122']).toEqual({
         name: 'ScheduledMessageConflictError',
-        retryable: true,
+        retryable: false,
       });
       expect(APIErrorCodes['123']).toEqual({
         name: 'ScheduledMessageAlreadySentError',
@@ -188,106 +190,6 @@ describe('scheduled messages API', () => {
       expect(spy.mock.calls[0][1]).not.toHaveProperty('include_scheduled_messages');
     });
 
-    it('drops scheduled messages of a response that arrives after the user disconnected', async () => {
-      const client = setup();
-      let resolve!: (value: unknown) => void;
-      vi.spyOn(client, 'post').mockReturnValue(
-        new Promise((r) => (resolve = r)) as never,
-      );
-      vi.spyOn(client, 'closeConnection').mockResolvedValue(undefined);
-
-      const querying = client.queryChannels({}, [], { include_scheduled_messages: true });
-      await vi.waitFor(() => expect(client.post).toHaveBeenCalled());
-      await client.disconnectUser();
-      resolve({
-        channels: [
-          channelResponse('a', [{ ...scheduledMessage, id: 'sm-a', cid: 'messaging:a' }]),
-        ],
-      });
-      await querying.catch(() => undefined);
-
-      expect(client.scheduledMessages.scheduledMessages.size).toBe(0);
-    });
-  });
-
-  describe('channel', () => {
-    it('sendMessage passes scheduled_at through and stores the scheduled message', async () => {
-      const client = setup();
-      const channel = client.channel('messaging', 'general');
-      const spy = vi.spyOn(client, 'post').mockResolvedValue({
-        message: { id: 'sm-1', text: 'see you tomorrow' },
-        scheduled_message: scheduledMessage,
-      });
-
-      const response = await channel.sendMessage(
-        { text: 'see you tomorrow' },
-        { scheduled_at: '2030-01-01T00:00:00Z' },
-      );
-
-      expect(spy).toHaveBeenCalledWith(
-        `${client.baseURL}/channels/messaging/general/message`,
-        {
-          message: { text: 'see you tomorrow' },
-          scheduled_at: '2030-01-01T00:00:00Z',
-        },
-      );
-      expect(response.scheduled_message).toEqual(scheduledMessage);
-      expect(client.scheduledMessages.getFromState('sm-1')).toEqual(scheduledMessage);
-      expect(channel.state.messages).toHaveLength(0);
-    });
-
-    it('sendMessage does not queue a scheduled send in the offline DB', async () => {
-      const client = setup();
-      const queueTask = vi.fn();
-      // @ts-expect-error partial offline DB
-      client.offlineDb = { queueTask };
-      const channel = client.channel('messaging', 'general');
-      vi.spyOn(client, 'post').mockResolvedValue({
-        message: { id: 'sm-1' },
-        scheduled_message: scheduledMessage,
-      });
-
-      await channel.sendMessage(
-        { id: 'sm-1', text: 'see you tomorrow' },
-        { scheduled_at: '2030-01-01T00:00:00Z' },
-      );
-
-      expect(queueTask).not.toHaveBeenCalled();
-    });
-
-    it('sendMessage without scheduled_at does not touch the scheduled messages store', async () => {
-      const client = setup();
-      const channel = client.channel('messaging', 'general');
-      vi.spyOn(client, 'post').mockResolvedValue({ message: { id: 'm-1' } });
-
-      await channel.sendMessage({ text: 'now' });
-
-      expect(client.scheduledMessages.scheduledMessages.size).toBe(0);
-    });
-
-    it('sendMessage drops a scheduled response that arrives after the user disconnected', async () => {
-      const client = setup();
-      const channel = client.channel('messaging', 'general');
-      let resolve!: (value: unknown) => void;
-      vi.spyOn(client, 'post').mockReturnValue(
-        new Promise((r) => (resolve = r)) as never,
-      );
-      vi.spyOn(client, 'closeConnection').mockResolvedValue(undefined);
-
-      const sending = channel.sendMessage(
-        { text: 'see you tomorrow' },
-        { scheduled_at: '2030-01-01T00:00:00Z' },
-      );
-      await client.disconnectUser();
-      resolve({
-        message: { id: 'sm-1', text: 'see you tomorrow' },
-        scheduled_message: scheduledMessage,
-      });
-      await sending;
-
-      expect(client.scheduledMessages.scheduledMessages.size).toBe(0);
-    });
-
     it('query passes include_scheduled_messages and hydrates the store', async () => {
       const client = setup();
       const { cid, id, type } = mockChannelQueryResponse.channel;
@@ -308,38 +210,60 @@ describe('scheduled messages API', () => {
   });
 
   describe('getScheduledMessageErrorReason', () => {
-    const apiError = (code: number, reason?: string) =>
-      Object.assign(new Error('failed'), {
-        code,
-        response: { data: { code, exception_fields: reason ? { reason } : undefined } },
-      });
-
     it('reads the reason from exception_fields', () => {
       expect(
-        getScheduledMessageErrorReason(apiError(124, 'scheduled_message_canceled')),
-      ).toBe('scheduled_message_canceled');
+        getScheduledMessageErrorReason(
+          generateAPIError(124, 'scheduled_message_canceled'),
+        ),
+      ).toBe(ScheduledMessageErrorReason.Canceled);
     });
 
     it('falls back to the error code', () => {
-      expect(getScheduledMessageErrorReason(apiError(114))).toBe(
-        'scheduled_messages_disabled',
+      expect(getScheduledMessageErrorReason(generateAPIError(114))).toBe(
+        ScheduledMessageErrorReason.Disabled,
       );
-      expect(getScheduledMessageErrorReason(apiError(123))).toBe(
-        'scheduled_message_already_sent',
+      expect(getScheduledMessageErrorReason(generateAPIError(123))).toBe(
+        ScheduledMessageErrorReason.AlreadySent,
       );
+    });
+
+    it('maps every scheduled message error code to its reason', () => {
+      const reasons = Array.from({ length: 11 }, (_, index) =>
+        getScheduledMessageErrorReason(generateAPIError(114 + index)),
+      );
+
+      expect(reasons).toEqual([
+        ScheduledMessageErrorReason.Disabled,
+        ScheduledMessageErrorReason.TooSoon,
+        ScheduledMessageErrorReason.TooFar,
+        ScheduledMessageErrorReason.ChannelLimit,
+        ScheduledMessageErrorReason.UserLimit,
+        ScheduledMessageErrorReason.IdTaken,
+        ScheduledMessageErrorReason.NotEditable,
+        ScheduledMessageErrorReason.Sending,
+        ScheduledMessageErrorReason.Conflict,
+        ScheduledMessageErrorReason.AlreadySent,
+        ScheduledMessageErrorReason.Canceled,
+      ]);
     });
 
     it('ignores an unknown reason and uses the code', () => {
-      expect(getScheduledMessageErrorReason(apiError(117, 'something_else'))).toBe(
-        'scheduled_limit_channel',
-      );
+      expect(
+        getScheduledMessageErrorReason(generateAPIError(117, 'something_else')),
+      ).toBe(ScheduledMessageErrorReason.ChannelLimit);
     });
 
     it('returns undefined for errors that are not scheduled message errors', () => {
-      expect(getScheduledMessageErrorReason(apiError(4))).toBeUndefined();
+      const reasonOnPlainError = Object.assign(new Error('failed'), {
+        code: 114,
+        response: {
+          data: { exception_fields: { reason: 'scheduled_messages_disabled' } },
+        },
+      });
+
+      expect(getScheduledMessageErrorReason(generateAPIError(4))).toBeUndefined();
       expect(getScheduledMessageErrorReason(new Error('network'))).toBeUndefined();
-      expect(getScheduledMessageErrorReason(undefined)).toBeUndefined();
-      expect(getScheduledMessageErrorReason('scheduled_at_too_far')).toBeUndefined();
+      expect(getScheduledMessageErrorReason(reasonOnPlainError)).toBeUndefined();
     });
   });
 

@@ -1,35 +1,43 @@
-import type { APIErrorResponse, ScheduledMessageErrorReason } from '../types';
+import { ErrorFromResponse, ScheduledMessageErrorReason } from '../types';
+import type { APIErrorResponse } from '../types';
 
-const reasonByCode: Record<number, ScheduledMessageErrorReason> = {
-  114: 'scheduled_messages_disabled',
-  115: 'scheduled_at_too_soon',
-  116: 'scheduled_at_too_far',
-  117: 'scheduled_limit_channel',
-  118: 'scheduled_limit_user',
-  119: 'scheduled_message_id_taken',
-  120: 'scheduled_message_not_editable',
-  121: 'scheduled_message_sending',
-  122: 'scheduled_message_conflict',
-  123: 'scheduled_message_already_sent',
-  124: 'scheduled_message_canceled',
+export type ScheduledMessageAPIError = ErrorFromResponse<APIErrorResponse>;
+
+const REASON_BY_ERROR_CODE: Record<number, ScheduledMessageErrorReason> = {
+  114: ScheduledMessageErrorReason.Disabled,
+  115: ScheduledMessageErrorReason.TooSoon,
+  116: ScheduledMessageErrorReason.TooFar,
+  117: ScheduledMessageErrorReason.ChannelLimit,
+  118: ScheduledMessageErrorReason.UserLimit,
+  119: ScheduledMessageErrorReason.IdTaken,
+  120: ScheduledMessageErrorReason.NotEditable,
+  121: ScheduledMessageErrorReason.Sending,
+  122: ScheduledMessageErrorReason.Conflict,
+  123: ScheduledMessageErrorReason.AlreadySent,
+  124: ScheduledMessageErrorReason.Canceled,
 };
 
-const reasons = new Set<string>(Object.values(reasonByCode));
+const KNOWN_ERROR_REASONS = new Set<string>(Object.values(ScheduledMessageErrorReason));
 
-const isScheduledMessageErrorReason = (
-  value: unknown,
-): value is ScheduledMessageErrorReason =>
-  typeof value === 'string' && reasons.has(value);
+const isKnownErrorReason = (reason?: string): reason is ScheduledMessageErrorReason =>
+  !!reason && KNOWN_ERROR_REASONS.has(reason);
+
+const isErrorFromResponse = (error: Error): error is ScheduledMessageAPIError =>
+  error instanceof ErrorFromResponse;
 
 export const getScheduledMessageErrorReason = (
-  error: unknown,
+  error: Error,
 ): ScheduledMessageErrorReason | undefined => {
-  if (!error || typeof error !== 'object') return;
-  const { code, response } = error as {
-    code?: unknown;
-    response?: { data?: Partial<APIErrorResponse> };
-  };
-  const reason = response?.data?.exception_fields?.reason;
-  if (isScheduledMessageErrorReason(reason)) return reason;
-  return typeof code === 'number' ? reasonByCode[code] : undefined;
+  if (!isErrorFromResponse(error)) return;
+
+  const { code, response } = error;
+  const errorData: Partial<APIErrorResponse> = response?.data ?? {};
+  const { exception_fields: exceptionFields = {} } = errorData;
+  const { reason } = exceptionFields;
+
+  const reasonFromCode = code === null ? undefined : REASON_BY_ERROR_CODE[code];
+
+  const errorReason = isKnownErrorReason(reason) ? reason : reasonFromCode;
+
+  return errorReason;
 };

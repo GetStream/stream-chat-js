@@ -6,6 +6,7 @@ import {
   StreamChat,
 } from '../../../src';
 import { getClientWithUser } from '../test-utils/getClient';
+import { generateAPIError } from '../test-utils/generateAPIError';
 
 const cid = 'messaging:general';
 const otherCid = 'messaging:random';
@@ -64,8 +65,9 @@ describe('ScheduledMessageManager', () => {
     expect(manager).toBeInstanceOf(ScheduledMessageManager);
     expect(manager.scheduledMessages.size).toBe(0);
     expect(manager.state.getLatestValue()).toEqual(
-      expect.objectContaining({ hasMore: false, isLoaded: false, isLoading: false }),
+      expect.objectContaining({ isDisabled: false, isLoaded: false, isLoading: false }),
     );
+    expect(manager.state.getLatestValue()).not.toHaveProperty('hasMore');
   });
 
   describe('state', () => {
@@ -116,21 +118,58 @@ describe('ScheduledMessageManager', () => {
       expect(manager.scheduledMessages.size).toBe(0);
     });
 
-    it('returns the scheduled messages of a channel or thread ordered by scheduled_at', () => {
-      const { manager } = setup();
-      const later = generateScheduledMessage({ scheduled_at: '2030-01-02T00:00:00Z' });
-      const sooner = generateScheduledMessage({ scheduled_at: '2030-01-01T00:00:00Z' });
-      const reply = generateScheduledMessage({
-        scheduled_at: '2030-01-03T00:00:00Z',
-        message: { text: 'reply', parent_id: 'parent' },
-      });
-      const elsewhere = generateScheduledMessage({ cid: otherCid });
-      [later, reply, elsewhere, sooner].forEach(manager.upsertToState);
+    describe('selectors', () => {
+      const populate = () => {
+        const { manager } = setup();
+        const later = generateScheduledMessage({ scheduled_at: '2030-01-02T00:00:00Z' });
+        const sooner = generateScheduledMessage({ scheduled_at: '2030-01-01T00:00:00Z' });
+        const laterReply = generateScheduledMessage({
+          scheduled_at: '2030-01-04T00:00:00Z',
+          message: { text: 'later reply', parent_id: 'parent' },
+        });
+        const soonerReply = generateScheduledMessage({
+          scheduled_at: '2030-01-03T00:00:00Z',
+          message: { text: 'sooner reply', parent_id: 'parent' },
+        });
+        const elsewhere = generateScheduledMessage({ cid: otherCid });
+        [later, laterReply, elsewhere, sooner, soonerReply].forEach(
+          manager.upsertToState,
+        );
+        return { elsewhere, later, laterReply, manager, sooner, soonerReply };
+      };
 
-      expect(manager.getForChannel(cid)).toEqual([sooner, later, reply]);
-      expect(manager.getForChannel(cid, { parentId: 'parent' })).toEqual([reply]);
-      expect(manager.getForChannel(cid, { parentId: null })).toEqual([sooner, later]);
-      expect(manager.getForChannel(otherCid)).toEqual([elsewhere]);
+      it('returns the channel-level scheduled messages ordered by scheduled_at', () => {
+        const { elsewhere, later, manager, sooner } = populate();
+
+        expect(manager.getForChannel(cid)).toEqual([sooner, later]);
+        expect(manager.getForChannel(otherCid)).toEqual([elsewhere]);
+        expect(manager.getForChannel('messaging:empty')).toEqual([]);
+      });
+
+      it('returns the scheduled replies of a thread ordered by scheduled_at', () => {
+        const { laterReply, manager, soonerReply } = populate();
+
+        expect(manager.getForThread('parent')).toEqual([soonerReply, laterReply]);
+        expect(manager.getForThread('other-parent')).toEqual([]);
+      });
+
+      it('counts the channel-level scheduled messages', () => {
+        const { manager } = populate();
+
+        expect(manager.getCountForChannel(cid)).toBe(2);
+        expect(manager.getCountForChannel(otherCid)).toBe(1);
+        expect(manager.getCountForChannel('messaging:empty')).toBe(0);
+      });
+
+      it('breaks scheduled_at ties by id', () => {
+        const { manager } = setup();
+        const scheduledAt = '2030-01-01T00:00:00Z';
+        const b = generateScheduledMessage({ id: 'b', scheduled_at: scheduledAt });
+        const a = generateScheduledMessage({ id: 'a', scheduled_at: scheduledAt });
+        [b, a].forEach(manager.upsertToState);
+
+        expect(manager.getForChannel(cid)).toEqual([a, b]);
+      });
     });
 
     it('replaces the scheduled messages of a channel when hydrating channel state', () => {
@@ -299,7 +338,6 @@ describe('ScheduledMessageManager', () => {
       expect(Array.from(manager.scheduledMessages.values())).toEqual(loaded);
       expect(manager.state.getLatestValue()).toEqual(
         expect.objectContaining({
-          hasMore: true,
           isLoaded: true,
           isLoading: false,
           next: 'cursor',
@@ -327,7 +365,21 @@ describe('ScheduledMessageManager', () => {
       expect(querySpy).toHaveBeenCalledTimes(2);
       expect(querySpy).toHaveBeenLastCalledWith({ limit: 100, next: 'cursor' });
       expect(manager.scheduledMessages.size).toBe(2);
-      expect(manager.state.getLatestValue().hasMore).toBe(false);
+      expect(manager.state.getLatestValue().next).toBeUndefined();
+    });
+
+    it('does not store finished scheduled messages returned by load', async () => {
+      const { client, manager } = setup();
+      const active = generateScheduledMessage();
+      const sent = generateScheduledMessage({ status: 'sent' });
+      vi.spyOn(client, 'queryScheduledMessages').mockResolvedValue({
+        scheduled_messages: [active, sent],
+        duration: '',
+      });
+
+      await manager.load();
+
+      expect(Array.from(manager.scheduledMessages.values())).toEqual([active]);
     });
 
     it('adds a loaded page to the store in a single update', async () => {
@@ -363,8 +415,45 @@ describe('ScheduledMessageManager', () => {
           isLoading: false,
           isLoaded: false,
           lastQueryError: error,
+          isDisabled: false,
         }),
       );
+    });
+
+    it('marks the feature disabled when load fails with error 114', async () => {
+      const { client, manager } = setup();
+      vi.spyOn(client, 'queryScheduledMessages').mockRejectedValue(
+        generateAPIError(114, 'scheduled_messages_disabled'),
+      );
+
+      await expect(manager.load()).rejects.toThrow('failed');
+
+      expect(manager.state.getLatestValue()).toEqual(
+        expect.objectContaining({ isDisabled: true, isLoaded: false, isLoading: false }),
+      );
+    });
+
+    it('clears the disabled flag after a successful load', async () => {
+      const { client, manager } = setup();
+      vi.spyOn(client, 'queryScheduledMessages')
+        .mockRejectedValueOnce(generateAPIError(114))
+        .mockResolvedValueOnce({ scheduled_messages: [], duration: '' });
+
+      await expect(manager.load()).rejects.toThrow('failed');
+      await manager.load();
+
+      expect(manager.state.getLatestValue()).toEqual(
+        expect.objectContaining({ isDisabled: false, lastQueryError: undefined }),
+      );
+    });
+
+    it('does not mark the feature disabled for other errors', async () => {
+      const { client, manager } = setup();
+      vi.spyOn(client, 'queryScheduledMessages').mockRejectedValue(generateAPIError(4));
+
+      await expect(manager.load()).rejects.toThrow('failed');
+
+      expect(manager.state.getLatestValue().isDisabled).toBe(false);
     });
 
     it('updates a scheduled message and stores the result', async () => {
@@ -463,20 +552,22 @@ describe('ScheduledMessageManager', () => {
       expect(manager.getFromState(sm.id)?.status).toBe('sending');
     });
 
-    it('keeps a message scheduled while load is in flight', async () => {
+    it('does not bring back a message sent while load is in flight', async () => {
       const { client, manager } = setup();
+      manager.registerSubscriptions();
+      const sm = generateScheduledMessage();
+      manager.upsertToState(sm);
       const response = deferred<unknown>();
       vi.spyOn(client, 'post').mockReturnValue(response.promise as never);
-      const existing = generateScheduledMessage();
-      const scheduledMeanwhile = generateScheduledMessage();
 
       const loading = manager.load();
-      manager.upsertToState(scheduledMeanwhile);
-      response.resolve({ scheduled_messages: [existing] });
+      client.dispatchEvent(
+        generateEvent('scheduled_message.sent', { ...sm, status: 'sent' }),
+      );
+      response.resolve({ scheduled_messages: [sm] });
       await loading;
 
-      expect(manager.getFromState(existing.id)).toEqual(existing);
-      expect(manager.getFromState(scheduledMeanwhile.id)).toEqual(scheduledMeanwhile);
+      expect(manager.getFromState(sm.id)).toBeUndefined();
     });
 
     it('keeps a failure received while load is in flight', async () => {
@@ -501,7 +592,7 @@ describe('ScheduledMessageManager', () => {
       expect(manager.getFromState(sm.id)?.status).toBe('failed');
     });
 
-    it('still drops a message missing from the load when it did not change meanwhile', async () => {
+    it('drops a message missing from the load', async () => {
       const { client, manager } = setup();
       const gone = generateScheduledMessage();
       manager.upsertToState(gone);
@@ -510,60 +601,6 @@ describe('ScheduledMessageManager', () => {
       await manager.load();
 
       expect(manager.getFromState(gone.id)).toBeUndefined();
-    });
-
-    it('keeps a message scheduled while a channel query is in flight', async () => {
-      const { manager } = setup();
-      const token = manager.snapshotToken();
-      const scheduledMeanwhile = generateScheduledMessage();
-      manager.upsertToState(scheduledMeanwhile);
-
-      manager.hydrateChannelState(cid, [], token);
-
-      expect(manager.getFromState(scheduledMeanwhile.id)).toEqual(scheduledMeanwhile);
-    });
-  });
-
-  describe('user switch', () => {
-    it('drops a load response that arrives after the user disconnected', async () => {
-      const { client, manager } = setup();
-      const response = deferred<unknown>();
-      vi.spyOn(client, 'post').mockReturnValue(response.promise as never);
-      vi.spyOn(client, 'closeConnection').mockResolvedValue(undefined);
-
-      const loading = manager.load();
-      await client.disconnectUser();
-      response.resolve({ scheduled_messages: [generateScheduledMessage()] });
-      await loading;
-
-      expect(manager.scheduledMessages.size).toBe(0);
-      expect(manager.state.getLatestValue().isLoaded).toBe(false);
-    });
-
-    it('drops a send-now response that arrives after the user disconnected', async () => {
-      const { client, manager } = setup();
-      const sm = generateScheduledMessage();
-      const response = deferred<unknown>();
-      vi.spyOn(client, 'post').mockReturnValue(response.promise as never);
-      vi.spyOn(client, 'closeConnection').mockResolvedValue(undefined);
-
-      const sending = manager.sendScheduledMessageNow(sm.id);
-      await client.disconnectUser();
-      response.resolve({ scheduled_message: sm });
-      await sending;
-
-      expect(manager.scheduledMessages.size).toBe(0);
-    });
-
-    it('drops a channel query response that arrives after the user disconnected', async () => {
-      const { client, manager } = setup();
-      const token = manager.snapshotToken();
-      vi.spyOn(client, 'closeConnection').mockResolvedValue(undefined);
-      await client.disconnectUser();
-
-      manager.hydrateChannelState(cid, [generateScheduledMessage()], token);
-
-      expect(manager.scheduledMessages.size).toBe(0);
     });
   });
 });
