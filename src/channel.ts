@@ -228,6 +228,9 @@ export class Channel {
   }
 
   async sendMessage(message: Message, options?: SendMessageOptions) {
+    if (options?.scheduled_at) {
+      return await this._sendMessage(message, options);
+    }
     try {
       const offlineDb = this.getClient().offlineDb;
       if (offlineDb) {
