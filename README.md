@@ -102,7 +102,7 @@ message.custom_property; // in the response object as well
 ```
 
 > [!WARNING]  
-> Generics mechanism has been removed in version `9.0.0` in favour of the module augmentation, please see [the release guide](https://getstream.io/chat/docs/node/upgrade-stream-chat-to-v9) on how to migrate.
+> Generics mechanism has been removed in version `9.0.0` in favour of the module augmentation, please see [the release guide](https://getstream.io/chat/docs/javascript/upgrade-stream-chat-to-v9/) on how to migrate.
 
 ## 🔗 (Optional) Development Setup in Combination With Our SDKs
 

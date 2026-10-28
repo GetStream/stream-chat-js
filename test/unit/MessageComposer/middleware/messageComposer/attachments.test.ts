@@ -5,12 +5,16 @@ import { MessageComposer } from '../../../../../src/messageComposer/messageCompo
 import { createAttachmentsCompositionMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/attachments';
 import {
   AttachmentLoadingState,
+  LocalAttachment,
   LocalImageAttachment,
 } from '../../../../../src/messageComposer/types';
 import { createDraftAttachmentsCompositionMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/attachments';
 import { MessageDraftComposerMiddlewareValueState } from '../../../../../src/messageComposer/middleware/messageComposer/types';
 import { MessageComposerMiddlewareState } from '../../../../../src/messageComposer/middleware/messageComposer/types';
 import { MiddlewareStatus } from '../../../../../src/middleware';
+import { Message, MessageResponse } from '../../../../../src/types';
+import { formatMessage } from '../../../../../src/utils';
+import { getClientWithUser } from '../../../test-utils/getClient';
 import { convertDateToTimestamp } from '../../../test-utils/time';
 
 const setup = (initialState: MessageComposerMiddlewareState) => {
@@ -182,11 +186,9 @@ describe('stream-io/message-composer-middleware/attachments', () => {
       },
     };
 
-    vi.spyOn(
-      messageComposer.attachmentManager,
-      'successfulUploads',
-      'get',
-    ).mockReturnValue([attachment]);
+    vi.spyOn(messageComposer.attachmentManager, 'attachments', 'get').mockReturnValue([
+      attachment,
+    ]);
 
     const result = await attachmentsMiddleware.handlers.compose(
       setup({
@@ -243,11 +245,9 @@ describe('stream-io/message-composer-middleware/attachments', () => {
       },
     ];
 
-    vi.spyOn(
-      messageComposer.attachmentManager,
-      'successfulUploads',
-      'get',
-    ).mockReturnValue(attachments);
+    vi.spyOn(messageComposer.attachmentManager, 'attachments', 'get').mockReturnValue(
+      attachments,
+    );
 
     const result = await attachmentsMiddleware.handlers.compose(
       setup({
@@ -298,11 +298,7 @@ describe('stream-io/message-composer-middleware/attachments', () => {
       'uploadsInProgressCount',
       'get',
     ).mockReturnValue(1);
-    vi.spyOn(
-      messageComposer.attachmentManager,
-      'successfulUploads',
-      'get',
-    ).mockReturnValue([]);
+    vi.spyOn(messageComposer.attachmentManager, 'attachments', 'get').mockReturnValue([]);
 
     const result = await attachmentsMiddleware.handlers.compose(
       setup({
@@ -346,11 +342,9 @@ describe('stream-io/message-composer-middleware/attachments', () => {
       },
     };
 
-    vi.spyOn(
-      messageComposer.attachmentManager,
-      'successfulUploads',
-      'get',
-    ).mockReturnValue([]);
+    vi.spyOn(messageComposer.attachmentManager, 'attachments', 'get').mockReturnValue([
+      attachment,
+    ]);
 
     const result = await attachmentsMiddleware.handlers.compose(
       setup({
@@ -411,7 +405,7 @@ describe('stream-io/message-composer-middleware/draft-attachments', () => {
       get uploadsInProgressCount() {
         return 0;
       },
-      get successfulUploads() {
+      get attachments() {
         return [];
       },
     };
@@ -450,11 +444,9 @@ describe('stream-io/message-composer-middleware/draft-attachments', () => {
       },
     };
 
-    vi.spyOn(
-      messageComposer.attachmentManager!,
-      'successfulUploads',
-      'get',
-    ).mockReturnValue([attachment]);
+    vi.spyOn(messageComposer.attachmentManager!, 'attachments', 'get').mockReturnValue([
+      attachment,
+    ]);
 
     const result = await draftAttachmentsMiddleware.handlers.compose(
       setupDraft({
@@ -490,11 +482,9 @@ describe('stream-io/message-composer-middleware/draft-attachments', () => {
       },
     };
 
-    vi.spyOn(
-      messageComposer.attachmentManager!,
-      'successfulUploads',
-      'get',
-    ).mockReturnValue([newAttachment]);
+    vi.spyOn(messageComposer.attachmentManager!, 'attachments', 'get').mockReturnValue([
+      newAttachment,
+    ]);
 
     const result = await draftAttachmentsMiddleware.handlers.compose(
       setupDraft({
@@ -807,5 +797,117 @@ describe('createAttachmentsCompositionMiddleware with pendingUploadsEnabled', ()
         (attachment) => (attachment as any).localMetadata?.id ?? 'done',
       ),
     ).toEqual(['in-flight', 'done', 'broken']);
+  });
+});
+
+describe('editing a message with attachments', () => {
+  const product = { type: 'product', title: 'Camp stove', custom: { price: '$45' } };
+  const image = {
+    type: 'image',
+    image_url: 'https://example.com/a.jpg',
+    fallback: 'a.jpg',
+  };
+  const newUpload = (uploadState: AttachmentLoadingState) => ({
+    type: 'image',
+    localMetadata: {
+      id: 'new-upload',
+      file: new File([], 'new.jpg', { type: 'image/jpeg' }),
+      uploadState,
+    },
+  });
+
+  const editMessage = async ({
+    attachments,
+    pendingUploads = false,
+    upload,
+  }: {
+    attachments: unknown[];
+    pendingUploads?: boolean;
+    upload?: ReturnType<typeof newUpload>;
+  }) => {
+    const client: StreamChat = getClientWithUser({ id: 'currentUser' });
+    const sendRequest = vi
+      .spyOn(client.api, 'sendRequest')
+      .mockResolvedValue({ metadata: {} } as never);
+    const composer = client.channel('messaging', 'channel-id').messageComposer;
+    if (pendingUploads) {
+      composer.updateConfig({ attachments: { pendingUploadsEnabled: true } });
+    }
+    composer.initState({
+      composition: formatMessage({
+        attachments,
+        created_at: convertDateToTimestamp(new Date()),
+        id: 'message-id',
+        text: 'text',
+        type: 'regular',
+        updated_at: convertDateToTimestamp(new Date()),
+        user: { id: 'currentUser' },
+      } as MessageResponse),
+    });
+    if (upload) composer.attachmentManager.upsertAttachments([upload as LocalAttachment]);
+    composer.textComposer.setText('edited text');
+
+    const composition = await composer.compose();
+    // the UI SDKs send the optimistic message as the update
+    await client.updateMessage(
+      { id: composition!.localMessage.id },
+      { message: composition!.localMessage as unknown as Message },
+    );
+    const sentAttachments = (sendRequest.mock.calls[0][4] as { message: Message }).message
+      .attachments;
+
+    return { composition: composition!, composer, sentAttachments };
+  };
+
+  it('keeps an attachment that is not an upload', async () => {
+    const { composer, composition, sentAttachments } = await editMessage({
+      attachments: [product],
+    });
+
+    expect(composer.editedMessage).toBeDefined();
+    expect(composition.message.attachments).toEqual([product]);
+    expect(sentAttachments).toEqual([product]);
+  });
+
+  it('keeps all attachments in order when not every one is an upload', async () => {
+    const { composition, sentAttachments } = await editMessage({
+      attachments: [product, image],
+    });
+
+    expect(composition.message.attachments).toEqual([product, image]);
+    expect(sentAttachments).toEqual([product, image]);
+  });
+
+  it('keeps the attachments with pending uploads enabled', async () => {
+    const { composition, sentAttachments } = await editMessage({
+      attachments: [product, image],
+      pendingUploads: true,
+    });
+
+    expect(composition.message.attachments).toEqual([product, image]);
+    expect(sentAttachments).toEqual([product, image]);
+  });
+
+  it('adds a new pending upload to the optimistic message only', async () => {
+    const upload = newUpload('uploading');
+    const { composition } = await editMessage({
+      attachments: [product],
+      pendingUploads: true,
+      upload,
+    });
+
+    expect(composition.message.attachments).toEqual([product]);
+    expect(composition.localMessage.attachments).toEqual([product, upload]);
+  });
+
+  it('leaves out a new upload that failed', async () => {
+    const { composition, sentAttachments } = await editMessage({
+      attachments: [product],
+      pendingUploads: true,
+      upload: newUpload('failed'),
+    });
+
+    expect(composition.message.attachments).toEqual([product]);
+    expect(sentAttachments).toEqual([product]);
   });
 });

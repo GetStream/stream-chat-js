@@ -58,6 +58,12 @@ export class StableWSConnection {
     },
   ) => void;
   requestID: string | undefined;
+  /**
+   * Set when the server sent a `connection.error` with code 40 (token expired) on an
+   * already established socket. The server closes the socket right after it, and the
+   * reconnect that follows must use a fresh token from the tokenProvider.
+   */
+  tokenExpiredByServer: boolean;
   resolvePromise?: (value: ConnectionOpen) => void;
   totalFailures: number;
   ws?: WebSocket;
@@ -75,6 +81,8 @@ export class StableWSConnection {
     /** Incremented when the current socket is closed or destroyed; older IDs' callbacks are ignored. */
     this.wsID = 1;
     this.lastEvent = null;
+    /** Set when the server reports that the token of the open socket expired */
+    this.tokenExpiredByServer = false;
   }
 
   /** Read live from the parent, so a config update reaches an already open socket. */
@@ -215,6 +223,7 @@ export class StableWSConnection {
     this.wsID += 1;
     this.isConnecting = false;
     this.isDisconnected = true;
+    this.tokenExpiredByServer = false;
     // A deliberate close still expects a reopen (mobile backgrounding), so waiters keep waiting:
     // invalidating drops the dead ID and arms a fresh deferred for the next socket.
     this.client.connectionIdManager.invalidate();
@@ -375,6 +384,15 @@ export class StableWSConnection {
 
     if (options.refreshToken) {
       await this.client.tokenManager.loadToken();
+
+      // Another reconnect may have started while the token was loading, e.g. when
+      // the socket fires both an error and a close event.
+      if (this.isConnecting || this.isHealthy) {
+        logger
+          .withExtraTags('_reconnect')
+          .debug('Aborting the reconnect: already connecting or healthy.');
+        return;
+      }
     }
 
     try {
@@ -521,6 +539,19 @@ export class StableWSConnection {
       this.scheduleNextPing();
     }
 
+    // The server reports a token that expired after the connection was established
+    // (auto_disconnect_ws) and then closes the socket. Remember it so the reconnect
+    // refreshes the token first instead of retrying once with the expired token.
+    if (
+      data?.type === 'connection.error' &&
+      data?.error?.code === chatCodes.TOKEN_EXPIRED
+    ) {
+      logger
+        .withExtraTags('onmessage')
+        .debug('The server reported that the token expired.', { wsID: wsId });
+      this.tokenExpiredByServer = true;
+    }
+
     this.client.dispatchEvent(decodedData);
     this.scheduleConnectionCheck();
   };
@@ -562,7 +593,7 @@ export class StableWSConnection {
           event,
         });
 
-      this._reconnect();
+      this._reconnectAfterFailure();
     }
   };
 
@@ -579,8 +610,25 @@ export class StableWSConnection {
       .withExtraTags('onerror')
       .warn('The WebSocket connection raised an error.', { event });
 
-    this._reconnect();
+    this._reconnectAfterFailure();
   };
+
+  /**
+   * _reconnectAfterFailure - Reconnects after the socket closed or failed. If the server
+   * reported that the token expired, the token is refreshed before reconnecting.
+   * Static tokens cannot be refreshed and reconnect as before.
+   */
+  _reconnectAfterFailure() {
+    if (this.tokenExpiredByServer && !this.client.tokenManager.isStatic()) {
+      logger
+        .withExtraTags('_reconnectAfterFailure')
+        .info('The token expired. Reloading the token and reconnecting.');
+      this._reconnect({ refreshToken: true });
+      return;
+    }
+
+    this._reconnect();
+  }
 
   /**
    * Writes the status to the field and to `client.wsConnection.state`, and drops the connection ID
@@ -667,6 +715,7 @@ export class StableWSConnection {
 
   _setupConnectionPromise = () => {
     this.isResolved = false;
+    this.tokenExpiredByServer = false;
     // Resolved by the first message (`connection.ok`), rejected on an error or close.
     this.connectionOpen = new Promise<ConnectionOpen>((resolve, reject) => {
       this.resolvePromise = resolve;

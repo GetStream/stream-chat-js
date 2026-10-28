@@ -1024,7 +1024,8 @@ describe('Poll optimistic updates', () => {
 			expect(poll.data.ownVotesByOptionId[optionD]).toBeUndefined();
 			expect(poll.data.vote_count).toBe(before.vote_count - 1);
 			expect(poll.data.vote_counts_by_option[optionD]).toBeUndefined();
-			expect(poll.data.latest_votes_by_option[optionD]).toEqual([]);
+			// the server omits options without votes, consumers rely on it
+			expect(poll.data.latest_votes_by_option).not.toHaveProperty(optionD);
 			expect(poll.data.maxVotedOptionIds).toEqual([optionA]);
 
 			request.resolve({ vote });
