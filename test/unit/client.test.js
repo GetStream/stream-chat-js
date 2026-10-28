@@ -1685,6 +1685,224 @@ describe('StreamChat.queryChannels', async () => {
 		});
 	});
 
+	// V10 counterparts of the message-set regressions fixed on v9 by #1934 (#1930, #1931).
+	describe('the newest page of a list query, compared with the loaded messages', () => {
+		const { cid } = mockChannelQueryResponse.channel;
+		const at = (n) => convertDateToTimestamp(new Date(Date.UTC(2026, 0, 1, 0, n)));
+		const message = (n, extra = {}) =>
+			generateMsg({
+				cid,
+				id: `m${n}`,
+				text: `Message ${n}`,
+				created_at: at(n),
+				...extra,
+			});
+		const range = (from, to) =>
+			Array.from({ length: to - from + 1 }, (_, i) => message(from + i));
+		const ids = (messages) => messages.map((m) => m.id);
+		const shownIds = (channel) => ids(channel.messagePaginator.items ?? []);
+
+		const hydrate = async (client, messages, messageLimit = 25) => {
+			const stub = sinon.stub(client, 'queryChannels').resolves({
+				channels: [
+					{
+						...mockChannelQueryResponse,
+						channel: {
+							...mockChannelQueryResponse.channel,
+							last_message_at: messages.length ? messages.at(-1).created_at : undefined,
+						},
+						messages,
+					},
+				],
+			});
+			const [channel] = await client.queryChannelsAndHydrate({
+				message_limit: messageLimit,
+			});
+			stub.restore();
+			return channel;
+		};
+
+		// Answers the channel's own queries from `all` the way the server does.
+		const serveFrom = (channel, all) =>
+			vi
+				.spyOn(channel, 'getOrCreate')
+				.mockImplementation(async ({ messages = {} } = {}) => {
+					const limit = messages.limit ?? 25;
+					const index = (id) => all.findIndex((m) => m.id === id);
+					let page;
+					if (messages.id_lt) page = all.slice(0, index(messages.id_lt)).slice(-limit);
+					else if (messages.id_gt)
+						page = all.slice(
+							index(messages.id_gt) + 1,
+							index(messages.id_gt) + 1 + limit,
+						);
+					else if (messages.id_around) {
+						// split evenly around the message, a side that runs out filled from the other
+						let start = Math.max(0, index(messages.id_around) - Math.floor(limit / 2));
+						start = Math.max(0, Math.min(start, all.length - limit));
+						page = all.slice(start, start + limit);
+					} else page = all.slice(-limit);
+					return {
+						...mockChannelQueryResponse,
+						channel: {
+							...mockChannelQueryResponse.channel,
+							last_message_at: all.at(-1).created_at,
+						},
+						messages: page,
+					};
+				});
+
+		describe('message_limit: 0 (#1931)', () => {
+			it('keeps the loaded messages and that older ones can be loaded', async () => {
+				const client = await getClientWithUser();
+				const channel = await hydrate(client, range(36, 60));
+				expect(channel.messagePaginator.hasMoreTail).toBe(true);
+
+				await hydrate(client, [], 0);
+
+				expect(shownIds(channel)).toEqual(ids(range(36, 60)));
+				expect(channel.messagePaginator.hasMoreTail).toBe(true);
+			});
+
+			it('keeps a fully loaded channel fully loaded', async () => {
+				const client = await getClientWithUser();
+				const channel = await hydrate(client, range(1, 10));
+				expect(channel.messagePaginator.hasMoreTail).toBe(false);
+
+				await hydrate(client, [], 0);
+
+				expect(shownIds(channel)).toEqual(ids(range(1, 10)));
+				expect(channel.messagePaginator.hasMoreTail).toBe(false);
+			});
+		});
+
+		describe('a newest page that does not connect to the loaded messages (#1930)', () => {
+			it('shows the newest page, and the gap can be paginated back to the loaded messages', async () => {
+				const client = await getClientWithUser();
+				const channel = await hydrate(client, range(1, 25));
+
+				// e.g. m26..m125 arrived while the app was disconnected
+				await hydrate(client, range(101, 125));
+
+				expect(shownIds(channel)).toEqual(ids(range(101, 125)));
+				expect(channel.messagePaginator.hasMoreHead).toBe(false);
+				expect(channel.messagePaginator.hasMoreTail).toBe(true);
+
+				serveFrom(channel, range(1, 125));
+				for (let i = 0; i < 10 && channel.messagePaginator.hasMoreTail; i++) {
+					await channel.messagePaginator.toTail();
+				}
+
+				expect(shownIds(channel)).toEqual(ids(range(1, 125)));
+				expect(channel.messagePaginator.hasMoreTail).toBe(false);
+			});
+
+			it('still merges a newest page that overlaps the loaded messages', async () => {
+				const client = await getClientWithUser();
+				const channel = await hydrate(client, range(1, 25));
+
+				await hydrate(client, range(11, 35));
+
+				expect(shownIds(channel)).toEqual(ids(range(1, 35)));
+			});
+
+			it('keeps the loaded messages when a newer message arrives over the socket', async () => {
+				const client = await getClientWithUser();
+				const channel = await hydrate(client, range(1, 25));
+
+				channel._handleChannelEvent({
+					type: 'message.new',
+					user: { id: 'other' },
+					message: message(101),
+				});
+
+				expect(shownIds(channel)).toEqual([...ids(range(1, 25)), 'm101']);
+			});
+
+			it('shows the newest page across a gap that watch() returns', async () => {
+				const client = await getClientWithUser();
+				const channel = await hydrate(client, range(1, 25));
+				serveFrom(channel, range(1, 125));
+
+				await channel.watch({ messages: { limit: 25 } });
+
+				expect(shownIds(channel)).toEqual(ids(range(101, 125)));
+				expect(channel.messagePaginator.hasMoreTail).toBe(true);
+			});
+
+			it('extends the loaded messages with a page loaded by a forward cursor', async () => {
+				const client = await getClientWithUser();
+				const channel = await hydrate(client, range(1, 25));
+				serveFrom(channel, range(1, 50));
+
+				await channel.watch({ messages: { limit: 25, id_gt: 'm25' } });
+				// stored as an interval of its own, which the next page towards the newest joins
+				expect(channel.messagePaginator.hasMoreHead).toBe(true);
+				await channel.messagePaginator.toHead();
+
+				expect(shownIds(channel)).toEqual(ids(range(1, 50)));
+				expect(channel.messagePaginator.hasMoreHead).toBe(false);
+			});
+
+			it('keeps a jumped-to older interval of an open channel shown across a reconnect', async () => {
+				const client = await getClientWithUser();
+				const channel = await hydrate(client, range(51, 75));
+				channel.activate();
+				serveFrom(channel, range(1, 75));
+				await channel.messagePaginator.jumpToMessage('m10', { pageSize: 20 });
+				const jumpedTo = shownIds(channel);
+				expect(jumpedTo).toContain('m10');
+				expect(jumpedTo).not.toContain('m51');
+
+				// connection recovery reloads an open channel; m76..m125 arrived meanwhile
+				serveFrom(channel, range(1, 125));
+				await channel.reload();
+
+				expect(shownIds(channel)).toEqual(jumpedTo);
+				await channel.messagePaginator.jumpToTheLatestMessage();
+				// the reload asks for as many messages as were loaded, here m26..m125
+				expect(shownIds(channel)).toEqual(ids(range(26, 125)));
+				expect(channel.messagePaginator.hasMoreTail).toBe(true);
+			});
+
+			it('shows the newest page of a channel that is not open, without welding a jumped-to interval to it', async () => {
+				const client = await getClientWithUser();
+				const channel = await hydrate(client, range(51, 75));
+				serveFrom(channel, range(1, 75));
+				await channel.messagePaginator.jumpToMessage('m10', { pageSize: 20 });
+
+				await hydrate(client, range(101, 125));
+
+				expect(shownIds(channel)).toEqual(ids(range(101, 125)));
+				serveFrom(channel, range(1, 125));
+				for (let i = 0; i < 10 && channel.messagePaginator.hasMoreTail; i++) {
+					await channel.messagePaginator.toTail();
+				}
+				expect(shownIds(channel)).toEqual(ids(range(1, 125)));
+			});
+
+			it('keeps a failed message the user sent while the newest page replaces the stale one', async () => {
+				const client = await getClientWithUser();
+				const channel = await hydrate(client, range(1, 25));
+				channel.messagePaginator.ingestItem(
+					formatMessage(
+						message(25, {
+							id: 'failed-message',
+							created_at: convertDateToTimestamp(
+								new Date(Date.UTC(2026, 0, 1, 0, 25, 30)),
+							),
+							status: 'failed',
+						}),
+					),
+				);
+
+				await hydrate(client, range(101, 125));
+
+				expect(shownIds(channel)).toContain('failed-message');
+			});
+		});
+	});
+
 	describe('a list response reporting newer messages than the newest window holds', () => {
 		const at = (second) => convertDateToTimestamp(`2023-11-14T12:00:0${second}.000Z`);
 		const message = (id, second) => generateMsg({ id, created_at: at(second) });

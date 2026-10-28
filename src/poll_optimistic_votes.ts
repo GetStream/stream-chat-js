@@ -287,9 +287,14 @@ function applyOwnVoteDelta(
     }
     voteCount = Math.max(voteCount - 1, 0);
     if (latestVotesByOption?.[optionId]) {
-      latestVotesByOption[optionId] = latestVotesByOption[optionId].filter(
+      const latestVotes = latestVotesByOption[optionId].filter(
         (latestVote) => latestVote.id !== vote.id,
       );
+      if (latestVotes.length) {
+        latestVotesByOption[optionId] = latestVotes;
+      } else {
+        delete latestVotesByOption[optionId];
+      }
     }
   }
 
