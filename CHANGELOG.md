@@ -1,3 +1,9 @@
+## [9.54.3](https://github.com/GetStream/stream-chat-js/compare/v9.54.2...v9.54.3) (2026-10-28)
+
+### Bug Fixes
+
+* read cached channels against the query's message_limit ([#1958](https://github.com/GetStream/stream-chat-js/issues/1958)) ([bbddea0](https://github.com/GetStream/stream-chat-js/commit/bbddea0563e2473b20b05dddb0875675e7e2f953))
+
 ## [9.54.2](https://github.com/GetStream/stream-chat-js/compare/v9.54.1...v9.54.2) (2026-10-28)
 
 ### Bug Fixes
