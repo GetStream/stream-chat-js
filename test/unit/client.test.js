@@ -1504,6 +1504,56 @@ describe('StreamChat.queryChannels', async () => {
 	});
 });
 
+describe('StreamChat.hydrateActiveChannels from the offline DB', () => {
+	// as ChannelManager does: the DB returns the newest `message_limit` messages of each channel
+	const hydrateFromOfflineDb = (client, messages, options) =>
+		client.hydrateActiveChannels(
+			[{ ...mockChannelQueryResponse, messages }],
+			{ offlineMode: true, skipInitialization: [] },
+			options,
+		)[0];
+
+	it('reads a full cached page as having older messages', async () => {
+		const client = await getClientWithUser();
+		const channel = hydrateFromOfflineDb(client, numberedMessages(91, 100), {
+			message_limit: 10,
+		});
+
+		expect(channel.state.messagePagination.hasPrev).toBe(true);
+	});
+
+	it('reads a short cached page as the start of the channel', async () => {
+		const client = await getClientWithUser();
+		const channel = hydrateFromOfflineDb(client, numberedMessages(1, 8), {
+			message_limit: 10,
+		});
+
+		expect(channel.state.messagePagination.hasPrev).toBe(false);
+	});
+
+	it('keeps older messages loadable once the online page arrives', async () => {
+		const client = await getClientWithUser();
+		const channel = hydrateFromOfflineDb(client, numberedMessages(91, 100), {
+			message_limit: 10,
+		});
+
+		const postStub = sinon.stub(client, 'post');
+		postStub.resolves({
+			channels: [{ ...mockChannelQueryResponse, messages: numberedMessages(91, 100) }],
+		});
+		await client.queryChannels({}, {}, { message_limit: 10 });
+		expect(channel.state.messagePagination.hasPrev).toBe(true);
+
+		postStub.resolves({
+			...mockChannelQueryResponse,
+			messages: numberedMessages(66, 90),
+		});
+		await channel.query({ messages: { limit: 25, id_lt: channel.state.messages[0].id } });
+		expect(channel.state.messages.length).toBe(35);
+		expect(channel.state.messagePagination.hasPrev).toBe(true);
+	});
+});
+
 describe('StreamChat.queryThreads', () => {
 	it('returns threads and next, and hydrates poll cache with parent messages', async () => {
 		const client = await getClientWithUser();
