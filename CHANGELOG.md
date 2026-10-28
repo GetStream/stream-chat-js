@@ -1,3 +1,11 @@
+## [9.54.2](https://github.com/GetStream/stream-chat-js/compare/v9.54.1...v9.54.2) (2026-10-28)
+
+### Bug Fixes
+
+* avoid dropping custom attachments on edit ([#1953](https://github.com/GetStream/stream-chat-js/issues/1953)) ([ebc794c](https://github.com/GetStream/stream-chat-js/commit/ebc794ca4c32373825cda712e2fc2945271498bc))
+* message pagination after message_limit 0 queries and disconnected latest pages ([#1934](https://github.com/GetStream/stream-chat-js/issues/1934)) ([6faedbc](https://github.com/GetStream/stream-chat-js/commit/6faedbc571d10eac93c859f8918ab56170059b89)), closes [#1931](https://github.com/GetStream/stream-chat-js/issues/1931) [#1930](https://github.com/GetStream/stream-chat-js/issues/1930)
+* poll crash on last vote removal ([#1952](https://github.com/GetStream/stream-chat-js/issues/1952)) ([c5c923a](https://github.com/GetStream/stream-chat-js/commit/c5c923ad727175297f85f359cdec1072b58a4039)), closes [#1895](https://github.com/GetStream/stream-chat-js/issues/1895)
+
 ## [9.54.1](https://github.com/GetStream/stream-chat-js/compare/v9.54.0...v9.54.1) (2026-10-27)
 
 ### Bug Fixes
