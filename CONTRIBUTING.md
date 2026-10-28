@@ -30,12 +30,12 @@ You can read about conventional commits [here](https://www.conventionalcommits.o
 
 ## Release (for Stream developers)
 
-Releasing this package involves two GitHub Action steps:
+Releases are automated with [semantic-release](https://github.com/semantic-release/semantic-release), so never bump the version manually. The next version and the changelog are derived from the commit messages since the last release.
 
-- Kick off a job called `initiate_release` ([link](https://github.com/GetStream/stream-chat-js/actions/workflows/initiate_release.yml)).
+To release, run the `Release` workflow ([link](https://github.com/GetStream/stream-chat-js/actions/workflows/release.yml)) from the branch you want to publish:
 
-The job creates a pull request with the changelog. Check if it looks good.
+- `master` publishes to the `latest` npm dist-tag.
+- `release-v8` publishes `8.x` versions to the `v8` dist-tag.
+- `rc` publishes prereleases.
 
-- Merge the pull request.
-
-Once the PR is merged, it automatically kicks off another job which will create the tag and created a GitHub release.
+The workflow updates `CHANGELOG.md`, publishes the package to npm, and creates the git tag and GitHub release. Enable the `dry_run` input to preview the next version and release notes without publishing anything.
