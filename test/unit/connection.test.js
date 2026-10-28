@@ -829,6 +829,13 @@ describe('connection', function () {
 				Promise.resolve(`token-${++calls}`),
 			);
 			const c = new StableWSConnection({ wsConnection: client.wsConnection });
+			// The real reconnect, without its randomized 0.25-2.5s backoff.
+			const reconnect = c._reconnect.bind(c);
+			const reconnectOptions = [];
+			c._reconnect = (options = {}) => {
+				reconnectOptions.push(options);
+				return reconnect({ ...options, interval: 1 });
+			};
 
 			await c.connect();
 			const [first] = MockWebSocket.instances;
@@ -836,11 +843,12 @@ describe('connection', function () {
 			first.readyState = MockWebSocket.CLOSED;
 			first.onclose?.({ code: 1008, reason: 'token expired', wasClean: true });
 
-			for (let i = 0; i < 100 && MockWebSocket.instances.length < 2; i++) {
+			for (let i = 0; i < 100 && !MockWebSocket.instances[1]?.sent.length; i++) {
 				await sleep(10);
 			}
-			await c.connectionOpen;
 			c.disconnect();
+
+			expect(reconnectOptions).to.deep.equal([{ refreshToken: true }]);
 
 			const tokens = MockWebSocket.instances.map((ws) => JSON.parse(ws.sent[0]).token);
 			expect(tokens).to.deep.equal(['token-1', 'token-2']);
