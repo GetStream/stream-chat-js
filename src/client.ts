@@ -2384,7 +2384,7 @@ export class StreamChat {
           ...messageSetPagination({
             parentSet: updatedMessagesSet,
             requestedPageSize:
-              queryChannelsOptions?.message_limit ||
+              queryChannelsOptions?.message_limit ??
               DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE,
             returnedPage: channelState.messages,
             filteredReturnedPage: channelState.messages.filter(

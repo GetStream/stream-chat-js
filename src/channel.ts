@@ -6,6 +6,7 @@ import { MessageReceiptsTracker } from './messageDelivery';
 import {
   channelHasReadEvents,
   generateChannelTempCid,
+  hasMessagePaginationCursor,
   invokeEventListener,
   logChatPromiseExecution,
   messageSetPagination,
@@ -1639,6 +1640,7 @@ export class Channel {
     const { messageSet, filteredMessageIds } = this._initializeState(
       state,
       messageSetToAddToIfDoesNotExist,
+      !hasMessagePaginationCursor(options?.messages),
     );
     messageSet.pagination = {
       ...messageSet.pagination,
@@ -2410,6 +2412,7 @@ export class Channel {
   _initializeState(
     state: ChannelAPIResponse,
     messageSetToAddToIfDoesNotExist: MessageSetType = 'latest',
+    isNewestPage = true,
   ) {
     const { state: clientState, user, userID } = this.getClient();
 
@@ -2429,6 +2432,9 @@ export class Channel {
     const messages = state.messages || [];
     if (!this.state.messages) {
       this.state.initMessages();
+    }
+    if (messageSetToAddToIfDoesNotExist === 'latest' && isNewestPage) {
+      this.state._dropLatestMessagesDisjointFrom(messages);
     }
     const { messageSet, filteredMessageIds } = this.state.addMessagesSorted(
       messages,
