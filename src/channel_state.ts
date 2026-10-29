@@ -3,6 +3,7 @@ import type {
   AIState,
   ChannelMemberResponse,
   Event,
+  EventPayload,
   LocalMessage,
   MessageResponse,
   PendingMessageResponse,
@@ -61,7 +62,8 @@ export type ChannelWatchState = {
 };
 
 export type TypingUsersState = {
-  typing: Record<string, Event>;
+  /** The latest `typing.start` per user ID; `typing.stop` removes the entry. */
+  typing: Record<string, EventPayload<'typing.start'>>;
 };
 
 export type ReadState = {
@@ -251,11 +253,11 @@ export class ChannelState extends StateStore<ChannelStateData> {
     return this.getLatestValue().typing;
   }
 
-  set typing(typing: Record<string, Event>) {
+  set typing(typing: Record<string, EventPayload<'typing.start'>>) {
     this.partialNext({ typing });
   }
 
-  setTypingEvent(userID: string, event: Event) {
+  setTypingEvent(userID: string, event: EventPayload<'typing.start'>) {
     this.typing = { ...this.typing, [userID]: event };
   }
 
