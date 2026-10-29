@@ -4927,6 +4927,15 @@ export const ScheduledMessageErrorReason = {
 export type ScheduledMessageErrorReason =
   (typeof ScheduledMessageErrorReason)[keyof typeof ScheduledMessageErrorReason];
 
+export const ScheduledMessageBlockReason = {
+  Command: 'command',
+  Poll: 'poll',
+  SharedLocation: 'shared_location',
+} as const;
+
+export type ScheduledMessageBlockReason =
+  (typeof ScheduledMessageBlockReason)[keyof typeof ScheduledMessageBlockReason];
+
 export const ScheduledMessageEventType = {
   Created: 'scheduled_message.created',
   Deleted: 'scheduled_message.deleted',

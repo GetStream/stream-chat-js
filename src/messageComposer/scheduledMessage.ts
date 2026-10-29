@@ -1,19 +1,21 @@
+import { LOCAL_MESSAGE_FIELDS, RESERVED_UPDATED_MESSAGE_FIELDS } from '../constants';
 import type {
   DraftMessage,
+  DraftResponse,
   Message,
   ScheduledMessageResponse,
   UpdatedMessage,
 } from '../types';
 
-const SERVER_FIELDS: ReadonlySet<string> = new Set([
-  'html',
-  'id',
-  'mml',
-  'shared_location',
-  'type',
+const SCHEDULED_MESSAGE_SERVER_FIELDS = ['id', 'mml', 'shared_location'];
+
+const SERVER_OWNED_FIELDS: ReadonlySet<string> = new Set([
+  ...Object.keys(RESERVED_UPDATED_MESSAGE_FIELDS),
+  ...Object.keys(LOCAL_MESSAGE_FIELDS),
+  ...SCHEDULED_MESSAGE_SERVER_FIELDS,
 ]);
 
-const COMPOSER_FIELDS: ReadonlySet<string> = new Set([
+const COMPOSER_OWNED_FIELDS: ReadonlySet<string> = new Set([
   'attachments',
   'mentioned_channel',
   'mentioned_group_ids',
@@ -27,10 +29,14 @@ const COMPOSER_FIELDS: ReadonlySet<string> = new Set([
   'text',
 ]);
 
-const REPLACED_FIELDS: ReadonlySet<string> = new Set([
-  ...SERVER_FIELDS,
-  ...COMPOSER_FIELDS,
+const STORED_FIELDS_REPLACED_ON_UPDATE: ReadonlySet<string> = new Set([
+  ...SERVER_OWNED_FIELDS,
+  ...COMPOSER_OWNED_FIELDS,
 ]);
+
+const COMPOSED_FIELDS_DROPPED_ON_UPDATE: ReadonlySet<string> = new Set(
+  [...SERVER_OWNED_FIELDS].filter((field) => !COMPOSER_OWNED_FIELDS.has(field)),
+);
 
 const omitFields = <T extends object>(source: T, fields: ReadonlySet<string>): Message =>
   Object.fromEntries(Object.entries(source).filter(([field]) => !fields.has(field)));
@@ -71,6 +77,22 @@ export const toScheduledMessageDraft = (
   return draftMessage;
 };
 
+export const toScheduledMessageComposition = (
+  scheduledMessage: ScheduledMessageResponse,
+): DraftResponse => {
+  const { cid, created_at, message } = scheduledMessage;
+  const { parent_id } = message;
+
+  const composition = {
+    channel_cid: cid,
+    created_at,
+    message: toScheduledMessageDraft(scheduledMessage),
+    parent_id,
+  };
+
+  return composition;
+};
+
 export const toScheduledMessagePayload = (
   composedMessage: Message | UpdatedMessage,
   scheduledMessage: ScheduledMessageResponse,
@@ -78,8 +100,8 @@ export const toScheduledMessagePayload = (
   const { message: storedMessage } = scheduledMessage;
   const { parent_id: parentId } = storedMessage;
 
-  const preservedFields = omitFields(storedMessage, REPLACED_FIELDS);
-  const composedFields = omitFields(composedMessage, SERVER_FIELDS);
+  const preservedFields = omitFields(storedMessage, STORED_FIELDS_REPLACED_ON_UPDATE);
+  const composedFields = omitFields(composedMessage, COMPOSED_FIELDS_DROPPED_ON_UPDATE);
 
   const scheduledMessagePayload = {
     ...preservedFields,
