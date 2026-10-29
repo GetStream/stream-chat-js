@@ -18,7 +18,7 @@ import { makeComparator } from '../sortCompiler';
 import { filterConstrainsField, itemMatchesFilter } from '../filterCompiler';
 import { StoreBackedItemIndex } from '../../entityStore/StoreBackedItemIndex';
 import type { EntityStore } from '../../entityStore/EntityStore';
-import { generateUUIDv4 } from '../../utils';
+import { generateUUIDv4, runDetached } from '../../utils';
 import type { StreamChat } from '../../client';
 import type { Channel } from '../../channel';
 import type {
@@ -299,6 +299,10 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   private _queryAwaitingSync: ChannelQueryShape | undefined;
   /** The cids of the page the latest query returned, `undefined` when it failed. */
   private _lastPageCids: string[] | undefined;
+  /** Whether `recoverLoadedItems` runs: its pages own the list's position until it ends. */
+  private _isRecoveringLoadedItems = false;
+  /** A next page refused while recovering, queried once the recovery ends. See `executeQuery`. */
+  private _tailQueryAwaitingRecovery = false;
   protected _sortComparatorFactory: ChannelSortComparatorFactory | undefined;
   sortComparator: (a: Channel, b: Channel) => number;
   filterBuilder: FilterBuilder<ChannelFilters>;
@@ -650,6 +654,12 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
    * network is not deferred.
    */
   async executeQuery(params: PaginationQueryParams<ChannelQueryShape> = {}) {
+    // The recovery's pages hold the position (`offset` restarts at 0 until the last one lands), so
+    // a page queried in between would fetch the wrong one. A refresh still runs.
+    if (this._isRecoveringLoadedItems && params.direction && params.reset !== 'yes') {
+      if (params.direction === 'tailward') this._tailQueryAwaitingRecovery = true;
+      return;
+    }
     const { offlineDb } = this.client;
 
     const effectiveParams: PaginationQueryParams<ChannelQueryShape> =
@@ -754,8 +764,23 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
    * Each page asks for everything still to cover and the next one starts where it ended, so the
    * server's page cap decides the step. A failed page removes nothing. At most
    * {@link MAX_RECOVERED_ITEMS} channels are re-queried: the rest are dropped.
+   *
+   * Paging is held meanwhile: a next page asked for is queried once the recovery ends, as the list
+   * end that asked for it does not ask again when the recovery changed nothing.
    */
   recoverLoadedItems = async () => {
+    this._isRecoveringLoadedItems = true;
+    try {
+      await this.recoverLoadedPages();
+    } finally {
+      this._isRecoveringLoadedItems = false;
+    }
+    if (!this._tailQueryAwaitingRecovery) return;
+    this._tailQueryAwaitingRecovery = false;
+    runDetached(this.toTail(), { context: 'ChannelPaginator.recoverLoadedItems' });
+  };
+
+  private recoverLoadedPages = async () => {
     const loadedCids = new Set((this.items ?? []).map((channel) => channel.cid));
     const recoveredCount = Math.min(loadedCids.size, MAX_RECOVERED_ITEMS);
     const returnedCids = new Set<string>();
@@ -849,6 +874,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     super.resetState();
     this._itemIndex.clear();
     this._queryAwaitingSync = undefined;
+    this._tailQueryAwaitingRecovery = false;
   }
 
   removeItem(params: { id?: string; item?: Channel }): ItemCoordinates {
