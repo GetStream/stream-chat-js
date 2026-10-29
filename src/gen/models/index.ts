@@ -318,7 +318,10 @@ export interface APIError {
 }
 
 export interface AWSRekognitionRule {
-  action: 'flag' | 'shadow' | 'remove' | 'bounce' | 'bounce_flag' | 'bounce_remove';
+  /**
+   * What a moderation rule does when it matches.
+   */
+  action: ModerationAction;
   label: string;
   min_confidence: number;
   subclassifications?: Record<string, any>;
@@ -387,6 +390,8 @@ export interface ActionSequence {
   warning_text: string;
 }
 
+export type ActivityVisibility = 'public' | 'private' | 'tag';
+
 export interface AddUserGroupMembersRequest {
   /**
    * List of user IDs to add as members
@@ -402,6 +407,11 @@ export interface AddUserGroupMembersRequest {
 export interface AddUserGroupMembersResponse {
   duration: string;
   user_group?: UserGroupResponse;
+}
+
+export interface AppChannelCountParameters {
+  threshold?: number;
+  time_window?: string;
 }
 
 export interface AppDefaults {
@@ -430,6 +440,11 @@ export interface AppEventResponse {
   async_url_enrich_enabled?: boolean;
   file_upload_config?: FileUploadConfig;
   image_upload_config?: FileUploadConfig;
+}
+
+export interface AppMessageCountParameters {
+  threshold?: number;
+  time_window?: string;
 }
 
 export interface AppResponseFields {
@@ -634,6 +649,8 @@ export interface AutomodDetailsResponse {
   result?: MessageModerationResult;
 }
 
+export type AutomodMode = 'disabled' | 'simple' | 'AI';
+
 export interface AutomodPlatformCircumventionConfig {
   enabled: boolean;
   rules: Array<AutomodRule>;
@@ -641,7 +658,10 @@ export interface AutomodPlatformCircumventionConfig {
 }
 
 export interface AutomodRule {
-  action: 'flag' | 'shadow' | 'remove' | 'bounce' | 'bounce_flag' | 'bounce_remove';
+  /**
+   * What a moderation rule does when it matches.
+   */
+  action: ModerationAction;
   label: string;
   threshold: number;
 }
@@ -653,7 +673,10 @@ export interface AutomodSemanticFiltersConfig {
 }
 
 export interface AutomodSemanticFiltersRule {
-  action: 'flag' | 'shadow' | 'remove' | 'bounce' | 'bounce_flag' | 'bounce_remove';
+  /**
+   * What a moderation rule does when it matches.
+   */
+  action: ModerationAction;
   name: string;
   threshold: number;
 }
@@ -677,7 +700,7 @@ export interface BanActionRequestPayload {
   /**
    * Message deletion mode: soft, pruning, or hard
    */
-  delete_messages?: 'soft' | 'pruning' | 'hard';
+  delete_messages?: DeleteMessages;
   /**
    * Whether to ban by IP address
    */
@@ -733,7 +756,10 @@ export interface BanInfoResponse {
 }
 
 export interface BanOptions {
-  delete_messages?: 'soft' | 'pruning' | 'hard';
+  /**
+   * How a ban or user deletion treats the user's messages.
+   */
+  delete_messages?: DeleteMessages;
   duration?: number;
   ip_ban?: boolean;
   reason?: string;
@@ -753,7 +779,10 @@ export interface BanRequest {
    * Channel where the ban applies
    */
   channel_cid?: string;
-  delete_messages?: 'soft' | 'pruning' | 'hard';
+  /**
+   * How a ban or user deletion treats the user's messages.
+   */
+  delete_messages?: DeleteMessages;
   /**
    * Whether to delete reactions by the banned user on other users' messages
    */
@@ -813,7 +842,7 @@ export interface BlockListOptions {
   /**
    * Blocklist behavior. One of: flag, block, shadow_block
    */
-  behavior: 'flag' | 'block' | 'shadow_block';
+  behavior: ChannelModerationBehavior;
   /**
    * Blocklist name
    */
@@ -909,6 +938,8 @@ export interface BlockedUserResponse {
    */
   user: UserResponse;
 }
+
+export type BlocklistBehavior = 'flag' | 'block';
 
 export interface BodyguardProfileSummary {
   name: string;
@@ -1095,7 +1126,10 @@ export interface ChannelBansScopeTotals {
 
 export interface ChannelConfigOverrides {
   blocklist?: string;
-  blocklist_behavior?: 'flag' | 'block';
+  /**
+   * What a blocklist does when it matches. shadow_block is not accepted on a channel override.
+   */
+  blocklist_behavior?: BlocklistBehavior;
   /**
    * Enable/disable message counting
    */
@@ -1107,7 +1141,7 @@ export interface ChannelConfigOverrides {
   /**
    * Overrides the push notification level for this channel
    */
-  push_level?: 'all' | 'all_mentions' | 'mentions' | 'direct_mentions' | 'none';
+  push_level?: PushLevel;
   /**
    * Enables message quotes
    */
@@ -1149,8 +1183,14 @@ export interface ChannelConfigOverrides {
 }
 
 export interface ChannelConfigWithInfo {
-  automod: 'disabled' | 'simple' | 'AI';
-  automod_behavior: 'flag' | 'block' | 'shadow_block';
+  /**
+   * Automod level applied to a channel type.
+   */
+  automod: AutomodMode;
+  /**
+   * What automod or a blocklist does when it matches.
+   */
+  automod_behavior: ChannelModerationBehavior;
   connect_events: boolean;
   count_messages: boolean;
   created_at: TimestampNS;
@@ -1178,13 +1218,32 @@ export interface ChannelConfigWithInfo {
   user_message_reminders: boolean;
   commands: Array<Command>;
   blocklist?: string;
-  blocklist_behavior?: 'flag' | 'block' | 'shadow_block';
+  /**
+   * What automod or a blocklist does when it matches.
+   */
+  blocklist_behavior?: ChannelModerationBehavior;
   partition_size?: number;
   partition_ttl?: string;
   /**
    * Sets the push notification level for a channel type
    */
-  push_level?: 'all' | 'all_mentions' | 'mentions' | 'direct_mentions' | 'none';
+  push_level?: PushLevel;
+  /**
+   * How far ahead, in seconds, a message can be scheduled. Present only when scheduled messages are enabled for the app. A later scheduled_at returns error code 116 (scheduled_at_too_far), whose max_lead_time_seconds carries the same value
+   */
+  scheduled_messages_max_lead_time_seconds?: number;
+  /**
+   * Maximum number of scheduled messages (scheduled or sending) a user can have in this channel. Present only when scheduled messages are enabled for the app. Scheduling more returns error code 117 (scheduled_limit_channel)
+   */
+  scheduled_messages_max_per_channel?: number;
+  /**
+   * Maximum number of scheduled messages (scheduled or sending) a user can have across all channels. Present only when scheduled messages are enabled for the app. Scheduling more returns error code 118 (scheduled_limit_user)
+   */
+  scheduled_messages_max_per_user?: number;
+  /**
+   * Minimum time ahead, in seconds, a message is scheduled for. Present only when scheduled messages are enabled for the app. A future scheduled_at closer than this is moved later, to the first whole minute at least this far ahead; it is never rejected
+   */
+  scheduled_messages_min_lead_time_seconds?: number;
   allowed_flag_reasons?: Array<string>;
   blocklists?: Array<BlockListOptions>;
   /**
@@ -1294,6 +1353,116 @@ export interface ChannelDeletedEvent {
   user?: UserResponseCommonFields;
 }
 
+export interface ChannelForkResponse {
+  /**
+   * CID of the fork
+   */
+  channel_cid: string;
+  /**
+   * Number of messages copied into the fork, once completed
+   */
+  copied_message_count: number;
+  /**
+   * Date/time of the fork
+   */
+  created_at: TimestampNS;
+  /**
+   * CID of the channel the fork was copied from
+   */
+  source_channel_cid: string;
+  /**
+   * ID of the message of the source channel the fork was made at
+   */
+  source_message_id: string;
+  /**
+   * `completed` once every message is copied. `backfilling` while a background task copies the history older than the newest page; the fork is usable meanwhile, and the newest messages, which an agent reads, are already there
+   */
+  status: string;
+  /**
+   * Maps the ID of each message the request copied, the newest page, to its ID in the fork. A fork message ID is a UUIDv5 of the fork CID and the source message ID; the fork message IDs endpoint maps any others
+   */
+  message_id_map: Record<string, string>;
+  /**
+   * ID of the task copying the older history of a backfilling fork
+   */
+  task_id?: string;
+}
+
+export interface ChannelForkSummary {
+  /**
+   * CID of the fork
+   */
+  channel_cid: string;
+  /**
+   * Number of messages copied into the fork, once completed
+   */
+  copied_message_count: number;
+  /**
+   * Date/time of the fork
+   */
+  created_at: TimestampNS;
+  /**
+   * CID of the channel the fork was copied from
+   */
+  source_channel_cid: string;
+  /**
+   * ID of the message of the source channel the fork was made at
+   */
+  source_message_id: string;
+  /**
+   * `completed` once every message is copied. `backfilling` while a background task copies the history older than the newest page; the fork is usable meanwhile, and the newest messages, which an agent reads, are already there
+   */
+  status: string;
+  /**
+   * ID of the task copying the older history of a backfilling fork
+   */
+  task_id?: string;
+}
+
+export interface ChannelForkedEvent {
+  /**
+   * Date/time of creation
+   */
+  created_at: TimestampNS;
+  /**
+   * Represents channel in chat
+   */
+  channel: ChannelResponse;
+  custom: Record<string, any>;
+  /**
+   * A fork of an agent channel
+   */
+  fork: ChannelForkSummary;
+  /**
+   * The type of event: "channel.forked" in this case
+   */
+  type: string;
+  /**
+   * The ID of the channel which was forked
+   */
+  channel_id?: string;
+  /**
+   * The number of members in the channel
+   */
+  channel_member_count?: number;
+  channel_message_count?: number;
+  /**
+   * The type of the channel which was forked
+   */
+  channel_type?: string;
+  /**
+   * The CID of the channel which was forked
+   */
+  cid?: string;
+  received_at?: TimestampNS;
+  /**
+   * The team ID
+   */
+  team?: string;
+  channel_custom?: CustomChannelData;
+  user?: UserResponseCommonFields;
+}
+
 export interface ChannelFrozenEvent {
   /**
    * Date/time of creation
@@ -1325,7 +1494,7 @@ export interface ChannelGetOrCreateRequest {
    */
   hide_for_creator?: boolean;
   /**
-   * Adds scheduled_messages to the response: the caller's own scheduled, sending and failed messages in this channel. Client-side only. Absent from the response when there are more than 100 or they could not be loaded; use the scheduled messages query then
+   * Adds scheduled_messages to the response: the acting user's own scheduled, sending and failed messages in this channel (server-side requests name the user with data.created_by_id or data.created_by; without one the field is omitted). Absent from the response when there are more than 100 or they could not be loaded; use the scheduled messages query then
    */
   include_scheduled_messages?: boolean;
   /**
@@ -1588,9 +1757,14 @@ export interface ChannelMetadata {
   last_message_at?: TimestampNS;
   member_count?: number;
   message_count?: number;
-  push_level?: string;
+  /**
+   * How much a channel notifies its members.
+   */
+  push_level?: PushLevel;
   team?: string;
 }
+
+export type ChannelModerationBehavior = 'flag' | 'block' | 'shadow_block';
 
 export interface ChannelMute {
   /**
@@ -1697,6 +1871,10 @@ export interface ChannelPartialUpdateResponse {
    * Custom data for this object
    */
   custom: Record<string, any>;
+  /**
+   * Date of the last message sent
+   */
+  last_message_at?: TimestampNS;
   /**
    * Team the channel belongs to
    */
@@ -1826,6 +2004,73 @@ export interface ChannelResponse {
    * User response object
    */
   truncated_by?: UserResponse;
+}
+
+export interface ChannelRewindResponse {
+  /**
+   * Date/time of the rewind
+   */
+  created_at: TimestampNS;
+  /**
+   * Number of messages the rewind hid that were not hidden already
+   */
+  hidden_count_at_rewind: number;
+  /**
+   * ID of the rewind
+   */
+  id: string;
+  /**
+   * Whether `message_id` was hidden too
+   */
+  inclusive: boolean;
+  /**
+   * ID of the message the channel was rewound to
+   */
+  message_id: string;
+}
+
+export interface ChannelRewoundEvent {
+  /**
+   * Date/time of creation
+   */
+  created_at: TimestampNS;
+  /**
+   * Represents channel in chat
+   */
+  channel: ChannelResponse;
+  custom: Record<string, any>;
+  /**
+   * A rewind of an agent channel
+   */
+  rewind: ChannelRewindResponse;
+  /**
+   * The type of event: "channel.rewound" in this case
+   */
+  type: string;
+  /**
+   * The ID of the channel which was rewound
+   */
+  channel_id?: string;
+  /**
+   * The number of members in the channel
+   */
+  channel_member_count?: number;
+  channel_message_count?: number;
+  /**
+   * The type of the channel which was rewound
+   */
+  channel_type?: string;
+  /**
+   * The CID of the channel which was rewound
+   */
+  cid?: string;
+  received_at?: TimestampNS;
+  /**
+   * The team ID
+   */
+  team?: string;
+  channel_custom?: CustomChannelData;
+  user?: UserResponseCommonFields;
 }
 
 export interface ChannelStateResponse {
@@ -2301,6 +2546,8 @@ export interface ClosedCaptionRuleParameters {
   llm_harm_labels?: Record<string, string>;
 }
 
+export type CollectionStatus = 'ok' | 'notfound';
+
 export interface Command {
   /**
    * Arguments help text, shown in commands auto-completion
@@ -2328,6 +2575,13 @@ export interface Command {
   updated_at?: TimestampNS;
 }
 
+export type CommentStatus =
+  | 'active'
+  | 'deleted'
+  | 'removed'
+  | 'hidden'
+  | 'shadow_blocked';
+
 export interface ConfigOverridesRequest {
   /**
    * Blocklist name
@@ -2336,7 +2590,7 @@ export interface ConfigOverridesRequest {
   /**
    * Blocklist behavior. One of: flag, block
    */
-  blocklist_behavior?: 'flag' | 'block';
+  blocklist_behavior?: BlocklistBehavior;
   /**
    * Enable/disable message counting
    */
@@ -2348,7 +2602,7 @@ export interface ConfigOverridesRequest {
   /**
    * Overrides the push notification level for this channel
    */
-  push_level?: 'all' | 'all_mentions' | 'mentions' | 'direct_mentions' | 'none';
+  push_level?: PushLevel;
   /**
    * Enable/disable quotes
    */
@@ -2545,7 +2799,7 @@ export interface CreateDeviceRequest {
   /**
    * Push provider
    */
-  push_provider: 'firebase' | 'apn' | 'huawei' | 'xiaomi';
+  push_provider: PushProviderName;
   /**
    * Stable physical device identifier used to deduplicate pushes across push providers (e.g. APNs VoIP and Firebase on the same iOS device). Distinct from 'id', which is the push token.
    */
@@ -2639,7 +2893,7 @@ export interface CreatePollRequest {
   /**
    * Represents the visibility of votes in a poll.
    */
-  voting_visibility?: 'anonymous' | 'public';
+  voting_visibility?: VotingVisibility;
   options?: Array<PollOptionInput>;
   /**
    * Custom data for this object
@@ -2833,6 +3087,8 @@ export interface DeleteMessageResponse {
   message: MessageResponse;
 }
 
+export type DeleteMessages = 'soft' | 'pruning' | 'hard';
+
 export interface DeleteModerationConfigResponse {
   duration: string;
 }
@@ -2917,7 +3173,7 @@ export interface DeleteUserMessagesRequestPayload {
   /**
    * Message deletion mode: soft, pruning, or hard
    */
-  delete_messages: 'soft' | 'pruning' | 'hard';
+  delete_messages: DeleteMessages;
   /**
    * Optional: scope deletion to a single channel (alternative to app-wide deletion)
    */
@@ -2992,7 +3248,7 @@ export interface DeviceResponse {
   /**
    * Push provider
    */
-  push_provider: string;
+  push_provider: PushProviderName;
   /**
    * User ID
    */
@@ -3236,6 +3492,8 @@ export interface EventResponse {
   event: WSEvent;
 }
 
+export type FeedVisibility = 'public' | 'visible' | 'followers' | 'members' | 'private';
+
 export interface FeedsActivityLocation {
   lat: number;
   lng: number;
@@ -3258,7 +3516,10 @@ export interface FeedsEnrichedCollectionResponse {
   created_at: TimestampNS;
   id: string;
   name: string;
-  status: string;
+  /**
+   * Enrichment status of a collection entry.
+   */
+  status: CollectionStatus;
   updated_at: TimestampNS;
   user_id: string;
   custom: Record<string, any>;
@@ -3282,7 +3543,10 @@ export interface FeedsFeedResponse {
    */
   created_by: UserResponse;
   deleted_at?: TimestampNS;
-  visibility?: string;
+  /**
+   * Who can see and follow a feed.
+   */
+  visibility?: FeedVisibility;
   filter_tags?: Array<string>;
   custom?: Record<string, any>;
   location?: FeedsActivityLocation;
@@ -3328,52 +3592,6 @@ export interface FeedsNotificationTrigger {
   custom?: Record<string, any>;
 }
 
-export interface FeedsPreferences {
-  /**
-   * Push notification preference for comments on user's activities. One of: all, none
-   */
-  comment?: 'all' | 'none';
-  /**
-   * Push notification preference for mentions in comments. One of: all, none
-   */
-  comment_mention?: 'all' | 'none';
-  /**
-   * Push notification preference for reactions on comments. One of: all, none
-   */
-  comment_reaction?: 'all' | 'none';
-  /**
-   * Push notification preference for replies to comments. One of: all, none
-   */
-  comment_reply?: 'all' | 'none';
-  /**
-   * Push notification preference for new followers. One of: all, none
-   */
-  follow?: 'all' | 'none';
-  /**
-   * Push notification preference for mentions in activities. One of: all, none
-   */
-  mention?: 'all' | 'none';
-  /**
-   * Push notification preference for reactions on user's activities or comments. One of: all, none
-   */
-  reaction?: 'all' | 'none';
-  /**
-   * Push notification preferences for custom activity types. Map of activity type to preference (all or none)
-   */
-  custom_activity_types?: Record<string, string>;
-}
-
-export interface FeedsPreferencesResponse {
-  comment?: string;
-  comment_mention?: string;
-  comment_reaction?: string;
-  comment_reply?: string;
-  follow?: string;
-  mention?: string;
-  reaction?: string;
-  custom_activity_types?: Record<string, string>;
-}
-
 export interface FeedsReactionGroupResponse {
   count: number;
   first_reaction_at: TimestampNS;
@@ -3411,12 +3629,18 @@ export interface FeedsV3ActivityResponse {
   popularity: number;
   preview: boolean;
   reaction_count: number;
-  restrict_replies: string;
+  /**
+   * Who is allowed to reply to an activity.
+   */
+  restrict_replies: RestrictReplies;
   score: number;
   share_count: number;
   type: string;
   updated_at: TimestampNS;
-  visibility: string;
+  /**
+   * Who can see an activity.
+   */
+  visibility: ActivityVisibility;
   attachments: Array<Attachment>;
   comments: Array<FeedsV3CommentResponse>;
   feeds: Array<string>;
@@ -3470,7 +3694,10 @@ export interface FeedsV3CommentResponse {
   reaction_count: number;
   reply_count: number;
   score: number;
-  status: string;
+  /**
+   * Moderation status of a comment.
+   */
+  status: CommentStatus;
   updated_at: TimestampNS;
   upvote_count: number;
   mentioned_users: Array<UserResponse>;
@@ -3674,6 +3901,118 @@ export interface FloodSimilarRuleParameters {
   threshold?: number;
   time_window?: string;
   allowlist?: Array<string>;
+}
+
+export interface ForkChannelRequest {
+  /**
+   * ID of the top-level message to fork at. The fork copies the visible messages created up to it, itself included, and their replies up to it. Fork only at a message the agent has finished writing: a message still being streamed is copied as it is at the time of the fork
+   */
+  message_id: string;
+  /**
+   * The channel a fork creates
+   */
+  channel: ForkChannelTarget;
+  /**
+   * When true, the copied messages carry no attachments. By default attachments are copied
+   */
+  exclude_attachments?: boolean;
+}
+
+export interface ForkChannelResponse {
+  duration: string;
+  /**
+   * List of channel members
+   */
+  members: Array<ChannelMemberResponse>;
+  /**
+   * List of channel messages
+   */
+  messages: Array<MessageResponse>;
+  /**
+   * List of pinned messages in the channel
+   */
+  pinned_messages: Array<MessageResponse>;
+  threads: Array<ThreadStateResponse>;
+  /**
+   * A fork of an agent channel
+   */
+  fork: ChannelForkResponse;
+  /**
+   * Milliseconds until the current user's slow mode cool down period ends. Only set on client-side get or create channel and get channel requests while the user is under cool down
+   */
+  cooldown_remaining_ms?: number;
+  /**
+   * Whether this channel is hidden or not
+   */
+  hidden?: boolean;
+  /**
+   * Messages before this date are hidden from the user
+   */
+  hide_messages_before?: TimestampNS;
+  /**
+   * Number of channel watchers
+   */
+  watcher_count?: number;
+  /**
+   * Active live locations in the channel
+   */
+  active_live_locations?: Array<SharedLocationResponseData>;
+  /**
+   * Pending messages that this user has sent
+   */
+  pending_messages?: Array<PendingMessageResponse>;
+  /**
+   * List of read states
+   */
+  read?: Array<ReadStateResponse>;
+  /**
+   * The caller's own scheduled, sending and failed messages in this channel. Set only by a client-side GetOrCreateChannel or QueryChannels with include_scheduled_messages; absent when not requested or not known, in which case use the scheduled messages query
+   */
+  scheduled_messages?: Array<ScheduledMessageResponse>;
+  /**
+   * List of user who is watching the channel
+   */
+  watchers?: Array<UserResponse>;
+  /**
+   * Represents channel in chat
+   */
+  channel?: ChannelResponse;
+  draft?: DraftResponse;
+  membership?: ChannelMemberResponse;
+  /**
+   * The push preference details.
+   */
+  push_preferences?: ChannelPushPreferencesResponse;
+}
+
+export interface ForkChannelTarget {
+  /**
+   * ID of the new agent channel
+   */
+  id: string;
+  /**
+   * Members of the new channel. Defaults to the source channel's members
+   */
+  members?: Array<ChannelMemberRequest>;
+  data?: ChannelInput;
+}
+
+export interface ForkMessageIDsRequest {
+  /**
+   * IDs of messages of the source channel, up to 1000
+   */
+  source_message_ids: Array<string>;
+}
+
+export interface ForkMessageIDsResponse {
+  /**
+   * Duration of the request in milliseconds
+   */
+  duration: string;
+  /**
+   * Maps each given source message ID the fork holds a copy of to the copy's ID. IDs the fork holds no copy of are left out
+   */
+  message_id_map: Record<string, string>;
 }
 
 export interface FullUserResponse {
@@ -3926,7 +4265,7 @@ export interface GroupedChannelsBucket {
 
 export interface GroupedChannelsGroupRequest {
   /**
-   * Max channels for this group; omitted or zero uses the request limit
+   * Max channels for this group; values above 15 are capped at 15. Omitted or zero uses the request limit
    */
   limit?: number;
   /**
@@ -3955,7 +4294,7 @@ export interface GroupedChannelsGroupRequest {
 
 export interface GroupedQueryChannelsRequest {
   /**
-   * Default max channels per group (default 10)
+   * Default max channels per group (default 10); values above 15 are capped at 15
    */
   limit?: number;
   /**
@@ -4322,6 +4661,21 @@ export interface MaxStreakChangedEvent {
   received_at?: TimestampNS;
 }
 
+export interface MediaDisplayResponse {
+  /**
+   * Reveals must be recorded via the reveal media endpoint (blurred CSAM or gore)
+   */
+  audit_reveal: boolean;
+  /**
+   * Default rendering before a reveal
+   */
+  mode: 'normal' | 'blur' | 'blur_grayscale';
+  /**
+   * Only users with the RevealProtectedMedia permission may reveal the media (CSAM)
+   */
+  reveal_restricted: boolean;
+}
+
 export interface MemberAddedEvent {
   /**
    * Date/time of creation
@@ -4593,7 +4947,7 @@ export interface MessageDeliveredEvent {
   /**
    * The time when the message was delivered
    */
-  last_delivered_at?: string;
+  last_delivered_at?: TimestampNS;
   /**
    * The ID of the last delivered message
    */
@@ -5354,6 +5708,14 @@ export interface MessageWithChannelResponse {
   shared_location?: SharedLocationResponseData;
 }
 
+export type ModerationAction =
+  | 'flag'
+  | 'shadow'
+  | 'remove'
+  | 'bounce'
+  | 'bounce_flag'
+  | 'bounce_remove';
+
 export interface ModerationActionConfigResponse {
   /**
    * The action to take
@@ -5495,6 +5857,7 @@ export interface ModerationMarkReviewedEvent {
 export interface ModerationPayload {
   country_code?: string;
   audios?: Array<string>;
+  country_codes?: Array<string>;
   image_ordered_keys?: Array<string>;
   images?: Array<string>;
   other_media?: Array<string>;
@@ -5787,6 +6150,62 @@ export interface NotificationChannelPartialUpdatedEvent {
    */
   team?: string;
   channel_custom?: CustomChannelData;
+}
+
+export interface NotificationChannelRewoundEvent {
+  /**
+   * Date/time of creation
+   */
+  created_at: TimestampNS;
+  /**
+   * Represents channel in chat
+   */
+  channel: ChannelResponse;
+  custom: Record<string, any>;
+  /**
+   * A rewind of an agent channel
+   */
+  rewind: ChannelRewindResponse;
+  /**
+   * The type of event: "notification.channel_rewound" in this case
+   */
+  type: string;
+  /**
+   * The ID of the channel which was rewound
+   */
+  channel_id?: string;
+  /**
+   * The number of members in the channel
+   */
+  channel_member_count?: number;
+  channel_message_count?: number;
+  /**
+   * The type of the channel which was rewound
+   */
+  channel_type?: string;
+  /**
+   * The CID of the channel which was rewound
+   */
+  cid?: string;
+  received_at?: TimestampNS;
+  /**
+   * The team ID
+   */
+  team?: string;
+  /**
+   * The total number of unread messages
+   */
+  total_unread_count?: number;
+  /**
+   * The number of channels with unread messages
+   */
+  unread_channels?: number;
+  /**
+   * The number of unread messages in the channel
+   */
+  unread_count?: number;
+  channel_custom?: CustomChannelData;
+  grouped_unread_channels?: Record<string, number>;
 }
 
 export interface NotificationChannelTruncatedEvent {
@@ -6304,7 +6723,10 @@ export interface OCRContentParameters {
 }
 
 export interface OCRRule {
-  action: 'flag' | 'shadow' | 'remove' | 'bounce' | 'bounce_flag' | 'bounce_remove';
+  /**
+   * What a moderation rule does when it matches.
+   */
+  action: ModerationAction;
   label: string;
 }
 
@@ -6519,7 +6941,7 @@ export interface PollResponseData {
   /**
    * Voting visibility of the poll
    */
-  voting_visibility: 'anonymous' | 'public';
+  voting_visibility: VotingVisibility;
   latest_answers: Array<PollVoteResponseData>;
   options: Array<PollOptionResponseData>;
   own_votes: Array<PollVoteResponseData>;
@@ -6684,11 +7106,9 @@ export interface PrivacySettingsResponse {
   typing_indicators?: TypingIndicatorsResponse;
 }
 
+export type PushLevel = 'all' | 'all_mentions' | 'mentions' | 'direct_mentions' | 'none';
+
 export interface PushPreferenceInput {
-  /**
-   * Set the level of call push notifications for the user. One of: all, none, default
-   */
-  call_level?: 'all' | 'none' | 'default';
   /**
    * Set the push preferences for a specific channel. If empty it sets the default for the user
    */
@@ -6708,10 +7128,6 @@ export interface PushPreferenceInput {
    */
   disabled_until?: Date;
   /**
-   * Set the level of feeds push notifications for the user. One of: all, none, default
-   */
-  feeds_level?: 'all' | 'none' | 'default';
-  /**
    * Remove the disabled until time. (IE stop snoozing notifications)
    */
   remove_disable?: boolean;
@@ -6724,7 +7140,6 @@ export interface PushPreferenceInput {
    */
   user_id?: string;
   chat_preferences?: ChatPreferencesInput;
-  feeds_preferences?: FeedsPreferences;
   /**
    * A recurring quiet-hours schedule: while any quiet window is active, push notifications for the user are suppressed. Suppressed notifications are dropped, not delayed.
    */
@@ -6732,7 +7147,6 @@ export interface PushPreferenceInput {
 }
 
 export interface PushPreferencesResponse {
-  call_level?: string;
   /**
    * The scope level of the push notifications.
    */
@@ -6741,14 +7155,14 @@ export interface PushPreferencesResponse {
    * If provided the notifications will be disabled until the set date.
    */
   disabled_until?: TimestampNS;
-  feeds_level?: string;
   chat_preferences?: ChatPreferencesResponse;
-  feeds_preferences?: FeedsPreferencesResponse;
   /**
    * A recurring quiet-hours schedule: while any quiet window is active, push notifications for the user are suppressed. Suppressed notifications are dropped, not delayed.
    */
   schedule?: PushScheduleResponse;
 }
+
+export type PushProviderName = 'firebase' | 'apn' | 'huawei' | 'xiaomi';
 
 export interface PushScheduleInput {
   /**
@@ -6965,11 +7379,11 @@ export interface QueryChannelBansResponse {
 
 export interface QueryChannelsDefaults {
   /**
-   * Number of channels returned when `limit` is omitted.
+   * Number of channels returned when `limit` is omitted. A request asking for at most one message and one member per channel can return more, up to the higher ceiling described on `max_limit`.
    */
   limit: number;
   /**
-   * Largest number of channels returned for one request. A bigger `limit` is silently clamped to this value rather than rejected. An app with no per-app override gets a higher ceiling for the narrow case of a request asking for at most one message and one member per channel.
+   * Largest number of channels returned for one request. A bigger `limit` is silently clamped to this value rather than rejected. An app with no per-app `max_limit` gets a higher ceiling for the narrow case of a request asking for at most one message and one member per channel.
    */
   max_limit: number;
   /**
@@ -8006,6 +8420,11 @@ export interface QueryReviewQueueRequest {
       operators: '$eq';
     };
 
+    has_false_positive: {
+      type: boolean;
+      operators: '$eq';
+    };
+
     has_image: {
       type: boolean;
       operators: '$eq';
@@ -8893,6 +9312,23 @@ export interface RestoreActionRequestPayload {
   decision_reason?: string;
 }
 
+export type RestrictReplies = 'everyone' | 'people_i_follow' | 'nobody';
+
+export interface RevealMediaRequest {
+  /**
+   * ID of the review queue item whose media is revealed
+   */
+  item_id: string;
+}
+
+export interface RevealMediaResponse {
+  duration: string;
+  /**
+   * Display policy for a review queue item's images and video
+   */
+  media_display: MediaDisplayResponse;
+}
+
 export interface ReviewQueueItemResponse {
   /**
    * AI-determined text severity
@@ -8957,6 +9393,10 @@ export interface ReviewQueueItemResponse {
    */
   languages: Array<string>;
   /**
+   * Display policy for a review queue item's images and video
+   */
+  media_display: MediaDisplayResponse;
+  /**
    * When the review was completed
    */
   completed_at?: TimestampNS;
@@ -8982,6 +9422,7 @@ export interface ReviewQueueItemResponse {
    * When the item was reviewed
    */
   reviewed_at?: TimestampNS;
+  country_codes?: Array<string>;
   /**
    * IDs of the item's flags a moderator marked as false positives
    */
@@ -9010,6 +9451,36 @@ export interface ReviewQueueItemResponse {
   moderation_payload?: ModerationPayloadResponse;
   poll?: PollResponseData;
   reaction?: Reaction;
+}
+
+export interface RewindChannelRequest {
+  /**
+   * ID of the newest visible message the caller saw. The rewind fails with a conflict when it is no longer the newest
+   */
+  expected_last_message_id: string;
+  /**
+   * ID of the top-level message to rewind the channel to. Every message created after it is hidden
+   */
+  message_id: string;
+  /**
+   * When true, `message_id` is hidden too and the message before it becomes the newest visible message
+   */
+  inclusive?: boolean;
+}
+
+export interface RewindChannelResponse {
+  /**
+   * Duration of the request in milliseconds
+   */
+  duration: string;
+  /**
+   * A rewind of an agent channel
+   */
+  rewind: ChannelRewindResponse;
+  /**
+   * Represents channel in chat
+   */
+  channel?: ChannelResponse;
 }
 
 export interface Role {
@@ -9064,6 +9535,14 @@ export interface RuleBuilderAction {
 export interface RuleBuilderCondition {
   confidence?: number;
   type?: string;
+  /**
+   * app_channel_count params: fires when the app creates at least threshold distinct channels within time_window
+   */
+  app_channel_count_params?: AppChannelCountParameters;
+  /**
+   * app_message_count params: fires when the app sends at least threshold chat messages within time_window
+   */
+  app_message_count_params?: AppMessageCountParameters;
   call_custom_property_params?: CallCustomPropertyParameters;
   call_type_rule_params?: CallTypeRuleParameters;
   call_violation_count_params?: CallViolationCountParameters;
@@ -9290,6 +9769,19 @@ export interface ScheduledMessageFailedEvent {
   scheduled_message?: ScheduledMessageResponse;
 }
 
+export type ScheduledMessageFailureReason =
+  | 'banned'
+  | 'no_permission'
+  | 'channel_frozen'
+  | 'channel_deleted'
+  | 'user_deleted'
+  | 'moderation_blocked'
+  | 'hook_rejected'
+  | 'expired'
+  | 'internal_error'
+  | 'invalid_message'
+  | 'pending_not_supported';
+
 export interface ScheduledMessageLocation {
   /**
    * The ID of the device that created the location.
@@ -9309,6 +9801,8 @@ export interface ScheduledMessageLocation {
    */
   longitude?: number;
 }
+
+export type ScheduledMessageQueryStatus = 'scheduled' | 'sending' | 'failed';
 
 export interface ScheduledMessageResponse {
   /**
@@ -9330,7 +9824,7 @@ export interface ScheduledMessageResponse {
   /**
    * Status of the scheduled message. One of: scheduled, sending, failed, canceled, sent. A message is sending from its first send attempt until it is sent or fails, including while it waits to retry a failed attempt; it cannot be edited, canceled or sent now while sending
    */
-  status: string;
+  status: ScheduledMessageStatus;
   /**
    * Date/time of the last update
    */
@@ -9346,7 +9840,7 @@ export interface ScheduledMessageResponse {
   /**
    * Why sending the message failed. Only set when status is failed. One of: banned, no_permission, channel_frozen, channel_deleted, user_deleted, moderation_blocked, hook_rejected, expired, internal_error, invalid_message, pending_not_supported
    */
-  failure_reason?: string;
+  failure_reason?: ScheduledMessageFailureReason;
   /**
    * The channel of a scheduled message
    */
@@ -9379,6 +9873,13 @@ export interface ScheduledMessageSentEvent {
   scheduled_message?: ScheduledMessageResponse;
 }
 
+export type ScheduledMessageStatus =
+  | 'scheduled'
+  | 'sending'
+  | 'failed'
+  | 'canceled'
+  | 'sent';
+
 export interface ScheduledMessageUpdatedEvent {
   /**
    * Date/time of creation
@@ -9409,7 +9910,7 @@ export interface ScheduledMessagesFilter {
   /**
    * Only these statuses, as reported in each scheduled message's status. One or more of: scheduled, sending, failed
    */
-  status?: Array<string>;
+  status?: Array<ScheduledMessageQueryStatus>;
 }
 
 export interface SearchPayload {
@@ -9843,7 +10344,7 @@ export interface SendMessageRequest {
   include_mentioned_members?: boolean;
   keep_channel_hidden?: boolean;
   /**
-   * When set, the message is not sent now: it is stored and sent at this time (UTC). The response then carries scheduled_message. Must be at least 1 minute and at most the app's maximum lead time (120 days by default) from now. Slash commands cannot be scheduled
+   * When set to a future time, the message is not sent now: it is stored and sent at that time (UTC), rounded up to the first whole minute that is at least 1 minute from now, never earlier than requested. The response then carries scheduled_message with the rounded time. Must be at most the app's maximum lead time (120 days by default) from now. A time that is now or in the past sends the message now as if scheduled_at was not set, unless the request's message ID belongs to a scheduled message that was canceled or already sent. Slash commands cannot be scheduled
    */
   scheduled_at?: Date;
   skip_enrich_url?: boolean;
@@ -10047,8 +10548,10 @@ export interface SortParamRequest {
   /**
    * Type of field to sort by. Empty string or omitted means string type (default). One of: number, boolean
    */
-  type?: string;
+  type?: SortParamType;
 }
+
+export type SortParamType = '' | 'number' | 'boolean';
 
 export interface SubmitActionRequest {
   /**
@@ -10663,6 +11166,10 @@ export interface UnreadCountsChannel {
    */
   channel_id: string;
   /**
+   * Whether the channel has messages newer than the user's last read. Large channels have no unread_count and only report this.
+   */
+  has_unread: boolean;
+  /**
    * The date which the current user last read the channel.
    */
   last_read: TimestampNS;
@@ -10964,7 +11471,7 @@ export interface UpdatePollRequest {
   /**
    * Voting visibility
    */
-  voting_visibility?: 'anonymous' | 'public';
+  voting_visibility?: VotingVisibility;
   /**
    * Poll options
    */
@@ -10997,7 +11504,7 @@ export interface UpdateReminderResponse {
 
 export interface UpdateScheduledMessageRequest {
   /**
-   * New send time (UTC). Must be at least 1 minute and at most the app's maximum lead time from now
+   * New send time (UTC). Must be in the future and at most the app's maximum lead time from now. Rounded up to the first whole minute that is at least 1 minute from now, never earlier than requested. Resending the stored time leaves it unchanged
    */
   scheduled_at?: Date;
   /**
@@ -11911,6 +12418,8 @@ export interface VoteData {
   option_id?: string;
 }
 
+export type VotingVisibility = 'anonymous' | 'public';
+
 export interface WSAuthMessage {
   /**
    * JWT token for authentication
@@ -11939,10 +12448,12 @@ export type WSClientEvent =
   | ({ type: 'app.updated' } & AppUpdatedEvent)
   | ({ type: 'channel.created' } & ChannelCreatedEvent)
   | ({ type: 'channel.deleted' } & ChannelDeletedEvent)
+  | ({ type: 'channel.forked' } & ChannelForkedEvent)
   | ({ type: 'channel.frozen' } & ChannelFrozenEvent)
   | ({ type: 'channel.hidden' } & ChannelHiddenEvent)
   | ({ type: 'channel.kicked' } & ChannelKickedEvent)
   | ({ type: 'channel.max_streak_changed' } & MaxStreakChangedEvent)
+  | ({ type: 'channel.rewound' } & ChannelRewoundEvent)
   | ({ type: 'channel.truncated' } & ChannelTruncatedEvent)
   | ({ type: 'channel.unfrozen' } & ChannelUnFrozenEvent)
   | ({ type: 'channel.updated' } & ChannelUpdatedEvent)
@@ -11971,6 +12482,7 @@ export type WSClientEvent =
   | ({
       type: 'notification.channel_partial_updated';
     } & NotificationChannelPartialUpdatedEvent)
+  | ({ type: 'notification.channel_rewound' } & NotificationChannelRewoundEvent)
   | ({ type: 'notification.channel_truncated' } & NotificationChannelTruncatedEvent)
   | ({ type: 'notification.invite_accepted' } & NotificationInviteAcceptedEvent)
   | ({ type: 'notification.invite_rejected' } & NotificationInviteRejectedEvent)
@@ -12027,10 +12539,12 @@ export type WSEvent =
   | ({ type: 'app.updated' } & AppUpdatedEvent)
   | ({ type: 'channel.created' } & ChannelCreatedEvent)
   | ({ type: 'channel.deleted' } & ChannelDeletedEvent)
+  | ({ type: 'channel.forked' } & ChannelForkedEvent)
   | ({ type: 'channel.frozen' } & ChannelFrozenEvent)
   | ({ type: 'channel.hidden' } & ChannelHiddenEvent)
   | ({ type: 'channel.kicked' } & ChannelKickedEvent)
   | ({ type: 'channel.max_streak_changed' } & MaxStreakChangedEvent)
+  | ({ type: 'channel.rewound' } & ChannelRewoundEvent)
   | ({ type: 'channel.truncated' } & ChannelTruncatedEvent)
   | ({ type: 'channel.unfrozen' } & ChannelUnFrozenEvent)
   | ({ type: 'channel.updated' } & ChannelUpdatedEvent)
@@ -12061,6 +12575,7 @@ export type WSEvent =
   | ({
       type: 'notification.channel_partial_updated';
     } & NotificationChannelPartialUpdatedEvent)
+  | ({ type: 'notification.channel_rewound' } & NotificationChannelRewoundEvent)
   | ({ type: 'notification.channel_truncated' } & NotificationChannelTruncatedEvent)
   | ({ type: 'notification.invite_accepted' } & NotificationInviteAcceptedEvent)
   | ({ type: 'notification.invite_rejected' } & NotificationInviteRejectedEvent)

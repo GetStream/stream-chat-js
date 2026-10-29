@@ -29,6 +29,8 @@ import type {
   QueryReviewQueueRequest,
   QueryReviewQueueResponse,
   QueueResponse,
+  RevealMediaRequest,
+  RevealMediaResponse,
   SubmitActionRequest,
   SubmitActionResponse,
   UnbanRequest,
@@ -41,6 +43,7 @@ import type {
   UpsertConfigRequest,
   UpsertConfigResponse,
 } from '../models';
+import { VideoContentParameters } from '../models';
 
 export class ModerationApi {
   constructor(public readonly apiClient: ApiClient) {}
@@ -367,6 +370,21 @@ export class ModerationApi {
       pathParams,
       undefined,
       request ?? {},
+      'application/json',
+      requestOptions,
+    );
+  }
+
+  revealMedia(
+    request: RevealMediaRequest,
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<RevealMediaResponse>> {
+    return this.apiClient.sendRequest<RevealMediaResponse>(
+      'POST',
+      '/api/v2/moderation/reveal_media',
+      undefined,
+      undefined,
+      request,
       'application/json',
       requestOptions,
     );

@@ -31,6 +31,10 @@ import type {
   EventResponse,
   FileUploadRequest,
   FileUploadResponse,
+  ForkChannelRequest,
+  ForkChannelResponse,
+  ForkMessageIDsRequest,
+  ForkMessageIDsResponse,
   GetApplicationResponse,
   GetBlockedUsersResponse,
   GetDraftResponse,
@@ -95,6 +99,8 @@ import type {
   RemoveUserGroupMembersRequest,
   RemoveUserGroupMembersResponse,
   Response,
+  RewindChannelRequest,
+  RewindChannelResponse,
   SearchPayload,
   SearchResponse,
   SearchRolesResponse,
@@ -523,6 +529,38 @@ export class ChatApi {
     );
   }
 
+  forkChannel(
+    pathParams: { type: string; id: string },
+    request: ForkChannelRequest,
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<ForkChannelResponse>> {
+    return this.apiClient.sendRequest<ForkChannelResponse>(
+      'POST',
+      '/api/v2/chat/channels/{type}/{id}/fork',
+      pathParams,
+      undefined,
+      request,
+      'application/json',
+      requestOptions,
+    );
+  }
+
+  forkMessageIDs(
+    pathParams: { type: string; id: string },
+    request: ForkMessageIDsRequest,
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<ForkMessageIDsResponse>> {
+    return this.apiClient.sendRequest<ForkMessageIDsResponse>(
+      'POST',
+      '/api/v2/chat/channels/{type}/{id}/fork/message_ids',
+      pathParams,
+      undefined,
+      request,
+      'application/json',
+      requestOptions,
+    );
+  }
+
   hideChannel(
     pathParams: { type: string; id: string },
     request?: HideChannelRequest,
@@ -680,6 +718,22 @@ export class ChatApi {
       pathParams,
       undefined,
       request ?? {},
+      'application/json',
+      requestOptions,
+    );
+  }
+
+  rewindChannel(
+    pathParams: { type: string; id: string },
+    request: RewindChannelRequest,
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<RewindChannelResponse>> {
+    return this.apiClient.sendRequest<RewindChannelResponse>(
+      'POST',
+      '/api/v2/chat/channels/{type}/{id}/rewind',
+      pathParams,
+      undefined,
+      request,
       'application/json',
       requestOptions,
     );
@@ -1294,14 +1348,14 @@ export class ChatApi {
   }
 
   unreadCounts(
-    _request?: Record<string, never>,
+    request?: { include_large_channels?: boolean },
     requestOptions?: StreamRequestOptions,
   ): Promise<StreamResponse<WrappedUnreadCountsResponse>> {
     return this.apiClient.sendRequest<WrappedUnreadCountsResponse>(
       'GET',
       '/api/v2/chat/unread',
       undefined,
-      undefined,
+      request,
       undefined,
       undefined,
       requestOptions,
