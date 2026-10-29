@@ -1,3 +1,9 @@
+## [9.54.4](https://github.com/GetStream/stream-chat-js/compare/v9.54.3...v9.54.4) (2026-10-29)
+
+### Bug Fixes
+
+* handle tokenProvider rejection during reconnect token refresh ([#1962](https://github.com/GetStream/stream-chat-js/issues/1962)) ([7721bd5](https://github.com/GetStream/stream-chat-js/commit/7721bd5bf6abcce9087f11d3c07f214a1d27e217))
+
 ## [9.54.3](https://github.com/GetStream/stream-chat-js/compare/v9.54.2...v9.54.3) (2026-10-28)
 
 ### Bug Fixes
