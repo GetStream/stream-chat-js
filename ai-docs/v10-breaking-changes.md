@@ -326,7 +326,7 @@ const client = StreamChat.getInstance(key, {
 
 - **v9:** `client.secret`, the `secret` constructor argument, `client.createToken(userID, exp?, iat?)`, `client._isUsingServerAuth()`, `client.validateServerSideAuth()`, `new TokenManager(secret)` signing server tokens (`JWTServerToken`) when no user token was set.
 - **v10:** all removed. No server JWTs are produced; every request needs a user token (or anonymous).
-- **Migrate:** move server code to `@stream-io/node-sdk` (token creation there). Delete branches gated on `_isUsingServerAuth()`. See also [server-only methods](#server-only-methods-removed) and [webhook helpers](#webhook-helpers-removed).
+- **Migrate:** move server code to `@stream-io/node-sdk`: `new StreamClient(apiKey, apiSecret)`, then `client.generateUserToken({ user_id, validity_in_seconds })` (or `exp` / `iat` in seconds) for user tokens. `generatePermanentUserToken({ user_id })` issues one without `exp`. `StreamClient` signs its own requests, so there is no server-token equivalent to create. Delete branches gated on `_isUsingServerAuth()`. Method mapping: [server-only methods](#server-only-methods-removed); webhooks: [webhook helpers](#webhook-helpers-removed).
 - **Source:** `src/token_manager.ts:21-26` (v10); `src/client.ts:451-454,1227-1245,3892,4297`, `src/token_manager.ts:24-34,58-61,140-142` (v9)
 
 <a id="streamchat-methods"></a>
@@ -343,28 +343,28 @@ Common rules for every generated or rewritten `StreamChat` method: path paramete
 
 - **v9 -> v10:**
 
-  | v9                                                                                 | v10                                                                                                  |
-  | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-  | `queryUserGroups(options?)`                                                        | `listUserGroups({ limit?, id_gt?, created_at_gt?, team_id? }?)`                                      |
-  | `addDevice(id, push_provider, userID?, push_provider_name?)`                       | `createDevice({ id, push_provider, push_provider_name?, hardware_id?, voip_token? })`                |
-  | `getDevices(userID?)`                                                              | `listDevices()`                                                                                      |
-  | `removeDevice(id, userID?)`                                                        | `deleteDevice({ id })`                                                                               |
-  | `setLocalDevice(device)`                                                           | none; call `createDevice(...)` after connecting (device no longer sent on WS connect)                |
-  | `getUnreadCount(userID?)`                                                          | `unreadCounts()` (connected user only)                                                               |
-  | `setPushPreferences(preferences)`                                                  | `updatePushNotificationPreferences({ preferences })`                                                 |
-  | `partialUpdateUser(u)` / `partialUpdateUsers(us)`                                  | `updateUsersPartial({ users: [{ id, set?, unset? }] })`                                              |
-  | `upsertUser(u)` / `upsertUsers(us)` / `updateUser(u)` (alias)                      | `updateUsers({ users: { [id]: user } })` (record keyed by id)                                        |
-  | `unBlockUser(id, userID?)`                                                         | `unblockUser(id, requestOptions?)` (wrapper over generated `unblockUsers`)                           |
-  | `getSharedLocations()`                                                             | `getUserLiveLocations()`                                                                             |
-  | `updateLocation(payload)`                                                          | `updateLiveLocation({ message_id, latitude?, longitude?, end_at? })`                                 |
-  | `markAllRead(data?)` (alias)                                                       | `markChannelsRead(request?)`                                                                         |
-  | `partialUpdateMessage(id, { set, unset }, userId?, options?)`                      | `updateMessagePartial({ id }, { set?, unset?, skip_enrich_url?, skip_push? })`                       |
-  | `ephemeralUpdateMessage(id, partial, user?, options?)`                             | none (ephemeral endpoint gone); use `updateMessagePartial`                                           |
-  | `partialUpdateThread(messageId, { set, unset })`                                   | `updateThreadPartial({ message_id }, { set?, unset? })` (no reserved-field guard, no empty-id throw) |
-  | `enrichURL(url)`                                                                   | `getOG({ url })` (response `GetOGResponse`)                                                          |
-  | `hydrateActiveChannels(channels, stateOptions?, options?)`                         | `hydrateChannels(channels, stateOptions?, queryOptions?)`                                            |
-  | `setAnonymousUser()` (alias)                                                       | `connectAnonymousUser()`                                                                             |
-  | poll methods (`partialUpdatePoll`, `closePoll`, `addPollAnswer`, `removePollVote`) | see [poll client methods](#poll-client-methods)                                                      |
+  | v9                                                                                 | v10                                                                                                         |
+  | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+  | `queryUserGroups(options?)`                                                        | `listUserGroups({ limit?, id_gt?, created_at_gt?, team_id? }?)`                                             |
+  | `addDevice(id, push_provider, userID?, push_provider_name?)`                       | `createDevice({ id, push_provider, push_provider_name?, hardware_id?, voip_token? })`                       |
+  | `getDevices(userID?)`                                                              | `listDevices()`                                                                                             |
+  | `removeDevice(id, userID?)`                                                        | `deleteDevice({ id })`                                                                                      |
+  | `setLocalDevice(device)`                                                           | none; call `createDevice(...)` after connecting (device no longer sent on WS connect)                       |
+  | `getUnreadCount(userID?)`                                                          | `unreadCounts()` (connected user only)                                                                      |
+  | `setPushPreferences(preferences)`                                                  | `updatePushNotificationPreferences({ preferences })`                                                        |
+  | `partialUpdateUser(u)` / `partialUpdateUsers(us)`                                  | `updateUsersPartial({ users: [{ id, set?, unset? }] })`; `set` keys stay flat ([custom data](#custom-data)) |
+  | `upsertUser(u)` / `upsertUsers(us)` / `updateUser(u)` (alias)                      | `updateUsers({ users: { [id]: user } })` (record keyed by id)                                               |
+  | `unBlockUser(id, userID?)`                                                         | `unblockUser(id, requestOptions?)` (wrapper over generated `unblockUsers`)                                  |
+  | `getSharedLocations()`                                                             | `getUserLiveLocations()`                                                                                    |
+  | `updateLocation(payload)`                                                          | `updateLiveLocation({ message_id, latitude?, longitude?, end_at? })`                                        |
+  | `markAllRead(data?)` (alias)                                                       | `markChannelsRead(request?)`                                                                                |
+  | `partialUpdateMessage(id, { set, unset }, userId?, options?)`                      | `updateMessagePartial({ id }, { set?, unset?, skip_enrich_url?, skip_push? })`                              |
+  | `ephemeralUpdateMessage(id, partial, user?, options?)`                             | none (ephemeral endpoint gone); use `updateMessagePartial`                                                  |
+  | `partialUpdateThread(messageId, { set, unset })`                                   | `updateThreadPartial({ message_id }, { set?, unset? })` (no reserved-field guard, no empty-id throw)        |
+  | `enrichURL(url)`                                                                   | `getOG({ url })` (response `GetOGResponse`)                                                                 |
+  | `hydrateActiveChannels(channels, stateOptions?, options?)`                         | `hydrateChannels(channels, stateOptions?, queryOptions?)`                                                   |
+  | `setAnonymousUser()` (alias)                                                       | `connectAnonymousUser()`                                                                                    |
+  | poll methods (`partialUpdatePoll`, `closePoll`, `addPollAnswer`, `removePollVote`) | see [poll client methods](#poll-client-methods)                                                             |
 
 - **Migrate:** per table. User data passed to `updateUsers` / `createGuest` is `UserRequest` (custom fields under `custom`, see [custom data](#custom-data)).
 - **Source:** `src/gen/chat/ChatApi.ts`, `src/client.ts:904,1672,1867` (v10); `src/client.ts:1189,1965,2286,2460-2560,2773-2800,3041,3253,3537,3575,3810,4605,5276` (v9)
@@ -615,7 +615,71 @@ Common rules for every generated or rewritten `StreamChat` method: path paramete
   | segments                            | `segment()`, `createSegment`, `createUserSegment`, `createChannelSegment`, `getSegment`, `updateSegment`, `addSegmentTargets`, `querySegmentTargets`, `removeSegmentTargets`, `querySegments`, `deleteSegment`, `segmentTargetExists`                                                              |
   | batch / filters / retention / usage | `channelBatchUpdater()`, `updateChannelsBatch`, `createPredefinedFilter`, `getPredefinedFilter`, `updatePredefinedFilter`, `deletePredefinedFilter`, `listPredefinedFilters`, `setRetentionPolicy`, `deleteRetentionPolicy`, `getRetentionPolicy`, `getRetentionPolicyRuns`, `queryTeamUsageStats` |
 
-- **Migrate:** `@stream-io/node-sdk` (exact method names there are not verified here). Querying with an existing `predefined_filter` still works through `queryChannels` / `queryChannelsAndHydrate`.
+- **Migrate:** `@stream-io/node-sdk`. One `StreamClient` covers every product. App, user, role, permission, push, import and task endpoints are on the client itself; chat endpoints are on `client.chat`; moderation endpoints are on `client.moderation`. Every method takes a single request object. Checked against `@stream-io/node-sdk@0.8.13`:
+
+  | v9 `stream-chat` (server)                                                                           | `@stream-io/node-sdk`                                                                                                                                                                                                                                             |
+  | --------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `new StreamChat(key, secret)` / `StreamChat.getInstance(key, secret)`                               | `new StreamClient(key, secret)`                                                                                                                                                                                                                                   |
+  | `client.createToken(id, exp?, iat?)`, `JWTUserToken(secret, id, extra)`                             | `client.generateUserToken({ user_id, validity_in_seconds?, exp?, iat? })`; no `exp`: `generatePermanentUserToken({ user_id })`                                                                                                                                    |
+  | `client.channel(type, { members, created_by_id }).create()` (distinct)                              | `client.chat.channel(type).getOrCreate({ data: { created_by_id, members: [{ user_id }] } })` or `client.chat.getOrCreateDistinctChannel({ type, data })`                                                                                                          |
+  | `client.channel(type, id, data).create()`                                                           | `client.chat.channel(type, id).getOrCreate({ data: { created_by_id, custom: {...} } })`                                                                                                                                                                           |
+  | `upsertUser(s)`, `partialUpdateUser(s)`                                                             | `client.upsertUsers([...])`, `client.updateUsersPartial({ users })`                                                                                                                                                                                               |
+  | `deleteUser(s)`, `deactivateUser(s)`, `reactivateUser(s)`, `restoreUsers`, `exportUser`             | Same names on `client`; single-user calls take `{ user_id }`, `deleteUsers` takes `{ user_ids, user?, messages?, conversations? }`                                                                                                                                |
+  | `revokeUserToken(s)`                                                                                | `client.updateUsersPartial({ users: [{ id, set: { revoke_tokens_issued_before: new Date() } }] })`                                                                                                                                                                |
+  | `updateAppSettings`                                                                                 | `client.updateApp({...})`                                                                                                                                                                                                                                         |
+  | `testPushSettings`, `testSQSSettings`, `testSNSSettings`                                            | `client.checkPush`, `client.checkSQS`, `client.checkSNS`                                                                                                                                                                                                          |
+  | `upsertPushProvider`, `deletePushProvider`, `listPushProviders`, `getRateLimits`                    | Same names on `client`                                                                                                                                                                                                                                            |
+  | `createChannelType`, `getChannelType`, `updateChannelType`, `deleteChannelType`, `listChannelTypes` | `client.chat.createChannelType({ name, automod, automod_behavior, max_message_length, ... })`, `getChannelType({ name })`, `updateChannelType({ name, automod, automod_behavior, max_message_length, ... })`, `deleteChannelType({ name })`, `listChannelTypes()` |
+  | `createCommand`, `getCommand`, `updateCommand`, `deleteCommand`, `listCommands`                     | Same names on `client.chat`                                                                                                                                                                                                                                       |
+  | `createRole`, `listRoles`, `deleteRole`, `*Permission`, `listPermissions`                           | Same names on `client`                                                                                                                                                                                                                                            |
+  | `getBlockList`                                                                                      | `client.getBlockList({ name })`                                                                                                                                                                                                                                   |
+  | `exportChannel(s)`, `getExportChannelStatus`, `exportUsers`, `getTask`                              | `client.chat.exportChannels({ channels })`, `client.exportUsers({ user_ids })`, then `client.getTask({ id: task_id })`                                                                                                                                            |
+  | `_createImportURL`, `_createImport`, `_getImport`, `_listImports`                                   | `client.createImportURL`, `createImport`, `getImport`, `listImports`                                                                                                                                                                                              |
+  | `undeleteMessage`, `commitMessage`, `queryMessageHistory`                                           | Same names on `client.chat`                                                                                                                                                                                                                                       |
+  | `updateChannelsBatch`, `channelBatchUpdater()`                                                      | `client.chat.channelBatchUpdate({...})`                                                                                                                                                                                                                           |
+  | campaigns, segments, predefined filters, retention, `queryTeamUsageStats`                           | Same names on `client.chat` (`listPredefinedFilters` -> `getPredefinedFilters`)                                                                                                                                                                                   |
+  | `getUnreadCountBatch`, `sendUserCustomEvent`                                                        | `client.chat.unreadCountsBatch({ user_ids })`, `client.chat.sendUserCustomEvent({ user_id, event })`                                                                                                                                                              |
+
+  Plain-JS scripts get no type errors, so check these by hand:
+  - `createChannelType` and `updateChannelType` **require** `automod` (`'disabled' | 'simple' | 'AI'`), `automod_behavior` and `max_message_length`.
+  - The request body is built from the endpoint's known fields, so **unknown keys are dropped without an error**. `createChannelType` does not take `quotes`, `reminders`, `allowed_flag_reasons` or `automod_thresholds`; set them with a follow-up `updateChannelType`.
+  - Channel members are `[{ user_id }]` objects, the creator is `data.created_by_id`, and channel custom data goes under `data.custom`.
+
+  ```ts
+  import { StreamClient } from '@stream-io/node-sdk';
+
+  const client = new StreamClient(
+    process.env.STREAM_API_KEY!,
+    process.env.STREAM_API_SECRET!,
+  );
+
+  const token = client.generateUserToken({
+    user_id: 'jane',
+    validity_in_seconds: 60 * 60,
+  });
+
+  await client.chat.channel('messaging').getOrCreate({
+    data: { created_by_id: 'jane', members: [{ user_id: 'jane' }, { user_id: 'john' }] },
+  });
+
+  await client.chat.createChannelType({
+    name: 'support',
+    automod: 'disabled',
+    automod_behavior: 'flag',
+    max_message_length: 5000,
+  });
+  await client.chat.updateChannelType({
+    name: 'support',
+    automod: 'disabled',
+    automod_behavior: 'flag',
+    max_message_length: 5000,
+    quotes: true,
+    reminders: true,
+  });
+  ```
+
+  Querying with an existing `predefined_filter` still works through `queryChannels` / `queryChannelsAndHydrate`.
+
 - **Source:** `src/gen/chat/ChatApi.ts`, `src/client.ts` (v10, absent); `src/client.ts:971,1011,1061,2530,2572,2846,3169,3272,4045,4157,4204,4244,4272-4297,4316,4485,4616,4648,4711,4759,4818,5127,5150,5262,5400,5487` (v9)
 
 <a id="webhook-helpers-removed"></a>
@@ -626,7 +690,7 @@ Common rules for every generated or rewritten `StreamChat` method: path paramete
 
 - **v9:** root exports `verifySignature`, `CheckSignature` (deprecated), `verifyAndParseWebhook`, `parseSqs`, `parseSns`, `gunzipPayload`, `decodeSqsPayload`, `decodeSnsPayload`, `parseEvent`, `InvalidWebhookError`, `InvalidWebhookErrorMessages`, `JWTUserToken`, `JWTServerToken`; client methods `verifyWebhook`, `verifyAndParseWebhook`, `parseSqs`, `parseSns`.
 - **v10:** removed. `signing.ts` exports only `UserFromToken` and `DevToken` (plus `client.devToken`).
-- **Migrate:** `@stream-io/node-sdk` webhook helpers and token generation.
+- **Migrate:** `@stream-io/node-sdk`. `client.verifyWebhook(body, signature)` returns a boolean. `client.verifyAndParseWebhook(rawBody, signature)` decompresses, verifies and returns the typed event, and throws `InvalidWebhookError` (a root export). `client.parseSqs(body)` and `client.parseSns(body)` cover queues. Tokens: `client.generateUserToken({ user_id, ... })` (see [server-side auth](#server-side-auth-removed)).
 - **Source:** `src/signing.ts:1-35` (v10); `src/signing.ts:18-290`, `src/client.ts:3990-4030` (v9)
 
 <a id="connection"></a>
@@ -785,8 +849,8 @@ The removal of the `connection.changed` / `transport.changed` events is owned by
 **Kind:** behavior · **Impact:** low · **PR:** #1819
 
 - **v9:** base64 via `base64-js` / custom decoder, Latin-1 char codes; `connectUser({ id: 'müller' }, client.devToken('müller'))` passed the user-id check.
-- **v10:** `DevToken` encodes UTF-8 bytes with `btoa`; `UserFromToken` decodes with global `atob` without UTF-8 decoding. Any non-ASCII id now fails `connectUser` with a dev token ("userToken does not have a user_id or is not matching with user.id") (tracked in v10-followups.md). Needs global `atob` / `btoa` (old Hermes: polyfill).
-- **Migrate:** ASCII ids for dev tokens; polyfill `atob` on runtimes without it.
+- **v10:** `DevToken` encodes UTF-8 bytes with `btoa`. `UserFromToken` decodes with global `atob`, with no base64url handling and no UTF-8 decoding, and `connectUser` runs it on every string token, signed or dev. A non-ASCII id fails `connectUser` ("userToken does not have a user*id or is not matching with user.id"), and a payload whose base64url form contains `-` / `*`(ids with`>`, `?`, `~`or non-ASCII characters) throws`InvalidCharacterError`(tracked in v10-followups.md). Needs global`atob`/`btoa` (old Hermes: polyfill).
+- **Migrate:** until it is fixed, pass such users a token provider (`connectUser(user, () => fetchToken())`) instead of a string, or keep ids ASCII without `>`, `?`, `~`. Polyfill `atob` on runtimes without it.
 - **Source:** `src/signing.ts:7-35`, `src/token_manager.ts:92-99` (v10); `src/signing.ts:63-86`, `src/base64.ts:47-80` (v9)
 
 <a id="insights-removed"></a>
@@ -835,6 +899,29 @@ Root causes referenced from every other section: custom data under `custom`, `Ti
 - **v10:** every entity has a `custom` object typed by the matching `Custom*Data` interface. On responses it is required (`MessageResponse.custom: CustomMessageData`, `UserResponse.custom`, `ChannelResponse.custom`, `ChannelMemberResponse.custom`, `ReactionResponse.custom`, `ThreadResponse.custom`, `Attachment.custom`, `OGAttachment.custom`, events `custom: CustomEventData`); on requests it is optional (`MessageRequest.custom?`, `ChannelInput.custom?`, `ChannelMemberRequest.custom?`, `ReactionRequest.custom?`, `PollOptionInput.custom?`, `CreatePollRequest.custom?`) except `Attachment.custom`, which is required in requests too. The SDK talks to `/api/v2/...` (REST and `/api/v2/connect`), whose payloads nest custom fields; there is no client-side flattening. `Attachment` members whose types follow the generated model: `actions`, `author_icon`, `color`, `fallback`, `fields`, `footer`, `footer_icon`, `giphy` (`Images`), `original_height`, `original_width`, `pretext`.
 - **Migrate:** read `message.custom.priority`; write `channel.sendMessage({ message: { text, custom: { priority } } })`; `client.channel('messaging', id, { custom: { name } })` via `ChannelInput`; outgoing attachments need at least `custom: {}`.
 - **Channel `name` and `image`:** the most common read to fix. `ChannelResponse` has no top-level `name` or `image`, so `channel.data?.name` / `channel.data?.image` (channel headers, list previews, search results) become `channel.data?.custom.name` / `channel.data?.custom.image`; grep for `data?.name` and `data.name`. Filtering is the exception: `name` is still a top-level key of the channel `filter_conditions` (`{ name: { $autocomplete: q } }` keeps working), while any other custom field filters as `'custom.<key>'` ([filters](#filter-types)).
+- **Partial updates are the exception.** `set` / `unset` in `updateUsersPartial({ users: [{ id, set, unset }] })` keep the v9 flat shape. Put built-in fields (`name`, `image`, `teams`, ...) and custom fields side by side at the top level of `set`, and reach nested custom fields with dotted paths (`'settings.theme'`). The API stores keys it does not know under `custom`, so they come back as `user.custom.<key>`. Do not wrap them as `set: { custom: { ... } }`.
+
+  ```ts
+  declare module 'stream-chat' {
+    interface CustomUserData {
+      color?: string;
+    }
+  }
+
+  // v9
+  await client.partialUpdateUser({
+    id: client.userID!,
+    set: { name: 'Jane', color: 'blue' },
+  });
+  // v10
+  const { users } = await client.updateUsersPartial({
+    users: [
+      { id: client.userID!, set: { name: 'Jane', color: 'blue' }, unset: ['nickname'] },
+    ],
+  });
+  users[client.userID!].custom.color; // 'blue'
+  ```
+
 - **Source:** `src/gen/models/index.ts:598-599,4889,4820,11555,1511,1501,1398,2663-2668`, `src/connection/wsConnection/StableWSConnection.ts:246` (v10); `src/types.ts:338,419,1056,2579,3038,3179,1712`, `src/connection.ts:219` (v9)
 
 ```ts
@@ -871,7 +958,7 @@ const p = message.custom.priority;
 
 - **v9:** permissive hand-written filters built from `QueryFilters<...>`, `QueryFilter`, `PrimitiveFilter`, `ContainsOperator`, `ArrayOneOrMore` / `ArrayTwoOrMore`, `QueryLogicalOperators`; custom fields as top-level keys (`{ color: 'green' }`); `$and` / `$nor` needed one element, `$or` two.
 - **v10:** `ChannelFilters`, `UserFilters`, `MemberFilters`, `MessageFilters`, `ReactionFilters`, `ThreadFilters`, `ReminderFilters`, `QueryPollsFilters`, `QueryVotesFilters` are derived from the generated request's `filter` / `filter_conditions` (`Filters<{ key: { type; operators } }>`). Only declared operators per key are allowed, one operator per key (`RequireOnlyOne`), `$eq` / `$ne` accept `null`, `$in` takes `T[]`. Custom fields use `` `custom.${field}` `` keys plus a `` `custom.${string}` `` index. Logical operators (`$and`, `$or`, `$nor`) are plain arrays. Keys removed from the typed filters include `ChannelFilters.deleted_at/config/cooldown/created_by/invites/truncated_*/auto_translation_language/own_capabilities`, all `MemberFilters` keys except via the generated payload, `UserFilters.privacy_settings/push_notifications/online/invisible/...`, `QueryPollsFilters.user_id`, `QueryVotesFilters.created_by_id`, `ReminderFilters.user_id`; added `ChannelFilters.channel_role`, `QueryVotesFilters.poll_id`, `ReminderFilters.expires_at`, `ThreadFilters.has_unread/reply_count/...`. Other filter keys whose typing changed (added, removed or retyped): `ChannelFilters.app_banned`, `auto_translation_enabled`, `distinct`, `filter_tags`, `hide_messages_before`, `invite`, `message_count`, `mute_expires_at`, `truncated_by`; `MemberFilters.invite`, `is_moderator`, `user.email`; `MessageFilters.mentioned_group_ids`, `mentioned_groups`, `mentioned_roles`, `mml`, `quoted_message_id`, `thread_participants`; `ThreadFilters.created_by_user_id`; `UserFilters.avg_response_time`, `bypass_moderation`, `deactivated_at`, `email`; `SearchPayload.force_default_search`, `force_sql_v2_backend`. `QueryFilters<Operators>` now requires its type argument. `SearchPayload` drops `client_id` / `connection_id` (and takes `filter_conditions`, `message_filter_conditions`, `query`).
-- **Migrate:** `{ color: 'green' }` -> `{ 'custom.color': 'green' }`; split two operators on one key into `$and`; replace removed building blocks with `Filters<...>` or the derived alias (`NonNullable<QueryChannelsRequest['filter_conditions']>`). Whether the API still accepts old top-level custom keys is unverified.
+- **Migrate:** `{ color: 'green' }` -> `{ 'custom.color': 'green' }`; split two operators on one key into `$and`; replace removed building blocks with `Filters<...>` or the derived alias (`NonNullable<QueryChannelsRequest['filter_conditions']>`). Whether the API still accepts old top-level custom keys is unverified. Built-in keys that left the typed filters (`UserFilters.online`, `invisible`, `privacy_settings`, ..., listed above) have no typed replacement. Whether the API still applies them is unverified ([open questions](#open-questions)). Do not silently delete such a filter: keep it behind a narrowly scoped `// @ts-expect-error <key> is not in the generated filter type` and check the results against the live API.
 - **Source:** `src/gen/models/index.ts:39-125`, `src/types.ts:215-231` (v10); `src/types.ts:31-40,1994,2182-2260` (v9)
 
 <a id="user-response-types"></a>
@@ -1037,6 +1124,28 @@ const p = message.custom.priority;
 - **v9:** `Event = CustomEventData & { type: EventTypes; ...~55 optional fields }`, so `e.user?.id`, `e.cid`, `e.total_unread_count` compiled on any event.
 - **v10:** `Event = (WSEvent & { received_at?: TimestampNS }) | LocalEvent | CustomEventTypeUnion`. `WSEvent` is the generated union of `{ type: '<name>' } & <Name>Event` members (minus the spec's `{ type: '*' } & CustomEvent` placeholder, which `Event` leaves out, see [event names](#event-type-names)); `LocalEvent` (not exported) covers `live_location_sharing.started` / `stopped`, `channels.queried` (`queriedChannels`), `connection.recovered`, `connection.fallback_activated` (`mode`), `offline_reactions.queried` (`offlineReactions`), `capabilities.changed`, `message.read_locally`. Fields exist only on the members that declare them; `EventPayload<'message.new'>` extracts one member. `SyncResponse.events` is `WSEvent[]`; `TypingStartEvent` is the generated `typing.start` payload. v9 flat fields now present only on specific members include `ai_message`, `ai_state`, `app`, `channel_custom`, `channel_id`, `channel_last_message_at`, `channel_member_count`, `channel_type`, `clear_history`, `connection_id`, `deleted_for_me`, `draft`, `first_unread_message_id`, `hard_delete`, `last_delivered_at`, `last_delivered_message_id`, `last_read_at`, `last_read_message_id`, `live_location`, `mark_messages_deleted`, `me`, `member`, `online`, `own_capabilities`, `parent_id`, `poll`, `poll_vote`, `reaction`, `reminder`, `shadow`, `team`, `thread`, `thread_id`, `total_unread_count`, `unread_channels`, `unread_count`, `unread_messages`, `unread_thread_messages`, `unread_threads`, `watcher_count`.
 - **Migrate:** narrow on `event.type` (or `'field' in event`), or type handlers as `EventPayload<'...'>`; `client.on('message.new', (e) => ...)` infers the member.
+- **Explicit `Event` annotations:** drop the `(e: Event) =>` annotation that v9 handlers usually carry. It widens `e` back to the whole union, and member fields (`e.message`, `e.cid`, `e.user`) stop compiling in the body, while the handler itself still type-checks. Annotate a handler declared elsewhere as `EventPayload<'...'>`. `on()` returns `{ unsubscribe }`, which replaces keeping the handler around for `off(name, handler)`.
+
+  ```ts
+  import type { EventPayload } from 'stream-chat';
+
+  // v9
+  const handler = (e: Event) => console.log(e.message?.text);
+  client.on('message.new', handler);
+  client.off('message.new', handler);
+
+  // v10
+  const { unsubscribe } = client.on('message.new', (e) =>
+    console.log(e.message.text, e.user?.id),
+  );
+  unsubscribe();
+
+  // or, declared elsewhere
+  const onNew = (e: EventPayload<'message.new'>) => console.log(e.message.id);
+  client.on('message.new', onNew);
+  client.off('message.new', onNew);
+  ```
+
 - **Source:** `src/types.ts:163-209,438-441`, `src/gen/models/index.ts:11938-12023` (v10); `src/types.ts:1712-1776` (v9)
 
 <a id="event-type-names"></a>
@@ -2980,7 +3089,29 @@ In both versions `src/index.ts` re-exports only `isOwnUser`, `chatCodes`, `logCh
 
 - **v9:** root exports `encodeBase64(data)`, `decodeBase64(s)`.
 - **v10:** removed, no replacement.
-- **Migrate:** `btoa` / `atob` (with a UTF-8 aware wrapper if needed).
+- **Migrate:** `btoa` / `atob` handle standard base64 of Latin-1 strings only. To decode a JWT segment (base64url, no padding) or UTF-8 text, convert first:
+
+  ```ts
+  /** Decodes base64 or base64url (padded or not) into UTF-8 text. */
+  export const decodeBase64 = (value: string): string => {
+    const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+    const bytes = Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  };
+
+  /** Encodes UTF-8 text as base64. */
+  export const encodeBase64 = (text: string): string => {
+    const bytes = new TextEncoder().encode(text);
+    return btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(''));
+  };
+
+  // Reading a JWT payload (no signature check):
+  const payload = JSON.parse(decodeBase64(token.split('.')[1]));
+  ```
+
+  On runtimes without `atob` / `btoa` / `TextDecoder` (old Hermes), polyfill them.
+
 - **Source:** `src/base64.ts:44-80`, `src/index.ts:1` (v9)
 
 <a id="campaign-segment-removed"></a>
@@ -3559,9 +3690,10 @@ Members that are `_`-prefixed, `@internal` or `@private`, or reachable only by d
 
 Claims the source cannot settle; verify against the live API or the target package before relying on them in docs.
 
-1. `@stream-io/node-sdk` method names for the removed server-only `StreamChat` methods and removed `Moderation` methods were not verified ([server-only methods](#server-only-methods-removed), [moderation removed](#moderation-removed-methods)).
+1. `@stream-io/node-sdk` method names for the removed `Moderation` methods were not verified ([moderation removed](#moderation-removed-methods)). The server-only `StreamChat` methods are mapped in [server-only methods](#server-only-methods-removed) (checked against node-sdk 0.8.13).
 2. Whether the API still honours `pending`, `pending_message_metadata`, `force_moderation`, `is_pending_message` when sent untyped on `sendMessage` ([sendMessage](#channel-send-message), [option types](#option-types)).
 3. Server outcome of replaying v9-persisted `send-message` / `create-draft` pending tasks (bare message as request body; likely an InputError that deletes the task) ([pending tasks](#pending-task-payloads)).
 4. TypeScript older than 5.5 was not tested against the v10 declarations ([TS requirements](#typescript-requirements)).
 5. Whether the API still accepts old top-level custom filter keys (`{ color: 'green' }` instead of `{ 'custom.color': 'green' }`) ([filters](#filter-types)).
 6. That `updateReminder({ message_id })` (no `remind_at`) clears the due date server-side is asserted by a docs snippet test against the live API, not run for this report ([reminder methods](#reminder-methods)).
+7. Whether the API still applies built-in filter keys that left the generated filter types, such as `online` in `queryUsers` `filter_conditions` ([filters](#filter-types)).
