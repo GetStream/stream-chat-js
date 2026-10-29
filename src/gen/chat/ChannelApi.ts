@@ -43,7 +43,6 @@ import type {
   UploadChannelRequest,
   UploadChannelResponse,
 } from '../models';
-import { WSClientEvent } from '../models';
 
 export class ChannelApi {
   constructor(

@@ -43,7 +43,6 @@ import type {
   UpsertConfigRequest,
   UpsertConfigResponse,
 } from '../models';
-import { VideoContentParameters } from '../models';
 
 export class ModerationApi {
   constructor(public readonly apiClient: ApiClient) {}
