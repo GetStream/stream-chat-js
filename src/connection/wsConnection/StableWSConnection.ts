@@ -383,7 +383,21 @@ export class StableWSConnection {
     this._destroyCurrentWSConnection();
 
     if (options.refreshToken) {
-      await this.client.tokenManager.loadToken();
+      try {
+        await this.client.tokenManager.loadToken();
+      } catch (error) {
+        // `_reconnect` is not awaited by its callers, so a rejection here would be unhandled.
+        // Treat a failed refresh like a failed connect and retry with backoff; the retry
+        // aborts on its own once disconnect() is called.
+        this._applyHealth(false);
+        this.consecutiveFailures += 1;
+        logger
+          .withExtraTags('_reconnect')
+          .warn('Failed to reload the token. Retrying the reconnect.', { error });
+
+        this._reconnect({ refreshToken: true });
+        return;
+      }
 
       // Another reconnect may have started while the token was loading, e.g. when
       // the socket fires both an error and a close event.

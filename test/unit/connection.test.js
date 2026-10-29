@@ -822,6 +822,51 @@ describe('connection', function () {
 			expect(client._settleConnectPromises.calledOnce).to.be.true;
 		});
 
+		it('retries the refresh with backoff when the tokenProvider rejects', async () => {
+			const client = newStreamChat();
+			let calls = 0;
+			client.tokenManager = await providerTokenManager(() =>
+				++calls === 1 ? Promise.resolve('token') : Promise.reject(new Error('offline')),
+			);
+			const c = new StableWSConnection({ wsConnection: client.wsConnection });
+			c._connect = sinon.spy();
+			c._reconnect = sinon.spy();
+
+			await expect(
+				StableWSConnection.prototype._reconnect.call(c, {
+					interval: 1,
+					refreshToken: true,
+				}),
+			).resolves.toBeUndefined();
+
+			expect(c._connect.notCalled).to.be.true;
+			expect(c.isHealthy).to.be.false;
+			expect(c.consecutiveFailures).to.equal(1);
+			expect(c._reconnect.calledOnce).to.be.true;
+			expect(c._reconnect.firstCall.args[0]).to.deep.equal({ refreshToken: true });
+		});
+
+		it('stops retrying the refresh after disconnect', async () => {
+			const client = newStreamChat();
+			let calls = 0;
+			const c = new StableWSConnection({ wsConnection: client.wsConnection });
+			client.tokenManager = await providerTokenManager(() => {
+				if (++calls === 1) return Promise.resolve('token');
+				// disconnect() lands while the refresh is in flight
+				c.isDisconnected = true;
+				return Promise.reject(new Error('offline'));
+			});
+			c._connect = sinon.spy();
+			const reconnect = c._reconnect.bind(c);
+			c._reconnect = (options = {}) => reconnect({ ...options, interval: 1 });
+
+			await c._reconnect({ refreshToken: true });
+			await sleep(20);
+
+			expect(calls).to.equal(2);
+			expect(c._connect.notCalled).to.be.true;
+		});
+
 		it('reconnects with a new token from the tokenProvider', async () => {
 			let calls = 0;
 			const client = newStreamChat();
