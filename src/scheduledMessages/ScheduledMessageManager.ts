@@ -21,7 +21,6 @@ import type {
   ScheduledMessageManagerOptions,
   ScheduledMessageManagerState,
   ScheduledMessageMap,
-  ScheduledMessagePredicate,
   ScheduledMessageQueryResultHandler,
 } from './types';
 
@@ -66,6 +65,9 @@ const isThreadReply = (scheduledMessage: ScheduledMessageResponse, parentId: str
   return message.parent_id === parentId;
 };
 
+const isInSnapshotScope = (scheduledMessage: ScheduledMessageResponse, cid?: string) =>
+  !cid || scheduledMessage.cid === cid;
+
 const createInitialState = (): ScheduledMessageManagerState => ({
   isDisabled: false,
   isLoaded: false,
@@ -103,14 +105,14 @@ export class ScheduledMessageManager extends WithSubscriptions {
 
   private applySnapshot = (
     snapshotMessages: ScheduledMessageResponse[],
-    isInScope: ScheduledMessagePredicate,
+    cid?: string,
   ) => {
     if (!this.client._cacheEnabled()) return;
 
     const currentMessages = Array.from(this.scheduledMessages.values());
 
     const isOutOfScope = (scheduledMessage: ScheduledMessageResponse) =>
-      !isInScope(scheduledMessage);
+      !isInSnapshotScope(scheduledMessage, cid);
     const isActive = (scheduledMessage: ScheduledMessageResponse) =>
       !isFinished(scheduledMessage) && !this.removedIds.has(scheduledMessage.id);
     const pickNewest = (incoming: ScheduledMessageResponse) => {
@@ -285,10 +287,7 @@ export class ScheduledMessageManager extends WithSubscriptions {
   ) => {
     if (!Array.isArray(scheduledMessages)) return;
 
-    const isInChannel = (scheduledMessage: ScheduledMessageResponse) =>
-      scheduledMessage.cid === cid;
-
-    this.applySnapshot(scheduledMessages, isInChannel);
+    this.applySnapshot(scheduledMessages, cid);
   };
 
   public resetState = () => {
@@ -317,7 +316,7 @@ export class ScheduledMessageManager extends WithSubscriptions {
     const replaceStore = ({
       scheduled_messages = [],
     }: QueryScheduledMessagesResponse) => {
-      this.applySnapshot(scheduled_messages, () => true);
+      this.applySnapshot(scheduled_messages);
 
       return { isLoaded: true };
     };
