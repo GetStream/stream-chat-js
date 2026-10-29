@@ -1428,7 +1428,7 @@ export interface ChannelForkedEvent {
    * Represents channel in chat
    */
   channel: ChannelResponse;
-  custom: Record<string, any>;
+  custom: CustomEventData;
   /**
    * A fork of an agent channel
    */
@@ -2038,7 +2038,7 @@ export interface ChannelRewoundEvent {
    * Represents channel in chat
    */
   channel: ChannelResponse;
-  custom: Record<string, any>;
+  custom: CustomEventData;
   /**
    * A rewind of an agent channel
    */
@@ -6125,7 +6125,7 @@ export interface NotificationChannelPartialUpdatedEvent {
    * Basic channel data and the complete custom data after a partial update.
    */
   channel: ChannelPartialUpdateResponse;
-  custom: Record<string, any>;
+  custom: CustomEventData;
   /**
    * The type of event: "notification.channel_partial_updated" in this case
    */
@@ -6161,7 +6161,7 @@ export interface NotificationChannelRewoundEvent {
    * Represents channel in chat
    */
   channel: ChannelResponse;
-  custom: Record<string, any>;
+  custom: CustomEventData;
   /**
    * A rewind of an agent channel
    */
@@ -9631,7 +9631,7 @@ export interface ScheduledMessageContentResponse {
    * Text of the message
    */
   text: string;
-  custom: Record<string, any>;
+  custom: CustomMessageData;
   /**
    * Contains HTML markup of the message
    */
@@ -9708,7 +9708,7 @@ export interface ScheduledMessageCreatedEvent {
    * Date/time of creation
    */
   created_at: TimestampNS;
-  custom: Record<string, any>;
+  custom: CustomEventData;
   user: UserResponseCommonFields;
   /**
    * The type of event: "scheduled_message.created" in this case
@@ -9730,7 +9730,7 @@ export interface ScheduledMessageDeletedEvent {
    * Date/time of creation
    */
   created_at: TimestampNS;
-  custom: Record<string, any>;
+  custom: CustomEventData;
   user: UserResponseCommonFields;
   /**
    * The type of event: "scheduled_message.deleted" in this case
@@ -9752,7 +9752,7 @@ export interface ScheduledMessageFailedEvent {
    * Date/time of creation
    */
   created_at: TimestampNS;
-  custom: Record<string, any>;
+  custom: CustomEventData;
   user: UserResponseCommonFields;
   /**
    * The type of event: "scheduled_message.failed" in this case
@@ -9856,7 +9856,7 @@ export interface ScheduledMessageSentEvent {
    * The ID of the message that was sent
    */
   message_id: string;
-  custom: Record<string, any>;
+  custom: CustomEventData;
   user: UserResponseCommonFields;
   /**
    * The type of event: "scheduled_message.sent" in this case
@@ -9885,7 +9885,7 @@ export interface ScheduledMessageUpdatedEvent {
    * Date/time of creation
    */
   created_at: TimestampNS;
-  custom: Record<string, any>;
+  custom: CustomEventData;
   user: UserResponseCommonFields;
   /**
    * The type of event: "scheduled_message.updated" in this case
