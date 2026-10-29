@@ -361,7 +361,7 @@ describe('ScheduledMessageManager', () => {
 
       await manager.load();
       await manager.loadMore();
-      await manager.loadMore(); // no next cursor: no request
+      await manager.loadMore();
 
       expect(querySpy).toHaveBeenCalledTimes(2);
       expect(querySpy).toHaveBeenLastCalledWith({ limit: 100, next: 'cursor' });

@@ -10,6 +10,7 @@ import {
 import { APIErrorCodes } from '../../../src/errors';
 import { generateAPIError } from '../test-utils/generateAPIError';
 import { getClientWithUser } from '../test-utils/getClient';
+import { MockOfflineDB } from '../offline-support/MockOfflineDB';
 import { mockChannelQueryResponse } from '../test-utils/mockChannelQueryResponse';
 
 const scheduledMessage: ScheduledMessageResponse = {
@@ -197,9 +198,9 @@ describe('scheduled messages API', () => {
 
     it('sendMessage does not queue a scheduled send in the offline DB', async () => {
       const client = setup();
-      const queueTask = vi.fn();
-      // @ts-expect-error partial offline DB
-      client.offlineDb = { queueTask };
+      const offlineDb = new MockOfflineDB({ client });
+      client.setOfflineDBApi(offlineDb);
+      const queueTask = vi.spyOn(offlineDb, 'queueTask').mockResolvedValue({});
       const channel = client.channel('messaging', 'general');
       vi.spyOn(client, 'post').mockResolvedValue({
         message: { id: 'sm-1' },
@@ -216,9 +217,11 @@ describe('scheduled messages API', () => {
 
     it('sendMessage without scheduled_at still goes through the offline DB', async () => {
       const client = setup();
-      const queueTask = vi.fn().mockResolvedValue({ message: { id: 'm-1' } });
-      // @ts-expect-error partial offline DB
-      client.offlineDb = { queueTask };
+      const offlineDb = new MockOfflineDB({ client });
+      client.setOfflineDBApi(offlineDb);
+      const queueTask = vi
+        .spyOn(offlineDb, 'queueTask')
+        .mockResolvedValue({ message: { id: 'm-1' } });
       const channel = client.channel('messaging', 'general');
 
       await channel.sendMessage({ id: 'm-1', text: 'now' });
