@@ -9,6 +9,7 @@ import { getScheduledMessageErrorReason } from './errors';
 import type { StreamChat } from '../client';
 import type {
   Event,
+  EventHandler,
   EventTypes,
   QueryScheduledMessagesOptions,
   QueryScheduledMessagesResponse,
@@ -17,7 +18,6 @@ import type {
 } from '../types';
 import type {
   ScheduledMessageEvent,
-  ScheduledMessageHandler,
   ScheduledMessageManagerOptions,
   ScheduledMessageManagerState,
   ScheduledMessageMap,
@@ -113,8 +113,10 @@ export class ScheduledMessageManager extends WithSubscriptions {
 
     const isOutOfScope = (scheduledMessage: ScheduledMessageResponse) =>
       !isInSnapshotScope(scheduledMessage, cid);
+
     const isActive = (scheduledMessage: ScheduledMessageResponse) =>
       !isFinished(scheduledMessage) && !this.removedIds.has(scheduledMessage.id);
+
     const pickNewest = (incoming: ScheduledMessageResponse) => {
       const current = this.scheduledMessages.get(incoming.id);
 
@@ -156,16 +158,19 @@ export class ScheduledMessageManager extends WithSubscriptions {
     if (hasChanges) this.state.partialNext({ scheduledMessages: nextScheduledMessages });
   };
 
-  private subscribeToEvents = (
-    eventTypes: EventTypes[],
-    handleScheduledMessage: ScheduledMessageHandler,
-  ) => {
-    const handleEvent = (event: Event) => {
-      if (!ScheduledMessageManager.isScheduledMessageEvent(event)) return;
+  private handleUpsertEvent = (event: Event) => {
+    if (!ScheduledMessageManager.isScheduledMessageEvent(event)) return;
 
-      handleScheduledMessage(event.scheduled_message);
-    };
+    this.upsertToState(event.scheduled_message);
+  };
 
+  private handleRemoveEvent = (event: Event) => {
+    if (!ScheduledMessageManager.isScheduledMessageEvent(event)) return;
+
+    this.removeFromState(event.scheduled_message.id);
+  };
+
+  private subscribeToEvents = (eventTypes: EventTypes[], handleEvent: EventHandler) => {
     const unsubscribeFunctions = eventTypes.map(
       (eventType) => this.client.on(eventType, handleEvent).unsubscribe,
     );
@@ -298,14 +303,11 @@ export class ScheduledMessageManager extends WithSubscriptions {
   public registerSubscriptions = () => {
     if (this.hasSubscriptions) return;
 
-    const removeScheduledMessage = ({ id }: ScheduledMessageResponse) =>
-      this.removeFromState(id);
-
     this.addUnsubscribeFunction(
-      this.subscribeToEvents(UPSERT_EVENT_TYPES, this.upsertToState),
+      this.subscribeToEvents(UPSERT_EVENT_TYPES, this.handleUpsertEvent),
     );
     this.addUnsubscribeFunction(
-      this.subscribeToEvents(REMOVE_EVENT_TYPES, removeScheduledMessage),
+      this.subscribeToEvents(REMOVE_EVENT_TYPES, this.handleRemoveEvent),
     );
     this.addUnsubscribeFunction(this.subscribeConnectionRecovered());
   };
