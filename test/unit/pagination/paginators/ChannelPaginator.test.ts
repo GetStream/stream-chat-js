@@ -1162,6 +1162,47 @@ describe('ChannelPaginator', () => {
       });
     });
 
+    describe('cached messages', () => {
+      const preloadWithMessageLimit = async (cachedMessageCount: number) => {
+        await setUpOfflineDb({ isSynced: false });
+        getChannelsForQuery.mockResolvedValue({
+          channels: [
+            generateChannel({
+              channel: { id: 'cached', type: 'type' },
+              messages: Array.from({ length: cachedMessageCount }, (_, i) =>
+                generateMsg({
+                  cid: 'type:cached',
+                  date: new Date(Date.UTC(2026, 0, 1, 0, i)),
+                }),
+              ),
+            }),
+          ],
+        });
+        const paginator = new ChannelPaginator({
+          client,
+          filters: { type: 'type' },
+          requestOptions: { message_limit: 10 },
+          sort: [{ field: 'last_message_at', direction: -1 }],
+        });
+
+        await paginator.toTail();
+
+        return paginator.items![0];
+      };
+
+      it('reads a full cached page as having older messages', async () => {
+        const channel = await preloadWithMessageLimit(10);
+
+        expect(channel.messagePaginator.state.getLatestValue().hasMoreTail).toBe(true);
+      });
+
+      it('reads a short cached page as the start of the channel', async () => {
+        const channel = await preloadWithMessageLimit(8);
+
+        expect(channel.messagePaginator.state.getLatestValue().hasMoreTail).toBe(false);
+      });
+    });
+
     it('persists cids under the full query request after a query', async () => {
       await setUpOfflineDb({ isSynced: true });
       const channelA = new Channel(client, 'type', 'offline-a', {});
