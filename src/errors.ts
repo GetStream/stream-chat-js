@@ -93,10 +93,19 @@ export function isErrorResponse(
   return !res.status || res.status < 200 || 300 <= res.status;
 }
 
-/** Turns whatever a request threw into a plain error object, so it can be stored on a message. */
+/**
+ * Turns whatever a request threw into a plain error object, so it can be stored on a message. A
+ * request that got no response (an axios network error, an `OfflineError`) has no HTTP status and is
+ * given `status: 0`, which is how a UI tells a transport failure from a rejection.
+ */
 export const parseError = (error: unknown): StreamAPIError => {
   const stringError = JSON.stringify(error);
-  return (stringError ? JSON.parse(stringError) : {}) as StreamAPIError;
+  const parsed = (stringError ? JSON.parse(stringError) : {}) as StreamAPIError;
+  const gotNoResponse =
+    error instanceof Error && !(error as { response?: unknown }).response;
+  return parsed.status == null && gotNoResponse
+    ? ({ ...parsed, status: 0 } as StreamAPIError)
+    : parsed;
 };
 
 /** Whether the server rejected a send because a message with that ID already exists. */

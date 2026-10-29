@@ -1,6 +1,6 @@
-import { isEphemeral, isErrorResponse } from '../../src/errors';
+import { isEphemeral, isErrorResponse, parseError } from '../../src/errors';
 
-import { CanceledError } from 'axios';
+import { AxiosError, CanceledError } from 'axios';
 import { describe, it, expect } from 'vitest';
 
 describe('error response', () => {
@@ -36,5 +36,27 @@ describe('isEphemeral', () => {
 		const canceled = new CanceledError('canceled');
 		expect(canceled.response).to.be.undefined;
 		expect(isEphemeral(canceled)).to.be.false;
+	});
+});
+
+describe('parseError', () => {
+	// UI SDKs key "network failure" UI (edit / discard a failed message) on `status === 0`.
+	it('gives a request that got no response status 0', () => {
+		const networkError = new AxiosError('Network Error', 'ERR_NETWORK');
+		expect(parseError(networkError).status).to.equal(0);
+	});
+	it('keeps the HTTP status of a request that got a response', () => {
+		const rejected = new AxiosError(
+			'Request failed',
+			'ERR_BAD_REQUEST',
+			undefined,
+			undefined,
+			{
+				data: { code: 4 },
+				headers: {},
+				status: 400,
+			},
+		);
+		expect(parseError(rejected).status).to.equal(400);
 	});
 });
