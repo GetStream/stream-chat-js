@@ -2817,8 +2817,18 @@ describe('ChannelPaginator', () => {
       await recovery;
     });
 
-    it('re-queries at most 150 channels and drops the rest, which load again on scroll', async () => {
-      const serverChannels = Array.from({ length: 160 }, (_, i) =>
+    it('removes a gone channel at the end of a list loaded to its end', async () => {
+      const { paginator, serverChannels, setServerChannels } = await setup();
+      // while away, c4, the last channel, was deleted: the second page comes back short
+      setServerChannels(serverChannels.slice(0, 3));
+
+      await paginator.recoverLoadedItems();
+
+      expect(paginator.items!.map((channel) => channel.id)).toEqual(['c1', 'c2', 'c3']);
+    });
+
+    it('re-queries at most 150 channels and keeps the ones loaded past them', async () => {
+      let serverChannels = Array.from({ length: 160 }, (_, i) =>
         channelResponse(
           `d${i}`,
           new Date(Date.UTC(2024, 0, 1) - i * 60_000).toISOString(),
@@ -2842,6 +2852,11 @@ describe('ChannelPaginator', () => {
       });
       while (paginator.hasMoreTail) await paginator.toTail();
       expect(paginator.items).toHaveLength(160);
+      // while away, d1-d3 were deleted: the 150 re-queried now end at d152, and d153-d159 sort
+      // below them though they are still there
+      serverChannels = serverChannels.filter(
+        (response) => !['d1', 'd2', 'd3'].includes(response.channel.id!),
+      );
       queryChannels.mockClear();
 
       await paginator.recoverLoadedItems();
@@ -2850,11 +2865,9 @@ describe('ChannelPaginator', () => {
         0, 30, 60, 90, 120,
       ]);
       expect(paginator.items!.map((channel) => channel.id)).toEqual(
-        serverChannels.slice(0, 150).map((response) => response.channel.id),
+        serverChannels.map((response) => response.channel.id),
       );
       expect(paginator.hasMoreTail).toBe(true);
-      await paginator.toTail();
-      expect(paginator.items).toHaveLength(160);
     });
 
     it('publishes a list it recovers in one page once', async () => {

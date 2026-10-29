@@ -42,7 +42,7 @@ const hasSameItems = (current: Channel[] | undefined, next: Channel[] | undefine
 
 /**
  * The most loaded channels a reconnect re-queries (`recoverLoadedItems`). Those loaded past it are
- * dropped, and load again when the list is scrolled to them.
+ * kept as they are, unverified.
  */
 const MAX_RECOVERED_ITEMS = 150;
 
@@ -759,11 +759,12 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
 
   /**
    * The reconnect refresh. Re-queries every loaded page, then drops the loaded channels no page
-   * returned: they were deleted, left, hidden, or no longer match the filter.
+   * returned that sort within the re-queried range: they were deleted, left, hidden, or no longer
+   * match the filter. Those sorting below it were not re-queried and stay.
    *
    * Each page asks for everything still to cover and the next one starts where it ended, so the
    * server's page cap decides the step. A failed page removes nothing. At most
-   * {@link MAX_RECOVERED_ITEMS} channels are re-queried: the rest are dropped.
+   * {@link MAX_RECOVERED_ITEMS} channels are re-queried.
    *
    * Paging is held meanwhile: a next page asked for is queried once the recovery ends, as the list
    * end that asked for it does not ask again when the recovery changed nothing.
@@ -777,13 +778,17 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     }
     if (!this._tailQueryAwaitingRecovery) return;
     this._tailQueryAwaitingRecovery = false;
-    runDetached(this.toTail(), { context: 'ChannelPaginator.recoverLoadedItems' });
+    runDetached(this.toTail(), {
+      context: 'ChannelPaginator.recoverLoadedItems',
+    });
   };
 
   private recoverLoadedPages = async () => {
     const loadedCids = new Set((this.items ?? []).map((channel) => channel.cid));
     const recoveredCount = Math.min(loadedCids.size, MAX_RECOVERED_ITEMS);
     const returnedCids = new Set<string>();
+    let lastReturnedCid: string | undefined;
+    let reachedEnd = false;
     const shape = this.getNextQueryShape();
     let interval: AnyInterval | null = null;
     let offset = 0;
@@ -807,17 +812,33 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
         // to move is going to do it to this page
         this.setActiveInterval(interval, { updateState: offset === 0 });
       }
+      // a page shorter than asked for, and than a page, is the end of the list
+      const requested =
+        offset === 0 ? Math.max(this.pageSize, loadedCids.size) : recoveredCount - offset;
+      if (page.length < Math.min(this.pageSize, requested)) reachedEnd = true;
       if (!page.length) break;
       pageCount++;
       for (const channel of result.stateCandidate.items ?? [])
         returnedCids.add(channel.cid);
+      lastReturnedCid = page[page.length - 1];
       offset += page.length;
     } while (offset < recoveredCount);
 
+    const lastReturned = lastReturnedCid
+      ? this.client.channelManager.get(lastReturnedCid)
+      : undefined;
+    const isWithinRecoveredRange = (cid: string) => {
+      if (reachedEnd) return true;
+      const channel = this.getItem(cid);
+      if (!channel || !lastReturned) return false;
+      return this.sortComparator(channel, lastReturned) < 0;
+    };
     this.batch(
       () => {
         for (const cid of loadedCids) {
-          if (!returnedCids.has(cid)) this.removeItem({ id: cid });
+          if (!returnedCids.has(cid) && isWithinRecoveredRange(cid)) {
+            this.removeItem({ id: cid });
+          }
         }
       },
       { coalesce: true },
