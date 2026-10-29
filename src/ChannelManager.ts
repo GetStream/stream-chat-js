@@ -194,8 +194,25 @@ const messageDeletedHandler: LabeledEventHandler<EventHandlerContext> = {
   id: 'ChannelManager:default-handler:message.deleted',
 };
 
+/**
+ * A list every channel left (all hidden) has no loaded page any more, and channels shown again land
+ * only in its logical intervals, which a list UI does not render: one comes back, the rest do not.
+ * Such a list re-queries its first page, as v9 did on `channel.visible`. Debounced, so showing several
+ * channels at once sends one query.
+ */
+const reloadListsWithoutLoadedPage = (channelManager: ChannelManager) => {
+  channelManager.paginators.forEach((paginator) => {
+    if (paginator.items === undefined || paginator.isLoading) return;
+    if (paginator.anchoredHeadItems.length > 0) return;
+    paginator.toTailDebounced({ reset: 'yes' });
+  });
+};
+
 const channelVisibleHandler: LabeledEventHandler<EventHandlerContext> = {
-  handle: updateLists,
+  handle: async (context) => {
+    await updateLists(context);
+    reloadListsWithoutLoadedPage(context.ctx.channelManager);
+  },
   id: 'ChannelManager:default-handler:channel.visible',
 };
 

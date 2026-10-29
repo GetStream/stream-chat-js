@@ -1420,6 +1420,45 @@ describe('ChannelManager', () => {
       });
     });
 
+    // With every channel hidden the list has no loaded page, so channels shown again would land in
+    // its logical intervals, out of the rendered list. It re-queries its first page instead.
+    it('re-queries the first page of a list emptied by channel.hidden when a channel is shown again', async () => {
+      const cid = 'messaging:hidden-3';
+      const channel = makeChannel(cid);
+      client.channelManager.getOrCreateChannel(cid, () => channel);
+
+      const regular = new ChannelPaginator({ client });
+      seed(regular, [channel]);
+      const reload = vi.spyOn(regular, 'toTailDebounced').mockImplementation(() => {});
+      const channelManager = useClientManager({ paginators: [regular] });
+      channelManager.registerSubscriptions();
+
+      client.dispatchEvent({ type: 'channel.hidden', cid } as const);
+      await vi.waitFor(() => expect(regular.items).toEqual([]));
+      client.dispatchEvent({ type: 'channel.visible', cid } as const);
+
+      await vi.waitFor(() => expect(reload).toHaveBeenCalledWith({ reset: 'yes' }));
+    });
+
+    it('does not re-query a list that still has its first page on channel.visible', async () => {
+      const shown = makeChannel('messaging:shown');
+      const other = makeChannel('messaging:other');
+      client.channelManager.getOrCreateChannel(shown.cid, () => shown);
+      client.channelManager.getOrCreateChannel(other.cid, () => other);
+
+      const regular = new ChannelPaginator({ client });
+      seed(regular, [other]);
+      const reload = vi.spyOn(regular, 'toTailDebounced').mockImplementation(() => {});
+      const ingestItem = vi.spyOn(regular, 'ingestItem');
+      const channelManager = useClientManager({ paginators: [regular] });
+      channelManager.registerSubscriptions();
+
+      client.dispatchEvent({ type: 'channel.visible', cid: shown.cid } as const);
+
+      await vi.waitFor(() => expect(ingestItem).toHaveBeenCalled());
+      expect(reload).not.toHaveBeenCalled();
+    });
+
     it('re-adds the channel on channel.visible', async () => {
       const cid = 'messaging:hidden-2';
       const channel = makeChannel(cid);
