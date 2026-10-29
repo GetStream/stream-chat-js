@@ -1,4 +1,5 @@
 import type {
+  LocalMessage,
   MessageRequest,
   MessageResponse,
   ReactionRequest,
@@ -46,6 +47,15 @@ const pickUpdateOptions = (
   if (typeof options.skip_push === 'boolean') picked.skip_push = options.skip_push;
   return picked;
 };
+
+/**
+ * Whether a failed message failed on an edit rather than on its send. The optimistic edit stamps
+ * `message_text_updated_at` only on a message the server has (see `MessageOperationStatePolicy`), and
+ * a send that never got through has none, so this holds after a reload too, when no cache remembers
+ * which operation failed.
+ */
+const isFailedEdit = (localMessage: LocalMessage) =>
+  localMessage.status === 'failed' && localMessage.message_text_updated_at != null;
 
 /**
  * Every optimistic operation on a message. Send, retry, update and delete have a status lifecycle and
@@ -231,12 +241,25 @@ export class MessageOperations {
     );
   }
 
-  /** A send with a cached payload: resends what failed, unless the caller passes a new one. */
+  /**
+   * A send with a cached payload: resends what failed, unless the caller passes a new one. A failed
+   * edit is replayed as an edit instead: the server already has that message, so a send would be
+   * rejected as a duplicate, and the duplicate taken for a delivered send.
+   */
   async retry(params: OperationParams<'retry'>): Promise<void> {
+    const cachedPayload = this.failedSendCache.get(params.localMessage.id);
+
+    if (!cachedPayload && isFailedEdit(params.localMessage)) {
+      // `received` so the optimistic step shows the edit as in flight, not failed; a rejection marks
+      // it failed again. The send options a retry carries do not apply to an edit.
+      return await this.update({
+        localMessage: { ...params.localMessage, error: undefined, status: 'received' },
+      });
+    }
+
     const handlers = this.ctx.handlers();
     // A failed message can carry an `error` type; what is resent is a regular message.
     const localMessage = { ...params.localMessage, type: 'regular' as const };
-    const cachedPayload = this.failedSendCache.get(localMessage.id);
     await this.sendWithFailedSendCache(
       'retry',
       {
