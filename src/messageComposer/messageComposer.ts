@@ -31,6 +31,7 @@ import type {
   ScheduledMessageResponse,
   UserResponse,
 } from '../types';
+import { ScheduledMessageBlockReason } from '../types';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 import type { StreamChat } from '../client';
 import type { CommandSendability, MessageComposerConfig } from './configuration/types';
@@ -54,7 +55,10 @@ import {
   stripCommandFromText,
 } from './middleware/textComposer/commandUtils';
 import { CommandSearchSource } from './middleware/textComposer/commands';
-import { toScheduledMessageDraft, toScheduledMessagePayload } from './scheduledMessage';
+import {
+  toScheduledMessageComposition,
+  toScheduledMessagePayload,
+} from './scheduledMessage';
 
 type UnregisterSubscriptions = Unsubscribe;
 
@@ -408,7 +412,7 @@ export class MessageComposer extends WithSubscriptions {
   getCommandDisabledReason = (
     command: CommandResponse,
   ): CommandSuggestionDisabledReason | undefined => {
-    if (this.editedMessage) return 'editing';
+    if (this.hasEditInProgress) return 'editing';
 
     if (
       this.quotedMessage &&
@@ -422,6 +426,12 @@ export class MessageComposer extends WithSubscriptions {
 
   isCommandDisabled = (command: CommandResponse) =>
     !!this.getCommandDisabledReason(command);
+
+  getComposedCommand = (
+    text = this.textComposer.text,
+    searchSource = new CommandSearchSource(this.channel),
+  ): CommandResponse | undefined =>
+    this.textComposer.command ?? getCommandByName(searchSource, getRawCommandName(text));
 
   validateCommandSendability = (
     command: CommandResponse,
@@ -1106,16 +1116,16 @@ export class MessageComposer extends WithSubscriptions {
     }
   };
 
-  private waitForUploadsToSettle = async () => {
+  private waitForUploadsInProgress = () => {
     const { attachmentManager } = this;
 
-    const hasUploadsInFlight = () => attachmentManager.attachments.some(isPendingUpload);
+    if (!this.allowsPendingUploads || !attachmentManager.uploadsInProgressCount) {
+      return Promise.resolve();
+    }
 
-    if (!hasUploadsInFlight()) return;
-
-    await new Promise<void>((resolve) => {
+    return new Promise<void>((resolve) => {
       const unsubscribe = attachmentManager.state.subscribe(() => {
-        if (hasUploadsInFlight()) return;
+        if (attachmentManager.uploadsInProgressCount) return;
 
         unsubscribe();
         resolve();
@@ -1123,18 +1133,36 @@ export class MessageComposer extends WithSubscriptions {
     });
   };
 
-  private isSlashCommand = (text = '') => {
-    const { command } = this.textComposer;
-    const rawCommandName = getRawCommandName(text);
+  private getScheduleBlockReason = (): ScheduledMessageBlockReason | undefined => {
+    if (this.getComposedCommand()) return ScheduledMessageBlockReason.Command;
 
-    const rawCommand = getCommandByName(
-      new CommandSearchSource(this.channel),
-      rawCommandName,
-    );
+    if (this.pollId) return ScheduledMessageBlockReason.Poll;
 
-    const isCommand = !!command || !!rawCommand;
+    if (this.locationComposer.validLocation) {
+      return ScheduledMessageBlockReason.SharedLocation;
+    }
 
-    return isCommand;
+    return undefined;
+  };
+
+  private rejectUnschedulableComposition = () => {
+    const reason = this.getScheduleBlockReason();
+
+    if (!reason) return false;
+
+    this.client.notifications.addWarning({
+      message: 'This message cannot be scheduled',
+      origin: {
+        emitter: 'MessageComposer',
+        context: { composer: this },
+      },
+      options: {
+        type: 'validation:scheduled-message:blocked',
+        metadata: { reason },
+      },
+    });
+
+    return true;
   };
 
   private notifyScheduledMessageError = (message: string, type: string, error: Error) => {
@@ -1152,17 +1180,6 @@ export class MessageComposer extends WithSubscriptions {
         originalError: error,
       },
     });
-  };
-
-  private discardDraft = async () => {
-    try {
-      await this.deleteDraft();
-    } catch (error) {
-      this.client.logger('error', 'messageComposer:deleteDraft', {
-        tags: ['channel', 'messageComposer'],
-        error,
-      });
-    }
   };
 
   private resolveMentionedUsers = async (userIds: string[] = []) => {
@@ -1234,7 +1251,9 @@ export class MessageComposer extends WithSubscriptions {
   ): Promise<ScheduledMessageResponse | undefined> => {
     if (this.hasEditInProgress) return;
 
-    await this.waitForUploadsToSettle();
+    if (this.rejectUnschedulableComposition()) return;
+
+    await this.waitForUploadsInProgress();
 
     const composition = await this.compose();
 
@@ -1242,27 +1261,12 @@ export class MessageComposer extends WithSubscriptions {
 
     const { message, sendOptions } = composition;
 
-    if (this.isSlashCommand(message.text)) {
-      this.client.notifications.addWarning({
-        message: 'Slash commands cannot be scheduled',
-        origin: {
-          emitter: 'MessageComposer',
-          context: { composer: this },
-        },
-        options: {
-          type: 'validation:scheduled-message:command',
-        },
-      });
-      return;
-    }
-
     try {
       const { scheduled_message: scheduledMessage } = await this.channel.sendMessage(
         message,
         { ...sendOptions, scheduled_at: scheduledAt.toISOString() },
       );
 
-      await this.discardDraft();
       this.clear();
 
       return scheduledMessage;
@@ -1281,7 +1285,6 @@ export class MessageComposer extends WithSubscriptions {
     const {
       mentioned_users: mentionedUserIds,
       parent_id: parentId,
-      poll_id: pollId = null,
       quoted_message_id: quotedMessageId,
       show_in_channel: showReplyInChannel = false,
     } = message;
@@ -1290,8 +1293,6 @@ export class MessageComposer extends WithSubscriptions {
       this.resolveMentionedUsers(mentionedUserIds),
       this.resolveQuotedMessage(quotedMessageId, parentId),
     ]);
-
-    const draftMessage = toScheduledMessageDraft(scheduledMessage);
 
     if (!this.editedScheduledMessage) {
       const snapshot = this.getSnapshot();
@@ -1304,20 +1305,11 @@ export class MessageComposer extends WithSubscriptions {
     }
 
     this.state.partialNext({ editedScheduledMessage: scheduledMessage });
-    this.clearSnapshots();
-    this.attachmentManager.initState({ message: draftMessage });
-    this.linkPreviewsManager.initState({ message: draftMessage });
-    this.locationComposer.initState();
-    this.textComposer.initState({ message: draftMessage });
+    this.initState({ composition: toScheduledMessageComposition(scheduledMessage) });
     this.textComposer.setMentionedUsers(mentionedUsers);
-    this.pollComposer.initState();
-    this.customDataManager.initState({ message: draftMessage });
-    this.state.next({
+    this.state.partialNext({
       draftId: null,
-      editedMessage: null,
       editedScheduledMessage: scheduledMessage,
-      id: MessageComposer.generateId(),
-      pollId,
       quotedMessage,
       showReplyInChannel,
     });
@@ -1330,25 +1322,13 @@ export class MessageComposer extends WithSubscriptions {
 
     if (!editedScheduledMessage) return;
 
+    if (this.rejectUnschedulableComposition()) return;
+
     const composition = await this.compose();
 
     if (!composition) return;
 
     const { message: composedMessage } = composition;
-
-    if (this.isSlashCommand(composedMessage.text)) {
-      this.client.notifications.addWarning({
-        message: 'Slash commands cannot be scheduled',
-        origin: {
-          emitter: 'MessageComposer',
-          context: { composer: this },
-        },
-        options: {
-          type: 'validation:scheduled-message:command',
-        },
-      });
-      return;
-    }
 
     const message = toScheduledMessagePayload(composedMessage, editedScheduledMessage);
 

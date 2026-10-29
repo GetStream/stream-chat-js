@@ -1,13 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   Channel,
+  createSendWithPendingUploadsAttachmentsMiddleware,
   LocalUploadAttachment,
   MessageComposer,
+  ScheduledMessageBlockReason,
   ScheduledMessageResponse,
   StreamChat,
   Thread,
 } from '../../../src';
 import { getClientWithUser } from '../test-utils/getClient';
+import { MockOfflineDB } from '../offline-support/MockOfflineDB';
 
 const user = { id: 'user1', name: 'User One' };
 const cid = 'messaging:general';
@@ -79,6 +82,25 @@ const setup = ({ threadId }: { threadId?: string } = {}) => {
   return { channel, client, composer };
 };
 
+const giphyCommand = { name: 'giphy', args: '[text]', description: 'Post a random gif' };
+
+const addGiphyCommand = (client: StreamChat, channel: Channel) => {
+  client.configs[channel.cid] = {
+    commands: [giphyCommand],
+    created_at: '',
+    reminders: false,
+    updated_at: '',
+  };
+};
+
+const blockedWarning = (reason: ScheduledMessageBlockReason) =>
+  expect.objectContaining({
+    options: {
+      type: 'validation:scheduled-message:blocked',
+      metadata: { reason },
+    },
+  });
+
 const mockScheduledSend = (
   client: StreamChat,
   scheduledMessage: ScheduledMessageResponse | null,
@@ -131,9 +153,9 @@ describe('MessageComposer scheduled messages', () => {
 
     it('does not queue the send in the offline DB', async () => {
       const { client, composer } = setup();
-      const queueTask = vi.fn();
-      // @ts-expect-error partial offline DB
-      client.offlineDb = { queueTask, executeQuerySafely: vi.fn() };
+      const offlineDb = new MockOfflineDB({ client });
+      client.setOfflineDBApi(offlineDb);
+      const queueTask = vi.spyOn(offlineDb, 'queueTask').mockResolvedValue({});
       mockScheduledSend(client, generateScheduledMessage());
       composer.textComposer.setText('see you tomorrow');
 
@@ -156,12 +178,13 @@ describe('MessageComposer scheduled messages', () => {
       );
     });
 
-    it('deletes the draft after scheduling', async () => {
+    it('deletes the draft through the composer subscriptions, like a normal send', async () => {
       const { channel, client, composer } = setup();
       mockScheduledSend(client, generateScheduledMessage());
       const deleteDraftSpy = vi.spyOn(channel, 'deleteDraft').mockResolvedValue({
         duration: '',
       });
+      composer.registerSubscriptions();
       composer.textComposer.setText('see you tomorrow');
       composer.state.partialNext({ draftId: 'draft-1' });
 
@@ -202,32 +225,97 @@ describe('MessageComposer scheduled messages', () => {
       );
     });
 
-    it('rejects a slash command', async () => {
+    it('rejects a typed slash command before waiting for uploads or composing', async () => {
       const { channel, client, composer } = setup();
-      client.configs[channel.cid] = {
-        commands: [{ name: 'giphy', args: '[text]', description: 'Post a random gif' }],
-        created_at: '',
-        reminders: false,
-        updated_at: '',
-      };
+      addGiphyCommand(client, channel);
       const postSpy = vi.spyOn(client, 'post');
+      const composeSpy = vi.spyOn(composer, 'compose');
       const addWarningSpy = vi.spyOn(client.notifications, 'addWarning');
       composer.textComposer.setText('/giphy cats');
 
       const result = await composer.schedule(scheduledAt);
 
       expect(result).toBeUndefined();
+      expect(composeSpy).not.toHaveBeenCalled();
       expect(postSpy).not.toHaveBeenCalled();
       expect(composer.textComposer.text).toBe('/giphy cats');
       expect(addWarningSpy).toHaveBeenCalledWith(
+        blockedWarning(ScheduledMessageBlockReason.Command),
+      );
+    });
+
+    it('rejects a selected command', async () => {
+      const { client, composer } = setup();
+      const postSpy = vi.spyOn(client, 'post');
+      const addWarningSpy = vi.spyOn(client.notifications, 'addWarning');
+      composer.textComposer.state.partialNext({ command: giphyCommand, text: 'cats' });
+
+      await composer.schedule(scheduledAt);
+
+      expect(postSpy).not.toHaveBeenCalled();
+      expect(addWarningSpy).toHaveBeenCalledWith(
+        blockedWarning(ScheduledMessageBlockReason.Command),
+      );
+    });
+
+    it('rejects a poll', async () => {
+      const { client, composer } = setup();
+      const postSpy = vi.spyOn(client, 'post');
+      const addWarningSpy = vi.spyOn(client.notifications, 'addWarning');
+      composer.state.partialNext({ pollId: 'poll-1' });
+
+      await composer.schedule(scheduledAt);
+
+      expect(postSpy).not.toHaveBeenCalled();
+      expect(addWarningSpy).toHaveBeenCalledWith(
+        blockedWarning(ScheduledMessageBlockReason.Poll),
+      );
+    });
+
+    it('rejects a shared location', async () => {
+      const { client, composer } = setup();
+      const postSpy = vi.spyOn(client, 'post');
+      const addWarningSpy = vi.spyOn(client.notifications, 'addWarning');
+      vi.spyOn(composer.locationComposer, 'validLocation', 'get').mockReturnValue({
+        created_by_device_id: 'device-1',
+        latitude: 1,
+        longitude: 2,
+        message_id: 'm-1',
+      });
+
+      await composer.schedule(scheduledAt);
+
+      expect(postSpy).not.toHaveBeenCalled();
+      expect(addWarningSpy).toHaveBeenCalledWith(
+        blockedWarning(ScheduledMessageBlockReason.SharedLocation),
+      );
+    });
+
+    it('refuses while uploads run, like a normal send', async () => {
+      const { client, composer } = setup();
+      const postSpy = vi.spyOn(client, 'post');
+      const addWarningSpy = vi.spyOn(client.notifications, 'addWarning');
+      composer.textComposer.setText('see you tomorrow');
+      composer.attachmentManager.state.partialNext({
+        attachments: [uploadAttachment('uploading')],
+      });
+
+      const result = await composer.schedule(scheduledAt);
+
+      expect(result).toBeUndefined();
+      expect(postSpy).not.toHaveBeenCalled();
+      expect(addWarningSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          options: { type: 'validation:scheduled-message:command' },
+          options: { type: 'validation:attachment:upload:in-progress' },
         }),
       );
     });
 
-    it('waits for uploads to settle before composing', async () => {
+    it('waits for uploads in progress when sending with pending uploads', async () => {
       const { client, composer } = setup();
+      composer.compositionMiddlewareExecutor.replace([
+        createSendWithPendingUploadsAttachmentsMiddleware(composer),
+      ]);
       const postSpy = mockScheduledSend(client, generateScheduledMessage());
       composer.attachmentManager.state.partialNext({
         attachments: [uploadAttachment('uploading')],
@@ -235,6 +323,7 @@ describe('MessageComposer scheduled messages', () => {
 
       const scheduling = composer.schedule(scheduledAt);
       await Promise.resolve();
+
       expect(postSpy).not.toHaveBeenCalled();
 
       composer.attachmentManager.state.partialNext({
@@ -247,6 +336,48 @@ describe('MessageComposer scheduled messages', () => {
           message: expect.objectContaining({
             attachments: [
               expect.objectContaining({ image_url: 'https://cdn.example.com/a.png' }),
+            ],
+          }),
+        }),
+      );
+    });
+
+    it('includes an attachment whose real upload finishes while scheduling', async () => {
+      const { channel, client } = setup();
+      const composer = channel.messageComposer;
+      channel.data = { own_capabilities: ['upload-file'] };
+      const appSettings = { app: { file_upload_config: {}, image_upload_config: {} } };
+      client.appSettingsPromise = Promise.resolve(appSettings);
+      vi.spyOn(client, 'getAppSettings').mockResolvedValue(appSettings);
+      composer.compositionMiddlewareExecutor.replace([
+        createSendWithPendingUploadsAttachmentsMiddleware(composer),
+      ]);
+      const postSpy = mockScheduledSend(client, generateScheduledMessage());
+      let finishUpload: () => void = () => undefined;
+      vi.spyOn(composer.attachmentManager, 'doUploadRequest').mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finishUpload = () => resolve({ file: 'https://cdn.example.com/p.png' });
+          }),
+      );
+      composer.textComposer.setText('photo');
+      const uploading = composer.attachmentManager.uploadFile(
+        new File([''], 'p.png', { type: 'image/png' }),
+      );
+      await vi.waitFor(() =>
+        expect(composer.attachmentManager.uploadsInProgressCount).toBe(1),
+      );
+
+      const scheduling = composer.schedule(scheduledAt);
+      finishUpload();
+      await uploading;
+      await scheduling;
+
+      expect(postSpy.mock.calls[0][1]).toEqual(
+        expect.objectContaining({
+          message: expect.objectContaining({
+            attachments: [
+              expect.objectContaining({ image_url: 'https://cdn.example.com/p.png' }),
             ],
           }),
         }),
@@ -318,6 +449,8 @@ describe('MessageComposer scheduled messages', () => {
           parent_id: 'parent-1',
           silent: true,
           mood: 'happy',
+          i18n: { language: 'en' },
+          user: { id: 'someone-else' },
         },
       });
       const updated = generateScheduledMessage({
@@ -348,6 +481,8 @@ describe('MessageComposer scheduled messages', () => {
       expect(message).not.toHaveProperty('mml');
       expect(message).not.toHaveProperty('type');
       expect(message).not.toHaveProperty('id');
+      expect(message).not.toHaveProperty('i18n');
+      expect(message).not.toHaveProperty('user');
       expect(result).toEqual(updated);
       expect(client.scheduledMessages.getFromState('sm-1')).toEqual(updated);
     });
@@ -442,6 +577,54 @@ describe('MessageComposer scheduled messages', () => {
       composer.cancelEditScheduledMessage();
 
       expect(composer.textComposer.text).toBe('my draft');
+    });
+
+    it('fills the composer through initState and keeps the scheduled values', async () => {
+      const { composer } = setup();
+      const initStateSpy = vi.spyOn(composer, 'initState');
+      const scheduledMessage = generateScheduledMessage({
+        message: { poll_id: 'poll-1', show_in_channel: true, text: 'see you tomorrow' },
+      });
+
+      await composer.editScheduledMessage(scheduledMessage);
+
+      expect(initStateSpy).toHaveBeenCalledWith({
+        composition: expect.objectContaining({
+          channel_cid: cid,
+          message: expect.objectContaining({ id: 'sm-1', text: 'see you tomorrow' }),
+        }),
+      });
+      expect(composer.draftId).toBeNull();
+      expect(composer.pollId).toBe('poll-1');
+      expect(composer.showReplyInChannel).toBe(true);
+      expect(composer.editedScheduledMessage).toBe(scheduledMessage);
+    });
+
+    it('disables commands while a scheduled message is edited', async () => {
+      const { composer } = setup();
+
+      await composer.editScheduledMessage(generateScheduledMessage());
+
+      expect(composer.getCommandDisabledReason(giphyCommand)).toBe('editing');
+      expect(composer.isCommandDisabled(giphyCommand)).toBe(true);
+    });
+
+    it('rejects a slash command typed during the edit', async () => {
+      const { channel, client, composer } = setup();
+      addGiphyCommand(client, channel);
+      const patchSpy = vi.spyOn(client, 'patch');
+      const addWarningSpy = vi.spyOn(client.notifications, 'addWarning');
+      await composer.editScheduledMessage(generateScheduledMessage());
+      composer.textComposer.setText('/giphy cats');
+
+      const result = await composer.updateScheduledMessage();
+
+      expect(result).toBeUndefined();
+      expect(patchSpy).not.toHaveBeenCalled();
+      expect(composer.editedScheduledMessage).toBeDefined();
+      expect(addWarningSpy).toHaveBeenCalledWith(
+        blockedWarning(ScheduledMessageBlockReason.Command),
+      );
     });
 
     it('neither creates nor deletes drafts while editing', async () => {
