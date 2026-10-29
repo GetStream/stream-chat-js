@@ -208,6 +208,247 @@ describe('connection', function () {
 		});
 	});
 
+	describe('token expired by the server after connect', () => {
+		const tokenExpiredEvent = JSON.stringify({
+			type: 'connection.error',
+			connection_id: '61112366-0a15-3891-0000-000000000009',
+			error: {
+				code: 40,
+				message: 'JWTAuth error: token is expired (exp)',
+				StatusCode: 401,
+			},
+		});
+
+		const providerTokenManager = async (tokenProvider) => {
+			const tm = new TokenManager();
+			await tm.setTokenOrProvider(tokenProvider, user);
+			return tm;
+		};
+
+		const resolvedConnection = (client) => {
+			const c = new StableWSConnection({ client });
+			c.isResolved = true;
+			c.scheduleConnectionCheck = () => null;
+			c._reconnect = sinon.spy();
+			return c;
+		};
+
+		it('refreshes the token on the following close when a tokenProvider is used', async () => {
+			const client = newStreamChat();
+			client.tokenManager = await providerTokenManager(() => Promise.resolve('token'));
+			const c = resolvedConnection(client);
+
+			c.onmessage(c.wsID, { data: tokenExpiredEvent });
+			expect(c.tokenExpiredByServer).to.be.true;
+
+			c.onclose(c.wsID, { code: 1008, reason: 'token expired' });
+			expect(c._reconnect.calledOnce).to.be.true;
+			expect(c._reconnect.firstCall.args[0]).to.deep.equal({ refreshToken: true });
+		});
+
+		it('refreshes the token when an error event comes with the close', async () => {
+			const client = newStreamChat();
+			client.tokenManager = await providerTokenManager(() => Promise.resolve('token'));
+			const c = resolvedConnection(client);
+
+			c.onmessage(c.wsID, { data: tokenExpiredEvent });
+			c.onerror(c.wsID, {});
+			c.onclose(c.wsID, { code: 1008, reason: 'token expired' });
+
+			expect(c._reconnect.calledTwice).to.be.true;
+			expect(c._reconnect.firstCall.args[0]).to.deep.equal({ refreshToken: true });
+			expect(c._reconnect.secondCall.args[0]).to.deep.equal({ refreshToken: true });
+		});
+
+		it('reconnects as before with a static token', () => {
+			const c = resolvedConnection(newStreamChat());
+			expect(c.client.tokenManager.isStatic()).to.be.true;
+
+			c.onmessage(c.wsID, { data: tokenExpiredEvent });
+			c.onclose(c.wsID, { code: 1008, reason: 'token expired' });
+
+			expect(c._reconnect.calledOnce).to.be.true;
+			expect(c._reconnect.firstCall.args).to.have.length(0);
+		});
+
+		it('does not refresh the token on a close without the event', async () => {
+			const client = newStreamChat();
+			client.tokenManager = await providerTokenManager(() => Promise.resolve('token'));
+			const c = resolvedConnection(client);
+
+			c.onclose(c.wsID, { code: 1008, reason: 'policy violation' });
+			c.onclose(c.wsID, { code: 1006 });
+
+			expect(c._reconnect.calledTwice).to.be.true;
+			expect(c._reconnect.firstCall.args).to.have.length(0);
+			expect(c._reconnect.secondCall.args).to.have.length(0);
+		});
+
+		it('ignores a connection.error with another code', async () => {
+			const client = newStreamChat();
+			client.tokenManager = await providerTokenManager(() => Promise.resolve('token'));
+			const c = resolvedConnection(client);
+
+			c.onmessage(c.wsID, {
+				data: JSON.stringify({
+					type: 'connection.error',
+					error: { code: 17, message: 'not allowed', StatusCode: 403 },
+				}),
+			});
+			expect(c.tokenExpiredByServer).to.be.false;
+
+			c.onclose(c.wsID, { code: 1008 });
+			expect(c._reconnect.firstCall.args).to.have.length(0);
+		});
+
+		it('does not reconnect on a 1000 close', async () => {
+			const client = newStreamChat();
+			client.tokenManager = await providerTokenManager(() => Promise.resolve('token'));
+			const c = resolvedConnection(client);
+			c.rejectPromise = sinon.spy();
+
+			c.onmessage(c.wsID, { data: tokenExpiredEvent });
+			c.onclose(c.wsID, { code: 1000, reason: 'closed' });
+
+			expect(c._reconnect.notCalled).to.be.true;
+		});
+
+		it('still dispatches the event', () => {
+			const client = newStreamChat();
+			client.dispatchEvent = sinon.spy();
+			const c = resolvedConnection(client);
+
+			c.onmessage(c.wsID, { data: tokenExpiredEvent });
+
+			expect(client.dispatchEvent.calledOnce).to.be.true;
+			expect(client.dispatchEvent.firstCall.args[0]).to.deep.equal(
+				JSON.parse(tokenExpiredEvent),
+			);
+		});
+
+		it('is cleared when a new socket is set up and on disconnect', async () => {
+			const client = newStreamChat();
+			client.tokenManager = await providerTokenManager(() => Promise.resolve('token'));
+			const c = resolvedConnection(client);
+
+			c.onmessage(c.wsID, { data: tokenExpiredEvent });
+			c._setupConnectionPromise();
+			expect(c.tokenExpiredByServer).to.be.false;
+
+			c.isResolved = true;
+			c.onmessage(c.wsID, { data: tokenExpiredEvent });
+			c.disconnect();
+			expect(c.tokenExpiredByServer).to.be.false;
+		});
+
+		it('lets only one of two concurrent refreshing reconnects connect and recover', async () => {
+			const client = newStreamChat();
+			client.tokenManager = await providerTokenManager(() =>
+				sleep(10).then(() => 'token'),
+			);
+			client.recoverState = sinon.spy(() => Promise.resolve());
+			const c = new StableWSConnection({ client });
+			// Mirrors the real _connect: a second call while connecting returns early.
+			c._connect = sinon.spy(async () => {
+				if (c.isConnecting) return;
+				c.isConnecting = true;
+				await sleep(10);
+				c.isConnecting = false;
+				c.isHealthy = true;
+			});
+
+			await Promise.all([
+				c._reconnect({ interval: 1, refreshToken: true }),
+				c._reconnect({ interval: 1, refreshToken: true }),
+			]);
+
+			expect(c._connect.calledOnce).to.be.true;
+			expect(client.recoverState.calledOnce).to.be.true;
+		});
+
+		it('retries the refresh with backoff when the tokenProvider rejects', async () => {
+			const client = newStreamChat();
+			let calls = 0;
+			client.tokenManager = await providerTokenManager(() =>
+				++calls === 1 ? Promise.resolve('token') : Promise.reject(new Error('offline')),
+			);
+			const c = new StableWSConnection({ client });
+			c._connect = sinon.spy();
+			c._reconnect = sinon.spy();
+
+			await expect(
+				StableWSConnection.prototype._reconnect.call(c, {
+					interval: 1,
+					refreshToken: true,
+				}),
+			).resolves.toBeUndefined();
+
+			expect(c._connect.notCalled).to.be.true;
+			expect(c.isHealthy).to.be.false;
+			expect(c.consecutiveFailures).to.equal(1);
+			expect(c._reconnect.calledOnce).to.be.true;
+			expect(c._reconnect.firstCall.args[0]).to.deep.equal({ refreshToken: true });
+		});
+
+		it('does not retry the refresh after disconnect', async () => {
+			const client = newStreamChat();
+			let calls = 0;
+			client.tokenManager = await providerTokenManager(() =>
+				++calls === 1 ? Promise.resolve('token') : Promise.reject(new Error('offline')),
+			);
+			const c = new StableWSConnection({ client });
+			c._connect = sinon.spy();
+			c._reconnect = sinon.spy();
+			c.isDisconnected = true;
+
+			await expect(
+				StableWSConnection.prototype._reconnect.call(c, {
+					interval: 1,
+					refreshToken: true,
+				}),
+			).resolves.toBeUndefined();
+
+			expect(c._connect.notCalled).to.be.true;
+			expect(c._reconnect.notCalled).to.be.true;
+		});
+
+		it('reconnects with a new token from the tokenProvider', async () => {
+			const authorizations = [];
+			const server = new WsServer({ port: 9998 });
+			server.on('connection', (socket, req) => {
+				const { query } = url.parse(req.url, true);
+				authorizations.push(query.authorization);
+				socket.send(
+					JSON.stringify({ type: 'health.check', connection_id: 'connection-id' }),
+				);
+				if (authorizations.length === 1) {
+					socket.send(tokenExpiredEvent);
+					socket.close(1008, 'token expired');
+				}
+			});
+
+			try {
+				let calls = 0;
+				const client = newStreamChat();
+				client.wsBaseURL = 'http://localhost:9998';
+				client.tokenManager = await providerTokenManager(() =>
+					Promise.resolve(`token-${++calls}`),
+				);
+				const c = new StableWSConnection({ client });
+
+				await c.connect();
+				for (let i = 0; i < 100 && authorizations.length < 2; i++) {
+					await sleep(50);
+				}
+				c.disconnect();
+
+				expect(authorizations).to.deep.equal(['token-1', 'token-2']);
+			} finally {
+				server.close();
+			}
+		});
+	});
+
 	describe('Connection connect timeout', function () {
 		const token =
 			'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYW1pbiJ9.dN0CCAW5CayCq0dsTXxLZvjxhQuZvlaeIfrJmxk9NkU';

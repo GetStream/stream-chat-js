@@ -1,4 +1,8 @@
-import { isFinishedUpload, isPendingUpload } from '../../attachmentIdentity';
+import {
+  isFinishedUpload,
+  isLocalUploadAttachment,
+  isPendingUpload,
+} from '../../attachmentIdentity';
 import type { MiddlewareHandlerParams } from '../../../middleware';
 import type { Attachment } from '../../../types';
 import type { MessageComposer } from '../../messageComposer';
@@ -15,6 +19,14 @@ const localAttachmentToAttachment = (localAttachment: LocalAttachment) => {
   const { localMetadata, ...attachment } = localAttachment;
   return attachment as Attachment;
 };
+
+/**
+ * An attachment that is not an upload (e.g. a custom one of an edited message or a restored
+ * draft) has no upload state and is sendable as it is. Leaving it out would drop it from the
+ * message: on an edit, the API removes every attachment missing from the payload.
+ */
+const isSendable = (attachment: LocalAttachment) =>
+  isFinishedUpload(attachment) || !isLocalUploadAttachment(attachment);
 
 /**
  * The composition step used by {@link createSendWithPendingUploadsAttachmentsMiddleware}.
@@ -46,8 +58,7 @@ const composeWithPendingUploads = ({
   // settles.
   const relevantAttachments = composer.attachmentManager.attachments.filter(
     (attachment) =>
-      isFinishedUpload(attachment) ||
-      (!composerIsKeptAsDraft && isPendingUpload(attachment)),
+      isSendable(attachment) || (!composerIsKeptAsDraft && isPendingUpload(attachment)),
   );
 
   const localAttachments = (state.localMessage.attachments ?? []).concat(
@@ -56,7 +67,7 @@ const composeWithPendingUploads = ({
     ),
   );
   const messageAttachments = (state.message.attachments ?? []).concat(
-    relevantAttachments.filter(isFinishedUpload).map(localAttachmentToAttachment),
+    relevantAttachments.filter(isSendable).map(localAttachmentToAttachment),
   );
 
   if (!localAttachments.length && !messageAttachments.length) return state;
@@ -153,7 +164,7 @@ export const createAttachmentsCompositionMiddleware = (
       }
 
       const attachments = (state.message.attachments ?? []).concat(
-        attachmentManager.successfulUploads.map(localAttachmentToAttachment),
+        attachmentManager.attachments.filter(isSendable).map(localAttachmentToAttachment),
       );
 
       // prevent introducing attachments array into the payload sent to the server
@@ -187,10 +198,10 @@ export const createDraftAttachmentsCompositionMiddleware = (
       const { attachmentManager } = composer;
       if (!attachmentManager) return forward();
 
-      const successfulUploads = attachmentManager.successfulUploads;
-      const attachments = successfulUploads.length
+      const sendableAttachments = attachmentManager.attachments.filter(isSendable);
+      const attachments = sendableAttachments.length
         ? (state.draft.attachments ?? []).concat(
-            successfulUploads.map(localAttachmentToAttachment),
+            sendableAttachments.map(localAttachmentToAttachment),
           )
         : undefined;
 

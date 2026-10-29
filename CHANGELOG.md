@@ -1,3 +1,26 @@
+## [9.54.3](https://github.com/GetStream/stream-chat-js/compare/v9.54.2...v9.54.3) (2026-10-28)
+
+### Bug Fixes
+
+* read cached channels against the query's message_limit ([#1958](https://github.com/GetStream/stream-chat-js/issues/1958)) ([bbddea0](https://github.com/GetStream/stream-chat-js/commit/bbddea0563e2473b20b05dddb0875675e7e2f953))
+
+## [9.54.2](https://github.com/GetStream/stream-chat-js/compare/v9.54.1...v9.54.2) (2026-10-28)
+
+### Bug Fixes
+
+* avoid dropping custom attachments on edit ([#1953](https://github.com/GetStream/stream-chat-js/issues/1953)) ([ebc794c](https://github.com/GetStream/stream-chat-js/commit/ebc794ca4c32373825cda712e2fc2945271498bc))
+* message pagination after message_limit 0 queries and disconnected latest pages ([#1934](https://github.com/GetStream/stream-chat-js/issues/1934)) ([6faedbc](https://github.com/GetStream/stream-chat-js/commit/6faedbc571d10eac93c859f8918ab56170059b89)), closes [#1931](https://github.com/GetStream/stream-chat-js/issues/1931) [#1930](https://github.com/GetStream/stream-chat-js/issues/1930)
+* poll crash on last vote removal ([#1952](https://github.com/GetStream/stream-chat-js/issues/1952)) ([c5c923a](https://github.com/GetStream/stream-chat-js/commit/c5c923ad727175297f85f359cdec1072b58a4039)), closes [#1895](https://github.com/GetStream/stream-chat-js/issues/1895)
+
+## [9.54.1](https://github.com/GetStream/stream-chat-js/compare/v9.54.0...v9.54.1) (2026-10-27)
+
+### Bug Fixes
+
+* **poll:** keep translations from poll.updated in the poll state ([#1938](https://github.com/GetStream/stream-chat-js/issues/1938)) ([3c1a18a](https://github.com/GetStream/stream-chat-js/commit/3c1a18a0be4d5086cce007b9e98ebab435bf386a)), closes [#1878](https://github.com/GetStream/stream-chat-js/issues/1878)
+* refresh the token before reconnecting when the server reports it expired ([#1944](https://github.com/GetStream/stream-chat-js/issues/1944)) ([2910396](https://github.com/GetStream/stream-chat-js/commit/291039695ca65ce7ec269daca486a5638e903568)), closes [GetStream/chat#19359](https://github.com/GetStream/chat/issues/19359)
+* type fixes from docs check; add docs snippet runner ([#1902](https://github.com/GetStream/stream-chat-js/issues/1902)) ([2095fc1](https://github.com/GetStream/stream-chat-js/commit/2095fc155912e34a7c0540c546be3c862d66d617))
+* type issues from platform docs check; add docs snippet test for the platform docs ([#1914](https://github.com/GetStream/stream-chat-js/issues/1914)) ([c7706d2](https://github.com/GetStream/stream-chat-js/commit/c7706d223873895204562857d9a7ad329a237ad0))
+
 ## [9.54.0](https://github.com/GetStream/stream-chat-js/compare/v9.53.0...v9.54.0) (2026-10-05)
 
 ### Bug Fixes

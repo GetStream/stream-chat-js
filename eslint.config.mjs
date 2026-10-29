@@ -11,7 +11,7 @@ export default tseslint.config(
   {
     name: 'default',
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
-    files: ['src/**/*.{js,ts}'],
+    files: ['src/**/*.{js,ts}', 'test/docs-snippets/**/*.{ts,mts}'],
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,
@@ -83,6 +83,13 @@ export default tseslint.config(
       '@typescript-eslint/no-require-imports': 'off', // TODO: remove this rule once all files are .mjs (and require is not used)
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/no-empty-object-type': 'off',
+    },
+  },
+  {
+    name: 'docs-snippets',
+    files: ['test/docs-snippets/**/*.{ts,mts}'],
+    languageOptions: {
+      globals: globals.node,
     },
   },
 );
