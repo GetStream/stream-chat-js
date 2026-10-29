@@ -298,26 +298,4 @@ describe('platform/03-events-and-notifications/05-push-preferences.md', () => {
     expect(userPreferences?.chat_level).toBe('all_mentions');
     expect(userPreferences?.chat_preferences).toBeUndefined();
   });
-
-  it('sets call push preferences', async () => {
-    // #region snippet docs="platform/03-events-and-notifications/05-push-preferences.md" heading="Setting Call Push Preferences" tab="JavaScript" index=1
-    // COPY: userId="user-1"
-    // Set call-level preferences with temporary disabling
-    const oneHourFromNow = new Date(Date.now() + 60 * 60 * 1000);
-
-    await client.updatePushNotificationPreferences({
-      preferences: [
-        {
-          user_id: userId,
-          call_level: 'all',
-          disabled_until: oneHourFromNow,
-        },
-      ],
-    });
-    // #endregion snippet
-
-    const userPreferences = await getUserPreferences();
-    expect(userPreferences?.call_level).toBe('all');
-    expect(isAbout(userPreferences?.disabled_until, oneHourFromNow)).toBe(true);
-  });
 });

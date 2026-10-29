@@ -114,8 +114,8 @@ export const EXCLUDED_SECTIONS: Record<string, { headings: string[]; reason: str
     reason: FEEDS,
   },
   'platform/03-events-and-notifications/05-push-preferences.md': {
-    headings: ['Feeds Push Preferences'],
-    reason: FEEDS,
+    headings: ['Feeds Push Preferences', 'Setting Call Push Preferences'],
+    reason: `${FEEDS}; Video call push preferences (\`call_level\`), not chat code`,
   },
 };
 
