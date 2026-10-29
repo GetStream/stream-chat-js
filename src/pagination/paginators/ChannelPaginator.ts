@@ -610,10 +610,14 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
         if (cachedQuery.predefinedFilter) {
           this.applyPredefinedFilterResponse(cachedQuery.predefinedFilter);
         }
-        return this.client.hydrateChannels(cachedQuery.channels, {
-          offlineMode: true,
-          skipInitialization: [], // an empty array clears existing channel messages (no duplicates)
-        });
+        return this.client.hydrateChannels(
+          cachedQuery.channels,
+          {
+            offlineMode: true,
+            skipInitialization: [], // an empty array clears existing channel messages (no duplicates)
+          },
+          request,
+        );
       }
     } catch (error) {
       chatLoggerSystem.getLogger('channel').error((error as Error).message);
