@@ -214,17 +214,24 @@ export class Channel {
    *
    * @return {Promise<SendMessageAPIResponse>} The Server Response
    */
-  async _sendMessage(rawMessage: Message, options?: SendMessageOptions) {
+  async _sendMessage(rawMessage: Message, options: SendMessageOptions = {}) {
     const client = this.getClient();
     const message = sanitizeOutgoingAttachments({
       client,
       message: rawMessage,
     });
 
-    return await client.post<SendMessageAPIResponse>(this._channelURL() + '/message', {
-      message,
-      ...options,
-    });
+    const response = await client.post<SendMessageAPIResponse>(
+      `${this._channelURL()}/message`,
+      {
+        message,
+        ...options,
+      },
+    );
+    if (response.scheduled_message) {
+      client.scheduledMessages.upsertToState(response.scheduled_message);
+    }
+    return response;
   }
 
   async sendMessage(message: Message, options?: SendMessageOptions) {
@@ -1660,6 +1667,10 @@ export class Channel {
 
     this.getClient().polls.hydratePollCache(state.messages, true);
     this.getClient().reminders.hydrateState(state.messages);
+    this.getClient().scheduledMessages.hydrateChannelState(
+      this.cid,
+      state.scheduled_messages,
+    );
 
     this.messageComposer.initStateFromChannelResponse(state);
 

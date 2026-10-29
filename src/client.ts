@@ -298,6 +298,7 @@ import { ChannelManager } from './channel_manager';
 import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
 import { ReminderManager } from './reminders';
+import { ScheduledMessageManager } from './scheduledMessages';
 import { StateStore } from './store';
 import type { MessageComposer } from './messageComposer';
 import type { AbstractOfflineDB } from './offline-support';
@@ -354,6 +355,7 @@ export class StreamChat {
   offlineDb?: AbstractOfflineDB;
   notifications: NotificationManager;
   reminders: ReminderManager;
+  scheduledMessages: ScheduledMessageManager;
   anonymous: boolean;
   persistUserOnConnectionFailure?: boolean;
   axiosInstance: AxiosInstance;
@@ -590,6 +592,7 @@ export class StreamChat {
     this.threads = new ThreadManager({ client: this });
     this.polls = new PollManager({ client: this });
     this.reminders = new ReminderManager({ client: this });
+    this.scheduledMessages = new ScheduledMessageManager({ client: this });
     this.messageDeliveryReporter = new MessageDeliveryReporter({ client: this });
     this.messageComposerCache = new FixedSizeQueueCache<string, MessageComposer>(64);
   }
@@ -1139,6 +1142,7 @@ export class StreamChat {
     this.state = new ClientState({ client: this });
     // reset thread manager
     this.threads.resetState();
+    this.scheduledMessages.resetState();
     this.uploadManager.reset();
     this.messageComposerCache.clear();
 
@@ -2271,7 +2275,7 @@ export class StreamChat {
       // stateOptions is never serialized, so it carries the abort signal
       { signal: stateOptions.signal },
     );
-    const channels = queryChannelsResponse.channels;
+    const channels = queryChannelsResponse.channels ?? [];
 
     this.dispatchEvent({
       type: 'channels.queried',
@@ -2280,13 +2284,19 @@ export class StreamChat {
         isLatestMessageSet: true,
       },
     });
-    if (channels?.length && this.offlineDb?.upsertChannels) {
+    if (channels.length && this.offlineDb?.upsertChannels) {
       await this.offlineDb.upsertChannels({
         channels,
         isLatestMessagesSet: true,
       });
     }
 
+    for (const channelState of channels) {
+      this.scheduledMessages.hydrateChannelState(
+        channelState.channel.cid,
+        channelState.scheduled_messages,
+      );
+    }
     const hydratedChannels = this.hydrateActiveChannels(channels, stateOptions, options);
 
     if (stateOptions.withResponse) {
