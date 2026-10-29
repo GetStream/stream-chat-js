@@ -767,11 +767,13 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
    * {@link MAX_RECOVERED_ITEMS} channels are re-queried.
    *
    * Paging is held meanwhile: a next page asked for is queried once the recovery ends, as the list
-   * end that asked for it does not ask again when the recovery changed nothing.
+   * end that asked for it does not ask again when the recovery changed nothing. A query of the
+   * list's own already in flight is waited for, as it would make the recovery's refused.
    */
   recoverLoadedItems = async () => {
     this._isRecoveringLoadedItems = true;
     try {
+      await this.waitForQueryToSettle();
       await this.recoverLoadedPages();
     } finally {
       this._isRecoveringLoadedItems = false;
@@ -782,6 +784,23 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       context: 'ChannelPaginator.recoverLoadedItems',
     });
   };
+
+  /** Resolves once the list has no query of its own in flight. */
+  private waitForQueryToSettle = () =>
+    new Promise<void>((resolve) => {
+      if (!this.isLoading) {
+        resolve();
+        return;
+      }
+      const unsubscribe = this.state.subscribeWithSelector(
+        ({ isLoading }) => ({ isLoading }),
+        ({ isLoading }) => {
+          if (isLoading) return;
+          unsubscribe();
+          resolve();
+        },
+      );
+    });
 
   private recoverLoadedPages = async () => {
     const loadedCids = new Set((this.items ?? []).map((channel) => channel.cid));

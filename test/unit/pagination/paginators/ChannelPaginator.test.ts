@@ -2803,6 +2803,8 @@ describe('ChannelPaginator', () => {
           (resolve) => (releaseSecondPage = () => resolve(answer(options))),
         );
       });
+      // only the recovery's own requests count below
+      queryChannels.mockClear();
 
       const recovery = paginator.recoverLoadedItems();
       await vi.waitFor(() => expect(queryChannels.mock.lastCall?.[0]?.offset).toBe(2));
@@ -2815,6 +2817,45 @@ describe('ChannelPaginator', () => {
       ]);
       releaseSecondPage();
       await recovery;
+    });
+
+    it('recovers once a next page already in flight lands', async () => {
+      const { paginator, queryChannels, serverChannels, setServerChannels } =
+        await setup();
+      setServerChannels([
+        ...serverChannels,
+        channelResponse('c5', '2023-12-31T00:00:00.000Z'),
+        channelResponse('c6', '2023-12-30T00:00:00.000Z'),
+      ]);
+      const answer = queryChannels.getMockImplementation()!;
+      let releaseNextPage = () => {};
+      queryChannels.mockImplementationOnce(
+        (options) =>
+          new Promise((resolve) => (releaseNextPage = () => resolve(answer(options)))),
+      );
+      // the list end asked for the next page just before the connection dropped
+      const nextPage = paginator.toTail();
+      await vi.waitFor(() => expect(paginator.isLoading).toBe(true));
+      // while away, c2 was deleted
+      setServerChannels([
+        serverChannels[0],
+        ...serverChannels.slice(2),
+        channelResponse('c5', '2023-12-31T00:00:00.000Z'),
+        channelResponse('c6', '2023-12-30T00:00:00.000Z'),
+      ]);
+
+      const recovery = paginator.recoverLoadedItems();
+      releaseNextPage();
+      await nextPage;
+      await recovery;
+
+      expect(paginator.items!.map((channel) => channel.id)).toEqual([
+        'c1',
+        'c3',
+        'c4',
+        'c5',
+        'c6',
+      ]);
     });
 
     it('removes a gone channel at the end of a list loaded to its end', async () => {
