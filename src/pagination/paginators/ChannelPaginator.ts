@@ -502,8 +502,14 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
    * The metadata describes the query as a whole, so it is committed only when a first page lands (a
    * failed query keeps the loaded list's). It is committed before `super`, which filters and ingests
    * the page using `matchesFilter` and the comparator this metadata feeds.
+   *
+   * A recovery page (see `recoverLoadedItems`) starts where the one before it ended, so it extends
+   * the shown interval, though a page at a caller's shape would otherwise start one of its own.
    */
   override placeQueryPage(params: PlaceQueryPageParams<Channel, ChannelQueryShape>) {
+    if (this._isRecoveringLoadedItems && params.startsSeparateInterval) {
+      params = { ...params, startsSeparateInterval: false };
+    }
     this._lastPageCids = params.results?.items.map((channel) => channel.cid);
     const pendingPredefinedFilter = this._pendingPredefinedFilter;
     this._pendingPredefinedFilter = undefined;
@@ -780,9 +786,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     }
     if (!this._tailQueryAwaitingRecovery) return;
     this._tailQueryAwaitingRecovery = false;
-    runDetached(this.toTail(), {
-      context: 'ChannelPaginator.recoverLoadedItems',
-    });
+    runDetached(this.toTail(), { context: 'ChannelPaginator.recoverLoadedItems' });
   };
 
   /** Resolves once the list has no query of its own in flight. */

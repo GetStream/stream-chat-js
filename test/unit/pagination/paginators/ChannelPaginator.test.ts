@@ -2858,6 +2858,38 @@ describe('ChannelPaginator', () => {
       ]);
     });
 
+    it('keeps showing the list when a later page shares no channel with it', async () => {
+      const { paginator, setServerChannels } = await setup({ pages: 0 });
+      const day = (n: number) => new Date(Date.UTC(2024, 0, 10 - n)).toISOString();
+      const all = Array.from({ length: 8 }, (_, i) =>
+        channelResponse(`c${i + 1}`, day(i)),
+      );
+      setServerChannels(all);
+      for (let page = 0; page < 3; page++) await paginator.toTail();
+      expect(paginator.items!.map((channel) => channel.id)).toEqual([
+        'c1',
+        'c2',
+        'c3',
+        'c4',
+        'c5',
+        'c6',
+      ]);
+      // while away, c2-c4 were deleted: the last page (c8) holds no channel the list loaded
+      setServerChannels(
+        all.filter((response) => !['c2', 'c3', 'c4'].includes(response.channel.id!)),
+      );
+
+      await paginator.recoverLoadedItems();
+
+      expect(paginator.items!.map((channel) => channel.id)).toEqual([
+        'c1',
+        'c5',
+        'c6',
+        'c7',
+        'c8',
+      ]);
+    });
+
     it('removes a gone channel at the end of a list loaded to its end', async () => {
       const { paginator, serverChannels, setServerChannels } = await setup();
       // while away, c4, the last channel, was deleted: the second page comes back short
