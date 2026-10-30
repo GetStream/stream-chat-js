@@ -29,6 +29,17 @@ export const APIErrorCodes: Record<string, { name: string; retryable: boolean }>
   '70': { name: 'ErrQueryChannelPermissions', retryable: false },
   '71': { name: 'ErrTooManyConnections', retryable: true },
   '99': { name: 'AppSuspendedError', retryable: false },
+  '114': { name: 'ScheduledMessagesDisabledError', retryable: false },
+  '115': { name: 'ScheduledAtTooSoonError', retryable: false },
+  '116': { name: 'ScheduledAtTooFarError', retryable: false },
+  '117': { name: 'ScheduledLimitChannelError', retryable: false },
+  '118': { name: 'ScheduledLimitUserError', retryable: false },
+  '119': { name: 'ScheduledMessageIDTakenError', retryable: false },
+  '120': { name: 'ScheduledMessageNotEditableError', retryable: false },
+  '121': { name: 'ScheduledMessageSendingError', retryable: false },
+  '122': { name: 'ScheduledMessageConflictError', retryable: false },
+  '123': { name: 'ScheduledMessageAlreadySentError', retryable: false },
+  '124': { name: 'ScheduledMessageCanceledError', retryable: false },
 };
 
 export type APIError = Error & {
