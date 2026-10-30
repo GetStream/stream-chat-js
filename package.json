@@ -45,8 +45,8 @@
     "/src"
   ],
   "dependencies": {
-    "@stream-io/logger": "^2.0.0",
-    "@stream-io/state-store": "^1.1.6",
+    "@stream-io/logger": "^2.1.0",
+    "@stream-io/state-store": "^1.2.0",
     "axios": "^1.19.0",
     "linkifyjs": "^4.3.3"
   },
