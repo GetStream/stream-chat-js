@@ -102,8 +102,8 @@ export abstract class BasePaginator<T> {
   };
 
   canExecuteQuery = (direction: PaginationDirection) =>
-    (!this.isLoading && direction === 'next' && this.hasNext) ||
-    (direction === 'prev' && this.hasPrev);
+    !this.isLoading &&
+    ((direction === 'next' && this.hasNext) || (direction === 'prev' && this.hasPrev));
 
   protected getStateBeforeFirstQuery(): PaginatorState<T> {
     return {
