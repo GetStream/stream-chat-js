@@ -1,5 +1,6 @@
 import type { AxiosResponse } from 'axios';
-import { isCancel } from 'axios';
+import { isAxiosError, isCancel } from 'axios';
+import { OfflineError } from './offline-support/types';
 import type { APIError as Gen_APIError, StreamAPIError } from './types';
 
 export const APIErrorCodes: Record<string, { name: string; retryable: boolean }> = {
@@ -94,16 +95,23 @@ export function isErrorResponse(
 }
 
 /**
+ * Whether a request failed in transport: axios sent it and got no response (and the caller did not
+ * cancel it), or the offline layer refused to send it. An error thrown by anything else, such as an
+ * integrator's own request handler, is not one, even though it carries no response either.
+ */
+const isTransportFailure = (error: unknown) =>
+  error instanceof OfflineError ||
+  (isAxiosError(error) && !error.response && !isCancel(error));
+
+/**
  * Turns whatever a request threw into a plain error object, so it can be stored on a message. A
- * request that got no response (an axios network error, an `OfflineError`) has no HTTP status and is
- * given `status: 0`, which is how a UI tells a transport failure from a rejection.
+ * transport failure (see {@link isTransportFailure}) has no HTTP status and is given `status: 0`,
+ * which is how a UI tells it from a rejection.
  */
 export const parseError = (error: unknown): StreamAPIError => {
   const stringError = JSON.stringify(error);
   const parsed = (stringError ? JSON.parse(stringError) : {}) as StreamAPIError;
-  const gotNoResponse =
-    error instanceof Error && !(error as { response?: unknown }).response;
-  return parsed.status == null && gotNoResponse
+  return parsed.status == null && isTransportFailure(error)
     ? ({ ...parsed, status: 0 } as StreamAPIError)
     : parsed;
 };
