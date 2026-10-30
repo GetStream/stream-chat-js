@@ -3347,10 +3347,11 @@ export type DeleteType = 'soft' | 'hard' | 'pruning';
   `user`:
     - soft: marks user as deleted and retains all user data
     - pruning: marks user as deleted and nullifies user information
-    - hard: deletes user completely - this requires hard option for messages and conversation as well
+    - hard: deletes user completely - this requires hard option for messages, and hard or keep option for conversations
   `conversations`:
     - soft: marks all conversation channels as deleted (same effect as Delete Channels with 'hard' option disabled)
     - hard: deletes channel and all its data completely including messages (same effect as Delete Channels with 'hard' option enabled)
+    - keep: doesn't delete any conversation channels. Use it with user hard, where an unset value defaults to hard
   `messages`:
     - soft: marks all user messages as deleted without removing any related message data
     - pruning: marks all user messages as deleted, nullifies message information and removes some message data such as reactions and flags
@@ -3358,7 +3359,7 @@ export type DeleteType = 'soft' | 'hard' | 'pruning';
   `new_channel_owner_id`: any channels owned by the hard-deleted user will be transferred to this user ID
  */
 export type DeleteUserOptions = {
-  conversations?: Exclude<DeleteType, 'pruning'>;
+  conversations?: Exclude<DeleteType, 'pruning'> | 'keep';
   messages?: DeleteType;
   new_channel_owner_id?: string;
   user?: DeleteType;
