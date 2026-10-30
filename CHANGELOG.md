@@ -1,3 +1,10 @@
+## [10.0.0-rc.28](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.27...v10.0.0-rc.28) (2026-10-30)
+
+### Bug Fixes
+
+* **deps:** bump [@stream-io](https://github.com/stream-io) toolkit packages to the .mjs/.cjs builds ([#1971](https://github.com/GetStream/stream-chat-js/issues/1971)) ([aa97cf4](https://github.com/GetStream/stream-chat-js/commit/aa97cf44110609057a9fa96eba7eccb4f85cb399)), closes [GetStream/js-toolkit#58](https://github.com/GetStream/js-toolkit/issues/58)
+* v10 regressions found in side-by-side QA ([#1965](https://github.com/GetStream/stream-chat-js/issues/1965)) ([b87d598](https://github.com/GetStream/stream-chat-js/commit/b87d5984a91627dd10c979a900f5cc81816777f7))
+
 ## [10.0.0-rc.27](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.26...v10.0.0-rc.27) (2026-10-30)
 
 ### Bug Fixes
