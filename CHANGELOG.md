@@ -483,6 +483,17 @@ docs/breaking-changes-v14-v15.md for the full migration guide.
 * add message/channel paginator stack with thread minimal-init and state stores ([#1795](https://github.com/GetStream/stream-chat-js/issues/1795)) ([62f0507](https://github.com/GetStream/stream-chat-js/commit/62f050786dc153b89920d59aacecaf5f051fbaed))
 * integrate OpenAPI generated clients ([#1760](https://github.com/GetStream/stream-chat-js/issues/1760)) ([0776bc4](https://github.com/GetStream/stream-chat-js/commit/0776bc460598a91afb91d4d04d3281a562073f13))
 * v10 ([cd3141e](https://github.com/GetStream/stream-chat-js/commit/cd3141efe47b49cf83d3d58725bb8ed3b4f88f08))
+## [9.54.4](https://github.com/GetStream/stream-chat-js/compare/v9.54.3...v9.54.4) (2026-10-29)
+
+### Bug Fixes
+
+* handle tokenProvider rejection during reconnect token refresh ([#1962](https://github.com/GetStream/stream-chat-js/issues/1962)) ([7721bd5](https://github.com/GetStream/stream-chat-js/commit/7721bd5bf6abcce9087f11d3c07f214a1d27e217))
+
+## [9.54.3](https://github.com/GetStream/stream-chat-js/compare/v9.54.2...v9.54.3) (2026-10-28)
+
+### Bug Fixes
+
+* read cached channels against the query's message_limit ([#1958](https://github.com/GetStream/stream-chat-js/issues/1958)) ([bbddea0](https://github.com/GetStream/stream-chat-js/commit/bbddea0563e2473b20b05dddb0875675e7e2f953))
 
 ## [9.54.2](https://github.com/GetStream/stream-chat-js/compare/v9.54.1...v9.54.2) (2026-10-28)
 
