@@ -147,7 +147,10 @@ export type MessageComposerConfig = {
   polls: PollComposerConfig;
   /**
    * Whether submitting keeps the composer's contents instead of clearing them (also leaving unresolved
-   * uploads in place). Defaults to retaining for a poll message.
+   * uploads in place). Defaults to retaining for a poll message while the composition chain sends
+   * polls alone (`POLL_ONLY_COMPOSITION_MIDDLEWARE_ID` is installed), so the drafted text and
+   * attachments stay for the next message. Without that step the poll goes out with them, and the
+   * composer clears.
    */
   retainCompositionOnSubmit: (composer: MessageComposer) => boolean;
   text: TextComposerConfig;

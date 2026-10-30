@@ -17,10 +17,18 @@ const pollLocalMessageNullifiedFields: Pick<
   text: '',
 };
 
+export const POLL_ONLY_COMPOSITION_MIDDLEWARE_ID =
+  'stream-io/message-composer-middleware/poll-only';
+
+/**
+ * Sends a composer's poll as a message of its own (outside threads and edits), leaving the text,
+ * attachments and quoted message in the composer. Remove it from the composer's
+ * `compositionMiddlewareExecutor` to send the poll together with the rest of the message instead.
+ */
 export const createPollOnlyCompositionMiddleware = (
   composer: MessageComposer,
 ): MessageCompositionMiddleware => ({
-  id: 'stream-io/message-composer-middleware/poll-only',
+  id: POLL_ONLY_COMPOSITION_MIDDLEWARE_ID,
   handlers: {
     compose: ({
       state,
