@@ -19,7 +19,7 @@ import {
   logChatPromiseExecution,
   sanitizeOutgoingAttachments,
 } from './utils';
-import { asTimestampNS, msToNs, nowNs } from './utils/time';
+import { asTimestampNS, nowNs } from './utils/time';
 import { abortError, waitUnlessAborted } from './utils/abort';
 import { normalizeUploadFile } from './upload-utils';
 import type { StreamChat } from './client';
@@ -2321,16 +2321,7 @@ export class Channel extends ChannelApi {
         if (event.user?.id && event.created_at != null) {
           const eventUser = event.user;
           const createdAt = event.created_at;
-          // `last_delivered_at` arrives as RFC3339 (the spec declares a bare string) while `created_at`
-          // is unix nanoseconds. Normalized to nanoseconds, falling back to `created_at` when absent or
-          // unparseable.
-          // TODO: report upstream — this field should be a `date-time` like every other timestamp.
-          const parsedDeliveredAt = event.last_delivered_at
-            ? Date.parse(event.last_delivered_at)
-            : NaN;
-          const resolvedDeliveredAt = Number.isFinite(parsedDeliveredAt)
-            ? msToNs(parsedDeliveredAt)
-            : createdAt;
+          const resolvedDeliveredAt = event.last_delivered_at ?? createdAt;
           this._upsertReadState(
             eventUser.id,
             (currentUserReadState) => {

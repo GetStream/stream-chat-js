@@ -29,6 +29,8 @@ import type {
   QueryReviewQueueRequest,
   QueryReviewQueueResponse,
   QueueResponse,
+  RevealMediaRequest,
+  RevealMediaResponse,
   SubmitActionRequest,
   SubmitActionResponse,
   UnbanRequest,
@@ -367,6 +369,21 @@ export class ModerationApi {
       pathParams,
       undefined,
       request ?? {},
+      'application/json',
+      requestOptions,
+    );
+  }
+
+  revealMedia(
+    request: RevealMediaRequest,
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<RevealMediaResponse>> {
+    return this.apiClient.sendRequest<RevealMediaResponse>(
+      'POST',
+      '/api/v2/moderation/reveal_media',
+      undefined,
+      undefined,
+      request,
       'application/json',
       requestOptions,
     );

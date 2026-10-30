@@ -2891,7 +2891,7 @@ describe('Channel _handleChannelEvent', function () {
 				channel_id: channel.id,
 				user,
 				last_delivered_message_id: 'fd403be5-9207-48db-8bd7-13bd65ffbea6',
-				last_delivered_at: new Date(2000).toISOString(),
+				last_delivered_at: msToNs(2000),
 			};
 		});
 
@@ -2909,7 +2909,7 @@ describe('Channel _handleChannelEvent', function () {
 				initialReadState.unread_messages,
 			);
 			expect(channel.state.read[user.id].last_delivered_at).toBe(
-				msToNs(Date.parse(messageDeliveredEvent.last_delivered_at)),
+				messageDeliveredEvent.last_delivered_at,
 			);
 			expect(channel.state.read[user.id].last_delivered_message_id).toBe(
 				messageDeliveredEvent.last_delivered_message_id,
@@ -2925,7 +2925,7 @@ describe('Channel _handleChannelEvent', function () {
 			const olderDeliveryEvent = {
 				...messageDeliveredEvent,
 				created_at: msToNs(2000),
-				last_delivered_at: new Date(2000).toISOString(),
+				last_delivered_at: msToNs(2000),
 				last_delivered_message_id: 'older-message-id',
 			};
 
@@ -2956,7 +2956,7 @@ describe('Channel _handleChannelEvent', function () {
 				initialReadState.unread_messages,
 			);
 			expect(channel.state.read[anotherUser.id].last_delivered_at).toBe(
-				msToNs(Date.parse(event.last_delivered_at)),
+				event.last_delivered_at,
 			);
 			expect(channel.state.read[anotherUser.id].last_delivered_message_id).toBe(
 				event.last_delivered_message_id,

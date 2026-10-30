@@ -100,7 +100,7 @@ describe(DOCS, () => {
         channel.messagePaginator.state.getLatestValue();
 
       // Latest message of the channel
-      const lastMessage = channel.messagePaginator.lastMessage;
+      const lastMessage = channel.messagePaginator.latestMessage;
 
       // Any loaded message by id
       const message = client.messageStore.get(messageId);
@@ -139,8 +139,8 @@ describe(DOCS, () => {
     // The latest message is reactive through `aggregateState`
     const unsubscribeLastMessage =
       channel.messagePaginator.aggregateState.subscribeWithSelector(
-        (state) => ({ lastMessage: state.lastMessage }),
-        ({ lastMessage }) => renderPreview(lastMessage),
+        (state) => ({ latestMessage: state.latestMessage }),
+        ({ latestMessage }) => renderPreview(latestMessage),
       );
     // #endregion snippet
 

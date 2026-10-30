@@ -7,6 +7,10 @@ import type {
   CreateDraftResponse,
   DeleteChannelResponse,
   EventResponse,
+  ForkChannelRequest,
+  ForkChannelResponse,
+  ForkMessageIDsRequest,
+  ForkMessageIDsResponse,
   GetDraftResponse,
   GetManyMessagesResponse,
   GetPinnedMessagesResponse,
@@ -18,6 +22,8 @@ import type {
   QueryChannelBansRequest,
   QueryChannelBansResponse,
   Response,
+  RewindChannelRequest,
+  RewindChannelResponse,
   SendEventRequest,
   SendMessageRequest,
   SendMessageResponse,
@@ -242,6 +248,40 @@ export class ChannelApi {
     );
   }
 
+  fork(
+    request: ForkChannelRequest,
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<ForkChannelResponse>> {
+    if (!this.id) {
+      throw new Error(
+        `Channel isn't yet created, call getOrCreateDistinctChannel() before this operation`,
+      );
+    }
+
+    return this.chatApi.forkChannel(
+      { id: this.id, type: this.type },
+      request,
+      requestOptions,
+    );
+  }
+
+  forkMessageIDs(
+    request: ForkMessageIDsRequest,
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<ForkMessageIDsResponse>> {
+    if (!this.id) {
+      throw new Error(
+        `Channel isn't yet created, call getOrCreateDistinctChannel() before this operation`,
+      );
+    }
+
+    return this.chatApi.forkMessageIDs(
+      { id: this.id, type: this.type },
+      request,
+      requestOptions,
+    );
+  }
+
   hide(
     request?: HideChannelRequest,
     requestOptions?: StreamRequestOptions,
@@ -404,6 +444,23 @@ export class ChannelApi {
     }
 
     return this.chatApi.markRead(
+      { id: this.id, type: this.type },
+      request,
+      requestOptions,
+    );
+  }
+
+  rewind(
+    request: RewindChannelRequest,
+    requestOptions?: StreamRequestOptions,
+  ): Promise<StreamResponse<RewindChannelResponse>> {
+    if (!this.id) {
+      throw new Error(
+        `Channel isn't yet created, call getOrCreateDistinctChannel() before this operation`,
+      );
+    }
+
+    return this.chatApi.rewindChannel(
       { id: this.id, type: this.type },
       request,
       requestOptions,
