@@ -67,8 +67,11 @@ export const DEFAULT_COMPOSER_CONFIG: MessageComposerConfig = deepFreezeConfig({
   linkPreviews: DEFAULT_LINK_PREVIEW_MANAGER_CONFIG,
   location: DEFAULT_LOCATION_COMPOSER_CONFIG,
   polls: DEFAULT_POLL_COMPOSER_CONFIG,
+  // Matches when the poll-only middleware sends the poll alone: never for an edit or a thread reply.
   retainCompositionOnSubmit: (composer) =>
     !!composer.pollId &&
+    !composer.editedMessage &&
+    !composer.threadId &&
     composer.compositionMiddlewareExecutor.installedMiddleware.some(
       ({ id }) => id === POLL_ONLY_COMPOSITION_MIDDLEWARE_ID,
     ),

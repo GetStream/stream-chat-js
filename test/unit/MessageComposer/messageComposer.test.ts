@@ -3376,6 +3376,45 @@ describe('MessageComposerConfig.retainCompositionOnSubmit', () => {
     expect(messageComposer.retainsCompositionOnSubmit).toBe(false);
   });
 
+  it('leaves edit mode after updating a message that has a poll', async () => {
+    const { messageComposer } = setup({
+      channelConfig: { polls: true },
+      composition: {
+        attachments: [],
+        id: 'm1',
+        mentioned_users: [],
+        poll_id: 'poll-1',
+        text: 'please vote',
+        type: 'regular',
+        user: { id: 'user-id' },
+      } as unknown as LocalMessage,
+    });
+    vi.spyOn(messageComposer.channel.messageOperations, 'update').mockResolvedValue(
+      undefined,
+    );
+
+    expect(messageComposer.pollId).toBe('poll-1');
+    expect(messageComposer.retainsCompositionOnSubmit).toBe(false);
+
+    messageComposer.textComposer.state.partialNext({ text: 'please vote (edited)' });
+    await messageComposer.update();
+
+    expect(messageComposer.editedMessage).toBeFalsy();
+    expect(messageComposer.textComposer.text).toBe('');
+  });
+
+  it('does not retain for a thread reply that carries a poll', () => {
+    const { mockChannel, mockClient } = setup();
+    const mockThread = getThread(mockChannel, mockClient, 'test-thread-id');
+    const { messageComposer } = setup({
+      channelConfig: { polls: true },
+      compositionContext: mockThread,
+    });
+
+    messageComposer.state.partialNext({ pollId: 'poll-1' });
+    expect(messageComposer.retainsCompositionOnSubmit).toBe(false);
+  });
+
   it('lets an integrator decide, receiving the composer', async () => {
     const retainCompositionOnSubmit = vi.fn(
       (composer: MessageComposer) => composer.textComposer.text === 'keep me',
