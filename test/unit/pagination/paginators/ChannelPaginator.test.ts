@@ -2948,6 +2948,44 @@ describe('ChannelPaginator', () => {
       ]);
     });
 
+    it.each([
+      ['first', 0],
+      ['second', 2],
+    ])(
+      'continues the list from its end when the %s recovery page fails',
+      async (_, failingOffset) => {
+        const { paginator, queryChannels, serverChannels, setServerChannels } =
+          await setup();
+        setServerChannels([
+          ...serverChannels,
+          channelResponse('c5', '2023-12-31T00:00:00.000Z'),
+          channelResponse('c6', '2023-12-30T00:00:00.000Z'),
+        ]);
+        vi.spyOn(utils, 'sleep').mockResolvedValue(undefined);
+        const answer = queryChannels.getMockImplementation()!;
+        queryChannels.mockImplementation((options) =>
+          (options?.offset ?? 0) === failingOffset
+            ? Promise.reject(new Error('offline'))
+            : answer(options),
+        );
+
+        await paginator.recoverLoadedItems();
+        queryChannels.mockImplementation(answer);
+        queryChannels.mockClear();
+        await paginator.toTail();
+
+        expect(queryChannels.mock.calls.map(([options]) => options?.offset)).toEqual([4]);
+        expect(paginator.items!.map((channel) => channel.id)).toEqual([
+          'c1',
+          'c2',
+          'c3',
+          'c4',
+          'c5',
+          'c6',
+        ]);
+      },
+    );
+
     it('removes a gone channel at the end of a list loaded to its end', async () => {
       const { paginator, serverChannels, setServerChannels } = await setup();
       // while away, c4, the last channel, was deleted: the second page comes back short

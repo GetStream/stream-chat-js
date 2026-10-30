@@ -840,7 +840,11 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
         updateState: false,
       });
       const page = this.getLastPageCids();
-      if (!result || !page || this._recoveryRequestedAgain) return;
+      if (!result || !page || this._recoveryRequestedAgain) {
+        // the first page reset the position and no page commits one, so hand it back
+        this.state.partialNext({ offset: this.items?.length ?? 0 });
+        return;
+      }
       if (result.targetInterval) {
         interval = result.targetInterval;
         // we update immediately for the first page as most of the stuff that is going
