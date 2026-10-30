@@ -1,3 +1,17 @@
+## [10.0.0-rc.27](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.26...v10.0.0-rc.27) (2026-10-30)
+
+### Bug Fixes
+
+* consolidate master and v10 ([#1957](https://github.com/GetStream/stream-chat-js/issues/1957)) ([802a956](https://github.com/GetStream/stream-chat-js/commit/802a956f40231ba0ea44794f8b9778c82aca252a))
+* handle tokenProvider rejection during reconnect token refresh ([#1963](https://github.com/GetStream/stream-chat-js/issues/1963)) ([e22d218](https://github.com/GetStream/stream-chat-js/commit/e22d21843b4ae1650de9cd686f135ea47faf6e8c))
+* narrow channel.state.typing to typing.start events ([#1960](https://github.com/GetStream/stream-chat-js/issues/1960)) ([acb2345](https://github.com/GetStream/stream-chat-js/commit/acb23450db193181e75d7f331abdc1cb73778a51)), closes [#1920](https://github.com/GetStream/stream-chat-js/issues/1920)
+* odd edge cases for channel list recovery ([#1966](https://github.com/GetStream/stream-chat-js/issues/1966)) ([dbc2468](https://github.com/GetStream/stream-chat-js/commit/dbc2468db567d92c2ae45516681454939e0aebd1))
+* pass full request options to hydration query ([#1959](https://github.com/GetStream/stream-chat-js/issues/1959)) ([489774b](https://github.com/GetStream/stream-chat-js/commit/489774ba7f3342dcfc8c5072bd496d59a4c8faf9))
+
+### Features
+
+* regenerate from latest api spec; docs sync ([#1969](https://github.com/GetStream/stream-chat-js/issues/1969)) ([ae1e86a](https://github.com/GetStream/stream-chat-js/commit/ae1e86a0b64075c7dda70977fa6eac765b78f7d5))
+
 ## [10.0.0-rc.26](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.25...v10.0.0-rc.26) (2026-10-27)
 
 ### Bug Fixes
