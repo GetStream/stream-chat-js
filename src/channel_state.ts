@@ -709,17 +709,23 @@ export class ChannelState {
     id: string;
     messageSetIndex?: number;
     parent_id?: string;
+    show_in_channel?: boolean;
   }) {
     let isRemoved = false;
-    if (messageToRemove.parent_id && this.threads[messageToRemove.parent_id]) {
+    const isInLoadedThread = !!(
+      messageToRemove.parent_id && this.threads[messageToRemove.parent_id]
+    );
+    if (isInLoadedThread) {
       const { removed, result: threadMessages } = this.removeMessageFromArray(
-        this.threads[messageToRemove.parent_id],
+        this.threads[messageToRemove.parent_id as string],
         messageToRemove,
       );
 
-      this.threads[messageToRemove.parent_id] = threadMessages;
+      this.threads[messageToRemove.parent_id as string] = threadMessages;
       isRemoved = removed;
-    } else {
+    }
+    // a thread reply can be shown in the channel message list as well
+    if (!isInLoadedThread || messageToRemove.show_in_channel) {
       const messageSetIndex =
         messageToRemove.messageSetIndex ?? this.findMessageSetIndex(messageToRemove);
       if (messageSetIndex !== -1) {
@@ -728,7 +734,7 @@ export class ChannelState {
           messageToRemove,
         );
         this.messageSets[messageSetIndex].messages = messages;
-        isRemoved = removed;
+        isRemoved = isRemoved || removed;
       }
     }
 
