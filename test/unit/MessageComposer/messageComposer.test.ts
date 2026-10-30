@@ -11,6 +11,7 @@ import {
   DEFAULT_COMPOSER_CONFIG,
   LocalMessage,
   MessageComposerConfig,
+  POLL_ONLY_COMPOSITION_MIDDLEWARE_ID,
   SharedLocation,
   StreamChat,
   Thread,
@@ -3303,14 +3304,43 @@ describe('MessageComposer submit lifecycle', () => {
     const { messageComposer, mockChannel } = setup({ channelConfig: { polls: true } });
     withText(messageComposer, 'vote please');
     messageComposer.state.partialNext({ pollId: 'poll-1' });
-    vi.spyOn(mockChannel.messageOperations, 'send').mockResolvedValue(undefined);
+    const send = vi
+      .spyOn(mockChannel.messageOperations, 'send')
+      .mockResolvedValue(undefined);
 
     expect(messageComposer.retainsCompositionOnSubmit).toBe(true);
 
     await messageComposer.send();
 
+    expect(send.mock.calls[0][0].message).toEqual({
+      id: expect.any(String),
+      poll_id: 'poll-1',
+    });
     expect(messageComposer.pollId).toBeNull();
     expect(messageComposer.textComposer.text).toBe('vote please');
+  });
+
+  it('sends the poll with the text once the poll-only middleware is removed, and clears', async () => {
+    const { messageComposer, mockChannel } = setup({ channelConfig: { polls: true } });
+    messageComposer.compositionMiddlewareExecutor.remove(
+      POLL_ONLY_COMPOSITION_MIDDLEWARE_ID,
+    );
+    withText(messageComposer, 'vote please');
+    messageComposer.state.partialNext({ pollId: 'poll-1' });
+    const send = vi
+      .spyOn(mockChannel.messageOperations, 'send')
+      .mockResolvedValue(undefined);
+
+    expect(messageComposer.retainsCompositionOnSubmit).toBe(false);
+
+    await messageComposer.send();
+
+    expect(send.mock.calls[0][0].message).toMatchObject({
+      poll_id: 'poll-1',
+      text: 'vote please',
+    });
+    expect(messageComposer.pollId).toBeNull();
+    expect(messageComposer.textComposer.text).toBe('');
   });
 
   it('routes an update through messageOperations.update', async () => {
@@ -3334,6 +3364,55 @@ describe('MessageComposerConfig.retainCompositionOnSubmit', () => {
 
     messageComposer.state.partialNext({ pollId: 'poll-1' });
     expect(messageComposer.retainsCompositionOnSubmit).toBe(true);
+  });
+
+  it('does not retain for a poll while the chain sends polls with the message', () => {
+    const { messageComposer } = setup({ channelConfig: { polls: true } });
+    messageComposer.compositionMiddlewareExecutor.remove(
+      POLL_ONLY_COMPOSITION_MIDDLEWARE_ID,
+    );
+
+    messageComposer.state.partialNext({ pollId: 'poll-1' });
+    expect(messageComposer.retainsCompositionOnSubmit).toBe(false);
+  });
+
+  it('leaves edit mode after updating a message that has a poll', async () => {
+    const { messageComposer } = setup({
+      channelConfig: { polls: true },
+      composition: {
+        attachments: [],
+        id: 'm1',
+        mentioned_users: [],
+        poll_id: 'poll-1',
+        text: 'please vote',
+        type: 'regular',
+        user: { id: 'user-id' },
+      } as unknown as LocalMessage,
+    });
+    vi.spyOn(messageComposer.channel.messageOperations, 'update').mockResolvedValue(
+      undefined,
+    );
+
+    expect(messageComposer.pollId).toBe('poll-1');
+    expect(messageComposer.retainsCompositionOnSubmit).toBe(false);
+
+    messageComposer.textComposer.state.partialNext({ text: 'please vote (edited)' });
+    await messageComposer.update();
+
+    expect(messageComposer.editedMessage).toBeFalsy();
+    expect(messageComposer.textComposer.text).toBe('');
+  });
+
+  it('does not retain for a thread reply that carries a poll', () => {
+    const { mockChannel, mockClient } = setup();
+    const mockThread = getThread(mockChannel, mockClient, 'test-thread-id');
+    const { messageComposer } = setup({
+      channelConfig: { polls: true },
+      compositionContext: mockThread,
+    });
+
+    messageComposer.state.partialNext({ pollId: 'poll-1' });
+    expect(messageComposer.retainsCompositionOnSubmit).toBe(false);
   });
 
   it('lets an integrator decide, receiving the composer', async () => {

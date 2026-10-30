@@ -11,6 +11,7 @@ import type {
 import { generateUUIDv4 } from '../../utils';
 import { deepFreezeConfig } from '../../configuration/utils/deepFreezeConfig';
 import { DEFAULT_COMMANDS_CONFIG } from './commands.configuration';
+import { POLL_ONLY_COMPOSITION_MIDDLEWARE_ID } from '../middleware/messageComposer/pollOnly';
 
 export const DEFAULT_LINK_PREVIEW_MANAGER_CONFIG: LinkPreviewsManagerConfig = {
   debounceURLEnrichmentMs: 1500,
@@ -66,6 +67,13 @@ export const DEFAULT_COMPOSER_CONFIG: MessageComposerConfig = deepFreezeConfig({
   linkPreviews: DEFAULT_LINK_PREVIEW_MANAGER_CONFIG,
   location: DEFAULT_LOCATION_COMPOSER_CONFIG,
   polls: DEFAULT_POLL_COMPOSER_CONFIG,
-  retainCompositionOnSubmit: (composer) => !!composer.pollId,
+  // Matches when the poll-only middleware sends the poll alone: never for an edit or a thread reply.
+  retainCompositionOnSubmit: (composer) =>
+    !!composer.pollId &&
+    !composer.editedMessage &&
+    !composer.threadId &&
+    composer.compositionMiddlewareExecutor.installedMiddleware.some(
+      ({ id }) => id === POLL_ONLY_COMPOSITION_MIDDLEWARE_ID,
+    ),
   text: DEFAULT_TEXT_COMPOSER_CONFIG,
 });

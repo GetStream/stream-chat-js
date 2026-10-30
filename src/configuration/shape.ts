@@ -361,7 +361,7 @@ const MESSAGE_COMPOSER_FIELDS: Record<keyof MessageComposerConfig, ConfigNode> =
   },
   retainCompositionOnSubmit: {
     description:
-      "Decides whether submitting keeps the composer's contents instead of clearing them. Retains for a poll message by default.",
+      "Decides whether submitting keeps the composer's contents instead of clearing them. Retains for a poll message by default, while the composition chain sends polls alone.",
     kind: 'value',
     type: 'function',
   },
