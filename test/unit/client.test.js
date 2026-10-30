@@ -1776,6 +1776,37 @@ describe('StreamChat.queryChannels', async () => {
 			});
 		});
 
+		describe('a cached page read against the query message_limit (#1958)', () => {
+			it('keeps older messages loadable once the online page arrives', async () => {
+				const client = await getClientWithUser();
+				// as ChannelPaginator.preloadFirstPageFromOfflineDb does: the DB returns the newest
+				// `message_limit` messages, read against that limit
+				const [channel] = client.hydrateChannels(
+					[
+						{
+							...mockChannelQueryResponse,
+							channel: { ...mockChannelQueryResponse.channel, last_message_at: at(200) },
+							messages: range(191, 200),
+						},
+					],
+					{ offlineMode: true, skipInitialization: [] },
+					{ message_limit: 10 },
+				);
+				expect(channel.messagePaginator.hasMoreTail).toBe(true);
+
+				await hydrate(client, range(191, 200), 10);
+				expect(shownIds(channel)).toEqual(ids(range(191, 200)));
+				expect(channel.messagePaginator.hasMoreTail).toBe(true);
+
+				serveFrom(channel, range(1, 200));
+				await channel.messagePaginator.toTail();
+
+				// one page of the channel's own page size, with more left behind it
+				expect(shownIds(channel)).toEqual(ids(range(91, 200)));
+				expect(channel.messagePaginator.hasMoreTail).toBe(true);
+			});
+		});
+
 		describe('a newest page that does not connect to the loaded messages (#1930)', () => {
 			it('shows the newest page, and the gap can be paginated back to the loaded messages', async () => {
 				const client = await getClientWithUser();
