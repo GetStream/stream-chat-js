@@ -58,10 +58,10 @@ export const JS_TAB = 'JavaScript';
  */
 export const NODE_TAB = 'Node.js';
 /**
- * Out of scope too: the stream-chat-js@9 versions shown next to `JavaScript` (client-side)
+ * Out of scope too: the stream-chat@9 versions shown next to `JavaScript` (client-side)
  * and `Node.js` (server-side). Neither tested nor changed.
  */
-export const V9_TABS = ['JavaScript (stream-chat-js@9)', 'Node.js (stream-chat-js@9)'];
+export const V9_TABS = ['JavaScript (stream-chat@9)', 'Node.js (stream-chat@9)'];
 /** Fences with these labels are never tested. */
 export const OUT_OF_SCOPE_TABS = [NODE_TAB, ...V9_TABS];
 /** Every JS fence must carry one of these labels. */

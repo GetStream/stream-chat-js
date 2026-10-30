@@ -21,7 +21,7 @@ import type { DocsFence, TestRegion } from './parse';
 
 // `yarn test-docs-sync`, in this order:
 // 1. Every JS fence (except `OUT_OF_SCOPE_TABS` fences: `Node.js` and the
-//    stream-chat-js@9 versions, and comment-only fences, like the "server-side only"
+//    stream-chat@9 versions, and comment-only fences, like the "server-side only"
 //    placeholders) on the pages of the tested sidebars (chat JavaScript, platform) has a
 //    test region.
 // 2. Every JS fence on those pages is labelled with one of `ALLOWED_JS_LABELS`.
@@ -93,7 +93,7 @@ describe.skipIf(!hasDocs)(`docs sync (${DOCS_DIR})`, () => {
     );
     expect(
       mislabelled,
-      `JS fences need label="${ALLOWED_JS_LABELS.join('" or label="')}" (client-side code, server-side Node.js code with or without @stream-io/node-sdk, or their stream-chat-js@9 versions)`,
+      `JS fences need label="${ALLOWED_JS_LABELS.join('" or label="')}" (client-side code, server-side Node.js code with or without @stream-io/node-sdk, or their stream-chat@9 versions)`,
     ).toEqual([]);
   });
 
