@@ -1440,6 +1440,34 @@ describe('ChannelManager', () => {
       await vi.waitFor(() => expect(reload).toHaveBeenCalledWith({ reset: 'yes' }));
     });
 
+    it('does not re-query a list without a loaded page whose filters exclude the channel shown', async () => {
+      const cid = 'messaging:hidden-4';
+      const channel = makeChannel(cid);
+      client.channelManager.getOrCreateChannel(cid, () => channel);
+
+      const regular = new ChannelPaginator({ client });
+      const teamOnly = new ChannelPaginator({ client, filters: { type: 'team' } });
+      seed(regular, [channel]);
+      seed(teamOnly, []);
+      const reloadRegular = vi
+        .spyOn(regular, 'toTailDebounced')
+        .mockImplementation(() => {});
+      const reloadTeamOnly = vi
+        .spyOn(teamOnly, 'toTailDebounced')
+        .mockImplementation(() => {});
+      const channelManager = useClientManager({ paginators: [regular, teamOnly] });
+      channelManager.registerSubscriptions();
+
+      client.dispatchEvent({ type: 'channel.hidden', cid } as const);
+      await vi.waitFor(() => expect(regular.items).toEqual([]));
+      client.dispatchEvent({ type: 'channel.visible', cid } as const);
+
+      await vi.waitFor(() =>
+        expect(reloadRegular).toHaveBeenCalledWith({ reset: 'yes' }),
+      );
+      expect(reloadTeamOnly).not.toHaveBeenCalled();
+    });
+
     it('does not re-query a list that still has its first page on channel.visible', async () => {
       const shown = makeChannel('messaging:shown');
       const other = makeChannel('messaging:other');
