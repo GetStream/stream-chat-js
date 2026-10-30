@@ -1,5 +1,6 @@
 import type { AxiosResponse } from 'axios';
-import { isCancel } from 'axios';
+import { isAxiosError, isCancel } from 'axios';
+import { OfflineError } from './offline-support/types';
 import type { APIError as Gen_APIError, StreamAPIError } from './types';
 
 export const APIErrorCodes: Record<string, { name: string; retryable: boolean }> = {
@@ -93,10 +94,26 @@ export function isErrorResponse(
   return !res.status || res.status < 200 || 300 <= res.status;
 }
 
-/** Turns whatever a request threw into a plain error object, so it can be stored on a message. */
+/**
+ * Whether a request failed in transport: axios sent it and got no response (and the caller did not
+ * cancel it), or the offline layer refused to send it. An error thrown by anything else, such as an
+ * integrator's own request handler, is not one, even though it carries no response either.
+ */
+const isTransportFailure = (error: unknown) =>
+  error instanceof OfflineError ||
+  (isAxiosError(error) && !error.response && !isCancel(error));
+
+/**
+ * Turns whatever a request threw into a plain error object, so it can be stored on a message. A
+ * transport failure (see {@link isTransportFailure}) has no HTTP status and is given `status: 0`,
+ * which is how a UI tells it from a rejection.
+ */
 export const parseError = (error: unknown): StreamAPIError => {
   const stringError = JSON.stringify(error);
-  return (stringError ? JSON.parse(stringError) : {}) as StreamAPIError;
+  const parsed = (stringError ? JSON.parse(stringError) : {}) as StreamAPIError;
+  return parsed.status == null && isTransportFailure(error)
+    ? ({ ...parsed, status: 0 } as StreamAPIError)
+    : parsed;
 };
 
 /** Whether the server rejected a send because a message with that ID already exists. */

@@ -1020,6 +1020,108 @@ describe('MessageOperations — optimistic lifecycle', () => {
       expect(lastPersisted()?.status).toBe('failed');
     });
 
+    // A failed edit is a message the server already has: resending it is rejected as a duplicate,
+    // which the send path takes for a delivered send, showing text the server never saved.
+    it('replays a failed edit as an edit when it is retried', async () => {
+      const seed = makeLocalMessage({ id: 'm1', status: 'received', text: 'before' });
+      const { context, handlers, ops, store } = harness({ seed });
+      handlers.update = async () => {
+        throw new Error('server error');
+      };
+      await rejects(ops.update({ localMessage: { ...seed, text: 'after' } }));
+
+      const update = vi.fn(async () => ({
+        message: makeMessageResponse({ id: 'm1', text: 'after' }),
+      }));
+      const send = vi.fn(context.defaults.send);
+      handlers.update = update;
+      handlers.send = send;
+      const failed = store.get('m1');
+      if (!failed) throw new Error('the failed edit is not held');
+      await ops.retry({ localMessage: failed });
+
+      expect(send).not.toHaveBeenCalled();
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(update.mock.calls[0][0].localMessage.text).toBe('after');
+      expect(store.get('m1')?.status).toBe('received');
+      expect(store.get('m1')?.text).toBe('after');
+    });
+
+    // A send that timed out after the server stored the message leaves a cached payload. A later edit
+    // that succeeds proves the server has the message, so a failed edit after it is still an edit.
+    it('replays a failed edit as an edit after an earlier edit of a failed send succeeded', async () => {
+      const seed = makeLocalMessage({ id: 'm1', text: 'sent' });
+      const { handlers, ops, store } = harness({ seed });
+      handlers.send = async () => {
+        throw new Error('timeout');
+      };
+      await rejects(ops.send({ localMessage: seed }));
+
+      handlers.update = async () => ({
+        message: makeMessageResponse({
+          id: 'm1',
+          message_text_updated_at: nowNs(),
+          text: 'first edit',
+        }),
+      });
+      const afterSendFailed = store.get('m1');
+      if (!afterSendFailed) throw new Error('the failed send is not held');
+      await ops.update({ localMessage: { ...afterSendFailed, text: 'first edit' } });
+
+      handlers.update = async () => {
+        throw new Error('server error');
+      };
+      const edited = store.get('m1');
+      if (!edited) throw new Error('the edit is not held');
+      await rejects(ops.update({ localMessage: { ...edited, text: 'second edit' } }));
+
+      const update = vi.fn(async () => ({
+        message: makeMessageResponse({ id: 'm1', text: 'second edit' }),
+      }));
+      const send = vi.fn(async () => ({ message: makeMessageResponse({ id: 'm1' }) }));
+      handlers.update = update;
+      handlers.send = send;
+      const failed = store.get('m1');
+      if (!failed) throw new Error('the failed edit is not held');
+      await ops.retry({ localMessage: failed });
+
+      expect(send).not.toHaveBeenCalled();
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(update.mock.calls[0][0].localMessage.text).toBe('second edit');
+    });
+
+    it('keeps a failed edit failed when its retry fails again', async () => {
+      const failed = makeLocalMessage({
+        id: 'm1',
+        message_text_updated_at: nowNs(),
+        status: 'failed',
+        text: 'after',
+      });
+      const { handlers, ops, store } = harness({ seed: failed });
+      handlers.update = async () => {
+        throw new Error('server error');
+      };
+
+      await rejects(ops.retry({ localMessage: failed }));
+
+      expect(store.get('m1')?.status).toBe('failed');
+      expect(store.get('m1')?.text).toBe('after');
+    });
+
+    it('still resends a failed send that has no cached payload', async () => {
+      const failed = makeLocalMessage({ id: 'm1', status: 'failed', text: 'unsent' });
+      const { handlers, ops } = harness({ seed: failed });
+      const update = vi.fn(async () => ({ message: makeMessageResponse({ id: 'm1' }) }));
+      const send = vi.fn(async () => ({ message: makeMessageResponse({ id: 'm1' }) }));
+      handlers.update = update;
+      handlers.send = send;
+
+      await ops.retry({ localMessage: failed });
+
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(update).not.toHaveBeenCalled();
+    });
+
     it('ignores a response that carries no message', async () => {
       const seed = makeLocalMessage({ id: 'm1', status: 'received', text: 'before' });
       const { handlers, ops, store } = harness({ seed });

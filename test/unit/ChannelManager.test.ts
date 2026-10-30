@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MockInstance } from 'vitest';
 import { getClientWithUser } from './test-utils/getClient';
 import {
+  asTimestampNS,
   Channel,
   ChannelPaginator,
   ChannelResponse,
@@ -1422,6 +1423,96 @@ describe('ChannelManager', () => {
         expect(regular.items).toEqual([]);
         expect(hiddenOnly.items?.map((c) => c.cid)).toEqual([cid]);
       });
+    });
+
+    // With every channel hidden the list has no loaded page, so channels shown again would land in
+    // its logical intervals, out of the rendered list: shown out of sort order, all but the first
+    // are lost. It re-queries its first page instead.
+    it('re-queries the first page of a list emptied by channel.hidden when channels are shown again', async () => {
+      const [newest, middle, oldest] = (
+        [
+          ['messaging:newest', '2026-01-03'],
+          ['messaging:middle', '2026-01-02'],
+          ['messaging:oldest', '2026-01-01'],
+        ] as const
+      ).map(([cid, lastMessageAt]) => {
+        const channel = makeChannel(cid);
+        channel.messagePaginator.setQueriedLatestMessageAt(
+          asTimestampNS(convertDateToTimestamp(lastMessageAt)),
+        );
+        return channel;
+      });
+      const sorted = [newest, middle, oldest];
+
+      const regular = new ChannelPaginator({ client });
+      seed(regular, sorted);
+      const channelManager = useClientManager({ paginators: [regular] });
+      channelManager.registerSubscriptions();
+
+      sorted.forEach(({ cid }) =>
+        client.dispatchEvent({ type: 'channel.hidden', cid } as const),
+      );
+      await vi.waitFor(() => expect(regular.items).toEqual([]));
+
+      const query = vi
+        .spyOn(client, 'queryChannelsAndHydrate')
+        .mockResolvedValue({ channels: sorted, duration: '0.1ms' } as never);
+      [newest, oldest, middle].forEach(({ cid }) =>
+        client.dispatchEvent({ type: 'channel.visible', cid } as const),
+      );
+
+      await vi.waitFor(() =>
+        expect(regular.items?.map((c) => c.cid)).toEqual(sorted.map((c) => c.cid)),
+      );
+      // debounced: showing several channels at once sends one query
+      expect(query).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not re-query a list without a loaded page whose filters exclude the channel shown', async () => {
+      const cid = 'messaging:hidden-4';
+      const channel = makeChannel(cid);
+      client.channelManager.getOrCreateChannel(cid, () => channel);
+
+      const regular = new ChannelPaginator({ client });
+      const teamOnly = new ChannelPaginator({ client, filters: { type: 'team' } });
+      seed(regular, [channel]);
+      seed(teamOnly, []);
+      const reloadRegular = vi
+        .spyOn(regular, 'toTailDebounced')
+        .mockImplementation(() => {});
+      const reloadTeamOnly = vi
+        .spyOn(teamOnly, 'toTailDebounced')
+        .mockImplementation(() => {});
+      const channelManager = useClientManager({ paginators: [regular, teamOnly] });
+      channelManager.registerSubscriptions();
+
+      client.dispatchEvent({ type: 'channel.hidden', cid } as const);
+      await vi.waitFor(() => expect(regular.items).toEqual([]));
+      client.dispatchEvent({ type: 'channel.visible', cid } as const);
+
+      await vi.waitFor(() =>
+        expect(reloadRegular).toHaveBeenCalledWith({ reset: 'yes' }),
+      );
+      expect(reloadTeamOnly).not.toHaveBeenCalled();
+    });
+
+    it('does not re-query a list that still has its first page on channel.visible', async () => {
+      const shown = makeChannel('messaging:shown');
+      const other = makeChannel('messaging:other');
+      client.channelManager.getOrCreateChannel(shown.cid, () => shown);
+      client.channelManager.getOrCreateChannel(other.cid, () => other);
+
+      const regular = new ChannelPaginator({ client });
+      seed(regular, [other]);
+      const reload = vi.spyOn(regular, 'toTailDebounced').mockImplementation(() => {});
+      const ingestItem = vi.spyOn(regular, 'ingestItem');
+      const channelManager = useClientManager({ paginators: [regular] });
+      channelManager.registerSubscriptions();
+
+      client.dispatchEvent({ type: 'channel.visible', cid: shown.cid } as const);
+
+      await vi.waitFor(() => expect(ingestItem).toHaveBeenCalled());
+      expect(reload).not.toHaveBeenCalled();
     });
 
     it('re-adds the channel on channel.visible', async () => {

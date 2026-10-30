@@ -289,9 +289,13 @@ export type PaginatorState<T> = {
  * {@link BasePaginator.logicalHeadItems}, {@link BasePaginator.logicalTailItems}.
  */
 export type PaginatorIntervalViews<T> = {
-  /** Out-of-order items above the loaded interval. */
+  /**
+   * Out-of-order items above the loaded interval. With no page loaded (before the first one, or after
+   * every loaded item left the list) the logical head can itself be the active interval, and then
+   * `state.items` lists the same items: a UI rendering both shows them twice.
+   */
   logicalHead: T[];
-  /** Out-of-order items below the loaded interval. */
+  /** Out-of-order items below the loaded interval; can be the active interval too, as above. */
   logicalTail: T[];
   /** The loaded page bounded at the dataset head (`isHead`); empty when the head is not loaded. */
   anchoredHead: T[];

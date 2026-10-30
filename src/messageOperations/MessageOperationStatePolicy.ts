@@ -242,8 +242,8 @@ export class MessageOperationStatePolicy {
 
     if (kind === 'update') {
       if (queued) return;
-      // The edit is kept and the failure recorded on it. Note the retry this enables re-sends rather
-      // than re-edits.
+      // The edit is kept and the failure recorded on it; `MessageOperations.retry` replays it as an
+      // edit.
       const failed: LocalMessage = {
         ...(this.ctx.get(messageId) ?? localMessage),
         error: parsed,

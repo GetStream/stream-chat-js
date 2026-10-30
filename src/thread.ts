@@ -688,9 +688,10 @@ export class Thread extends WithSubscriptions {
         ...current,
         deletedAt: message.deleted_at ?? null,
         parentMessage: message,
-        participants:
-          normalizeThreadParticipants(message.thread_participants, current.channel.cid) ??
+        participants: mergeThreadParticipants(
           current.participants,
+          normalizeThreadParticipants(message.thread_participants, current.channel.cid),
+        ),
         replyCount: message.reply_count ?? current.replyCount,
       }));
     });
@@ -808,6 +809,22 @@ const normalizeThreadParticipants = (
         user_id: participant.id,
       }) as ThreadParticipant,
   );
+};
+
+/**
+ * Adds the participants a parent message lists to the thread's. The message lists only the users who
+ * replied, while a thread response also counts the parent's author, so replacing the thread's list
+ * with the message's would drop that author.
+ */
+const mergeThreadParticipants = (
+  current: ThreadStateResponse['thread_participants'],
+  fromMessage: ThreadStateResponse['thread_participants'],
+): ThreadStateResponse['thread_participants'] => {
+  if (!fromMessage) return current;
+  if (!current?.length) return fromMessage;
+  const known = new Set(current.map((participant) => participant.user_id));
+  const added = fromMessage.filter((participant) => !known.has(participant.user_id));
+  return added.length ? [...current, ...added] : current;
 };
 
 /** `participant_limit` of the single-thread requests (`getThreadAndHydrate`, `reload()`). */

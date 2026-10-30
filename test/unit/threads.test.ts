@@ -373,6 +373,28 @@ describe('Threads 2.0', () => {
       });
 
       describe('updateParentMessageLocally', () => {
+        // A parent message lists only the users who replied; the thread also counts its author.
+        it('keeps participants the parent message does not list', () => {
+          const thread = createTestThread({
+            thread_participants: [
+              { user_id: 'parent-author', user: { id: 'parent-author' } },
+              { user_id: 'replier', user: { id: 'replier' } },
+            ] as ThreadStateResponse['thread_participants'],
+          });
+          thread.registerSubscriptions();
+
+          thread.updateParentMessageLocally({
+            message: generateMsg({
+              id: parentMessageResponse.id,
+              thread_participants: [{ id: 'replier' }, { id: 'new-replier' }],
+            }) as MessageResponse,
+          });
+
+          expect(
+            thread.state.getLatestValue().participants?.map((p) => p.user_id),
+          ).to.deep.equal(['parent-author', 'replier', 'new-replier']);
+        });
+
         it('prevents updating a parent message if the ids do not match', () => {
           const thread = createTestThread();
           const message = generateMsg() as MessageResponse;

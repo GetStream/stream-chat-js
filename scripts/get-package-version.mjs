@@ -11,7 +11,11 @@ export default function getPackageVersion() {
   // if it fails (loads a default), try pulling version from git
   if (version === '0.0.0-development') {
     try {
-      version = execSync('git describe --tags --abbrev=0').toString().trim();
+      // Tags are `v`-prefixed (`v10.0.0-rc.25`); the version is not, since the user agent adds the `v`.
+      version = execSync('git describe --tags --abbrev=0')
+        .toString()
+        .trim()
+        .replace(/^v/, '');
     } catch (error) {
       console.warn(
         'Could not get latest version from git tags, falling back to package.json#version',
