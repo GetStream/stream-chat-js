@@ -244,12 +244,13 @@ export class MessageOperations {
   /**
    * A send with a cached payload: resends what failed, unless the caller passes a new one. A failed
    * edit is replayed as an edit instead: the server already has that message, so a send would be
-   * rejected as a duplicate, and the duplicate taken for a delivered send.
+   * rejected as a duplicate, and the duplicate taken for a delivered send. That holds even with a
+   * cached payload: a send that failed after the server stored the message leaves one behind.
    */
   async retry(params: OperationParams<'retry'>): Promise<void> {
-    const cachedPayload = this.failedSendCache.get(params.localMessage.id);
-
-    if (!cachedPayload && isFailedEdit(params.localMessage)) {
+    if (isFailedEdit(params.localMessage)) {
+      // The server has the message, so a payload cached from its send is stale.
+      this.failedSendCache.clear(params.localMessage.id);
       // `received` so the optimistic step shows the edit as in flight, not failed; a rejection marks
       // it failed again. The send options a retry carries do not apply to an edit.
       return await this.update({
@@ -257,6 +258,7 @@ export class MessageOperations {
       });
     }
 
+    const cachedPayload = this.failedSendCache.get(params.localMessage.id);
     const handlers = this.ctx.handlers();
     // A failed message can carry an `error` type; what is resent is a regular message.
     const localMessage = { ...params.localMessage, type: 'regular' as const };
