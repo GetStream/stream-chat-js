@@ -2890,6 +2890,64 @@ describe('ChannelPaginator', () => {
       ]);
     });
 
+    it('starts over from the first page when recovered again while recovering', async () => {
+      const { paginator, queryChannels, serverChannels, setServerChannels } =
+        await setup();
+      const answer = queryChannels.getMockImplementation()!;
+      let releaseFirstPage = () => {};
+      queryChannels.mockImplementationOnce(
+        (options) =>
+          new Promise((resolve) => (releaseFirstPage = () => resolve(answer(options)))),
+      );
+      queryChannels.mockClear();
+
+      const recovery = paginator.recoverLoadedItems();
+      await vi.waitFor(() => expect(queryChannels).toHaveBeenCalledTimes(1));
+      // the connection dropped and came back while the first page was in flight, and c2 was deleted
+      setServerChannels(
+        serverChannels.filter((response) => response.channel.id !== 'c2'),
+      );
+      paginator.recoverLoadedItems();
+      releaseFirstPage();
+      await recovery;
+
+      // the superseded pass stopped after its page, the next one started from the first page
+      expect(queryChannels.mock.calls.map(([options]) => options?.offset ?? 0)).toEqual([
+        0, 0, 2, 3,
+      ]);
+      expect(paginator.items!.map((channel) => channel.id)).toEqual(['c1', 'c3', 'c4']);
+    });
+
+    it('holds paging until a recovery asked for again while recovering ends', async () => {
+      const { paginator, queryChannels } = await setup();
+      const answer = queryChannels.getMockImplementation()!;
+      const heldPages: Array<() => void> = [];
+      queryChannels.mockImplementation(
+        (options) =>
+          new Promise((resolve) => heldPages.push(() => resolve(answer(options)))),
+      );
+      queryChannels.mockClear();
+
+      const recovery = paginator.recoverLoadedItems();
+      await vi.waitFor(() => expect(heldPages).toHaveLength(1));
+      paginator.recoverLoadedItems();
+      heldPages.shift()!();
+      // the second pass is running
+      await vi.waitFor(() => expect(heldPages).toHaveLength(1));
+      expect(await paginator.toTail()).toBeUndefined();
+      expect(queryChannels).toHaveBeenCalledTimes(2);
+
+      queryChannels.mockImplementation(answer);
+      heldPages.shift()!();
+      await recovery;
+
+      // the next page asked for meanwhile goes out once, after the last pass
+      await vi.waitFor(() => expect(queryChannels.mock.lastCall?.[0]?.offset).toBe(4));
+      expect(queryChannels.mock.calls.map(([options]) => options?.offset ?? 0)).toEqual([
+        0, 0, 2, 4,
+      ]);
+    });
+
     it('removes a gone channel at the end of a list loaded to its end', async () => {
       const { paginator, serverChannels, setServerChannels } = await setup();
       // while away, c4, the last channel, was deleted: the second page comes back short

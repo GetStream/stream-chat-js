@@ -301,6 +301,8 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   private _lastPageCids: string[] | undefined;
   /** Whether `recoverLoadedItems` runs: its pages own the list's position until it ends. */
   private _isRecoveringLoadedItems = false;
+  /** A recovery asked for while one runs: the running pass stops and a new one starts. */
+  private _recoveryRequestedAgain = false;
   /** A next page refused while recovering, queried once the recovery ends. See `executeQuery`. */
   private _tailQueryAwaitingRecovery = false;
   protected _sortComparatorFactory: ChannelSortComparatorFactory | undefined;
@@ -775,12 +777,22 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
    * Paging is held meanwhile: a next page asked for is queried once the recovery ends, as the list
    * end that asked for it does not ask again when the recovery changed nothing. A query of the
    * list's own already in flight is waited for, as it would make the recovery's refused.
+   *
+   * A call while a recovery runs returns at once and the running pass starts over from the first page
+   * once its page in flight lands, as the pages before were watched on a connection that is gone.
    */
   recoverLoadedItems = async () => {
+    if (this._isRecoveringLoadedItems) {
+      this._recoveryRequestedAgain = true;
+      return;
+    }
     this._isRecoveringLoadedItems = true;
     try {
-      await this.waitForQueryToSettle();
-      await this.recoverLoadedPages();
+      do {
+        this._recoveryRequestedAgain = false;
+        await this.waitForQueryToSettle();
+        await this.recoverLoadedPages();
+      } while (this._recoveryRequestedAgain);
     } finally {
       this._isRecoveringLoadedItems = false;
     }
@@ -828,7 +840,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
         updateState: false,
       });
       const page = this.getLastPageCids();
-      if (!result || !page) return;
+      if (!result || !page || this._recoveryRequestedAgain) return;
       if (result.targetInterval) {
         interval = result.targetInterval;
         // we update immediately for the first page as most of the stuff that is going
