@@ -14,4 +14,10 @@ yarn exec prettier --write $OUTPUT_DIR/models/index.ts
 
 node ./scripts/apply-custom-data-types.mts -i $OUTPUT_DIR/models/index.ts
 
+# The API classes import every model, and unused-imports removes only every other
+# unused name per fix pass (neighbouring fixes share a comma), so the cleanup needs
+# more than ESLint's 10 passes per run. This first run lets the one in lint-fix finish;
+# `|| true` because it exits non-zero while warnings remain.
+yarn exec eslint --fix $OUTPUT_DIR > /dev/null || true
+
 yarn lint-fix
