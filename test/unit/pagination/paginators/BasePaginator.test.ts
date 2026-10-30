@@ -727,6 +727,22 @@ describe('BasePaginator', () => {
         expect(await nextPageOffset()).toBe(7);
       });
 
+      it('continues from where it was when the refresh fails', async () => {
+        const { nextPageOffset, paginator } = await setup();
+
+        const refreshPromise = paginator.executeQuery({
+          keepPreviousItems: true,
+          reset: 'yes',
+        });
+        await sleep(0);
+        paginator.queryReject(new Error('offline'));
+        await refreshPromise;
+
+        expect(paginator.items).toHaveLength(6);
+        expect(paginator.offset).toBe(6);
+        expect(await nextPageOffset()).toBe(6);
+      });
+
       it('continues from the end of page 1 when the page does not connect to the kept window', async () => {
         // More than a page of new items entered above the kept window: the items between the page and
         // the window are unknown, so continuing past the window would skip them.

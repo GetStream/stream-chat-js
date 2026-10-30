@@ -18,7 +18,7 @@ import { makeComparator } from '../sortCompiler';
 import { filterConstrainsField, itemMatchesFilter } from '../filterCompiler';
 import { StoreBackedItemIndex } from '../../entityStore/StoreBackedItemIndex';
 import type { EntityStore } from '../../entityStore/EntityStore';
-import { generateUUIDv4 } from '../../utils';
+import { generateUUIDv4, runDetached } from '../../utils';
 import type { StreamChat } from '../../client';
 import type { Channel } from '../../channel';
 import type {
@@ -42,7 +42,7 @@ const hasSameItems = (current: Channel[] | undefined, next: Channel[] | undefine
 
 /**
  * The most loaded channels a reconnect re-queries (`recoverLoadedItems`). Those loaded past it are
- * dropped, and load again when the list is scrolled to them.
+ * kept as they are, unverified.
  */
 const MAX_RECOVERED_ITEMS = 150;
 
@@ -299,6 +299,12 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
   private _queryAwaitingSync: ChannelQueryShape | undefined;
   /** The cids of the page the latest query returned, `undefined` when it failed. */
   private _lastPageCids: string[] | undefined;
+  /** Whether `recoverLoadedItems` runs: its pages own the list's position until it ends. */
+  private _isRecoveringLoadedItems = false;
+  /** A recovery asked for while one runs: the running pass stops and a new one starts. */
+  private _recoveryRequestedAgain = false;
+  /** A next page refused while recovering, queried once the recovery ends. See `executeQuery`. */
+  private _tailQueryAwaitingRecovery = false;
   protected _sortComparatorFactory: ChannelSortComparatorFactory | undefined;
   sortComparator: (a: Channel, b: Channel) => number;
   filterBuilder: FilterBuilder<ChannelFilters>;
@@ -498,8 +504,14 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
    * The metadata describes the query as a whole, so it is committed only when a first page lands (a
    * failed query keeps the loaded list's). It is committed before `super`, which filters and ingests
    * the page using `matchesFilter` and the comparator this metadata feeds.
+   *
+   * A recovery page (see `recoverLoadedItems`) starts where the one before it ended, so it extends
+   * the shown interval, though a page at a caller's shape would otherwise start one of its own.
    */
   override placeQueryPage(params: PlaceQueryPageParams<Channel, ChannelQueryShape>) {
+    if (this._isRecoveringLoadedItems && params.startsSeparateInterval) {
+      params = { ...params, startsSeparateInterval: false };
+    }
     this._lastPageCids = params.results?.items.map((channel) => channel.cid);
     const pendingPredefinedFilter = this._pendingPredefinedFilter;
     this._pendingPredefinedFilter = undefined;
@@ -650,6 +662,12 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
    * network is not deferred.
    */
   async executeQuery(params: PaginationQueryParams<ChannelQueryShape> = {}) {
+    // The recovery's pages hold the position (`offset` restarts at 0 until the last one lands), so
+    // a page queried in between would fetch the wrong one. A refresh still runs.
+    if (this._isRecoveringLoadedItems && params.direction && params.reset !== 'yes') {
+      if (params.direction === 'tailward') this._tailQueryAwaitingRecovery = true;
+      return;
+    }
     const { offlineDb } = this.client;
 
     const effectiveParams: PaginationQueryParams<ChannelQueryShape> =
@@ -749,16 +767,63 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
 
   /**
    * The reconnect refresh. Re-queries every loaded page, then drops the loaded channels no page
-   * returned: they were deleted, left, hidden, or no longer match the filter.
+   * returned that sort within the re-queried range: they were deleted, left, hidden, or no longer
+   * match the filter. Those sorting below it were not re-queried and stay.
    *
    * Each page asks for everything still to cover and the next one starts where it ended, so the
    * server's page cap decides the step. A failed page removes nothing. At most
-   * {@link MAX_RECOVERED_ITEMS} channels are re-queried: the rest are dropped.
+   * {@link MAX_RECOVERED_ITEMS} channels are re-queried.
+   *
+   * Paging is held meanwhile: a next page asked for is queried once the recovery ends, as the list
+   * end that asked for it does not ask again when the recovery changed nothing. A query of the
+   * list's own already in flight is waited for, as it would make the recovery's refused.
+   *
+   * A call while a recovery runs returns at once and the running pass starts over from the first page
+   * once its page in flight lands, as the pages before were watched on a connection that is gone.
    */
   recoverLoadedItems = async () => {
+    if (this._isRecoveringLoadedItems) {
+      this._recoveryRequestedAgain = true;
+      return;
+    }
+    this._isRecoveringLoadedItems = true;
+    try {
+      do {
+        this._recoveryRequestedAgain = false;
+        await this.waitForQueryToSettle();
+        await this.recoverLoadedPages();
+      } while (this._recoveryRequestedAgain);
+    } finally {
+      this._isRecoveringLoadedItems = false;
+    }
+    if (!this._tailQueryAwaitingRecovery) return;
+    this._tailQueryAwaitingRecovery = false;
+    runDetached(this.toTail(), { context: 'ChannelPaginator.recoverLoadedItems' });
+  };
+
+  /** Resolves once the list has no query of its own in flight. */
+  private waitForQueryToSettle = () =>
+    new Promise<void>((resolve) => {
+      if (!this.isLoading) {
+        resolve();
+        return;
+      }
+      const unsubscribe = this.state.subscribeWithSelector(
+        ({ isLoading }) => ({ isLoading }),
+        ({ isLoading }) => {
+          if (isLoading) return;
+          unsubscribe();
+          resolve();
+        },
+      );
+    });
+
+  private recoverLoadedPages = async () => {
     const loadedCids = new Set((this.items ?? []).map((channel) => channel.cid));
     const recoveredCount = Math.min(loadedCids.size, MAX_RECOVERED_ITEMS);
     const returnedCids = new Set<string>();
+    let lastReturnedCid: string | undefined;
+    let reachedEnd = false;
     const shape = this.getNextQueryShape();
     let interval: AnyInterval | null = null;
     let offset = 0;
@@ -775,24 +840,44 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
         updateState: false,
       });
       const page = this.getLastPageCids();
-      if (!result || !page) return;
+      if (!result || !page || this._recoveryRequestedAgain) {
+        // the first page reset the position and no page commits one, so hand it back
+        this.state.partialNext({ offset: this.items?.length ?? 0 });
+        return;
+      }
       if (result.targetInterval) {
         interval = result.targetInterval;
         // we update immediately for the first page as most of the stuff that is going
         // to move is going to do it to this page
         this.setActiveInterval(interval, { updateState: offset === 0 });
       }
+      // a page shorter than asked for, and than a page, is the end of the list
+      const requested =
+        offset === 0 ? Math.max(this.pageSize, loadedCids.size) : recoveredCount - offset;
+      if (page.length < Math.min(this.pageSize, requested)) reachedEnd = true;
       if (!page.length) break;
       pageCount++;
       for (const channel of result.stateCandidate.items ?? [])
         returnedCids.add(channel.cid);
+      lastReturnedCid = page[page.length - 1];
       offset += page.length;
     } while (offset < recoveredCount);
 
+    const lastReturned = lastReturnedCid
+      ? this.client.channelManager.get(lastReturnedCid)
+      : undefined;
+    const isWithinRecoveredRange = (cid: string) => {
+      if (reachedEnd) return true;
+      const channel = this.getItem(cid);
+      if (!channel || !lastReturned) return false;
+      return this.sortComparator(channel, lastReturned) < 0;
+    };
     this.batch(
       () => {
         for (const cid of loadedCids) {
-          if (!returnedCids.has(cid)) this.removeItem({ id: cid });
+          if (!returnedCids.has(cid) && isWithinRecoveredRange(cid)) {
+            this.removeItem({ id: cid });
+          }
         }
       },
       { coalesce: true },
@@ -849,6 +934,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
     super.resetState();
     this._itemIndex.clear();
     this._queryAwaitingSync = undefined;
+    this._tailQueryAwaitingRecovery = false;
   }
 
   removeItem(params: { id?: string; item?: Channel }): ItemCoordinates {

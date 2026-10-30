@@ -1088,9 +1088,9 @@ describe('ChannelManager', () => {
       expect(recoverLoadedItems).toHaveBeenCalledTimes(1);
     });
 
-    it('does not recover a list while its own query is in flight', async () => {
+    it('recovers a list once its own query in flight settles', async () => {
       // The recovery's queries go through `executeQuery`, whose `isLoading` guard refuses to
-      // overlap a query already running for the same list.
+      // overlap a query already running for the same list, so the recovery waits for it.
       const paginator = new ChannelPaginator({ client });
       vi.spyOn(paginator, 'isInitialized', 'get').mockReturnValue(true);
       paginator.state.partialNext({ isLoading: true });
@@ -1098,9 +1098,13 @@ describe('ChannelManager', () => {
         .spyOn(client, 'queryChannels')
         .mockResolvedValue({ channels: [], duration: '0ms' } as never);
 
-      await useClientManager({ paginators: [paginator] }).recover();
-
+      const recovery = useClientManager({ paginators: [paginator] }).recover();
+      await new Promise((resolve) => setTimeout(resolve, 0));
       expect(queryChannels).not.toHaveBeenCalled();
+      paginator.state.partialNext({ isLoading: false });
+      await recovery;
+
+      expect(queryChannels).toHaveBeenCalledTimes(1);
     });
 
     it('skips a list that has never queried, so it cannot race its own first query', async () => {

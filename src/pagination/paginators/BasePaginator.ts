@@ -205,6 +205,8 @@ export type QueryPagePlacement<Q> = Pick<
    */
   continuesIntervalId?: string;
   isFirstPage: boolean;
+  /** The position a refresh keeping the items reset, restored when it places no page. */
+  positionBeforeReset?: Pick<PaginatorState<unknown>, 'cursor' | 'offset'>;
   requestedPageSize: number;
 };
 
@@ -3032,12 +3034,14 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     // Other first pages keep them: with cursors every page looks like a first page, and filter or
     // sort changes clear the intervals themselves (`resetState()`).
     const isForcedReset = reset === 'yes' && !keepPreviousItems;
+    let positionBeforeReset: QueryPagePlacement<Q>['positionBeforeReset'];
     if (isForcedReset) {
       this.clearItemStorage();
       this.state.next(this.getStateBeforeFirstQuery());
     } else if (reset === 'yes' && !forcedQueryShape) {
       // A refresh keeping the items (reconnect, pull-to-refresh) restarts from the first page but
       // leaves the list visible until that page arrives: only the position is reset.
+      positionBeforeReset = { cursor: this.cursor, offset: this.offset };
       this.state.partialNext({
         cursor: this.config.initialCursor,
         offset: this.config.initialOffset ?? 0,
@@ -3104,6 +3108,7 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
         direction,
         isFirstPage,
         keepPreviousItems,
+        positionBeforeReset,
         queryShape,
         requestedPageSize: this.getRequestedPageSize(queryShape),
         updateState,
@@ -3120,7 +3125,10 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     this._lastQueryShape = params.queryShape;
     const { results } = params;
     if (!results) {
-      const stateUpdate: Partial<PaginatorState<T>> = { isLoading: false };
+      const stateUpdate: Partial<PaginatorState<T>> = {
+        isLoading: false,
+        ...params.positionBeforeReset,
+      };
       this.state.partialNext(stateUpdate);
       return { stateCandidate: stateUpdate, targetInterval: null };
     }

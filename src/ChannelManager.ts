@@ -1006,8 +1006,8 @@ export class ChannelManager extends WithSubscriptions {
    * watches by default), those below it come back through `restoreInterruptedWatch`.
    * Never-queried paginators are skipped: they run their own first query on mount, and querying them
    * here would race it. Unlike {@link ChannelManager.reload}, it merges the page into the loaded
-   * list (`keepPreviousItems`) instead of blanking it, and is not `silent`: the `isLoading`
-   * transition guards against an overlapping query.
+   * list (`keepPreviousItems`) instead of blanking it. Its pages are `silent` so paging is held while it
+   * runs and a recovery asked for meanwhile supersedes it (see `ChannelPaginator.recoverLoadedItems`).
    */
   recover = async () =>
     await Promise.allSettled(

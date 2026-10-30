@@ -2803,6 +2803,8 @@ describe('ChannelPaginator', () => {
           (resolve) => (releaseSecondPage = () => resolve(answer(options))),
         );
       });
+      // only the recovery's own requests count below
+      queryChannels.mockClear();
 
       const recovery = paginator.recoverLoadedItems();
       await vi.waitFor(() => expect(queryChannels.mock.lastCall?.[0]?.offset).toBe(2));
@@ -2817,8 +2819,185 @@ describe('ChannelPaginator', () => {
       await recovery;
     });
 
-    it('re-queries at most 150 channels and drops the rest, which load again on scroll', async () => {
-      const serverChannels = Array.from({ length: 160 }, (_, i) =>
+    it('recovers once a next page already in flight lands', async () => {
+      const { paginator, queryChannels, serverChannels, setServerChannels } =
+        await setup();
+      setServerChannels([
+        ...serverChannels,
+        channelResponse('c5', '2023-12-31T00:00:00.000Z'),
+        channelResponse('c6', '2023-12-30T00:00:00.000Z'),
+      ]);
+      const answer = queryChannels.getMockImplementation()!;
+      let releaseNextPage = () => {};
+      queryChannels.mockImplementationOnce(
+        (options) =>
+          new Promise((resolve) => (releaseNextPage = () => resolve(answer(options)))),
+      );
+      // the list end asked for the next page just before the connection dropped
+      const nextPage = paginator.toTail();
+      await vi.waitFor(() => expect(paginator.isLoading).toBe(true));
+      // while away, c2 was deleted
+      setServerChannels([
+        serverChannels[0],
+        ...serverChannels.slice(2),
+        channelResponse('c5', '2023-12-31T00:00:00.000Z'),
+        channelResponse('c6', '2023-12-30T00:00:00.000Z'),
+      ]);
+
+      const recovery = paginator.recoverLoadedItems();
+      releaseNextPage();
+      await nextPage;
+      await recovery;
+
+      expect(paginator.items!.map((channel) => channel.id)).toEqual([
+        'c1',
+        'c3',
+        'c4',
+        'c5',
+        'c6',
+      ]);
+    });
+
+    it('keeps showing the list when a later page shares no channel with it', async () => {
+      const { paginator, setServerChannels } = await setup({ pages: 0 });
+      const day = (n: number) => new Date(Date.UTC(2024, 0, 10 - n)).toISOString();
+      const all = Array.from({ length: 8 }, (_, i) =>
+        channelResponse(`c${i + 1}`, day(i)),
+      );
+      setServerChannels(all);
+      for (let page = 0; page < 3; page++) await paginator.toTail();
+      expect(paginator.items!.map((channel) => channel.id)).toEqual([
+        'c1',
+        'c2',
+        'c3',
+        'c4',
+        'c5',
+        'c6',
+      ]);
+      // while away, c2-c4 were deleted: the last page (c8) holds no channel the list loaded
+      setServerChannels(
+        all.filter((response) => !['c2', 'c3', 'c4'].includes(response.channel.id!)),
+      );
+
+      await paginator.recoverLoadedItems();
+
+      expect(paginator.items!.map((channel) => channel.id)).toEqual([
+        'c1',
+        'c5',
+        'c6',
+        'c7',
+        'c8',
+      ]);
+    });
+
+    it('starts over from the first page when recovered again while recovering', async () => {
+      const { paginator, queryChannels, serverChannels, setServerChannels } =
+        await setup();
+      const answer = queryChannels.getMockImplementation()!;
+      let releaseFirstPage = () => {};
+      queryChannels.mockImplementationOnce(
+        (options) =>
+          new Promise((resolve) => (releaseFirstPage = () => resolve(answer(options)))),
+      );
+      queryChannels.mockClear();
+
+      const recovery = paginator.recoverLoadedItems();
+      await vi.waitFor(() => expect(queryChannels).toHaveBeenCalledTimes(1));
+      // the connection dropped and came back while the first page was in flight, and c2 was deleted
+      setServerChannels(
+        serverChannels.filter((response) => response.channel.id !== 'c2'),
+      );
+      paginator.recoverLoadedItems();
+      releaseFirstPage();
+      await recovery;
+
+      // the superseded pass stopped after its page, the next one started from the first page
+      expect(queryChannels.mock.calls.map(([options]) => options?.offset ?? 0)).toEqual([
+        0, 0, 2, 3,
+      ]);
+      expect(paginator.items!.map((channel) => channel.id)).toEqual(['c1', 'c3', 'c4']);
+    });
+
+    it('holds paging until a recovery asked for again while recovering ends', async () => {
+      const { paginator, queryChannels } = await setup();
+      const answer = queryChannels.getMockImplementation()!;
+      const heldPages: Array<() => void> = [];
+      queryChannels.mockImplementation(
+        (options) =>
+          new Promise((resolve) => heldPages.push(() => resolve(answer(options)))),
+      );
+      queryChannels.mockClear();
+
+      const recovery = paginator.recoverLoadedItems();
+      await vi.waitFor(() => expect(heldPages).toHaveLength(1));
+      paginator.recoverLoadedItems();
+      heldPages.shift()!();
+      // the second pass is running
+      await vi.waitFor(() => expect(heldPages).toHaveLength(1));
+      expect(await paginator.toTail()).toBeUndefined();
+      expect(queryChannels).toHaveBeenCalledTimes(2);
+
+      queryChannels.mockImplementation(answer);
+      heldPages.shift()!();
+      await recovery;
+
+      // the next page asked for meanwhile goes out once, after the last pass
+      await vi.waitFor(() => expect(queryChannels.mock.lastCall?.[0]?.offset).toBe(4));
+      expect(queryChannels.mock.calls.map(([options]) => options?.offset ?? 0)).toEqual([
+        0, 0, 2, 4,
+      ]);
+    });
+
+    it.each([
+      ['first', 0],
+      ['second', 2],
+    ])(
+      'continues the list from its end when the %s recovery page fails',
+      async (_, failingOffset) => {
+        const { paginator, queryChannels, serverChannels, setServerChannels } =
+          await setup();
+        setServerChannels([
+          ...serverChannels,
+          channelResponse('c5', '2023-12-31T00:00:00.000Z'),
+          channelResponse('c6', '2023-12-30T00:00:00.000Z'),
+        ]);
+        vi.spyOn(utils, 'sleep').mockResolvedValue(undefined);
+        const answer = queryChannels.getMockImplementation()!;
+        queryChannels.mockImplementation((options) =>
+          (options?.offset ?? 0) === failingOffset
+            ? Promise.reject(new Error('offline'))
+            : answer(options),
+        );
+
+        await paginator.recoverLoadedItems();
+        queryChannels.mockImplementation(answer);
+        queryChannels.mockClear();
+        await paginator.toTail();
+
+        expect(queryChannels.mock.calls.map(([options]) => options?.offset)).toEqual([4]);
+        expect(paginator.items!.map((channel) => channel.id)).toEqual([
+          'c1',
+          'c2',
+          'c3',
+          'c4',
+          'c5',
+          'c6',
+        ]);
+      },
+    );
+
+    it('removes a gone channel at the end of a list loaded to its end', async () => {
+      const { paginator, serverChannels, setServerChannels } = await setup();
+      // while away, c4, the last channel, was deleted: the second page comes back short
+      setServerChannels(serverChannels.slice(0, 3));
+
+      await paginator.recoverLoadedItems();
+
+      expect(paginator.items!.map((channel) => channel.id)).toEqual(['c1', 'c2', 'c3']);
+    });
+
+    it('re-queries at most 150 channels and keeps the ones loaded past them', async () => {
+      let serverChannels = Array.from({ length: 160 }, (_, i) =>
         channelResponse(
           `d${i}`,
           new Date(Date.UTC(2024, 0, 1) - i * 60_000).toISOString(),
@@ -2842,6 +3021,11 @@ describe('ChannelPaginator', () => {
       });
       while (paginator.hasMoreTail) await paginator.toTail();
       expect(paginator.items).toHaveLength(160);
+      // while away, d1-d3 were deleted: the 150 re-queried now end at d152, and d153-d159 sort
+      // below them though they are still there
+      serverChannels = serverChannels.filter(
+        (response) => !['d1', 'd2', 'd3'].includes(response.channel.id!),
+      );
       queryChannels.mockClear();
 
       await paginator.recoverLoadedItems();
@@ -2850,11 +3034,9 @@ describe('ChannelPaginator', () => {
         0, 30, 60, 90, 120,
       ]);
       expect(paginator.items!.map((channel) => channel.id)).toEqual(
-        serverChannels.slice(0, 150).map((response) => response.channel.id),
+        serverChannels.map((response) => response.channel.id),
       );
       expect(paginator.hasMoreTail).toBe(true);
-      await paginator.toTail();
-      expect(paginator.items).toHaveLength(160);
     });
 
     it('publishes a list it recovers in one page once', async () => {
@@ -2921,6 +3103,50 @@ describe('ChannelPaginator', () => {
       await paginator.recoverLoadedItems();
 
       expect(paginator.items!.map((channel) => channel.id)).toEqual(['e1', 'e2']);
+    });
+
+    it('queries a next page asked for while recovering once the recovery ends', async () => {
+      const { paginator, queryChannels, serverChannels, setServerChannels } =
+        await setup();
+      setServerChannels([
+        ...serverChannels,
+        channelResponse('c5', '2023-12-31T00:00:00.000Z'),
+        channelResponse('c6', '2023-12-30T00:00:00.000Z'),
+      ]);
+      const answer = queryChannels.getMockImplementation()!;
+      let releaseSecondPage = () => {};
+      queryChannels.mockImplementation((options) => {
+        if (options?.offset !== 2) return answer(options);
+        return new Promise(
+          (resolve) => (releaseSecondPage = () => resolve(answer(options))),
+        );
+      });
+      queryChannels.mockClear();
+
+      const recovery = paginator.recoverLoadedItems();
+      await vi.waitFor(() => expect(queryChannels.mock.lastCall?.[0]?.offset).toBe(2));
+      // the list end reached while the second page is in flight
+      expect(await paginator.toTail()).toBeUndefined();
+      releaseSecondPage();
+      await recovery;
+      await vi.waitFor(() => expect(paginator.items).toHaveLength(6));
+
+      // the next page is queried from where the recovery left the list, not from its first page
+      expect(
+        queryChannels.mock.calls.map(([options]) => [options?.offset, options?.limit]),
+      ).toEqual([
+        [0, 4],
+        [2, 2],
+        [4, 2],
+      ]);
+      expect(paginator.items!.map((channel) => channel.id)).toEqual([
+        'c1',
+        'c2',
+        'c3',
+        'c4',
+        'c5',
+        'c6',
+      ]);
     });
   });
 });
