@@ -604,8 +604,16 @@ export class MessageComposer extends WithSubscriptions {
     if (this.channel.cid !== channelApiResponse.channel.cid) {
       return;
     }
-    if (channelApiResponse.draft) {
-      this.initState({ composition: channelApiResponse.draft });
+    const { draft } = channelApiResponse;
+    if (this.scheduledMessageInComposer) {
+      if (draft) {
+        this.restoreAfterScheduledMessageEdit = () =>
+          this.initState({ composition: draft });
+      }
+      return;
+    }
+    if (draft) {
+      this.initState({ composition: draft });
     } else if (this.state.getLatestValue().draftId) {
       this.clear();
       this.client.offlineDb?.executeQuerySafely(

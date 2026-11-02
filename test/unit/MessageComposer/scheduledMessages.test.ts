@@ -973,4 +973,42 @@ describe('MessageComposer scheduled messages', () => {
       expect(composer.failedScheduledMessage).toBeUndefined();
     });
   });
+
+  describe('channel state arriving during a scheduled composition', () => {
+    const channelResponseWithDraft = (text: string) =>
+      ({
+        channel: { cid, id: 'general', type: 'messaging' },
+        draft: {
+          channel_cid: cid,
+          created_at: new Date().toISOString(),
+          message: { id: 'draft-2', text },
+        },
+      }) as unknown as Parameters<MessageComposer['initStateFromChannelResponse']>[0];
+
+    it('keeps the edit and restores the newer draft when the edit ends', async () => {
+      const { composer } = setup();
+      composer.textComposer.setText('my draft');
+      await composer.editScheduledMessage(generateScheduledMessage());
+
+      composer.initStateFromChannelResponse(channelResponseWithDraft('newer draft'));
+
+      expect(composer.textComposer.text).toBe('see you tomorrow');
+      expect(composer.editedScheduledMessage).toBeDefined();
+
+      composer.cancelEditScheduledMessage();
+
+      expect(composer.textComposer.text).toBe('newer draft');
+    });
+
+    it('keeps a failed message being scheduled again', async () => {
+      const { composer } = setup();
+      const failedMessage = generateScheduledMessage({ status: 'failed' });
+      await composer.rescheduleFailedMessage(failedMessage);
+
+      composer.initStateFromChannelResponse(channelResponseWithDraft('newer draft'));
+
+      expect(composer.failedScheduledMessage).toBe(failedMessage);
+      expect(composer.textComposer.text).toBe('see you tomorrow');
+    });
+  });
 });
