@@ -1,6 +1,7 @@
 import { ErrorFromResponse, ScheduledMessageErrorReason } from '../types';
 import type { APIErrorResponse } from '../types';
-import type { ScheduledMessageAPIError } from './types';
+
+type ScheduledMessageAPIError = ErrorFromResponse<APIErrorResponse>;
 
 const NOT_FOUND_STATUS = 404;
 

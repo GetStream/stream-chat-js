@@ -1,7 +1,5 @@
 import type { StreamChat } from '../client';
 import type {
-  APIErrorResponse,
-  ErrorFromResponse,
   Event,
   QueryScheduledMessagesResponse,
   ScheduledMessageResponse,
@@ -29,8 +27,6 @@ export type ScheduledMessageEvent = Event & {
 export type ScheduledMessageQueryResultHandler = (
   response: QueryScheduledMessagesResponse,
 ) => Partial<ScheduledMessageManagerState> | void;
-
-export type ScheduledMessageAPIError = ErrorFromResponse<APIErrorResponse>;
 
 export type ScheduledMessageLimits = {
   maxLeadTimeSeconds: number;
