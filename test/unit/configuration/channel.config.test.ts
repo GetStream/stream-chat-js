@@ -1,8 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getClientWithUser } from '../test-utils/getClient';
 import type { Channel } from '../../../src/channel';
 import type { StreamChat } from '../../../src/client';
 import { convertDateToTimestamp } from '../test-utils/time';
+import { generateMsg } from '../test-utils/generateMessage';
+import { ChannelApi } from '../../../src/gen/chat/ChannelApi';
 
 describe("the 'channel' configuration key", () => {
   let client: StreamChat;
@@ -477,6 +479,88 @@ describe("the 'channel' configuration key", () => {
       channel.initialized = true;
 
       await expect(channel.markRead()).rejects.toThrow('Read events are disabled');
+    });
+
+    describe('read events off', () => {
+      afterEach(() => {
+        vi.restoreAllMocks();
+      });
+
+      const withReadEvents = ({
+        capability,
+        enabled = true,
+        localUnreadCountEnabled = false,
+      }: {
+        capability: boolean;
+        enabled?: boolean;
+        localUnreadCountEnabled?: boolean;
+      }) => {
+        client.config.set({
+          channel: { readEvents: { enabled, localUnreadCountEnabled } },
+        });
+        const channel = withServerConfig({ read_events: true });
+        channel.initialized = true;
+        channel.data = {
+          ...channel.data,
+          own_capabilities: capability ? ['read-events'] : [],
+        } as never;
+        return channel;
+      };
+      const receiveMessageFromOtherUser = (channel: Channel) =>
+        channel._handleChannelEvent({
+          type: 'message.new',
+          user: { id: 'other' },
+          message: generateMsg({ user: { id: 'other' } }),
+        } as never);
+
+      it('does not count unread messages when the integrator disables read events', () => {
+        const channel = withReadEvents({ capability: true, enabled: false });
+
+        receiveMessageFromOtherUser(channel);
+
+        expect(channel.readEventsEnabled).toBe(false);
+        expect(channel.countUnread()).toBe(0);
+      });
+
+      it('counts them locally when localUnreadCountEnabled is set as well', () => {
+        const channel = withReadEvents({
+          capability: true,
+          enabled: false,
+          localUnreadCountEnabled: true,
+        });
+
+        receiveMessageFromOtherUser(channel);
+
+        expect(channel.countUnread()).toBe(1);
+      });
+
+      it('refuses markRead without the read-events capability', async () => {
+        const request = vi
+          .spyOn(ChannelApi.prototype, 'markRead')
+          .mockResolvedValue({} as never);
+        const channel = withReadEvents({ capability: false });
+
+        expect(channel.readEventsEnabled).toBe(false);
+        await expect(channel.markRead()).rejects.toThrow('read-events');
+        expect(request).not.toHaveBeenCalled();
+      });
+
+      it('resets a local count without a request when the capability is missing', async () => {
+        const request = vi
+          .spyOn(ChannelApi.prototype, 'markRead')
+          .mockResolvedValue({} as never);
+        const channel = withReadEvents({
+          capability: false,
+          localUnreadCountEnabled: true,
+        });
+        receiveMessageFromOtherUser(channel);
+        expect(channel.countUnread()).toBe(1);
+
+        await expect(channel.markReadViaReporter()).resolves.toBeNull();
+
+        expect(request).not.toHaveBeenCalled();
+        expect(channel.countUnread()).toBe(0);
+      });
     });
 
     it('leaves the sibling group alone when only one is registered', () => {

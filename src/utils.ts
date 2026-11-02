@@ -109,7 +109,9 @@ export const channelHasReadEvents = (channel?: Channel) => {
 
 /** Whether read events are off and the channel keeps a client-local unread count. */
 export const channelTracksReadLocally = (channel?: Channel) =>
-  !channelHasReadEvents(channel) && !!channel?.config.readEvents.localUnreadCountEnabled;
+  !!channel &&
+  !channel.readEventsEnabled &&
+  channel.config.readEvents.localUnreadCountEnabled;
 
 /** A random retry delay in milliseconds that grows with `numberOfFailures`. */
 export function retryInterval(numberOfFailures: number) {
