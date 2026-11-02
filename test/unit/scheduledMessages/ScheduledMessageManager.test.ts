@@ -557,6 +557,66 @@ describe('ScheduledMessageManager', () => {
   });
 
   describe('ordering', () => {
+    it('keeps a message stored while load() is in flight', async () => {
+      const { client, manager } = setup();
+      const response = deferred<unknown>();
+      vi.spyOn(client, 'queryScheduledMessages').mockReturnValue(
+        response.promise as never,
+      );
+      const stale = generateScheduledMessage();
+      manager.upsertToState(stale);
+
+      const loading = manager.load();
+      const fresh = generateScheduledMessage();
+      manager.upsertToState(fresh);
+      response.resolve({ scheduled_messages: [], duration: '' });
+      await loading;
+
+      expect(manager.getFromState(fresh.id)).toBe(fresh);
+      expect(manager.getFromState(stale.id)).toBeUndefined();
+    });
+
+    it('applies only the latest of two overlapping loads', async () => {
+      const { client, manager } = setup();
+      const first = deferred<unknown>();
+      const second = deferred<unknown>();
+      const querySpy = vi
+        .spyOn(client, 'queryScheduledMessages')
+        .mockReturnValueOnce(first.promise as never)
+        .mockReturnValueOnce(second.promise as never);
+      const fromFirst = generateScheduledMessage();
+      const fromSecond = generateScheduledMessage();
+
+      const firstLoad = manager.load();
+      const secondLoad = manager.load();
+      first.resolve({ scheduled_messages: [fromFirst], duration: '' });
+
+      await expect(firstLoad).resolves.toBeUndefined();
+      expect(manager.getFromState(fromFirst.id)).toBeUndefined();
+      expect(manager.state.getLatestValue().isLoading).toBe(true);
+
+      await vi.waitFor(() => expect(querySpy).toHaveBeenCalledTimes(2));
+      second.resolve({ scheduled_messages: [fromSecond], duration: '' });
+      await secondLoad;
+
+      expect(manager.getFromState(fromSecond.id)).toBe(fromSecond);
+      expect(manager.state.getLatestValue().isLoading).toBe(false);
+    });
+
+    it('keeps a message stored after the channel state was requested', () => {
+      const { manager } = setup();
+      const stale = generateScheduledMessage();
+      manager.upsertToState(stale);
+      const requestedAtVersion = manager.version;
+      const fresh = generateScheduledMessage();
+      manager.upsertToState(fresh);
+
+      manager.hydrateChannelState(cid, [], requestedAtVersion);
+
+      expect(manager.getFromState(fresh.id)).toBe(fresh);
+      expect(manager.getFromState(stale.id)).toBeUndefined();
+    });
+
     it('keeps a failed message failed when the send-now response arrives after the failed event', async () => {
       const { client, manager } = setup();
       manager.registerSubscriptions();
@@ -671,6 +731,37 @@ describe('ScheduledMessageManager', () => {
       ...(scheduled_messages ? { scheduled_messages } : {}),
     });
 
+    it('leaves channels in skipInitialization alone when hydrating from queryChannels', async () => {
+      const { client, manager } = setup();
+      const stored = generateScheduledMessage({ cid: 'messaging:a' });
+      manager.upsertToState(stored);
+      vi.spyOn(client, 'post').mockResolvedValue({
+        channels: [channelResponse('a', [])],
+      });
+
+      await client.queryChannels(
+        {},
+        [],
+        { include_scheduled_messages: true },
+        { skipInitialization: ['a'] },
+      );
+
+      expect(manager.getFromState(stored.id)).toBe(stored);
+    });
+
+    it('does not update the store when a snapshot changes nothing', () => {
+      const { manager } = setup();
+      const stored = generateScheduledMessage();
+      manager.upsertToState(stored);
+      const listener = vi.fn();
+      manager.state.subscribe(listener);
+      listener.mockClear();
+
+      manager.hydrateChannelState(cid, [stored]);
+
+      expect(listener).not.toHaveBeenCalled();
+    });
+
     it('hydrates the store per channel from queryChannels', async () => {
       const { client, manager } = setup();
       const inA = generateScheduledMessage({ cid: 'messaging:a' });
@@ -711,6 +802,22 @@ describe('ScheduledMessageManager', () => {
       await client.queryChannels({}, [], { include_scheduled_messages: true });
 
       expect(manager.getForChannel('messaging:a')).toEqual([known]);
+    });
+
+    it('keeps a message stored while channel.query is in flight', async () => {
+      const { client, manager } = setup();
+      const channel = client.channel('messaging', 'general');
+      const response = deferred<unknown>();
+      vi.spyOn(client, 'post').mockReturnValue(response.promise as never);
+
+      const querying = channel.query({ include_scheduled_messages: true });
+      await vi.waitFor(() => expect(client.post).toHaveBeenCalled());
+      const fresh = generateScheduledMessage();
+      manager.upsertToState(fresh);
+      response.resolve({ ...mockChannelQueryResponse, scheduled_messages: [] });
+      await querying;
+
+      expect(manager.getFromState(fresh.id)).toBe(fresh);
     });
 
     it('hydrates the store from channel.query', async () => {

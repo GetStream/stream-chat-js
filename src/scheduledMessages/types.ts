@@ -1,19 +1,11 @@
 import type { StreamChat } from '../client';
-import type {
-  APIErrorResponse,
-  ErrorFromResponse,
-  Event,
-  QueryScheduledMessagesResponse,
-  ScheduledMessageResponse,
-} from '../types';
-
-export type ScheduledMessageMap = Map<string, ScheduledMessageResponse>;
+import type { Event, ScheduledMessageResponse } from '../types';
 
 export type ScheduledMessageManagerState = {
   isDisabled: boolean;
   isLoaded: boolean;
   isLoading: boolean;
-  scheduledMessages: ScheduledMessageMap;
+  scheduledMessages: Map<string, ScheduledMessageResponse>;
   lastQueryError?: Error;
   next?: string;
 };
@@ -25,12 +17,6 @@ export type ScheduledMessageManagerOptions = {
 export type ScheduledMessageEvent = Event & {
   scheduled_message: ScheduledMessageResponse;
 };
-
-export type ScheduledMessageQueryResultHandler = (
-  response: QueryScheduledMessagesResponse,
-) => Partial<ScheduledMessageManagerState> | void;
-
-export type ScheduledMessageAPIError = ErrorFromResponse<APIErrorResponse>;
 
 export type ScheduledMessageLimits = {
   maxLeadTimeSeconds: number;
