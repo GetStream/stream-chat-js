@@ -2359,13 +2359,18 @@ export class Channel extends ChannelApi {
       case 'user.watching.start':
       case 'user.updated':
         if (event.user?.id) {
-          channelState.watchers[event.user.id] = event.user;
+          channelState.watchers = {
+            ...channelState.watchers,
+            [event.user.id]: event.user,
+          };
           channel.getClient().state.updateUserReference(event.user, channel.cid);
         }
         break;
       case 'user.watching.stop':
-        if (event.user?.id) {
-          delete channelState.watchers[event.user.id];
+        if (event.user?.id && channelState.watchers[event.user.id]) {
+          const newWatchers = { ...channelState.watchers };
+          delete newWatchers[event.user.id];
+          channelState.watchers = newWatchers;
         }
         break;
       case 'message.deleted':
@@ -2574,7 +2579,9 @@ export class Channel extends ChannelApi {
 
           channelState.members = newMembers;
 
-          // TODO?: unset membership
+          if (event.user.id === this.getClient().userId) {
+            channelState.membership = {} as ChannelMemberResponse;
+          }
         }
         break;
       case 'notification.mark_unread': {
@@ -2660,23 +2667,21 @@ export class Channel extends ChannelApi {
         break;
       }
       case 'user.banned':
+      case 'user.unbanned': {
         if (!event.user?.id) break;
-        channelState.members[event.user.id] = {
-          ...(channelState.members[event.user.id] || {}),
-          shadow_banned: !!event.shadow,
-          banned: !event.shadow,
-          user: { ...(channelState.members[event.user.id]?.user || {}), ...event.user },
+        const isBanned = event.type === 'user.banned';
+        const member = channelState.members[event.user.id];
+        channelState.members = {
+          ...channelState.members,
+          [event.user.id]: {
+            ...(member || {}),
+            shadow_banned: isBanned && !!event.shadow,
+            banned: isBanned && !event.shadow,
+            user: { ...(member?.user || {}), ...event.user },
+          },
         };
         break;
-      case 'user.unbanned':
-        if (!event.user?.id) break;
-        channelState.members[event.user.id] = {
-          ...(channelState.members[event.user.id] || {}),
-          shadow_banned: false,
-          banned: false,
-          user: { ...(channelState.members[event.user.id]?.user || {}), ...event.user },
-        };
-        break;
+      }
       default:
     }
 
@@ -2754,13 +2759,15 @@ export class Channel extends ChannelApi {
     if (state.watcher_count !== undefined) {
       this.state.watcher_count = state.watcher_count;
     }
-    if (state.watchers) {
+    if (state.watchers?.length) {
+      const watchers = { ...this.state.watchers };
       for (const watcher of state.watchers) {
         if (watcher) {
           clientState.updateUserReference(watcher, this.cid);
-          this.state.watchers[watcher.id] = watcher;
+          watchers[watcher.id] = watcher;
         }
       }
+      this.state.watchers = watchers;
     }
 
     // Initialized to the latest message (or now, if empty) so nothing up to here counts as

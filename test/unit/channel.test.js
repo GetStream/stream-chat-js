@@ -1524,6 +1524,120 @@ describe('Channel _handleChannelEvent', function () {
 
 			expect(channel.data.member_count).to.equal(5);
 		});
+
+		it('member.removed for the current user clears ChannelState.membership', () => {
+			const currentMember = generateMember({ user });
+			const otherMember = generateMember({ user: otherUser });
+			channel._handleChannelEvent({ type: 'member.added', user, member: currentMember });
+			channel._handleChannelEvent({
+				type: 'member.added',
+				user: otherUser,
+				member: otherMember,
+			});
+
+			channel._handleChannelEvent({
+				type: 'member.removed',
+				user: otherUser,
+				member: otherMember,
+			});
+			expect(channel.state.membership).to.deep.equal(currentMember);
+
+			channel._handleChannelEvent({
+				type: 'member.removed',
+				user,
+				member: currentMember,
+			});
+			expect(channel.state.members).to.be.empty;
+			expect(channel.state.membership).to.be.empty;
+		});
+	});
+
+	describe('watchers and members publish a new reference', () => {
+		const subscribeTo = (key) => {
+			const handler = vi.fn();
+			channel.state.subscribeWithSelector((state) => ({ [key]: state[key] }), handler);
+			handler.mockClear();
+			return handler;
+		};
+
+		it('notifies watchers subscribers on user.watching.start and user.watching.stop', () => {
+			const handler = subscribeTo('watchers');
+
+			channel._handleChannelEvent({ type: 'user.watching.start', user: otherUser });
+			expect(handler).toHaveBeenCalledTimes(1);
+			expect(channel.state.watchers).to.deep.equal({ [otherUser.id]: otherUser });
+
+			channel._handleChannelEvent({ type: 'user.watching.stop', user: otherUser });
+			expect(handler).toHaveBeenCalledTimes(2);
+			expect(channel.state.watchers).to.be.empty;
+		});
+
+		it('notifies watchers subscribers on user.updated for a watcher', () => {
+			channel._handleChannelEvent({ type: 'user.watching.start', user: otherUser });
+			const handler = subscribeTo('watchers');
+			const renamed = { ...otherUser, name: 'Renamed' };
+
+			channel._handleChannelEvent({ type: 'user.updated', user: renamed });
+
+			expect(handler).toHaveBeenCalledTimes(1);
+			expect(channel.state.watchers[otherUser.id]).to.equal(renamed);
+		});
+
+		it('does not notify watchers subscribers on user.watching.stop for a user who was not watching', () => {
+			const handler = subscribeTo('watchers');
+
+			channel._handleChannelEvent({ type: 'user.watching.stop', user: otherUser });
+
+			expect(handler).not.toHaveBeenCalled();
+		});
+
+		it('notifies members subscribers on user.banned and user.unbanned', () => {
+			channel._handleChannelEvent({
+				type: 'member.added',
+				user: otherUser,
+				member: generateMember({ user: otherUser }),
+			});
+			const handler = subscribeTo('members');
+
+			channel._handleChannelEvent({ type: 'user.banned', user: otherUser });
+			expect(handler).toHaveBeenCalledTimes(1);
+			expect(channel.state.members[otherUser.id].banned).to.be.true;
+
+			channel._handleChannelEvent({ type: 'user.unbanned', user: otherUser });
+			expect(handler).toHaveBeenCalledTimes(2);
+			expect(channel.state.members[otherUser.id].banned).to.be.false;
+		});
+
+		it('notifies membership subscribers when the current user is removed', () => {
+			channel._handleChannelEvent({
+				type: 'member.added',
+				user,
+				member: generateMember({ user }),
+			});
+			const handler = subscribeTo('membership');
+
+			channel._handleChannelEvent({ type: 'member.removed', user });
+
+			expect(handler).toHaveBeenCalledTimes(1);
+		});
+
+		it('does not notify membership subscribers when another member is removed', () => {
+			channel._handleChannelEvent({
+				type: 'member.added',
+				user,
+				member: generateMember({ user }),
+			});
+			channel._handleChannelEvent({
+				type: 'member.added',
+				user: otherUser,
+				member: generateMember({ user: otherUser }),
+			});
+			const handler = subscribeTo('membership');
+
+			channel._handleChannelEvent({ type: 'member.removed', user: otherUser });
+
+			expect(handler).not.toHaveBeenCalled();
+		});
 	});
 
 	describe('message.new', () => {
@@ -4000,6 +4114,28 @@ describe('Channel last_message_at', () => {
 });
 
 describe('Channel _initializeState', () => {
+	it('publishes a new watchers reference, keeping watchers already in state', async () => {
+		const client = await getClientWithUser();
+		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
+		const alice = { id: 'alice' };
+		const bob = { id: 'bob' };
+		channel.state.watchers = { [alice.id]: alice };
+		const previousWatchers = channel.state.watchers;
+		const handler = vi.fn();
+		channel.state.subscribeWithSelector(
+			(state) => ({ watchers: state.watchers }),
+			handler,
+		);
+		handler.mockClear();
+
+		channel._initializeState({ watchers: [bob] });
+
+		expect(handler).toHaveBeenCalledTimes(1);
+		expect(channel.state.watchers).to.not.equal(previousWatchers);
+		expect(channel.state.watchers).to.deep.equal({ [alice.id]: alice, [bob.id]: bob });
+		expect(previousWatchers).to.deep.equal({ [alice.id]: alice });
+	});
+
 	it('should not keep members that have unwatched since last watch', async () => {
 		const client = await getClientWithUser();
 		const channel = client.channelManager.ensure({ type: 'messaging', id: uuidv4() });
