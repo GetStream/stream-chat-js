@@ -123,9 +123,9 @@ export type MessageComposerState = {
   failedScheduledMessage: ScheduledMessageResponse | null;
 };
 
-export type ScheduledMessageEditRestore = () => void;
+type ScheduledMessageEditRestore = () => void;
 
-export type ScheduledMessageCompositionState = Pick<
+type ScheduledMessageCompositionState = Pick<
   MessageComposerState,
   'editedScheduledMessage' | 'failedScheduledMessage'
 >;
