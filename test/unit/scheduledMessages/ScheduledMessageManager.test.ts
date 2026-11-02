@@ -576,6 +576,33 @@ describe('ScheduledMessageManager', () => {
       expect(manager.getFromState(stale.id)).toBeUndefined();
     });
 
+    it('applies only the latest of two overlapping loads', async () => {
+      const { client, manager } = setup();
+      const first = deferred<unknown>();
+      const second = deferred<unknown>();
+      const querySpy = vi
+        .spyOn(client, 'queryScheduledMessages')
+        .mockReturnValueOnce(first.promise as never)
+        .mockReturnValueOnce(second.promise as never);
+      const fromFirst = generateScheduledMessage();
+      const fromSecond = generateScheduledMessage();
+
+      const firstLoad = manager.load();
+      const secondLoad = manager.load();
+      first.resolve({ scheduled_messages: [fromFirst], duration: '' });
+
+      await expect(firstLoad).resolves.toBeUndefined();
+      expect(manager.getFromState(fromFirst.id)).toBeUndefined();
+      expect(manager.state.getLatestValue().isLoading).toBe(true);
+
+      await vi.waitFor(() => expect(querySpy).toHaveBeenCalledTimes(2));
+      second.resolve({ scheduled_messages: [fromSecond], duration: '' });
+      await secondLoad;
+
+      expect(manager.getFromState(fromSecond.id)).toBe(fromSecond);
+      expect(manager.state.getLatestValue().isLoading).toBe(false);
+    });
+
     it('keeps a message stored after the channel state was requested', () => {
       const { manager } = setup();
       const stale = generateScheduledMessage();

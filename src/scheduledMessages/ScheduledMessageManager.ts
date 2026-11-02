@@ -1,4 +1,5 @@
 import { StateStore } from '../store';
+import { withCancellation } from '../utils/concurrency';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 import {
   ScheduledMessageErrorReason,
@@ -28,6 +29,8 @@ import type {
 } from './types';
 
 export const SCHEDULED_MESSAGES_LOAD_LIMIT = 100;
+
+const CANCELED = 'canceled';
 
 const UPSERT_EVENT_TYPES: EventTypes[] = [
   ScheduledMessageEventType.Created,
@@ -90,6 +93,7 @@ export class ScheduledMessageManager extends WithSubscriptions {
   private removedIds = new Set<string>();
   private receivedVersion = 0;
   private receivedVersions = new Map<string, number>();
+  private loadTag = Symbol('ScheduledMessageManager.load');
 
   public state: StateStore<ScheduledMessageManagerState>;
 
@@ -222,11 +226,15 @@ export class ScheduledMessageManager extends WithSubscriptions {
   private query = async (
     options: QueryScheduledMessagesOptions,
     handleResult: ScheduledMessageQueryResultHandler,
+    signal?: AbortSignal,
   ): Promise<QueryScheduledMessagesResponse> => {
     this.state.partialNext({ isLoading: true });
 
     try {
       const response = await this.client.queryScheduledMessages(options);
+
+      if (signal?.aborted) return response;
+
       const { next } = response;
 
       const resultState = handleResult(response);
@@ -240,6 +248,8 @@ export class ScheduledMessageManager extends WithSubscriptions {
 
       return response;
     } catch (error) {
+      if (signal?.aborted) throw error;
+
       const lastQueryError = error as Error;
       const errorReason = getScheduledMessageErrorReason(lastQueryError);
 
@@ -249,7 +259,7 @@ export class ScheduledMessageManager extends WithSubscriptions {
 
       throw error;
     } finally {
-      this.state.partialNext({ isLoading: false });
+      if (!signal?.aborted) this.state.partialNext({ isLoading: false });
     }
   };
 
@@ -264,6 +274,23 @@ export class ScheduledMessageManager extends WithSubscriptions {
 
       throw error;
     }
+  };
+
+  private loadSnapshot = async (signal: AbortSignal) => {
+    const options = { limit: SCHEDULED_MESSAGES_LOAD_LIMIT };
+    const requestedAtVersion = this.receivedVersion;
+
+    const replaceStore = ({
+      scheduled_messages = [],
+    }: QueryScheduledMessagesResponse) => {
+      this.applySnapshot(scheduled_messages, { requestedAtVersion });
+
+      return { isLoaded: true };
+    };
+
+    const response = await this.query(options, replaceStore, signal);
+
+    return signal.aborted ? CANCELED : response;
   };
 
   public static isScheduledMessageEvent = (
@@ -352,19 +379,10 @@ export class ScheduledMessageManager extends WithSubscriptions {
     this.addUnsubscribeFunction(this.subscribeConnectionRecovered());
   };
 
-  public load = (): Promise<QueryScheduledMessagesResponse> => {
-    const options = { limit: SCHEDULED_MESSAGES_LOAD_LIMIT };
-    const requestedAtVersion = this.receivedVersion;
+  public load = async (): Promise<QueryScheduledMessagesResponse | undefined> => {
+    const result = await withCancellation(this.loadTag, this.loadSnapshot);
 
-    const replaceStore = ({
-      scheduled_messages = [],
-    }: QueryScheduledMessagesResponse) => {
-      this.applySnapshot(scheduled_messages, { requestedAtVersion });
-
-      return { isLoaded: true };
-    };
-
-    return this.query(options, replaceStore);
+    return result === CANCELED ? undefined : result;
   };
 
   public loadMore = async (): Promise<QueryScheduledMessagesResponse | undefined> => {
