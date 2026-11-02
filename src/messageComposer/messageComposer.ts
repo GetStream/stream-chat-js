@@ -1329,6 +1329,11 @@ export class MessageComposer extends WithSubscriptions {
 
     await this.waitForUploadsInProgress();
 
+    const compositionChanged =
+      this.hasEditInProgress || this.failedScheduledMessage !== failedScheduledMessage;
+
+    if (compositionChanged) return;
+
     const composition = await this.compose({
       sendOptions: { scheduled_at: scheduledAt.toISOString() },
     });

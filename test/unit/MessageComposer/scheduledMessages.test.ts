@@ -864,6 +864,29 @@ describe('MessageComposer scheduled messages', () => {
       );
     });
 
+    it('does not schedule when cancelled while uploads finish', async () => {
+      const { client, composer } = setup();
+      composer.compositionMiddlewareExecutor.replace([
+        createSendWithPendingUploadsAttachmentsMiddleware(composer),
+      ]);
+      const postSpy = mockScheduledSend(client, generateScheduledMessage({ id: 'sm-2' }));
+      const deleteSpy = vi.spyOn(client.scheduledMessages, 'deleteScheduledMessage');
+      composer.textComposer.setText('my draft');
+      await composer.rescheduleFailedMessage(generateFailedMessage());
+      composer.attachmentManager.state.partialNext({
+        attachments: [uploadAttachment('uploading')],
+      });
+
+      const scheduling = composer.schedule(scheduledAt);
+      composer.cancelRescheduleFailedMessage();
+      composer.attachmentManager.state.partialNext({ attachments: [] });
+
+      await expect(scheduling).resolves.toBeUndefined();
+      expect(postSpy).not.toHaveBeenCalled();
+      expect(deleteSpy).not.toHaveBeenCalled();
+      expect(composer.textComposer.text).toBe('my draft');
+    });
+
     it('restores the earlier composition when cancelled', async () => {
       const { composer } = setup();
       composer.textComposer.setText('my draft');
