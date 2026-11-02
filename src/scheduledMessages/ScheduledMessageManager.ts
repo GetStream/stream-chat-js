@@ -24,11 +24,15 @@ import type {
   ScheduledMessageEvent,
   ScheduledMessageManagerOptions,
   ScheduledMessageManagerState,
-  ScheduledMessageMap,
-  ScheduledMessageQueryResultHandler,
 } from './types';
 
-export const SCHEDULED_MESSAGES_LOAD_LIMIT = 100;
+type ScheduledMessageMap = ScheduledMessageManagerState['scheduledMessages'];
+
+type ScheduledMessageQueryResultHandler = (
+  response: QueryScheduledMessagesResponse,
+) => Partial<ScheduledMessageManagerState> | void;
+
+const SCHEDULED_MESSAGES_LOAD_LIMIT = 100;
 
 const CANCELED = 'canceled';
 
