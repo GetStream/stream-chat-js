@@ -2412,6 +2412,30 @@ describe('Threads 2.0', () => {
           thread.unregisterSubscriptions();
         });
 
+        it('replaces an updated user in the parent message on "user.updated" when no channel paginator holds it', () => {
+          const authorId = 'renamed-parent-author';
+          const thread = createTestThread({
+            parentMessageOverrides: { user: { id: authorId, name: 'Old name' } },
+          });
+          subscribeThread(thread);
+          expect(channel.messagePaginator.getItem(thread.id)).to.be.undefined;
+          expect(thread.state.getLatestValue().parentMessage.user?.name).to.equal(
+            'Old name',
+          );
+
+          client.dispatchEvent({
+            type: 'user.updated',
+            user: { id: authorId, name: 'New name' },
+            created_at: nowNs(),
+          });
+
+          expect(thread.state.getLatestValue().parentMessage.user?.name).to.equal(
+            'New name',
+          );
+
+          thread.unregisterSubscriptions();
+        });
+
         it('applies "reaction.new" to a reply the thread paginator already holds', () => {
           const thread = createTestThread();
           subscribeThread(thread);
