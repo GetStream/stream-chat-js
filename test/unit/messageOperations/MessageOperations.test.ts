@@ -917,6 +917,33 @@ describe('MessageOperations — optimistic lifecycle', () => {
       expect(store.get('m1')?.text).toBe('from a websocket event');
     });
 
+    // UIs render `i18n.<language>_text` in place of `text`, so a translation of the old text left on
+    // the optimistic copy hides the edit until the server responds, or offline, until the replay.
+    it('drops the translations of the replaced text', async () => {
+      const seed = makeLocalMessage({
+        i18n: { en_text: 'before', es_text: 'antes', language: 'en' },
+        id: 'm1',
+        status: 'received',
+        text: 'before',
+      });
+      const { ops, persisted } = harness({ seed });
+
+      await ops.update({ localMessage: { ...seed, text: 'after' } });
+
+      expect(persisted[0].text).toBe('after');
+      expect(persisted[0].i18n).toBeUndefined();
+    });
+
+    it('keeps the translations when the edit leaves the text unchanged', async () => {
+      const i18n = { en_text: 'same', es_text: 'igual', language: 'en' };
+      const seed = makeLocalMessage({ i18n, id: 'm1', status: 'received', text: 'same' });
+      const { ops, persisted } = harness({ seed });
+
+      await ops.update({ localMessage: { ...seed, attachments: [] } });
+
+      expect(persisted[0].i18n).toEqual(i18n);
+    });
+
     it('stamps message_text_updated_at so the "edited" indicator shows immediately', async () => {
       const seed = makeLocalMessage({ id: 'm1', status: 'received' });
       const { ops, persisted } = harness({ seed });
