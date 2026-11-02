@@ -1,3 +1,13 @@
+## [10.0.0-rc.30](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.29...v10.0.0-rc.30) (2026-11-02)
+
+### Bug Fixes
+
+* handle user.updated in threads ([#1979](https://github.com/GetStream/stream-chat-js/issues/1979)) ([9064ffc](https://github.com/GetStream/stream-chat-js/commit/9064ffc87f8a7886c0bcdc6bcc8c714c191f2814))
+* notify channel state subscribers on watcher, ban and member removal events ([#1977](https://github.com/GetStream/stream-chat-js/issues/1977)) ([3a7be78](https://github.com/GetStream/stream-chat-js/commit/3a7be785220f58fce6265b2bf81f93018bb87299))
+* optimistic updates for translated messages ([#1975](https://github.com/GetStream/stream-chat-js/issues/1975)) ([91fc290](https://github.com/GetStream/stream-chat-js/commit/91fc290e593f344ebaae58747c6039954ac210d7))
+* restore composer custom data from drafts and edits, keep custom on edit ([#1978](https://github.com/GetStream/stream-chat-js/issues/1978)) ([51ddcad](https://github.com/GetStream/stream-chat-js/commit/51ddcad8149729145a992ab86341859e9f5f8a49))
+* unread snapshot count, pinned replies, joined and invite filters, read events check ([#1981](https://github.com/GetStream/stream-chat-js/issues/1981)) ([1247d10](https://github.com/GetStream/stream-chat-js/commit/1247d1035879baa02225b06a71d29f0c5a4206b8))
+
 ## [10.0.0-rc.29](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.28...v10.0.0-rc.29) (2026-11-02)
 
 ### Features
