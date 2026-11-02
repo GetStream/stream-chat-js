@@ -29,9 +29,8 @@ import type {
   MessageResponse,
   MessageResponseBase,
   ScheduledMessageResponse,
-  UserResponse,
+  SendMessageOptions,
 } from '../types';
-import { ScheduledMessageBlockReason } from '../types';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 import type { StreamChat } from '../client';
 import type { CommandSendability, MessageComposerConfig } from './configuration/types';
@@ -49,13 +48,12 @@ import type { TextComposerSnapshot } from './textComposer';
 import type { DeepPartial } from '../types.utility';
 import type { MergeWithCustomizer } from '../utils/mergeWith/mergeWithCore';
 import {
-  getCommandByName,
   getMentionedUsersInText,
-  getRawCommandName,
   stripCommandFromText,
 } from './middleware/textComposer/commandUtils';
-import { CommandSearchSource } from './middleware/textComposer/commands';
 import {
+  resolveMentionedUsers,
+  resolveQuotedMessage,
   toScheduledMessageComposition,
   toScheduledMessagePayload,
 } from './scheduledMessage';
@@ -111,6 +109,10 @@ export type MessageComposerState = {
 };
 
 export type ScheduledMessageEditRestore = () => void;
+
+export type MessageComposerComposeOptions = {
+  sendOptions?: SendMessageOptions;
+};
 
 export type MessageComposerOptions = {
   client: StreamChat;
@@ -426,12 +428,6 @@ export class MessageComposer extends WithSubscriptions {
 
   isCommandDisabled = (command: CommandResponse) =>
     !!this.getCommandDisabledReason(command);
-
-  getComposedCommand = (
-    text = this.textComposer.text,
-    searchSource = new CommandSearchSource(this.channel),
-  ): CommandResponse | undefined =>
-    this.textComposer.command ?? getCommandByName(searchSource, getRawCommandName(text));
 
   validateCommandSendability = (
     command: CommandResponse,
@@ -925,7 +921,9 @@ export class MessageComposer extends WithSubscriptions {
     this.clear();
   };
 
-  compose = async (): Promise<MessageComposerMiddlewareValue['state'] | undefined> => {
+  compose = async ({ sendOptions = {} }: MessageComposerComposeOptions = {}): Promise<
+    MessageComposerMiddlewareValue['state'] | undefined
+  > => {
     const created_at = this.editedMessage?.created_at ?? new Date();
 
     const text = '';
@@ -952,7 +950,7 @@ export class MessageComposer extends WithSubscriptions {
           type: 'regular',
           updated_at: created_at,
         },
-        sendOptions: {},
+        sendOptions,
       },
     });
 
@@ -1133,38 +1131,6 @@ export class MessageComposer extends WithSubscriptions {
     });
   };
 
-  private getScheduleBlockReason = (): ScheduledMessageBlockReason | undefined => {
-    if (this.getComposedCommand()) return ScheduledMessageBlockReason.Command;
-
-    if (this.pollId) return ScheduledMessageBlockReason.Poll;
-
-    if (this.locationComposer.validLocation) {
-      return ScheduledMessageBlockReason.SharedLocation;
-    }
-
-    return undefined;
-  };
-
-  private rejectUnschedulableComposition = () => {
-    const reason = this.getScheduleBlockReason();
-
-    if (!reason) return false;
-
-    this.client.notifications.addWarning({
-      message: 'This message cannot be scheduled',
-      origin: {
-        emitter: 'MessageComposer',
-        context: { composer: this },
-      },
-      options: {
-        type: 'validation:scheduled-message:blocked',
-        metadata: { reason },
-      },
-    });
-
-    return true;
-  };
-
   private notifyScheduledMessageError = (message: string, type: string, error: Error) => {
     this.client.notifications.addError({
       message,
@@ -1182,61 +1148,6 @@ export class MessageComposer extends WithSubscriptions {
     });
   };
 
-  private resolveMentionedUsers = async (userIds: string[] = []) => {
-    const knownUsers = this.client.state.users;
-    const missingUserIds = userIds.filter((userId) => !knownUsers[userId]);
-
-    const fetchedUsers: Record<string, UserResponse> = {};
-
-    if (missingUserIds.length) {
-      try {
-        const { users } = await this.client.queryUsers({ id: { $in: missingUserIds } });
-        users.forEach((user) => (fetchedUsers[user.id] = user));
-      } catch (error) {
-        this.client.logger('error', 'messageComposer:resolveMentionedUsers', {
-          tags: ['messageComposer', 'scheduledMessages'],
-          error,
-        });
-      }
-    }
-
-    const mentionedUsers = userIds.map(
-      (userId): UserResponse =>
-        knownUsers[userId] ?? fetchedUsers[userId] ?? { id: userId },
-    );
-
-    return mentionedUsers;
-  };
-
-  private resolveQuotedMessage = async (
-    quotedMessageId?: string,
-    parentId?: string,
-  ): Promise<LocalMessage | null> => {
-    if (!quotedMessageId) return null;
-
-    const { state } = this.channel;
-    const messageFromState =
-      state.findMessage(quotedMessageId) ??
-      (parentId ? state.findMessage(quotedMessageId, parentId) : undefined);
-
-    if (messageFromState) return messageFromState;
-
-    try {
-      const { message } = await this.client.getMessage(quotedMessageId);
-
-      const quotedMessage = formatMessage(message);
-
-      return quotedMessage;
-    } catch (error) {
-      this.client.logger('error', 'messageComposer:resolveQuotedMessage', {
-        tags: ['messageComposer', 'scheduledMessages'],
-        error,
-      });
-
-      return null;
-    }
-  };
-
   private endScheduledMessageEdit = () => {
     const restore = this.restoreAfterScheduledMessageEdit ?? this.clear;
 
@@ -1251,11 +1162,11 @@ export class MessageComposer extends WithSubscriptions {
   ): Promise<ScheduledMessageResponse | undefined> => {
     if (this.hasEditInProgress) return;
 
-    if (this.rejectUnschedulableComposition()) return;
-
     await this.waitForUploadsInProgress();
 
-    const composition = await this.compose();
+    const composition = await this.compose({
+      sendOptions: { scheduled_at: scheduledAt.toISOString() },
+    });
 
     if (!composition) return;
 
@@ -1264,7 +1175,7 @@ export class MessageComposer extends WithSubscriptions {
     try {
       const { scheduled_message: scheduledMessage } = await this.channel.sendMessage(
         message,
-        { ...sendOptions, scheduled_at: scheduledAt.toISOString() },
+        sendOptions,
       );
 
       this.clear();
@@ -1290,8 +1201,8 @@ export class MessageComposer extends WithSubscriptions {
     } = message;
 
     const [mentionedUsers, quotedMessage] = await Promise.all([
-      this.resolveMentionedUsers(mentionedUserIds),
-      this.resolveQuotedMessage(quotedMessageId, parentId),
+      resolveMentionedUsers(this.client, mentionedUserIds),
+      resolveQuotedMessage(this.channel, quotedMessageId, parentId),
     ]);
 
     if (!this.editedScheduledMessage) {
@@ -1321,8 +1232,6 @@ export class MessageComposer extends WithSubscriptions {
     const { editedScheduledMessage } = this;
 
     if (!editedScheduledMessage) return;
-
-    if (this.rejectUnschedulableComposition()) return;
 
     const composition = await this.compose();
 

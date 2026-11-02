@@ -1,10 +1,15 @@
 import { LOCAL_MESSAGE_FIELDS, RESERVED_UPDATED_MESSAGE_FIELDS } from '../constants';
+import { formatMessage } from '../utils';
+import type { Channel } from '../channel';
+import type { StreamChat } from '../client';
 import type {
   DraftMessage,
   DraftResponse,
+  LocalMessage,
   Message,
   ScheduledMessageResponse,
   UpdatedMessage,
+  UserResponse,
 } from '../types';
 
 const SCHEDULED_MESSAGE_SERVER_FIELDS = ['id', 'mml', 'shared_location'];
@@ -110,4 +115,64 @@ export const toScheduledMessagePayload = (
   };
 
   return scheduledMessagePayload;
+};
+
+export const resolveMentionedUsers = async (
+  client: StreamChat,
+  userIds: string[] = [],
+): Promise<UserResponse[]> => {
+  const knownUsers = client.state.users;
+  const missingUserIds = userIds.filter((userId) => !knownUsers[userId]);
+
+  const fetchedUsers: Record<string, UserResponse> = {};
+
+  if (missingUserIds.length) {
+    try {
+      const { users } = await client.queryUsers({ id: { $in: missingUserIds } });
+      users.forEach((user) => (fetchedUsers[user.id] = user));
+    } catch (error) {
+      client.logger('error', 'messageComposer:resolveMentionedUsers', {
+        tags: ['messageComposer', 'scheduledMessages'],
+        error,
+      });
+    }
+  }
+
+  const mentionedUsers = userIds.map(
+    (userId): UserResponse =>
+      knownUsers[userId] ?? fetchedUsers[userId] ?? { id: userId },
+  );
+
+  return mentionedUsers;
+};
+
+export const resolveQuotedMessage = async (
+  channel: Channel,
+  quotedMessageId?: string,
+  parentId?: string,
+): Promise<LocalMessage | null> => {
+  if (!quotedMessageId) return null;
+
+  const client = channel.getClient();
+  const { state } = channel;
+  const messageFromState =
+    state.findMessage(quotedMessageId) ??
+    (parentId ? state.findMessage(quotedMessageId, parentId) : undefined);
+
+  if (messageFromState) return messageFromState;
+
+  try {
+    const { message } = await client.getMessage(quotedMessageId);
+
+    const quotedMessage = formatMessage(message);
+
+    return quotedMessage;
+  } catch (error) {
+    client.logger('error', 'messageComposer:resolveQuotedMessage', {
+      tags: ['messageComposer', 'scheduledMessages'],
+      error,
+    });
+
+    return null;
+  }
 };

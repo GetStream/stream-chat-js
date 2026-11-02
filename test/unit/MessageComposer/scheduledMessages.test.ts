@@ -225,18 +225,16 @@ describe('MessageComposer scheduled messages', () => {
       );
     });
 
-    it('rejects a typed slash command before waiting for uploads or composing', async () => {
+    it('rejects a typed slash command', async () => {
       const { channel, client, composer } = setup();
       addGiphyCommand(client, channel);
       const postSpy = vi.spyOn(client, 'post');
-      const composeSpy = vi.spyOn(composer, 'compose');
       const addWarningSpy = vi.spyOn(client.notifications, 'addWarning');
       composer.textComposer.setText('/giphy cats');
 
       const result = await composer.schedule(scheduledAt);
 
       expect(result).toBeUndefined();
-      expect(composeSpy).not.toHaveBeenCalled();
       expect(postSpy).not.toHaveBeenCalled();
       expect(composer.textComposer.text).toBe('/giphy cats');
       expect(addWarningSpy).toHaveBeenCalledWith(
@@ -289,6 +287,50 @@ describe('MessageComposer scheduled messages', () => {
       expect(addWarningSpy).toHaveBeenCalledWith(
         blockedWarning(ScheduledMessageBlockReason.SharedLocation),
       );
+    });
+
+    it('blocks a poll in compose() when scheduled_at is passed', async () => {
+      const { client, composer } = setup();
+      const postSpy = vi.spyOn(client, 'post');
+      const addWarningSpy = vi.spyOn(client.notifications, 'addWarning');
+      composer.state.partialNext({ pollId: 'poll-1' });
+
+      const composition = await composer.compose({
+        sendOptions: { scheduled_at: scheduledAt.toISOString() },
+      });
+
+      expect(composition).toBeUndefined();
+      expect(postSpy).not.toHaveBeenCalled();
+      expect(addWarningSpy).toHaveBeenCalledWith(
+        blockedWarning(ScheduledMessageBlockReason.Poll),
+      );
+    });
+
+    it('leaves polls, commands and locations alone in a normal composition', async () => {
+      const { client, composer } = setup();
+      const addWarningSpy = vi.spyOn(client.notifications, 'addWarning');
+      composer.state.partialNext({ pollId: 'poll-1' });
+
+      const composition = await composer.compose();
+
+      expect(composition?.message).toEqual(
+        expect.objectContaining({ poll_id: 'poll-1' }),
+      );
+      expect(addWarningSpy).not.toHaveBeenCalled();
+    });
+
+    it('passes the compose send options through the middleware', async () => {
+      const { composer } = setup();
+      composer.textComposer.setText('see you tomorrow');
+
+      const composition = await composer.compose({
+        sendOptions: { scheduled_at: scheduledAt.toISOString(), skip_push: true },
+      });
+
+      expect(composition?.sendOptions).toEqual({
+        scheduled_at: scheduledAt.toISOString(),
+        skip_push: true,
+      });
     });
 
     it('refuses while uploads run, like a normal send', async () => {

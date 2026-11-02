@@ -55,10 +55,9 @@ export const createCompositionValidationMiddleware = (
           return await discard();
         }
 
-        const currentCommand = composer.getComposedCommand(
-          inputText,
-          effectiveCommandSearchSource,
-        );
+        const currentCommand =
+          composer.textComposer.command ??
+          getCommandByName(effectiveCommandSearchSource, getRawCommandName(inputText));
         if (
           currentCommand &&
           notifyCommandNotReady({
