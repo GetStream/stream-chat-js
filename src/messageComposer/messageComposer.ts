@@ -1174,20 +1174,7 @@ export class MessageComposer extends WithSubscriptions {
       const poll = await this.client.polls.createPoll(composition.data);
       this.state.partialNext({ pollId: poll?.id });
     } catch (error) {
-      this.client.notifications.addError({
-        message: 'Failed to create the poll',
-        origin: {
-          emitter: 'MessageComposer',
-          context: { composer: this },
-        },
-        options: {
-          type: 'api:poll:create:failed',
-          metadata: {
-            reason: (error as Error).message,
-          },
-          originalError: error instanceof Error ? error : undefined,
-        },
-      });
+      this.notifyApiError('Failed to create the poll', 'api:poll:create:failed', error);
       throw error;
     }
   };
@@ -1200,20 +1187,11 @@ export class MessageComposer extends WithSubscriptions {
       this.refreshId();
       this.locationComposer.initState();
     } catch (error) {
-      this.client.notifications.addError({
-        message: 'Failed to share the location',
-        origin: {
-          emitter: 'MessageComposer',
-          context: { composer: this },
-        },
-        options: {
-          type: 'api:location:create:failed',
-          metadata: {
-            reason: (error as Error).message,
-          },
-          originalError: error instanceof Error ? error : undefined,
-        },
-      });
+      this.notifyApiError(
+        'Failed to share the location',
+        'api:location:create:failed',
+        error,
+      );
       throw error;
     }
   };
@@ -1235,7 +1213,7 @@ export class MessageComposer extends WithSubscriptions {
     });
   };
 
-  private notifyScheduledMessageError = (message: string, type: string, error: Error) => {
+  private notifyApiError = (message: string, type: string, error: unknown) => {
     this.client.notifications.addError({
       message,
       origin: {
@@ -1245,9 +1223,9 @@ export class MessageComposer extends WithSubscriptions {
       options: {
         type,
         metadata: {
-          reason: error.message,
+          reason: (error as Error).message,
         },
-        originalError: error,
+        originalError: error instanceof Error ? error : undefined,
       },
     });
   };
@@ -1361,10 +1339,10 @@ export class MessageComposer extends WithSubscriptions {
 
       return scheduledMessage;
     } catch (error) {
-      this.notifyScheduledMessageError(
+      this.notifyApiError(
         'Failed to schedule the message',
         'api:scheduled-message:create:failed',
-        error as Error,
+        error,
       );
       throw error;
     }
@@ -1416,10 +1394,10 @@ export class MessageComposer extends WithSubscriptions {
 
       return scheduledMessage;
     } catch (error) {
-      this.notifyScheduledMessageError(
+      this.notifyApiError(
         'Failed to update the scheduled message',
         'api:scheduled-message:update:failed',
-        error as Error,
+        error,
       );
       throw error;
     }
