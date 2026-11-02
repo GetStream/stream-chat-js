@@ -295,7 +295,7 @@ These are full items in [Dead code and leftovers](#dead-code); listed here so th
 
 <a id="watchers-members-in-place"></a>
 
-#### Watchers and members are mutated in place on the store-backed state
+#### Watchers and members are mutated in place on the store-backed state [SOLVED 14301018]
 
 `bug` · confidence: high · pre-release: no · channel state
 
@@ -303,6 +303,7 @@ These are full items in [Dead code and leftovers](#dead-code); listed here so th
 - **What:** `channelState.watchers[id] = user`, `delete channelState.watchers[id]` and `channelState.members[id] = {...}` write into the store's current object; no new reference is published.
 - **Evidence / scenario:** `useStateStore(channel.state, (s) => ({ watchers: s.watchers }))` does not re-render when another user starts watching or is banned; the shallow selector compare sees the same object.
 - **Suggested change:** Assign new objects (`channelState.watchers = { ...channelState.watchers, [id]: user }`, same for `members`) or use `partialNext`.
+- **Also:** `member.removed` for the current user left `membership` set; it now resets it to the empty initial value.
 
 <a id="read-events-gate"></a>
 
