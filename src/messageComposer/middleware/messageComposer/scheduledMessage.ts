@@ -1,6 +1,6 @@
 import { ScheduledMessageBlockReason } from '../../../types';
 import { CommandSearchSource } from '../textComposer/commands';
-import { getCommandByName, getRawCommandName } from '../textComposer/commandUtils';
+import { getCurrentCommand } from '../textComposer/commandUtils';
 import type { MiddlewareHandlerParams } from '../../../middleware';
 import type { MessageComposer } from '../../messageComposer';
 import type {
@@ -12,12 +12,11 @@ const getScheduleBlockReason = (
   composer: MessageComposer,
   commandSearchSource: CommandSearchSource,
 ): ScheduledMessageBlockReason | undefined => {
-  const { locationComposer, pollId, textComposer } = composer;
-  const command =
-    textComposer.command ??
-    getCommandByName(commandSearchSource, getRawCommandName(textComposer.text));
+  const { locationComposer, pollId } = composer;
 
-  if (command) return ScheduledMessageBlockReason.Command;
+  if (getCurrentCommand(composer, commandSearchSource)) {
+    return ScheduledMessageBlockReason.Command;
+  }
 
   if (pollId) return ScheduledMessageBlockReason.Poll;
 

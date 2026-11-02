@@ -3,6 +3,7 @@ import type { CommandResponse } from '../../../types';
 import { CommandSearchSource } from '../textComposer/commands';
 import {
   getCommandByName,
+  getCurrentCommand,
   getRawCommandName,
   notifyCommandDisabled,
   notifyCommandNotReady,
@@ -55,9 +56,11 @@ export const createCompositionValidationMiddleware = (
           return await discard();
         }
 
-        const currentCommand =
-          composer.textComposer.command ??
-          getCommandByName(effectiveCommandSearchSource, getRawCommandName(inputText));
+        const currentCommand = getCurrentCommand(
+          composer,
+          effectiveCommandSearchSource,
+          inputText,
+        );
         if (
           currentCommand &&
           notifyCommandNotReady({

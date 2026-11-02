@@ -7,6 +7,7 @@ import type {
   DraftResponse,
   LocalMessage,
   Message,
+  ScheduledMessageContent,
   ScheduledMessageResponse,
   UpdatedMessage,
   UserResponse,
@@ -20,7 +21,7 @@ const SERVER_OWNED_FIELDS: ReadonlySet<string> = new Set([
   ...SCHEDULED_MESSAGE_SERVER_FIELDS,
 ]);
 
-const COMPOSER_OWNED_FIELDS: ReadonlySet<string> = new Set([
+const COMPOSER_OWNED_FIELD_NAMES = [
   'attachments',
   'mentioned_channel',
   'mentioned_group_ids',
@@ -32,7 +33,9 @@ const COMPOSER_OWNED_FIELDS: ReadonlySet<string> = new Set([
   'quoted_message_id',
   'show_in_channel',
   'text',
-]);
+] as const satisfies ReadonlyArray<keyof ScheduledMessageContent>;
+
+const COMPOSER_OWNED_FIELDS: ReadonlySet<string> = new Set(COMPOSER_OWNED_FIELD_NAMES);
 
 const STORED_FIELDS_REPLACED_ON_UPDATE: ReadonlySet<string> = new Set([
   ...SERVER_OWNED_FIELDS,
@@ -46,37 +49,23 @@ const COMPOSED_FIELDS_DROPPED_ON_UPDATE: ReadonlySet<string> = new Set(
 const omitFields = <T extends object>(source: T, fields: ReadonlySet<string>): Message =>
   Object.fromEntries(Object.entries(source).filter(([field]) => !fields.has(field)));
 
+const pickFields = <T extends object, K extends keyof T>(
+  source: T,
+  fields: readonly K[],
+): Pick<T, K> =>
+  Object.fromEntries(
+    fields.filter((field) => field in source).map((field) => [field, source[field]]),
+  ) as Pick<T, K>;
+
 export const toScheduledMessageDraft = (
   scheduledMessage: ScheduledMessageResponse,
 ): DraftMessage => {
   const { id, message } = scheduledMessage;
-  const {
-    attachments,
-    mentioned_channel,
-    mentioned_group_ids,
-    mentioned_here,
-    mentioned_roles,
-    mentioned_users,
-    parent_id,
-    poll_id,
-    quoted_message_id,
-    show_in_channel,
-    text,
-  } = message;
 
   const draftMessage = {
-    attachments,
+    ...pickFields(message, COMPOSER_OWNED_FIELD_NAMES),
     id,
-    mentioned_channel,
-    mentioned_group_ids,
-    mentioned_here,
-    mentioned_roles,
-    mentioned_users,
-    parent_id,
-    poll_id,
-    quoted_message_id,
-    show_in_channel,
-    text,
+    text: message.text,
   };
 
   return draftMessage;
