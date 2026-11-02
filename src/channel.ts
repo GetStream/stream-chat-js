@@ -2569,21 +2569,26 @@ export class Channel extends ChannelApi {
         }
         break;
       }
-      case 'member.removed':
-        if (event.user?.id) {
+      case 'member.removed': {
+        // The spec documents `event.user` as the user who removed the member, so the removed
+        // user is read from `event.member` first.
+        const removedUserId =
+          event.member?.user?.id ?? event.member?.user_id ?? event.user?.id;
+        if (removedUserId) {
           const newMembers = {
             ...channelState.members,
           };
 
-          delete newMembers[event.user.id];
+          delete newMembers[removedUserId];
 
           channelState.members = newMembers;
 
-          if (event.user.id === this.getClient().userId) {
+          if (removedUserId === this.getClient().userId) {
             channelState.membership = {} as ChannelMemberResponse;
           }
         }
         break;
+      }
       case 'notification.mark_unread': {
         const ownMessage = event.user?.id === this.getClient().user?.id;
         if (!ownMessage || !event.user || event.last_read_at == null) break;

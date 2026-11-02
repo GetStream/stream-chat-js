@@ -1550,6 +1550,34 @@ describe('Channel _handleChannelEvent', function () {
 			expect(channel.state.members).to.be.empty;
 			expect(channel.state.membership).to.be.empty;
 		});
+
+		it('member.removed removes event.member, not an event.user who removed them', () => {
+			const currentMember = generateMember({ user });
+			const otherMember = generateMember({ user: otherUser });
+			channel._handleChannelEvent({ type: 'member.added', user, member: currentMember });
+			channel._handleChannelEvent({
+				type: 'member.added',
+				user: otherUser,
+				member: otherMember,
+			});
+
+			channel._handleChannelEvent({ type: 'member.removed', user, member: otherMember });
+
+			expect(channel.state.members).to.have.keys([user.id]);
+			expect(channel.state.membership).to.deep.equal(currentMember);
+		});
+
+		it('member.removed falls back to event.user without event.member', () => {
+			channel._handleChannelEvent({
+				type: 'member.added',
+				user: otherUser,
+				member: generateMember({ user: otherUser }),
+			});
+
+			channel._handleChannelEvent({ type: 'member.removed', user: otherUser });
+
+			expect(channel.state.members).to.be.empty;
+		});
 	});
 
 	describe('watchers and members publish a new reference', () => {
