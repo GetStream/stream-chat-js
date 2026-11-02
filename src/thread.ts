@@ -661,6 +661,11 @@ export class Thread extends WithSubscriptions {
     this.messagePaginator.reflectQuotedMessageUpdate(formatMessage(message));
   };
 
+  public handleUserUpdated = (event: PipelineEvent) => {
+    if (!event.user) return;
+    this.messagePaginator.reflectUserUpdate(event.user);
+  };
+
   // Applies a user ban or deletion to this thread's replies.
   public handleUserMessagesDeleted = (event: PipelineEvent) => {
     if (!event.user) return;

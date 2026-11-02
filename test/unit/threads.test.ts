@@ -2375,6 +2375,43 @@ describe('Threads 2.0', () => {
           });
         });
 
+        it('replaces an updated user in the thread paginator\'s replies on "user.updated"', () => {
+          const thread = createTestThread();
+          subscribeThread(thread);
+          const authorId = 'renamed-user';
+          const replyId = uuidv4();
+          thread.messagePaginator.ingestPage({
+            page: [
+              formatMessage(
+                generateMsg({
+                  id: replyId,
+                  parent_id: thread.id,
+                  user: { id: authorId, name: 'Old name' },
+                }) as MessageResponse,
+              ),
+            ],
+            isHead: true,
+            isTail: true,
+            setActive: true,
+          });
+
+          client.dispatchEvent({
+            type: 'user.updated',
+            user: { id: authorId, name: 'New name' },
+            created_at: nowNs(),
+          });
+
+          expect(thread.messagePaginator.getItem(replyId)?.user?.name).to.equal(
+            'New name',
+          );
+          expect(
+            thread.messagePaginator.items?.find((reply) => reply.id === replyId)?.user
+              ?.name,
+          ).to.equal('New name');
+
+          thread.unregisterSubscriptions();
+        });
+
         it('applies "reaction.new" to a reply the thread paginator already holds', () => {
           const thread = createTestThread();
           subscribeThread(thread);

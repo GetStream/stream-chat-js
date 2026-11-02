@@ -338,13 +338,16 @@ export class ThreadManager extends WithSubscriptions {
             ),
           ),
       ),
-      // A banned or deleted user's replies can be in any thread, so these two are the exception.
+      // A user's replies can be in any thread, so the user events are the exception.
       ...(['user.messages.deleted', 'user.deleted'] as const).map((eventType) =>
         this.client.on(eventType, (event) =>
           this.threadStore
             .values()
             .forEach((thread) => thread.handleUserMessagesDeleted(event)),
         ),
+      ),
+      this.client.on('user.updated', (event) =>
+        this.threadStore.values().forEach((thread) => thread.handleUserUpdated(event)),
       ),
     ].map(({ unsubscribe }) => unsubscribe);
 
