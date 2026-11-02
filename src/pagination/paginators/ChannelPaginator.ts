@@ -208,6 +208,31 @@ const memberUserNameFilterResolver: FieldToDataResolver<Channel> = {
       : [],
 };
 
+/** The own invite's status: `pending`, `accepted` or `rejected`, or `undefined` without an invite. */
+const resolveOwnInviteStatus = (channel: Channel) => {
+  const { membership } = channel.state;
+  if (membership?.invite_accepted_at != null) return 'accepted';
+  if (membership?.invite_rejected_at != null) return 'rejected';
+  if (membership?.invited) return 'pending';
+  return undefined;
+};
+
+const inviteFilterResolver: FieldToDataResolver<Channel> = {
+  matchesField: (field) => field === 'invite',
+  resolve: resolveOwnInviteStatus,
+};
+
+const joinedFilterResolver: FieldToDataResolver<Channel> = {
+  matchesField: (field) => field === 'joined',
+  // A member, unless the membership is a pending or rejected invite.
+  resolve: (channel) => {
+    const { membership } = channel.state;
+    const isMember = !!(membership?.user?.id ?? membership?.user_id);
+    const inviteStatus = resolveOwnInviteStatus(channel);
+    return isMember && inviteStatus !== 'pending' && inviteStatus !== 'rejected';
+  },
+};
+
 const pinnedFilterResolver: FieldToDataResolver<Channel> = {
   matchesField: (field) => field === 'pinned',
   resolve: (channel) => channel.state.membership.pinned_at != null,
@@ -349,6 +374,8 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
       createAppBannedFilterResolver(client),
       createHasUnreadFilterResolver(client),
       hiddenFilterResolver,
+      inviteFilterResolver,
+      joinedFilterResolver,
       lastUpdatedFilterResolver,
       pinnedFilterResolver,
       createMutedFilterResolver(client),
