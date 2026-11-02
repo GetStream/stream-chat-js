@@ -5,7 +5,10 @@ import {
   ScheduledMessageEventType,
   ScheduledMessageStatus,
 } from '../types';
-import { getScheduledMessageErrorReason } from './errors';
+import {
+  getScheduledMessageErrorReason,
+  isScheduledMessageNotFoundError,
+} from './errors';
 import type { StreamChat } from '../client';
 import type {
   Event,
@@ -232,6 +235,19 @@ export class ScheduledMessageManager extends WithSubscriptions {
     }
   };
 
+  private removeWhenNotFound = async <TResult>(
+    id: string,
+    request: () => Promise<TResult>,
+  ): Promise<TResult> => {
+    try {
+      return await request();
+    } catch (error) {
+      if (isScheduledMessageNotFoundError(error as Error)) this.removeFromState(id);
+
+      throw error;
+    }
+  };
+
   public static isScheduledMessageEvent = (
     event: Event,
   ): event is ScheduledMessageEvent => !!event.scheduled_message;
@@ -343,8 +359,10 @@ export class ScheduledMessageManager extends WithSubscriptions {
     id: string,
     options: UpdateScheduledMessageOptions,
   ) => {
-    const { scheduled_message: scheduledMessage } =
-      await this.client.updateScheduledMessage(id, options);
+    const { scheduled_message: scheduledMessage } = await this.removeWhenNotFound(
+      id,
+      () => this.client.updateScheduledMessage(id, options),
+    );
 
     this.upsertToState(scheduledMessage);
 
@@ -352,8 +370,10 @@ export class ScheduledMessageManager extends WithSubscriptions {
   };
 
   public deleteScheduledMessage = async (id: string) => {
-    const { scheduled_message: scheduledMessage } =
-      await this.client.deleteScheduledMessage(id);
+    const { scheduled_message: scheduledMessage } = await this.removeWhenNotFound(
+      id,
+      () => this.client.deleteScheduledMessage(id),
+    );
 
     this.removeFromState(id);
 
@@ -361,8 +381,10 @@ export class ScheduledMessageManager extends WithSubscriptions {
   };
 
   public sendScheduledMessageNow = async (id: string) => {
-    const { scheduled_message: scheduledMessage } =
-      await this.client.sendScheduledMessageNow(id);
+    const { scheduled_message: scheduledMessage } = await this.removeWhenNotFound(
+      id,
+      () => this.client.sendScheduledMessageNow(id),
+    );
 
     this.upsertToState(scheduledMessage);
 
