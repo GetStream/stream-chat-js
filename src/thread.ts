@@ -661,6 +661,18 @@ export class Thread extends WithSubscriptions {
     this.messagePaginator.reflectQuotedMessageUpdate(formatMessage(message));
   };
 
+  public handleUserUpdated = (event: PipelineEvent) => {
+    const { user } = event;
+    if (!user) return;
+    this.messagePaginator.reflectUserUpdate(user);
+
+    // the parent message might not yet be loaded in channel.messagePaginator
+    const parent = this.client.messageStore.get(this.id);
+    if (parent?.user?.id === user.id && parent.user !== user) {
+      this.client.messageStore.upsert({ ...parent, user });
+    }
+  };
+
   // Applies a user ban or deletion to this thread's replies.
   public handleUserMessagesDeleted = (event: PipelineEvent) => {
     if (!event.user) return;
