@@ -75,6 +75,26 @@ export type APIResponse = {
   blocklist?: BlockListResponse;
 };
 
+export type PagerDefaults = {
+  limit: number;
+};
+
+/**
+ * Request limit defaults applied by the server when the corresponding field is omitted.
+ */
+export type AppDefaults = {
+  get_or_create_channel: {
+    members: PagerDefaults;
+    messages: PagerDefaults;
+  };
+  query_channels: {
+    limit: number;
+    max_limit: number;
+    member_limit: number;
+    message_limit: number;
+  };
+};
+
 export type TranslateResponse = {
   language: string;
   translated_text: string;
@@ -143,6 +163,7 @@ export type AppSettingsAPIResponse = APIResponse & {
     cdn_expiration_seconds?: number;
     chat_primary_use_case?: string;
     custom_action_handler_url?: string;
+    defaults?: AppDefaults;
     datadog_info?: {
       api_key: string;
       site: string;
@@ -2676,6 +2697,11 @@ export type ChannelConfigFields = {
 export type ChannelConfigWithInfo = ChannelConfigFields &
   CreatedAtUpdatedAt & {
     commands?: CommandResponse[];
+    // scheduled message limits, present only when the app has scheduled messages enabled
+    scheduled_messages_max_lead_time_seconds?: number;
+    scheduled_messages_max_per_channel?: number;
+    scheduled_messages_max_per_user?: number;
+    scheduled_messages_min_lead_time_seconds?: number;
   };
 
 export type ChannelData = CustomChannelData &
