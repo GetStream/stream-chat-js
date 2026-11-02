@@ -83,7 +83,7 @@ describe('ChannelPaginator', () => {
         paginator.filterBuilder.buildFilters({ baseFilters: paginator.staticFilters }),
       ).toStrictEqual({});
       // @ts-expect-error accessing protected property
-      expect(paginator._filterFieldToDataResolvers).toHaveLength(10);
+      expect(paginator._filterFieldToDataResolvers).toHaveLength(12);
       expect(paginator.config.doRequest).toBeUndefined();
     });
 
@@ -147,7 +147,7 @@ describe('ChannelPaginator', () => {
         ...initialFilterBuilderContext,
       });
       // @ts-expect-error accessing protected property
-      expect(paginator._filterFieldToDataResolvers).toHaveLength(10);
+      expect(paginator._filterFieldToDataResolvers).toHaveLength(12);
       expect(paginator.config.debounceMs).toStrictEqual(paginatorOptions.debounceMs);
       expect(paginator.config.doRequest).toStrictEqual(doRequest);
       expect(paginator.config.hasPaginationQueryShapeChanged).toStrictEqual(
@@ -619,6 +619,86 @@ describe('ChannelPaginator', () => {
         pinned_at: undefined,
       };
       expect(paginator.matchesFilter(channel1)).toBeFalsy();
+    });
+
+    it('resolves field "joined" from the own membership', () => {
+      const joined = new ChannelPaginator({ client, filters: { joined: true } });
+      const notJoined = new ChannelPaginator({ client, filters: { joined: false } });
+      const expectJoined = (value: boolean) => {
+        expect(joined.matchesFilter(channel1)).toBe(value);
+        expect(notJoined.matchesFilter(channel1)).toBe(!value);
+      };
+      const invitedAt = convertDateToTimestamp('2025-09-03T12:19:39.101089Z');
+
+      // Not a member.
+      channel1.state.membership = {};
+      expectJoined(false);
+
+      channel1.state.membership = { user };
+      expectJoined(true);
+
+      channel1.state.membership = { user, invited: true };
+      expectJoined(false);
+
+      channel1.state.membership = { user, invited: true, invite_accepted_at: invitedAt };
+      expectJoined(true);
+
+      channel1.state.membership = { user, invited: true, invite_rejected_at: invitedAt };
+      expectJoined(false);
+    });
+
+    it('resolves field "invite" from the own membership', () => {
+      const listFor = (invite: 'pending' | 'accepted' | 'rejected') =>
+        new ChannelPaginator({ client, filters: { invite } });
+      const statusOf = () =>
+        (['pending', 'accepted', 'rejected'] as const).filter((status) =>
+          listFor(status).matchesFilter(channel1),
+        );
+      const invitedAt = convertDateToTimestamp('2025-09-03T12:19:39.101089Z');
+
+      channel1.state.membership = { user };
+      expect(statusOf()).toEqual([]);
+
+      channel1.state.membership = { user, invited: true };
+      expect(statusOf()).toEqual(['pending']);
+
+      channel1.state.membership = { user, invited: true, invite_accepted_at: invitedAt };
+      expect(statusOf()).toEqual(['accepted']);
+
+      channel1.state.membership = { user, invited: true, invite_rejected_at: invitedAt };
+      expect(statusOf()).toEqual(['rejected']);
+    });
+
+    it('keeps a joined channel in a joined list when an event ingests it again', () => {
+      const paginator = new ChannelPaginator({
+        client,
+        filters: { type: 'messaging', joined: true },
+      });
+      const channel = new Channel(client, 'messaging', 'joined-channel', {});
+      channel.state.membership = { user };
+      paginator.setItems({
+        valueOrFactory: [channel],
+        isFirstPage: true,
+        isLastPage: true,
+      });
+
+      paginator.ingestItem(channel);
+
+      expect(paginator.items).toStrictEqual([channel]);
+    });
+
+    it('runs rules added with addFilterResolvers before the built-in ones', () => {
+      const paginator = new ChannelPaginator({
+        client,
+        // @ts-expect-error using undeclared custom property
+        filters: { color: 'red' },
+      });
+      paginator.addFilterResolvers([
+        { matchesField: (field) => field === 'color', resolve: () => 'red' },
+      ]);
+
+      // `channel.data` has no `color`: only the added rule resolves it.
+      expect(paginator.matchesFilter(channel1)).toBeTruthy();
     });
 
     it('resolves "muted" field from client mute state', () => {

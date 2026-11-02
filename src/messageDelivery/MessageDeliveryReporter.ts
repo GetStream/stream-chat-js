@@ -334,8 +334,8 @@ export class MessageDeliveryReporter {
   };
 
   /**
-   * Marks the channel or thread read. A channel with read events disabled is marked read locally when
-   * `localUnreadCountEnabled` is set.
+   * Marks the channel or thread read. With read events off (`channel.readEventsEnabled`) no request
+   * goes out: a channel is marked read locally when `localUnreadCountEnabled` is set.
    *
    * @param collection - The channel or thread to mark as read.
    * @param options - Flags forwarded to the underlying `markRead` call.
@@ -358,19 +358,19 @@ export class MessageDeliveryReporter {
             options: requestOptions,
             thread: collection,
           })) ?? null)
-        : await channel.markRead(requestOptions);
+        : channel.readEventsEnabled
+          ? await channel.markRead(requestOptions)
+          : null;
     } else {
       const { readEvents, requestHandlers } = channel.configState.getLatestValue();
       const markReadRequestHandler = requestHandlers?.markReadRequest;
-      // Without read events `channel.markRead()` throws, so reset unread locally (threads have their own
-      // read state and are not affected).
       if (markReadRequestHandler) {
         result =
           (await markReadRequestHandler({ channel, options: requestOptions })) ?? null;
-      } else if (!readEvents.enabled && readEvents.localUnreadCountEnabled) {
-        channel.markReadLocally();
-      } else {
+      } else if (channel.readEventsEnabled) {
         result = await channel.markRead(requestOptions);
+      } else if (readEvents.localUnreadCountEnabled) {
+        channel.markReadLocally();
       }
     }
 

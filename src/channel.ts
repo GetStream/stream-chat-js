@@ -130,12 +130,14 @@ export type ChannelConfig = {
    */
   typingEvents: { enabled: boolean };
   /**
-   * Read receipts. `enabled` is ANDed with the channel type's `read_events`. Read by
-   * {@link Channel.markRead} and {@link Channel.markUnread}. Defaults to `true`.
+   * Read receipts. `enabled` is ANDed with the channel type's `read_events`. Together with the own
+   * `read-events` capability it decides {@link Channel.readEventsEnabled}, which gates counting
+   * unread messages, {@link Channel.markRead} and {@link Channel.markUnread}. Defaults to `true`.
    *
-   * `localUnreadCountEnabled` applies only while `enabled` is false: the channel keeps counting
-   * unread messages and {@link Channel.markReadLocally} resets the count, sending nothing to the
-   * server. The server does not restrict it. Defaults to `false`.
+   * `localUnreadCountEnabled` applies only while read events are off
+   * ({@link Channel.readEventsEnabled} is false): the channel keeps counting unread messages and
+   * {@link Channel.markReadLocally} resets the count, sending nothing to the server. The server does
+   * not restrict it. Defaults to `false`.
    */
   readEvents: { enabled: boolean; localUnreadCountEnabled: boolean };
   /** Threaded replies. Defaults to enabled. ANDed with the channel type's `replies`. */
@@ -1119,6 +1121,16 @@ export class Channel extends ChannelApi {
   }
 
   /**
+   * Whether read events are on. `config.readEvents.enabled` (the channel type's `read_events` and
+   * the client configuration) and the own `read-events` capability allow them. Unread messages are
+   * counted and marked read only while it is true, unless `readEvents.localUnreadCountEnabled` keeps
+   * a local count.
+   */
+  get readEventsEnabled(): boolean {
+    return this.config.readEvents.enabled && channelHasReadEvents(this);
+  }
+
+  /**
    * Marks read through `MessageDeliveryReporter`: uses the `markReadRequest` handler if set, marks
    * read locally when read events are off and `localUnreadCountEnabled` is set, and drops the
    * delivery candidate when a request went out. `markRead()` does none of this.
@@ -1142,9 +1154,9 @@ export class Channel extends ChannelApi {
   override async markRead(...args: Parameters<ChannelApi['markRead']>) {
     this._checkInitialized();
 
-    if (!this.configController.value.readEvents.enabled) {
+    if (!this.readEventsEnabled) {
       throw new Error(
-        "Read events are disabled — either by the channel type's `read_events` setting or by `channel.readEvents.enabled` in your configuration",
+        "Read events are disabled by the channel type's `read_events` setting, by `channel.readEvents.enabled` in your configuration, or because the user lacks the `read-events` capability",
       );
     }
 
@@ -1308,9 +1320,9 @@ export class Channel extends ChannelApi {
   override async markUnread(...args: Parameters<ChannelApi['markUnread']>) {
     this._checkInitialized();
 
-    if (!this.configController.value.readEvents.enabled) {
+    if (!this.readEventsEnabled) {
       throw new Error(
-        "Read events are disabled — either by the channel type's `read_events` setting or by `channel.readEvents.enabled` in your configuration",
+        "Read events are disabled by the channel type's `read_events` setting, by `channel.readEvents.enabled` in your configuration, or because the user lacks the `read-events` capability",
       );
     }
 
@@ -1318,8 +1330,8 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Resets the unread count without a backend call, for channels with read events disabled (e.g.
-   * livestreams) that set `readEvents.localUnreadCountEnabled`. Dispatches the client-only
+   * Resets the unread count without a backend call, for channels with read events off
+   * ({@link Channel.readEventsEnabled}, e.g. livestreams) that set `readEvents.localUnreadCountEnabled`. Dispatches the client-only
    * `message.read_locally` event, handled like `message.read` minus the delivery-report sync. With
    * offline support the reset is persisted.
    *
@@ -1587,7 +1599,7 @@ export class Channel extends ChannelApi {
       return false;
 
     // Not counted when read events are disabled, unless `readEvents.localUnreadCountEnabled` is set.
-    if (!this.config.readEvents.localUnreadCountEnabled && !channelHasReadEvents(this)) {
+    if (!this.config.readEvents.localUnreadCountEnabled && !this.readEventsEnabled) {
       return false;
     }
 
@@ -2485,9 +2497,9 @@ export class Channel extends ChannelApi {
           }
 
           if (countsAsOwnUnread) {
-            this.messagePaginator.setUnreadSnapshot({
-              unreadCount: channelState.unreadCount,
-            });
+            const { unreadCount } =
+              this.messagePaginator.unreadStateSnapshot.getLatestValue();
+            this.messagePaginator.setUnreadSnapshot({ unreadCount: unreadCount + 1 });
           }
 
           client.syncDeliveredCandidates([this]);
@@ -2509,6 +2521,15 @@ export class Channel extends ChannelApi {
             // Added on pin, removed on unpin (`matchesFilter`).
             this.pinnedMessagesPaginator.ingestItem(formattedMessage);
             this.pinnedMessagesPaginator.reflectQuotedMessageUpdate(formattedMessage);
+          } else {
+            const isListedAsPinned =
+              (this.pinnedMessagesPaginator.locateByItem(formattedMessage).interval
+                ?.currentIndex ?? -1) > -1;
+            const isPinChange = formattedMessage.pinned !== isListedAsPinned;
+            if (!isAppliedByThread || isPinChange) {
+              // Added on pin, removed on unpin (`matchesFilter`).
+              this.pinnedMessagesPaginator.ingestItem(formattedMessage);
+            }
           }
         }
         break;

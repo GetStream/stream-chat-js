@@ -26,7 +26,6 @@ import { OfflineDBSyncManager } from './offline_sync_manager';
 import { chatLoggerSystem } from '../logger';
 import { StateStore } from '@stream-io/state-store';
 import {
-  channelHasReadEvents,
   channelTracksReadLocally,
   formatMessage,
   isThreadOnlyReply,
@@ -402,7 +401,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
           // read-events-disabled channels with a local unread count (their `state.read[userId]`
           // can be absent).
           const tracksReadLocally = channelTracksReadLocally(channel);
-          if (channel && (channelHasReadEvents(channel) || tracksReadLocally)) {
+          if (channel && (channel.readEventsEnabled || tracksReadLocally)) {
             const ownReads = channel.state.read[userId];
             const unreadCount = channel.countUnread();
             const upsertReadsQueries = await this.upsertReads({
@@ -802,7 +801,7 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
       const userId = ownUser.id;
       const activeChannel = this.client.channelManager.get(cid);
       const tracksReadLocally = channelTracksReadLocally(activeChannel);
-      if (activeChannel && (channelHasReadEvents(activeChannel) || tracksReadLocally)) {
+      if (activeChannel && (activeChannel.readEventsEnabled || tracksReadLocally)) {
         const ownReads = activeChannel.state.read[userId];
 
         let unreadCount = 0;

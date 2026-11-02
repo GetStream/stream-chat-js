@@ -665,13 +665,13 @@ const CHANNEL_FIELDS: Record<keyof ChannelDeclarativeConfig, ConfigNode> = {
     fields: {
       enabled: {
         description:
-          'Allows marking the channel read or unread. The server must also allow it per channel type (`read_events`), and a server "no" wins.',
+          'Allows counting unread messages and marking the channel read or unread. The server must also allow it per channel type (`read_events`), and a server "no" wins. Without the own `read-events` capability read events stay off.',
         kind: 'value',
         type: 'boolean',
       },
       localUnreadCountEnabled: {
         description:
-          'Counts unread messages client-side when `enabled` is false, reset by `channel.markReadLocally()` instead of a request. Not subject to server authority.',
+          'Counts unread messages client-side while read events are off (`channel.readEventsEnabled` is false), reset by `channel.markReadLocally()` instead of a request. Has no effect while read events are on. Not subject to server authority.',
         kind: 'value',
         type: 'boolean',
       },

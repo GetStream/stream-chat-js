@@ -4688,7 +4688,7 @@ describe('BasePaginator', () => {
         expect(paginator._filterFieldToDataResolvers).toHaveLength(0);
       });
 
-      it('get expanded with addFilterResolvers', () => {
+      it('get added ahead of the existing ones with addFilterResolvers', () => {
         const paginator = new Paginator();
         paginator.addFilterResolvers(resolvers1);
 
@@ -4699,15 +4699,15 @@ describe('BasePaginator', () => {
 
         // @ts-expect-error accessing protected property
         expect(paginator._filterFieldToDataResolvers).toStrictEqual([
-          ...resolvers1,
           ...resolvers2,
+          ...resolvers1,
         ]);
 
         paginator.addFilterResolvers([]);
         // @ts-expect-error accessing protected property
         expect(paginator._filterFieldToDataResolvers).toStrictEqual([
-          ...resolvers1,
           ...resolvers2,
+          ...resolvers1,
         ]);
       });
     });

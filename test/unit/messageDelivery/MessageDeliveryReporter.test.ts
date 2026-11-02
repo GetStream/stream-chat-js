@@ -546,15 +546,15 @@ describe('MessageDeliveryReporter', () => {
       expect(localChannel.countUnread()).toBe(0);
     });
 
-    it('still requests when no local unread count was configured', async () => {
+    it('sends no request when no local unread count was configured', async () => {
       const markReadSpy = vi.spyOn(localChannel, 'markRead').mockResolvedValue({} as any);
 
-      await localChannel.markReadViaReporter();
+      await expect(localChannel.markReadViaReporter()).resolves.toBeNull();
 
-      expect(markReadSpy).toHaveBeenCalledTimes(1);
+      expect(markReadSpy).not.toHaveBeenCalled();
     });
 
-    it('leaves threads on the request path, since a thread read is not the channel read', async () => {
+    it('sends no thread request and leaves the local count alone, since a thread read is not the channel read', async () => {
       enableLocalUnreadCount();
       const markReadSpy = vi.spyOn(localChannel, 'markRead').mockResolvedValue({} as any);
       const markReadLocallySpy = vi.spyOn(localChannel, 'markReadLocally');
@@ -566,10 +566,10 @@ describe('MessageDeliveryReporter', () => {
         ),
       });
 
-      await client.messageDeliveryReporter.markRead(thread);
+      await expect(client.messageDeliveryReporter.markRead(thread)).resolves.toBeNull();
 
       expect(markReadLocallySpy).not.toHaveBeenCalled();
-      expect(markReadSpy).toHaveBeenCalledWith({ thread_id: thread.id });
+      expect(markReadSpy).not.toHaveBeenCalled();
     });
 
     it('lets a custom markReadRequest handler take over', async () => {

@@ -1006,8 +1006,15 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     this._filterFieldToDataResolvers = resolvers;
   }
 
+  /**
+   * Adds rules ahead of the existing ones. The first rule that matches a field resolves it, so an
+   * added rule takes precedence over a built-in one, including a catch-all.
+   */
   addFilterResolvers(resolvers: FieldToDataResolver<T>[]) {
-    this._filterFieldToDataResolvers.push(...resolvers);
+    this._filterFieldToDataResolvers = [
+      ...resolvers,
+      ...this._filterFieldToDataResolvers,
+    ];
   }
 
   getItemId(item: T): string {
