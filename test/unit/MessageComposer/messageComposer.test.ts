@@ -1551,16 +1551,16 @@ describe('MessageComposer', () => {
         expect(result?.localMessage.custom).toEqual({ priority: 'low', reviewed: true });
       });
 
-      it('keeps the edited message custom data the composer did not restore', async () => {
-        const { messageComposer } = setup();
-        messageComposer.setEditedMessage(editedMessageWithCustomData);
-        messageComposer.textComposer.setText('Edited text');
-        messageComposer.customDataManager.setMessageData({ priority: 'low' });
+      it('lets an edit remove a custom field of the edited message', async () => {
+        const { messageComposer } = setup({ composition: editedMessageWithCustomData });
+        messageComposer.customDataManager.state.partialNext({
+          message: { reviewed: true },
+        });
 
         const result = await messageComposer.compose();
 
-        expect(result?.message.custom).toEqual({ priority: 'low', reviewed: true });
-        expect(result?.localMessage.custom).toEqual({ priority: 'low', reviewed: true });
+        expect(result?.message.custom).toEqual({ reviewed: true });
+        expect(result?.localMessage.custom).toEqual({ reviewed: true });
       });
 
       it('sends no custom data with a new message that has none', async () => {

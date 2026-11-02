@@ -1,20 +1,10 @@
 import type { MiddlewareHandlerParams } from '../../../middleware';
 import { formatMessage, toUpdatedMessagePayload } from '../../../utils';
-import type { CustomMessageData } from '../../../custom_types';
-import type { LocalMessage } from '../../../types';
 import type { MessageComposer } from '../../messageComposer';
 import type {
   MessageComposerMiddlewareState,
   MessageCompositionMiddleware,
 } from './types';
-
-const keepEditedMessageCustom = <T extends { custom?: CustomMessageData }>(
-  composed: T,
-  editedMessage: LocalMessage | undefined,
-): T => {
-  if (!editedMessage?.custom) return composed;
-  return { ...composed, custom: { ...editedMessage.custom, ...composed.custom } };
-};
 
 export const createCompositionDataCleanupMiddleware = (
   composer: MessageComposer,
@@ -42,12 +32,12 @@ export const createCompositionDataCleanupMiddleware = (
         ...state,
         localMessage: formatMessage({
           ...composer.editedMessage,
-          ...keepEditedMessageCustom(state.localMessage, composer.editedMessage),
+          ...state.localMessage,
           ...common,
         }),
         message: {
           ...editedMessagePayloadToBeSent,
-          ...keepEditedMessageCustom(state.message, composer.editedMessage),
+          ...state.message,
           ...common,
         } as typeof state.message,
         sendOptions:
