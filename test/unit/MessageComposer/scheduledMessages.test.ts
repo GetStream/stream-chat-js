@@ -891,4 +891,86 @@ describe('MessageComposer scheduled messages', () => {
       expect(deleteDraftSpy).not.toHaveBeenCalled();
     });
   });
+
+  describe('scheduled message changed elsewhere', () => {
+    const scheduledEvent = (type: string, scheduledMessage: ScheduledMessageResponse) =>
+      ({ type, scheduled_message: scheduledMessage }) as Parameters<
+        StreamChat['dispatchEvent']
+      >[0];
+
+    it.each([
+      ['scheduled_message.sent', 'sent'],
+      ['scheduled_message.deleted', 'deleted'],
+      ['scheduled_message.failed', 'failed'],
+    ])('ends the edit and restores the draft on %s', async (type, reason) => {
+      const { client, composer } = setup();
+      const addWarningSpy = vi.spyOn(client.notifications, 'addWarning');
+      composer.registerSubscriptions();
+      composer.textComposer.setText('my draft');
+      const scheduledMessage = generateScheduledMessage();
+      await composer.editScheduledMessage(scheduledMessage);
+
+      client.dispatchEvent(scheduledEvent(type, scheduledMessage));
+
+      expect(composer.editedScheduledMessage).toBeUndefined();
+      expect(composer.textComposer.text).toBe('my draft');
+      expect(addWarningSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          options: {
+            type: 'validation:scheduled-message:composition:ended',
+            metadata: { reason },
+          },
+        }),
+      );
+    });
+
+    it('ignores events of other scheduled messages', async () => {
+      const { client, composer } = setup();
+      composer.registerSubscriptions();
+      const scheduledMessage = generateScheduledMessage();
+      await composer.editScheduledMessage(scheduledMessage);
+
+      client.dispatchEvent(
+        scheduledEvent(
+          'scheduled_message.sent',
+          generateScheduledMessage({ id: 'sm-2' }),
+        ),
+      );
+
+      expect(composer.editedScheduledMessage).toBe(scheduledMessage);
+    });
+
+    it('keeps the newest stored copy of the edited message', async () => {
+      const { client, composer } = setup();
+      composer.registerSubscriptions();
+      const scheduledMessage = generateScheduledMessage();
+      await composer.editScheduledMessage(scheduledMessage);
+      const newer = generateScheduledMessage({ updated_at: '2026-10-16T00:00:00.000Z' });
+      const older = generateScheduledMessage({ updated_at: '2026-10-14T00:00:00.000Z' });
+
+      client.dispatchEvent(scheduledEvent('scheduled_message.updated', newer));
+      client.dispatchEvent(scheduledEvent('scheduled_message.updated', older));
+
+      expect(composer.editedScheduledMessage).toBe(newer);
+      expect(composer.textComposer.text).toBe('see you tomorrow');
+    });
+
+    it('ends scheduling a failed message again only when it is deleted', async () => {
+      const { client, composer } = setup();
+      composer.registerSubscriptions();
+      const failedMessage = generateScheduledMessage({
+        failure_reason: 'channel_frozen',
+        status: 'failed',
+      });
+      await composer.rescheduleFailedMessage(failedMessage);
+
+      client.dispatchEvent(scheduledEvent('scheduled_message.failed', failedMessage));
+
+      expect(composer.failedScheduledMessage).toBe(failedMessage);
+
+      client.dispatchEvent(scheduledEvent('scheduled_message.deleted', failedMessage));
+
+      expect(composer.failedScheduledMessage).toBeUndefined();
+    });
+  });
 });

@@ -23,6 +23,7 @@ import type {
   CommandResponse,
   DraftMessage,
   DraftResponse,
+  Event,
   EventTypes,
   LocalMessage,
   LocalMessageBase,
@@ -31,7 +32,11 @@ import type {
   ScheduledMessageResponse,
   SendMessageOptions,
 } from '../types';
-import { ScheduledMessageStatus } from '../types';
+import {
+  ScheduledMessageCompositionEndReason,
+  ScheduledMessageEventType,
+  ScheduledMessageStatus,
+} from '../types';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 import type { StreamChat } from '../client';
 import type { CommandSendability, MessageComposerConfig } from './configuration/types';
@@ -60,6 +65,14 @@ import {
 } from './scheduledMessage';
 
 type UnregisterSubscriptions = Unsubscribe;
+
+const END_REASON_BY_SCHEDULED_MESSAGE_EVENT: Partial<
+  Record<EventTypes, ScheduledMessageCompositionEndReason>
+> = {
+  [ScheduledMessageEventType.Deleted]: ScheduledMessageCompositionEndReason.Deleted,
+  [ScheduledMessageEventType.Failed]: ScheduledMessageCompositionEndReason.Failed,
+  [ScheduledMessageEventType.Sent]: ScheduledMessageCompositionEndReason.Sent,
+};
 
 export type LastComposerChange = { draftUpdate: number | null; stateUpdate: number };
 
@@ -679,6 +692,7 @@ export class MessageComposer extends WithSubscriptions {
       this.addUnsubscribeFunction(this.subscribeMessageComposerSetupStateChange());
       this.addUnsubscribeFunction(this.subscribeMessageUpdated());
       this.addUnsubscribeFunction(this.subscribeMessageDeleted());
+      this.addUnsubscribeFunction(this.subscribeScheduledMessageEvents());
 
       this.addUnsubscribeFunction(this.subscribeTextComposerStateChanged());
       this.addUnsubscribeFunction(this.subscribeAttachmentManagerStateChanged());
@@ -718,6 +732,65 @@ export class MessageComposer extends WithSubscriptions {
     );
 
     return () => unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
+  };
+
+  private refreshEditedScheduledMessage = ({ scheduled_message: incoming }: Event) => {
+    const { editedScheduledMessage } = this;
+
+    if (!incoming || incoming.id !== editedScheduledMessage?.id) return;
+
+    const isOlder =
+      Date.parse(incoming.updated_at) < Date.parse(editedScheduledMessage.updated_at);
+
+    if (isOlder) return;
+
+    this.state.partialNext({ editedScheduledMessage: incoming });
+  };
+
+  private endWhenScheduledMessageEnds = ({
+    scheduled_message: incoming,
+    type,
+  }: Event) => {
+    const { failedScheduledMessage, scheduledMessageInComposer } = this;
+    const reason = END_REASON_BY_SCHEDULED_MESSAGE_EVENT[type];
+
+    if (!incoming || !reason || incoming.id !== scheduledMessageInComposer?.id) return;
+
+    const isFailedMessageStillThere =
+      !!failedScheduledMessage && reason !== ScheduledMessageCompositionEndReason.Deleted;
+
+    if (isFailedMessageStillThere) return;
+
+    this.endScheduledMessageComposition();
+    this.client.notifications.addWarning({
+      message: 'The scheduled message can no longer be edited',
+      origin: {
+        emitter: 'MessageComposer',
+        context: { composer: this },
+      },
+      options: {
+        type: 'validation:scheduled-message:composition:ended',
+        metadata: { reason },
+      },
+    });
+  };
+
+  private subscribeScheduledMessageEvents = () => {
+    const endEventTypes = Object.keys(
+      END_REASON_BY_SCHEDULED_MESSAGE_EVENT,
+    ) as EventTypes[];
+
+    const subscriptions = [
+      this.client.on(
+        ScheduledMessageEventType.Updated,
+        this.refreshEditedScheduledMessage,
+      ),
+      ...endEventTypes.map((eventType) =>
+        this.client.on(eventType, this.endWhenScheduledMessageEnds),
+      ),
+    ];
+
+    return () => subscriptions.forEach(({ unsubscribe }) => unsubscribe());
   };
 
   private subscribeMessageComposerSetupStateChange = () => {
