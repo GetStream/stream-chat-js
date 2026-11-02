@@ -335,6 +335,27 @@ describe('Channel isViewingLive (unread bump gating)', function () {
 		).to.be.equal(1);
 	});
 
+	it('adds new messages to the snapshot count after the channel was marked read on open', () => {
+		const { channel } = setupChannel();
+		// Opened with 14 unread and marked read: the read state is at 0, the snapshot keeps 14.
+		channel.state.read = {
+			[user.id]: {
+				last_read: convertDateToTimestamp(new Date(Date.UTC(2020, 0, 1))),
+				unread_messages: 0,
+				user,
+			},
+		};
+		channel.messagePaginator.setUnreadSnapshot({ unreadCount: 14 });
+
+		dispatchNewMessageFromOther(channel);
+		dispatchNewMessageFromOther(channel);
+
+		expect(channel.countUnread()).to.be.equal(2);
+		expect(
+			channel.messagePaginator.unreadStateSnapshot.getLatestValue().unreadCount,
+		).to.be.equal(16);
+	});
+
 	it('setViewingLive no-ops when the value is unchanged', () => {
 		const { channel } = setupChannel();
 		let emissions = 0;

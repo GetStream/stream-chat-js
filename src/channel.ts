@@ -2485,9 +2485,9 @@ export class Channel extends ChannelApi {
           }
 
           if (countsAsOwnUnread) {
-            this.messagePaginator.setUnreadSnapshot({
-              unreadCount: channelState.unreadCount,
-            });
+            const { unreadCount } =
+              this.messagePaginator.unreadStateSnapshot.getLatestValue();
+            this.messagePaginator.setUnreadSnapshot({ unreadCount: unreadCount + 1 });
           }
 
           client.syncDeliveredCandidates([this]);
