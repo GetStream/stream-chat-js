@@ -1906,6 +1906,30 @@ describe('Channel _handleChannelEvent', function () {
 				'pinned-existing',
 			);
 		});
+
+		it('adds a thread reply to the pinned list on pin and removes it on unpin', () => {
+			seedPinned([]);
+			const reply = generateMsg({
+				id: 'pinned-reply',
+				cid: channel.cid,
+				parent_id: 'parent-id',
+				pinned: true,
+				pinned_at: convertDateToTimestamp(
+					new Date('2020-01-01T00:00:00.001Z').toISOString(),
+				),
+			});
+
+			channel._handleChannelEvent({ type: 'message.updated', message: reply });
+			expect(pinnedIds()).to.eql(['pinned-reply']);
+			// The channel's own list still leaves thread-only replies to the thread.
+			expect(channel.messagePaginator.getItem(reply.id)).to.be.undefined;
+
+			channel._handleChannelEvent({
+				type: 'message.updated',
+				message: { ...reply, pinned: false, pinned_at: null },
+			});
+			expect(pinnedIds()).to.eql([]);
+		});
 	});
 
 	describe('message.updated', () => {

@@ -208,6 +208,28 @@ describe('publish amplification — one event, one publish per collection', () =
     expect(thread?.messagePaginator.getItem('seed')?.text).toBe('edited');
     recorder.stop();
   });
+
+  it('message.updated unpinning and pinning a reply the held thread applied updates the pinned list', () => {
+    const { channel, client, held, recorder } = linked();
+
+    client.dispatchEvent({
+      cid: channel.cid,
+      message: generateMsg({ ...held, id: 'seed', pinned: false, pinned_at: null }),
+      type: 'message.updated',
+    } as never);
+
+    expect(channel.pinnedMessagesPaginator.items?.map((m) => m.id)).not.toContain('seed');
+    expect(channel.messagePaginator.getItem('seed')?.pinned).toBe(false);
+
+    client.dispatchEvent({
+      cid: channel.cid,
+      message: generateMsg({ ...held, id: 'seed', pinned: true, pinned_at: 1 }),
+      type: 'message.updated',
+    } as never);
+
+    expect(channel.pinnedMessagesPaginator.items?.map((m) => m.id)).toContain('seed');
+    recorder.stop();
+  });
 });
 
 describe('publish amplification — baseline (unthrottled)', () => {

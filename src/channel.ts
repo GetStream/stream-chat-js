@@ -2509,6 +2509,15 @@ export class Channel extends ChannelApi {
             // Added on pin, removed on unpin (`matchesFilter`).
             this.pinnedMessagesPaginator.ingestItem(formattedMessage);
             this.pinnedMessagesPaginator.reflectQuotedMessageUpdate(formattedMessage);
+          } else {
+            const isListedAsPinned =
+              (this.pinnedMessagesPaginator.locateByItem(formattedMessage).interval
+                ?.currentIndex ?? -1) > -1;
+            const isPinChange = formattedMessage.pinned !== isListedAsPinned;
+            if (!isAppliedByThread || isPinChange) {
+              // Added on pin, removed on unpin (`matchesFilter`).
+              this.pinnedMessagesPaginator.ingestItem(formattedMessage);
+            }
           }
         }
         break;
