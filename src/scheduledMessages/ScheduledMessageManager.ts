@@ -71,6 +71,11 @@ const isThreadReply = (scheduledMessage: ScheduledMessageResponse, parentId: str
 const isInSnapshotScope = (scheduledMessage: ScheduledMessageResponse, cid?: string) =>
   !cid || scheduledMessage.cid === cid;
 
+type SnapshotScope = {
+  cid?: string;
+  requestedAtVersion?: number;
+};
+
 const createInitialState = (): ScheduledMessageManagerState => ({
   isDisabled: false,
   isLoaded: false,
@@ -83,6 +88,8 @@ const createInitialState = (): ScheduledMessageManagerState => ({
 export class ScheduledMessageManager extends WithSubscriptions {
   private client: StreamChat;
   private removedIds = new Set<string>();
+  private receivedVersion = 0;
+  private receivedVersions = new Map<string, number>();
 
   public state: StateStore<ScheduledMessageManagerState>;
 
@@ -106,16 +113,25 @@ export class ScheduledMessageManager extends WithSubscriptions {
     return isRemoved || isOlderThanCurrent;
   };
 
+  private isReceivedSince = (id: string, requestedAtVersion?: number) => {
+    if (requestedAtVersion === undefined) return false;
+
+    const receivedVersion = this.receivedVersions.get(id);
+
+    return receivedVersion !== undefined && receivedVersion > requestedAtVersion;
+  };
+
   private applySnapshot = (
     snapshotMessages: ScheduledMessageResponse[],
-    cid?: string,
+    { cid, requestedAtVersion }: SnapshotScope = {},
   ) => {
     if (!this.client._cacheEnabled()) return;
 
     const currentMessages = Array.from(this.scheduledMessages.values());
 
-    const isOutOfScope = (scheduledMessage: ScheduledMessageResponse) =>
-      !isInSnapshotScope(scheduledMessage, cid);
+    const isKept = (scheduledMessage: ScheduledMessageResponse) =>
+      !isInSnapshotScope(scheduledMessage, cid) ||
+      this.isReceivedSince(scheduledMessage.id, requestedAtVersion);
 
     const isActive = (scheduledMessage: ScheduledMessageResponse) =>
       !isFinished(scheduledMessage) && !this.removedIds.has(scheduledMessage.id);
@@ -126,7 +142,7 @@ export class ScheduledMessageManager extends WithSubscriptions {
       return current && isNewerThan(current, incoming) ? current : incoming;
     };
 
-    const keptMessages = currentMessages.filter(isOutOfScope);
+    const keptMessages = currentMessages.filter(isKept);
     const snapshotMessagesToStore = snapshotMessages.filter(isActive).map(pickNewest);
 
     const nextScheduledMessages: ScheduledMessageMap = new Map();
@@ -155,6 +171,8 @@ export class ScheduledMessageManager extends WithSubscriptions {
       if (this.isOutdated(scheduledMessage, nextScheduledMessages)) continue;
 
       nextScheduledMessages.set(id, scheduledMessage);
+      this.receivedVersion += 1;
+      this.receivedVersions.set(id, this.receivedVersion);
       hasChanges = true;
     }
 
@@ -252,6 +270,10 @@ export class ScheduledMessageManager extends WithSubscriptions {
     event: Event,
   ): event is ScheduledMessageEvent => !!event.scheduled_message;
 
+  public get version() {
+    return this.receivedVersion;
+  }
+
   public get scheduledMessages() {
     return this.state.getLatestValue().scheduledMessages;
   }
@@ -305,14 +327,16 @@ export class ScheduledMessageManager extends WithSubscriptions {
   public hydrateChannelState = (
     cid: string,
     scheduledMessages?: ScheduledMessageResponse[],
+    requestedAtVersion?: number,
   ) => {
     if (!Array.isArray(scheduledMessages)) return;
 
-    this.applySnapshot(scheduledMessages, cid);
+    this.applySnapshot(scheduledMessages, { cid, requestedAtVersion });
   };
 
   public resetState = () => {
     this.removedIds.clear();
+    this.receivedVersions.clear();
     this.state.next(createInitialState());
   };
 
@@ -330,11 +354,12 @@ export class ScheduledMessageManager extends WithSubscriptions {
 
   public load = (): Promise<QueryScheduledMessagesResponse> => {
     const options = { limit: SCHEDULED_MESSAGES_LOAD_LIMIT };
+    const requestedAtVersion = this.receivedVersion;
 
     const replaceStore = ({
       scheduled_messages = [],
     }: QueryScheduledMessagesResponse) => {
-      this.applySnapshot(scheduled_messages);
+      this.applySnapshot(scheduled_messages, { requestedAtVersion });
 
       return { isLoaded: true };
     };

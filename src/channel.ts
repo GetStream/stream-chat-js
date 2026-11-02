@@ -1582,6 +1582,8 @@ export class Channel {
     // Make sure we wait for the connect promise if there is a pending one
     await this.getClient().wsPromise;
 
+    const scheduledMessagesVersion = this.getClient().scheduledMessages.version;
+
     const createdById =
       options.created_by?.id ??
       options.created_by_id ??
@@ -1670,6 +1672,7 @@ export class Channel {
     this.getClient().scheduledMessages.hydrateChannelState(
       this.cid,
       state.scheduled_messages,
+      scheduledMessagesVersion,
     );
 
     this.messageComposer.initStateFromChannelResponse(state);
