@@ -40,9 +40,10 @@ describe('CustomDataManager', () => {
       expect(customDataManager.customMessageData).toEqual({});
     });
 
-    it('should initialize with message data if provided', () => {
+    it("should initialize with the message's custom data if provided", () => {
       const message: LocalMessage = {
-        custom_field: 'test-value',
+        custom: { custom_field: 'test-value' },
+        top_level_field: 'ignored',
         id: 'test-message-id',
         text: 'Test message',
         type: 'regular',
@@ -60,7 +61,20 @@ describe('CustomDataManager', () => {
         message,
       });
 
-      expect(managerWithMessage.customMessageData).toEqual({});
+      expect(managerWithMessage.customMessageData).toEqual({
+        custom_field: 'test-value',
+      });
+    });
+
+    it("should not share the message's custom object", () => {
+      const custom = { custom_field: 'test-value' };
+      const managerWithMessage = new CustomDataManager({
+        composer: mockComposer,
+        message: { id: 'draft-id', text: '', custom },
+      });
+
+      expect(managerWithMessage.customMessageData).toEqual(custom);
+      expect(managerWithMessage.customMessageData).not.toBe(custom);
     });
   });
 
@@ -75,9 +89,11 @@ describe('CustomDataManager', () => {
       expect(customDataManager.customMessageData).toEqual({});
     });
 
-    it('should reset state with message data if provided', () => {
+    it("should reset state to the message's custom data if provided", () => {
+      customDataManager.setMessageData({ stale: true });
       const message: LocalMessage = {
-        custom_field: 'test-value',
+        custom: { custom_field: 'test-value' },
+        top_level_field: 'ignored',
         id: 'test-message-id',
         text: 'Test message',
         type: 'regular',
@@ -91,7 +107,7 @@ describe('CustomDataManager', () => {
       };
 
       customDataManager.initState({ message });
-      expect(customDataManager.customMessageData).toEqual({});
+      expect(customDataManager.customMessageData).toEqual({ custom_field: 'test-value' });
     });
   });
 

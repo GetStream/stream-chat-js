@@ -1481,6 +1481,99 @@ describe('MessageComposer', () => {
       expect(result?.message).not.toHaveProperty('priority');
     });
 
+    describe('custom message data of a draft or an edited message', () => {
+      const draftWithCustomData: DraftResponse = {
+        channel_cid: 'messaging:test-channel-id',
+        message: {
+          id: 'draft-message-id',
+          text: 'Draft text',
+          custom: { priority: 'high' },
+        },
+        created_at: nowNs(),
+      };
+
+      const editedMessageWithCustomData: LocalMessage = {
+        id: 'edited-message-id',
+        type: 'regular',
+        text: 'Edited message',
+        attachments: [],
+        mentioned_users: [],
+        custom: { priority: 'high', reviewed: true },
+        created_at: nowNs(),
+        deleted_at: null,
+        pinned_at: null,
+        status: 'received',
+        updated_at: nowNs(),
+      };
+
+      it('restores the custom data of the draft the composer starts from', async () => {
+        const { messageComposer } = setup({ composition: draftWithCustomData });
+
+        expect(messageComposer.customDataManager.customMessageData).toEqual({
+          priority: 'high',
+        });
+        // The draft validation middleware discards a draft without a local change, which the
+        // composer's subscriptions record.
+        messageComposer.registerSubscriptions();
+        messageComposer.textComposer.setText('Changed draft text');
+        const composed = await messageComposer.composeDraft();
+        messageComposer.unregisterSubscriptions();
+        expect(composed?.draft.custom).toEqual({ priority: 'high' });
+      });
+
+      it('restores the custom data of a draft loaded into the composer', () => {
+        const { messageComposer } = setup();
+        messageComposer.customDataManager.setMessageData({ stale: true });
+
+        messageComposer.initState({ composition: draftWithCustomData });
+
+        expect(messageComposer.customDataManager.customMessageData).toEqual({
+          priority: 'high',
+        });
+      });
+
+      it('restores the custom data of the edited message', () => {
+        const { messageComposer } = setup({ composition: editedMessageWithCustomData });
+
+        expect(messageComposer.customDataManager.customMessageData).toEqual({
+          priority: 'high',
+          reviewed: true,
+        });
+      });
+
+      it('composes the restored custom data of the edited message with the composer data', async () => {
+        const { messageComposer } = setup({ composition: editedMessageWithCustomData });
+        messageComposer.customDataManager.setMessageData({ priority: 'low' });
+
+        const result = await messageComposer.compose();
+
+        expect(result?.message.custom).toEqual({ priority: 'low', reviewed: true });
+        expect(result?.localMessage.custom).toEqual({ priority: 'low', reviewed: true });
+      });
+
+      it('lets an edit remove a custom field of the edited message', async () => {
+        const { messageComposer } = setup({ composition: editedMessageWithCustomData });
+        messageComposer.customDataManager.state.partialNext({
+          message: { reviewed: true },
+        });
+
+        const result = await messageComposer.compose();
+
+        expect(result?.message.custom).toEqual({ reviewed: true });
+        expect(result?.localMessage.custom).toEqual({ reviewed: true });
+      });
+
+      it('sends no custom data with a new message that has none', async () => {
+        const { messageComposer } = setup();
+        messageComposer.textComposer.setText('Test message');
+
+        const result = await messageComposer.compose();
+
+        expect(result?.message).not.toHaveProperty('custom');
+        expect(result?.localMessage).not.toHaveProperty('custom');
+      });
+    });
+
     it('should compose message', async () => {
       const { messageComposer } = setup();
       messageComposer.textComposer.setText('Test message');
