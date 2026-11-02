@@ -206,6 +206,10 @@ export class MessageOperationStatePolicy {
     return unhandledKind(kind);
   }
 
+  /**
+   * Records a failed request. Resolves `true` when the error shows the request took effect on the
+   * server, so the operation succeeded after all.
+   */
   async failure<K extends OperationKind>({
     error,
     kind,
@@ -220,17 +224,18 @@ export class MessageOperationStatePolicy {
     messageId: string;
     optimistic?: OptimisticOutcome;
     options?: MessageOperationSpec[K]['options'];
-  }) {
+  }): Promise<boolean> {
     const parsed = parseError(error);
 
-    if (isAlreadyExistsError(error, parsed)) {
+    // The server has a message with this ID, so an earlier attempt landed and the send succeeded.
+    if ((kind === 'send' || kind === 'retry') && isAlreadyExistsError(error, parsed)) {
       const existing = this.ctx.get(messageId);
       if (existing?.status === 'sending') {
         const received: LocalMessage = { ...localMessage, status: 'received' };
         this.ctx.ingest(received);
         this.ctx.persist(received);
       }
-      return;
+      return true;
     }
 
     // A request waiting in the offline queue has not failed: the optimistic state stays.
@@ -241,11 +246,11 @@ export class MessageOperationStatePolicy {
 
     if (kind === 'delete') {
       if (!queued) this.revertDelete({ messageId, optimistic, options });
-      return;
+      return false;
     }
 
     if (kind === 'update') {
-      if (queued) return;
+      if (queued) return false;
       // The edit is kept and the failure recorded on it; `MessageOperations.retry` replays it as an
       // edit.
       const failed: LocalMessage = {
@@ -255,14 +260,14 @@ export class MessageOperationStatePolicy {
       };
       this.ctx.ingest(failed);
       this.ctx.persist(failed);
-      return;
+      return false;
     }
 
     if (kind === 'send' || kind === 'retry') {
       const failed: LocalMessage = { ...localMessage, error: parsed, status: 'failed' };
       this.ctx.ingest(failed);
       this.ctx.persist(failed);
-      return;
+      return false;
     }
 
     return unhandledKind(kind);

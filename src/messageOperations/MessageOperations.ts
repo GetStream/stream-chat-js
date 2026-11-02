@@ -201,7 +201,7 @@ export class MessageOperations {
         options: params.options,
       });
     } catch (e) {
-      await this.policy.failure({
+      const succeeded = await this.policy.failure({
         error: e,
         kind,
         localMessage: effective.localMessage,
@@ -209,7 +209,7 @@ export class MessageOperations {
         optimistic,
         options: params.options,
       });
-      throw e;
+      if (!succeeded) throw e;
     }
   }
 
