@@ -2292,7 +2292,10 @@ export class StreamChat {
       });
     }
 
+    const { skipInitialization } = stateOptions;
     for (const channelState of channels) {
+      if (skipInitialization?.includes(channelState.channel.id)) continue;
+
       this.scheduledMessages.hydrateChannelState(
         channelState.channel.cid,
         channelState.scheduled_messages,

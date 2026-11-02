@@ -731,6 +731,37 @@ describe('ScheduledMessageManager', () => {
       ...(scheduled_messages ? { scheduled_messages } : {}),
     });
 
+    it('leaves channels in skipInitialization alone when hydrating from queryChannels', async () => {
+      const { client, manager } = setup();
+      const stored = generateScheduledMessage({ cid: 'messaging:a' });
+      manager.upsertToState(stored);
+      vi.spyOn(client, 'post').mockResolvedValue({
+        channels: [channelResponse('a', [])],
+      });
+
+      await client.queryChannels(
+        {},
+        [],
+        { include_scheduled_messages: true },
+        { skipInitialization: ['a'] },
+      );
+
+      expect(manager.getFromState(stored.id)).toBe(stored);
+    });
+
+    it('does not update the store when a snapshot changes nothing', () => {
+      const { manager } = setup();
+      const stored = generateScheduledMessage();
+      manager.upsertToState(stored);
+      const listener = vi.fn();
+      manager.state.subscribe(listener);
+      listener.mockClear();
+
+      manager.hydrateChannelState(cid, [stored]);
+
+      expect(listener).not.toHaveBeenCalled();
+    });
+
     it('hydrates the store per channel from queryChannels', async () => {
       const { client, manager } = setup();
       const inA = generateScheduledMessage({ cid: 'messaging:a' });

@@ -79,6 +79,12 @@ type SnapshotScope = {
   requestedAtVersion?: number;
 };
 
+const haveSameEntries = (first: ScheduledMessageMap, second: ScheduledMessageMap) =>
+  first.size === second.size &&
+  Array.from(first).every(
+    ([id, scheduledMessage]) => second.get(id) === scheduledMessage,
+  );
+
 const createInitialState = (): ScheduledMessageManagerState => ({
   isDisabled: false,
   isLoaded: false,
@@ -153,6 +159,8 @@ export class ScheduledMessageManager extends WithSubscriptions {
     [...keptMessages, ...snapshotMessagesToStore].forEach((scheduledMessage) =>
       nextScheduledMessages.set(scheduledMessage.id, scheduledMessage),
     );
+
+    if (haveSameEntries(nextScheduledMessages, this.scheduledMessages)) return;
 
     this.state.partialNext({ scheduledMessages: nextScheduledMessages });
   };
