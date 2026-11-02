@@ -1,3 +1,9 @@
+## [10.0.0-rc.29](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.28...v10.0.0-rc.29) (2026-11-02)
+
+### Features
+
+* let integrators send a poll with the message by removing the poll-only middleware ([#1970](https://github.com/GetStream/stream-chat-js/issues/1970)) ([b515849](https://github.com/GetStream/stream-chat-js/commit/b51584960c204be4f051678d5845ba0a2436c6f4)), closes [GetStream/stream-chat-react#3365](https://github.com/GetStream/stream-chat-react/issues/3365)
+
 ## [10.0.0-rc.28](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.27...v10.0.0-rc.28) (2026-10-30)
 
 ### Bug Fixes
