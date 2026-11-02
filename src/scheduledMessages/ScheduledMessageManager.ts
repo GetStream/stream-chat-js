@@ -5,10 +5,14 @@ import {
   ScheduledMessageEventType,
   ScheduledMessageStatus,
 } from '../types';
-import { getScheduledMessageErrorReason } from './errors';
+import {
+  getScheduledMessageErrorReason,
+  isScheduledMessageNotFoundError,
+} from './errors';
 import type { StreamChat } from '../client';
 import type {
   Event,
+  EventHandler,
   EventTypes,
   QueryScheduledMessagesOptions,
   QueryScheduledMessagesResponse,
@@ -17,11 +21,9 @@ import type {
 } from '../types';
 import type {
   ScheduledMessageEvent,
-  ScheduledMessageHandler,
   ScheduledMessageManagerOptions,
   ScheduledMessageManagerState,
   ScheduledMessageMap,
-  ScheduledMessagePredicate,
   ScheduledMessageQueryResultHandler,
 } from './types';
 
@@ -66,6 +68,9 @@ const isThreadReply = (scheduledMessage: ScheduledMessageResponse, parentId: str
   return message.parent_id === parentId;
 };
 
+const isInSnapshotScope = (scheduledMessage: ScheduledMessageResponse, cid?: string) =>
+  !cid || scheduledMessage.cid === cid;
+
 const createInitialState = (): ScheduledMessageManagerState => ({
   isDisabled: false,
   isLoaded: false,
@@ -103,16 +108,18 @@ export class ScheduledMessageManager extends WithSubscriptions {
 
   private applySnapshot = (
     snapshotMessages: ScheduledMessageResponse[],
-    isInScope: ScheduledMessagePredicate,
+    cid?: string,
   ) => {
     if (!this.client._cacheEnabled()) return;
 
     const currentMessages = Array.from(this.scheduledMessages.values());
 
     const isOutOfScope = (scheduledMessage: ScheduledMessageResponse) =>
-      !isInScope(scheduledMessage);
+      !isInSnapshotScope(scheduledMessage, cid);
+
     const isActive = (scheduledMessage: ScheduledMessageResponse) =>
       !isFinished(scheduledMessage) && !this.removedIds.has(scheduledMessage.id);
+
     const pickNewest = (incoming: ScheduledMessageResponse) => {
       const current = this.scheduledMessages.get(incoming.id);
 
@@ -154,16 +161,19 @@ export class ScheduledMessageManager extends WithSubscriptions {
     if (hasChanges) this.state.partialNext({ scheduledMessages: nextScheduledMessages });
   };
 
-  private subscribeToEvents = (
-    eventTypes: EventTypes[],
-    handleScheduledMessage: ScheduledMessageHandler,
-  ) => {
-    const handleEvent = (event: Event) => {
-      if (!ScheduledMessageManager.isScheduledMessageEvent(event)) return;
+  private handleUpsertEvent = (event: Event) => {
+    if (!ScheduledMessageManager.isScheduledMessageEvent(event)) return;
 
-      handleScheduledMessage(event.scheduled_message);
-    };
+    this.upsertToState(event.scheduled_message);
+  };
 
+  private handleRemoveEvent = (event: Event) => {
+    if (!ScheduledMessageManager.isScheduledMessageEvent(event)) return;
+
+    this.removeFromState(event.scheduled_message.id);
+  };
+
+  private subscribeToEvents = (eventTypes: EventTypes[], handleEvent: EventHandler) => {
     const unsubscribeFunctions = eventTypes.map(
       (eventType) => this.client.on(eventType, handleEvent).unsubscribe,
     );
@@ -222,6 +232,19 @@ export class ScheduledMessageManager extends WithSubscriptions {
       throw error;
     } finally {
       this.state.partialNext({ isLoading: false });
+    }
+  };
+
+  private removeWhenNotFound = async <TResult>(
+    id: string,
+    request: () => Promise<TResult>,
+  ): Promise<TResult> => {
+    try {
+      return await request();
+    } catch (error) {
+      if (isScheduledMessageNotFoundError(error as Error)) this.removeFromState(id);
+
+      throw error;
     }
   };
 
@@ -285,10 +308,7 @@ export class ScheduledMessageManager extends WithSubscriptions {
   ) => {
     if (!Array.isArray(scheduledMessages)) return;
 
-    const isInChannel = (scheduledMessage: ScheduledMessageResponse) =>
-      scheduledMessage.cid === cid;
-
-    this.applySnapshot(scheduledMessages, isInChannel);
+    this.applySnapshot(scheduledMessages, cid);
   };
 
   public resetState = () => {
@@ -299,14 +319,11 @@ export class ScheduledMessageManager extends WithSubscriptions {
   public registerSubscriptions = () => {
     if (this.hasSubscriptions) return;
 
-    const removeScheduledMessage = ({ id }: ScheduledMessageResponse) =>
-      this.removeFromState(id);
-
     this.addUnsubscribeFunction(
-      this.subscribeToEvents(UPSERT_EVENT_TYPES, this.upsertToState),
+      this.subscribeToEvents(UPSERT_EVENT_TYPES, this.handleUpsertEvent),
     );
     this.addUnsubscribeFunction(
-      this.subscribeToEvents(REMOVE_EVENT_TYPES, removeScheduledMessage),
+      this.subscribeToEvents(REMOVE_EVENT_TYPES, this.handleRemoveEvent),
     );
     this.addUnsubscribeFunction(this.subscribeConnectionRecovered());
   };
@@ -317,7 +334,7 @@ export class ScheduledMessageManager extends WithSubscriptions {
     const replaceStore = ({
       scheduled_messages = [],
     }: QueryScheduledMessagesResponse) => {
-      this.applySnapshot(scheduled_messages, () => true);
+      this.applySnapshot(scheduled_messages);
 
       return { isLoaded: true };
     };
@@ -342,8 +359,10 @@ export class ScheduledMessageManager extends WithSubscriptions {
     id: string,
     options: UpdateScheduledMessageOptions,
   ) => {
-    const { scheduled_message: scheduledMessage } =
-      await this.client.updateScheduledMessage(id, options);
+    const { scheduled_message: scheduledMessage } = await this.removeWhenNotFound(
+      id,
+      () => this.client.updateScheduledMessage(id, options),
+    );
 
     this.upsertToState(scheduledMessage);
 
@@ -351,8 +370,10 @@ export class ScheduledMessageManager extends WithSubscriptions {
   };
 
   public deleteScheduledMessage = async (id: string) => {
-    const { scheduled_message: scheduledMessage } =
-      await this.client.deleteScheduledMessage(id);
+    const { scheduled_message: scheduledMessage } = await this.removeWhenNotFound(
+      id,
+      () => this.client.deleteScheduledMessage(id),
+    );
 
     this.removeFromState(id);
 
@@ -360,8 +381,10 @@ export class ScheduledMessageManager extends WithSubscriptions {
   };
 
   public sendScheduledMessageNow = async (id: string) => {
-    const { scheduled_message: scheduledMessage } =
-      await this.client.sendScheduledMessageNow(id);
+    const { scheduled_message: scheduledMessage } = await this.removeWhenNotFound(
+      id,
+      () => this.client.sendScheduledMessageNow(id),
+    );
 
     this.upsertToState(scheduledMessage);
 

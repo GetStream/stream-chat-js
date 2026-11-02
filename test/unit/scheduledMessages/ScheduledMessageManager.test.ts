@@ -498,6 +498,62 @@ describe('ScheduledMessageManager', () => {
 
       expect(manager.getFromState(sm.id)).toBe(due);
     });
+
+    describe('a scheduled message the server no longer has', () => {
+      const notFoundError = generateAPIError(16, undefined, 404);
+
+      it.each([
+        [
+          'updateScheduledMessage',
+          (manager: ScheduledMessageManager, id: string) =>
+            manager.updateScheduledMessage(id, { message: { text: 'late edit' } }),
+        ],
+        [
+          'deleteScheduledMessage',
+          (manager: ScheduledMessageManager, id: string) =>
+            manager.deleteScheduledMessage(id),
+        ],
+        [
+          'sendScheduledMessageNow',
+          (manager: ScheduledMessageManager, id: string) =>
+            manager.sendScheduledMessageNow(id),
+        ],
+      ] as const)('is removed from the store when %s gets a 404', async (method, act) => {
+        const { client, manager } = setup();
+        const sm = generateScheduledMessage();
+        manager.upsertToState(sm);
+        vi.spyOn(client, method).mockRejectedValue(notFoundError);
+
+        await expect(act(manager, sm.id)).rejects.toBe(notFoundError);
+
+        expect(manager.getFromState(sm.id)).toBeUndefined();
+      });
+
+      it('is not brought back by a late event', async () => {
+        const { client, manager } = setup();
+        manager.registerSubscriptions();
+        const sm = generateScheduledMessage();
+        manager.upsertToState(sm);
+        vi.spyOn(client, 'sendScheduledMessageNow').mockRejectedValue(notFoundError);
+
+        await expect(manager.sendScheduledMessageNow(sm.id)).rejects.toBe(notFoundError);
+        client.dispatchEvent(generateEvent('scheduled_message.updated', sm));
+
+        expect(manager.getFromState(sm.id)).toBeUndefined();
+      });
+
+      it('stays in the store when the request fails for another reason', async () => {
+        const { client, manager } = setup();
+        const sm = generateScheduledMessage();
+        manager.upsertToState(sm);
+        const sendingError = generateAPIError(121, 'scheduled_message_sending', 409);
+        vi.spyOn(client, 'sendScheduledMessageNow').mockRejectedValue(sendingError);
+
+        await expect(manager.sendScheduledMessageNow(sm.id)).rejects.toBe(sendingError);
+
+        expect(manager.getFromState(sm.id)).toBe(sm);
+      });
+    });
   });
 
   describe('ordering', () => {

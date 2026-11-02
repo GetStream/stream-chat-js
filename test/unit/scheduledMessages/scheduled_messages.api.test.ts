@@ -3,6 +3,7 @@ import {
   DEFAULT_SCHEDULED_MESSAGE_LIMITS,
   getScheduledMessageErrorReason,
   getScheduledMessageLimits,
+  isScheduledMessageNotFoundError,
   ScheduledMessageErrorReason,
   ScheduledMessageResponse,
   StreamChat,
@@ -285,6 +286,19 @@ describe('scheduled messages API', () => {
       expect(getScheduledMessageErrorReason(generateAPIError(4))).toBeUndefined();
       expect(getScheduledMessageErrorReason(new Error('network'))).toBeUndefined();
       expect(getScheduledMessageErrorReason(reasonOnPlainError)).toBeUndefined();
+    });
+  });
+
+  describe('isScheduledMessageNotFoundError', () => {
+    it('matches a 404 API error', () => {
+      expect(isScheduledMessageNotFoundError(generateAPIError(16, undefined, 404))).toBe(
+        true,
+      );
+    });
+
+    it('does not match other API errors or plain errors', () => {
+      expect(isScheduledMessageNotFoundError(generateAPIError(122))).toBe(false);
+      expect(isScheduledMessageNotFoundError(new Error('network'))).toBe(false);
     });
   });
 

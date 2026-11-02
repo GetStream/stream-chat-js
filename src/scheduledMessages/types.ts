@@ -26,14 +26,6 @@ export type ScheduledMessageEvent = Event & {
   scheduled_message: ScheduledMessageResponse;
 };
 
-export type ScheduledMessageHandler = (
-  scheduledMessage: ScheduledMessageResponse,
-) => void;
-
-export type ScheduledMessagePredicate = (
-  scheduledMessage: ScheduledMessageResponse,
-) => boolean;
-
 export type ScheduledMessageQueryResultHandler = (
   response: QueryScheduledMessagesResponse,
 ) => Partial<ScheduledMessageManagerState> | void;
