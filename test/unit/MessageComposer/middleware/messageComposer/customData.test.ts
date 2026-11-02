@@ -86,7 +86,7 @@ describe('Custom Data Middleware', () => {
       expect(result.state.localMessage).not.toHaveProperty('key');
     });
 
-    it('keeps the custom fields the message already has', async () => {
+    it('keeps the custom fields an earlier middleware set', async () => {
       composer.customDataManager.setMessageData({ key: 'value' });
       const middleware = createCustomDataCompositionMiddleware(composer);
       const state: MessageComposerMiddlewareState = {
@@ -160,7 +160,7 @@ describe('Custom Data Middleware', () => {
       expect(result.state.draft).not.toHaveProperty('key');
     });
 
-    it('keeps the custom fields the draft already has', async () => {
+    it('keeps the custom fields an earlier middleware set in the draft', async () => {
       composer.customDataManager.setMessageData({ key: 'value' });
       const middleware = createDraftCustomDataCompositionMiddleware(composer);
       const state: MessageDraftComposerMiddlewareValueState = {

@@ -20,11 +20,15 @@ export type CustomDataManagerOptions = {
   message?: DraftMessage | LocalMessage;
 };
 
-const initState = (options: CustomDataManagerOptions): CustomDataManagerState => {
-  if (!options)
-    return { message: {} as CustomMessageData, custom: {} as CustomMessageComposerData };
-  return { message: {} as CustomMessageData, custom: {} as CustomMessageComposerData };
-};
+const restoreCustomMessageData = (
+  message?: DraftMessage | LocalMessage,
+): CustomMessageData => ({ ...message?.custom }) as CustomMessageData;
+
+const initState = (options?: CustomDataManagerOptions): CustomDataManagerState => ({
+  message: restoreCustomMessageData(options?.message),
+  // Composer-only data that is never sent, so there is nothing to restore.
+  custom: {} as CustomMessageComposerData,
+});
 
 export class CustomDataManager {
   composer: MessageComposer;
