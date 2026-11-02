@@ -2,6 +2,8 @@ import { ErrorFromResponse, ScheduledMessageErrorReason } from '../types';
 import type { APIErrorResponse } from '../types';
 import type { ScheduledMessageAPIError } from './types';
 
+const NOT_FOUND_STATUS = 404;
+
 const REASON_BY_ERROR_CODE: Record<number, ScheduledMessageErrorReason> = {
   114: ScheduledMessageErrorReason.Disabled,
   115: ScheduledMessageErrorReason.TooSoon,
@@ -40,3 +42,6 @@ export const getScheduledMessageErrorReason = (
 
   return errorReason;
 };
+
+export const isScheduledMessageNotFoundError = (error: Error) =>
+  isErrorFromResponse(error) && error.status === NOT_FOUND_STATUS;
