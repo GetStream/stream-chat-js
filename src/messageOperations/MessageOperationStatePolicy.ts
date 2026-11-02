@@ -104,9 +104,13 @@ export class MessageOperationStatePolicy {
       // that never left the device stays `failed`.
       const isFailed = localMessage.status === 'failed';
       const editedAt = nowNs();
+      // The translations in `i18n` are of the text being replaced, and a UI renders them in place of
+      // `text`, so they would hide the edit. The server translates the new text in its response.
+      const textChanged = localMessage.text !== previous?.text;
       const applied: LocalMessage = {
         ...localMessage,
         error: isFailed ? localMessage.error : undefined,
+        ...(textChanged ? { i18n: undefined } : {}),
         updated_at: editedAt,
         // `message_text_updated_at` drives the "edited" indicator, so it appears immediately, but only
         // for a message the server has seen: a failed one never had a confirmed text update.
