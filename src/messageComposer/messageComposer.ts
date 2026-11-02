@@ -31,6 +31,7 @@ import type {
   ScheduledMessageResponse,
   SendMessageOptions,
 } from '../types';
+import { ScheduledMessageStatus } from '../types';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 import type { StreamChat } from '../client';
 import type { CommandSendability, MessageComposerConfig } from './configuration/types';
@@ -106,9 +107,15 @@ export type MessageComposerState = {
    */
   editedMessage: LocalMessage | null;
   editedScheduledMessage: ScheduledMessageResponse | null;
+  failedScheduledMessage: ScheduledMessageResponse | null;
 };
 
 export type ScheduledMessageEditRestore = () => void;
+
+export type ScheduledMessageCompositionState = Pick<
+  MessageComposerState,
+  'editedScheduledMessage' | 'failedScheduledMessage'
+>;
 
 export type MessageComposerComposeOptions = {
   sendOptions?: SendMessageOptions;
@@ -156,6 +163,7 @@ const initState = (
       showReplyInChannel: false,
       editedMessage: null,
       editedScheduledMessage: null,
+      failedScheduledMessage: null,
     };
   }
 
@@ -184,6 +192,7 @@ const initState = (
     showReplyInChannel: false,
     editedMessage,
     editedScheduledMessage: null,
+    failedScheduledMessage: null,
   };
 };
 
@@ -344,8 +353,20 @@ export class MessageComposer extends WithSubscriptions {
     return this.state.getLatestValue().editedScheduledMessage ?? undefined;
   }
 
+  public get failedScheduledMessage(): ScheduledMessageResponse | undefined {
+    return this.state.getLatestValue().failedScheduledMessage ?? undefined;
+  }
+
   private get hasEditInProgress() {
     return !!this.editedMessage || !!this.editedScheduledMessage;
+  }
+
+  private get scheduledMessageInComposer() {
+    return this.editedScheduledMessage ?? this.failedScheduledMessage;
+  }
+
+  private get pausesDrafts() {
+    return this.hasEditInProgress || !!this.failedScheduledMessage;
   }
 
   get contextType() {
@@ -736,7 +757,7 @@ export class MessageComposer extends WithSubscriptions {
         draft.channel_cid !== this.channel.cid
       )
         return;
-      if (this.editedScheduledMessage) {
+      if (this.scheduledMessageInComposer) {
         this.restoreAfterScheduledMessageEdit = () =>
           this.initState({ composition: draft });
         return;
@@ -755,7 +776,7 @@ export class MessageComposer extends WithSubscriptions {
       ) {
         return;
       }
-      if (this.editedScheduledMessage) {
+      if (this.scheduledMessageInComposer) {
         this.restoreAfterScheduledMessageEdit = this.clear;
         return;
       }
@@ -974,7 +995,7 @@ export class MessageComposer extends WithSubscriptions {
   createDraft = async () => {
     // server-side drafts are not stored on message level but on thread and channel level
     // therefore we don't need to create a draft if the message is edited
-    if (this.hasEditInProgress || !this.config.drafts.enabled) return;
+    if (this.pausesDrafts || !this.config.drafts.enabled) return;
     const composition = await this.composeDraft();
     if (!composition) return;
     const { draft } = composition;
@@ -1003,7 +1024,7 @@ export class MessageComposer extends WithSubscriptions {
   };
 
   deleteDraft = async () => {
-    if (this.hasEditInProgress || !this.config.drafts.enabled || !this.draftId) return;
+    if (this.pausesDrafts || !this.config.drafts.enabled || !this.draftId) return;
     this.state.partialNext({ draftId: null }); // todo: should we clear the whole state?
     const parentId = this.threadId ?? undefined;
     if (this.client.offlineDb) {
@@ -1024,8 +1045,7 @@ export class MessageComposer extends WithSubscriptions {
   };
 
   getDraft = async () => {
-    if (this.hasEditInProgress || !this.config.drafts.enabled || !this.client.userID)
-      return;
+    if (this.pausesDrafts || !this.config.drafts.enabled || !this.client.userID) return;
 
     const draftFromOfflineDB = await this.client.offlineDb?.getDraft({
       cid: this.channel.cid,
@@ -1148,19 +1168,83 @@ export class MessageComposer extends WithSubscriptions {
     });
   };
 
-  private endScheduledMessageEdit = () => {
+  private endScheduledMessageComposition = () => {
     const restore = this.restoreAfterScheduledMessageEdit ?? this.clear;
 
     this.restoreAfterScheduledMessageEdit = null;
-    this.state.partialNext({ editedScheduledMessage: null });
+    this.state.partialNext({
+      editedScheduledMessage: null,
+      failedScheduledMessage: null,
+    });
 
     restore();
+  };
+
+  private saveCompositionBeforeScheduledMessage = () => {
+    if (this.scheduledMessageInComposer) return;
+
+    const snapshot = this.getSnapshot();
+    const state = this.state.getLatestValue();
+
+    this.restoreAfterScheduledMessageEdit = () => {
+      this.restoreSnapshot(snapshot);
+      this.state.next({
+        ...state,
+        editedScheduledMessage: null,
+        failedScheduledMessage: null,
+      });
+    };
+  };
+
+  private fillFromScheduledMessage = async (
+    scheduledMessage: ScheduledMessageResponse,
+    scheduledMessageState: ScheduledMessageCompositionState,
+  ) => {
+    const { message } = scheduledMessage;
+    const {
+      mentioned_users: mentionedUserIds,
+      parent_id: parentId,
+      quoted_message_id: quotedMessageId,
+      show_in_channel: showReplyInChannel = false,
+    } = message;
+
+    const [mentionedUsers, quotedMessage] = await Promise.all([
+      resolveMentionedUsers(this.client, mentionedUserIds),
+      resolveQuotedMessage(this.channel, quotedMessageId, parentId),
+    ]);
+
+    this.saveCompositionBeforeScheduledMessage();
+
+    this.state.partialNext(scheduledMessageState);
+    this.initState({ composition: toScheduledMessageComposition(scheduledMessage) });
+    this.textComposer.setMentionedUsers(mentionedUsers);
+    this.state.partialNext({
+      ...scheduledMessageState,
+      draftId: null,
+      quotedMessage,
+      showReplyInChannel,
+    });
+  };
+
+  private removeFailedScheduledMessage = (
+    failedScheduledMessage: ScheduledMessageResponse,
+  ) => {
+    this.client.scheduledMessages
+      .deleteScheduledMessage(failedScheduledMessage.id)
+      .catch((error) =>
+        this.client.logger('error', 'messageComposer:removeFailedScheduledMessage', {
+          tags: ['messageComposer', 'scheduledMessages'],
+          error,
+        }),
+      );
   };
 
   public schedule = async (
     scheduledAt: Date,
   ): Promise<ScheduledMessageResponse | undefined> => {
     if (this.hasEditInProgress) return;
+
+    const { failedScheduledMessage } = this;
 
     await this.waitForUploadsInProgress();
 
@@ -1178,7 +1262,12 @@ export class MessageComposer extends WithSubscriptions {
         sendOptions,
       );
 
-      this.clear();
+      if (failedScheduledMessage) {
+        this.endScheduledMessageComposition();
+        this.removeFailedScheduledMessage(failedScheduledMessage);
+      } else {
+        this.clear();
+      }
 
       return scheduledMessage;
     } catch (error) {
@@ -1191,39 +1280,25 @@ export class MessageComposer extends WithSubscriptions {
     }
   };
 
-  public editScheduledMessage = async (scheduledMessage: ScheduledMessageResponse) => {
-    const { message } = scheduledMessage;
-    const {
-      mentioned_users: mentionedUserIds,
-      parent_id: parentId,
-      quoted_message_id: quotedMessageId,
-      show_in_channel: showReplyInChannel = false,
-    } = message;
-
-    const [mentionedUsers, quotedMessage] = await Promise.all([
-      resolveMentionedUsers(this.client, mentionedUserIds),
-      resolveQuotedMessage(this.channel, quotedMessageId, parentId),
-    ]);
-
-    if (!this.editedScheduledMessage) {
-      const snapshot = this.getSnapshot();
-      const state = this.state.getLatestValue();
-
-      this.restoreAfterScheduledMessageEdit = () => {
-        this.restoreSnapshot(snapshot);
-        this.state.next({ ...state, editedScheduledMessage: null });
-      };
-    }
-
-    this.state.partialNext({ editedScheduledMessage: scheduledMessage });
-    this.initState({ composition: toScheduledMessageComposition(scheduledMessage) });
-    this.textComposer.setMentionedUsers(mentionedUsers);
-    this.state.partialNext({
-      draftId: null,
+  public editScheduledMessage = (scheduledMessage: ScheduledMessageResponse) =>
+    this.fillFromScheduledMessage(scheduledMessage, {
       editedScheduledMessage: scheduledMessage,
-      quotedMessage,
-      showReplyInChannel,
+      failedScheduledMessage: null,
     });
+
+  public rescheduleFailedMessage = async (failedMessage: ScheduledMessageResponse) => {
+    if (failedMessage.status !== ScheduledMessageStatus.Failed) return;
+
+    await this.fillFromScheduledMessage(failedMessage, {
+      editedScheduledMessage: null,
+      failedScheduledMessage: failedMessage,
+    });
+  };
+
+  public cancelRescheduleFailedMessage = () => {
+    if (!this.failedScheduledMessage) return;
+
+    this.endScheduledMessageComposition();
   };
 
   public updateScheduledMessage = async (): Promise<
@@ -1247,7 +1322,7 @@ export class MessageComposer extends WithSubscriptions {
         { message },
       );
 
-      this.endScheduledMessageEdit();
+      this.endScheduledMessageComposition();
 
       return scheduledMessage;
     } catch (error) {
@@ -1263,6 +1338,6 @@ export class MessageComposer extends WithSubscriptions {
   public cancelEditScheduledMessage = () => {
     if (!this.editedScheduledMessage) return;
 
-    this.endScheduledMessageEdit();
+    this.endScheduledMessageComposition();
   };
 }
