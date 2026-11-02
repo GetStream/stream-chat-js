@@ -130,6 +130,11 @@ export type ScheduledMessageCompositionState = Pick<
   'editedScheduledMessage' | 'failedScheduledMessage'
 >;
 
+export type MessageComposerInitStateOptions = {
+  composition?: DraftResponse | MessageResponse | LocalMessage;
+  stateOverrides?: Partial<MessageComposerState>;
+};
+
 export type MessageComposerComposeOptions = {
   sendOptions?: SendMessageOptions;
 };
@@ -579,9 +584,7 @@ export class MessageComposer extends WithSubscriptions {
     this.state.partialNext({ id: MessageComposer.generateId() });
   };
 
-  initState = ({
-    composition,
-  }: { composition?: DraftResponse | MessageResponse | LocalMessage } = {}) => {
+  initState = ({ composition, stateOverrides }: MessageComposerInitStateOptions = {}) => {
     this.clearSnapshots();
     this.editingAuditState.partialNext(this.initEditingAuditState(composition));
 
@@ -597,7 +600,7 @@ export class MessageComposer extends WithSubscriptions {
     this.textComposer.initState({ message });
     this.pollComposer.initState();
     this.customDataManager.initState({ message });
-    this.state.next(initState(composition));
+    this.state.next({ ...initState(composition), ...stateOverrides });
   };
 
   initStateFromChannelResponse = (channelApiResponse: ChannelAPIResponse) => {
@@ -1296,15 +1299,16 @@ export class MessageComposer extends WithSubscriptions {
 
     this.saveCompositionBeforeScheduledMessage();
 
-    this.state.partialNext(scheduledMessageState);
-    this.initState({ composition: toScheduledMessageComposition(scheduledMessage) });
-    this.textComposer.setMentionedUsers(mentionedUsers);
-    this.state.partialNext({
-      ...scheduledMessageState,
-      draftId: null,
-      quotedMessage,
-      showReplyInChannel,
+    this.initState({
+      composition: toScheduledMessageComposition(scheduledMessage),
+      stateOverrides: {
+        ...scheduledMessageState,
+        draftId: null,
+        quotedMessage,
+        showReplyInChannel,
+      },
     });
+    this.textComposer.setMentionedUsers(mentionedUsers);
   };
 
   private removeFailedScheduledMessage = (

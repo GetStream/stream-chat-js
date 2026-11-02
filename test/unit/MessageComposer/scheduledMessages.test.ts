@@ -630,10 +630,17 @@ describe('MessageComposer scheduled messages', () => {
 
       await composer.editScheduledMessage(scheduledMessage);
 
+      expect(initStateSpy).toHaveBeenCalledTimes(1);
       expect(initStateSpy).toHaveBeenCalledWith({
         composition: expect.objectContaining({
           channel_cid: cid,
           message: expect.objectContaining({ id: 'sm-1', text: 'see you tomorrow' }),
+        }),
+        stateOverrides: expect.objectContaining({
+          draftId: null,
+          editedScheduledMessage: scheduledMessage,
+          failedScheduledMessage: null,
+          showReplyInChannel: true,
         }),
       });
       expect(composer.draftId).toBeNull();
