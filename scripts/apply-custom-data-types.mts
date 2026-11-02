@@ -29,6 +29,7 @@ const CUSTOM_DATA_MAPPING: Record<string, string> = {
   ChannelInput: 'CustomChannelData',
   ChannelInputRequest: 'CustomChannelData',
   ChannelMetadata: 'CustomChannelData',
+  ChannelPartialUpdateResponse: 'CustomChannelData',
   ChannelResponse: 'CustomChannelData',
 
   // CustomMemberData
@@ -151,6 +152,7 @@ const CUSTOM_DATA_MAPPING: Record<string, string> = {
   TypingStartEvent: 'CustomEventData',
   TypingStopEvent: 'CustomEventData',
   UserBannedEvent: 'CustomEventData',
+  UserClaimedEvent: 'CustomEventData',
   UserDeactivatedEvent: 'CustomEventData',
   UserDeletedEvent: 'CustomEventData',
   UserGroupCreatedEvent: 'CustomEventData',
