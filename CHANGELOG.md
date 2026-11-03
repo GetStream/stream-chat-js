@@ -1,3 +1,17 @@
+## [10.0.0-rc.31](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.30...v10.0.0-rc.31) (2026-11-03)
+
+### ⚠ BREAKING CHANGES
+
+* the message composer installs the command middlewares by default: createActiveCommandGuardMiddleware and createCommandStringExtractionMiddleware in the text composer chain, createCommandInjectionMiddleware in the composition chain and createDraftCommandInjectionMiddleware in the draft composition chain. Typing `/giphy cats` activates giphy and leaves `cats` in the text, and a command picked with `textComposer.setCommand()` is sent with its name. Delete your own installs of these middlewares. A UI without a command chip removes all four by id: `stream-io/text-composer/active-command-guard` and `stream-io/text-composer/command-string-extraction` from `textComposer.middlewareExecutor`, `stream-io/message-composer-middleware/command-string-injection` from `compositionMiddlewareExecutor` and `stream-io/message-composer-middleware/draft-command-string-injection` from `draftCompositionMiddlewareExecutor`. See ai-docs/v10-breaking-changes.md#composer-command-middlewares-default.
+
+### Bug Fixes
+
+* existing messages retry guards ([#1982](https://github.com/GetStream/stream-chat-js/issues/1982)) ([c7c971f](https://github.com/GetStream/stream-chat-js/commit/c7c971fd6d4c2403ed77d6e2a3bde1e8ab9b3c85))
+* install the command middlewares in the composer by default ([#1985](https://github.com/GetStream/stream-chat-js/issues/1985)) ([1dc25e2](https://github.com/GetStream/stream-chat-js/commit/1dc25e21dde50c06aff38e3ffb6ee5f1f1a7199d))
+* let an edit clear all custom fields ([#1983](https://github.com/GetStream/stream-chat-js/issues/1983)) ([9437b09](https://github.com/GetStream/stream-chat-js/commit/9437b093d1702afaf0a14161ec4855b81c0a9cf4))
+* **pagination:** keep loaded items when filterQueryResults empties a later page ([#1986](https://github.com/GetStream/stream-chat-js/issues/1986)) ([78a32c3](https://github.com/GetStream/stream-chat-js/commit/78a32c3d1240fcccf708d90dc76dc74efa54d299))
+* **search:** match message text by word prefix in MessageSearchSource ([#1987](https://github.com/GetStream/stream-chat-js/issues/1987)) ([ef58ef5](https://github.com/GetStream/stream-chat-js/commit/ef58ef56fdd63c76077431c360fa13e5d42502cd))
+
 ## [10.0.0-rc.30](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.29...v10.0.0-rc.30) (2026-11-02)
 
 ### Bug Fixes
