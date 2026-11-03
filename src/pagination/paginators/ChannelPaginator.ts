@@ -651,10 +651,7 @@ export class ChannelPaginator extends BasePaginator<Channel, ChannelQueryShape> 
         }
         return this.client.hydrateChannels(
           cachedQuery.channels,
-          {
-            offlineMode: true,
-            skipInitialization: [], // an empty array clears existing channel messages (no duplicates)
-          },
+          { offlineMode: true },
           request,
         );
       }

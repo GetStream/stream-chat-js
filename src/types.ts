@@ -129,7 +129,6 @@ export type ChannelOptions = Omit<QueryChannelsRequest, 'filter_conditions' | 's
 
 export type ChannelStateOptions = {
   offlineMode?: boolean;
-  skipInitialization?: string[];
   skipHydration?: boolean;
   /**
    * Makes `queryChannelsAndHydrate()` return the full query response (with hydrated `channels`,

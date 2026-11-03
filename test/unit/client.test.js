@@ -1789,7 +1789,7 @@ describe('StreamChat.queryChannels', async () => {
 							messages: range(191, 200),
 						},
 					],
-					{ offlineMode: true, skipInitialization: [] },
+					{ offlineMode: true },
 					{ message_limit: 10 },
 				);
 				expect(channel.messagePaginator.hasMoreTail).toBe(true);
@@ -1804,6 +1804,28 @@ describe('StreamChat.queryChannels', async () => {
 				// one page of the channel's own page size, with more left behind it
 				expect(shownIds(channel)).toEqual(ids(range(91, 200)));
 				expect(channel.messagePaginator.hasMoreTail).toBe(true);
+			});
+		});
+
+		describe('a cached page over loaded messages', () => {
+			it('merges with the loaded messages without duplicating them', async () => {
+				const client = await getClientWithUser();
+				const channel = await hydrate(client, range(1, 25));
+
+				// as ChannelPaginator.preloadFirstPageFromOfflineDb does for a channel already loaded
+				client.hydrateChannels(
+					[
+						{
+							...mockChannelQueryResponse,
+							channel: { ...mockChannelQueryResponse.channel, last_message_at: at(35) },
+							messages: range(11, 35),
+						},
+					],
+					{ offlineMode: true },
+					{ message_limit: 25 },
+				);
+
+				expect(shownIds(channel)).toEqual(ids(range(1, 35)));
 			});
 		});
 
@@ -1975,6 +1997,33 @@ describe('StreamChat.queryChannels', async () => {
 
 			expect(channel.messagePaginator.anchoredHeadItem?.id).toBe('m9');
 			expect(channel.messagePaginator.items.map((m) => m.id)).toEqual(['m8', 'm9']);
+		});
+
+		it('applies the members, read state and pinned messages to an on-screen channel', async () => {
+			const client = await getClientWithUser();
+			const channel = await loadJumpedAwayChannel(client);
+			channel.activate();
+
+			const other = { id: 'other-user' };
+			const stub = sinon.stub(client, 'queryChannels').resolves({
+				channels: [
+					{
+						...mockChannelQueryResponse,
+						channel: { ...mockChannelQueryResponse.channel, last_message_at: at(9) },
+						members: [{ user: other, user_id: other.id }],
+						messages: [message('m8', 8), message('m9', 9)],
+						pinned_messages: [{ ...message('m5', 5), pinned: true, pinned_at: at(7) }],
+						read: [{ user: other, last_read: at(9), unread_messages: 3 }],
+					},
+				],
+			});
+			await client.queryChannelsAndHydrate({ message_limit: 2 });
+			stub.restore();
+
+			expect(channel.messagePaginator.anchoredHeadItem?.id).toBe('m6');
+			expect(channel.state.members[other.id]).toBeDefined();
+			expect(channel.state.read[other.id].unread_messages).toBe(3);
+			expect(channel.pinnedMessagesPaginator.items?.map((m) => m.id)).toEqual(['m5']);
 		});
 
 		it('leaves an on-screen channel to its own reload', async () => {
