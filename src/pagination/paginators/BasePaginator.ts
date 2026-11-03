@@ -3254,9 +3254,14 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
     if (interval && updateState) {
       this.setActiveInterval(interval, { updateState: false });
       stateUpdate.items = this.intervalToItems(interval);
-    } else if (updateState && !items.length && (keepPreviousItems || !isFirstPage)) {
-      // An empty page must not wipe the loaded items on a `keepPreviousItems` refresh or an
-      // incremental query (`ingestPage` returns null for it). A genuine reset still blanks.
+    } else if (
+      updateState &&
+      !filteredItems.length &&
+      (keepPreviousItems || !isFirstPage)
+    ) {
+      // A page left empty, by the server or by `filterQueryResults`, must not wipe the loaded items
+      // on a `keepPreviousItems` refresh or an incremental query (`ingestPage` returns null for it).
+      // A genuine reset still blanks.
       stateUpdate.items = this.items;
     }
 
