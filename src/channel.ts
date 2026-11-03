@@ -591,24 +591,7 @@ export class Channel extends ChannelApi {
     requestOptions?: StreamRequestOptions,
   ) {
     const data = await this.updateChannelPartial(update, requestOptions);
-
-    const channel = data.channel;
-    const currentCapabilities = this.data?.own_capabilities ?? [];
-    const newCapabilities = channel?.own_capabilities;
-
-    const capabilitiesChanged =
-      newCapabilities &&
-      [...currentCapabilities].sort().join() !== [...newCapabilities].sort().join();
-
-    this.data = channel;
-    if (capabilitiesChanged) {
-      this.getClient().dispatchEvent({
-        type: 'capabilities.changed',
-        cid: this.cid,
-        own_capabilities: newCapabilities,
-      });
-    }
-
+    this.data = data.channel;
     return data;
   }
 
@@ -1205,14 +1188,19 @@ export class Channel extends ChannelApi {
    * Reads `state.data`. Assigning publishes `data`, `memberCount` and `ownCapabilities` in one update.
    * If the object omits `member_count` or `own_capabilities`, the last known values are carried onto
    * a copy (the assigned object is not changed). Editing `channel.data.x` in place does not reach
-   * the state.
+   * the state. `ownCapabilities` keeps its array while the capabilities stay the same (in any
+   * order), so a subscriber to it is notified only when they change.
    */
   get data(): Partial<ChannelResponse> | undefined {
     return this.state.getLatestValue().data;
   }
 
   set data(next: Partial<ChannelResponse> | undefined) {
-    const previous = this.state.getLatestValue().data;
+    const {
+      data: previous,
+      memberCount: previousMemberCount,
+      ownCapabilities: previousOwnCapabilities,
+    } = this.state.getLatestValue();
     const carriedMemberCount =
       typeof next?.member_count !== 'number' && typeof previous?.member_count === 'number'
         ? previous.member_count
@@ -1233,11 +1221,16 @@ export class Channel extends ChannelApi {
         : next;
 
     const memberCount = data?.member_count ?? carriedMemberCount;
-    const ownCapabilities = data?.own_capabilities ?? carriedCapabilities;
+    const ownCapabilities = data?.own_capabilities ?? carriedCapabilities ?? [];
+    const toKey = (capabilities: readonly string[]) => [...capabilities].sort().join();
+    const haveSameOwnCapabilities =
+      toKey(previousOwnCapabilities) === toKey(ownCapabilities);
     this.state.partialNext({
       data,
-      memberCount: memberCount ?? this.state.getLatestValue().memberCount,
-      ownCapabilities: ownCapabilities ? [...ownCapabilities] : [],
+      memberCount: memberCount ?? previousMemberCount,
+      ownCapabilities: haveSameOwnCapabilities
+        ? previousOwnCapabilities
+        : [...ownCapabilities],
     });
   }
 
@@ -1926,26 +1919,9 @@ export class Channel extends ChannelApi {
 
     this.messageComposer.initStateFromChannelResponse(state);
 
-    const areCapabilitiesChanged =
-      [...(channel.own_capabilities || [])].sort().join() !==
-      [
-        ...(this.data && Array.isArray(this.data?.own_capabilities)
-          ? this.data.own_capabilities
-          : []),
-      ]
-        .sort()
-        .join();
     this.data = channel;
     // One update before the events below: the offline DB reads it when handling them.
     this.state.partialNext({ initialized: true, offlineMode: false });
-
-    if (areCapabilitiesChanged) {
-      this.getClient().dispatchEvent({
-        type: 'capabilities.changed',
-        cid: this.cid,
-        own_capabilities: channel.own_capabilities ?? [],
-      });
-    }
 
     this.getClient().dispatchEvent({
       type: 'channels.queried',

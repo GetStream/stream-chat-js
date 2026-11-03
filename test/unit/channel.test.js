@@ -3397,38 +3397,6 @@ describe('Channel _handleChannelEvent', function () {
 			expect(channel.messagePaginator.anchoredHeadItems.length).to.be.eq(1);
 			expect(channel.state.watcher_count).to.be.eq(5);
 		});
-
-		// capabilities.changed is emitted from the channel.updated / query path.
-		it('should dispatch "capabilities.changed" event', async () => {
-			const response = mockChannelQueryResponse;
-			channel.data.own_capabilities = response.channel.own_capabilities.slice(0, 1);
-			const sendRequestStub = sinon
-				.stub(client.api, 'sendRequest')
-				.resolves({ ...response, metadata: {} });
-			const spy = sinon.spy();
-			channel.on('capabilities.changed', spy);
-
-			await channel.query();
-
-			expect(spy.calledOnce).to.be.true;
-
-			const arg = spy.firstCall.args[0];
-			// We don't care about received_at in the assertion
-			delete arg.received_at;
-			sinon.assert.match(arg, {
-				type: 'capabilities.changed',
-				cid: channel.cid,
-				own_capabilities: response.channel.own_capabilities,
-			});
-
-			channel.data.own_capabilities = response.channel.own_capabilities;
-			sendRequestStub.resolves({ ...response, metadata: {} });
-			spy.resetHistory();
-
-			await channel.query();
-
-			expect(spy.notCalled).to.be.true;
-		});
 	});
 
 	describe('user.banned / user.unbanned', () => {
@@ -8155,5 +8123,206 @@ describe('Channel member, filter-tag and upload-delete requests', () => {
 
 		expect(deleteImage).toHaveBeenCalledWith({ url: 'https://cdn/image.png' }, undefined);
 		expect(deleteFile).toHaveBeenCalledWith({ url: 'https://cdn/file.pdf' }, undefined);
+	});
+});
+
+describe('Channel.data ownCapabilities', () => {
+	let client;
+	let channel;
+
+	const ownCapabilities = () => channel.state.getLatestValue().ownCapabilities;
+
+	const listenToOwnCapabilities = () => {
+		const spy = vi.fn();
+		channel.state.subscribeWithSelector(
+			({ ownCapabilities }) => ({ ownCapabilities }),
+			spy,
+		);
+		// subscribeWithSelector reports the current value once on subscribe
+		spy.mockClear();
+		return spy;
+	};
+
+	const queryResponseWith = (channelFields) => ({
+		...mockChannelQueryResponse,
+		channel: { ...mockChannelQueryResponse.channel, ...channelFields },
+		metadata: {},
+	});
+
+	beforeEach(() => {
+		client = new StreamChat('apiKey');
+		client.user = { id: 'user' };
+		channel = client.channelManager.ensure({ type: 'messaging', id: 'id' });
+		channel.data = { ...channel.data, own_capabilities: ['read-events'] };
+	});
+
+	it('publishes the capabilities channel.updated brings', () => {
+		const spy = listenToOwnCapabilities();
+
+		channel._handleChannelEvent({
+			type: 'channel.updated',
+			channel: { own_capabilities: ['read-events', 'send-message'] },
+		});
+
+		expect(spy).toHaveBeenCalledTimes(1);
+		expect(ownCapabilities()).toEqual(['read-events', 'send-message']);
+	});
+
+	it('keeps the array when channel.updated brings the same capabilities in another order', () => {
+		channel.data = {
+			...channel.data,
+			own_capabilities: ['read-events', 'send-message'],
+		};
+		const before = ownCapabilities();
+		const spy = listenToOwnCapabilities();
+
+		channel._handleChannelEvent({
+			type: 'channel.updated',
+			channel: { own_capabilities: ['send-message', 'read-events'] },
+		});
+
+		expect(ownCapabilities()).toBe(before);
+		expect(spy).not.toHaveBeenCalled();
+	});
+
+	it('keeps the array when channel.updated omits own_capabilities', () => {
+		const before = ownCapabilities();
+		const spy = listenToOwnCapabilities();
+
+		channel._handleChannelEvent({
+			type: 'channel.updated',
+			channel: { name: 'renamed' },
+		});
+
+		expect(ownCapabilities()).toBe(before);
+		expect(spy).not.toHaveBeenCalled();
+	});
+
+	it('publishes the capabilities once when a frozen change re-queries the channel', async () => {
+		channel.data = { ...channel.data, frozen: false };
+		sinon
+			.stub(client.api, 'sendRequest')
+			.resolves(queryResponseWith({ frozen: true, own_capabilities: ['send-message'] }));
+		const querySpy = vi.spyOn(channel, 'query');
+		const spy = listenToOwnCapabilities();
+
+		channel._handleChannelEvent({
+			type: 'channel.updated',
+			channel: { frozen: true, own_capabilities: ['send-message'] },
+		});
+		await querySpy.mock.results[0].value;
+
+		expect(querySpy).toHaveBeenCalledTimes(1);
+		expect(spy).toHaveBeenCalledTimes(1);
+		expect(ownCapabilities()).toEqual(['send-message']);
+	});
+
+	it('publishes the capabilities a query response brings', async () => {
+		sinon
+			.stub(client.api, 'sendRequest')
+			.resolves(queryResponseWith({ own_capabilities: ['send-message'] }));
+		const spy = listenToOwnCapabilities();
+
+		await channel.query();
+
+		expect(spy).toHaveBeenCalledTimes(1);
+		expect(ownCapabilities()).toEqual(['send-message']);
+	});
+
+	it('keeps the capabilities when a query response omits own_capabilities', async () => {
+		const { own_capabilities, ...channelWithoutCapabilities } =
+			mockChannelQueryResponse.channel;
+		sinon.stub(client.api, 'sendRequest').resolves({
+			...mockChannelQueryResponse,
+			channel: channelWithoutCapabilities,
+			metadata: {},
+		});
+		const before = ownCapabilities();
+
+		await channel.query();
+
+		expect(ownCapabilities()).toBe(before);
+		expect(channel.data.own_capabilities).toEqual(['read-events']);
+	});
+
+	it('publishes the capabilities updatePartial() returns', async () => {
+		vi.spyOn(channel, 'updateChannelPartial').mockResolvedValue({
+			channel: { ...channel.data, own_capabilities: ['send-message'] },
+		});
+		const spy = listenToOwnCapabilities();
+
+		await channel.updatePartial({ set: { frozen: false } });
+
+		expect(spy).toHaveBeenCalledTimes(1);
+		expect(ownCapabilities()).toEqual(['send-message']);
+	});
+
+	it('keeps the array when updatePartial() returns the same capabilities', async () => {
+		vi.spyOn(channel, 'updateChannelPartial').mockResolvedValue({
+			channel: { ...channel.data, own_capabilities: ['read-events'] },
+		});
+		const before = ownCapabilities();
+		const spy = listenToOwnCapabilities();
+
+		await channel.updatePartial({ set: { frozen: false } });
+
+		expect(ownCapabilities()).toBe(before);
+		expect(spy).not.toHaveBeenCalled();
+	});
+
+	it('publishes the capabilities update() returns', async () => {
+		sinon.stub(client.api, 'sendRequest').resolves({
+			channel: { ...channel.data, own_capabilities: ['send-message'] },
+			metadata: {},
+		});
+		const spy = listenToOwnCapabilities();
+
+		await channel.update({ data: { custom: { name: 'renamed' } } });
+
+		expect(spy).toHaveBeenCalledTimes(1);
+		expect(ownCapabilities()).toEqual(['send-message']);
+	});
+
+	it('publishes the capabilities a queryChannels response brings', () => {
+		const spy = listenToOwnCapabilities();
+
+		client.hydrateChannels([
+			queryResponseWith({
+				cid: channel.cid,
+				id: channel.id,
+				type: channel.type,
+				own_capabilities: ['send-message'],
+			}),
+		]);
+
+		expect(spy).toHaveBeenCalledTimes(1);
+		expect(ownCapabilities()).toEqual(['send-message']);
+	});
+
+	it('does not share its array with data.own_capabilities', () => {
+		const assigned = ['read-events', 'send-message'];
+
+		channel.data = { ...channel.data, own_capabilities: assigned };
+		assigned.push('send-reaction');
+
+		expect(ownCapabilities()).toEqual(['read-events', 'send-message']);
+	});
+
+	it('keeps the initial array when the first known capabilities are empty', () => {
+		const fresh = client.channelManager.ensure({ type: 'messaging', id: 'fresh' });
+		const before = fresh.state.getLatestValue().ownCapabilities;
+
+		fresh.data = { ...fresh.data, own_capabilities: [] };
+
+		expect(fresh.state.getLatestValue().ownCapabilities).toBe(before);
+		expect(fresh.data.own_capabilities).toEqual([]);
+	});
+
+	it('keeps the capabilities when data is cleared', () => {
+		const before = ownCapabilities();
+
+		channel.data = undefined;
+
+		expect(ownCapabilities()).toBe(before);
 	});
 });

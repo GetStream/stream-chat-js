@@ -47,6 +47,8 @@ client.on('friendship_request', (event) => event.custom.text);
 
 // @ts-expect-error -- removed in v10, never dispatched
 client.on('connection.changed', () => undefined);
+// @ts-expect-error -- removed in v10; subscribe to `channel.state` `ownCapabilities`
+channel.on('capabilities.changed', () => undefined);
 // @ts-expect-error -- a typo is not an event type
 channel.on('message.nwe', () => undefined);
 // @ts-expect-error -- a custom event has to be declared through `CustomEventTypes`

@@ -160,6 +160,7 @@ Old → new, Ctrl-F friendly. "§" is the section in this guide; "Ref" is the an
 | `(e: Event) => e.message?.text`                                                                    | `client.on('message.new', (e) => e.message.text)` or `EventPayload<'message.new'>`                                                               | [§7](#s7-events)                                                | event-union                       |
 | `client.on('connection.changed', fn)`                                                              | `client.wsConnection.state.subscribeWithSelector(...)`                                                                                           | [§7](#s7-events)                                                | connection-changed-removed        |
 | `transport.changed`                                                                                | `connection.fallback_activated`                                                                                                                  | [§7](#s7-events)                                                | connection-changed-removed        |
+| `channel.on('capabilities.changed', fn)`                                                           | `channel.state.subscribeWithSelector(({ ownCapabilities }) => ({ ownCapabilities }), fn)`                                                        | [§7](#s7-events)                                                | capabilities-changed-removed      |
 | `channel.muted` / `channel.unmuted` events                                                         | `notification.channel_mutes_updated`                                                                                                             | [§7](#s7-events)                                                | event-type-names                  |
 | custom event `e.text`                                                                              | `e.custom.text`; declare names in `CustomEventTypes`                                                                                             | [§7](#s7-events)                                                | custom-events                     |
 | `channel.sendEvent({ type, text })`                                                                | `channel.sendEvent({ event: { type, custom: { text } } })`                                                                                       | [§7](#s7-events)                                                | channel-send-event                |
@@ -593,7 +594,7 @@ client.off('message.new', onNew);
 
 - Drop explicit `(e: Event) =>` annotations; they widen the event back to the union.
 - `EventTypes` → `EventType` (type only). `EVENT_MAP` is gone: keep your own list if you iterated it.
-- Removed names: `connection.changed`, `transport.changed`, `channel.muted` / `channel.unmuted` (use `notification.channel_mutes_updated`), `user.unread_message_reminder`. `'*'` is not an event name; listen with `client.on(cb)` or `client.on('all', cb)`.
+- Removed names: `connection.changed`, `transport.changed`, `capabilities.changed` (subscribe to `channel.state` `ownCapabilities`, which changes only when the capabilities do), `channel.muted` / `channel.unmuted` (use `notification.channel_mutes_updated`), `user.unread_message_reminder`. `'*'` is not an event name; listen with `client.on(cb)` or `client.on('all', cb)`.
 - `channel.listeners` is a `Map<EventType, Set<EventHandler>>` (`channel.listeners.get(type)?.size`, `channel.listeners.clear()`); a handler registered twice registers once. Same for `client.listeners`.
 - `AIState` literal `AI_STATE_CHECKING_SOURCES` is now `AI_STATE_EXTERNAL_SOURCES` (use `AIStates`).
 
@@ -632,7 +633,7 @@ await channel.sendEvent({
 client.on('friendship.request', (e) => console.log(e.custom));
 ```
 
-Ref: event-union, event-type-names, connection-changed-removed, custom-events, event-handler-generic, connection-open, channel-send-event, channel-listeners, ws-connection, websocket-impl-network-status, long-poll-fallback, ai-state.
+Ref: event-union, event-type-names, connection-changed-removed, capabilities-changed-removed, custom-events, event-handler-generic, connection-open, channel-send-event, channel-listeners, ws-connection, websocket-impl-network-status, long-poll-fallback, ai-state.
 
 <a id="s8-errors"></a>
 
