@@ -2129,3 +2129,30 @@ describe('find message by timestamp', () => {
 		expect(foundMessage).toBeNull();
 	});
 });
+
+describe('ChannelState removeMessage', () => {
+	it('removes a hard-deleted thread reply that is also shown in the channel from the channel message list', () => {
+		const client = new StreamChat();
+		const channel = new Channel(client, 'type', 'id', {});
+		client._addChannelConfig({ cid: channel.cid, config: {} });
+		const state = new ChannelState(channel);
+
+		state.addMessagesSorted([
+			generateMsg({ id: 'parent', date: '2020-01-01T00:00:00.000Z' }),
+		]);
+		const reply = generateMsg({
+			id: 'reply',
+			parent_id: 'parent',
+			show_in_channel: true,
+			date: '2020-01-01T00:00:01.000Z',
+		});
+		state.addMessagesSorted([reply]);
+		expect(state.threads.parent.map((m) => m.id)).toEqual(['reply']);
+		expect(state.messages.map((m) => m.id)).toEqual(['parent', 'reply']);
+
+		state.removeMessage({ id: 'reply', parent_id: 'parent', show_in_channel: true });
+
+		expect(state.threads.parent).toHaveLength(0);
+		expect(state.messages.map((m) => m.id)).toEqual(['parent']);
+	});
+});
