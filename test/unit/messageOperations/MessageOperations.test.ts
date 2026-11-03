@@ -127,8 +127,94 @@ describe('MessageOperations', () => {
 
     const localMessage = makeLocalMessage({ id: 'm1', status: 'failed' });
 
-    await expect(ops.send({ localMessage })).rejects.toThrow();
+    await expect(ops.send({ localMessage })).resolves.toBeUndefined();
     expect(store.get('m1')?.status).toBe('received');
+  });
+
+  it('resolves a retry that the server rejects with "already exists"', async () => {
+    const store: Store = new Map();
+    let sendCalls = 0;
+
+    const ops = new MessageOperations({
+      ...stateHooks(store),
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      handlers: () => ({}),
+      defaults: {
+        delete: defaultDelete,
+        send: async () => {
+          sendCalls += 1;
+          // The first request landed, but its response was lost.
+          if (sendCalls === 1) throw new Error('timeout');
+          throw Object.assign(new Error('message already exists'), { code: 4 });
+        },
+        update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+      },
+    });
+
+    const localMessage = makeLocalMessage({ id: 'm1', status: 'failed' });
+
+    await expect(ops.send({ localMessage })).rejects.toThrow('timeout');
+    expect(store.get('m1')?.status).toBe('failed');
+
+    await expect(ops.retry({ localMessage: store.get('m1')! })).resolves.toBeUndefined();
+    expect(store.get('m1')?.status).toBe('received');
+    expect(store.get('m1')?.error).toBeUndefined();
+  });
+
+  it('rejects an edit that fails with the "already exists" code', async () => {
+    const store: Store = new Map();
+    store.set('m1', makeLocalMessage({ id: 'm1', status: 'received' }));
+
+    const ops = new MessageOperations({
+      ...stateHooks(store),
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      handlers: () => ({}),
+      defaults: {
+        delete: defaultDelete,
+        send: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+        update: async () => {
+          throw Object.assign(new Error('message already exists'), { code: 4 });
+        },
+      },
+    });
+
+    await expect(
+      ops.update({
+        localMessage: makeLocalMessage({ id: 'm1', status: 'received', text: 'edit' }),
+      }),
+    ).rejects.toThrow('already exists');
+    expect(store.get('m1')?.status).toBe('failed');
+  });
+
+  it('resolves a send whose server copy arrived before the request failed', async () => {
+    const store: Store = new Map();
+
+    const ops = new MessageOperations({
+      ...stateHooks(store),
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      handlers: () => ({}),
+      defaults: {
+        delete: defaultDelete,
+        send: async () => {
+          // The server saved the message and its `message.new` arrived, then the client timed out.
+          store.set(
+            'm1',
+            makeLocalMessage({ id: 'm1', status: 'received', text: 'from the server' }),
+          );
+          throw new Error('timeout of 3000ms exceeded');
+        },
+        update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+      },
+    });
+
+    const localMessage = makeLocalMessage({ id: 'm1', status: 'failed' });
+
+    await expect(ops.send({ localMessage })).resolves.toBeUndefined();
+    expect(store.get('m1')?.status).toBe('received');
+    expect(store.get('m1')?.text).toBe('from the server');
   });
 
   it('marks as failed on non-duplicate error', async () => {

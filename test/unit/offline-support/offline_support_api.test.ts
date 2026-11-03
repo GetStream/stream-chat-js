@@ -18,6 +18,7 @@ import {
   StableWSConnection,
 } from '../../../src';
 import { chatLoggerSystem } from '../../../src/logger';
+import { QUEUEABLE_OPERATIONS } from '../../../src/offline-support/queueableOperations';
 
 import { generateChannel } from '../test-utils/generateChannel';
 import { generateReadResponse } from '../test-utils/generateReadResponse';
@@ -3031,6 +3032,20 @@ describe('OfflineSupportApi', () => {
           expect(deletePendingTaskSpy).toHaveBeenCalledTimes(2);
           expect(deletePendingTaskSpy).toHaveBeenCalledWith({ id: 1 });
           expect(deletePendingTaskSpy).toHaveBeenCalledWith({ id: 2 });
+        });
+
+        it('hands a rejected replay to its operation', async () => {
+          const onReplayRejected = vi.spyOn(
+            QUEUEABLE_OPERATIONS['send-message'],
+            'onReplayRejected',
+          );
+          executeTaskSpy.mockRejectedValueOnce(skippableError);
+
+          await offlineDb.executePendingTasks();
+
+          expect(onReplayRejected).toHaveBeenCalledWith(
+            expect.objectContaining({ error: skippableError, task: task1 }),
+          );
         });
 
         it('should skip tasks with no id', async () => {

@@ -3402,6 +3402,45 @@ describe('MessageComposer submit lifecycle', () => {
     );
   });
 
+  it('reports a send the server already has as sent', async () => {
+    const { messageComposer, mockChannel } = setup();
+    withText(messageComposer);
+    const addError = vi.spyOn(messageComposer.client.notifications, 'addError');
+    let messageId: string | undefined;
+    stubSendRequest(mockChannel, async ({ localMessage }) => {
+      messageId = localMessage.id;
+      throw Object.assign(
+        new Error(
+          `SendMessage failed with error: "a message with ID ${messageId} already exists"`,
+        ),
+        { code: 4 },
+      );
+    });
+
+    await expect(messageComposer.send()).resolves.toBe('sent');
+
+    expect(addError).not.toHaveBeenCalled();
+    expect(mockChannel.messagePaginator.getItem(messageId!)?.status).toBe('received');
+  });
+
+  it('reports a send whose server copy arrived before a timeout as sent', async () => {
+    const { messageComposer, mockChannel } = setup();
+    withText(messageComposer);
+    const addError = vi.spyOn(messageComposer.client.notifications, 'addError');
+    let messageId: string | undefined;
+    stubSendRequest(mockChannel, async ({ localMessage }) => {
+      messageId = localMessage.id;
+      // The server's `message.new` arrives before the client gives up on the request.
+      mockChannel.messagePaginator.ingestItem({ ...localMessage, status: 'received' });
+      throw new Error('timeout of 3000ms exceeded');
+    });
+
+    await expect(messageComposer.send()).resolves.toBe('sent');
+
+    expect(addError).not.toHaveBeenCalled();
+    expect(mockChannel.messagePaginator.getItem(messageId!)?.status).toBe('received');
+  });
+
   it('returns false and sends nothing when there is nothing to compose', async () => {
     const { messageComposer, mockChannel } = setup();
     const send = vi
