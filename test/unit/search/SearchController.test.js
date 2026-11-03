@@ -996,7 +996,10 @@ describe('BaseSearchSource and implementations', () => {
 				sinon.match({
 					payload: {
 						filter_conditions: { members: { $in: ['current-user'] } },
-						message_filter_conditions: { type: 'regular', text: 'test' },
+						message_filter_conditions: {
+							type: 'regular',
+							text: { $autocomplete: 'test' },
+						},
 						limit: 10,
 					},
 				}),

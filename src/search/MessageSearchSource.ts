@@ -138,7 +138,8 @@ export class MessageSearchSource<
       initialFilterConfig: {
         text: {
           enabled: true,
-          generate: ({ searchQuery }) => (searchQuery ? { text: searchQuery } : null),
+          generate: ({ searchQuery }) =>
+            searchQuery ? { text: { $autocomplete: searchQuery } } : null,
         },
         ...filterBuilderOptions?.messageSearch?.initialFilterConfig,
       },
