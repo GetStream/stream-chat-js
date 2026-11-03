@@ -1,5 +1,7 @@
+import { createActiveCommandGuardMiddleware } from './activeCommandGuard';
 import { createCommandsMiddleware } from './commands';
 import { createCommandEffectsMiddleware } from './commandEffects';
+import { createCommandStringExtractionMiddleware } from './commandStringExtraction';
 import { createMentionsMiddleware } from './mentions';
 import { createTextComposerPreValidationMiddleware } from './validation';
 import { chatLoggerSystem } from '../../../logger';
@@ -49,9 +51,14 @@ export class TextComposerMiddlewareExecutor<
     this.use([
       createTextComposerPreValidationMiddleware(composer) as TextComposerMiddleware<T>,
       createMentionsMiddleware(composer.channel) as TextComposerMiddleware<T>,
+      // While a command is active, the guard stops the commands middleware from suggesting or
+      // activating another one. The extraction moves the active command out of the text, which
+      // the command injection composition middleware puts back in front of the sent text.
+      createActiveCommandGuardMiddleware() as TextComposerMiddleware<T>,
       createCommandsMiddleware(composer.channel, {
         composer,
       }) as TextComposerMiddleware<T>,
+      createCommandStringExtractionMiddleware() as TextComposerMiddleware<T>,
       createCommandEffectsMiddleware() as TextComposerMiddleware<T>,
     ]);
   }

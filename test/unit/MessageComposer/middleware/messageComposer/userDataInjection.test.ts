@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { MessageComposerMiddlewareState } from '../../../../../src';
-import { createUserDataInjectionMiddleware } from '../../../../../src/messageComposer/middleware/messageComposer/userDataInjection';
+import {
+  createUserDataInjectionMiddleware,
+  MessageComposerMiddlewareState,
+  USER_DATA_INJECTION_MIDDLEWARE_ID,
+} from '../../../../../src';
 import { convertDateToTimestamp } from '../../../test-utils/time';
 
 const setupMiddlewareApi = (initialState: MessageComposerMiddlewareState) => {
@@ -47,6 +50,15 @@ const mockComposer = {
 } as any;
 
 describe('stream-io/message-composer-middleware/user-data-injection', () => {
+  it('is installed under the exported id', () => {
+    expect(USER_DATA_INJECTION_MIDDLEWARE_ID).toBe(
+      'stream-io/message-composer-middleware/user-data-injection',
+    );
+    expect(createUserDataInjectionMiddleware(mockComposer).id).toBe(
+      USER_DATA_INJECTION_MIDDLEWARE_ID,
+    );
+  });
+
   it('should complete if composer.client.user is defined', async () => {
     const middleware = createUserDataInjectionMiddleware(mockComposer);
     const middlewareApi = setupMiddlewareApi(stateSeed);

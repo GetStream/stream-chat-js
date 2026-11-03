@@ -17,6 +17,7 @@ import {
   mentionEntityToUserResponse,
   userResponseToMentionEntity,
 } from './middleware/textComposer/mentionUtils';
+import { commandTakesNoArguments } from './middleware/textComposer/commandUtils';
 import type { MessageComposer } from './messageComposer';
 import type { Command, DraftMessage, LocalMessage, UserResponse } from '../types';
 
@@ -226,6 +227,15 @@ export class TextComposer {
 
   get textIsEmpty() {
     return textIsEmpty(this.text);
+  }
+
+  /**
+   * Whether the active command is content on its own: a command that takes no arguments is sent as
+   * `/shrug` with no text. A command that takes arguments still needs text.
+   */
+  get activeCommandIsContent() {
+    const { command } = this;
+    return !!command && commandTakesNoArguments(command);
   }
 
   initState = ({ message }: { message?: DraftMessage | LocalMessage } = {}) => {

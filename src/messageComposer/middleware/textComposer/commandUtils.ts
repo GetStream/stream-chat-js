@@ -18,8 +18,16 @@ export const getCompleteCommandInString = (text: string) => {
   return commandName;
 };
 
+// Command names match regardless of case, as `getCommandByName` activates them: `/GIPHY` is `giphy`.
 export const stripCommandFromText = (text: string, commandName: string) =>
-  text.replace(new RegExp(`^${escapeCommandRegExp(`/${commandName}`)}\\s*`), '');
+  text.replace(new RegExp(`^${escapeCommandRegExp(`/${commandName}`)}\\s*`, 'i'), '');
+
+/** Whether `text` starts with `/commandName` as a whole word, e.g. `/giphy cats` for `giphy`. */
+export const textStartsWithCommand = (text: string, commandName: string) =>
+  new RegExp(`^${escapeCommandRegExp(`/${commandName}`)}(\\s|$)`, 'i').test(text);
+
+/** Whether `command` takes no arguments, so it is a message on its own, e.g. `/shrug`. */
+export const commandTakesNoArguments = (command: Command) => !command.args?.trim();
 
 export const stripMentionTokens = (
   text: string,

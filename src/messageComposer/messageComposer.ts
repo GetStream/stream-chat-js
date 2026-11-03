@@ -472,6 +472,7 @@ export class MessageComposer extends WithSubscriptions {
 
       return !!(
         !this.textComposer.textIsEmpty ||
+        this.textComposer.activeCommandIsContent ||
         hasSendableAttachment ||
         this.pollId ||
         this.locationComposer.validLocation
@@ -481,6 +482,7 @@ export class MessageComposer extends WithSubscriptions {
     return !!(
       (!this.attachmentManager.uploadsInProgressCount &&
         (!this.textComposer.textIsEmpty ||
+          this.textComposer.activeCommandIsContent ||
           this.attachmentManager.successfulUploadsCount > 0)) ||
       this.pollId ||
       !!this.locationComposer.validLocation
@@ -494,6 +496,7 @@ export class MessageComposer extends WithSubscriptions {
   get contentIsEmpty() {
     return (
       this.textComposer.textIsEmpty &&
+      !this.textComposer.activeCommandIsContent &&
       !this.attachmentManager.attachments.length &&
       !this.pollId &&
       !this.locationComposer.validLocation
@@ -826,9 +829,11 @@ export class MessageComposer extends WithSubscriptions {
       this.clear();
     }).unsubscribe;
 
+  // The command is selected too: an active command that takes no arguments is content, so clearing
+  // one can empty the composition without changing the text.
   private subscribeTextComposerStateChanged = () =>
     this.textComposer.state.subscribeWithSelector(
-      ({ text }) => [text] as const,
+      ({ command, text }) => [text, command] as const,
       ([currentText], previousSelection) => {
         // Skip the initial subscription call.
         if (typeof previousSelection === 'undefined') return;

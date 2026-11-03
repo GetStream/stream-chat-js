@@ -6,10 +6,17 @@ import type {
 import type { MiddlewareHandlerParams } from '../../../middleware';
 import type { UserResponse } from '../../../types';
 
+export const USER_DATA_INJECTION_MIDDLEWARE_ID =
+  'stream-io/message-composer-middleware/user-data-injection';
+
+/**
+ * Puts the connected user on the composed local message (`user`, `user_id`), so the message
+ * renders with its author before the server responds.
+ */
 export const createUserDataInjectionMiddleware = (
   composer: MessageComposer,
 ): MessageCompositionMiddleware => ({
-  id: 'stream-io/message-composer-middleware/user-data-injection',
+  id: USER_DATA_INJECTION_MIDDLEWARE_ID,
   handlers: {
     compose: ({
       state,
