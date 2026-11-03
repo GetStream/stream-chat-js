@@ -3000,9 +3000,9 @@ Poll data types and `PollResponse` renaming: [poll types](#poll-types). State ti
 **Kind:** behavior · **Impact:** medium · **PR:** #1831
 
 - **v9:** `isUploadEnabled = hasUploadPermission && hasAvailableUploadSlots`; `uploadFiles` skipped the `upload-file` capability check whenever a custom `doUploadRequest` was configured (`hasCustomDoUploadRequest`).
-- **v10:** `isUploadEnabled = config.enabled && hasAvailableUploadSlots && (!usesStreamStorage || hasUploadPermission)`, with `usesStreamStorage = !config.customCdn`; `uploadFiles` and the deprecated `uploadAttachment` both return early on `!isUploadEnabled`. A custom `doUploadRequest` without `customCdn: true` now needs `upload-file` and is subject to the channel type's `uploads` flag. `attachments.enabled: false` blocks even with `customCdn`.
+- **v10:** `isUploadEnabled = config.enabled && hasAvailableUploadSlots && (!usesStreamStorage || hasUploadPermission)`, with `usesStreamStorage = !config.customCdn`; `uploadFiles` returns early on `!isUploadEnabled`; `uploadFile` does not check it. A custom `doUploadRequest` without `customCdn: true` now needs `upload-file` and is subject to the channel type's `uploads` flag. `attachments.enabled: false` blocks even with `customCdn`.
 - **Migrate:** if files go to your own storage, `client.config.set({ messageComposer: { attachments: { customCdn: true, doUploadRequest } } })`. Gate the attach button on `attachmentManager.isUploadEnabled`.
-- **Source:** `src/messageComposer/attachmentManager.ts:203,219-225,823`, `src/messageComposer/messageComposer.ts:642` (v10); `src/messageComposer/attachmentManager.ts:181,785` (v9)
+- **Source:** `src/messageComposer/attachmentManager.ts:203,219-225,700-701`, `src/messageComposer/messageComposer.ts:642` (v10); `src/messageComposer/attachmentManager.ts:181,785` (v9)
 
 <a id="composer-default-upload"></a>
 
@@ -3014,6 +3014,17 @@ Poll data types and `PollResponse` renaming: [poll types](#poll-types). State ti
 - **v10:** calls `channel.uploadImage/uploadFile({ file }, requestOptions)` (FileReference passed whole), strips `duration` and `metadata`, throws `The upload succeeded but the response carried no file URL` when `file` is missing (surfaces as a failed upload). `doDefaultUploadRequest` / `doUploadRequest` return `MinimumUploadRequestResult`.
 - **Migrate:** spies on `channel.sendImage/sendFile` no longer intercept composer uploads; stub `uploadImage/uploadFile` or set `doUploadRequest`.
 - **Source:** `src/messageComposer/attachmentManager.ts:624-670` (v10); `src/messageComposer/attachmentManager.ts:552-601` (v9)
+
+<a id="upload-attachment-removed"></a>
+
+### `AttachmentManager.uploadAttachment` removed; `uploadFile` takes an attachment
+
+**Kind:** removed · **Impact:** medium
+
+- **v9:** `attachmentManager.uploadAttachment(attachment)` (deprecated) uploaded an existing local attachment in place, keeping its `localMetadata.id`. UI SDKs used it to retry a failed upload and to upload a voice recording they built. It ran `fileUploadFilter` and the server upload-config check but neither the pre-upload (`prepare`) nor the post-upload (`postProcess`) middleware, and returned early when `isUploadEnabled` was false. It resolved to `undefined` when it uploaded nothing (uploads disabled, file or id missing, `fileUploadFilter` rejected it, or `doUploadRequest` returned nothing).
+- **v10:** removed. `attachmentManager.uploadFile(fileOrAttachment)` also takes an existing local attachment: it keeps its id, its fields and its position in `attachments`, and runs the same pre- and post-upload middleware as a new file. An attachment without `localMetadata.file` or `localMetadata.id` is returned unchanged with the `attachmentFileMissing` / `attachmentIdMissing` notification. `uploadFile` does not check `isUploadEnabled`, and always resolves to an attachment: one it did not upload comes back unchanged or with `uploadState` `pending` or `blocked`.
+- **Migrate:** replace `uploadAttachment(attachment)` with `if (attachmentManager.isUploadEnabled) await attachmentManager.uploadFile(attachment)`. Where the result was checked for `undefined`, check `result.localMetadata.uploadState` instead. Middleware inserted into `preUploadMiddlewareExecutor` / `postUploadMiddlewareExecutor` now also runs on retries.
+- **Source:** `src/messageComposer/attachmentManager.ts:668-698` (v10); `src/messageComposer/attachmentManager.ts:620,725` (v9)
 
 <a id="is-shared-location-response"></a>
 
