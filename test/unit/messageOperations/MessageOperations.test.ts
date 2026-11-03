@@ -159,6 +159,7 @@ describe('MessageOperations', () => {
 
     await expect(ops.retry({ localMessage: store.get('m1')! })).resolves.toBeUndefined();
     expect(store.get('m1')?.status).toBe('received');
+    expect(store.get('m1')?.error).toBeUndefined();
   });
 
   it('rejects an edit that fails with the "already exists" code', async () => {

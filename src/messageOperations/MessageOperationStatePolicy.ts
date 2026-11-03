@@ -231,7 +231,11 @@ export class MessageOperationStatePolicy {
     if ((kind === 'send' || kind === 'retry') && isAlreadyExistsError(error, parsed)) {
       const existing = this.ctx.get(messageId);
       if (existing?.status === 'sending') {
-        const received: LocalMessage = { ...localMessage, status: 'received' };
+        const received: LocalMessage = {
+          ...localMessage,
+          error: undefined,
+          status: 'received',
+        };
         this.ctx.ingest(received);
         this.ctx.persist(received);
       }
