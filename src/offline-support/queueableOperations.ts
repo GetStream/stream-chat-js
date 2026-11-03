@@ -1,7 +1,9 @@
 import { chatLoggerSystem } from '../logger';
 import { formatMessage } from '../utils';
+import { isAlreadyExistsError, parseError } from '../errors';
 import type { Channel } from '../channel';
 import type { StreamChat } from '../client';
+import type { LocalMessage } from '../types';
 import type { PendingTask, PendingTaskOf, QueueableResult, QueueableType } from './types';
 
 const logger = chatLoggerSystem.getLogger('offline-db');
@@ -29,6 +31,12 @@ export type QueueableOperation<T extends QueueableType> = {
   onReplay?: (params: {
     client: StreamChat;
     result: QueueableResult<T>;
+    task: PendingTaskOf<T>;
+  }) => void;
+  /** Settles local state after a replay the server rejected for whatever reason. */
+  onReplayRejected?: (params: {
+    client: StreamChat;
+    error: unknown;
     task: PendingTaskOf<T>;
   }) => void;
 };
@@ -101,6 +109,24 @@ export const QUEUEABLE_OPERATIONS: {
         });
       }
       channelOf(client, task).messagePaginator.trackLatestMessage(formatMessage(message));
+    },
+    // the server has the message, meaning an earlier attempt landed but its response was lost
+    onReplayRejected: ({ client, error, task }) => {
+      const store = client.messageStore;
+      const held = store.get(task.messageId);
+
+      if (held?.status === 'failed' && isAlreadyExistsError(error, parseError(error))) {
+        const received: LocalMessage = { ...held, error: undefined, status: 'received' };
+        store.upsert(received);
+        store.flushSubscribers(received.id);
+        client.offlineDb?.executeQuerySafely(
+          (db) =>
+            db.upsertMessageWithChannelGuard({
+              message: { ...received, cid: `${task.channelType}:${task.channelId}` },
+            }),
+          { method: 'sendMessage:replayRejected' },
+        );
+      }
     },
     run: ({ channel, client, task }) =>
       channelOf(client, task, channel).sendMessage(...task.payload),

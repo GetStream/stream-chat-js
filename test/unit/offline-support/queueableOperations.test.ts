@@ -6,7 +6,7 @@ import {
   queueOrRun,
   runQueueableOperation,
 } from '../../../src/offline-support/queueableOperations';
-import { StreamChat, Thread } from '../../../src';
+import { formatMessage, StreamChat, Thread } from '../../../src';
 import type { MessageResponse, PendingTask, PendingTaskTypes } from '../../../src';
 import { generateMsg } from '../test-utils/generateMessage';
 
@@ -99,6 +99,84 @@ describe('send-message replay', () => {
     } as never);
 
     expect(upsertReply).toHaveBeenCalledWith(expect.objectContaining({ message }));
+  });
+
+  describe('rejected with "already exists"', () => {
+    const alreadyExists = () =>
+      Object.assign(
+        new Error('SendMessage failed with error: "message already exists"'),
+        {
+          code: 4,
+        },
+      );
+
+    const setup = () => {
+      const client = new StreamChat('apiKey');
+      client.user = { id: 'me' };
+      const channel = client.channelManager.ensure({ type: 'messaging', id: 'general' });
+      return { channel, client };
+    };
+
+    it('marks the failed message received, since the server has it', () => {
+      const { channel, client } = setup();
+      channel.messagePaginator.ingestItem(
+        formatMessage({
+          ...generateMsg({ cid: channel.cid, id: 'm1' }),
+          error: { code: 16, message: 'timeout' },
+          status: 'failed',
+        } as never),
+      );
+
+      QUEUEABLE_OPERATIONS['send-message'].onReplayRejected?.({
+        client,
+        error: alreadyExists(),
+        task: { ...task, type: 'send-message' },
+      } as never);
+
+      expect(channel.messagePaginator.getItem('m1')?.status).toBe('received');
+      expect(channel.messagePaginator.getItem('m1')?.error).toBeUndefined();
+    });
+
+    it('marks a failed reply received in its thread', () => {
+      const { channel, client } = setup();
+      const thread = new Thread({
+        channel,
+        client,
+        parentMessage: generateMsg({ cid: channel.cid }) as MessageResponse,
+      });
+      thread.messagePaginator.ingestItem(
+        formatMessage({
+          ...generateMsg({ cid: channel.cid, id: 'm1', parent_id: thread.id }),
+          status: 'failed',
+        } as never),
+      );
+
+      QUEUEABLE_OPERATIONS['send-message'].onReplayRejected?.({
+        client,
+        error: alreadyExists(),
+        task: { ...task, type: 'send-message' },
+      } as never);
+
+      expect(thread.messagePaginator.getItem('m1')?.status).toBe('received');
+    });
+
+    it('leaves the message failed for any other rejection', () => {
+      const { channel, client } = setup();
+      channel.messagePaginator.ingestItem(
+        formatMessage({
+          ...generateMsg({ cid: channel.cid, id: 'm1' }),
+          status: 'failed',
+        } as never),
+      );
+
+      QUEUEABLE_OPERATIONS['send-message'].onReplayRejected?.({
+        client,
+        error: Object.assign(new Error('forbidden'), { code: 17 }),
+        task: { ...task, type: 'send-message' },
+      } as never);
+
+      expect(channel.messagePaginator.getItem('m1')?.status).toBe('failed');
+    });
   });
 });
 

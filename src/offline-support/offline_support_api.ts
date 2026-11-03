@@ -1147,6 +1147,11 @@ export abstract class AbstractOfflineDB implements OfflineDBApi {
           true,
         );
       } catch (e) {
+        const operation = QUEUEABLE_OPERATIONS[task.type] as QueueableOperation<
+          typeof task.type
+        >;
+        operation.onReplayRejected?.({ client: this.client, error: e, task });
+
         const error = e as AxiosError<APIError>;
         if (!this.shouldSkipQueueingTask(error)) {
           continue;
