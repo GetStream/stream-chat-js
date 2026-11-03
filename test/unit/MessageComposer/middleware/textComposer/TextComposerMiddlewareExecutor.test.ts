@@ -79,11 +79,14 @@ describe('TextComposerMiddlewareExecutor', () => {
       messageComposer: { textComposer },
     } = setup();
     const middleware = textComposer.middlewareExecutor.middleware;
-    expect(middleware.length).toBe(4);
-    expect(middleware[0].id).toBe('stream-io/text-composer/pre-validation-middleware');
-    expect(middleware[1].id).toBe('stream-io/text-composer/mentions-middleware');
-    expect(middleware[2].id).toBe('stream-io/text-composer/commands-middleware');
-    expect(middleware[3].id).toBe('stream-io/text-composer/command-effects-middleware');
+    expect(middleware.map(({ id }) => id)).toEqual([
+      'stream-io/text-composer/pre-validation-middleware',
+      'stream-io/text-composer/mentions-middleware',
+      'stream-io/text-composer/active-command-guard',
+      'stream-io/text-composer/commands-middleware',
+      'stream-io/text-composer/command-string-extraction',
+      'stream-io/text-composer/command-effects-middleware',
+    ]);
   });
 
   it('should handle onChange event with mentions', async () => {

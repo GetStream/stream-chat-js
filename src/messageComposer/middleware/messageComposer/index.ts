@@ -10,3 +10,4 @@ export * from './sharedLocation';
 export * from './textComposer';
 export * from './types';
 export * from './commandInjection';
+export * from './userDataInjection';

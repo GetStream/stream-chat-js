@@ -7,7 +7,7 @@ import {
 } from '../../../src/messageComposer/messageComposer';
 import { textIsEmpty } from '../../../src/messageComposer/textComposer';
 import { createCommandStringExtractionMiddleware } from '../../../src/messageComposer/middleware/textComposer/commandStringExtraction';
-import { DraftResponse, LocalMessage } from '../../../src/types';
+import { Command, DraftResponse, LocalMessage } from '../../../src/types';
 import { logChatPromiseExecution } from '../../../src/utils';
 import { TextComposerConfig } from '../../../src/messageComposer/configuration';
 import { LinkPreviewStatus } from '../../../src/messageComposer/linkPreviewsManager';
@@ -110,6 +110,27 @@ describe('TextComposer', () => {
       expect(textIsEmpty('Hello')).toBe(false);
       expect(textIsEmpty('> Hello')).toBe(false);
       expect(textIsEmpty('**Hello**')).toBe(false);
+    });
+  });
+
+  describe('activeCommandIsContent', () => {
+    it('is false without an active command', () => {
+      const { messageComposer } = setup();
+      expect(messageComposer.textComposer.activeCommandIsContent).toBe(false);
+    });
+
+    it.each([
+      ['', true],
+      [undefined, true],
+      ['[text]', false],
+    ])('for a command with args %j is %s', (args, expected) => {
+      const { messageComposer } = setup();
+      messageComposer.textComposer.setCommand({
+        args,
+        description: 'A command',
+        name: 'custom',
+      } as Command);
+      expect(messageComposer.textComposer.activeCommandIsContent).toBe(expected);
     });
   });
 

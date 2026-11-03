@@ -20,6 +20,10 @@ import {
   createDraftCompositionValidationMiddleware,
 } from './compositionValidation';
 import { createCompositionDataCleanupMiddleware } from './cleanData';
+import {
+  createCommandInjectionMiddleware,
+  createDraftCommandInjectionMiddleware,
+} from './commandInjection';
 import type {
   MessageComposerMiddlewareExecutorOptions,
   MessageComposerMiddlewareState,
@@ -47,6 +51,7 @@ export class MessageComposerMiddlewareExecutor extends MiddlewareExecutor<
       createPollOnlyCompositionMiddleware(composer),
       createTextComposerCompositionMiddleware(composer),
       createAttachmentsCompositionMiddleware(composer),
+      createCommandInjectionMiddleware(composer),
       createLinkPreviewsCompositionMiddleware(composer),
       createSharedLocationCompositionMiddleware(composer),
       createMessageComposerStateCompositionMiddleware(composer),
@@ -68,6 +73,7 @@ export class MessageDraftComposerMiddlewareExecutor extends MiddlewareExecutor<
     this.use([
       createDraftTextComposerCompositionMiddleware(composer),
       createDraftAttachmentsCompositionMiddleware(composer),
+      createDraftCommandInjectionMiddleware(composer),
       createDraftLinkPreviewsCompositionMiddleware(composer),
       createDraftMessageComposerStateCompositionMiddleware(composer),
       createDraftCustomDataCompositionMiddleware(composer),
