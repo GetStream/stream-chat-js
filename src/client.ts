@@ -77,6 +77,7 @@ import {
 import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
 import { ReminderManager } from './reminders';
+import { ScheduledMessageManager } from './scheduledMessages';
 import type { AbstractOfflineDB } from './offline-support';
 import { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';
 import { isEqual } from './utils/mergeWith/mergeWithCore';
@@ -170,6 +171,7 @@ export class StreamChat extends ChatApi {
   offlineDb?: AbstractOfflineDB;
   notifications: NotificationManager;
   reminders: ReminderManager;
+  scheduledMessages: ScheduledMessageManager;
   axiosInstance: AxiosInstance;
   baseURL?: string;
   cleaningIntervalRef?: ReturnType<typeof setTimeout>;
@@ -332,6 +334,7 @@ export class StreamChat extends ChatApi {
     this.connectionRecovery = new ConnectionRecoveryManager({ client: this });
     this.connectionRecovery.registerSubscriptions();
     this.reminders = new ReminderManager({ client: this });
+    this.scheduledMessages = new ScheduledMessageManager({ client: this });
     this.messageDeliveryReporter = new MessageDeliveryReporter({ client: this });
     this.messageComposerCache = new FixedSizeQueueCache<string, MessageComposer>(64);
     // a cached composer, such as a message edit's, keeps the channel it was built with
@@ -756,6 +759,7 @@ export class StreamChat extends ChatApi {
     }
     this.state = new ClientState({ client: this });
     this.threads.resetState();
+    this.scheduledMessages.resetState();
     // Channel mutes are per-user: stale ones would resolve `muted` filters against the previous
     // user.
     this.mutedChannels = [];
