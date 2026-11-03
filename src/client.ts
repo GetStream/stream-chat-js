@@ -1406,7 +1406,6 @@ export class StreamChat extends ChatApi {
    *   such as `predefined_filter`, `filter_values`, and `sort_values`.
    * @param stateOptions - Options that only affect state management and are not sent in the
    *   request. Defaults to `{}`.
-   * @param stateOptions.skipInitialization - IDs of channels whose state is not initialized.
    * @param stateOptions.skipHydration - Not read: it has no effect.
    * @param stateOptions.withResponse - Returns the full query response (with hydrated `channels`)
    *   instead of `Channel[]`.
@@ -1513,7 +1512,7 @@ export class StreamChat extends ChatApi {
     queryChannelsOptions?: ChannelOptions,
     headIntervalItemIdsAtRequestByCid?: Map<string, ReadonlySet<string>>,
   ) {
-    const { skipInitialization, offlineMode = false } = stateOptions;
+    const { offlineMode = false } = stateOptions;
     const channels: Channel[] = [];
 
     for (const channelState of channelsFromApi) {
@@ -1541,9 +1540,6 @@ export class StreamChat extends ChatApi {
       }
       c.push_preferences = channelState.push_preferences;
 
-      const willInitialize =
-        skipInitialization === undefined ||
-        !skipInitialization.includes(channelState.channel.id);
       const requestedPageSize =
         queryChannelsOptions?.message_limit ??
         DEFAULT_QUERY_CHANNELS_MESSAGE_LIST_PAGE_SIZE;
@@ -1552,7 +1548,7 @@ export class StreamChat extends ChatApi {
       // messages: read and delivery positions that come without a message id are looked up among
       // them (see `Channel.runChannelQuery`). Not for an active channel, whose own
       // `channel.reload()` owns its message list (see `Channel.activate()`).
-      const placesNewestPage = willInitialize && !c.active;
+      const placesNewestPage = !c.active;
       let placedFirstPage = false;
       if (placesNewestPage) {
         // The response's `last_message_at` first, so the paginator can tell whether the page
@@ -1569,30 +1565,21 @@ export class StreamChat extends ChatApi {
         );
       }
 
-      if (skipInitialization === undefined) {
-        c._initializeState(channelState);
-      } else if (!skipInitialization.includes(channelState.channel.id)) {
-        // The message list's page is placed above; the pinned list's comes with _initializeState.
-        c._initializeState(channelState);
-      }
+      // The message list's page is placed above; the pinned list's comes with _initializeState.
+      // An active channel takes the response's members, read state and pinned messages as well:
+      // they are newer than the ones it holds.
+      c._initializeState(channelState);
       // from the read state the response brought, as `channel.watch()` does
       if (placedFirstPage) c.messagePaginator.seedUnreadSnapshot();
       // Unless the newest page was placed, which brings the interval up to date, the head interval
       // is checked against this response's `last_message_at`, as `Channel.requestChannelState` does
       // for a channel query; an on-screen channel is left to its own `channel.reload()`, as above.
-      if (
-        willInitialize &&
-        !c.active &&
-        !wasWatching &&
-        !(placesNewestPage && channelState.messages.length)
-      ) {
+      if (placesNewestPage && !wasWatching && !channelState.messages.length) {
         c.messagePaginator.unmarkStaleHead();
       }
 
-      if (willInitialize) {
-        this.polls.hydratePollCache(channelState.messages, true);
-        this.reminders.hydrateState(channelState.messages);
-      }
+      this.polls.hydratePollCache(channelState.messages, true);
+      this.reminders.hydrateState(channelState.messages);
       c.messageComposer.initStateFromChannelResponse(channelState);
       c.cooldownTimer.refresh();
       channels.push(c);
