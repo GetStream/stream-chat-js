@@ -648,6 +648,83 @@ describe('BasePaginator', () => {
       expect(paginator.hasMoreTail).toBe(false);
     });
 
+    describe('a page that filterQueryResults reduces to nothing', () => {
+      class BlockedFilteringPaginator extends Paginator {
+        filterQueryResults(items: TestItem[]) {
+          return items.filter((item) => !item.blocked);
+        }
+      }
+      const blocked1: TestItem = { id: 'blocked1', blocked: true };
+      const blocked2: TestItem = { id: 'blocked2', blocked: true };
+
+      it('keeps the loaded items and advances the offset by the raw page (offset)', async () => {
+        const paginator = new BlockedFilteringPaginator({ pageSize: 1 });
+
+        let nextPromise = paginator.toTail();
+        await sleep(0);
+        paginator.queryResolve({ items: [a] });
+        await nextPromise;
+        expect(paginator.items).toEqual([a]);
+
+        nextPromise = paginator.toTail();
+        paginator.queryResolve({ items: [blocked1] });
+        await nextPromise;
+        expect(paginator.items).toEqual([a]);
+        expect(paginator.offset).toBe(2);
+        expect(paginator.hasMoreTail).toBe(true);
+
+        nextPromise = paginator.toTail();
+        paginator.queryResolve({ items: [b] });
+        await nextPromise;
+        expect(paginator.items).toEqual([a, b]);
+        expect(paginator.offset).toBe(3);
+      });
+
+      it('keeps the loaded items and advances the cursor by the raw page (cursor)', async () => {
+        const paginator = new BlockedFilteringPaginator({
+          initialCursor: ZERO_PAGE_CURSOR,
+          pageSize: 1,
+        });
+
+        let nextPromise = paginator.toTail();
+        await sleep(0);
+        paginator.queryResolve({ items: [a], tailward: 'next1', headward: null });
+        await nextPromise;
+        expect(paginator.items).toEqual([a]);
+
+        nextPromise = paginator.toTail();
+        paginator.queryResolve({ items: [blocked1], tailward: 'next2', headward: null });
+        await nextPromise;
+        expect(paginator.items).toEqual([a]);
+        expect(paginator.cursor).toEqual({ tailward: 'next2', headward: null });
+        expect(paginator.hasMoreTail).toBe(true);
+
+        nextPromise = paginator.toTail();
+        paginator.queryResolve({ items: [b], tailward: null, headward: null });
+        await nextPromise;
+        expect(paginator.items).toEqual([a, b]);
+        expect(paginator.hasMoreTail).toBe(false);
+      });
+
+      it('still blanks the list on a reset first page', async () => {
+        const paginator = new BlockedFilteringPaginator({ pageSize: 2 });
+
+        let nextPromise = paginator.toTail();
+        await sleep(0);
+        paginator.queryResolve({ items: [a, b] });
+        await nextPromise;
+        expect(paginator.items).toEqual([a, b]);
+
+        nextPromise = paginator.executeQuery({ reset: 'yes' });
+        await sleep(0);
+        paginator.queryResolve({ items: [blocked1, blocked2] });
+        await nextPromise;
+        expect(paginator.items).toEqual([]);
+        expect(paginator.offset).toBe(2);
+        expect(paginator.hasMoreTail).toBe(true);
+      });
+    });
+
     describe('keepPreviousItems + reset: where pagination continues after the refresh (offset)', () => {
       const e: TestItem = { id: 'e', age: 18, name: 'E' };
       const f: TestItem = { id: 'f', age: 16, name: 'F' };
