@@ -89,6 +89,16 @@ describe('scheduled message hydration', () => {
       expect(manager.getForChannel('messaging:a')).toEqual([known]);
     });
 
+    it('accepts a response without channels', async () => {
+      const { client, manager } = setup();
+      const known = generateScheduledMessage({ cid: 'messaging:a' });
+      manager.upsertToState(known);
+      vi.spyOn(client, 'queryChannels').mockResolvedValue({ duration: '' } as never);
+
+      await expect(client.queryChannelsAndHydrate({})).resolves.toEqual([]);
+      expect(manager.getFromState(known.id)).toBe(known);
+    });
+
     it('keeps a message stored while the query is in flight', async () => {
       const { client, manager } = setup();
       const response = deferred<unknown>();

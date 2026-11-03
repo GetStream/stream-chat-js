@@ -1461,7 +1461,7 @@ export class StreamChat extends ChatApi {
       options,
       headIntervalItemIdsAtRequestByCid,
     );
-    for (const { channel, scheduled_messages } of channels) {
+    for (const { channel, scheduled_messages } of channels ?? []) {
       if (!channel) continue;
       this.scheduledMessages.hydrateChannelState(
         channel.cid,
