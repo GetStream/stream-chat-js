@@ -904,6 +904,8 @@ describe('MessageComposer', () => {
         draftId: null,
         showReplyInChannel: false,
         editedMessage: null,
+        editedScheduledMessage: null,
+        failedScheduledMessage: null,
       });
     });
 
@@ -923,6 +925,8 @@ describe('MessageComposer', () => {
         quotedMessage: null,
         draftId: null,
         showReplyInChannel: false,
+        editedScheduledMessage: null,
+        failedScheduledMessage: null,
         editedMessage: expect.objectContaining({
           id: 'test-message-id',
           text: 'Hello world',
@@ -1244,6 +1248,8 @@ describe('MessageComposer', () => {
         quotedMessage: null,
         draftId: null,
         showReplyInChannel: false,
+        editedScheduledMessage: null,
+        failedScheduledMessage: null,
         editedMessage: expect.objectContaining({
           id: 'edited-message-id',
           poll_id: 'test-poll-id',
