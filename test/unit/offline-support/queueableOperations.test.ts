@@ -160,6 +160,77 @@ describe('send-message replay', () => {
       expect(thread.messagePaginator.getItem('m1')?.status).toBe('received');
     });
 
+    it('leaves a message that is no longer failed alone', () => {
+      const { channel, client } = setup();
+      // Already settled, e.g. by the user's retry.
+      channel.messagePaginator.ingestItem(
+        formatMessage({
+          ...generateMsg({ cid: channel.cid, id: 'm1', text: 'retried' }),
+          status: 'received',
+        } as never),
+      );
+      const before = channel.messagePaginator.getItem('m1');
+
+      QUEUEABLE_OPERATIONS['send-message'].onReplayRejected?.({
+        client,
+        error: alreadyExists(),
+        task: { ...task, type: 'send-message' },
+      } as never);
+
+      expect(channel.messagePaginator.getItem('m1')).toBe(before);
+    });
+
+    it("persists the received message under the task's channel", () => {
+      const { channel, client } = setup();
+      const upsertMessageWithChannelGuard = vi.fn(async () => []);
+      client.offlineDb = {
+        executeQuerySafely: (query: (db: unknown) => unknown) =>
+          query({ upsertMessageWithChannelGuard }),
+      } as never;
+      channel.messagePaginator.ingestItem(
+        formatMessage({
+          ...generateMsg({ cid: channel.cid, id: 'm1' }),
+          status: 'failed',
+        } as never),
+      );
+
+      QUEUEABLE_OPERATIONS['send-message'].onReplayRejected?.({
+        client,
+        error: alreadyExists(),
+        task: { ...task, type: 'send-message' },
+      } as never);
+
+      expect(upsertMessageWithChannelGuard).toHaveBeenCalledWith({
+        message: expect.objectContaining({
+          cid: 'messaging:general',
+          error: undefined,
+          id: 'm1',
+          status: 'received',
+        }),
+      });
+    });
+
+    it('does nothing for a message that is not loaded', () => {
+      const { client } = setup();
+      const upsertMessageWithChannelGuard = vi.fn(async () => []);
+      client.offlineDb = {
+        executeQuerySafely: (query: (db: unknown) => unknown) =>
+          query({ upsertMessageWithChannelGuard }),
+      } as never;
+      const upsert = vi.spyOn(client.messageStore, 'upsert');
+
+      expect(() =>
+        QUEUEABLE_OPERATIONS['send-message'].onReplayRejected?.({
+          client,
+          error: alreadyExists(),
+          task: { ...task, type: 'send-message' },
+        } as never),
+      ).not.toThrow();
+
+      expect(upsert).not.toHaveBeenCalled();
+      expect(upsertMessageWithChannelGuard).not.toHaveBeenCalled();
+    });
+
     it('leaves the message failed for any other rejection', () => {
       const { channel, client } = setup();
       channel.messagePaginator.ingestItem(
