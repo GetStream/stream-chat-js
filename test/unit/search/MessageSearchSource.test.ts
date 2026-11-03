@@ -139,6 +139,16 @@ describe('MessageSearchSource', () => {
     expect(searchSource.pageSize).toBe(3000);
   });
 
+  it('matches the message text with $autocomplete by default', () => {
+    const { generate } =
+      searchSource.messageSearchFilterBuilder.filterConfig.getLatestValue().text;
+
+    expect(generate({ searchQuery: 'lunch' })).toEqual({
+      text: { $autocomplete: 'lunch' },
+    });
+    expect(generate({ searchQuery: '' })).toBeNull();
+  });
+
   it('uses default options and custom filter builder options', () => {
     const searchSource = new MessageSearchSource<{
       messageSearchChannelContext: { a: string };
@@ -173,7 +183,7 @@ describe('MessageSearchSource', () => {
         .getLatestValue()
         .text.generate({ searchQuery: 'searchQuery', b: 'hello' }),
     ).toEqual({
-      text: 'searchQuery',
+      text: { $autocomplete: 'searchQuery' },
     });
     expect(searchSource.messageSearchFilterBuilder.context.getLatestValue()).toEqual({
       b: 'messageSearchFilterBuilder',
@@ -266,7 +276,7 @@ describe('MessageSearchSource', () => {
           message_filter_conditions: {
             'mentioned_users.id': { $contains: 'abc' },
             type: 'regular',
-            text: 'hello',
+            text: { $autocomplete: 'hello' },
           },
           limit: searchSource.pageSize,
           next: 'next-token-old',
@@ -315,7 +325,7 @@ describe('MessageSearchSource', () => {
           message_filter_conditions: {
             'mentioned_users.id': { $contains: searchQuery },
             type: 'regular',
-            text: searchQuery,
+            text: { $autocomplete: searchQuery },
           },
           limit: searchSource.pageSize,
           next: 'next-token-old',
@@ -372,7 +382,7 @@ describe('MessageSearchSource', () => {
           },
           message_filter_conditions: {
             type: 'deleted',
-            text: 'hello',
+            text: { $autocomplete: 'hello' },
           },
           limit: searchSource.pageSize,
           next: 'next-token-old',
