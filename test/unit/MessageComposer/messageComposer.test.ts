@@ -1563,6 +1563,29 @@ describe('MessageComposer', () => {
         expect(result?.localMessage.custom).toEqual({ reviewed: true });
       });
 
+      it('lets an edit remove every custom field of the edited message', async () => {
+        const { messageComposer } = setup({ composition: editedMessageWithCustomData });
+        // The `message` field holds the custom data sent in the message's `custom`.
+        messageComposer.customDataManager.state.partialNext({ message: {} });
+
+        const result = await messageComposer.compose();
+
+        expect(result?.message.custom).toEqual({});
+        expect(result?.localMessage.custom).toEqual({});
+        expect(result?.message.text).toBe('Edited message');
+      });
+
+      it('sends no custom data with an edit of a message that has none', async () => {
+        const { messageComposer } = setup({
+          composition: { ...editedMessageWithCustomData, custom: undefined },
+        });
+
+        const result = await messageComposer.compose();
+
+        expect(result?.message.custom).toBeUndefined();
+        expect(result?.localMessage.custom).toBeUndefined();
+      });
+
       it('sends no custom data with a new message that has none', async () => {
         const { messageComposer } = setup();
         messageComposer.textComposer.setText('Test message');
