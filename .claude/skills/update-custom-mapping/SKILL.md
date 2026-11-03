@@ -32,7 +32,7 @@ Map a candidate only when its `custom` **is the custom data of the domain object
 - Every new `*Event` interface with a `custom` field → `CustomEventData`, as all existing events are.
 - Filters: map `Request.filter_field` to the type of the objects being queried (the filter on `QueryChannelsRequest` filters channels → `CustomChannelData`).
 - **Not** a match, leave unmapped: objects that merely sit next to a mapped one but have their own custom bag — flags (`FlagRequest`, `MessageFlagResponse`, `ModerationFlagResponse`), moderation payloads / actions / action configs / review queue (including its filter), action logs, calls, and Feeds models (`Feeds*`). A flag on a message is not message custom data. There is no `Custom*Data` for these; the unmapped warning for them is expected.
-- `CustomMessageComposerData`, `CustomCommandData` and `CustomEventTypes` are not wire-model custom bags; don't map generated models to them unless a model plainly is a command.
+- `CustomMessageComposerData` and `CustomEventTypes` are not wire-model custom bags; don't map generated models to them.
 
 If a candidate is genuinely ambiguous, ask the user (AskUserQuestion) rather than guess — a wrong mapping types data that does not have the integrator's shape.
 

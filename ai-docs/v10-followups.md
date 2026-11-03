@@ -644,7 +644,7 @@ Unused in `src` and not used downstream. Most are v10-only. The ones marked "v9 
 
 `dead-code` · confidence: low · pre-release: yes · public surface
 
-- **Where:** `src/index.ts:34, 37, 39-40, 121`
+- **Where:** `src/index.ts:34, 37, 39-40, 118`
 - **What:** `mergeServerRestrictions`, `ServerRestrictions`, `ServerUpperBounds`, `ConfiguredInstance`, `NS_PER_MS` are new in v10, not used downstream (React defines its own `NS_PER_MS` in a test), and not needed to name a public signature. Removing them after 10.0.0 is breaking; adding later is not.
 - **Suggested change:** Decide whether they are intended public API; otherwise drop them from the barrel.
 
@@ -679,13 +679,14 @@ Unused in `src` and not used downstream. Most are v10-only. The ones marked "v9 
 
 <a id="keep-custom-command-data"></a>
 
-#### `CustomCommandData` is augmented downstream but has no effect
+#### `CustomCommandData` is augmented downstream but has no effect [SOLVED]
 
 `dead-code` · confidence: high · pre-release: yes · types
 
 - **Where:** `src/custom_types.ts:6`
 - **What:** Exported for augmentation but referenced nowhere in v10 `src` (v9 fed `CommandVariants`). React (`src/@types/stream-chat-custom-data.d.ts:23`) and RN (`package/src/types/stream-chat-common-custom-data.d.ts:24`, two examples) still augment it, so removal breaks their declaration files, yet the augmentation does nothing.
 - **Suggested change:** Type `Command['name']` with it again, or remove it together with the downstream declarations.
+- **Resolution:** removed; command names stay `string` and an app types its own names ([custom-data augmentation](v10-breaking-changes.md#custom-data-augmentation)). React drops its `CustomCommandData` augmentation and `DefaultCommandData` in the same change; RN still has to delete its declarations.
 
 <a id="keep-downstream"></a>
 
