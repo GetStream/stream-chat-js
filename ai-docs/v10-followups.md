@@ -679,7 +679,7 @@ Unused in `src` and not used downstream. Most are v10-only. The ones marked "v9 
 
 <a id="keep-custom-command-data"></a>
 
-#### `CustomCommandData` is augmented downstream but has no effect [SOLVED]
+#### `CustomCommandData` is augmented downstream but has no effect [SOLVED 4f475c11]
 
 `dead-code` · confidence: high · pre-release: yes · types
 
