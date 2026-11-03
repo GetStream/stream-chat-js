@@ -7,6 +7,18 @@ import type {
   MessageDraftCompositionMiddleware,
 } from './types';
 
+const hasFields = (data?: object) => !!data && Object.keys(data).length > 0;
+
+/**
+ * An edit started with `initState({ composition: message })` loads a copy of the message's `custom`
+ * into the composer, so composer data without fields means the fields were cleared. The edit then
+ * sends an empty `custom`, because the data cleanup middleware fills a missing `custom` from the
+ * edited message.
+ */
+const editClearsCustomData = (composer: MessageComposer) =>
+  hasFields(composer.editedMessage?.custom) &&
+  !hasFields(composer.customDataManager.customMessageData);
+
 export const createCustomDataCompositionMiddleware = (
   composer: MessageComposer,
 ): MessageCompositionMiddleware => ({
@@ -18,7 +30,7 @@ export const createCustomDataCompositionMiddleware = (
       forward,
     }: MiddlewareHandlerParams<MessageComposerMiddlewareState>) => {
       const data = composer.customDataManager.customMessageData;
-      if (!data || !Object.keys(data).length) return forward();
+      if (!hasFields(data) && !editClearsCustomData(composer)) return forward();
 
       return next({
         ...state,
@@ -46,7 +58,7 @@ export const createDraftCustomDataCompositionMiddleware = (
       forward,
     }: MiddlewareHandlerParams<MessageDraftComposerMiddlewareValueState>) => {
       const data = composer.customDataManager.customMessageData;
-      if (!data || !Object.keys(data).length) return forward();
+      if (!hasFields(data)) return forward();
 
       return next({
         ...state,
