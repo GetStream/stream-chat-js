@@ -454,10 +454,16 @@ export class Channel extends ChannelApi {
   override async sendMessage(...args: Parameters<ChannelApi['sendMessage']>) {
     const [request, requestOptions] = args;
 
-    return await super.sendMessage(
+    const response = await super.sendMessage(
       { ...request, message: sanitizeOutgoingAttachments(request.message) },
       requestOptions,
     );
+
+    if (response.scheduled_message) {
+      this.getClient().scheduledMessages.upsertToState(response.scheduled_message);
+    }
+
+    return response;
   }
 
   async sendReaction(...args: Parameters<ChatApi['sendReaction']>) {
@@ -1847,6 +1853,7 @@ export class Channel extends ChannelApi {
       state: true,
       ...options,
     };
+    const scheduledMessagesVersion = this.getClient().scheduledMessages.version;
 
     const state = this.id
       ? await this.getOrCreate(queryPayload, requestOptions)
@@ -1865,6 +1872,11 @@ export class Channel extends ChannelApi {
     }
 
     this.getClient()._addChannelConfig(channel);
+    this.getClient().scheduledMessages.hydrateChannelState(
+      channel.cid,
+      state.scheduled_messages,
+      scheduledMessagesVersion,
+    );
 
     // The composer's server config arrives here for a channel opened via `ensure({ type, id })`. A
     // composer with registered subscriptions hears it through the store, one without is told here.

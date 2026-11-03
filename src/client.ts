@@ -1437,6 +1437,7 @@ export class StreamChat extends ChatApi {
       const idsAtRequest = channel.messagePaginator?.getHeadIntervalItemIdsAtRequest();
       if (idsAtRequest) headIntervalItemIdsAtRequestByCid.set(channel.cid, idsAtRequest);
     }
+    const scheduledMessagesVersion = this.scheduledMessages.version;
     const queryChannelsResponse = await this.queryChannels(options, requestOptions);
     const channels = queryChannelsResponse.channels;
 
@@ -1460,6 +1461,14 @@ export class StreamChat extends ChatApi {
       options,
       headIntervalItemIdsAtRequestByCid,
     );
+    for (const { channel, scheduled_messages } of channels) {
+      if (!channel) continue;
+      this.scheduledMessages.hydrateChannelState(
+        channel.cid,
+        scheduled_messages,
+        scheduledMessagesVersion,
+      );
+    }
 
     if (stateOptions.withResponse) {
       return {
