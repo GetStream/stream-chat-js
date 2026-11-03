@@ -264,6 +264,8 @@ export class MessageOperationStatePolicy {
     }
 
     if (kind === 'send' || kind === 'retry') {
+      // the server's copy arrived while the request was open, so the send succeeded.
+      if (this.ctx.get(messageId)?.status === 'received') return true;
       const failed: LocalMessage = { ...localMessage, error: parsed, status: 'failed' };
       this.ctx.ingest(failed);
       this.ctx.persist(failed);

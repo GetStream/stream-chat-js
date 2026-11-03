@@ -187,6 +187,35 @@ describe('MessageOperations', () => {
     expect(store.get('m1')?.status).toBe('failed');
   });
 
+  it('resolves a send whose server copy arrived before the request failed', async () => {
+    const store: Store = new Map();
+
+    const ops = new MessageOperations({
+      ...stateHooks(store),
+      ingest: (m) => store.set(m.id, m),
+      get: (id) => store.get(id),
+      handlers: () => ({}),
+      defaults: {
+        delete: defaultDelete,
+        send: async () => {
+          // The server saved the message and its `message.new` arrived, then the client timed out.
+          store.set(
+            'm1',
+            makeLocalMessage({ id: 'm1', status: 'received', text: 'from the server' }),
+          );
+          throw new Error('timeout of 3000ms exceeded');
+        },
+        update: async () => ({ message: makeMessageResponse({ id: 'm1' }) }),
+      },
+    });
+
+    const localMessage = makeLocalMessage({ id: 'm1', status: 'failed' });
+
+    await expect(ops.send({ localMessage })).resolves.toBeUndefined();
+    expect(store.get('m1')?.status).toBe('received');
+    expect(store.get('m1')?.text).toBe('from the server');
+  });
+
   it('marks as failed on non-duplicate error', async () => {
     const store: Store = new Map();
 
