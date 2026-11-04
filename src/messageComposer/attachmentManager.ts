@@ -423,10 +423,16 @@ export class AttachmentManager {
   ): Promise<UploadPermissionCheckResult> => {
     const client = this.channel.getClient();
     let appSettings;
-    if (!client.appSettingsPromise) {
-      appSettings = await client.getAppSettings();
-    } else {
-      appSettings = await client.appSettingsPromise;
+    try {
+      appSettings = await (client.appSettingsPromise ?? client.getAppSettings());
+    } catch (error) {
+      // offline, the copy the offline database keeps stands in for the request
+      appSettings = client.userId
+        ? await client.offlineDb
+            ?.getAppSettings({ userId: client.userId })
+            .catch(() => null)
+        : null;
+      if (!appSettings) throw error;
     }
     const uploadConfig = isImageFile(fileLike)
       ? appSettings?.app?.image_upload_config
