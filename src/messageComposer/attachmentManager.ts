@@ -380,7 +380,9 @@ export class AttachmentManager {
 
   /**
    * Merges each attachment into the one with its `localMetadata.id`, or appends it. An attachment
-   * without `localMetadata` (e.g. a custom-type one the app builds) is appended with a new local id.
+   * without a local id (e.g. a custom-type one the app builds) is appended with a new one, on every
+   * call: to update or remove it later, pass `{ ...attachment, localMetadata: { id } }` with your own
+   * id instead.
    */
   upsertAttachments = (attachmentsToUpsert: Array<Attachment | LocalAttachment>) => {
     if (!attachmentsToUpsert.length) return;
