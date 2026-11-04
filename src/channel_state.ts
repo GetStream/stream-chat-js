@@ -85,6 +85,11 @@ export type MembershipState = {
 };
 
 export type OwnCapabilitiesState = {
+  /**
+   * The current user's capabilities in the channel: the same capabilities as
+   * `data.own_capabilities`, empty until known. The array is replaced only when the capabilities
+   * change (order ignored), so subscribe to it to react to changes.
+   */
   ownCapabilities: string[];
 };
 

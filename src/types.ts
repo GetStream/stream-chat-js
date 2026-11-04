@@ -6,7 +6,6 @@ import type {
   BanRequest,
   ChannelConfigWithInfo,
   ChannelMemberRequest,
-  ChannelOwnCapability,
   ChannelStateResponseFields,
   CreateDeviceRequest,
   CreatePollRequest,
@@ -185,10 +184,6 @@ type LocalEvent = (
   | ({ type: 'connection.fallback_activated' } & { mode: string })
   | ({ type: 'offline_reactions.queried' } & {
       offlineReactions: ReactionResponse[];
-    })
-  | ({ type: 'capabilities.changed' } & {
-      cid: string;
-      own_capabilities: ChannelOwnCapability[];
     })
   | ({ type: 'message.read_locally' } & {
       channel_type: string;
