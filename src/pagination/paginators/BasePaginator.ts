@@ -529,6 +529,8 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
   protected _executeQueryDebounced!: DebouncedExecQueryFunction<Q>;
   /** Last effective query shape produced by the subclass for the most recent request. */
   protected _lastQueryShape?: Q;
+  /** Set by `setItems`, which loads a page (even an empty one) without a query. */
+  private _pageSetWithoutQuery = false;
 
   /**
    * Stable, purely data-driven comparison (age, timestamps, ...). Default for
@@ -643,6 +645,18 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
    */
   get isInitialized() {
     return typeof this._lastQueryShape !== 'undefined';
+  }
+
+  /**
+   * True once a page was loaded: by a query, or by `setItems`, including an empty page (e.g. a
+   * catch-all list seeded so it never runs its own query). Items that live events ingested into a
+   * never-queried list are not a loaded page, although they make `items` defined: a UI deciding
+   * whether to run the first query reads this, not `items === undefined`. Unlike `isInitialized`,
+   * an empty `setItems` page counts, so connection recovery (which re-runs initialized lists'
+   * queries) still skips such a list. Cleared by `resetState`.
+   */
+  get hasLoadedPage() {
+    return this._pageSetWithoutQuery || this.isInitialized;
   }
 
   get isOfflineSupportEnabled() {
@@ -2682,6 +2696,8 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
         newState.hasMoreTail = interval.hasMoreTail;
       }
 
+      // Before the publish below: subscribers read `hasLoadedPage` from inside it.
+      this._pageSetWithoutQuery = true;
       return newState;
     });
 
@@ -3450,13 +3466,15 @@ export abstract class BasePaginator<T, Q, R = PaginationQueryReturnValue<T>> {
   }
 
   resetState() {
+    // Nothing is loaded, so the next query is a first page again. A stale shape would make a
+    // re-query with an unchanged shape a continuation, ingested without `isHead`. Cleared before
+    // the publish below, whose subscribers read `isInitialized` / `hasLoadedPage`.
+    this._lastQueryShape = undefined;
+    this._pageSetWithoutQuery = false;
     this.state.next(this.initialState);
     this.setIntervals([]);
     this.setActiveInterval(undefined);
     this.clearIntervalViews();
-    // Nothing is loaded, so the next query is a first page again. A stale shape would make a
-    // re-query with an unchanged shape a continuation, ingested without `isHead`.
-    this._lastQueryShape = undefined;
   }
 
   /**
