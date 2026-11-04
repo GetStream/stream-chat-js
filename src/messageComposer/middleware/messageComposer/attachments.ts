@@ -1,9 +1,4 @@
-import {
-  isFailedUpload,
-  isFinishedUpload,
-  isLocalUploadAttachment,
-  isPendingUpload,
-} from '../../attachmentIdentity';
+import { isResolvableUpload, isSendableAttachment } from '../../attachmentIdentity';
 import type { MiddlewareHandlerParams } from '../../../middleware';
 import { CORE_NOTIFICATION_TYPE } from '../../../notifications';
 import type { Attachment } from '../../../types';
@@ -20,14 +15,6 @@ const localAttachmentToAttachment = (localAttachment: LocalAttachment) => {
   const { localMetadata: _localMetadata, ...attachment } = localAttachment;
   return attachment as Attachment;
 };
-
-/**
- * An attachment that is not an upload (e.g. a custom one of an edited message or a restored
- * draft) has no upload state and is sendable as it is. Leaving it out would drop it from the
- * message: on an edit, the API removes every attachment missing from the payload.
- */
-const isSendable = (attachment: LocalAttachment) =>
-  isFinishedUpload(attachment) || !isLocalUploadAttachment(attachment);
 
 /**
  * Composition when {@link AttachmentManagerConfig.pendingUploadsEnabled} is on. `message.attachments`
@@ -50,20 +37,21 @@ const composeWithPendingUploads = ({
   // Composer order is kept in both payloads, so previews do not reshuffle when an upload settles.
   const relevantAttachments = composer.attachmentManager.attachments.filter(
     (attachment) =>
-      isSendable(attachment) ||
-      (!composerIsKeptAsDraft &&
-        (isPendingUpload(attachment) || isFailedUpload(attachment))),
+      isSendableAttachment(attachment) ||
+      (!composerIsKeptAsDraft && isResolvableUpload(attachment)),
   );
 
   const localAttachments = (state.localMessage.attachments ?? []).concat(
     // A finished upload or a non-upload is final; the rest keep `localMetadata` (joined to the upload
     // record).
     relevantAttachments.map((attachment) =>
-      isSendable(attachment) ? localAttachmentToAttachment(attachment) : attachment,
+      isSendableAttachment(attachment)
+        ? localAttachmentToAttachment(attachment)
+        : attachment,
     ),
   );
   const messageAttachments = (state.message.attachments ?? []).concat(
-    relevantAttachments.filter(isSendable).map(localAttachmentToAttachment),
+    relevantAttachments.filter(isSendableAttachment).map(localAttachmentToAttachment),
   );
 
   if (!localAttachments.length && !messageAttachments.length) return state;
@@ -124,7 +112,9 @@ export const createAttachmentsCompositionMiddleware = (
       }
 
       const attachments = (state.message.attachments ?? []).concat(
-        attachmentManager.attachments.filter(isSendable).map(localAttachmentToAttachment),
+        attachmentManager.attachments
+          .filter(isSendableAttachment)
+          .map(localAttachmentToAttachment),
       );
 
       // Do not add an empty `attachments` array to the payload.
@@ -158,7 +148,8 @@ export const createDraftAttachmentsCompositionMiddleware = (
       const { attachmentManager } = composer;
       if (!attachmentManager) return forward();
 
-      const sendableAttachments = attachmentManager.attachments.filter(isSendable);
+      const sendableAttachments =
+        attachmentManager.attachments.filter(isSendableAttachment);
       const attachments = sendableAttachments.length
         ? (state.draft.attachments ?? []).concat(
             sendableAttachments.map(localAttachmentToAttachment),

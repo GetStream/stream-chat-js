@@ -1,7 +1,6 @@
 import {
-  isFailedUpload,
   isLocalImageAttachment,
-  isPendingUpload,
+  isResolvableUpload,
 } from '../messageComposer/attachmentIdentity';
 
 import type { StreamChat } from '../client';
@@ -61,7 +60,7 @@ export const settlePendingAttachmentUploads = async ({
   failureReason?: unknown;
 }> => {
   const unsettledIndexes = attachments.reduce<number[]>((indexes, attachment, index) => {
-    if (isPendingUpload(attachment) || isFailedUpload(attachment)) indexes.push(index);
+    if (isResolvableUpload(attachment)) indexes.push(index);
     return indexes;
   }, []);
 
