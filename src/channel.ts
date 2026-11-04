@@ -2583,6 +2583,15 @@ export class Channel extends ChannelApi {
           if (removedUserId === this.getClient().userId) {
             channelState.membership = {} as ChannelMemberResponse;
           }
+
+          this._patchReadState(
+            (currentReadState) => {
+              if (!currentReadState[removedUserId]) return currentReadState;
+              const { [removedUserId]: _removed, ...nextReadState } = currentReadState;
+              return nextReadState;
+            },
+            { removedUserIds: [removedUserId] },
+          );
         }
         break;
       }

@@ -1601,6 +1601,28 @@ describe('Channel _handleChannelEvent', function () {
 
 			expect(channel.state.members).to.be.empty;
 		});
+
+		it('member.removed drops the removed member from the read state and the receipts', () => {
+			const lastRead = convertDateToTimestamp(new Date('2026-01-02T00:00:00.000Z'));
+			channel._initializeState({
+				members: [generateMember({ user }), generateMember({ user: otherUser })],
+				read: [
+					{ last_read: lastRead, unread_messages: 0, user },
+					{ last_read: lastRead, unread_messages: 0, user: otherUser },
+				],
+			});
+			expect(channel.messageReceiptsTracker.getUserProgress(otherUser.id)).toBeTruthy();
+
+			channel._handleChannelEvent({
+				type: 'member.removed',
+				user,
+				member: generateMember({ user: otherUser }),
+			});
+
+			expect(channel.state.read).to.have.keys([user.id]);
+			expect(channel.messageReceiptsTracker.getUserProgress(otherUser.id)).toBeNull();
+			expect(channel.messageReceiptsTracker.getUserProgress(user.id)).toBeTruthy();
+		});
 	});
 
 	describe('watchers and members publish a new reference', () => {
@@ -1813,7 +1835,6 @@ describe('Channel _handleChannelEvent', function () {
 				'message.updated',
 				'member.added',
 				'member.updated',
-				'member.removed',
 			];
 
 			for (const event of events) {
@@ -1844,7 +1865,6 @@ describe('Channel _handleChannelEvent', function () {
 				'message.updated',
 				'member.added',
 				'member.updated',
-				'member.removed',
 			];
 
 			for (const event of events) {
