@@ -43,8 +43,8 @@ export type MessagePaginatorAggregateState = {
    * {@link MessagePaginator.latestMessage}). For display (latest-message preview, latest-reply
    * avatar). A live reference: it advances to a strictly newer message, is refreshed in place on
    * edit, soft-delete or reaction, and is recomputed when hard-removed. Follows
-   * `shouldAdvanceLatestMessage` (skips `error` and `ephemeral` messages, system messages per
-   * `skip_last_msg_update_for_system_msgs`, and thread-only replies). `null` until one is ingested.
+   * `shouldAdvanceLatestMessage` (skips `error` and `ephemeral` messages and thread-only replies).
+   * `null` until one is ingested.
    *
    * It lives outside pagination `state`, which only emits when the active interval is affected: a
    * message landing in the head interval while an older interval is active would go stale there.
@@ -154,10 +154,17 @@ export class MessagePaginator extends MessageIntervalPaginator {
    * {@link latestMessage}'s `created_at` and the `last_message_at` of the latest response (see
    * {@link setQueriedLatestMessageAt}). Later than {@link latestMessage} when the server has newer
    * messages the client does not hold. The channel-list sort key. **Derived** (never stored) so it
-   * cannot drift from {@link latestMessage}. `null` until a query sets it or a message is ingested.
+   * cannot drift from {@link latestMessage}. A system message that does not move `last_message_at`
+   * (see {@link isSkippedSystemMessage}) does not count: the newest loaded message that does is
+   * used instead. `null` until a query sets it or a message is ingested.
    */
   get latestMessageAt(): TimestampNS | null {
-    return this.latestMessageAtIncluding(this.latestMessage);
+    const { latestMessage } = this.aggregateState.getLatestValue();
+    return this.latestMessageAtIncluding(
+      this.isSkippedSystemMessage(latestMessage)
+        ? this.recomputeLatestMessage({ counts: this.movesLastMessageAt })
+        : latestMessage,
+    );
   }
 
   /**
@@ -168,8 +175,11 @@ export class MessagePaginator extends MessageIntervalPaginator {
     const { latestMessage } = this.aggregateState.getLatestValue();
     const isUnsent = !!latestMessage && !this.isServerConfirmedMessage(latestMessage);
     return this.latestMessageAtIncluding(
-      isUnsent
-        ? this.recomputeLatestMessage({ serverConfirmedOnly: true })
+      isUnsent || this.isSkippedSystemMessage(latestMessage)
+        ? this.recomputeLatestMessage({
+            counts: this.movesLastMessageAt,
+            serverConfirmedOnly: true,
+          })
         : latestMessage,
     );
   }
@@ -194,8 +204,8 @@ export class MessagePaginator extends MessageIntervalPaginator {
    *
    * It differs from {@link anchoredHeadItem}, the newest message of the interval known to reach the
    * server's latest message, in two ways:
-   * - It skips messages that do not count. With system messages skipped, a system message can be
-   *   `anchoredHeadItem` but never `latestMessage`.
+   * - It skips messages that do not count: an `error` message can be `anchoredHeadItem` but never
+   *   `latestMessage`.
    * - It does not need that interval. A channel opened at its first unread message loads m40–m60
    *   while the server's newest is m95: `latestMessage` is m60, `latestMessageAt` is m95's time and
    *   `anchoredHeadItem` is `undefined`.
@@ -220,21 +230,33 @@ export class MessagePaginator extends MessageIntervalPaginator {
   /**
    * Whether `message` counts as the channel's latest message: not shadowed, not an `error` or
    * `ephemeral` message (only the current user sees those, e.g. a failed command or a giphy preview)
-   * and, in the main list, not a thread-only reply nor (with `skip_last_msg_update_for_system_msgs`,
-   * which the server also applies to `last_message_at`) a system message. A reply list
-   * (`parentMessageId` set) holds only thread replies, so the thread-only and system rules do not
-   * apply there.
+   * and, in the main list, not a thread-only reply. A reply list (`parentMessageId` set) holds only
+   * thread replies, so the thread-only rule does not apply there.
    */
   protected shouldAdvanceLatestMessage(message: LocalMessage): boolean {
     if (message.shadowed) return false;
     if (message.type === 'error' || message.type === 'ephemeral') return false;
     if (this.parentMessageId) return true;
-    if (isThreadOnlyReply(message)) return false;
-    const skipSystemMessage =
-      !!this.channel.serverConfig?.skip_last_msg_update_for_system_msgs &&
-      message.type === 'system';
-    return !skipSystemMessage;
+    return !isThreadOnlyReply(message);
   }
+
+  /**
+   * Whether `message` is a main-list system message that, with
+   * `skip_last_msg_update_for_system_msgs`, does not move the channel's `last_message_at` on the
+   * server. It is still shown as the {@link latestMessage}, but {@link latestMessageAt} skips it.
+   */
+  private isSkippedSystemMessage(message: LocalMessage | null): boolean {
+    return (
+      !!message &&
+      !this.parentMessageId &&
+      message.type === 'system' &&
+      !!this.channel.serverConfig?.skip_last_msg_update_for_system_msgs
+    );
+  }
+
+  /** Whether `message` counts for {@link latestMessageAt}. */
+  private movesLastMessageAt = (message: LocalMessage) =>
+    this.shouldAdvanceLatestMessage(message) && !this.isSkippedSystemMessage(message);
 
   /**
    * Advances {@link latestMessage} (and so {@link latestMessageAt}) to `message` when it is newer
@@ -555,26 +577,31 @@ export class MessagePaginator extends MessageIntervalPaginator {
   }
 
   /**
-   * The still-loaded message with the greatest `created_at` that passes
-   * {@link shouldAdvanceLatestMessage} (skips system / thread-only per config), from the interval
-   * that reaches the newest message and the {@link logicalHeadItemsSinceQueriedLatestMessageAt}.
-   * An interval reached by a jump is not searched, nor an out-of-order older message: neither is the
-   * channel's previous message. Used to recompute the tracked latest after the current one is
-   * removed or stops counting; `serverConfirmedOnly` skips unsent messages and `excludeId` skips
-   * that message. `null` when nothing loaded qualifies. It compares timestamps rather than
-   * positions, so it holds for any `itemOrder` / `requestSort`.
+   * The still-loaded message with the greatest `created_at` that `counts` (by default
+   * {@link shouldAdvanceLatestMessage}), from the interval that reaches the newest message and the
+   * {@link logicalHeadItemsSinceQueriedLatestMessageAt}. An interval reached by a jump is not
+   * searched, nor an out-of-order older message: neither is the channel's previous message. Used to
+   * recompute the tracked latest after the current one is removed or stops counting;
+   * `serverConfirmedOnly` skips unsent messages and `excludeId` skips that message. `null` when
+   * nothing loaded qualifies. It compares timestamps rather than positions, so it holds for any
+   * `itemOrder` / `requestSort`.
    */
   private recomputeLatestMessage({
+    counts = (message) => this.shouldAdvanceLatestMessage(message),
     excludeId,
     serverConfirmedOnly = false,
-  }: { excludeId?: string; serverConfirmedOnly?: boolean } = {}): LocalMessage | null {
+  }: {
+    counts?: (message: LocalMessage) => boolean;
+    excludeId?: string;
+    serverConfirmedOnly?: boolean;
+  } = {}): LocalMessage | null {
     let latest: LocalMessage | null = null;
     let latestTimestamp = -Infinity;
     for (const item of [
       ...this.anchoredHeadItems,
       ...this.logicalHeadItemsSinceQueriedLatestMessageAt,
     ]) {
-      if (item.id === excludeId || !this.shouldAdvanceLatestMessage(item)) continue;
+      if (item.id === excludeId || !counts(item)) continue;
       if (serverConfirmedOnly && !this.isServerConfirmedMessage(item)) continue;
       const timestamp = getMessageCreatedAtTimestamp(item);
       if (timestamp === null || timestamp <= latestTimestamp) continue;

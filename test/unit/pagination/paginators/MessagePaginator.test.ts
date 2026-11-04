@@ -6091,6 +6091,57 @@ describe('MessagePaginator', () => {
       expect(tracking.latestMessageAt).toBe(at('2020-01-01T00:00:00.000Z'));
     });
 
+    describe('system messages (RN-495)', () => {
+      const message = (id: string, second: number, extra: Partial<LocalMessage> = {}) =>
+        createMessage({
+          id,
+          cid: 'channel-id',
+          created_at: convertDateToTimestamp(`2020-01-01T00:00:0${second}.000Z`),
+          ...extra,
+        });
+
+      it.each([true, false])(
+        'become the latest message (skip_last_msg_update_for_system_msgs: %s)',
+        (skip) => {
+          skipSystemMessages = skip;
+          const paginator = buildPaginator();
+          paginator.ingestItem(message('m1', 1));
+
+          paginator.ingestItem(message('sys', 2, { type: 'system' }));
+
+          expect(paginator.latestMessage?.id).toBe('sys');
+        },
+      );
+
+      it('do not move latestMessageAt with skip_last_msg_update_for_system_msgs', () => {
+        skipSystemMessages = true;
+        const skipping = buildPaginator();
+        skipping.ingestItem(message('m1', 1));
+        skipping.ingestItem(message('sys', 2, { type: 'system' }));
+        // the channel keeps its place in the list, as the server keeps `last_message_at`
+        expect(skipping.latestMessageAt).toBe(at('2020-01-01T00:00:01.000Z'));
+
+        skipSystemMessages = false;
+        const tracking = buildPaginator();
+        tracking.ingestItem(message('m1', 1));
+        tracking.ingestItem(message('sys', 2, { type: 'system' }));
+        expect(tracking.latestMessageAt).toBe(at('2020-01-01T00:00:02.000Z'));
+      });
+
+      it('show a system message posted with a truncation', () => {
+        skipSystemMessages = true;
+        const paginator = buildPaginator();
+        paginator.ingestItem(message('m1', 1));
+        paginator.ingestItem(message('m2', 2));
+
+        paginator.truncate({ truncatedAt: at('2020-01-01T00:00:03.000Z') });
+        paginator.ingestItem(message('truncated', 3, { type: 'system' }));
+
+        expect(paginator.latestMessage?.id).toBe('truncated');
+        expect(paginator.latestMessageAt).toBeNull();
+      });
+    });
+
     describe('error and ephemeral messages (only the current user sees them)', () => {
       const message = (id: string, second: number, extra: Partial<LocalMessage> = {}) =>
         createMessage({
@@ -6382,7 +6433,8 @@ describe('MessagePaginator', () => {
           created_at: convertDateToTimestamp('2020-01-01T00:00:02.000Z'),
         }),
       );
-      // A system message is the newest LOADED item, but the config keeps it from becoming the latest.
+      // A system message is the newest LOADED item, but the config keeps it from moving
+      // `latestMessageAt`.
       paginator.ingestItem(
         createMessage({
           id: 'sys',
@@ -6391,14 +6443,14 @@ describe('MessagePaginator', () => {
           created_at: convertDateToTimestamp('2020-01-01T00:00:03.000Z'),
         }),
       );
-      expect(paginator.latestMessage?.id).toBe('m1');
+      expect(paginator.latestMessageAt).toBe(at('2020-01-01T00:00:02.000Z'));
       // the newest loaded item, unfiltered
       expect(paginator.anchoredHeadItem?.id).toBe('sys');
 
-      // Hard-removing the tracked latest must recompute to the previous NON-system message (m0),
-      // not to the newest loaded item (which is the system message).
+      // Hard-removing m1 must move `latestMessageAt` to the previous NON-system message (m0), not
+      // to the newest loaded item (which is the system message).
       paginator.removeItem({ id: 'm1' });
-      expect(paginator.latestMessage?.id).toBe('m0');
+      expect(paginator.latestMessageAt).toBe(at('2020-01-01T00:00:01.000Z'));
     });
   });
 

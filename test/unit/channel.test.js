@@ -1323,13 +1323,15 @@ describe('Channel local unread count (readEvents.localUnreadCountEnabled)', func
 
 		it('a system message', function () {
 			const { client, channel } = setupChannel({ localUnreadCountEnabled: true });
-			// the system message is then not the channel's latest message
+			// the system message then does not move the channel's `last_message_at`
 			client._addChannelConfig({
 				cid: channel.cid,
 				config: { skip_last_msg_update_for_system_msgs: true },
 			});
 			seedLatestWindow(channel, [msgAt('m1', 1), msgAt('system', 2, { type: 'system' })]);
-			expect(channel.messagePaginator.latestMessage?.id).toBe('m1');
+			expect(channel.messagePaginator.latestMessageAt).toBe(
+				convertDateToTimestamp(at(1).toISOString()),
+			);
 
 			const event = channel.markReadLocally();
 
