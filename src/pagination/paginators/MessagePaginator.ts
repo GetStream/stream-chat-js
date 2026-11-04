@@ -43,8 +43,8 @@ export type MessagePaginatorAggregateState = {
    * {@link MessagePaginator.latestMessage}). For display (latest-message preview, latest-reply
    * avatar). A live reference: it advances to a strictly newer message, is refreshed in place on
    * edit, soft-delete or reaction, and is recomputed when hard-removed. Follows
-   * `shouldAdvanceLatestMessage` (skips system messages per `skip_last_msg_update_for_system_msgs`,
-   * and thread-only replies). `null` until one is ingested.
+   * `shouldAdvanceLatestMessage` (skips `error` and `ephemeral` messages, system messages per
+   * `skip_last_msg_update_for_system_msgs`, and thread-only replies). `null` until one is ingested.
    *
    * It lives outside pagination `state`, which only emits when the active interval is affected: a
    * message landing in the head interval while an older interval is active would go stale there.
@@ -218,13 +218,16 @@ export class MessagePaginator extends MessageIntervalPaginator {
   }
 
   /**
-   * Whether `message` counts as the channel's latest message: not shadowed and, in the main list,
-   * not a thread-only reply nor (with `skip_last_msg_update_for_system_msgs`, which the server also
-   * applies to `last_message_at`) a system message. A reply list (`parentMessageId` set) holds only
-   * thread replies, so only the shadow rule applies there.
+   * Whether `message` counts as the channel's latest message: not shadowed, not an `error` or
+   * `ephemeral` message (only the current user sees those, e.g. a failed command or a giphy preview)
+   * and, in the main list, not a thread-only reply nor (with `skip_last_msg_update_for_system_msgs`,
+   * which the server also applies to `last_message_at`) a system message. A reply list
+   * (`parentMessageId` set) holds only thread replies, so the thread-only and system rules do not
+   * apply there.
    */
   protected shouldAdvanceLatestMessage(message: LocalMessage): boolean {
     if (message.shadowed) return false;
+    if (message.type === 'error' || message.type === 'ephemeral') return false;
     if (this.parentMessageId) return true;
     if (isThreadOnlyReply(message)) return false;
     const skipSystemMessage =
@@ -240,10 +243,16 @@ export class MessagePaginator extends MessageIntervalPaginator {
    * for callers that advance it without an in-interval ingest, e.g. offline pending-message replay.
    */
   trackLatestMessage(message: LocalMessage): boolean {
-    if (!this.shouldAdvanceLatestMessage(message)) return false;
+    const current = this.aggregateState.getLatestValue().latestMessage;
+    if (!this.shouldAdvanceLatestMessage(message)) {
+      if (current?.id !== message.id) return false;
+      this.aggregateState.partialNext({
+        latestMessage: this.recomputeLatestMessage({ excludeId: message.id }),
+      });
+      return true;
+    }
     const incoming = getMessageCreatedAtTimestamp(message);
     if (incoming === null) return false;
-    const current = this.aggregateState.getLatestValue().latestMessage;
     // An edit, soft-delete, reaction or quote update re-ingests the current latest (same ID and
     // `created_at`): refresh it in place so `latestMessage` stays live.
     if (current && current.id === message.id) {
@@ -476,7 +485,12 @@ export class MessagePaginator extends MessageIntervalPaginator {
     const { latestMessage } = this.aggregateState.getLatestValue();
     if (!latestMessage || !batch.changedIds.has(latestMessage.id)) return;
     const stored = this.getItem(latestMessage.id);
-    if (stored) this.aggregateState.partialNext({ latestMessage: stored });
+    if (!stored) return;
+    this.aggregateState.partialNext({
+      latestMessage: this.shouldAdvanceLatestMessage(stored)
+        ? stored
+        : this.recomputeLatestMessage({ excludeId: stored.id }),
+    });
   }
 
   reflectUserUpdate(user: UserResponse) {
@@ -546,19 +560,21 @@ export class MessagePaginator extends MessageIntervalPaginator {
    * that reaches the newest message and the {@link logicalHeadItemsSinceQueriedLatestMessageAt}.
    * An interval reached by a jump is not searched, nor an out-of-order older message: neither is the
    * channel's previous message. Used to recompute the tracked latest after the current one is
-   * removed; `serverConfirmedOnly` skips unsent messages. `null` when nothing loaded qualifies.
-   * It compares timestamps rather than positions, so it holds for any `itemOrder` / `requestSort`.
+   * removed or stops counting; `serverConfirmedOnly` skips unsent messages and `excludeId` skips
+   * that message. `null` when nothing loaded qualifies. It compares timestamps rather than
+   * positions, so it holds for any `itemOrder` / `requestSort`.
    */
   private recomputeLatestMessage({
+    excludeId,
     serverConfirmedOnly = false,
-  }: { serverConfirmedOnly?: boolean } = {}): LocalMessage | null {
+  }: { excludeId?: string; serverConfirmedOnly?: boolean } = {}): LocalMessage | null {
     let latest: LocalMessage | null = null;
     let latestTimestamp = -Infinity;
     for (const item of [
       ...this.anchoredHeadItems,
       ...this.logicalHeadItemsSinceQueriedLatestMessageAt,
     ]) {
-      if (!this.shouldAdvanceLatestMessage(item)) continue;
+      if (item.id === excludeId || !this.shouldAdvanceLatestMessage(item)) continue;
       if (serverConfirmedOnly && !this.isServerConfirmedMessage(item)) continue;
       const timestamp = getMessageCreatedAtTimestamp(item);
       if (timestamp === null || timestamp <= latestTimestamp) continue;

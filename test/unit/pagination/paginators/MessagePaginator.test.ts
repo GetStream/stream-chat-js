@@ -5896,6 +5896,7 @@ describe('MessagePaginator', () => {
   describe('trackLatestMessage() / latestMessageAt', () => {
     let skipSystemMessages: boolean;
     let trackingChannel: Channel;
+    let trackingIndex: StoreBackedItemIndex<LocalMessage>;
 
     const buildPaginator = (parentMessageId?: string) => {
       trackingChannel = {
@@ -5905,12 +5906,13 @@ describe('MessagePaginator', () => {
         query: vi.fn(),
         ...fakeChannelQuery,
       } as unknown as Channel;
+      trackingIndex = new StoreBackedItemIndex<LocalMessage>({
+        getEntityId: (message) => message.id,
+      });
       return new MessagePaginator({
         channel: trackingChannel,
         parentMessageId,
-        itemIndex: new StoreBackedItemIndex<LocalMessage>({
-          getEntityId: (message) => message.id,
-        }),
+        itemIndex: trackingIndex,
       });
     };
 
@@ -6087,6 +6089,87 @@ describe('MessagePaginator', () => {
       const tracking = buildPaginator();
       tracking.trackLatestMessage(systemMessage);
       expect(tracking.latestMessageAt).toBe(at('2020-01-01T00:00:00.000Z'));
+    });
+
+    describe('error and ephemeral messages (only the current user sees them)', () => {
+      const message = (id: string, second: number, extra: Partial<LocalMessage> = {}) =>
+        createMessage({
+          id,
+          cid: 'channel-id',
+          created_at: convertDateToTimestamp(`2020-01-01T00:00:0${second}.000Z`),
+          ...extra,
+        });
+
+      it.each(['error', 'ephemeral'] as const)(
+        'never advance for a new %s message',
+        (type) => {
+          const paginator = buildPaginator();
+          paginator.ingestItem(message('a', 1));
+
+          paginator.ingestItem(message('b', 2, { type }));
+
+          expect(paginator.latestMessage?.id).toBe('a');
+          expect(paginator.latestMessageAt).toBe(at('2020-01-01T00:00:01.000Z'));
+        },
+      );
+
+      it('fall back to the previous message when the sent latest comes back as an error', () => {
+        const paginator = buildPaginator();
+        paginator.ingestItem(message('a', 1));
+        // an unknown command (`/test`) is sent as a regular message...
+        paginator.ingestItem(message('b', 2, { status: 'sending', text: '/test' }));
+        expect(paginator.latestMessage?.id).toBe('b');
+
+        // ...and the server answers with an `error` message under the same id
+        paginator.ingestItem(
+          message('b', 2, { type: 'error', text: 'Sorry, command test' }),
+        );
+
+        expect(paginator.latestMessage?.id).toBe('a');
+        expect(paginator.latestMessageAt).toBe(at('2020-01-01T00:00:01.000Z'));
+      });
+
+      it('advance once an ephemeral giphy preview is sent', () => {
+        const paginator = buildPaginator();
+        paginator.ingestItem(message('a', 1));
+        paginator.ingestItem(
+          message('giphy', 2, { status: 'sending', text: '/giphy hi' }),
+        );
+        paginator.ingestItem(
+          message('giphy', 2, { type: 'ephemeral', command: 'giphy' }),
+        );
+        expect(paginator.latestMessage?.id).toBe('a');
+
+        paginator.ingestItem(message('giphy', 2, { type: 'regular', command: 'giphy' }));
+
+        expect(paginator.latestMessage?.id).toBe('giphy');
+        expect(paginator.latestMessage?.type).toBe('regular');
+      });
+
+      it('skip them in a reply list too', () => {
+        const paginator = buildPaginator('parent');
+        paginator.ingestItem(message('r1', 1, { parent_id: 'parent' }));
+        paginator.ingestItem(
+          message('r2', 2, { parent_id: 'parent', status: 'sending' }),
+        );
+
+        paginator.ingestItem(message('r2', 2, { parent_id: 'parent', type: 'error' }));
+
+        expect(paginator.latestMessage?.id).toBe('r1');
+      });
+
+      it('fall back to the previous message when the stored latest stops counting', () => {
+        const paginator = buildPaginator();
+        paginator.ingestItem(message('a', 1));
+        paginator.ingestItem(message('b', 2));
+        expect(paginator.latestMessage?.id).toBe('b');
+
+        // a change written to the store without going through the paginator's ingest
+        trackingIndex.setOne(message('b', 2, { type: 'error' }));
+        paginator.onEntitiesChanged({ changedIds: new Set(['b']) });
+
+        expect(paginator.latestMessage?.id).toBe('a');
+      });
     });
 
     it('auto-tracks on ingestion for the main channel list too', () => {
