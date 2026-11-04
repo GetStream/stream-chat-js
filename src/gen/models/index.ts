@@ -126,7 +126,7 @@ export type RequireOnlyOne<T, Keys extends keyof T = keyof T> = Omit<T, Keys> &
   }[Keys];
 export interface AIAudioConfigRequest {
   /**
-   * Bodyguard credentials profile to classify transcripts with. Applies to the NLP engine only; ignored when LLM configurability is enabled. Empty falls back to the app-pinned profile, then the organization's top-level credentials
+   * Bodyguard credentials profile to classify transcripts with. Applies to the NLP engine only; ignored when the policy's engine is LLM. Empty falls back to the app-pinned profile, then the organization's top-level credentials
    */
   profile?: string;
   /**
@@ -139,7 +139,7 @@ export interface AIAudioConfigRequest {
 
 export interface AIAudioConfigResponse {
   /**
-   * Whether the engine selected by the application's LLM configurability flag has a rule that does something. Derived, not stored
+   * Whether the policy's engine (engine.provider, else the application's LLM configurability flag) has a rule that does something. Derived, not stored
    */
   enabled: boolean;
   /**
@@ -159,6 +159,7 @@ export interface AIImageConfig {
   ocr_rules: Array<OCRRule>;
   rules: Array<AWSRekognitionRule>;
   async?: boolean;
+  ocr_severity_rules?: Array<BodyguardRule>;
 }
 
 export interface AIImageLabelDefinition {
@@ -835,6 +836,7 @@ export interface BlockListConfig {
   enabled: boolean;
   rules: Array<BlockListRule>;
   async?: boolean;
+  explicit_urls_only?: boolean;
   match_substring?: boolean;
 }
 
@@ -1359,7 +1361,7 @@ export interface ChannelForkResponse {
    */
   channel_cid: string;
   /**
-   * Number of messages copied into the fork, once completed
+   * Number of messages copied into the fork, once completed. On a failed fork, the number of messages of its history, newest first, copied before the copy failed; the fork can hold a few more
    */
   copied_message_count: number;
   /**
@@ -1375,17 +1377,29 @@ export interface ChannelForkResponse {
    */
   source_message_id: string;
   /**
-   * `completed` once every message is copied. `backfilling` while a background task copies the history older than the newest page; the fork is usable meanwhile, and the newest messages, which an agent reads, are already there
+   * `completed` once every message is copied. `backfilling` while a background task copies the history older than the newest page; the fork is usable meanwhile, and the newest messages, which an agent reads, are normally already there. The request reads at most 1,000 source messages: when those are mostly deleted, shadowed or replies shown in the channel, it copies fewer, at least the message the fork is made at, and the task copies the rest. `failed` when the copy failed for good (see `failed_reason`): nothing more is copied, the fork keeps what it holds and is usable, and it no longer counts toward the source's fork limit
    */
   status: string;
   /**
-   * Maps the ID of each message the request copied, the newest page, to its ID in the fork. A fork message ID is a UUIDv5 of the fork CID and the source message ID; the fork message IDs endpoint maps any others
+   * Maps the ID of each message the request copied, the newest page, to its ID in the fork; short when the request copied less than a page (see `status`). A fork message ID is a UUIDv5 of the fork CID and the source message ID; the fork message IDs endpoint maps any others
    */
   message_id_map: Record<string, string>;
+  /**
+   * Why the copy of a failed fork failed: `fork_message_id_taken` (the ID a message is copied under is held by another message; fork into another channel ID) or `message_too_large` (a source message is over a size limit of agent channels: its text, custom data or attachments)
+   */
+  failed_reason?: string;
+  /**
+   * ID, in the source channel, of the oldest message a truncated fork copied. The fork holds no older source message; replies of the oldest copied messages may also have been left out
+   */
+  oldest_source_message_id?: string;
   /**
    * ID of the task copying the older history of a backfilling fork
    */
   task_id?: string;
+  /**
+   * True, once completed, when the source held more than 10,000 messages up to the fork point: the fork holds the newest 10,000 of them
+   */
+  truncated?: boolean;
 }
 
 export interface ChannelForkSummary {
@@ -1394,7 +1408,7 @@ export interface ChannelForkSummary {
    */
   channel_cid: string;
   /**
-   * Number of messages copied into the fork, once completed
+   * Number of messages copied into the fork, once completed. On a failed fork, the number of messages of its history, newest first, copied before the copy failed; the fork can hold a few more
    */
   copied_message_count: number;
   /**
@@ -1410,13 +1424,25 @@ export interface ChannelForkSummary {
    */
   source_message_id: string;
   /**
-   * `completed` once every message is copied. `backfilling` while a background task copies the history older than the newest page; the fork is usable meanwhile, and the newest messages, which an agent reads, are already there
+   * `completed` once every message is copied. `backfilling` while a background task copies the history older than the newest page; the fork is usable meanwhile, and the newest messages, which an agent reads, are normally already there. The request reads at most 1,000 source messages: when those are mostly deleted, shadowed or replies shown in the channel, it copies fewer, at least the message the fork is made at, and the task copies the rest. `failed` when the copy failed for good (see `failed_reason`): nothing more is copied, the fork keeps what it holds and is usable, and it no longer counts toward the source's fork limit
    */
   status: string;
+  /**
+   * Why the copy of a failed fork failed: `fork_message_id_taken` (the ID a message is copied under is held by another message; fork into another channel ID) or `message_too_large` (a source message is over a size limit of agent channels: its text, custom data or attachments)
+   */
+  failed_reason?: string;
+  /**
+   * ID, in the source channel, of the oldest message a truncated fork copied. The fork holds no older source message; replies of the oldest copied messages may also have been left out
+   */
+  oldest_source_message_id?: string;
   /**
    * ID of the task copying the older history of a backfilling fork
    */
   task_id?: string;
+  /**
+   * True, once completed, when the source held more than 10,000 messages up to the fork point: the fork holds the newest 10,000 of them
+   */
+  truncated?: boolean;
 }
 
 export interface ChannelForkedEvent {
@@ -1438,7 +1464,7 @@ export interface ChannelForkedEvent {
    */
   type: string;
   /**
-   * The ID of the channel which was forked
+   * The ID of the channel the event is sent on
    */
   channel_id?: string;
   /**
@@ -1447,11 +1473,11 @@ export interface ChannelForkedEvent {
   channel_member_count?: number;
   channel_message_count?: number;
   /**
-   * The type of the channel which was forked
+   * The type of the channel the event is sent on
    */
   channel_type?: string;
   /**
-   * The CID of the channel which was forked
+   * The CID of the channel the event is sent on: the source, or the fork
    */
   cid?: string;
   received_at?: TimestampNS;
@@ -1870,7 +1896,7 @@ export interface ChannelPartialUpdateResponse {
   /**
    * Custom data for this object
    */
-  custom: Record<string, any>;
+  custom: CustomChannelData;
   /**
    * Date of the last message sent
    */
@@ -2000,6 +2026,10 @@ export interface ChannelResponse {
    * User response object
    */
   created_by?: UserResponse;
+  /**
+   * A fork of an agent channel
+   */
+  fork?: ChannelForkSummary;
   /**
    * User response object
    */
@@ -2688,6 +2718,7 @@ export interface ConfigResponse {
   automod_semantic_filters_config?: AutomodSemanticFiltersConfig;
   automod_toxicity_config?: AutomodToxicityConfig;
   block_list_config?: BlockListConfig;
+  engine?: ModerationEngineConfigResponse;
   flood_config?: FloodConfig;
   intent_config?: IntentConfigResponse;
   llm_config?: LLMConfig;
@@ -4637,6 +4668,10 @@ export interface MarkReviewedRequestPayload {
    * Skip marking content as reviewed
    */
   disable_marking_content_as_reviewed?: boolean;
+  /**
+   * Internal moderator note, stored on the action log and returned by QueryModerationLogs. Not shown to the appealing user; use decision_reason for that
+   */
+  reason?: string;
 }
 
 export interface MarkUnreadRequest {
@@ -5796,6 +5831,28 @@ export interface ModerationCustomActionEvent {
    * Represents any chat message
    */
   message?: MessageResponse;
+}
+
+export interface ModerationEngineConfigRequest {
+  /**
+   * LLM model used when the provider resolves to llm. Not allowed with provider nlp. Empty uses the app's moderation settings
+   */
+  model?: 'gpt-4o-mini' | 'gpt-4o';
+  /**
+   * llm or nlp. Empty follows the app's LLM moderation setting
+   */
+  provider?: 'llm' | 'nlp';
+}
+
+export interface ModerationEngineConfigResponse {
+  /**
+   * LLM model used when the provider resolves to llm. Not allowed with provider nlp. Empty uses the app's moderation settings
+   */
+  model?: string;
+  /**
+   * llm or nlp. Empty follows the app's LLM moderation setting
+   */
+  provider?: 'llm' | 'nlp';
 }
 
 export interface ModerationFlagResponse {
@@ -9310,6 +9367,10 @@ export interface RestoreActionRequestPayload {
    * Reason for the appeal decision
    */
   decision_reason?: string;
+  /**
+   * Internal moderator note, stored on the action log and returned by QueryModerationLogs. Not shown to the appealing user; use decision_reason for that
+   */
+  reason?: string;
 }
 
 export type RestrictReplies = 'everyone' | 'people_i_follow' | 'nobody';
@@ -11105,6 +11166,10 @@ export interface UnbanActionRequestPayload {
    */
   remove_future_channels_ban?: boolean;
   /**
+   * When lifting a shadow ban, also restore the messages the user sent during it. Runs asynchronously; ignored for a regular ban
+   */
+  restore_shadowed_messages?: boolean;
+  /**
    * Optional: unban user directly without review item
    */
   target_user_id?: string;
@@ -11720,6 +11785,7 @@ export interface UpsertConfigRequest {
   aws_rekognition_config?: AIImageConfig;
   block_list_config?: BlockListConfig;
   bodyguard_config?: AITextConfig;
+  engine?: ModerationEngineConfigRequest;
   flood_config?: FloodConfig;
   google_vision_config?: GoogleVisionConfig;
   intent_config?: IntentConfigRequest;
@@ -11824,6 +11890,21 @@ export interface UserChannelBanCountRuleParameters {
 export interface UserChannelCountRuleParameters {
   threshold?: number;
   time_window?: string;
+}
+
+export interface UserClaimedEvent {
+  /**
+   * Date/time of creation
+   */
+  created_at: TimestampNS;
+  claimed_by: UserResponseCommonFields;
+  custom: CustomEventData;
+  user: UserResponseCommonFields;
+  /**
+   * The type of event: "user.claimed" in this case
+   */
+  type: string;
+  received_at?: TimestampNS;
 }
 
 export interface UserCreatedWithinParameters {
@@ -12515,6 +12596,7 @@ export type WSClientEvent =
   | ({ type: 'typing.start' } & TypingStartEvent)
   | ({ type: 'typing.stop' } & TypingStopEvent)
   | ({ type: 'user.banned' } & UserBannedEvent)
+  | ({ type: 'user.claimed' } & UserClaimedEvent)
   | ({ type: 'user.deactivated' } & UserDeactivatedEvent)
   | ({ type: 'user.deleted' } & UserDeletedEvent)
   | ({ type: 'user.messages.deleted' } & UserMessagesDeletedEvent)
@@ -12608,6 +12690,7 @@ export type WSEvent =
   | ({ type: 'typing.start' } & TypingStartEvent)
   | ({ type: 'typing.stop' } & TypingStopEvent)
   | ({ type: 'user.banned' } & UserBannedEvent)
+  | ({ type: 'user.claimed' } & UserClaimedEvent)
   | ({ type: 'user.deactivated' } & UserDeactivatedEvent)
   | ({ type: 'user.deleted' } & UserDeletedEvent)
   | ({ type: 'user.messages.deleted' } & UserMessagesDeletedEvent)
