@@ -230,8 +230,12 @@ describe('attachments with nothing to upload', () => {
     it('does not send or save a file whose upload has not started', async () => {
       const { composer, sendRequest, sentAttachments } = setup();
       composer.updateConfig({ drafts: { enabled: true } });
+      // The types reject this shape; it can still come from untyped code.
       composer.attachmentManager.upsertAttachments([
-        { ...image, localMetadata: { file: new File([], 'a.jpg'), id: 'image' } },
+        {
+          ...image,
+          localMetadata: { file: new File([], 'a.jpg'), id: 'image' },
+        } as unknown as LocalAttachment,
       ]);
 
       expect(composer.hasSendableData).toBe(false);
