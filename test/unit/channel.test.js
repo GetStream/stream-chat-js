@@ -2377,6 +2377,69 @@ describe('Channel _handleChannelEvent', function () {
 			).toBeUndefined();
 		});
 
+		it('message.deleted hard delete of an unread message lowers the own unread count', function () {
+			const message = generateMsg({ cid: channel.cid, user: otherUser });
+			channel.messagePaginator.ingestItem(message);
+			seedOwnUnreadCount(channel, 2);
+
+			channel._handleChannelEvent({
+				type: 'message.deleted',
+				user: otherUser,
+				hard_delete: true,
+				message,
+			});
+
+			expect(channel.state.unreadCount).to.equal(1);
+		});
+
+		it('message.deleted soft delete lowers the own unread count once, a later hard delete does not', function () {
+			const message = generateMsg({ cid: channel.cid, user: otherUser });
+			channel.messagePaginator.ingestItem(message);
+			seedOwnUnreadCount(channel, 2);
+			const deletedMessage = {
+				...message,
+				type: 'deleted',
+				deleted_at: convertDateToTimestamp(),
+			};
+
+			channel._handleChannelEvent({
+				type: 'message.deleted',
+				user: otherUser,
+				message: deletedMessage,
+			});
+			expect(channel.state.unreadCount).to.equal(1);
+
+			channel._handleChannelEvent({
+				type: 'message.deleted',
+				user: otherUser,
+				hard_delete: true,
+				message: deletedMessage,
+			});
+			expect(channel.state.unreadCount).to.equal(1);
+		});
+
+		it('message.deleted does not lower the own unread count for a message already read', function () {
+			const message = generateMsg({ cid: channel.cid, user: otherUser });
+			channel.messagePaginator.ingestItem(message);
+			seedOwnUnreadCount(channel, 2);
+			channel.state.read = {
+				...channel.state.read,
+				[user.id]: {
+					...channel.state.read[user.id],
+					last_read: convertDateToTimestamp(),
+				},
+			};
+
+			channel._handleChannelEvent({
+				type: 'message.deleted',
+				user: otherUser,
+				hard_delete: true,
+				message,
+			});
+
+			expect(channel.state.unreadCount).to.equal(2);
+		});
+
 		it('message.deleted soft delete updates message in messagePaginator', function () {
 			const message = generateMsg({
 				cid: channel.cid,

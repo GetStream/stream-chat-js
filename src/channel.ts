@@ -2365,6 +2365,19 @@ export class Channel extends ChannelApi {
         if (event.message) {
           this._extendEventWithOwnReactions(event);
           const formattedMessage = formatMessage(event.message);
+          // the server lowers unread count regardless of the type of deletion
+          const deletedMessage = this.getClient().messageStore.get(event.message.id);
+          const lastRead = this.lastRead();
+          if (
+            deletedMessage &&
+            deletedMessage.type !== 'deleted' &&
+            lastRead != null &&
+            deletedMessage.created_at > lastRead &&
+            this.state.unreadCount > 0 &&
+            this._countMessageAsUnread(deletedMessage)
+          ) {
+            this._setOwnUnreadCount(this.state.unreadCount - 1);
+          }
           // Thread-only replies are handled by the Thread object; the channel owns the main list.
           if (!isThreadOnlyReply(event.message)) {
             if (event.hard_delete) {
