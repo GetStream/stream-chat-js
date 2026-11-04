@@ -11,7 +11,10 @@ import type { StateStore, Unsubscribe } from '@stream-io/state-store';
 const logger = chatLoggerSystem.getLogger('client');
 
 export type ConnectionRecoveryManagerConfig = {
-  /** Whether the client recovers its own state on reconnect. Set `false` if the app does it itself. */
+  /**
+   * Whether the client recovers its own state on reconnect. Set `false` if the app does it itself:
+   * `connection.recovered` is still dispatched on every reconnect, and `recover()` still runs a full pass.
+   */
   enabled: boolean;
 };
 
@@ -29,6 +32,9 @@ export const DEFAULT_CONNECTION_RECOVERY_MANAGER_CONFIG: ConnectionRecoveryManag
  *
  * Lists and active channels recover on the offline DB's sync-status edge when offline support is on (it
  * lands after pending tasks replay), else when the socket goes online.
+ *
+ * With `enabled: false` a reconnect recovers nothing but still dispatches `connection.recovered`, at
+ * the same point a recovery would have started.
  */
 export class ConnectionRecoveryManager extends WithSubscriptions {
   client: StreamChat;
@@ -91,17 +97,10 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
             // `closeConnection()`).
             if (!lastUnhealthyAt) return;
 
-            if (!this.config.enabled) return;
-
-            // Lists and active channels recover off the sync-status edge when there is one (the only
-            // signal that lands after replay and sync), else here. Exactly one path runs per reconnect.
+            // The reconnect is handled off the sync-status edge when there is one (the only signal
+            // that lands after replay and sync), else here. Exactly one path runs per reconnect.
             const syncEdgeDrivesRecovery = this.ensureSyncStatusSubscription();
-            if (!syncEdgeDrivesRecovery) {
-              runDetached(this.recoverChannelLists(), { context: 'recoverChannelLists' });
-              runDetached(this.recoverActiveChannels(), {
-                context: 'recoverActiveChannels',
-              });
-            }
+            if (!syncEdgeDrivesRecovery) this.handleReconnect();
           },
         ),
       );
@@ -128,13 +127,29 @@ export class ConnectionRecoveryManager extends WithSubscriptions {
     if (!offlineDb?.state.getLatestValue().initialized) return false;
 
     const { unsubscribe } = offlineDb.syncManager.onSyncStatusChange((status) => {
-      if (!status || !this.config.enabled) return;
-      runDetached(this.recoverChannelLists(), { context: 'recoverChannelLists' });
-      runDetached(this.recoverActiveChannels(), { context: 'recoverActiveChannels' });
+      if (status) this.handleReconnect();
     });
     this.unsubscribeSyncStatus = unsubscribe;
     return true;
   };
+
+  /**
+   * Recovers the lists, and the active channels and threads (that pass dispatches `connection.recovered`
+   * when done). With recovery disabled it skips the refresh and only dispatches the event, so an app that
+   * refreshes its own data knows when to do it.
+   */
+  private handleReconnect() {
+    if (this.config.enabled) {
+      runDetached(this.recoverChannelLists(), { context: 'recoverChannelLists' });
+      runDetached(this.recoverActiveChannels(), { context: 'recoverActiveChannels' });
+      return;
+    }
+    // The sync-status edge lands after replay and sync, by which time the socket may be down again;
+    // the next reconnect dispatches the event then.
+    if (this.client.wsConnection.isHealthy) {
+      this.client.dispatchEvent({ type: 'connection.recovered' });
+    }
+  }
 
   /**
    * Channels a consumer is reading. Not filtered on `watchStatus`: a channel opened while offline never

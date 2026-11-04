@@ -829,7 +829,7 @@ const release = channel.activate();
 release();
 ```
 
-There is no `channel.deactivate()`: `activate()` returns its release function. Do not also reload active channels on `connection.recovered` (it fires after the SDK reloaded them). With `connectionRecovery.enabled: false`, `connection.recovered` is not dispatched on reconnects; a custom recovery should watch `client.wsConnection.state` instead. Ref: channel-activate-recovery, connection-recovery.
+There is no `channel.deactivate()`: `activate()` returns its release function. Do not also reload active channels on `connection.recovered` (it fires after the SDK reloaded them). With `connectionRecovery.enabled: false`, nothing is reloaded on reconnects but `connection.recovered` is still dispatched on each one (after the offline sync when an offline DB is initialized), so a custom recovery keeps listening to it. Ref: channel-activate-recovery, connection-recovery.
 
 <a id="s10-3-sending-messages-and-reactions"></a>
 

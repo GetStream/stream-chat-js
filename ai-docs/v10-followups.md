@@ -118,17 +118,6 @@ Ordered by severity. The breaking dead-code removals and leftover decisions are 
 - **Evidence / scenario:** The user jumped to an older message (active interval is not the head); `user.messages.deleted` arrives for a banned user; that user's newest messages in the head interval stay visible when the user jumps back to latest.
 - **Suggested change:** Iterate all loaded intervals (or the item index) instead of `items`.
 
-<a id="recovery-disabled-no-event"></a>
-
-### `connectionRecovery.enabled: false` also suppresses `connection.recovered` [SOLVED 311c28a2]
-
-`bug` · confidence: high · pre-release: yes · connection recovery
-
-- **Where:** `src/connection/ConnectionRecoveryManager.ts:273-279` (`recoverActiveChannels` returns first when disabled), `:353` (the only dispatch site), `:362-370` (`recover()`), `:196-215` (offline sync-edge path); `src/thread_manager.ts:468`; v9 `src/client.ts:1782-1817`
-- **What:** Behaviour change to confirm is intended. v9 dispatched `connection.recovered` after every reconnect, also with `recoverStateOnReconnect: false` (the `else` branch), and that flag existed so integrators could run their own recovery keyed on the event. In v10 the event is dispatched only from inside `recoverActiveChannels`, which returns on its first line when `connectionRecovery.enabled` is `false`, so the event never fires and the manual `client.connectionRecovery.recover()` is a no-op too. With an initialized offline DB the event is also delayed until the offline sync finishes.
-- **Evidence / scenario:** An app sets `recoverStateOnReconnect: false` in v9 and re-queries its channels on `connection.recovered`. After migrating to `connectionRecovery.enabled: false` it never recovers after a drop, and `ThreadManager`, which reloads threads on `connection.recovered`, stops reloading as well. Documented in the breaking-changes doc (`#connection-recovery`) with a `wsConnection.state` workaround.
-- **Suggested change:** Decide before 10.0.0: either dispatch `connection.recovered` on the reconnect edge when recovery is disabled (v9 parity) or keep the current behaviour and state it in the `connectionRecovery` JSDoc. Changing it after the release is a behaviour change again.
-
 <a id="reminder-paginator-flash"></a>
 
 ### Reminder list blanks on every "load more" [SOLVED 73a87752]
