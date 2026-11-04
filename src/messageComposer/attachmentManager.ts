@@ -33,6 +33,7 @@ import type {
   UploadPermissionCheckResult,
 } from './types';
 import type {
+  Attachment,
   ChannelResponse,
   DraftMessage,
   LocalMessage,
@@ -244,6 +245,10 @@ export class AttachmentManager {
     return this.getUploadsByState('pending').length;
   }
 
+  /**
+   * Slots left for files. Each finished or uploading attachment takes one. Pending, failed and blocked
+   * uploads, and attachments with nothing to upload, take none.
+   */
   get availableUploadSlots() {
     return (
       this.config.maxNumberOfFilesPerMessage -
@@ -337,25 +342,33 @@ export class AttachmentManager {
     return this.attachments.indexOf(attachmentsById[localId]);
   };
 
-  private prepareAttachmentUpdate = (attachmentToUpdate: LocalAttachment) => {
-    const stateAttachments = this.attachments;
-    const attachments = [...this.attachments];
-    const attachmentIndex = this.getAttachmentIndex(attachmentToUpdate.localMetadata.id);
+  /**
+   * `attachments` with `attachmentToUpdate` merged in place of the one with its `localMetadata.id`:
+   * `null` when none has it, `attachments` itself when the merge changes nothing.
+   */
+  private prepareAttachmentUpdate = (
+    attachmentToUpdate: LocalAttachment,
+    attachments: LocalAttachment[] = this.attachments,
+  ) => {
+    const attachmentIndex = attachments.findIndex(
+      ({ localMetadata }) => localMetadata?.id === attachmentToUpdate.localMetadata.id,
+    );
     if (attachmentIndex === -1) return null;
     // Replace in place by ID; reordering would break indexing.
     const merged = mergeWithDiff<LocalAttachment>(
-      stateAttachments[attachmentIndex],
+      attachments[attachmentIndex],
       attachmentToUpdate,
     );
     const updatesOnMerge = merged.diff && Object.keys(merged.diff.children).length;
     if (updatesOnMerge) {
       const localAttachment = ensureIsLocalAttachment(merged.result);
       if (localAttachment) {
-        attachments.splice(attachmentIndex, 1, localAttachment);
-        return attachments;
+        const updatedAttachments = [...attachments];
+        updatedAttachments.splice(attachmentIndex, 1, localAttachment);
+        return updatedAttachments;
       }
     }
-    return stateAttachments;
+    return attachments;
   };
 
   updateAttachment = (attachmentToUpdate: LocalAttachment) => {
@@ -365,24 +378,22 @@ export class AttachmentManager {
     }
   };
 
-  upsertAttachments = (attachmentsToUpsert: LocalAttachment[]) => {
+  /**
+   * Merges each attachment into the one with its `localMetadata.id`, or appends it. An attachment
+   * without `localMetadata` (e.g. a custom-type one the app builds) is appended with a new local id.
+   */
+  upsertAttachments = (attachmentsToUpsert: Array<Attachment | LocalAttachment>) => {
     if (!attachmentsToUpsert.length) return;
-    let attachments = [...this.attachments];
-    let hasUpdates = false;
+    let attachments = this.attachments;
     attachmentsToUpsert.forEach((attachment) => {
-      const updatedAttachments = this.prepareAttachmentUpdate(attachment);
-      if (updatedAttachments === null) {
-        const localAttachment = ensureIsLocalAttachment(attachment);
-        if (localAttachment) {
-          attachments.push(localAttachment);
-          hasUpdates = true;
-        }
-      } else if (updatedAttachments !== this.attachments) {
-        attachments = updatedAttachments;
-        hasUpdates = true;
-      }
+      const localAttachment = ensureIsLocalAttachment(attachment);
+      if (!localAttachment) return;
+      attachments = this.prepareAttachmentUpdate(localAttachment, attachments) ?? [
+        ...attachments,
+        localAttachment,
+      ];
     });
-    if (hasUpdates) {
+    if (attachments !== this.attachments) {
       this.state.partialNext({ attachments });
     }
   };

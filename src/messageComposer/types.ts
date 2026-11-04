@@ -47,8 +47,14 @@ export type LocalAttachmentCast<A, L = Record<string, unknown>> = A & {
   localMetadata: L & BaseLocalAttachmentMetadata;
 };
 
+/**
+ * Local metadata of any attachment. Only `id` is required: an attachment with nothing to upload (a
+ * custom-type or `giphy` one) leaves out the upload fields, and the composer sends it as it is.
+ */
 export type LocalAttachmentMetadata<CustomLocalMetadata = Record<string, unknown>> =
-  CustomLocalMetadata & BaseLocalAttachmentMetadata & LocalImageAttachmentUploadMetadata;
+  CustomLocalMetadata &
+    BaseLocalAttachmentMetadata &
+    Partial<LocalImageAttachmentUploadMetadata>;
 
 export type UploadedAttachment =
   | AudioAttachment
