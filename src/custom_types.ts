@@ -3,7 +3,6 @@ export interface CustomAttachmentData {
   file_size?: number;
 }
 export interface CustomChannelData {}
-export interface CustomCommandData {}
 export interface CustomEventData {}
 export interface CustomEventTypes {}
 export interface CustomMemberData {}

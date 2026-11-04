@@ -30,7 +30,7 @@ The highest-impact changes. Most integrations need all of these.
 | 2   | Custom data lives under `custom` on every entity, request and event                                                 | [custom-data](#custom-data)                                                                                                                                             |
 | 3   | Server timestamps are `TimestampNS` (branded ns numbers), not strings or `Date`                                     | [timestamp-ns](#timestamp-ns)                                                                                                                                           |
 | 4   | Sort is `SortParamRequest[]` (`[{ field, direction }]`); all sort aliases removed                                   | [sort-shape](#sort-shape)                                                                                                                                               |
-| 5   | Types are generated from the OpenAPI spec; 384 type names renamed or removed                                        | [generated-types](#generated-types), [type-rename-table](#type-rename-table)                                                                                            |
+| 5   | Types are generated from the OpenAPI spec; 385 type names renamed or removed                                        | [generated-types](#generated-types), [type-rename-table](#type-rename-table)                                                                                            |
 | 6   | `Role`, `User`, `Reaction`, `PollResponse`, `ThreadResponse`, ... keep their name but change meaning                | [same-name-meaning-changes](#same-name-meaning-changes)                                                                                                                 |
 | 7   | `Event` is a discriminated union; `EventTypes` -> `EventType`; `EVENT_MAP` removed                                  | [event-union](#event-union), [event-type-names](#event-type-names)                                                                                                      |
 | 8   | `connection.changed` / `transport.changed` are never dispatched; use `client.wsConnection.state`                    | [connection-changed-removed](#connection-changed-removed)                                                                                                               |
@@ -943,15 +943,15 @@ const p = message.custom.priority;
 **Kind:** type-shape · **Impact:** high
 
 - **v9:** augmenting `CustomMessageData` (etc.) added top-level properties to `MessageResponse`, `Message`, filters and sort keys; `CustomCommandData` keys extended `CommandVariants`; `CustomEventData` extended every `Event`.
-- **v10:** same 13 interfaces, same names, same root re-export. They now type the `custom` object only. Differences:
+- **v10:** the same interfaces, names and root re-export, except `CustomCommandData`. They now type the `custom` object only. Differences:
   - `CustomAttachmentData` ships two declared members, `mime_type?: string` and `file_size?: number` ([attachment metadata](#attachment-metadata-custom)); augmentations merge with them.
-  - `CustomCommandData` is no longer referenced anywhere (`Command.name` / `set` are plain `string`), so augmenting it has no effect.
+  - `CustomCommandData` is removed. Command names come from the server, so `Command['name']` / `Command['set']` are plain `string`; an app that wants a closed set of names types them itself.
   - `CustomEventData` types `event.custom`; event names come from `CustomEventTypes` keys, and `on()` / `off()` reject an undeclared custom name ([custom events](#custom-events)).
   - poll options use `CustomPollOptionData` (v9 `PollOptionResponse` used `CustomPollData`).
   - filters reach custom fields through `custom.<field>` keys derived from the augmentation ([filters](#filter-types)); sort keys are untyped strings ([sort](#sort-shape)).
   - required members declared in an augmentation become required in every `custom` object, including test fixtures of response types.
-- **Migrate:** keep the `declare module 'stream-chat'` blocks; move every read/write of augmented fields under `.custom`; drop `CustomCommandData` augmentations.
-- **Source:** `src/custom_types.ts:1-16`, `src/gen/models/index.ts:1-12`, `src/index.ts:93-107` (v10); `src/custom_types.ts:1-13` (v9)
+- **Migrate:** keep the `declare module 'stream-chat'` blocks; move every read/write of augmented fields under `.custom`; delete every `CustomCommandData` augmentation and import. An augmentation of it still compiles (it declares a new interface nothing reads), so search for the name instead of relying on `tsc`.
+- **Source:** `src/custom_types.ts:1-15`, `src/gen/models/index.ts:1-12`, `src/index.ts:90-103` (v10); `src/custom_types.ts:1-13` (v9)
 
 <a id="filter-types"></a>
 
@@ -1083,7 +1083,7 @@ const p = message.custom.priority;
 - **v9:** response and event date fields were ISO `string` (`created_at`, `updated_at`, `deleted_at`, `last_read`, `last_active`, `last_message_at`, `remind_at`, `pinned_at`, `expires`, ...); `formatMessage` / `LocalMessage` converted message dates to `Date`; `Event.received_at: string | Date`.
 - **v10:** `type TimestampNS = number & { readonly [timestampNsBrand]: true }`; every server-sent date on generated responses and events (391 fields) and the hand-written state types carry it; a plain `number` is not assignable. Root-exported helpers: `nsToDate`, `convertTimestampToDate`, `nsToMs`, `msToNs`, `dateToNs`, `nowNs`, `nsToRfc3339`, `asTimestampNS`, `NS_PER_MS`. `received_at?: TimestampNS` on every event. Silent failure modes (no type error): `dayjs(ns)`, `ts > Date.now()`, `if (!created_at)` (0 is valid), persisted `Date` / ISO values. Slice-specific state fields: [state timestamps](#state-timestamps).
 - **Migrate:** compare and sort timestamps numerically; convert at the UI edge with `nsToDate(ts)` / `convertTimestampToDate(ts)`; mint values with `nowNs()` / `msToNs()` / `dateToNs()`; brand DB rows with `asTimestampNS()`; migrate persisted state.
-- **Source:** `src/gen/models/index.ts:13-37`, `src/utils/time.ts:1-80`, `src/index.ts:115-125`, `src/types.ts:193,197` (v10); `src/types.ts:1712-1776`, `src/utils.ts:351` (v9)
+- **Source:** `src/gen/models/index.ts:13-37`, `src/utils/time.ts:1-80`, `src/index.ts:112-123`, `src/types.ts:193,197` (v10); `src/types.ts:1712-1776`, `src/utils.ts:351` (v9)
 
 <a id="date-constructor-guard"></a>
 
@@ -3203,10 +3203,10 @@ In both versions `src/index.ts` re-exports only `isOwnUser`, `chatCodes`, `logCh
 
 **Kind:** renamed · **Impact:** high · **PR:** #1760, #1836, #1896
 
-All 384 hand-written v9 type exports from `src/types.ts` (383) and `src/events.ts` (1) that no longer exist under the same name, with their v10 mapping. Categories: renamed (same role), renamed with a shape change, derived expression, sort alias ([sort](#sort-shape)), removed with the API that used it (mostly server-side/admin methods removed from the client: use `@stream-io/node-sdk`), removed with no replacement. The "verified delta" column is computed member by member ("drops" = v9 members missing in v10; date fields that only changed to `TimestampNS` are counted, see [TimestampNS](#timestamp-ns)). Two names in these tables, `BlocklistBehavior` and `ModerationAction`, are exported again at `fdfcb296` (as generated literal unions, see their rows), so 382 v9 names are gone. Names that survive with a different meaning are in [same-name changes](#same-name-meaning-changes). Facts worth noting: `AppSettings` (the `updateAppSettings` input) has no client replacement (`AppResponseFields` is the read shape, not a replacement); `FlagMessageResponse`, `FlagUserResponse`, `MuteUserResponse`, `UnmuteUserResponse` are all removed; `ReminderAPIResponse` maps to `CreateReminderResponse` / `UpdateReminderResponse`, `PollAnswer` to `PollVoteResponseData`, `FlagMessageResponse` to `FlagItemResponse`; `UsersAPIResponse` (`users: UserResponse[]`) maps to `QueryUsersResponse`.
+All 385 hand-written v9 type exports from `src/types.ts` (383), `src/events.ts` (1) and `src/custom_types.ts` (1) that no longer exist under the same name, with their v10 mapping. Categories: renamed (same role), renamed with a shape change, derived expression, sort alias ([sort](#sort-shape)), removed with the API that used it (mostly server-side/admin methods removed from the client: use `@stream-io/node-sdk`), removed with no replacement. The "verified delta" column is computed member by member ("drops" = v9 members missing in v10; date fields that only changed to `TimestampNS` are counted, see [TimestampNS](#timestamp-ns)). Two names in these tables, `BlocklistBehavior` and `ModerationAction`, are exported again at `fdfcb296` (as generated literal unions, see their rows), so 383 v9 names are gone. Names that survive with a different meaning are in [same-name changes](#same-name-meaning-changes). Facts worth noting: `AppSettings` (the `updateAppSettings` input) has no client replacement (`AppResponseFields` is the read shape, not a replacement); `FlagMessageResponse`, `FlagUserResponse`, `MuteUserResponse`, `UnmuteUserResponse` are all removed; `ReminderAPIResponse` maps to `CreateReminderResponse` / `UpdateReminderResponse`, `PollAnswer` to `PollVoteResponseData`, `FlagMessageResponse` to `FlagItemResponse`; `UsersAPIResponse` (`users: UserResponse[]`) maps to `QueryUsersResponse`.
 
 - **Migrate:** rename imports per row; for derived rows write the expression or inline the type.
-- **Source:** `src/types.ts`, `src/gen/models/index.ts` (v10); `src/types.ts`, `src/events.ts` (v9)
+- **Source:** `src/types.ts`, `src/gen/models/index.ts` (v10); `src/types.ts`, `src/events.ts`, `src/custom_types.ts` (v9)
 
 ### Renamed (same role, generated name) (92)
 
@@ -3578,7 +3578,7 @@ All 384 hand-written v9 type exports from `src/types.ts` (383) and `src/events.t
 | `UserCustomEvent`                 | removed: no replacement (sendUserCustomEvent removed)                                                                                                   |                       |
 | `XiaomiConfig`                    | removed: no replacement (app-settings admin)                                                                                                            |                       |
 
-### Removed: no replacement type (39)
+### Removed: no replacement type (40)
 
 | v9                             | v10                                                                                                                                                                                                                                       | verified delta / note |
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
@@ -3592,6 +3592,7 @@ All 384 hand-written v9 type exports from `src/types.ts` (383) and `src/events.t
 | `ConnectionChangeEvent`        | removed: no replacement; connection.changed event removed; client.wsConnection.state / client.networkConnection.state                                                                                                                     |                       |
 | `ContainsOperator`             | removed: no replacement; filters generated per endpoint                                                                                                                                                                                   |                       |
 | `CreatedAtUpdatedAt`           | removed: no replacement                                                                                                                                                                                                                   |                       |
+| `CustomCommandData`            | removed: no replacement; command names are `string` (`Command['name']` / `Command['set']`)                                                                                                                                                |                       |
 | `DeleteMessagesOptions`        | removed: no replacement; was alias of MessageDeletionStrategy                                                                                                                                                                             |                       |
 | `EVENT_MAP`                    | removed: no replacement; event set is the Event union; EventType                                                                                                                                                                          |                       |
 | `GetMessageOptions`            | removed: no replacement; getMessage no longer sends show_deleted_message                                                                                                                                                                  |                       |
