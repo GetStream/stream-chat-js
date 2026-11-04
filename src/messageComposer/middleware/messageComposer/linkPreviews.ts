@@ -39,15 +39,16 @@ export const createLinkPreviewsCompositionMiddleware = (
         state.localMessage.attachments ?? []
       ).concat(linkPreviews);
 
-      // Do not add an empty `attachments` array to the payload.
-      if (!messageAttachments.length && !localAttachments.length) return forward();
-
       const sendOptions = { ...state.sendOptions };
       const skip_enrich_url =
         (!someLinkPreviewsLoading && linkPreviews.length > 0) ||
         someLinkPreviewsDismissed;
       if (skip_enrich_url) {
         sendOptions.skip_enrich_url = true;
+      }
+
+      if (!messageAttachments.length && !localAttachments.length) {
+        return skip_enrich_url ? next({ ...state, sendOptions }) : forward();
       }
 
       // `attachments` is set only when non-empty: on an edit the API reads an empty array as "remove
