@@ -1,3 +1,21 @@
+## [10.0.0-rc.32](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.31...v10.0.0-rc.32) (2026-11-04)
+
+### ⚠ BREAKING CHANGES
+
+* the client no longer dispatches capabilities.changed and
+the name is no longer an EventType. Subscribe to channel.state instead:
+channel.state.subscribeWithSelector(({ ownCapabilities }) => ({ ownCapabilities }), fn).
+See ai-docs/v10-breaking-changes.md#capabilities-changed-removed.
+* AttachmentManager.uploadAttachment() is removed. Retry a failed upload, or upload an attachment you built yourself such as a voice recording, with `attachmentManager.uploadFile(attachment)`. It keeps the attachment's id, fields and position, and runs the pre- and post-upload middleware, which uploadAttachment() skipped. uploadFile() does not check `isUploadEnabled`, so check it first to skip the upload as uploadAttachment() did. uploadFile() always resolves to an attachment: where a result was checked for `undefined`, check `result.localMetadata.uploadState` instead. See ai-docs/v10-breaking-changes.md#upload-attachment-removed.
+
+### Bug Fixes
+
+* drop capabilities.changed; channel.state ownCapabilities is the change signal ([#1992](https://github.com/GetStream/stream-chat-js/issues/1992)) ([6da7713](https://github.com/GetStream/stream-chat-js/commit/6da77137f97c39cd34c2efc2261f496f487f3b58))
+
+### Features
+
+* let AttachmentManager.uploadFile retry an existing attachment ([#1991](https://github.com/GetStream/stream-chat-js/issues/1991)) ([cf8b1fa](https://github.com/GetStream/stream-chat-js/commit/cf8b1fa94330901c1ab15aac5564565c95252723))
+
 ## [10.0.0-rc.31](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.30...v10.0.0-rc.31) (2026-11-03)
 
 ### ⚠ BREAKING CHANGES
