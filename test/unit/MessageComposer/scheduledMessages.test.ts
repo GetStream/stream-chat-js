@@ -268,7 +268,7 @@ describe('MessageComposer scheduled messages', () => {
       const result = await composer.schedule(scheduledAt);
 
       expect(result).toEqual({ status: 'sent' });
-      expect(client.scheduledMessages.scheduledMessages.size).toBe(0);
+      expect(client.scheduledMessages.store.values()).toEqual([]);
       expect(composer.textComposer.text).toBe('');
     });
 

@@ -9,7 +9,6 @@ export type ChatLoggerScope =
   | 'instance-configuration'
   | 'message-composer'
   | 'offline-db'
-  | 'scheduled-message-manager'
   | 'state-store'
   | 'text-composer'
   | 'thread'

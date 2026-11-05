@@ -1,7 +1,7 @@
 import { StateStore } from '@stream-io/state-store';
-import { chatLoggerSystem } from '../logger';
+import { EntityStore } from '../entityStore/EntityStore';
+import { ScheduledMessagePaginator } from '../pagination/paginators/ScheduledMessagePaginator';
 import { sanitizeOutgoingAttachments } from '../utils';
-import { withCancellation } from '../utils/concurrency';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 import {
   SCHEDULED_MESSAGE_STATUS,
@@ -14,32 +14,15 @@ import {
 } from './errors';
 import type { StreamChat } from '../client';
 import type {
-  QueryScheduledMessagesRequest,
-  QueryScheduledMessagesResponse,
   ScheduledMessageResponse,
   ScheduledMessageStatus,
   UpdateScheduledMessageRequest,
 } from '../gen/models';
-import type { StreamResponse } from '../types';
 import type {
   ScheduledMessageEvent,
   ScheduledMessageManagerOptions,
   ScheduledMessageManagerState,
 } from './types';
-
-const logger = chatLoggerSystem.getLogger('scheduled-message-manager');
-
-type ScheduledMessageMap = ScheduledMessageManagerState['scheduledMessages'];
-
-type QueryScheduledMessagesResult = StreamResponse<QueryScheduledMessagesResponse>;
-
-type ScheduledMessageQueryResultHandler = (
-  response: QueryScheduledMessagesResult,
-) => Partial<ScheduledMessageManagerState> | void;
-
-const SCHEDULED_MESSAGES_LOAD_LIMIT = 100;
-
-const CANCELED = 'canceled';
 
 const UPSERT_EVENT_TYPES = [
   ScheduledMessageEventType.Created,
@@ -65,42 +48,12 @@ const isNewerThan = (
   incoming: ScheduledMessageResponse,
 ) => current.updated_at > incoming.updated_at;
 
-const byScheduledAt = (a: ScheduledMessageResponse, b: ScheduledMessageResponse) =>
-  a.scheduled_at - b.scheduled_at || a.id.localeCompare(b.id);
-
-const isChannelMessage = (scheduledMessage: ScheduledMessageResponse, cid: string) => {
-  const { cid: messageCid, message } = scheduledMessage;
-
-  return messageCid === cid && !message.parent_id;
-};
-
-const isThreadReply = (scheduledMessage: ScheduledMessageResponse, parentId: string) => {
-  const { message } = scheduledMessage;
-
-  return message.parent_id === parentId;
-};
-
-const isInSnapshotScope = (scheduledMessage: ScheduledMessageResponse, cid?: string) =>
-  !cid || scheduledMessage.cid === cid;
-
-type SnapshotScope = {
-  cid?: string;
-  requestedAtVersion?: number;
-};
-
-const haveSameEntries = (first: ScheduledMessageMap, second: ScheduledMessageMap) =>
-  first.size === second.size &&
-  Array.from(first).every(
-    ([id, scheduledMessage]) => second.get(id) === scheduledMessage,
-  );
+const isDisabledError = (error: Error | undefined) =>
+  !!error &&
+  getScheduledMessageErrorReason(error) === ScheduledMessageErrorReason.Disabled;
 
 const createInitialState = (): ScheduledMessageManagerState => ({
   isDisabled: false,
-  isLoaded: false,
-  isLoading: false,
-  lastQueryError: undefined,
-  next: undefined,
-  scheduledMessages: new Map(),
 });
 
 export class ScheduledMessageManager extends WithSubscriptions {
@@ -108,8 +61,15 @@ export class ScheduledMessageManager extends WithSubscriptions {
   private removedIds = new Set<string>();
   private receivedVersion = 0;
   private receivedVersions = new Map<string, number>();
-  private loadTag = Symbol('ScheduledMessageManager.load');
+  private hydratedCids = new Set<string>();
+  private channelPaginators = new Map<string, ScheduledMessagePaginator>();
+  private paginatorUnsubscribeFunctions: Array<() => void> = [];
 
+  public readonly store = new EntityStore<ScheduledMessageResponse>({
+    getEntityId: ({ id }) => id,
+    releaseOnLastUnlink: false,
+  });
+  public paginator: ScheduledMessagePaginator;
   public state: StateStore<ScheduledMessageManagerState>;
 
   constructor({ client }: ScheduledMessageManagerOptions) {
@@ -117,19 +77,18 @@ export class ScheduledMessageManager extends WithSubscriptions {
 
     this.client = client;
     this.state = new StateStore<ScheduledMessageManagerState>(createInitialState());
+    this.paginator = this.createPaginator();
+    this.watchQueryErrors(this.paginator);
   }
 
-  private isOutdated = (
-    incoming: ScheduledMessageResponse,
-    scheduledMessages: ScheduledMessageMap,
-  ) => {
-    const { id } = incoming;
-    const current = scheduledMessages.get(id);
+  private resolveLatest = (incoming: ScheduledMessageResponse) => {
+    if (this.removedIds.has(incoming.id)) return undefined;
 
-    const isRemoved = this.removedIds.has(id);
-    const isOlderThanCurrent = !!current && isNewerThan(current, incoming);
+    const current = this.store.get(incoming.id);
 
-    return isRemoved || isOlderThanCurrent;
+    const latest = current && isNewerThan(current, incoming) ? current : incoming;
+
+    return latest;
   };
 
   private isReceivedSince = (id: string, requestedAtVersion?: number) => {
@@ -140,60 +99,37 @@ export class ScheduledMessageManager extends WithSubscriptions {
     return receivedVersion !== undefined && receivedVersion > requestedAtVersion;
   };
 
-  private applySnapshot = (
-    snapshotMessages: ScheduledMessageResponse[],
-    { cid, requestedAtVersion }: SnapshotScope = {},
-  ) => {
-    const currentMessages = Array.from(this.scheduledMessages.values());
-
-    const isKept = (scheduledMessage: ScheduledMessageResponse) =>
-      !isInSnapshotScope(scheduledMessage, cid) ||
-      this.isReceivedSince(scheduledMessage.id, requestedAtVersion);
-
-    const isActive = (scheduledMessage: ScheduledMessageResponse) =>
-      !isFinished(scheduledMessage) && !this.removedIds.has(scheduledMessage.id);
-
-    const pickNewest = (incoming: ScheduledMessageResponse) => {
-      const current = this.scheduledMessages.get(incoming.id);
-
-      return current && isNewerThan(current, incoming) ? current : incoming;
-    };
-
-    const keptMessages = currentMessages.filter(isKept);
-    const snapshotMessagesToStore = snapshotMessages.filter(isActive).map(pickNewest);
-
-    const nextScheduledMessages: ScheduledMessageMap = new Map();
-    [...keptMessages, ...snapshotMessagesToStore].forEach((scheduledMessage) =>
-      nextScheduledMessages.set(scheduledMessage.id, scheduledMessage),
+  private updateIsDisabled = () => {
+    const isDisabled = this.paginators.some(({ lastQueryError }) =>
+      isDisabledError(lastQueryError),
     );
 
-    if (haveSameEntries(nextScheduledMessages, this.scheduledMessages)) return;
-
-    this.state.partialNext({ scheduledMessages: nextScheduledMessages });
+    this.state.partialNext({ isDisabled });
   };
 
-  private upsertManyToState = (incomingMessages: ScheduledMessageResponse[]) => {
-    const nextScheduledMessages = new Map(this.scheduledMessages);
-    let hasChanges = false;
+  private createPaginator = (cid?: string) =>
+    new ScheduledMessagePaginator({
+      cid,
+      client: this.client,
+      resolveLatest: this.resolveLatest,
+      store: this.store,
+    });
 
-    for (const scheduledMessage of incomingMessages) {
-      const { id } = scheduledMessage;
+  private watchQueryErrors = (paginator: ScheduledMessagePaginator) => {
+    const unsubscribe = paginator.state.subscribeWithSelector(
+      ({ lastQueryError }) => ({ lastQueryError }),
+      this.updateIsDisabled,
+    );
 
-      if (isFinished(scheduledMessage)) {
-        this.removedIds.add(id);
-        hasChanges = nextScheduledMessages.delete(id) || hasChanges;
-        continue;
-      }
+    this.paginatorUnsubscribeFunctions.push(unsubscribe);
+  };
 
-      if (this.isOutdated(scheduledMessage, nextScheduledMessages)) continue;
+  private ingest = (scheduledMessage: ScheduledMessageResponse) => {
+    this.paginators.forEach((paginator) => paginator.ingestItem(scheduledMessage));
+    this.store.upsert(scheduledMessage);
 
-      nextScheduledMessages.set(id, scheduledMessage);
-      this.receivedVersion += 1;
-      this.receivedVersions.set(id, this.receivedVersion);
-      hasChanges = true;
-    }
-
-    if (hasChanges) this.state.partialNext({ scheduledMessages: nextScheduledMessages });
+    this.receivedVersion += 1;
+    this.receivedVersions.set(scheduledMessage.id, this.receivedVersion);
   };
 
   private handleUpsertEvent = (event: ScheduledMessageEvent) => {
@@ -222,66 +158,22 @@ export class ScheduledMessageManager extends WithSubscriptions {
     return unsubscribeAll;
   };
 
-  private canLoadAutomatically = () => {
-    const { isDisabled } = this.state.getLatestValue();
-    const { anonymous, userID } = this.client;
+  private reloadWhenRecovered = () =>
+    this.client.on('connection.recovered', () => {
+      const loadedPaginators = this.paginators.filter(
+        ({ isInitialized }) => isInitialized,
+      );
 
-    return !!userID && !anonymous && !isDisabled;
-  };
+      loadedPaginators.forEach((paginator) => paginator.reload());
+    }).unsubscribe;
 
-  private loadWhenConnected = () =>
+  private forgetHydrationWhenDisconnected = () =>
     this.client.wsConnection.state.subscribeWithSelector(
       ({ isHealthy }) => ({ isHealthy }),
       ({ isHealthy }) => {
-        if (!isHealthy || !this.canLoadAutomatically()) return;
-
-        this.load().catch((error) =>
-          logger
-            .withExtraTags('loadWhenConnected')
-            .warn('Loading the scheduled messages failed.', { error }),
-        );
+        if (!isHealthy) this.hydratedCids.clear();
       },
     );
-
-  private query = async (
-    request: QueryScheduledMessagesRequest,
-    handleResult: ScheduledMessageQueryResultHandler,
-    signal?: AbortSignal,
-  ): Promise<QueryScheduledMessagesResult> => {
-    this.state.partialNext({ isLoading: true });
-
-    try {
-      const response = await this.client.queryScheduledMessages(request);
-
-      if (signal?.aborted) return response;
-
-      const { next } = response;
-
-      const resultState = handleResult(response);
-
-      this.state.partialNext({
-        ...resultState,
-        isDisabled: false,
-        lastQueryError: undefined,
-        next,
-      });
-
-      return response;
-    } catch (error) {
-      if (signal?.aborted) throw error;
-
-      const lastQueryError = error as Error;
-      const errorReason = getScheduledMessageErrorReason(lastQueryError);
-
-      const isDisabled = errorReason === ScheduledMessageErrorReason.Disabled;
-
-      this.state.partialNext({ isDisabled, lastQueryError });
-
-      throw error;
-    } finally {
-      if (!signal?.aborted) this.state.partialNext({ isLoading: false });
-    }
-  };
 
   private removeWhenNotFound = async <TResult>(
     id: string,
@@ -296,73 +188,44 @@ export class ScheduledMessageManager extends WithSubscriptions {
     }
   };
 
-  private loadSnapshot = async (signal: AbortSignal) => {
-    const request = { limit: SCHEDULED_MESSAGES_LOAD_LIMIT };
-    const requestedAtVersion = this.receivedVersion;
-
-    const replaceStore = ({ scheduled_messages = [] }: QueryScheduledMessagesResult) => {
-      this.applySnapshot(scheduled_messages, { requestedAtVersion });
-
-      return { isLoaded: true };
-    };
-
-    const response = await this.query(request, replaceStore, signal);
-
-    return signal.aborted ? CANCELED : response;
-  };
-
   public get version() {
     return this.receivedVersion;
   }
 
-  public get scheduledMessages() {
-    return this.state.getLatestValue().scheduledMessages;
+  public get paginators() {
+    return [this.paginator, ...this.channelPaginators.values()];
   }
 
-  public getFromState = (id: string) => this.scheduledMessages.get(id);
+  public getChannelPaginator = (cid: string) => {
+    const existingPaginator = this.channelPaginators.get(cid);
 
-  public getForChannel = (cid: string) => {
-    const allScheduledMessages = Array.from(this.scheduledMessages.values());
+    if (existingPaginator) return existingPaginator;
 
-    const channelScheduledMessages = allScheduledMessages
-      .filter((scheduledMessage) => isChannelMessage(scheduledMessage, cid))
-      .sort(byScheduledAt);
+    const paginator = this.createPaginator(cid);
+    this.channelPaginators.set(cid, paginator);
+    this.watchQueryErrors(paginator);
 
-    return channelScheduledMessages;
+    if (this.hydratedCids.has(cid)) paginator.setCompleteList(this.store.values());
+
+    return paginator;
   };
 
-  public getCountForChannel = (cid: string) => {
-    const allScheduledMessages = Array.from(this.scheduledMessages.values());
+  public getFromState = (id: string) => this.store.get(id);
 
-    const channelScheduledMessageCount = allScheduledMessages.filter((scheduledMessage) =>
-      isChannelMessage(scheduledMessage, cid),
-    ).length;
+  public upsertToState = (scheduledMessage: ScheduledMessageResponse) => {
+    if (isFinished(scheduledMessage)) {
+      this.removeFromState(scheduledMessage.id);
+      return;
+    }
 
-    return channelScheduledMessageCount;
+    if (this.resolveLatest(scheduledMessage) !== scheduledMessage) return;
+
+    this.ingest(scheduledMessage);
   };
-
-  public getForThread = (parentId: string) => {
-    const allScheduledMessages = Array.from(this.scheduledMessages.values());
-
-    const threadScheduledMessages = allScheduledMessages
-      .filter((scheduledMessage) => isThreadReply(scheduledMessage, parentId))
-      .sort(byScheduledAt);
-
-    return threadScheduledMessages;
-  };
-
-  public upsertToState = (scheduledMessage: ScheduledMessageResponse) =>
-    this.upsertManyToState([scheduledMessage]);
 
   public removeFromState = (id: string) => {
     this.removedIds.add(id);
-
-    if (!this.scheduledMessages.has(id)) return;
-
-    const nextScheduledMessages = new Map(this.scheduledMessages);
-    nextScheduledMessages.delete(id);
-
-    this.state.partialNext({ scheduledMessages: nextScheduledMessages });
+    this.store.remove(id);
   };
 
   public hydrateChannelState = (
@@ -372,12 +235,42 @@ export class ScheduledMessageManager extends WithSubscriptions {
   ) => {
     if (!Array.isArray(scheduledMessages)) return;
 
-    this.applySnapshot(scheduledMessages, { cid, requestedAtVersion });
+    const snapshotMessages = scheduledMessages
+      .filter((scheduledMessage) => !isFinished(scheduledMessage))
+      .map(this.resolveLatest)
+      .filter((scheduledMessage) => scheduledMessage !== undefined);
+    const snapshotIds = new Set(snapshotMessages.map(({ id }) => id));
+
+    const isMissingFromSnapshot = ({ cid: messageCid, id }: ScheduledMessageResponse) =>
+      messageCid === cid &&
+      !snapshotIds.has(id) &&
+      !this.isReceivedSince(id, requestedAtVersion);
+
+    const missingMessages = this.store.values().filter(isMissingFromSnapshot);
+
+    this.store.transaction(() => {
+      missingMessages.forEach(({ id }) => this.store.remove(id));
+      snapshotMessages.forEach(this.ingest);
+    });
+
+    this.hydratedCids.add(cid);
+    this.channelPaginators.get(cid)?.setCompleteList(this.store.values());
   };
 
   public resetState = () => {
+    this.paginatorUnsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
+    this.paginatorUnsubscribeFunctions = [];
+    this.channelPaginators.forEach((paginator) => paginator.dispose());
+    this.channelPaginators.clear();
+    this.paginator.dispose();
+
     this.removedIds.clear();
     this.receivedVersions.clear();
+    this.hydratedCids.clear();
+    this.store.clear();
+
+    this.paginator = this.createPaginator();
+    this.watchQueryErrors(this.paginator);
     this.state.next(createInitialState());
   };
 
@@ -390,26 +283,8 @@ export class ScheduledMessageManager extends WithSubscriptions {
     this.addUnsubscribeFunction(
       this.subscribeToEvents(REMOVE_EVENT_TYPES, this.handleRemoveEvent),
     );
-    this.addUnsubscribeFunction(this.loadWhenConnected());
-  };
-
-  public load = async (): Promise<QueryScheduledMessagesResult | undefined> => {
-    const result = await withCancellation(this.loadTag, this.loadSnapshot);
-
-    return result === CANCELED ? undefined : result;
-  };
-
-  public loadMore = async (): Promise<QueryScheduledMessagesResult | undefined> => {
-    const { isLoading, next } = this.state.getLatestValue();
-
-    if (!next || isLoading) return;
-
-    const request = { limit: SCHEDULED_MESSAGES_LOAD_LIMIT, next };
-
-    const addPage = ({ scheduled_messages = [] }: QueryScheduledMessagesResult) =>
-      this.upsertManyToState(scheduled_messages);
-
-    return await this.query(request, addPage);
+    this.addUnsubscribeFunction(this.reloadWhenRecovered());
+    this.addUnsubscribeFunction(this.forgetHydrationWhenDisconnected());
   };
 
   public updateScheduledMessage = async (

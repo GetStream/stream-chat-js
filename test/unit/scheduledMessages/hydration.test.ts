@@ -60,8 +60,8 @@ describe('scheduled message hydration', () => {
 
       await client.queryChannelsAndHydrate({ include_scheduled_messages: true });
 
-      expect(manager.getForChannel('messaging:a')).toEqual([inA]);
-      expect(manager.getForChannel('messaging:b')).toEqual([]);
+      expect(manager.getChannelPaginator('messaging:a').items).toEqual([inA]);
+      expect(manager.getChannelPaginator('messaging:b').items).toEqual([]);
     });
 
     it('empties a channel whose scheduled_messages is an empty list', async () => {
@@ -74,8 +74,9 @@ describe('scheduled message hydration', () => {
 
       await client.queryChannelsAndHydrate({ include_scheduled_messages: true });
 
-      expect(manager.getForChannel('messaging:a')).toEqual([]);
-      expect(manager.getForChannel('messaging:other')).toEqual([other]);
+      expect(manager.getChannelPaginator('messaging:a').items).toEqual([]);
+      expect(manager.getFromState(stale.id)).toBeUndefined();
+      expect(manager.getFromState(other.id)).toBe(other);
     });
 
     it('keeps the store when scheduled_messages is absent', async () => {
@@ -86,7 +87,7 @@ describe('scheduled message hydration', () => {
 
       await client.queryChannelsAndHydrate({ include_scheduled_messages: true });
 
-      expect(manager.getForChannel('messaging:a')).toEqual([known]);
+      expect(manager.getFromState(known.id)).toBe(known);
     });
 
     it('accepts a response without channels', async () => {
@@ -129,7 +130,7 @@ describe('scheduled message hydration', () => {
 
       await channel.query({ include_scheduled_messages: true });
 
-      expect(manager.getForChannel(channelCid)).toEqual([inChannel]);
+      expect(manager.getChannelPaginator(channelCid).items).toEqual([inChannel]);
     });
 
     it('keeps a message stored while channel.query is in flight', async () => {
@@ -183,7 +184,7 @@ describe('scheduled message hydration', () => {
         scheduled_at: new Date(Date.now() - 60 * 1000),
       });
 
-      expect(manager.scheduledMessages.size).toBe(0);
+      expect(manager.store.values()).toEqual([]);
     });
   });
 });
