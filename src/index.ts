@@ -91,7 +91,6 @@ export * from './LiveLocationManager';
 export type {
   CustomAttachmentData,
   CustomChannelData,
-  CustomCommandData,
   CustomEventData,
   CustomEventTypes,
   CustomMemberData,

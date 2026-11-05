@@ -4,11 +4,7 @@ import type {
   UploadRequestFn,
   UploadRequestOptions,
 } from './configuration';
-import {
-  isLocalImageAttachment,
-  isPendingUpload,
-  isUploadedAttachment,
-} from './attachmentIdentity';
+import { isPendingUpload, isUploadedAttachment } from './attachmentIdentity';
 import {
   createFileFromBlobs,
   ensureIsLocalAttachment,
@@ -33,11 +29,11 @@ import type {
   FileReference,
   LocalAttachment,
   LocalAttachmentUploadMetadata,
-  LocalNotImageAttachment,
   LocalUploadAttachment,
   UploadPermissionCheckResult,
 } from './types';
 import type {
+  Attachment,
   ChannelResponse,
   DraftMessage,
   LocalMessage,
@@ -77,6 +73,23 @@ const initState = ({
       } as LocalAttachment;
     }),
 });
+
+/**
+ * Whether an upload input is an attachment rather than a file: `File`, `Blob` and `FileReference`
+ * never carry `localMetadata`.
+ */
+const isUploadInputAttachment = (
+  input: FileReference | FileLike | LocalUploadAttachment,
+): input is LocalUploadAttachment => 'localMetadata' in input;
+
+/**
+ * An upload rejection as an `Error`, so a rejection with any other value still fails the upload
+ * instead of dropping the attachment. A cancellation is kept as it is, for `isUploadCancellation`.
+ */
+const toUploadError = (rejection: unknown) =>
+  rejection instanceof Error || isUploadCancellation(rejection)
+    ? (rejection as Error)
+    : new Error('unknown error', { cause: rejection });
 
 export class AttachmentManager {
   readonly state: StateStore<AttachmentManagerState>;
@@ -232,6 +245,10 @@ export class AttachmentManager {
     return this.getUploadsByState('pending').length;
   }
 
+  /**
+   * Slots left for files. Each finished or uploading attachment takes one. Pending, failed and blocked
+   * uploads, and attachments with nothing to upload, take none.
+   */
   get availableUploadSlots() {
     return (
       this.config.maxNumberOfFilesPerMessage -
@@ -325,25 +342,33 @@ export class AttachmentManager {
     return this.attachments.indexOf(attachmentsById[localId]);
   };
 
-  private prepareAttachmentUpdate = (attachmentToUpdate: LocalAttachment) => {
-    const stateAttachments = this.attachments;
-    const attachments = [...this.attachments];
-    const attachmentIndex = this.getAttachmentIndex(attachmentToUpdate.localMetadata.id);
+  /**
+   * `attachments` with `attachmentToUpdate` merged in place of the one with its `localMetadata.id`:
+   * `null` when none has it, `attachments` itself when the merge changes nothing.
+   */
+  private prepareAttachmentUpdate = (
+    attachmentToUpdate: LocalAttachment,
+    attachments: LocalAttachment[] = this.attachments,
+  ) => {
+    const attachmentIndex = attachments.findIndex(
+      ({ localMetadata }) => localMetadata?.id === attachmentToUpdate.localMetadata.id,
+    );
     if (attachmentIndex === -1) return null;
     // Replace in place by ID; reordering would break indexing.
     const merged = mergeWithDiff<LocalAttachment>(
-      stateAttachments[attachmentIndex],
+      attachments[attachmentIndex],
       attachmentToUpdate,
     );
     const updatesOnMerge = merged.diff && Object.keys(merged.diff.children).length;
     if (updatesOnMerge) {
       const localAttachment = ensureIsLocalAttachment(merged.result);
       if (localAttachment) {
-        attachments.splice(attachmentIndex, 1, localAttachment);
-        return attachments;
+        const updatedAttachments = [...attachments];
+        updatedAttachments.splice(attachmentIndex, 1, localAttachment);
+        return updatedAttachments;
       }
     }
-    return stateAttachments;
+    return attachments;
   };
 
   updateAttachment = (attachmentToUpdate: LocalAttachment) => {
@@ -353,24 +378,24 @@ export class AttachmentManager {
     }
   };
 
-  upsertAttachments = (attachmentsToUpsert: LocalAttachment[]) => {
+  /**
+   * Merges each attachment into the one with its `localMetadata.id`, or appends it. An attachment
+   * without a local id (e.g. a custom-type one the app builds) is appended with a new one, on every
+   * call: to update or remove it later, pass `{ ...attachment, localMetadata: { id } }` with your own
+   * id instead.
+   */
+  upsertAttachments = (attachmentsToUpsert: Array<Attachment | LocalAttachment>) => {
     if (!attachmentsToUpsert.length) return;
-    let attachments = [...this.attachments];
-    let hasUpdates = false;
+    let attachments = this.attachments;
     attachmentsToUpsert.forEach((attachment) => {
-      const updatedAttachments = this.prepareAttachmentUpdate(attachment);
-      if (updatedAttachments === null) {
-        const localAttachment = ensureIsLocalAttachment(attachment);
-        if (localAttachment) {
-          attachments.push(localAttachment);
-          hasUpdates = true;
-        }
-      } else if (updatedAttachments !== this.attachments) {
-        attachments = updatedAttachments;
-        hasUpdates = true;
-      }
+      const localAttachment = ensureIsLocalAttachment(attachment);
+      if (!localAttachment) return;
+      attachments = this.prepareAttachmentUpdate(localAttachment, attachments) ?? [
+        ...attachments,
+        localAttachment,
+      ];
     });
-    if (hasUpdates) {
+    if (attachments !== this.attachments) {
       this.state.partialNext({ attachments });
     }
   };
@@ -411,10 +436,16 @@ export class AttachmentManager {
   ): Promise<UploadPermissionCheckResult> => {
     const client = this.channel.getClient();
     let appSettings;
-    if (!client.appSettingsPromise) {
-      appSettings = await client.getAppSettings();
-    } else {
-      appSettings = await client.appSettingsPromise;
+    try {
+      appSettings = await (client.appSettingsPromise ?? client.getAppSettings());
+    } catch (error) {
+      // offline, the copy the offline database keeps stands in for the request
+      appSettings = client.userId
+        ? await client.offlineDb
+            ?.getAppSettings({ userId: client.userId })
+            .catch(() => null)
+        : null;
+      if (!appSettings) throw error;
     }
     const uploadConfig = isImageFile(fileLike)
       ? appSettings?.app?.image_upload_config
@@ -545,9 +576,11 @@ export class AttachmentManager {
     return localAttachment;
   };
 
-  private ensureLocalUploadAttachment = async (
-    attachment: Partial<LocalUploadAttachment>,
-  ) => {
+  /**
+   * Whether `attachment` carries what an upload needs: a file and a local id. Reports the missing one
+   * as an error notification.
+   */
+  private isUploadableOrNotify = (attachment: Partial<LocalUploadAttachment>) => {
     if (!attachment.localMetadata?.file) {
       this.client.notifications.addError({
         message: 'File is required for upload attachment',
@@ -557,7 +590,7 @@ export class AttachmentManager {
         },
         options: { type: CORE_NOTIFICATION_TYPE.attachmentFileMissing },
       });
-      return;
+      return false;
     }
 
     if (!attachment.localMetadata.id) {
@@ -569,18 +602,10 @@ export class AttachmentManager {
         },
         options: { type: CORE_NOTIFICATION_TYPE.attachmentIdMissing },
       });
-      return;
+      return false;
     }
 
-    if (!this.fileUploadFilter(attachment)) return;
-
-    const newAttachment = await this.fileToLocalUploadAttachment(
-      attachment.localMetadata.file,
-    );
-    if (attachment.localMetadata.id) {
-      newAttachment.localMetadata.id = attachment.localMetadata.id;
-    }
-    return newAttachment;
+    return true;
   };
 
   /** The default upload, skipping the custom `doUploadRequest` so a custom one can delegate here. */
@@ -649,114 +674,30 @@ export class AttachmentManager {
     return this.doDefaultUploadRequest(fileLike, options);
   };
 
-  // @deprecated use attachmentManager.uploadFile(file)
-  uploadAttachment = async (attachment: LocalUploadAttachment) => {
-    if (!this.isUploadEnabled) return;
-
-    const localAttachment = await this.ensureLocalUploadAttachment(attachment);
-
-    if (typeof localAttachment === 'undefined') return;
-
-    if (localAttachment.localMetadata.uploadState === 'blocked') {
-      this.upsertAttachments([localAttachment]);
-      this.client.notifications.addError({
-        message: `The attachment upload was blocked`,
-        origin: {
-          emitter: 'AttachmentManager',
-          context: {
-            attachment,
-            blockedAttachment: localAttachment,
-            composer: this.composer,
-          },
-        },
-        options: {
-          type: CORE_NOTIFICATION_TYPE.attachmentUploadBlocked,
-          metadata: {
-            reason: localAttachment.localMetadata.uploadPermissionCheck?.reason,
-          },
-        },
-      });
-      return localAttachment;
-    }
-
-    let response: MinimumUploadRequestResult;
-    try {
-      response = await this.upload(attachment);
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : 'unknown error';
-      const failedAttachment: LocalUploadAttachment = {
-        ...attachment,
-        localMetadata: {
-          ...attachment.localMetadata,
-          uploadState: 'failed',
-          uploadProgress: undefined,
-          // `false`, not `undefined`: `mergeWith` skips `undefined`, which would leave a stale `true`.
-          uploadConfirmationPending: false,
-        },
-      };
-
-      // A cancellation is not an error (same guard as `createUploadErrorHandlerMiddleware`).
-      if (!isUploadCancellation(error)) {
-        this.client.notifications.addError({
-          message: 'Error uploading attachment',
-          origin: {
-            emitter: 'AttachmentManager',
-            context: { attachment, failedAttachment, composer: this.composer },
-          },
-          options: {
-            type: CORE_NOTIFICATION_TYPE.attachmentUploadFailed,
-            metadata: { reason },
-            originalError: error instanceof Error ? error : undefined,
-          },
-        });
-      }
-
-      this.updateAttachment(failedAttachment);
-      return failedAttachment;
-    }
-
-    if (!response) {
-      // A falsy `doUploadRequest` result drops the attachment, so the app can handle failure itself.
-      this.removeAttachments([attachment.localMetadata.id]);
-      return;
-    }
-
-    const uploadedAttachment: LocalUploadAttachment = {
-      ...attachment,
-      localMetadata: {
-        ...attachment.localMetadata,
-        uploadState: 'finished',
-        uploadProgress: undefined,
-        uploadConfirmationPending: false,
-      },
-    };
-
-    const previewUri = uploadedAttachment.localMetadata.previewUri;
-    if (previewUri) {
-      if (previewUri.startsWith('blob:')) URL.revokeObjectURL(previewUri);
-      delete uploadedAttachment.localMetadata.previewUri;
-    }
-
-    if (isLocalImageAttachment(uploadedAttachment)) {
-      uploadedAttachment.image_url = response.file;
+  /**
+   * Uploads a file, or an existing local attachment, through the pre- and post-upload middleware.
+   *
+   * A file becomes a new attachment. An attachment keeps its `localMetadata.id`, its fields and its
+   * position in `attachments`: a failed upload is retried in place, and an attachment the caller built
+   * is uploaded with its own fields. An attachment without a file or a local id is returned unchanged,
+   * with an error notification.
+   *
+   * Unlike {@link uploadFiles}, it does not check {@link isUploadEnabled}.
+   */
+  uploadFile = async (
+    fileOrAttachment: FileReference | FileLike | LocalUploadAttachment,
+  ) => {
+    let initialAttachment: LocalUploadAttachment;
+    if (isUploadInputAttachment(fileOrAttachment)) {
+      if (!this.isUploadableOrNotify(fileOrAttachment)) return fileOrAttachment;
+      initialAttachment = fileOrAttachment;
     } else {
-      (uploadedAttachment as LocalNotImageAttachment).asset_url = response.file;
-    }
-    if (response.thumb_url) {
-      (uploadedAttachment as LocalNotImageAttachment).thumb_url = response.thumb_url;
+      initialAttachment = AttachmentManager.toLocalUploadAttachment(fileOrAttachment);
     }
 
-    this.updateAttachment(uploadedAttachment);
-
-    return uploadedAttachment;
-  };
-
-  uploadFile = async (file: FileReference | FileLike) => {
     const preUpload = await this.preUploadMiddlewareExecutor.execute({
       eventName: 'prepare',
-      initialValue: {
-        attachment: AttachmentManager.toLocalUploadAttachment(file),
-      },
+      initialValue: { attachment: initialAttachment },
       mode: 'concurrent',
     });
 
@@ -798,7 +739,7 @@ export class AttachmentManager {
     try {
       response = await this.upload(attachment);
     } catch (err) {
-      error = err instanceof Error ? err : undefined;
+      error = toUploadError(err);
     }
 
     const postUpload = await this.postUploadMiddlewareExecutor.execute({

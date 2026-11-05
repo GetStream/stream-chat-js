@@ -1,3 +1,49 @@
+## [10.0.0-rc.34](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.33...v10.0.0-rc.34) (2026-11-05)
+
+### Bug Fixes
+
+* issues found by the RN e2e tests ([#1996](https://github.com/GetStream/stream-chat-js/issues/1996)) ([f5d1a2d](https://github.com/GetStream/stream-chat-js/commit/f5d1a2d6c1d10a5791d36a9035cd6d538794ecd0))
+* **pagination:** count a page set with setItems as loaded, even when empty ([#1995](https://github.com/GetStream/stream-chat-js/issues/1995)) ([bfff3c8](https://github.com/GetStream/stream-chat-js/commit/bfff3c851c18f094e221aba0108cdc274bc471f6))
+
+## [10.0.0-rc.33](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.32...v10.0.0-rc.33) (2026-11-05)
+
+### ⚠ BREAKING CHANGES
+
+* `LocalAttachmentMetadata` requires only `id`. `file` and `uploadState` are
+optional, so code that reads them from a `LocalAttachment` must handle `undefined`. A `file` must
+come with its `uploadState`: `localMetadata: { id, file }` no longer compiles, and an attachment
+in that shape from untyped code is no longer sent. An attachment with neither field (a custom type
+or `giphy`) is sent as it is, takes no upload slot, and counts as content in `hasSendableData`.
+* CustomCommandData is no longer exported. Delete its augmentations and imports. A leftover augmentation still compiles and has no effect, so search for the name rather than relying on tsc. An app that wants a closed set of command names declares its own union. See ai-docs/v10-breaking-changes.md#custom-data-augmentation.
+
+### Bug Fixes
+
+* dispatch connection.recovered on reconnect when recovery is disabled ([#1994](https://github.com/GetStream/stream-chat-js/issues/1994)) ([13bb533](https://github.com/GetStream/stream-chat-js/commit/13bb533744f47f58efbe15c042cee4943d612609))
+* remove CustomCommandData ([#1989](https://github.com/GetStream/stream-chat-js/issues/1989)) ([f737d61](https://github.com/GetStream/stream-chat-js/commit/f737d61993d87d45e730b6887389d648af3bed18))
+
+### Features
+
+* send and count attachments with nothing to upload ([#1993](https://github.com/GetStream/stream-chat-js/issues/1993)) ([b2dfb8a](https://github.com/GetStream/stream-chat-js/commit/b2dfb8aacd1e17b5015291f55944485920d87360)), closes [ai-docs/v10-breaking-changes.md#non-upload-attachments](https://github.com/ai-docs/v10-breaking-changes.md/issues/non-upload-attachments)
+* update to latest api spec ([461eb24](https://github.com/GetStream/stream-chat-js/commit/461eb24363e365407f37bd45c16739287ff72b64))
+
+## [10.0.0-rc.32](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.31...v10.0.0-rc.32) (2026-11-04)
+
+### ⚠ BREAKING CHANGES
+
+* the client no longer dispatches capabilities.changed and
+the name is no longer an EventType. Subscribe to channel.state instead:
+channel.state.subscribeWithSelector(({ ownCapabilities }) => ({ ownCapabilities }), fn).
+See ai-docs/v10-breaking-changes.md#capabilities-changed-removed.
+* AttachmentManager.uploadAttachment() is removed. Retry a failed upload, or upload an attachment you built yourself such as a voice recording, with `attachmentManager.uploadFile(attachment)`. It keeps the attachment's id, fields and position, and runs the pre- and post-upload middleware, which uploadAttachment() skipped. uploadFile() does not check `isUploadEnabled`, so check it first to skip the upload as uploadAttachment() did. uploadFile() always resolves to an attachment: where a result was checked for `undefined`, check `result.localMetadata.uploadState` instead. See ai-docs/v10-breaking-changes.md#upload-attachment-removed.
+
+### Bug Fixes
+
+* drop capabilities.changed; channel.state ownCapabilities is the change signal ([#1992](https://github.com/GetStream/stream-chat-js/issues/1992)) ([6da7713](https://github.com/GetStream/stream-chat-js/commit/6da77137f97c39cd34c2efc2261f496f487f3b58))
+
+### Features
+
+* let AttachmentManager.uploadFile retry an existing attachment ([#1991](https://github.com/GetStream/stream-chat-js/issues/1991)) ([cf8b1fa](https://github.com/GetStream/stream-chat-js/commit/cf8b1fa94330901c1ab15aac5564565c95252723))
+
 ## [10.0.0-rc.31](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.30...v10.0.0-rc.31) (2026-11-03)
 
 ### ⚠ BREAKING CHANGES

@@ -130,6 +130,7 @@ describe('stream-io/message-composer-middleware/link-previews', () => {
     expect(result.status).toBeUndefined;
     expect(result.state.message.attachments ?? []).toHaveLength(0);
     expect(result.state.localMessage.attachments ?? []).toHaveLength(0);
+    expect(result.state.sendOptions.skip_enrich_url).toBeUndefined();
   });
 
   it('should add loaded preview to message attachments', async () => {
@@ -350,6 +351,8 @@ describe('stream-io/message-composer-middleware/link-previews', () => {
     expect(result.status).toBeUndefined;
     expect(result.state.message.attachments ?? []).toHaveLength(0);
     expect(result.state.localMessage.attachments ?? []).toHaveLength(0);
+    // the server must not enrich the URL of a dismissed preview
+    expect(result.state.sendOptions).toEqual({ skip_enrich_url: true });
   });
 
   it('should handle message with multiple link previews and skip url enrichment server-side if some were dismissed', async () => {

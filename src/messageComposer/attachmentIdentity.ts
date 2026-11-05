@@ -55,6 +55,32 @@ export const isFailedUpload = (
   isLocalUploadAttachment(attachment) &&
   attachment.localMetadata.uploadState === 'failed';
 
+/**
+ * Whether this attachment's upload can still resolve to a URL: `pending` and `uploading` ones on their
+ * own, `failed` ones by a retry. Sending the message awaits or retries them. `blocked` ones never
+ * resolve.
+ */
+export const isResolvableUpload = (attachment: unknown) =>
+  isPendingUpload(attachment) || isFailedUpload(attachment);
+
+/**
+ * Whether this local attachment has nothing to upload: neither an upload state nor a file, such as
+ * a custom-type or a `giphy` attachment.
+ */
+export const isNonUploadAttachment = (attachment: unknown) =>
+  isLocalAttachment(attachment) &&
+  !isLocalUploadAttachment(attachment) &&
+  !attachment.localMetadata.file;
+
+/**
+ * Whether the composer sends this attachment as it is: an upload that resolved to a URL, or an
+ * attachment with nothing to upload. Attachments restored from an edited message or a draft are one
+ * or the other. Leaving a non-upload out would drop it from the message: on an edit, the API removes
+ * every attachment missing from the payload.
+ */
+export const isSendableAttachment = (attachment: unknown) =>
+  isFinishedUpload(attachment) || isNonUploadAttachment(attachment);
+
 export const isFileAttachment = (
   attachment: Attachment | LocalAttachment,
   supportedVideoFormat: string[] = [],

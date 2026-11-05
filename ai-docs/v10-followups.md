@@ -118,17 +118,6 @@ Ordered by severity. The breaking dead-code removals and leftover decisions are 
 - **Evidence / scenario:** The user jumped to an older message (active interval is not the head); `user.messages.deleted` arrives for a banned user; that user's newest messages in the head interval stay visible when the user jumps back to latest.
 - **Suggested change:** Iterate all loaded intervals (or the item index) instead of `items`.
 
-<a id="recovery-disabled-no-event"></a>
-
-### `connectionRecovery.enabled: false` also suppresses `connection.recovered` [SOLVED 311c28a2]
-
-`bug` · confidence: high · pre-release: yes · connection recovery
-
-- **Where:** `src/connection/ConnectionRecoveryManager.ts:273-279` (`recoverActiveChannels` returns first when disabled), `:353` (the only dispatch site), `:362-370` (`recover()`), `:196-215` (offline sync-edge path); `src/thread_manager.ts:468`; v9 `src/client.ts:1782-1817`
-- **What:** Behaviour change to confirm is intended. v9 dispatched `connection.recovered` after every reconnect, also with `recoverStateOnReconnect: false` (the `else` branch), and that flag existed so integrators could run their own recovery keyed on the event. In v10 the event is dispatched only from inside `recoverActiveChannels`, which returns on its first line when `connectionRecovery.enabled` is `false`, so the event never fires and the manual `client.connectionRecovery.recover()` is a no-op too. With an initialized offline DB the event is also delayed until the offline sync finishes.
-- **Evidence / scenario:** An app sets `recoverStateOnReconnect: false` in v9 and re-queries its channels on `connection.recovered`. After migrating to `connectionRecovery.enabled: false` it never recovers after a drop, and `ThreadManager`, which reloads threads on `connection.recovered`, stops reloading as well. Documented in the breaking-changes doc (`#connection-recovery`) with a `wsConnection.state` workaround.
-- **Suggested change:** Decide before 10.0.0: either dispatch `connection.recovered` on the reconnect edge when recovery is disabled (v9 parity) or keep the current behaviour and state it in the `connectionRecovery` JSDoc. Changing it after the release is a behaviour change again.
-
 <a id="reminder-paginator-flash"></a>
 
 ### Reminder list blanks on every "load more" [SOLVED 73a87752]
@@ -644,7 +633,7 @@ Unused in `src` and not used downstream. Most are v10-only. The ones marked "v9 
 
 `dead-code` · confidence: low · pre-release: yes · public surface
 
-- **Where:** `src/index.ts:34, 37, 39-40, 121`
+- **Where:** `src/index.ts:34, 37, 39-40, 118`
 - **What:** `mergeServerRestrictions`, `ServerRestrictions`, `ServerUpperBounds`, `ConfiguredInstance`, `NS_PER_MS` are new in v10, not used downstream (React defines its own `NS_PER_MS` in a test), and not needed to name a public signature. Removing them after 10.0.0 is breaking; adding later is not.
 - **Suggested change:** Decide whether they are intended public API; otherwise drop them from the barrel.
 
@@ -679,13 +668,14 @@ Unused in `src` and not used downstream. Most are v10-only. The ones marked "v9 
 
 <a id="keep-custom-command-data"></a>
 
-#### `CustomCommandData` is augmented downstream but has no effect
+#### `CustomCommandData` is augmented downstream but has no effect [SOLVED 4f475c11]
 
 `dead-code` · confidence: high · pre-release: yes · types
 
 - **Where:** `src/custom_types.ts:6`
 - **What:** Exported for augmentation but referenced nowhere in v10 `src` (v9 fed `CommandVariants`). React (`src/@types/stream-chat-custom-data.d.ts:23`) and RN (`package/src/types/stream-chat-common-custom-data.d.ts:24`, two examples) still augment it, so removal breaks their declaration files, yet the augmentation does nothing.
 - **Suggested change:** Type `Command['name']` with it again, or remove it together with the downstream declarations.
+- **Resolution:** removed; command names stay `string` and an app types its own names ([custom-data augmentation](v10-breaking-changes.md#custom-data-augmentation)). React drops its `CustomCommandData` augmentation and `DefaultCommandData` in the same change; RN still has to delete its declarations.
 
 <a id="keep-downstream"></a>
 
@@ -695,7 +685,6 @@ Unused in `src` and not used downstream. Most are v10-only. The ones marked "v9 
 
 - **Where / What:** no src reader, but used downstream, so keep (or migrate the consumer first):
   - `AttachmentManager.fileToLocalUploadAttachment` (deprecated): RN `examples/ExpoChatGPTSample/screens/ChatContent.tsx:121`.
-  - `AttachmentManager.uploadAttachment` (deprecated): runtime use in both UI SDKs. React `src/components/MediaRecorder/hooks/useMediaRecorder.ts:58`, `src/components/MessageComposer/AttachmentPreviewList/AttachmentPreviewList.tsx:99-141` (`handleRetry`), `VoiceRecordingPreviewSlot.tsx:39`; RN `package/src/components/MessageInput/components/AttachmentPreview/AttachmentUploadPreviewList.tsx:353-503`, `package/src/components/MessageInput/hooks/useAudioRecorder.tsx:111`.
   - `BasePaginator.next`, `hasNext`, `hasPrev` (deprecated shims): React `src/components/ChannelList/ChannelList.tsx:95` (`loadNextOnScrollToBottom={paginator.next}`), `src/components/InfiniteScrollPaginator/InfiniteScrollWithComponents.tsx:66-67` (see [shims](#lo-paginator-shims)). Removed in 6bba7286, after React `master` moved to `toTail` / `hasMoreTail` / `hasMoreHead`.
   - `TextComposer.upsertMentionedUser` (deprecated): React `MessageInput.test.tsx:1750-1778`.
   - `MessageComposer.allowsPendingUploads`: React `examples/vite/src/Debug/ComposerStateInspector.tsx:140`. Now only an alias of `attachmentManager.config.pendingUploadsEnabled` (`src/messageComposer/messageComposer.ts:474-480`), still read by `hasSendableData`.
@@ -763,9 +752,9 @@ Unused in `src` and not used downstream. Most are v10-only. The ones marked "v9 
 
 `leftover` · confidence: high · pre-release: yes · composer
 
-- **Where:** `src/messageComposer/attachmentManager.ts:144-156` (`fileUploadFilter` getter/setter), `:566` (`fileToLocalUploadAttachment`), `:689` (`uploadAttachment`), `:811` (`// todo: remove with the next major release`), `:187-189` (`hasCustomDoUploadRequest`); `src/messageComposer/textComposer.ts:331-356` (`upsertMentionedUser`, `getMentionedUser`, `removeMentionedUser`); `src/messageComposer/middleware/textComposer/types.ts:123` (`TextComposerState.mentionedUsers`); `src/messageComposer/types.ts:112` (`LocalImageAttachmentUploadMetadata.previewUri`)
-- **What:** v9-era deprecations kept in the v10 major. `hasCustomDoUploadRequest` has no reader since `customCdn` replaced the custom-upload waiver and invites the v9 reading "custom fn = custom storage" (React mentions it only in an example comment). `previewUri` is widely used downstream; `fileToLocalUploadAttachment`, `uploadAttachment` (runtime use in React and RN) and `upsertMentionedUser` are used downstream (see [keep](#keep-downstream)). The deprecated `fileUploadFilter` getter is still read by the upload path (`:811`), so removing it removes the `config.fileUploadFilter` filter feature, not dead code.
-- **Suggested change:** Decide per member: keep `uploadAttachment`; remove the unused `getMentionedUser`, `removeMentionedUser` and `hasCustomDoUploadRequest` (or deprecate it toward `usesStreamStorage`) now; remove `fileUploadFilter` only together with the `:811` filter path (filtering moves to middleware); re-target the TODOs on the used ones to v11 explicitly.
+- **Where:** `src/messageComposer/attachmentManager.ts:144-156` (`fileUploadFilter` getter/setter), `:566` (`fileToLocalUploadAttachment`), `:811` (`// todo: remove with the next major release`), `:187-189` (`hasCustomDoUploadRequest`); `src/messageComposer/textComposer.ts:331-356` (`upsertMentionedUser`, `getMentionedUser`, `removeMentionedUser`); `src/messageComposer/middleware/textComposer/types.ts:123` (`TextComposerState.mentionedUsers`); `src/messageComposer/types.ts:112` (`LocalImageAttachmentUploadMetadata.previewUri`)
+- **What:** v9-era deprecations kept in the v10 major. `hasCustomDoUploadRequest` has no reader since `customCdn` replaced the custom-upload waiver and invites the v9 reading "custom fn = custom storage" (React mentions it only in an example comment). `previewUri` is widely used downstream; `fileToLocalUploadAttachment` and `upsertMentionedUser` are used downstream (see [keep](#keep-downstream)). The deprecated `fileUploadFilter` getter is still read by the upload path (`:811`), so removing it removes the `config.fileUploadFilter` filter feature, not dead code.
+- **Suggested change:** Decide per member: remove the unused `getMentionedUser`, `removeMentionedUser` and `hasCustomDoUploadRequest` (or deprecate it toward `usesStreamStorage`) now; remove `fileUploadFilter` only together with the `:811` filter path (filtering moves to middleware); re-target the TODOs on the used ones to v11 explicitly.
 
 <a id="lo-online-status"></a>
 

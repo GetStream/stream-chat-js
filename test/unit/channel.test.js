@@ -1323,13 +1323,15 @@ describe('Channel local unread count (readEvents.localUnreadCountEnabled)', func
 
 		it('a system message', function () {
 			const { client, channel } = setupChannel({ localUnreadCountEnabled: true });
-			// the system message is then not the channel's latest message
+			// the system message then does not move the channel's `last_message_at`
 			client._addChannelConfig({
 				cid: channel.cid,
 				config: { skip_last_msg_update_for_system_msgs: true },
 			});
 			seedLatestWindow(channel, [msgAt('m1', 1), msgAt('system', 2, { type: 'system' })]);
-			expect(channel.messagePaginator.latestMessage?.id).toBe('m1');
+			expect(channel.messagePaginator.latestMessageAt).toBe(
+				convertDateToTimestamp(at(1).toISOString()),
+			);
 
 			const event = channel.markReadLocally();
 
@@ -1599,6 +1601,28 @@ describe('Channel _handleChannelEvent', function () {
 
 			expect(channel.state.members).to.be.empty;
 		});
+
+		it('member.removed drops the removed member from the read state and the receipts', () => {
+			const lastRead = convertDateToTimestamp(new Date('2026-01-02T00:00:00.000Z'));
+			channel._initializeState({
+				members: [generateMember({ user }), generateMember({ user: otherUser })],
+				read: [
+					{ last_read: lastRead, unread_messages: 0, user },
+					{ last_read: lastRead, unread_messages: 0, user: otherUser },
+				],
+			});
+			expect(channel.messageReceiptsTracker.getUserProgress(otherUser.id)).toBeTruthy();
+
+			channel._handleChannelEvent({
+				type: 'member.removed',
+				user,
+				member: generateMember({ user: otherUser }),
+			});
+
+			expect(channel.state.read).to.have.keys([user.id]);
+			expect(channel.messageReceiptsTracker.getUserProgress(otherUser.id)).toBeNull();
+			expect(channel.messageReceiptsTracker.getUserProgress(user.id)).toBeTruthy();
+		});
 	});
 
 	describe('watchers and members publish a new reference', () => {
@@ -1811,7 +1835,6 @@ describe('Channel _handleChannelEvent', function () {
 				'message.updated',
 				'member.added',
 				'member.updated',
-				'member.removed',
 			];
 
 			for (const event of events) {
@@ -1842,7 +1865,6 @@ describe('Channel _handleChannelEvent', function () {
 				'message.updated',
 				'member.added',
 				'member.updated',
-				'member.removed',
 			];
 
 			for (const event of events) {
@@ -2353,6 +2375,136 @@ describe('Channel _handleChannelEvent', function () {
 			expect(
 				channel.messagePaginator.items?.find((m) => m.id === message.id),
 			).toBeUndefined();
+		});
+
+		it('message.deleted hard delete of an unread message lowers the own unread count', function () {
+			const message = generateMsg({ cid: channel.cid, user: otherUser });
+			channel.messagePaginator.ingestItem(message);
+			seedOwnUnreadCount(channel, 2);
+
+			channel._handleChannelEvent({
+				type: 'message.deleted',
+				user: otherUser,
+				hard_delete: true,
+				message,
+			});
+
+			expect(channel.state.unreadCount).to.equal(1);
+		});
+
+		it('message.deleted soft delete lowers the own unread count once, a later hard delete does not', function () {
+			const message = generateMsg({ cid: channel.cid, user: otherUser });
+			channel.messagePaginator.ingestItem(message);
+			seedOwnUnreadCount(channel, 2);
+			const deletedMessage = {
+				...message,
+				type: 'deleted',
+				deleted_at: convertDateToTimestamp(),
+			};
+
+			channel._handleChannelEvent({
+				type: 'message.deleted',
+				user: otherUser,
+				message: deletedMessage,
+			});
+			expect(channel.state.unreadCount).to.equal(1);
+
+			channel._handleChannelEvent({
+				type: 'message.deleted',
+				user: otherUser,
+				hard_delete: true,
+				message: deletedMessage,
+			});
+			expect(channel.state.unreadCount).to.equal(1);
+		});
+
+		it('message.deleted does not lower the own unread count for a message already read', function () {
+			const message = generateMsg({ cid: channel.cid, user: otherUser });
+			channel.messagePaginator.ingestItem(message);
+			seedOwnUnreadCount(channel, 2);
+			channel.state.read = {
+				...channel.state.read,
+				[user.id]: {
+					...channel.state.read[user.id],
+					last_read: convertDateToTimestamp(),
+				},
+			};
+
+			channel._handleChannelEvent({
+				type: 'message.deleted',
+				user: otherUser,
+				hard_delete: true,
+				message,
+			});
+
+			expect(channel.state.unreadCount).to.equal(2);
+		});
+
+		it("user.messages.deleted hard delete lowers the own unread count by the user's unread messages", function () {
+			const thirdUser = { id: 'third-user' };
+			channel.messagePaginator.ingestItem(
+				generateMsg({ cid: channel.cid, user: otherUser }),
+			);
+			channel.messagePaginator.ingestItem(
+				generateMsg({ cid: channel.cid, user: thirdUser }),
+			);
+			channel.messagePaginator.ingestItem(
+				generateMsg({ cid: channel.cid, user: otherUser }),
+			);
+			seedOwnUnreadCount(channel, 3);
+
+			channel._handleChannelEvent({
+				type: 'user.messages.deleted',
+				cid: channel.cid,
+				user: otherUser,
+				hard_delete: true,
+			});
+
+			expect(channel.state.unreadCount).to.equal(1);
+		});
+
+		it('user.messages.deleted hard delete counts unread messages outside the newest interval', function () {
+			// e.g. a channel opened at its first unread message: the loaded interval does not reach the
+			// newest message
+			channel.messagePaginator.ingestPage({
+				page: [
+					generateMsg({ cid: channel.cid, user: otherUser }),
+					generateMsg({ cid: channel.cid, user: otherUser }),
+				],
+				isHead: false,
+				isTail: false,
+				setActive: true,
+			});
+			expect(channel.messagePaginator.anchoredHeadItem).toBeUndefined();
+			seedOwnUnreadCount(channel, 5);
+
+			channel._handleChannelEvent({
+				type: 'user.messages.deleted',
+				cid: channel.cid,
+				user: otherUser,
+				hard_delete: true,
+			});
+
+			expect(channel.state.unreadCount).to.equal(3);
+		});
+
+		it('user.messages.deleted soft delete keeps the own unread count, as the server does', function () {
+			channel.messagePaginator.ingestItem(
+				generateMsg({ cid: channel.cid, user: otherUser }),
+			);
+			channel.messagePaginator.ingestItem(
+				generateMsg({ cid: channel.cid, user: otherUser }),
+			);
+			seedOwnUnreadCount(channel, 2);
+
+			channel._handleChannelEvent({
+				type: 'user.messages.deleted',
+				cid: channel.cid,
+				user: otherUser,
+				soft_delete: true,
+			});
+
+			expect(channel.state.unreadCount).to.equal(2);
 		});
 
 		it('message.deleted soft delete updates message in messagePaginator', function () {
@@ -3396,38 +3548,6 @@ describe('Channel _handleChannelEvent', function () {
 			expect(Object.keys(channel.state.read).length).to.be.eq(1);
 			expect(channel.messagePaginator.anchoredHeadItems.length).to.be.eq(1);
 			expect(channel.state.watcher_count).to.be.eq(5);
-		});
-
-		// capabilities.changed is emitted from the channel.updated / query path.
-		it('should dispatch "capabilities.changed" event', async () => {
-			const response = mockChannelQueryResponse;
-			channel.data.own_capabilities = response.channel.own_capabilities.slice(0, 1);
-			const sendRequestStub = sinon
-				.stub(client.api, 'sendRequest')
-				.resolves({ ...response, metadata: {} });
-			const spy = sinon.spy();
-			channel.on('capabilities.changed', spy);
-
-			await channel.query();
-
-			expect(spy.calledOnce).to.be.true;
-
-			const arg = spy.firstCall.args[0];
-			// We don't care about received_at in the assertion
-			delete arg.received_at;
-			sinon.assert.match(arg, {
-				type: 'capabilities.changed',
-				cid: channel.cid,
-				own_capabilities: response.channel.own_capabilities,
-			});
-
-			channel.data.own_capabilities = response.channel.own_capabilities;
-			sendRequestStub.resolves({ ...response, metadata: {} });
-			spy.resetHistory();
-
-			await channel.query();
-
-			expect(spy.notCalled).to.be.true;
 		});
 	});
 
@@ -8155,5 +8275,206 @@ describe('Channel member, filter-tag and upload-delete requests', () => {
 
 		expect(deleteImage).toHaveBeenCalledWith({ url: 'https://cdn/image.png' }, undefined);
 		expect(deleteFile).toHaveBeenCalledWith({ url: 'https://cdn/file.pdf' }, undefined);
+	});
+});
+
+describe('Channel.data ownCapabilities', () => {
+	let client;
+	let channel;
+
+	const ownCapabilities = () => channel.state.getLatestValue().ownCapabilities;
+
+	const listenToOwnCapabilities = () => {
+		const spy = vi.fn();
+		channel.state.subscribeWithSelector(
+			({ ownCapabilities }) => ({ ownCapabilities }),
+			spy,
+		);
+		// subscribeWithSelector reports the current value once on subscribe
+		spy.mockClear();
+		return spy;
+	};
+
+	const queryResponseWith = (channelFields) => ({
+		...mockChannelQueryResponse,
+		channel: { ...mockChannelQueryResponse.channel, ...channelFields },
+		metadata: {},
+	});
+
+	beforeEach(() => {
+		client = new StreamChat('apiKey');
+		client.user = { id: 'user' };
+		channel = client.channelManager.ensure({ type: 'messaging', id: 'id' });
+		channel.data = { ...channel.data, own_capabilities: ['read-events'] };
+	});
+
+	it('publishes the capabilities channel.updated brings', () => {
+		const spy = listenToOwnCapabilities();
+
+		channel._handleChannelEvent({
+			type: 'channel.updated',
+			channel: { own_capabilities: ['read-events', 'send-message'] },
+		});
+
+		expect(spy).toHaveBeenCalledTimes(1);
+		expect(ownCapabilities()).toEqual(['read-events', 'send-message']);
+	});
+
+	it('keeps the array when channel.updated brings the same capabilities in another order', () => {
+		channel.data = {
+			...channel.data,
+			own_capabilities: ['read-events', 'send-message'],
+		};
+		const before = ownCapabilities();
+		const spy = listenToOwnCapabilities();
+
+		channel._handleChannelEvent({
+			type: 'channel.updated',
+			channel: { own_capabilities: ['send-message', 'read-events'] },
+		});
+
+		expect(ownCapabilities()).toBe(before);
+		expect(spy).not.toHaveBeenCalled();
+	});
+
+	it('keeps the array when channel.updated omits own_capabilities', () => {
+		const before = ownCapabilities();
+		const spy = listenToOwnCapabilities();
+
+		channel._handleChannelEvent({
+			type: 'channel.updated',
+			channel: { name: 'renamed' },
+		});
+
+		expect(ownCapabilities()).toBe(before);
+		expect(spy).not.toHaveBeenCalled();
+	});
+
+	it('publishes the capabilities once when a frozen change re-queries the channel', async () => {
+		channel.data = { ...channel.data, frozen: false };
+		sinon
+			.stub(client.api, 'sendRequest')
+			.resolves(queryResponseWith({ frozen: true, own_capabilities: ['send-message'] }));
+		const querySpy = vi.spyOn(channel, 'query');
+		const spy = listenToOwnCapabilities();
+
+		channel._handleChannelEvent({
+			type: 'channel.updated',
+			channel: { frozen: true, own_capabilities: ['send-message'] },
+		});
+		await querySpy.mock.results[0].value;
+
+		expect(querySpy).toHaveBeenCalledTimes(1);
+		expect(spy).toHaveBeenCalledTimes(1);
+		expect(ownCapabilities()).toEqual(['send-message']);
+	});
+
+	it('publishes the capabilities a query response brings', async () => {
+		sinon
+			.stub(client.api, 'sendRequest')
+			.resolves(queryResponseWith({ own_capabilities: ['send-message'] }));
+		const spy = listenToOwnCapabilities();
+
+		await channel.query();
+
+		expect(spy).toHaveBeenCalledTimes(1);
+		expect(ownCapabilities()).toEqual(['send-message']);
+	});
+
+	it('keeps the capabilities when a query response omits own_capabilities', async () => {
+		const { own_capabilities, ...channelWithoutCapabilities } =
+			mockChannelQueryResponse.channel;
+		sinon.stub(client.api, 'sendRequest').resolves({
+			...mockChannelQueryResponse,
+			channel: channelWithoutCapabilities,
+			metadata: {},
+		});
+		const before = ownCapabilities();
+
+		await channel.query();
+
+		expect(ownCapabilities()).toBe(before);
+		expect(channel.data.own_capabilities).toEqual(['read-events']);
+	});
+
+	it('publishes the capabilities updatePartial() returns', async () => {
+		vi.spyOn(channel, 'updateChannelPartial').mockResolvedValue({
+			channel: { ...channel.data, own_capabilities: ['send-message'] },
+		});
+		const spy = listenToOwnCapabilities();
+
+		await channel.updatePartial({ set: { frozen: false } });
+
+		expect(spy).toHaveBeenCalledTimes(1);
+		expect(ownCapabilities()).toEqual(['send-message']);
+	});
+
+	it('keeps the array when updatePartial() returns the same capabilities', async () => {
+		vi.spyOn(channel, 'updateChannelPartial').mockResolvedValue({
+			channel: { ...channel.data, own_capabilities: ['read-events'] },
+		});
+		const before = ownCapabilities();
+		const spy = listenToOwnCapabilities();
+
+		await channel.updatePartial({ set: { frozen: false } });
+
+		expect(ownCapabilities()).toBe(before);
+		expect(spy).not.toHaveBeenCalled();
+	});
+
+	it('publishes the capabilities update() returns', async () => {
+		sinon.stub(client.api, 'sendRequest').resolves({
+			channel: { ...channel.data, own_capabilities: ['send-message'] },
+			metadata: {},
+		});
+		const spy = listenToOwnCapabilities();
+
+		await channel.update({ data: { custom: { name: 'renamed' } } });
+
+		expect(spy).toHaveBeenCalledTimes(1);
+		expect(ownCapabilities()).toEqual(['send-message']);
+	});
+
+	it('publishes the capabilities a queryChannels response brings', () => {
+		const spy = listenToOwnCapabilities();
+
+		client.hydrateChannels([
+			queryResponseWith({
+				cid: channel.cid,
+				id: channel.id,
+				type: channel.type,
+				own_capabilities: ['send-message'],
+			}),
+		]);
+
+		expect(spy).toHaveBeenCalledTimes(1);
+		expect(ownCapabilities()).toEqual(['send-message']);
+	});
+
+	it('does not share its array with data.own_capabilities', () => {
+		const assigned = ['read-events', 'send-message'];
+
+		channel.data = { ...channel.data, own_capabilities: assigned };
+		assigned.push('send-reaction');
+
+		expect(ownCapabilities()).toEqual(['read-events', 'send-message']);
+	});
+
+	it('keeps the initial array when the first known capabilities are empty', () => {
+		const fresh = client.channelManager.ensure({ type: 'messaging', id: 'fresh' });
+		const before = fresh.state.getLatestValue().ownCapabilities;
+
+		fresh.data = { ...fresh.data, own_capabilities: [] };
+
+		expect(fresh.state.getLatestValue().ownCapabilities).toBe(before);
+		expect(fresh.data.own_capabilities).toEqual([]);
+	});
+
+	it('keeps the capabilities when data is cleared', () => {
+		const before = ownCapabilities();
+
+		channel.data = undefined;
+
+		expect(ownCapabilities()).toBe(before);
 	});
 });

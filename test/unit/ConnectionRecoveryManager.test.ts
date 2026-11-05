@@ -33,6 +33,11 @@ describe('ConnectionRecoveryManager', () => {
     client.wsConnection._setStatus({ isHealthy: true, connectionId: 'reconnected-id' });
   };
   const offline = () => client.wsConnection._setStatus({ isHealthy: false });
+  /** A socket that has never been up connects: no drop was recorded, so nothing fell behind. */
+  const firstConnect = () => {
+    client.wsConnection.state.partialNext({ isHealthy: false, lastUnhealthyAt: null });
+    client.wsConnection._setStatus({ isHealthy: true });
+  };
 
   /** A channel a consumer has declared it is reading, i.e. what recovery reloads. */
   const activeChannel = (id: string) => {
@@ -513,9 +518,13 @@ describe('ConnectionRecoveryManager', () => {
     const disableRecovery = () =>
       client.config.set({ client: { connectionRecovery: { enabled: false } } });
 
-    it('recovers nothing on a reconnect and dispatches no connection.recovered', async () => {
+    it('recovers nothing on a reconnect but still dispatches connection.recovered', async () => {
+      // An app that turns recovery off refreshes its own data, and the event is its signal to do so.
       disableRecovery();
       const { reload } = activeChannel('active');
+      const { reload: threadReload } = activeThread('open-thread');
+      const closed = buildThread('closed-thread');
+      closed.thread.activate()();
       const recoverLists = vi
         .spyOn(client.channelManager, 'recover')
         .mockResolvedValue([]);
@@ -525,8 +534,34 @@ describe('ConnectionRecoveryManager', () => {
       online();
       await new Promise((resolve) => setTimeout(resolve, 20));
 
+      expect(recovered).toHaveBeenCalledTimes(1);
       expect(reload).not.toHaveBeenCalled();
+      expect(threadReload).not.toHaveBeenCalled();
       expect(recoverLists).not.toHaveBeenCalled();
+      expect(closed.thread.hasStaleState).toBe(false);
+    });
+
+    it('dispatches connection.recovered on every reconnect', async () => {
+      disableRecovery();
+      const recovered = vi.fn();
+      client.on('connection.recovered', recovered);
+
+      online();
+      offline();
+      online();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(recovered).toHaveBeenCalledTimes(2);
+    });
+
+    it('dispatches nothing on a first connect', async () => {
+      disableRecovery();
+      const recovered = vi.fn();
+      client.on('connection.recovered', recovered);
+
+      firstConnect();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
       expect(recovered).not.toHaveBeenCalled();
     });
 
@@ -603,6 +638,74 @@ describe('ConnectionRecoveryManager', () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
 
       expect(reload).toHaveBeenCalledTimes(1);
+    });
+
+    it('with recovery off, dispatches connection.recovered only after replay and sync', async () => {
+      // The app refreshes its own data on the event, so it must not query ahead of the replay either.
+      client.config.set({ client: { connectionRecovery: { enabled: false } } });
+      const order: string[] = [];
+      await attachDb();
+      const { reload } = activeChannel('active');
+      vi.spyOn(client, 'sync').mockImplementation(async () => {
+        order.push('sync');
+        return { events: [] } as never;
+      });
+      db.getAllChannelCids.mockResolvedValue(['messaging:cached']);
+      db.executePendingTasks = vi.fn().mockImplementation(async () => {
+        order.push('executePendingTasks');
+      });
+      client.on('connection.recovered', () => order.push('recovered'));
+
+      online();
+
+      await vi.waitFor(() => expect(order).to.contain('recovered'));
+      expect(order).to.deep.equal(['executePendingTasks', 'sync', 'recovered']);
+      expect(reload).not.toHaveBeenCalled();
+    });
+
+    it('with recovery off, dispatches connection.recovered exactly once per reconnect', async () => {
+      // Only one of the two paths may handle a reconnect: the socket edge or the sync-status edge.
+      client.config.set({ client: { connectionRecovery: { enabled: false } } });
+      await attachDb();
+      const recovered = vi.fn();
+      client.on('connection.recovered', recovered);
+
+      online();
+      await vi.waitFor(() => expect(recovered).toHaveBeenCalledTimes(1));
+      offline();
+      online();
+      await vi.waitFor(() => expect(recovered).toHaveBeenCalledTimes(2));
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      expect(recovered).toHaveBeenCalledTimes(2);
+    });
+
+    it('with recovery off, withholds connection.recovered when the socket dropped before the sync finished', async () => {
+      client.config.set({ client: { connectionRecovery: { enabled: false } } });
+      await attachDb();
+      const recovered = vi.fn();
+      client.on('connection.recovered', recovered);
+      let finishSync = () => {};
+      db.executePendingTasks = vi
+        .fn()
+        .mockImplementation(() => new Promise<void>((resolve) => (finishSync = resolve)));
+
+      online();
+      await vi.waitFor(() => expect(db.executePendingTasks).toHaveBeenCalled());
+      offline();
+      expect(db.syncManager.isSynced).toBe(false);
+      finishSync();
+      // The edge has landed once the sync manager reports synced again.
+      await vi.waitFor(() => expect(db.syncManager.isSynced).toBe(true));
+
+      expect(recovered).not.toHaveBeenCalled();
+
+      // The next reconnect dispatches it, once.
+      db.executePendingTasks = vi.fn().mockResolvedValue(undefined);
+      online();
+      await vi.waitFor(() => expect(recovered).toHaveBeenCalledTimes(1));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(recovered).toHaveBeenCalledTimes(1);
     });
 
     it('still reloads when the sync fails', async () => {

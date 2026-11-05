@@ -1944,6 +1944,10 @@ export class MessageIntervalPaginator extends BasePaginator<
     }
   }
 
+  /**
+   * Deletes `userId`'s loaded messages (removes them on a hard delete) and marks the quotes of them
+   * as deleted. Returns the messages it deleted, as they were before.
+   */
   applyMessageDeletionForUser = ({
     userId,
     hardDelete = false,
@@ -1952,14 +1956,16 @@ export class MessageIntervalPaginator extends BasePaginator<
     userId: string;
     hardDelete?: boolean;
     deletedAt: TimestampNS;
-  }) => {
+  }): LocalMessage[] => {
     const loadedMessages = this._itemIndex.values();
+    const deletedMessages: LocalMessage[] = [];
 
     // Coalesce: one emit for this interval and one shared-store flush for the sibling holders.
     this.batch(
       () => {
         for (const message of loadedMessages) {
           if (message.user?.id === userId) {
+            deletedMessages.push(message);
             if (hardDelete) {
               this.removeItem({ id: message.id });
             } else {
@@ -1991,6 +1997,7 @@ export class MessageIntervalPaginator extends BasePaginator<
       },
       { coalesce: true },
     );
+    return deletedMessages;
   };
 
   /** Updates the quoted-message snapshot of every cached message that quotes `message`. */

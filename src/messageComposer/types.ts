@@ -47,8 +47,34 @@ export type LocalAttachmentCast<A, L = Record<string, unknown>> = A & {
   localMetadata: L & BaseLocalAttachmentMetadata;
 };
 
+/**
+ * Local metadata of any attachment. Only `id` is required: an attachment with nothing to upload (a
+ * custom-type or `giphy` one) leaves out the upload fields, and the composer sends it as it is.
+ * `file` and `uploadState` come as {@link LocalAttachmentFileFields} or
+ * {@link LocalAttachmentNoFileFields}.
+ */
 export type LocalAttachmentMetadata<CustomLocalMetadata = Record<string, unknown>> =
-  CustomLocalMetadata & BaseLocalAttachmentMetadata & LocalImageAttachmentUploadMetadata;
+  CustomLocalMetadata &
+    BaseLocalAttachmentMetadata &
+    Partial<Omit<LocalImageAttachmentUploadMetadata, 'file' | 'uploadState'>> &
+    (LocalAttachmentFileFields | LocalAttachmentNoFileFields);
+
+/**
+ * A local file comes with its upload state: the composer never sends a file with no upload state.
+ */
+export type LocalAttachmentFileFields = Pick<
+  LocalAttachmentUploadMetadata,
+  'file' | 'uploadState'
+>;
+
+/**
+ * No local file: an attachment with nothing to upload (no `uploadState`), or an upload restored from
+ * a sent message or a draft (`uploadState` without its file).
+ */
+export type LocalAttachmentNoFileFields = {
+  file?: undefined;
+  uploadState?: AttachmentLoadingState;
+};
 
 export type UploadedAttachment =
   | AudioAttachment

@@ -1,7 +1,7 @@
 import { CORE_NOTIFICATION_TYPE } from '../notifications';
 import type { CoreNotificationType } from '../notifications';
 import { AttachmentManager } from './attachmentManager';
-import { isFailedUpload, isFinishedUpload, isPendingUpload } from './attachmentIdentity';
+import { isResolvableUpload, isSendableAttachment } from './attachmentIdentity';
 import { CustomDataManager } from './CustomDataManager';
 import { LinkPreviewsManager } from './linkPreviewsManager';
 import { LocationComposer } from './LocationComposer';
@@ -557,19 +557,18 @@ export class MessageComposer extends WithSubscriptions {
     if (!this.isCommandSendable) return false;
 
     if (this.allowsPendingUploads) {
-      // Uploads in flight do not block. Pending attachments count as content (settled on send), so
-      // do `failed` ones (retried on send). `blocked` ones do not (no retry can settle them).
-      const hasSendableAttachment = this.attachmentManager.attachments.some(
+      // Uploads in flight do not block: besides finished uploads and attachments with nothing to
+      // upload, uploads that can still resolve count as content (awaited or retried on send).
+      // `blocked` ones do not.
+      const hasAttachmentContent = this.attachmentManager.attachments.some(
         (attachment) =>
-          isFinishedUpload(attachment) ||
-          isPendingUpload(attachment) ||
-          isFailedUpload(attachment),
+          isSendableAttachment(attachment) || isResolvableUpload(attachment),
       );
 
       return !!(
         !this.textComposer.textIsEmpty ||
         this.textComposer.activeCommandIsContent ||
-        hasSendableAttachment ||
+        hasAttachmentContent ||
         this.pollId ||
         this.locationComposer.validLocation
       );
@@ -579,7 +578,7 @@ export class MessageComposer extends WithSubscriptions {
       (!this.attachmentManager.uploadsInProgressCount &&
         (!this.textComposer.textIsEmpty ||
           this.textComposer.activeCommandIsContent ||
-          this.attachmentManager.successfulUploadsCount > 0)) ||
+          this.attachmentManager.attachments.some(isSendableAttachment))) ||
       this.pollId ||
       !!this.locationComposer.validLocation
     );

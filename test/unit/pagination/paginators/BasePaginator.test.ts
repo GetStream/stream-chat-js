@@ -4534,6 +4534,83 @@ describe('BasePaginator', () => {
         // @ts-expect-error accessing protected property
         expect(paginator._activeIntervalId).toBe(intervals[0].id);
       });
+
+      describe('hasLoadedPage', () => {
+        it('is false until a page is loaded', () => {
+          const paginator = new Paginator();
+          expect(paginator.hasLoadedPage).toBe(false);
+        });
+
+        it('counts an empty page as loaded, without initializing the query shape', () => {
+          const paginator = new Paginator();
+
+          // e.g. a catch-all list seeded so it never runs its own query
+          paginator.setItems({ isLastPage: true, valueOrFactory: [] });
+
+          expect(paginator.hasLoadedPage).toBe(true);
+          // still skipped by connection recovery: there is no query to re-run
+          expect(paginator.isInitialized).toBe(false);
+        });
+
+        it('does not count items ingested into a list that was never queried', () => {
+          const paginator = new Paginator({ itemIndex });
+          paginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: -1 }],
+          });
+
+          paginator.ingestItem(v);
+
+          // the item is shown, but no page was loaded: the first query still has to run
+          expect(paginator.items).toEqual([v]);
+          expect(paginator.hasLoadedPage).toBe(false);
+
+          paginator.removeItem({ item: v });
+
+          expect(paginator.items).toEqual([]);
+          expect(paginator.hasLoadedPage).toBe(false);
+        });
+
+        it('is true after a query placed a page and false again after resetState', () => {
+          const paginator = new Paginator({ itemIndex });
+          paginator.sortComparator = makeComparator<TestItem>({
+            sort: [{ field: 'age', direction: -1 }],
+          });
+
+          paginator.placeQueryPage({
+            direction: 'tailward',
+            isFirstPage: true,
+            queryShape: defaultNextQueryShape,
+            requestedPageSize: 3,
+            results: { items: [] },
+          });
+          expect(paginator.hasLoadedPage).toBe(true);
+
+          paginator.resetState();
+          expect(paginator.hasLoadedPage).toBe(false);
+
+          paginator.setItems({ valueOrFactory: [] });
+          paginator.resetState();
+          expect(paginator.hasLoadedPage).toBe(false);
+        });
+
+        it('is already current when the state change is published', () => {
+          // a UI selector reads it from inside the state subscription
+          const paginator = new Paginator();
+          const seen: boolean[] = [];
+          const unsubscribe = paginator.state.subscribe(() => {
+            seen.push(paginator.hasLoadedPage);
+          });
+
+          paginator.setItems({ valueOrFactory: [] });
+          paginator.resetState();
+          paginator.setItems({ valueOrFactory: [a] });
+          paginator.resetState();
+          unsubscribe();
+
+          // initial call on subscribe, then each setItems / resetState
+          expect(seen).toEqual([false, true, false, true, false]);
+        });
+      });
     });
 
     describe('reload', () => {
