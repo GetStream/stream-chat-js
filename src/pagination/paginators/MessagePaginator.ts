@@ -159,12 +159,15 @@ export class MessagePaginator extends MessageIntervalPaginator {
    * used instead. `null` until a query sets it or a message is ingested.
    */
   get latestMessageAt(): TimestampNS | null {
+    return this.latestMessageAtIncluding(this.latestMessageAtSource);
+  }
+
+  /** The newest loaded message that moves `last_message_at`, which {@link latestMessageAt} reads. */
+  private get latestMessageAtSource(): LocalMessage | null {
     const { latestMessage } = this.aggregateState.getLatestValue();
-    return this.latestMessageAtIncluding(
-      this.isSkippedSystemMessage(latestMessage)
-        ? this.recomputeLatestMessage({ counts: this.movesLastMessageAt })
-        : latestMessage,
-    );
+    return this.isSkippedSystemMessage(latestMessage)
+      ? this.recomputeLatestMessage({ counts: this.movesLastMessageAt })
+      : latestMessage;
   }
 
   /**
@@ -530,28 +533,36 @@ export class MessagePaginator extends MessageIntervalPaginator {
     const { latestMessage, queriedLatestMessageAt } =
       this.aggregateState.getLatestValue();
     const wasLatest = !!removedId && latestMessage?.id === removedId;
+    // A skipped system message can be the latest without moving `last_message_at`, so the message
+    // that did can be another one.
+    const latestMessageAtSource = removedId ? this.latestMessageAtSource : null;
+    const wasLatestMessageAtSource =
+      !!removedId && latestMessageAtSource?.id === removedId;
     const result = super.removeItem(params);
-    if (wasLatest) {
-      // The tracked latest was hard-removed; fall back to the newest still-loaded message that
-      // passes the filter, which `trackLatestMessage` cannot do (it only advances).
-      const previous = this.recomputeLatestMessage();
-      const previousAt = getMessageCreatedAtTimestamp(previous);
-      const removedAt = getMessageCreatedAtTimestamp(latestMessage);
-      const isQueriedFromRemovedMessage =
-        queriedLatestMessageAt !== null &&
-        removedAt !== null &&
-        queriedLatestMessageAt <= removedAt;
-      // The server moves `last_message_at` back to the previous message without sending it, so the
-      // queried value takes the previous loaded message's time. With none loaded the new value is
-      // unknown, and it stays.
-      this.aggregateState.partialNext({
-        latestMessage: previous,
-        queriedLatestMessageAt:
-          isQueriedFromRemovedMessage && previousAt !== null
-            ? previousAt
-            : queriedLatestMessageAt,
-      });
-    }
+    if (!wasLatest && !wasLatestMessageAtSource) return result;
+    // A tracked message was hard-removed; fall back to the newest still-loaded message that counts,
+    // which `trackLatestMessage` cannot do (it only advances).
+    const previousAt = wasLatestMessageAtSource
+      ? getMessageCreatedAtTimestamp(
+          this.recomputeLatestMessage({ counts: this.movesLastMessageAt }),
+        )
+      : null;
+    const removedAt = getMessageCreatedAtTimestamp(latestMessageAtSource);
+    const isQueriedFromRemovedMessage =
+      wasLatestMessageAtSource &&
+      queriedLatestMessageAt !== null &&
+      removedAt !== null &&
+      queriedLatestMessageAt <= removedAt;
+    // The server moves `last_message_at` back to the previous message without sending it, so the
+    // queried value takes the previous loaded message's time. With none loaded the new value is
+    // unknown, and it stays.
+    this.aggregateState.partialNext({
+      latestMessage: wasLatest ? this.recomputeLatestMessage() : latestMessage,
+      queriedLatestMessageAt:
+        isQueriedFromRemovedMessage && previousAt !== null
+          ? previousAt
+          : queriedLatestMessageAt,
+    });
     return result;
   }
 

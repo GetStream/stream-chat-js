@@ -6128,6 +6128,34 @@ describe('MessagePaginator', () => {
         expect(tracking.latestMessageAt).toBe(at('2020-01-01T00:00:02.000Z'));
       });
 
+      it('fall back to the previous message that moves last_message_at when it is hard-removed', () => {
+        skipSystemMessages = true;
+        const paginator = buildPaginator();
+        paginator.ingestItem(message('m1', 1));
+        paginator.ingestItem(message('m2', 2));
+        paginator.ingestItem(message('sys', 3, { type: 'system' }));
+        paginator.setQueriedLatestMessageAt(at('2020-01-01T00:00:02.000Z'));
+
+        paginator.removeItem({ id: 'm2' });
+
+        expect(paginator.latestMessage?.id).toBe('sys');
+        expect(paginator.latestMessageAt).toBe(at('2020-01-01T00:00:01.000Z'));
+      });
+
+      it('keep the queried last_message_at when the skipped system message is hard-removed', () => {
+        skipSystemMessages = true;
+        const paginator = buildPaginator();
+        paginator.ingestItem(message('m1', 1));
+        paginator.ingestItem(message('sys0', 2, { type: 'system' }));
+        paginator.ingestItem(message('sys', 3, { type: 'system' }));
+        paginator.setQueriedLatestMessageAt(at('2020-01-01T00:00:01.000Z'));
+
+        paginator.removeItem({ id: 'sys' });
+
+        expect(paginator.latestMessage?.id).toBe('sys0');
+        expect(paginator.latestMessageAt).toBe(at('2020-01-01T00:00:01.000Z'));
+      });
+
       it('show a system message posted with a truncation', () => {
         skipSystemMessages = true;
         const paginator = buildPaginator();
