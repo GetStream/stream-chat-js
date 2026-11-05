@@ -39,10 +39,10 @@ const FINISHED_STATUSES = new Set<ScheduledMessageStatus>([
 const isFinished = ({ status }: ScheduledMessageResponse) =>
   FINISHED_STATUSES.has(status);
 
-const isNewerThan = (
-  current: ScheduledMessageResponse,
+const isAtLeastAsNewAs = (
   incoming: ScheduledMessageResponse,
-) => current.updated_at > incoming.updated_at;
+  current: ScheduledMessageResponse,
+) => incoming.updated_at >= current.updated_at;
 
 const isDisabledError = (error: Error | undefined) =>
   !!error &&
@@ -54,7 +54,6 @@ const createInitialState = (): ScheduledMessageManagerState => ({
 
 export class ScheduledMessageManager extends WithSubscriptions {
   private client: StreamChat;
-  private removedIds = new Set<string>();
   private receivedVersion = 0;
   private receivedVersions = new Map<string, number>();
   private hydratedCids = new Set<string>();
@@ -89,14 +88,23 @@ export class ScheduledMessageManager extends WithSubscriptions {
   }
 
   private resolveLatest = (incoming: ScheduledMessageResponse) => {
-    if (this.removedIds.has(incoming.id)) return undefined;
-
     const current = this.store.get(incoming.id);
 
-    const latest = current && isNewerThan(current, incoming) ? current : incoming;
+    if (!current) return incoming;
+
+    if (isFinished(current)) return current;
+
+    if (isFinished(incoming)) return incoming;
+
+    const latest = isAtLeastAsNewAs(incoming, current) ? incoming : current;
 
     return latest;
   };
+
+  private finish = (
+    scheduledMessage: ScheduledMessageResponse,
+    status: ScheduledMessageStatus,
+  ) => this.upsertToState({ ...scheduledMessage, status });
 
   private isReceivedSince = (id: string, requestedAtVersion?: number) => {
     if (requestedAtVersion === undefined) return false;
@@ -247,22 +255,25 @@ export class ScheduledMessageManager extends WithSubscriptions {
     return paginator;
   };
 
-  public getFromState = (id: string) => this.store.get(id);
+  public getFromState = (id: string) => {
+    const scheduledMessage = this.store.get(id);
+
+    return scheduledMessage && !isFinished(scheduledMessage)
+      ? scheduledMessage
+      : undefined;
+  };
 
   public upsertToState = (scheduledMessage: ScheduledMessageResponse) => {
-    if (isFinished(scheduledMessage)) {
-      this.removeFromState(scheduledMessage.id);
-      return;
-    }
-
     if (this.resolveLatest(scheduledMessage) !== scheduledMessage) return;
 
     this.ingest(scheduledMessage);
   };
 
   public removeFromState = (id: string) => {
-    this.removedIds.add(id);
-    this.store.remove(id);
+    const scheduledMessage = this.store.get(id);
+
+    if (scheduledMessage)
+      this.finish(scheduledMessage, SCHEDULED_MESSAGE_STATUS.Canceled);
   };
 
   public hydrateChannelState = (
@@ -272,22 +283,21 @@ export class ScheduledMessageManager extends WithSubscriptions {
   ) => {
     if (!Array.isArray(scheduledMessages)) return;
 
-    const snapshotMessages = scheduledMessages
-      .filter((scheduledMessage) => !isFinished(scheduledMessage))
-      .map(this.resolveLatest)
-      .filter((scheduledMessage) => scheduledMessage !== undefined);
-    const snapshotIds = new Set(snapshotMessages.map(({ id }) => id));
+    const snapshotIds = new Set(scheduledMessages.map(({ id }) => id));
 
-    const isMissingFromSnapshot = ({ cid: messageCid, id }: ScheduledMessageResponse) =>
-      messageCid === cid &&
-      !snapshotIds.has(id) &&
-      !this.isReceivedSince(id, requestedAtVersion);
+    const isMissingFromSnapshot = (scheduledMessage: ScheduledMessageResponse) =>
+      scheduledMessage.cid === cid &&
+      !isFinished(scheduledMessage) &&
+      !snapshotIds.has(scheduledMessage.id) &&
+      !this.isReceivedSince(scheduledMessage.id, requestedAtVersion);
 
     const missingMessages = this.store.values().filter(isMissingFromSnapshot);
 
     this.store.transaction(() => {
-      missingMessages.forEach(({ id }) => this.store.remove(id));
-      snapshotMessages.forEach(this.ingest);
+      missingMessages.forEach((scheduledMessage) =>
+        this.finish(scheduledMessage, SCHEDULED_MESSAGE_STATUS.Canceled),
+      );
+      scheduledMessages.forEach(this.upsertToState);
     });
 
     this.hydratedCids.add(cid);
@@ -301,7 +311,6 @@ export class ScheduledMessageManager extends WithSubscriptions {
     this.channelPaginators.clear();
     this.paginator.dispose();
 
-    this.removedIds.clear();
     this.receivedVersions.clear();
     this.hydratedCids.clear();
     this.store.clear();
@@ -343,7 +352,7 @@ export class ScheduledMessageManager extends WithSubscriptions {
       () => this.client.deleteScheduledMessage({ id }),
     );
 
-    this.removeFromState(id);
+    this.finish(scheduledMessage, SCHEDULED_MESSAGE_STATUS.Canceled);
 
     return scheduledMessage;
   };

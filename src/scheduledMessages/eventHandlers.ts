@@ -1,8 +1,9 @@
-import { ScheduledMessageEventType } from './constants';
+import { SCHEDULED_MESSAGE_STATUS, ScheduledMessageEventType } from './constants';
 import type {
   EventHandlerPipelineHandler,
   LabeledEventHandler,
 } from '../EventHandlerPipeline';
+import type { ScheduledMessageStatus } from '../gen/models';
 import type {
   ScheduledMessageManagerEventHandlerContext,
   ScheduledMessageManagerEventHandlers,
@@ -24,14 +25,16 @@ const upsertScheduledMessage: ScheduledMessageEventHandler = ({
   scheduledMessageManager.upsertToState(scheduledMessage);
 };
 
-const removeScheduledMessage: ScheduledMessageEventHandler = ({
-  ctx: { scheduledMessageManager },
-  event: { scheduled_message: scheduledMessage },
-}) => {
-  if (!scheduledMessage) return;
+const finishScheduledMessage =
+  (status: ScheduledMessageStatus): ScheduledMessageEventHandler =>
+  ({
+    ctx: { scheduledMessageManager },
+    event: { scheduled_message: scheduledMessage },
+  }) => {
+    if (!scheduledMessage) return;
 
-  scheduledMessageManager.removeFromState(scheduledMessage.id);
-};
+    scheduledMessageManager.upsertToState({ ...scheduledMessage, status });
+  };
 
 const reloadLoadedLists: ScheduledMessageEventHandler = async ({
   ctx: { scheduledMessageManager },
@@ -54,7 +57,7 @@ export const DEFAULT_SCHEDULED_MESSAGE_EVENT_HANDLERS: ScheduledMessageManagerEv
     ),
     [ScheduledMessageEventType.Deleted]: toDefaultHandler(
       ScheduledMessageEventType.Deleted,
-      removeScheduledMessage,
+      finishScheduledMessage(SCHEDULED_MESSAGE_STATUS.Canceled),
     ),
     [ScheduledMessageEventType.Failed]: toDefaultHandler(
       ScheduledMessageEventType.Failed,
@@ -62,7 +65,7 @@ export const DEFAULT_SCHEDULED_MESSAGE_EVENT_HANDLERS: ScheduledMessageManagerEv
     ),
     [ScheduledMessageEventType.Sent]: toDefaultHandler(
       ScheduledMessageEventType.Sent,
-      removeScheduledMessage,
+      finishScheduledMessage(SCHEDULED_MESSAGE_STATUS.Sent),
     ),
     [ScheduledMessageEventType.Updated]: toDefaultHandler(
       ScheduledMessageEventType.Updated,

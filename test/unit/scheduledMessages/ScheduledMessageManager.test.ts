@@ -859,6 +859,122 @@ describe('ScheduledMessageManager', () => {
     });
   });
 
+  describe('stale copies', () => {
+    const setupWithLoadedLists = async () => {
+      const { client, manager } = setup();
+      manager.registerSubscriptions();
+      const channelPaginator = manager.getChannelPaginator(cid);
+      await loadAll(manager);
+      const sm = generateScheduledMessage({ updated_at: at(0) });
+      manager.upsertToState(sm);
+      return { channelPaginator, client, manager, sm };
+    };
+
+    it('keeps the finished record of a sent message in the store', async () => {
+      const { client, manager, sm } = await setupWithLoadedLists();
+
+      await dispatchEvent(
+        client,
+        generateEvent('scheduled_message.sent', {
+          ...sm,
+          status: 'sent',
+          updated_at: at(20),
+        }),
+      );
+
+      expect(manager.store.get(sm.id)?.status).toBe('sent');
+      expect(manager.getFromState(sm.id)).toBeUndefined();
+      expect(itemsOf(manager.paginator)).toEqual([]);
+    });
+
+    it('records a deleted scheduled message as canceled', async () => {
+      const { client, manager, sm } = await setupWithLoadedLists();
+
+      await dispatchEvent(client, generateEvent('scheduled_message.deleted', sm));
+
+      expect(manager.store.get(sm.id)?.status).toBe('canceled');
+      expect(itemsOf(manager.paginator)).toEqual([]);
+    });
+
+    it('does not list a sent message again when a late edit response still says scheduled', async () => {
+      const { channelPaginator, client, manager, sm } = await setupWithLoadedLists();
+      const response = deferred<unknown>();
+      vi.spyOn(client, 'updateScheduledMessage').mockReturnValue(
+        response.promise as never,
+      );
+
+      const updating = manager.updateScheduledMessage(sm.id, {
+        message: { text: 'edited' },
+      });
+      await dispatchEvent(
+        client,
+        generateEvent('scheduled_message.sent', {
+          ...sm,
+          status: 'sent',
+          updated_at: at(20),
+        }),
+      );
+      response.resolve({
+        scheduled_message: { ...sm, message: { text: 'edited' }, updated_at: at(30) },
+      });
+      await updating;
+
+      expect(manager.store.get(sm.id)?.status).toBe('sent');
+      expect(itemsOf(channelPaginator)).toEqual([]);
+      expect(itemsOf(manager.paginator)).toEqual([]);
+    });
+
+    it('does not list a sent message again from a channel response', async () => {
+      const { channelPaginator, client, manager, sm } = await setupWithLoadedLists();
+      await dispatchEvent(
+        client,
+        generateEvent('scheduled_message.sent', {
+          ...sm,
+          status: 'sent',
+          updated_at: at(20),
+        }),
+      );
+
+      manager.hydrateChannelState(cid, [sm]);
+
+      expect(itemsOf(channelPaginator)).toEqual([]);
+      expect(itemsOf(manager.paginator)).toEqual([]);
+    });
+
+    it('does not list a sent message again from a query page', async () => {
+      const { channelPaginator, client, manager, sm } = await setupWithLoadedLists();
+      await dispatchEvent(
+        client,
+        generateEvent('scheduled_message.sent', {
+          ...sm,
+          status: 'sent',
+          updated_at: at(20),
+        }),
+      );
+      vi.mocked(client.queryScheduledMessages).mockResolvedValue(queryResponse([sm]));
+
+      await channelPaginator.reload();
+      await manager.paginator.reload();
+
+      expect(itemsOf(channelPaginator)).toEqual([]);
+      expect(itemsOf(manager.paginator)).toEqual([]);
+    });
+
+    it('takes a newer copy over the stored one', async () => {
+      const { client, manager, sm } = await setupWithLoadedLists();
+      const newer = { ...sm, message: { text: 'newer' }, updated_at: at(20) };
+
+      await dispatchEvent(client, generateEvent('scheduled_message.updated', newer));
+      await dispatchEvent(
+        client,
+        generateEvent('scheduled_message.updated', { ...sm, updated_at: at(10) }),
+      );
+
+      expect(manager.getFromState(sm.id)).toBe(newer);
+      expect(itemsOf(manager.paginator)).toEqual([newer]);
+    });
+  });
+
   describe('ordering', () => {
     it('keeps a message created while the first query is in flight', async () => {
       const { client, manager } = setup();

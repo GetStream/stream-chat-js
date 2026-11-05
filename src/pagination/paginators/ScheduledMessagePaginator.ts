@@ -25,9 +25,7 @@ export type ScheduledMessagePaginatorOptions = {
     ScheduledMessageResponse,
     QueryScheduledMessagesRequest
   >;
-  resolveLatest?: (
-    incoming: ScheduledMessageResponse,
-  ) => ScheduledMessageResponse | undefined;
+  resolveLatest?: (incoming: ScheduledMessageResponse) => ScheduledMessageResponse;
   store?: EntityStore<ScheduledMessageResponse>;
 };
 
@@ -38,8 +36,6 @@ const EXHAUSTED_CURSOR: PaginatorCursor = { headward: null, tailward: null };
 const getScheduledMessageId = ({ id }: ScheduledMessageResponse) => id;
 
 const keepIncoming = (incoming: ScheduledMessageResponse) => incoming;
-
-const isDefined = <T>(value: T | undefined): value is T => value !== undefined;
 
 const isFailed = ({ status }: ScheduledMessageResponse) =>
   status === SCHEDULED_MESSAGE_STATUS.Failed;
@@ -60,9 +56,7 @@ export class ScheduledMessagePaginator extends BasePaginator<
   QueryScheduledMessagesRequest
 > {
   private client: StreamChat;
-  private resolveLatest: (
-    incoming: ScheduledMessageResponse,
-  ) => ScheduledMessageResponse | undefined;
+  private resolveLatest: (incoming: ScheduledMessageResponse) => ScheduledMessageResponse;
 
   public readonly cid: string | undefined;
 
@@ -171,7 +165,7 @@ export class ScheduledMessagePaginator extends BasePaginator<
   }
 
   public filterQueryResults(items: ScheduledMessageResponse[]) {
-    const latestItems = items.map(this.resolveLatest).filter(isDefined);
+    const latestItems = items.map(this.resolveLatest);
 
     const matchingItems = latestItems.filter((item) => this.matchesFilter(item));
 
