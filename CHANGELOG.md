@@ -1,3 +1,10 @@
+## [10.0.0-rc.34](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.33...v10.0.0-rc.34) (2026-11-05)
+
+### Bug Fixes
+
+* issues found by the RN e2e tests ([#1996](https://github.com/GetStream/stream-chat-js/issues/1996)) ([f5d1a2d](https://github.com/GetStream/stream-chat-js/commit/f5d1a2d6c1d10a5791d36a9035cd6d538794ecd0))
+* **pagination:** count a page set with setItems as loaded, even when empty ([#1995](https://github.com/GetStream/stream-chat-js/issues/1995)) ([bfff3c8](https://github.com/GetStream/stream-chat-js/commit/bfff3c851c18f094e221aba0108cdc274bc471f6))
+
 ## [10.0.0-rc.33](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.32...v10.0.0-rc.33) (2026-11-05)
 
 ### ⚠ BREAKING CHANGES
