@@ -1,17 +1,16 @@
 import { StateStore } from '@stream-io/state-store';
 import { EntityStore } from '../entityStore/EntityStore';
+import { EventHandlerPipeline } from '../EventHandlerPipeline';
 import { ScheduledMessagePaginator } from '../pagination/paginators/ScheduledMessagePaginator';
 import { sanitizeOutgoingAttachments } from '../utils';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
-import {
-  SCHEDULED_MESSAGE_STATUS,
-  ScheduledMessageErrorReason,
-  ScheduledMessageEventType,
-} from './constants';
+import { SCHEDULED_MESSAGE_STATUS, ScheduledMessageErrorReason } from './constants';
 import {
   getScheduledMessageErrorReason,
   isScheduledMessageNotFoundError,
 } from './errors';
+import { DEFAULT_SCHEDULED_MESSAGE_EVENT_HANDLERS } from './eventHandlers';
+import type { Unsubscribe } from '@stream-io/state-store';
 import type { StreamChat } from '../client';
 import type {
   ScheduledMessageResponse,
@@ -19,21 +18,18 @@ import type {
   UpdateScheduledMessageRequest,
 } from '../gen/models';
 import type {
-  ScheduledMessageEvent,
+  AddScheduledMessageEventHandlerParams,
+  RemoveScheduledMessageEventHandlersParams,
+  ScheduledMessageManagerEventHandlerContext,
+  ScheduledMessageManagerEventHandlers,
+  ScheduledMessageManagerEventType,
   ScheduledMessageManagerOptions,
   ScheduledMessageManagerState,
+  SetScheduledMessageEventHandlersParams,
 } from './types';
 
-const UPSERT_EVENT_TYPES = [
-  ScheduledMessageEventType.Created,
-  ScheduledMessageEventType.Failed,
-  ScheduledMessageEventType.Updated,
-] as const;
-
-const REMOVE_EVENT_TYPES = [
-  ScheduledMessageEventType.Deleted,
-  ScheduledMessageEventType.Sent,
-] as const;
+type ScheduledMessageEventHandlerPipeline =
+  EventHandlerPipeline<ScheduledMessageManagerEventHandlerContext>;
 
 const FINISHED_STATUSES = new Set<ScheduledMessageStatus>([
   SCHEDULED_MESSAGE_STATUS.Canceled,
@@ -64,6 +60,10 @@ export class ScheduledMessageManager extends WithSubscriptions {
   private hydratedCids = new Set<string>();
   private channelPaginators = new Map<string, ScheduledMessagePaginator>();
   private paginatorUnsubscribeFunctions: Array<() => void> = [];
+  private eventHandlerPipelines = new Map<
+    ScheduledMessageManagerEventType,
+    ScheduledMessageEventHandlerPipeline
+  >();
 
   public readonly store = new EntityStore<ScheduledMessageResponse>({
     getEntityId: ({ id }) => id,
@@ -72,13 +72,20 @@ export class ScheduledMessageManager extends WithSubscriptions {
   public paginator: ScheduledMessagePaginator;
   public state: StateStore<ScheduledMessageManagerState>;
 
-  constructor({ client }: ScheduledMessageManagerOptions) {
+  constructor({
+    client,
+    eventHandlers = ScheduledMessageManager.getDefaultHandlers(),
+  }: ScheduledMessageManagerOptions) {
     super();
 
     this.client = client;
     this.state = new StateStore<ScheduledMessageManagerState>(createInitialState());
     this.paginator = this.createPaginator();
     this.watchQueryErrors(this.paginator);
+
+    Object.entries(eventHandlers).forEach(([eventType, handlers = []]) =>
+      this.ensurePipeline(eventType).replaceAll(handlers),
+    );
   }
 
   private resolveLatest = (incoming: ScheduledMessageResponse) => {
@@ -132,39 +139,15 @@ export class ScheduledMessageManager extends WithSubscriptions {
     this.receivedVersions.set(scheduledMessage.id, this.receivedVersion);
   };
 
-  private handleUpsertEvent = (event: ScheduledMessageEvent) => {
-    if (!event.scheduled_message) return;
+  private get eventHandlerContext(): ScheduledMessageManagerEventHandlerContext {
+    return { scheduledMessageManager: this };
+  }
 
-    this.upsertToState(event.scheduled_message);
-  };
+  private runEventHandlers = () =>
+    this.client.on((event) => {
+      const pipeline = this.eventHandlerPipelines.get(event.type);
 
-  private handleRemoveEvent = (event: ScheduledMessageEvent) => {
-    if (!event.scheduled_message) return;
-
-    this.removeFromState(event.scheduled_message.id);
-  };
-
-  private subscribeToEvents = (
-    eventTypes: ReadonlyArray<ScheduledMessageEventType>,
-    handleEvent: (event: ScheduledMessageEvent) => void,
-  ) => {
-    const unsubscribeFunctions = eventTypes.map(
-      (eventType) => this.client.on(eventType, handleEvent).unsubscribe,
-    );
-
-    const unsubscribeAll = () =>
-      unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
-
-    return unsubscribeAll;
-  };
-
-  private reloadWhenRecovered = () =>
-    this.client.on('connection.recovered', () => {
-      const loadedPaginators = this.paginators.filter(
-        ({ isInitialized }) => isInitialized,
-      );
-
-      loadedPaginators.forEach((paginator) => paginator.reload());
+      pipeline?.run(event, this.eventHandlerContext);
     }).unsubscribe;
 
   private forgetHydrationWhenDisconnected = () =>
@@ -195,6 +178,60 @@ export class ScheduledMessageManager extends WithSubscriptions {
   public get paginators() {
     return [this.paginator, ...this.channelPaginators.values()];
   }
+
+  public get pipelines() {
+    return this.eventHandlerPipelines;
+  }
+
+  public static getDefaultHandlers(): ScheduledMessageManagerEventHandlers {
+    const defaultHandlers = Object.fromEntries(
+      Object.entries(DEFAULT_SCHEDULED_MESSAGE_EVENT_HANDLERS).map(
+        ([eventType, handlers = []]) => [eventType, [...handlers]],
+      ),
+    );
+
+    return defaultHandlers;
+  }
+
+  public ensurePipeline = (eventType: ScheduledMessageManagerEventType) => {
+    const existingPipeline = this.eventHandlerPipelines.get(eventType);
+
+    if (existingPipeline) return existingPipeline;
+
+    const pipeline: ScheduledMessageEventHandlerPipeline = new EventHandlerPipeline({
+      id: `ScheduledMessageManager:${eventType}`,
+    });
+    this.eventHandlerPipelines.set(eventType, pipeline);
+
+    return pipeline;
+  };
+
+  public addEventHandler = ({
+    eventType,
+    ...payload
+  }: AddScheduledMessageEventHandlerParams): Unsubscribe =>
+    this.ensurePipeline(eventType).insert(payload);
+
+  public setEventHandlers = ({
+    eventType,
+    handlers,
+  }: SetScheduledMessageEventHandlersParams) =>
+    this.ensurePipeline(eventType).replaceAll(handlers);
+
+  public removeEventHandlers = ({
+    eventType,
+    handlers,
+  }: RemoveScheduledMessageEventHandlersParams) => {
+    const pipeline = this.eventHandlerPipelines.get(eventType);
+
+    handlers.forEach((params) => pipeline?.remove(params));
+  };
+
+  public reload = async () => {
+    const loadedPaginators = this.paginators.filter(({ isInitialized }) => isInitialized);
+
+    await Promise.allSettled(loadedPaginators.map((paginator) => paginator.reload()));
+  };
 
   public getChannelPaginator = (cid: string) => {
     const existingPaginator = this.channelPaginators.get(cid);
@@ -277,13 +314,7 @@ export class ScheduledMessageManager extends WithSubscriptions {
   public registerSubscriptions = () => {
     if (this.hasSubscriptions) return;
 
-    this.addUnsubscribeFunction(
-      this.subscribeToEvents(UPSERT_EVENT_TYPES, this.handleUpsertEvent),
-    );
-    this.addUnsubscribeFunction(
-      this.subscribeToEvents(REMOVE_EVENT_TYPES, this.handleRemoveEvent),
-    );
-    this.addUnsubscribeFunction(this.reloadWhenRecovered());
+    this.addUnsubscribeFunction(this.runEventHandlers());
     this.addUnsubscribeFunction(this.forgetHydrationWhenDisconnected());
   };
 

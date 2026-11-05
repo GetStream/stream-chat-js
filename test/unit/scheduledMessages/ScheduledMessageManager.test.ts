@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  Event,
   EventType,
   ScheduledMessageManager,
   ScheduledMessagePaginator,
@@ -62,6 +63,13 @@ const setup = () => {
   const manager = client.scheduledMessages;
   vi.spyOn(client, 'queryScheduledMessages').mockResolvedValue(queryResponse([]));
   return { client, manager };
+};
+
+const dispatchEvent = async (client: StreamChat, event: Event) => {
+  client.dispatchEvent(event);
+
+  const pipelines = Array.from(client.scheduledMessages.pipelines.values());
+  await Promise.all(pipelines.map((pipeline) => pipeline.drain()));
 };
 
 const itemsOf = (paginator: ScheduledMessagePaginator) => paginator.items ?? [];
@@ -374,25 +382,26 @@ describe('ScheduledMessageManager', () => {
   describe('events', () => {
     it.each(['scheduled_message.created', 'scheduled_message.updated'] as EventType[])(
       'upserts on %s',
-      (type) => {
+      async (type) => {
         const { client, manager } = setup();
         manager.registerSubscriptions();
         const sm = generateScheduledMessage();
 
-        client.dispatchEvent(generateEvent(type, sm));
+        await dispatchEvent(client, generateEvent(type, sm));
 
         expect(manager.getFromState(sm.id)).toEqual(sm);
         expect(itemsOf(manager.paginator)).toEqual([sm]);
       },
     );
 
-    it('keeps a message awaiting a send retry as sending', () => {
+    it('keeps a message awaiting a send retry as sending', async () => {
       const { client, manager } = setup();
       manager.registerSubscriptions();
       const sm = generateScheduledMessage();
       manager.upsertToState(sm);
 
-      client.dispatchEvent(
+      await dispatchEvent(
+        client,
         generateEvent('scheduled_message.updated', { ...sm, status: 'sending' }),
       );
 
@@ -400,13 +409,14 @@ describe('ScheduledMessageManager', () => {
       expect(itemsOf(manager.paginator)).toHaveLength(1);
     });
 
-    it('marks the scheduled message failed on scheduled_message.failed', () => {
+    it('marks the scheduled message failed on scheduled_message.failed', async () => {
       const { client, manager } = setup();
       manager.registerSubscriptions();
       const sm = generateScheduledMessage();
       manager.upsertToState(sm);
 
-      client.dispatchEvent(
+      await dispatchEvent(
+        client,
         generateEvent('scheduled_message.failed', {
           ...sm,
           status: 'failed',
@@ -419,13 +429,14 @@ describe('ScheduledMessageManager', () => {
       );
     });
 
-    it('removes on scheduled_message.sent', () => {
+    it('removes on scheduled_message.sent', async () => {
       const { client, manager } = setup();
       manager.registerSubscriptions();
       const sm = generateScheduledMessage();
       manager.upsertToState(sm);
 
-      client.dispatchEvent(
+      await dispatchEvent(
+        client,
         generateEvent(
           'scheduled_message.sent',
           { ...sm, status: 'sent' },
@@ -437,13 +448,14 @@ describe('ScheduledMessageManager', () => {
       expect(itemsOf(manager.paginator)).toEqual([]);
     });
 
-    it('removes on scheduled_message.deleted', () => {
+    it('removes on scheduled_message.deleted', async () => {
       const { client, manager } = setup();
       manager.registerSubscriptions();
       const sm = generateScheduledMessage();
       manager.upsertToState(sm);
 
-      client.dispatchEvent(
+      await dispatchEvent(
+        client,
         generateEvent('scheduled_message.deleted', { ...sm, status: 'canceled' }),
       );
 
@@ -451,16 +463,16 @@ describe('ScheduledMessageManager', () => {
       expect(itemsOf(manager.paginator)).toEqual([]);
     });
 
-    it('ignores scheduled message events before registerSubscriptions and after unregistering', () => {
+    it('ignores scheduled message events before registerSubscriptions and after unregistering', async () => {
       const { client, manager } = setup();
       const sm = generateScheduledMessage();
 
-      client.dispatchEvent(generateEvent('scheduled_message.created', sm));
+      await dispatchEvent(client, generateEvent('scheduled_message.created', sm));
       expect(manager.getFromState(sm.id)).toBeUndefined();
 
       manager.registerSubscriptions();
       manager.unregisterSubscriptions();
-      client.dispatchEvent(generateEvent('scheduled_message.created', sm));
+      await dispatchEvent(client, generateEvent('scheduled_message.created', sm));
       expect(manager.getFromState(sm.id)).toBeUndefined();
     });
   });
@@ -484,7 +496,7 @@ describe('ScheduledMessageManager', () => {
       const querySpy = vi.mocked(client.queryScheduledMessages);
       querySpy.mockClear();
 
-      client.dispatchEvent({ type: 'connection.recovered' });
+      await dispatchEvent(client, { type: 'connection.recovered' });
 
       await vi.waitFor(() => expect(querySpy).toHaveBeenCalledTimes(2));
       expect(querySpy).toHaveBeenCalledWith(
@@ -493,6 +505,119 @@ describe('ScheduledMessageManager', () => {
       expect(querySpy).toHaveBeenCalledWith(
         expect.objectContaining({ filter: { cid, status: ACTIVE_STATUSES } }),
       );
+    });
+  });
+
+  describe('event handlers', () => {
+    it('handles the scheduled message events and connection.recovered with labeled defaults', () => {
+      const { manager } = setup();
+
+      const handlerIds = Array.from(manager.pipelines.entries()).map(
+        ([eventType, pipeline]) => [
+          eventType,
+          pipeline.findIndex({
+            idMatch: { id: `ScheduledMessageManager:default-handler:${eventType}` },
+          }),
+        ],
+      );
+
+      expect(Object.fromEntries(handlerIds)).toEqual({
+        'connection.recovered': 0,
+        'scheduled_message.created': 0,
+        'scheduled_message.deleted': 0,
+        'scheduled_message.failed': 0,
+        'scheduled_message.sent': 0,
+        'scheduled_message.updated': 0,
+      });
+    });
+
+    it('returns a copy of the default handlers', () => {
+      const defaultHandlers = ScheduledMessageManager.getDefaultHandlers();
+      defaultHandlers['scheduled_message.created']?.splice(0);
+
+      expect(
+        ScheduledMessageManager.getDefaultHandlers()['scheduled_message.created'],
+      ).toHaveLength(1);
+    });
+
+    it('replaces the default handlers with the ones passed to the constructor', async () => {
+      const { client } = setup();
+      const manager = new ScheduledMessageManager({ client, eventHandlers: {} });
+      manager.registerSubscriptions();
+      const sm = generateScheduledMessage();
+
+      client.dispatchEvent(generateEvent('scheduled_message.created', sm));
+
+      expect(manager.pipelines.size).toBe(0);
+      expect(manager.getFromState(sm.id)).toBeUndefined();
+    });
+
+    it('keeps failed scheduled messages out of the lists with a replaced handler', async () => {
+      const { client, manager } = setup();
+      manager.registerSubscriptions();
+      await loadAll(manager);
+      const sm = generateScheduledMessage();
+      manager.upsertToState(sm);
+      manager.setEventHandlers({
+        eventType: 'scheduled_message.failed',
+        handlers: [
+          {
+            handle: ({ ctx: { scheduledMessageManager }, event }) => {
+              if (event.scheduled_message)
+                scheduledMessageManager.removeFromState(event.scheduled_message.id);
+            },
+            id: 'app:drop-failed',
+          },
+        ],
+      });
+
+      await dispatchEvent(
+        client,
+        generateEvent('scheduled_message.failed', { ...sm, status: 'failed' }),
+      );
+
+      expect(itemsOf(manager.paginator)).toEqual([]);
+    });
+
+    it('stops the default handler from an added handler until it is unsubscribed', async () => {
+      const { client, manager } = setup();
+      manager.registerSubscriptions();
+      const ignored = generateScheduledMessage({ cid: otherCid });
+      const unsubscribe = manager.addEventHandler({
+        eventType: 'scheduled_message.created',
+        handle: ({ event }) =>
+          event.scheduled_message?.cid === otherCid ? { action: 'stop' } : undefined,
+        index: 0,
+      });
+
+      await dispatchEvent(client, generateEvent('scheduled_message.created', ignored));
+      expect(manager.getFromState(ignored.id)).toBeUndefined();
+
+      unsubscribe();
+      await dispatchEvent(client, generateEvent('scheduled_message.created', ignored));
+      expect(manager.getFromState(ignored.id)).toBe(ignored);
+    });
+
+    it('does not reload the lists after connection.recovered once its handler is removed', async () => {
+      const { client, manager } = setup();
+      manager.registerSubscriptions();
+      await manager.paginator.toTail();
+      const querySpy = vi.mocked(client.queryScheduledMessages);
+      querySpy.mockClear();
+
+      manager.removeEventHandlers({
+        eventType: 'connection.recovered',
+        handlers: [
+          {
+            idMatch: {
+              id: 'ScheduledMessageManager:default-handler:connection.recovered',
+            },
+          },
+        ],
+      });
+      await dispatchEvent(client, { type: 'connection.recovered' });
+
+      expect(querySpy).not.toHaveBeenCalled();
     });
   });
 
@@ -715,7 +840,7 @@ describe('ScheduledMessageManager', () => {
         vi.spyOn(client, 'sendScheduledMessageNow').mockRejectedValue(notFoundError);
 
         await expect(manager.sendScheduledMessageNow(sm.id)).rejects.toBe(notFoundError);
-        client.dispatchEvent(generateEvent('scheduled_message.updated', sm));
+        await dispatchEvent(client, generateEvent('scheduled_message.updated', sm));
 
         expect(manager.getFromState(sm.id)).toBeUndefined();
       });
@@ -789,7 +914,8 @@ describe('ScheduledMessageManager', () => {
       );
 
       const sending = manager.sendScheduledMessageNow(sm.id);
-      client.dispatchEvent(
+      await dispatchEvent(
+        client,
         generateEvent('scheduled_message.failed', {
           ...sm,
           status: 'failed',
@@ -806,18 +932,20 @@ describe('ScheduledMessageManager', () => {
       expect(itemsOf(manager.paginator)[0]?.status).toBe('failed');
     });
 
-    it('ignores an updated event older than the stored version', () => {
+    it('ignores an updated event older than the stored version', async () => {
       const { client, manager } = setup();
       manager.registerSubscriptions();
       const sm = generateScheduledMessage({ updated_at: at(0) });
-      client.dispatchEvent(
+      await dispatchEvent(
+        client,
         generateEvent('scheduled_message.failed', {
           ...sm,
           status: 'failed',
           updated_at: at(20),
         }),
       );
-      client.dispatchEvent(
+      await dispatchEvent(
+        client,
         generateEvent('scheduled_message.updated', { ...sm, updated_at: at(10) }),
       );
 
@@ -844,7 +972,8 @@ describe('ScheduledMessageManager', () => {
       );
 
       const loading = manager.paginator.toTail();
-      client.dispatchEvent(
+      await dispatchEvent(
+        client,
         generateEvent('scheduled_message.sent', { ...sm, status: 'sent' }),
       );
       response.resolve(queryResponse([sm]));
@@ -865,7 +994,8 @@ describe('ScheduledMessageManager', () => {
       );
 
       const loading = manager.paginator.toTail();
-      client.dispatchEvent(
+      await dispatchEvent(
+        client,
         generateEvent('scheduled_message.failed', {
           ...sm,
           status: 'failed',
