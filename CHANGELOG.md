@@ -1,3 +1,24 @@
+## [10.0.0-rc.33](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.32...v10.0.0-rc.33) (2026-11-05)
+
+### ⚠ BREAKING CHANGES
+
+* `LocalAttachmentMetadata` requires only `id`. `file` and `uploadState` are
+optional, so code that reads them from a `LocalAttachment` must handle `undefined`. A `file` must
+come with its `uploadState`: `localMetadata: { id, file }` no longer compiles, and an attachment
+in that shape from untyped code is no longer sent. An attachment with neither field (a custom type
+or `giphy`) is sent as it is, takes no upload slot, and counts as content in `hasSendableData`.
+* CustomCommandData is no longer exported. Delete its augmentations and imports. A leftover augmentation still compiles and has no effect, so search for the name rather than relying on tsc. An app that wants a closed set of command names declares its own union. See ai-docs/v10-breaking-changes.md#custom-data-augmentation.
+
+### Bug Fixes
+
+* dispatch connection.recovered on reconnect when recovery is disabled ([#1994](https://github.com/GetStream/stream-chat-js/issues/1994)) ([13bb533](https://github.com/GetStream/stream-chat-js/commit/13bb533744f47f58efbe15c042cee4943d612609))
+* remove CustomCommandData ([#1989](https://github.com/GetStream/stream-chat-js/issues/1989)) ([f737d61](https://github.com/GetStream/stream-chat-js/commit/f737d61993d87d45e730b6887389d648af3bed18))
+
+### Features
+
+* send and count attachments with nothing to upload ([#1993](https://github.com/GetStream/stream-chat-js/issues/1993)) ([b2dfb8a](https://github.com/GetStream/stream-chat-js/commit/b2dfb8aacd1e17b5015291f55944485920d87360)), closes [ai-docs/v10-breaking-changes.md#non-upload-attachments](https://github.com/ai-docs/v10-breaking-changes.md/issues/non-upload-attachments)
+* update to latest api spec ([461eb24](https://github.com/GetStream/stream-chat-js/commit/461eb24363e365407f37bd45c16739287ff72b64))
+
 ## [10.0.0-rc.32](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.31...v10.0.0-rc.32) (2026-11-04)
 
 ### ⚠ BREAKING CHANGES
