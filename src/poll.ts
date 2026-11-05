@@ -340,7 +340,7 @@ export class Poll {
     return poll;
   };
 
-  update = async (data: Exclude<UpdatePollRequest, 'id'>) =>
+  update = async (data: Omit<UpdatePollRequest, 'id'>) =>
     await this.client.updatePoll({ ...data, id: this.id as string });
 
   partialUpdate = async (partialPollObject: PartialPollUpdate) =>
