@@ -36,10 +36,10 @@ const finishScheduledMessage =
     scheduledMessageManager.upsertToState({ ...scheduledMessage, status });
   };
 
-const reloadLoadedLists: ScheduledMessageEventHandler = async ({
+const recoverLists: ScheduledMessageEventHandler = async ({
   ctx: { scheduledMessageManager },
 }) => {
-  await scheduledMessageManager.reload();
+  await scheduledMessageManager.recover();
 };
 
 const toDefaultHandler = (
@@ -73,6 +73,6 @@ export const DEFAULT_SCHEDULED_MESSAGE_EVENT_HANDLERS: ScheduledMessageManagerEv
     ),
     [CONNECTION_RECOVERED_EVENT_TYPE]: toDefaultHandler(
       CONNECTION_RECOVERED_EVENT_TYPE,
-      reloadLoadedLists,
+      recoverLists,
     ),
   };

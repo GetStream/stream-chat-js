@@ -166,6 +166,13 @@ export class ScheduledMessageManager extends WithSubscriptions {
       },
     );
 
+  private isRefreshedByHydration = ({ cid }: ScheduledMessagePaginator) =>
+    !!cid && this.hydratedCids.has(cid);
+
+  private reloadPaginators = async (paginators: ScheduledMessagePaginator[]) => {
+    await Promise.allSettled(paginators.map((paginator) => paginator.reload()));
+  };
+
   private removeWhenNotFound = async <TResult>(
     id: string,
     request: () => Promise<TResult>,
@@ -238,7 +245,15 @@ export class ScheduledMessageManager extends WithSubscriptions {
   public reload = async () => {
     const loadedPaginators = this.paginators.filter(({ isInitialized }) => isInitialized);
 
-    await Promise.allSettled(loadedPaginators.map((paginator) => paginator.reload()));
+    await this.reloadPaginators(loadedPaginators);
+  };
+
+  public recover = async () => {
+    const stalePaginators = this.paginators.filter(
+      (paginator) => paginator.isInitialized && !this.isRefreshedByHydration(paginator),
+    );
+
+    await this.reloadPaginators(stalePaginators);
   };
 
   public getChannelPaginator = (cid: string) => {

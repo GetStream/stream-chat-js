@@ -506,6 +506,71 @@ describe('ScheduledMessageManager', () => {
         expect.objectContaining({ filter: { cid, status: ACTIVE_STATUSES } }),
       );
     });
+
+    describe('after a reconnect', () => {
+      const reconnect = (client: StreamChat) => {
+        client.wsConnection._setStatus({ isHealthy: false });
+        client.wsConnection._setStatus({ isHealthy: true, connectionId: 'reconnected' });
+      };
+
+      const setupWithLoadedLists = async () => {
+        const { client, manager } = setup();
+        manager.registerSubscriptions();
+        const channelPaginator = manager.getChannelPaginator(cid);
+        await loadAll(manager);
+        const querySpy = vi.mocked(client.queryScheduledMessages);
+        querySpy.mockClear();
+        return { channelPaginator, client, manager, querySpy };
+      };
+
+      it('reloads the loaded lists once the client recovered', async () => {
+        const { client, querySpy } = await setupWithLoadedLists();
+
+        reconnect(client);
+
+        await vi.waitFor(() => expect(querySpy).toHaveBeenCalledTimes(2));
+      });
+
+      it('does not reload the lists when connection recovery is turned off', async () => {
+        const { client, querySpy } = await setupWithLoadedLists();
+        const recovered = vi.fn();
+        client.on('connection.recovered', recovered);
+        client.connectionRecovery.updateConfig({ enabled: false });
+
+        reconnect(client);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(recovered).not.toHaveBeenCalled();
+        expect(querySpy).not.toHaveBeenCalled();
+      });
+
+      it('does not reload a channel list that a channel response refreshed since', async () => {
+        const { client, manager, querySpy } = await setupWithLoadedLists();
+        client.connectionRecovery.updateConfig({ enabled: false });
+        reconnect(client);
+
+        manager.hydrateChannelState(cid, []);
+        await dispatchEvent(client, { type: 'connection.recovered' });
+
+        await vi.waitFor(() => expect(querySpy).toHaveBeenCalledTimes(1));
+        expect(querySpy).toHaveBeenCalledWith(
+          expect.objectContaining({ filter: { status: ACTIVE_STATUSES } }),
+        );
+      });
+
+      it('reloads a channel list hydrated before the reconnect', async () => {
+        const { client, manager, querySpy } = await setupWithLoadedLists();
+        manager.hydrateChannelState(cid, []);
+
+        reconnect(client);
+
+        await vi.waitFor(() =>
+          expect(querySpy).toHaveBeenCalledWith(
+            expect.objectContaining({ filter: { cid, status: ACTIVE_STATUSES } }),
+          ),
+        );
+      });
+    });
   });
 
   describe('event handlers', () => {
