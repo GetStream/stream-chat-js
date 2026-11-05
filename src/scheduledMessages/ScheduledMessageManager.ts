@@ -11,21 +11,28 @@ import {
 } from './errors';
 import { DEFAULT_SCHEDULED_MESSAGE_EVENT_HANDLERS } from './eventHandlers';
 import type { Unsubscribe } from '@stream-io/state-store';
+import type { Channel } from '../channel';
 import type { StreamChat } from '../client';
 import type {
   ScheduledMessageResponse,
   ScheduledMessageStatus,
+  SendMessageRequest,
   UpdateScheduledMessageRequest,
 } from '../gen/models';
 import type {
   AddScheduledMessageEventHandlerParams,
+  DefaultScheduledMessageRequest,
   RemoveScheduledMessageEventHandlersParams,
+  ScheduledMessageIdRequestParams,
   ScheduledMessageManagerEventHandlerContext,
   ScheduledMessageManagerEventHandlers,
   ScheduledMessageManagerEventType,
   ScheduledMessageManagerOptions,
   ScheduledMessageManagerState,
+  ScheduledMessageRequestFn,
+  ScheduledMessageRequestHandlers,
   SetScheduledMessageEventHandlersParams,
+  UpdateScheduledMessageRequestParams,
 } from './types';
 
 type ScheduledMessageEventHandlerPipeline =
@@ -172,6 +179,35 @@ export class ScheduledMessageManager extends WithSubscriptions {
   private reloadPaginators = async (paginators: ScheduledMessagePaginator[]) => {
     await Promise.allSettled(paginators.map((paginator) => paginator.reload()));
   };
+
+  private getRequestHandlers = (cid?: string): ScheduledMessageRequestHandlers => {
+    const channel = cid ? this.client.channelManager.get(cid) : undefined;
+
+    const requestHandlers =
+      channel?.configState.getLatestValue().requestHandlers ??
+      this.client.config.getConfig('channel')?.requestHandlers ??
+      {};
+
+    return requestHandlers;
+  };
+
+  private getRequestHandlersFor = (id: string) =>
+    this.getRequestHandlers(this.store.get(id)?.cid);
+
+  private sendRequest = <TParams, TResponse>(
+    handler: ScheduledMessageRequestFn<TParams, TResponse> | undefined,
+    defaultRequest: DefaultScheduledMessageRequest<TParams, TResponse>,
+    params: TParams,
+  ) => (handler ? handler(params, defaultRequest) : defaultRequest(params));
+
+  private requestUpdate = ({ id, request }: UpdateScheduledMessageRequestParams) =>
+    this.client.updateScheduledMessage({ id }, request);
+
+  private requestDelete = ({ id }: ScheduledMessageIdRequestParams) =>
+    this.client.deleteScheduledMessage({ id });
+
+  private requestSendNow = ({ id }: ScheduledMessageIdRequestParams) =>
+    this.client.sendScheduledMessageNow({ id });
 
   private removeWhenNotFound = async <TResult>(
     id: string,
@@ -342,10 +378,29 @@ export class ScheduledMessageManager extends WithSubscriptions {
     this.addUnsubscribeFunction(this.forgetHydrationWhenDisconnected());
   };
 
+  public scheduleMessage = async (channel: Channel, request: SendMessageRequest) => {
+    const { scheduleMessageRequest } = this.getRequestHandlers(channel.cid);
+    const sanitizedRequest = {
+      ...request,
+      message: sanitizeOutgoingAttachments(request.message),
+    };
+
+    const response = await this.sendRequest(
+      scheduleMessageRequest,
+      (params) => channel.sendMessage(params),
+      sanitizedRequest,
+    );
+
+    if (response.scheduled_message) this.upsertToState(response.scheduled_message);
+
+    return response;
+  };
+
   public updateScheduledMessage = async (
     id: string,
     request: UpdateScheduledMessageRequest,
   ) => {
+    const { updateScheduledMessageRequest } = this.getRequestHandlersFor(id);
     const { message } = request;
     const sanitizedRequest = message
       ? { ...request, message: sanitizeOutgoingAttachments(message) }
@@ -353,7 +408,11 @@ export class ScheduledMessageManager extends WithSubscriptions {
 
     const { scheduled_message: scheduledMessage } = await this.removeWhenNotFound(
       id,
-      () => this.client.updateScheduledMessage({ id }, sanitizedRequest),
+      () =>
+        this.sendRequest(updateScheduledMessageRequest, this.requestUpdate, {
+          id,
+          request: sanitizedRequest,
+        }),
     );
 
     this.upsertToState(scheduledMessage);
@@ -362,9 +421,11 @@ export class ScheduledMessageManager extends WithSubscriptions {
   };
 
   public deleteScheduledMessage = async (id: string) => {
+    const { deleteScheduledMessageRequest } = this.getRequestHandlersFor(id);
+
     const { scheduled_message: scheduledMessage } = await this.removeWhenNotFound(
       id,
-      () => this.client.deleteScheduledMessage({ id }),
+      () => this.sendRequest(deleteScheduledMessageRequest, this.requestDelete, { id }),
     );
 
     this.finish(scheduledMessage, SCHEDULED_MESSAGE_STATUS.Canceled);
@@ -373,9 +434,11 @@ export class ScheduledMessageManager extends WithSubscriptions {
   };
 
   public sendScheduledMessageNow = async (id: string) => {
+    const { sendScheduledMessageNowRequest } = this.getRequestHandlersFor(id);
+
     const { scheduled_message: scheduledMessage } = await this.removeWhenNotFound(
       id,
-      () => this.client.sendScheduledMessageNow({ id }),
+      () => this.sendRequest(sendScheduledMessageNowRequest, this.requestSendNow, { id }),
     );
 
     this.upsertToState(scheduledMessage);

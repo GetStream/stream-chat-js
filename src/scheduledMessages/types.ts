@@ -4,7 +4,15 @@ import type {
   InsertEventHandlerPayload,
   LabeledEventHandler,
 } from '../EventHandlerPipeline';
-import type { EventPayload, EventType } from '../types';
+import type {
+  DeleteScheduledMessageResponse,
+  SendMessageRequest,
+  SendMessageResponse,
+  SendScheduledMessageNowResponse,
+  UpdateScheduledMessageRequest,
+  UpdateScheduledMessageResponse,
+} from '../gen/models';
+import type { EventPayload, EventType, StreamResponse } from '../types';
 import type { ScheduledMessageManager } from './ScheduledMessageManager';
 
 export type ScheduledMessageManagerState = {
@@ -36,6 +44,51 @@ export type SetScheduledMessageEventHandlersParams = {
 export type RemoveScheduledMessageEventHandlersParams = {
   eventType: ScheduledMessageManagerEventType;
   handlers: FindEventHandlerParams<ScheduledMessageManagerEventHandlerContext>[];
+};
+
+export type DefaultScheduledMessageRequest<TParams, TResponse> = (
+  params: TParams,
+) => Promise<StreamResponse<TResponse>>;
+
+export type ScheduledMessageRequestFn<TParams, TResponse> = (
+  params: TParams,
+  defaultRequest: DefaultScheduledMessageRequest<TParams, TResponse>,
+) => Promise<StreamResponse<TResponse>>;
+
+export type ScheduledMessageIdRequestParams = {
+  id: string;
+};
+
+export type UpdateScheduledMessageRequestParams = {
+  id: string;
+  request: UpdateScheduledMessageRequest;
+};
+
+export type ScheduleMessageRequestFn = ScheduledMessageRequestFn<
+  SendMessageRequest,
+  SendMessageResponse
+>;
+
+export type UpdateScheduledMessageRequestFn = ScheduledMessageRequestFn<
+  UpdateScheduledMessageRequestParams,
+  UpdateScheduledMessageResponse
+>;
+
+export type DeleteScheduledMessageRequestFn = ScheduledMessageRequestFn<
+  ScheduledMessageIdRequestParams,
+  DeleteScheduledMessageResponse
+>;
+
+export type SendScheduledMessageNowRequestFn = ScheduledMessageRequestFn<
+  ScheduledMessageIdRequestParams,
+  SendScheduledMessageNowResponse
+>;
+
+export type ScheduledMessageRequestHandlers = {
+  deleteScheduledMessageRequest?: DeleteScheduledMessageRequestFn;
+  scheduleMessageRequest?: ScheduleMessageRequestFn;
+  sendScheduledMessageNowRequest?: SendScheduledMessageNowRequestFn;
+  updateScheduledMessageRequest?: UpdateScheduledMessageRequestFn;
 };
 
 export type ScheduledMessageManagerOptions = {

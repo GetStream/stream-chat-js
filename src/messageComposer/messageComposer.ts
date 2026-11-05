@@ -1586,10 +1586,11 @@ export class MessageComposer extends WithSubscriptions {
     const { message, sendOptions } = composition;
 
     try {
-      const { scheduled_message: scheduledMessage } = await this.channel.sendMessage({
-        ...sendOptions,
-        message,
-      });
+      const { scheduled_message: scheduledMessage } =
+        await this.client.scheduledMessages.scheduleMessage(this.channel, {
+          ...sendOptions,
+          message,
+        });
 
       if (failedScheduledMessage) {
         this.endScheduledMessageComposition();

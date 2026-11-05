@@ -9,6 +9,7 @@ import { MessagePaginator, PinnedMessagePaginator } from './pagination/paginator
 import { createMessageOperations, reflectReactionEvent } from './messageOperations';
 import type { MessageOperations } from './messageOperations';
 import type { OperationRequestFn } from './messageOperations/types';
+import type { ScheduledMessageRequestHandlers } from './scheduledMessages/types';
 import {
   channelHasReadEvents,
   formatMessage,
@@ -122,7 +123,7 @@ export type ChannelConfig = {
     sendMessageRequest?: OperationRequestFn<'send'>;
     retrySendMessageRequest?: OperationRequestFn<'retry'>;
     updateMessageRequest?: OperationRequestFn<'update'>;
-  };
+  } & ScheduledMessageRequestHandlers;
   /**
    * Typing indicators. Defaults to enabled. ANDed with the channel type's `typing_events`. Read by
    * {@link Channel.keystroke} and {@link Channel.stopTyping}.
