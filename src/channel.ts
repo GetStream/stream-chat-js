@@ -1640,6 +1640,28 @@ export class Channel extends ChannelApi {
   }
 
   /**
+   * Lowers the own unread count by the unread ones among `deletedMessages`, as they were before the
+   * delete. The server lowers it for every unread message deleted, except in a soft bulk delete
+   * (`user.messages.deleted`), and does not send the new count. Unread messages that are not loaded
+   * cannot be counted; the next query brings the server's count.
+   *
+   * @internal
+   */
+  _lowerUnreadCountForDeletedMessages(deletedMessages: LocalMessage[]) {
+    const lastRead = this.lastRead();
+    if (lastRead == null || this.state.unreadCount === 0) return;
+    const deletedUnread = deletedMessages.filter(
+      (message) =>
+        message.type !== 'deleted' &&
+        message.created_at > lastRead &&
+        this._countMessageAsUnread(message),
+    ).length;
+    if (deletedUnread > 0) {
+      this._setOwnUnreadCount(Math.max(0, this.state.unreadCount - deletedUnread));
+    }
+  }
+
+  /**
    * Counts the unread messages that mention the current user, within the channel's newest messages
    * that are loaded (see {@link newestKnownMessages}).
    *
@@ -2365,6 +2387,9 @@ export class Channel extends ChannelApi {
         if (event.message) {
           this._extendEventWithOwnReactions(event);
           const formattedMessage = formatMessage(event.message);
+          // the server lowers unread count regardless of the type of deletion
+          const deletedMessage = this.getClient().messageStore.get(event.message.id);
+          if (deletedMessage) this._lowerUnreadCountForDeletedMessages([deletedMessage]);
           // Thread-only replies are handled by the Thread object; the channel owns the main list.
           if (!isThreadOnlyReply(event.message)) {
             if (event.hard_delete) {
@@ -2385,11 +2410,13 @@ export class Channel extends ChannelApi {
         if (event.user) {
           const deletedAt = event.created_at ?? nowNs();
           const hardDelete = !!event.hard_delete;
-          this.messagePaginator.applyMessageDeletionForUser({
+          const deletedMessages = this.messagePaginator.applyMessageDeletionForUser({
             userId: event.user.id,
             hardDelete,
             deletedAt,
           });
+          // the server keeps the unread count on a soft bulk delete
+          if (hardDelete) this._lowerUnreadCountForDeletedMessages(deletedMessages);
           this.pinnedMessagesPaginator.applyMessageDeletionForUser({
             userId: event.user.id,
             hardDelete,
@@ -2583,6 +2610,15 @@ export class Channel extends ChannelApi {
           if (removedUserId === this.getClient().userId) {
             channelState.membership = {} as ChannelMemberResponse;
           }
+
+          this._patchReadState(
+            (currentReadState) => {
+              if (!currentReadState[removedUserId]) return currentReadState;
+              const { [removedUserId]: _removed, ...nextReadState } = currentReadState;
+              return nextReadState;
+            },
+            { removedUserIds: [removedUserId] },
+          );
         }
         break;
       }

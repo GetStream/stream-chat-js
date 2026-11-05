@@ -5896,6 +5896,7 @@ describe('MessagePaginator', () => {
   describe('trackLatestMessage() / latestMessageAt', () => {
     let skipSystemMessages: boolean;
     let trackingChannel: Channel;
+    let trackingIndex: StoreBackedItemIndex<LocalMessage>;
 
     const buildPaginator = (parentMessageId?: string) => {
       trackingChannel = {
@@ -5905,12 +5906,13 @@ describe('MessagePaginator', () => {
         query: vi.fn(),
         ...fakeChannelQuery,
       } as unknown as Channel;
+      trackingIndex = new StoreBackedItemIndex<LocalMessage>({
+        getEntityId: (message) => message.id,
+      });
       return new MessagePaginator({
         channel: trackingChannel,
         parentMessageId,
-        itemIndex: new StoreBackedItemIndex<LocalMessage>({
-          getEntityId: (message) => message.id,
-        }),
+        itemIndex: trackingIndex,
       });
     };
 
@@ -6087,6 +6089,166 @@ describe('MessagePaginator', () => {
       const tracking = buildPaginator();
       tracking.trackLatestMessage(systemMessage);
       expect(tracking.latestMessageAt).toBe(at('2020-01-01T00:00:00.000Z'));
+    });
+
+    describe('system messages (RN-495)', () => {
+      const message = (id: string, second: number, extra: Partial<LocalMessage> = {}) =>
+        createMessage({
+          id,
+          cid: 'channel-id',
+          created_at: convertDateToTimestamp(`2020-01-01T00:00:0${second}.000Z`),
+          ...extra,
+        });
+
+      it.each([true, false])(
+        'become the latest message (skip_last_msg_update_for_system_msgs: %s)',
+        (skip) => {
+          skipSystemMessages = skip;
+          const paginator = buildPaginator();
+          paginator.ingestItem(message('m1', 1));
+
+          paginator.ingestItem(message('sys', 2, { type: 'system' }));
+
+          expect(paginator.latestMessage?.id).toBe('sys');
+        },
+      );
+
+      it('do not move latestMessageAt with skip_last_msg_update_for_system_msgs', () => {
+        skipSystemMessages = true;
+        const skipping = buildPaginator();
+        skipping.ingestItem(message('m1', 1));
+        skipping.ingestItem(message('sys', 2, { type: 'system' }));
+        // the channel keeps its place in the list, as the server keeps `last_message_at`
+        expect(skipping.latestMessageAt).toBe(at('2020-01-01T00:00:01.000Z'));
+
+        skipSystemMessages = false;
+        const tracking = buildPaginator();
+        tracking.ingestItem(message('m1', 1));
+        tracking.ingestItem(message('sys', 2, { type: 'system' }));
+        expect(tracking.latestMessageAt).toBe(at('2020-01-01T00:00:02.000Z'));
+      });
+
+      it('fall back to the previous message that moves last_message_at when it is hard-removed', () => {
+        skipSystemMessages = true;
+        const paginator = buildPaginator();
+        paginator.ingestItem(message('m1', 1));
+        paginator.ingestItem(message('m2', 2));
+        paginator.ingestItem(message('sys', 3, { type: 'system' }));
+        paginator.setQueriedLatestMessageAt(at('2020-01-01T00:00:02.000Z'));
+
+        paginator.removeItem({ id: 'm2' });
+
+        expect(paginator.latestMessage?.id).toBe('sys');
+        expect(paginator.latestMessageAt).toBe(at('2020-01-01T00:00:01.000Z'));
+      });
+
+      it('keep the queried last_message_at when the skipped system message is hard-removed', () => {
+        skipSystemMessages = true;
+        const paginator = buildPaginator();
+        paginator.ingestItem(message('m1', 1));
+        paginator.ingestItem(message('sys0', 2, { type: 'system' }));
+        paginator.ingestItem(message('sys', 3, { type: 'system' }));
+        paginator.setQueriedLatestMessageAt(at('2020-01-01T00:00:01.000Z'));
+
+        paginator.removeItem({ id: 'sys' });
+
+        expect(paginator.latestMessage?.id).toBe('sys0');
+        expect(paginator.latestMessageAt).toBe(at('2020-01-01T00:00:01.000Z'));
+      });
+
+      it('show a system message posted with a truncation', () => {
+        skipSystemMessages = true;
+        const paginator = buildPaginator();
+        paginator.ingestItem(message('m1', 1));
+        paginator.ingestItem(message('m2', 2));
+
+        paginator.truncate({ truncatedAt: at('2020-01-01T00:00:03.000Z') });
+        paginator.ingestItem(message('truncated', 3, { type: 'system' }));
+
+        expect(paginator.latestMessage?.id).toBe('truncated');
+        expect(paginator.latestMessageAt).toBeNull();
+      });
+    });
+
+    describe('error and ephemeral messages (only the current user sees them)', () => {
+      const message = (id: string, second: number, extra: Partial<LocalMessage> = {}) =>
+        createMessage({
+          id,
+          cid: 'channel-id',
+          created_at: convertDateToTimestamp(`2020-01-01T00:00:0${second}.000Z`),
+          ...extra,
+        });
+
+      it.each(['error', 'ephemeral'] as const)(
+        'never advance for a new %s message',
+        (type) => {
+          const paginator = buildPaginator();
+          paginator.ingestItem(message('a', 1));
+
+          paginator.ingestItem(message('b', 2, { type }));
+
+          expect(paginator.latestMessage?.id).toBe('a');
+          expect(paginator.latestMessageAt).toBe(at('2020-01-01T00:00:01.000Z'));
+        },
+      );
+
+      it('fall back to the previous message when the sent latest comes back as an error', () => {
+        const paginator = buildPaginator();
+        paginator.ingestItem(message('a', 1));
+        // an unknown command (`/test`) is sent as a regular message...
+        paginator.ingestItem(message('b', 2, { status: 'sending', text: '/test' }));
+        expect(paginator.latestMessage?.id).toBe('b');
+
+        // ...and the server answers with an `error` message under the same id
+        paginator.ingestItem(
+          message('b', 2, { type: 'error', text: 'Sorry, command test' }),
+        );
+
+        expect(paginator.latestMessage?.id).toBe('a');
+        expect(paginator.latestMessageAt).toBe(at('2020-01-01T00:00:01.000Z'));
+      });
+
+      it('advance once an ephemeral giphy preview is sent', () => {
+        const paginator = buildPaginator();
+        paginator.ingestItem(message('a', 1));
+        paginator.ingestItem(
+          message('giphy', 2, { status: 'sending', text: '/giphy hi' }),
+        );
+        paginator.ingestItem(
+          message('giphy', 2, { type: 'ephemeral', command: 'giphy' }),
+        );
+        expect(paginator.latestMessage?.id).toBe('a');
+
+        paginator.ingestItem(message('giphy', 2, { type: 'regular', command: 'giphy' }));
+
+        expect(paginator.latestMessage?.id).toBe('giphy');
+        expect(paginator.latestMessage?.type).toBe('regular');
+      });
+
+      it('skip them in a reply list too', () => {
+        const paginator = buildPaginator('parent');
+        paginator.ingestItem(message('r1', 1, { parent_id: 'parent' }));
+        paginator.ingestItem(
+          message('r2', 2, { parent_id: 'parent', status: 'sending' }),
+        );
+
+        paginator.ingestItem(message('r2', 2, { parent_id: 'parent', type: 'error' }));
+
+        expect(paginator.latestMessage?.id).toBe('r1');
+      });
+
+      it('fall back to the previous message when the stored latest stops counting', () => {
+        const paginator = buildPaginator();
+        paginator.ingestItem(message('a', 1));
+        paginator.ingestItem(message('b', 2));
+        expect(paginator.latestMessage?.id).toBe('b');
+
+        // a change written to the store without going through the paginator's ingest
+        trackingIndex.setOne(message('b', 2, { type: 'error' }));
+        paginator.onEntitiesChanged({ changedIds: new Set(['b']) });
+
+        expect(paginator.latestMessage?.id).toBe('a');
+      });
     });
 
     it('auto-tracks on ingestion for the main channel list too', () => {
@@ -6299,7 +6461,8 @@ describe('MessagePaginator', () => {
           created_at: convertDateToTimestamp('2020-01-01T00:00:02.000Z'),
         }),
       );
-      // A system message is the newest LOADED item, but the config keeps it from becoming the latest.
+      // A system message is the newest LOADED item, but the config keeps it from moving
+      // `latestMessageAt`.
       paginator.ingestItem(
         createMessage({
           id: 'sys',
@@ -6308,14 +6471,14 @@ describe('MessagePaginator', () => {
           created_at: convertDateToTimestamp('2020-01-01T00:00:03.000Z'),
         }),
       );
-      expect(paginator.latestMessage?.id).toBe('m1');
+      expect(paginator.latestMessageAt).toBe(at('2020-01-01T00:00:02.000Z'));
       // the newest loaded item, unfiltered
       expect(paginator.anchoredHeadItem?.id).toBe('sys');
 
-      // Hard-removing the tracked latest must recompute to the previous NON-system message (m0),
-      // not to the newest loaded item (which is the system message).
+      // Hard-removing m1 must move `latestMessageAt` to the previous NON-system message (m0), not
+      // to the newest loaded item (which is the system message).
       paginator.removeItem({ id: 'm1' });
-      expect(paginator.latestMessage?.id).toBe('m0');
+      expect(paginator.latestMessageAt).toBe(at('2020-01-01T00:00:01.000Z'));
     });
   });
 

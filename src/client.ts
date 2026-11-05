@@ -709,13 +709,21 @@ export class StreamChat extends ChatApi {
    *   second argument, as on the generated methods; pass `undefined`.
    * @param   requestOptions - Per-request options such as an abort `signal`. Never serialized
    *   into the request (optional).
-   * @returns The application settings response.
+   * @returns The application settings response. A failed request is not kept in
+   *   {@link appSettingsPromise}, so the next call fetches again.
    */
   async getAppSettings(
     _request?: Record<string, never>,
     requestOptions?: StreamRequestOptions,
   ) {
-    return await (this.appSettingsPromise = this.getApp(undefined, requestOptions));
+    const promise = this.getApp(undefined, requestOptions);
+    this.appSettingsPromise = promise;
+    try {
+      return await promise;
+    } catch (error) {
+      if (this.appSettingsPromise === promise) this.appSettingsPromise = undefined;
+      throw error;
+    }
   }
 
   /**
@@ -1055,11 +1063,13 @@ export class StreamChat extends ChatApi {
     // Scans all loaded channels; `applyMessageDeletionForUser` filters by author ID.
     for (const channel of this.channelManager.values()) {
       if (channel) {
-        channel.messagePaginator.applyMessageDeletionForUser({
+        const deletedMessages = channel.messagePaginator.applyMessageDeletionForUser({
           userId: user.id,
           hardDelete,
           deletedAt: deletedAt ?? nowNs(),
         });
+        // the server keeps the unread count on a soft bulk delete
+        if (hardDelete) channel._lowerUnreadCountForDeletedMessages(deletedMessages);
         channel.pinnedMessagesPaginator.applyMessageDeletionForUser({
           userId: user.id,
           hardDelete,

@@ -18,6 +18,7 @@ import { AppResponseFields } from '../../../src';
 import * as Utils from '../../../src/utils';
 import { beforeEach } from 'node:test';
 import { convertDateToTimestamp } from '../test-utils/time';
+import { MockOfflineDB } from '../offline-support/MockOfflineDB';
 
 /**
  * Utility to generate a  file
@@ -1475,6 +1476,78 @@ describe('AttachmentManager', () => {
       const getUploadConfigCheck = (attachmentManager as any).getUploadConfigCheck;
       const noSizeResult = await getUploadConfigCheck(blob);
       expect(noSizeResult).toEqual({ uploadBlocked: false });
+    });
+
+    describe('when the app settings cannot be fetched', () => {
+      const file = generateFile({ name: 'test.gif', type: 'image/gif' });
+
+      const setupFailedFetch = () => {
+        const result = setup();
+        const { mockClient } = result;
+        const error = new Error('Network Error');
+        mockClient.appSettingsPromise = undefined;
+        mockClient.getAppSettings = vi.fn().mockRejectedValue(error);
+        const offlineDb = new MockOfflineDB({ client: mockClient });
+        mockClient.setOfflineDBApi(offlineDb);
+        return { ...result, error, offlineDb };
+      };
+
+      it('checks against the offline database copy', async () => {
+        const {
+          messageComposer: { attachmentManager },
+          offlineDb,
+        } = setupFailedFetch();
+        offlineDb.getAppSettings.mockResolvedValue(defaultAppSettings);
+
+        const result = await attachmentManager.getUploadConfigCheck(file);
+
+        expect(offlineDb.getAppSettings).toHaveBeenCalledWith({ userId: 'user-id' });
+        expect(result).toEqual({
+          uploadBlocked: true,
+          reason: 'allowed_file_extensions',
+        });
+      });
+
+      it('checks against the offline database copy when a cached request failed', async () => {
+        const {
+          messageComposer: { attachmentManager },
+          mockClient,
+          offlineDb,
+        } = setupFailedFetch();
+        const rejected = Promise.reject(new Error('Network Error'));
+        rejected.catch(() => null);
+        mockClient.appSettingsPromise = rejected;
+        offlineDb.getAppSettings.mockResolvedValue(defaultAppSettings);
+
+        const result = await attachmentManager.getUploadConfigCheck(file);
+
+        expect(result).toEqual({
+          uploadBlocked: true,
+          reason: 'allowed_file_extensions',
+        });
+      });
+
+      it('rethrows the fetch error without an offline database copy', async () => {
+        const {
+          error,
+          messageComposer: { attachmentManager },
+          offlineDb,
+        } = setupFailedFetch();
+        offlineDb.getAppSettings.mockResolvedValue(null);
+
+        await expect(attachmentManager.getUploadConfigCheck(file)).rejects.toBe(error);
+      });
+
+      it('rethrows the fetch error when the offline database read fails', async () => {
+        const {
+          error,
+          messageComposer: { attachmentManager },
+          offlineDb,
+        } = setupFailedFetch();
+        offlineDb.getAppSettings.mockRejectedValue(new Error('DB Error'));
+
+        await expect(attachmentManager.getUploadConfigCheck(file)).rejects.toBe(error);
+      });
     });
   });
 

@@ -1323,13 +1323,15 @@ describe('Channel local unread count (readEvents.localUnreadCountEnabled)', func
 
 		it('a system message', function () {
 			const { client, channel } = setupChannel({ localUnreadCountEnabled: true });
-			// the system message is then not the channel's latest message
+			// the system message then does not move the channel's `last_message_at`
 			client._addChannelConfig({
 				cid: channel.cid,
 				config: { skip_last_msg_update_for_system_msgs: true },
 			});
 			seedLatestWindow(channel, [msgAt('m1', 1), msgAt('system', 2, { type: 'system' })]);
-			expect(channel.messagePaginator.latestMessage?.id).toBe('m1');
+			expect(channel.messagePaginator.latestMessageAt).toBe(
+				convertDateToTimestamp(at(1).toISOString()),
+			);
 
 			const event = channel.markReadLocally();
 
@@ -1599,6 +1601,28 @@ describe('Channel _handleChannelEvent', function () {
 
 			expect(channel.state.members).to.be.empty;
 		});
+
+		it('member.removed drops the removed member from the read state and the receipts', () => {
+			const lastRead = convertDateToTimestamp(new Date('2026-01-02T00:00:00.000Z'));
+			channel._initializeState({
+				members: [generateMember({ user }), generateMember({ user: otherUser })],
+				read: [
+					{ last_read: lastRead, unread_messages: 0, user },
+					{ last_read: lastRead, unread_messages: 0, user: otherUser },
+				],
+			});
+			expect(channel.messageReceiptsTracker.getUserProgress(otherUser.id)).toBeTruthy();
+
+			channel._handleChannelEvent({
+				type: 'member.removed',
+				user,
+				member: generateMember({ user: otherUser }),
+			});
+
+			expect(channel.state.read).to.have.keys([user.id]);
+			expect(channel.messageReceiptsTracker.getUserProgress(otherUser.id)).toBeNull();
+			expect(channel.messageReceiptsTracker.getUserProgress(user.id)).toBeTruthy();
+		});
 	});
 
 	describe('watchers and members publish a new reference', () => {
@@ -1811,7 +1835,6 @@ describe('Channel _handleChannelEvent', function () {
 				'message.updated',
 				'member.added',
 				'member.updated',
-				'member.removed',
 			];
 
 			for (const event of events) {
@@ -1842,7 +1865,6 @@ describe('Channel _handleChannelEvent', function () {
 				'message.updated',
 				'member.added',
 				'member.updated',
-				'member.removed',
 			];
 
 			for (const event of events) {
@@ -2353,6 +2375,136 @@ describe('Channel _handleChannelEvent', function () {
 			expect(
 				channel.messagePaginator.items?.find((m) => m.id === message.id),
 			).toBeUndefined();
+		});
+
+		it('message.deleted hard delete of an unread message lowers the own unread count', function () {
+			const message = generateMsg({ cid: channel.cid, user: otherUser });
+			channel.messagePaginator.ingestItem(message);
+			seedOwnUnreadCount(channel, 2);
+
+			channel._handleChannelEvent({
+				type: 'message.deleted',
+				user: otherUser,
+				hard_delete: true,
+				message,
+			});
+
+			expect(channel.state.unreadCount).to.equal(1);
+		});
+
+		it('message.deleted soft delete lowers the own unread count once, a later hard delete does not', function () {
+			const message = generateMsg({ cid: channel.cid, user: otherUser });
+			channel.messagePaginator.ingestItem(message);
+			seedOwnUnreadCount(channel, 2);
+			const deletedMessage = {
+				...message,
+				type: 'deleted',
+				deleted_at: convertDateToTimestamp(),
+			};
+
+			channel._handleChannelEvent({
+				type: 'message.deleted',
+				user: otherUser,
+				message: deletedMessage,
+			});
+			expect(channel.state.unreadCount).to.equal(1);
+
+			channel._handleChannelEvent({
+				type: 'message.deleted',
+				user: otherUser,
+				hard_delete: true,
+				message: deletedMessage,
+			});
+			expect(channel.state.unreadCount).to.equal(1);
+		});
+
+		it('message.deleted does not lower the own unread count for a message already read', function () {
+			const message = generateMsg({ cid: channel.cid, user: otherUser });
+			channel.messagePaginator.ingestItem(message);
+			seedOwnUnreadCount(channel, 2);
+			channel.state.read = {
+				...channel.state.read,
+				[user.id]: {
+					...channel.state.read[user.id],
+					last_read: convertDateToTimestamp(),
+				},
+			};
+
+			channel._handleChannelEvent({
+				type: 'message.deleted',
+				user: otherUser,
+				hard_delete: true,
+				message,
+			});
+
+			expect(channel.state.unreadCount).to.equal(2);
+		});
+
+		it("user.messages.deleted hard delete lowers the own unread count by the user's unread messages", function () {
+			const thirdUser = { id: 'third-user' };
+			channel.messagePaginator.ingestItem(
+				generateMsg({ cid: channel.cid, user: otherUser }),
+			);
+			channel.messagePaginator.ingestItem(
+				generateMsg({ cid: channel.cid, user: thirdUser }),
+			);
+			channel.messagePaginator.ingestItem(
+				generateMsg({ cid: channel.cid, user: otherUser }),
+			);
+			seedOwnUnreadCount(channel, 3);
+
+			channel._handleChannelEvent({
+				type: 'user.messages.deleted',
+				cid: channel.cid,
+				user: otherUser,
+				hard_delete: true,
+			});
+
+			expect(channel.state.unreadCount).to.equal(1);
+		});
+
+		it('user.messages.deleted hard delete counts unread messages outside the newest interval', function () {
+			// e.g. a channel opened at its first unread message: the loaded interval does not reach the
+			// newest message
+			channel.messagePaginator.ingestPage({
+				page: [
+					generateMsg({ cid: channel.cid, user: otherUser }),
+					generateMsg({ cid: channel.cid, user: otherUser }),
+				],
+				isHead: false,
+				isTail: false,
+				setActive: true,
+			});
+			expect(channel.messagePaginator.anchoredHeadItem).toBeUndefined();
+			seedOwnUnreadCount(channel, 5);
+
+			channel._handleChannelEvent({
+				type: 'user.messages.deleted',
+				cid: channel.cid,
+				user: otherUser,
+				hard_delete: true,
+			});
+
+			expect(channel.state.unreadCount).to.equal(3);
+		});
+
+		it('user.messages.deleted soft delete keeps the own unread count, as the server does', function () {
+			channel.messagePaginator.ingestItem(
+				generateMsg({ cid: channel.cid, user: otherUser }),
+			);
+			channel.messagePaginator.ingestItem(
+				generateMsg({ cid: channel.cid, user: otherUser }),
+			);
+			seedOwnUnreadCount(channel, 2);
+
+			channel._handleChannelEvent({
+				type: 'user.messages.deleted',
+				cid: channel.cid,
+				user: otherUser,
+				soft_delete: true,
+			});
+
+			expect(channel.state.unreadCount).to.equal(2);
 		});
 
 		it('message.deleted soft delete updates message in messagePaginator', function () {

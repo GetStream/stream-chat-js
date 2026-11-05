@@ -140,6 +140,44 @@ describe('StreamChat getInstance', () => {
 		expect(config.params).not.toHaveProperty('signal');
 		expect(config.params).not.toHaveProperty('timeout');
 	});
+
+	// A failed request (e.g. on a cold start while offline) must not stay cached, or every later
+	// `appSettingsPromise` reader fails for the rest of the session.
+	it('getAppSettings does not keep a failed request', async () => {
+		const client = new StreamChat('key');
+		client.tokenManager.getToken = () => 'mock-token';
+		const requestSpy = vi
+			.spyOn(client.axiosInstance, 'request')
+			.mockRejectedValueOnce(new Error('Network Error'))
+			.mockResolvedValueOnce({ data: { app: { name: 'app' } }, status: 200 });
+
+		await expect(client.getAppSettings()).rejects.toThrow('Network Error');
+		expect(client.appSettingsPromise).toBeUndefined();
+
+		const appSettings = await client.getAppSettings();
+		expect(appSettings.app).toEqual({ name: 'app' });
+		expect(client.appSettingsPromise).toBeDefined();
+		expect(requestSpy).toHaveBeenCalledTimes(2);
+	});
+
+	it('getAppSettings keeps a newer request when an older one fails', async () => {
+		const client = new StreamChat('key');
+		client.tokenManager.getToken = () => 'mock-token';
+		let rejectFirst;
+		vi.spyOn(client.axiosInstance, 'request')
+			.mockImplementationOnce(
+				() => new Promise((_resolve, reject) => (rejectFirst = reject)),
+			)
+			.mockResolvedValueOnce({ data: { app: { name: 'app' } }, status: 200 });
+
+		const first = client.getAppSettings();
+		await client.getAppSettings();
+		const newer = client.appSettingsPromise;
+		rejectFirst(new Error('Network Error'));
+
+		await expect(first).rejects.toThrow('Network Error');
+		expect(client.appSettingsPromise).toBe(newer);
+	});
 });
 
 describe('StreamChat config(s) store', () => {
