@@ -2440,6 +2440,73 @@ describe('Channel _handleChannelEvent', function () {
 			expect(channel.state.unreadCount).to.equal(2);
 		});
 
+		it("user.messages.deleted hard delete lowers the own unread count by the user's unread messages", function () {
+			const thirdUser = { id: 'third-user' };
+			channel.messagePaginator.ingestItem(
+				generateMsg({ cid: channel.cid, user: otherUser }),
+			);
+			channel.messagePaginator.ingestItem(
+				generateMsg({ cid: channel.cid, user: thirdUser }),
+			);
+			channel.messagePaginator.ingestItem(
+				generateMsg({ cid: channel.cid, user: otherUser }),
+			);
+			seedOwnUnreadCount(channel, 3);
+
+			channel._handleChannelEvent({
+				type: 'user.messages.deleted',
+				cid: channel.cid,
+				user: otherUser,
+				hard_delete: true,
+			});
+
+			expect(channel.state.unreadCount).to.equal(1);
+		});
+
+		it('user.messages.deleted hard delete counts unread messages outside the newest interval', function () {
+			// e.g. a channel opened at its first unread message: the loaded interval does not reach the
+			// newest message
+			channel.messagePaginator.ingestPage({
+				page: [
+					generateMsg({ cid: channel.cid, user: otherUser }),
+					generateMsg({ cid: channel.cid, user: otherUser }),
+				],
+				isHead: false,
+				isTail: false,
+				setActive: true,
+			});
+			expect(channel.messagePaginator.anchoredHeadItem).toBeUndefined();
+			seedOwnUnreadCount(channel, 5);
+
+			channel._handleChannelEvent({
+				type: 'user.messages.deleted',
+				cid: channel.cid,
+				user: otherUser,
+				hard_delete: true,
+			});
+
+			expect(channel.state.unreadCount).to.equal(3);
+		});
+
+		it('user.messages.deleted soft delete keeps the own unread count, as the server does', function () {
+			channel.messagePaginator.ingestItem(
+				generateMsg({ cid: channel.cid, user: otherUser }),
+			);
+			channel.messagePaginator.ingestItem(
+				generateMsg({ cid: channel.cid, user: otherUser }),
+			);
+			seedOwnUnreadCount(channel, 2);
+
+			channel._handleChannelEvent({
+				type: 'user.messages.deleted',
+				cid: channel.cid,
+				user: otherUser,
+				soft_delete: true,
+			});
+
+			expect(channel.state.unreadCount).to.equal(2);
+		});
+
 		it('message.deleted soft delete updates message in messagePaginator', function () {
 			const message = generateMsg({
 				cid: channel.cid,

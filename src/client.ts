@@ -1063,11 +1063,13 @@ export class StreamChat extends ChatApi {
     // Scans all loaded channels; `applyMessageDeletionForUser` filters by author ID.
     for (const channel of this.channelManager.values()) {
       if (channel) {
-        channel.messagePaginator.applyMessageDeletionForUser({
+        const deletedMessages = channel.messagePaginator.applyMessageDeletionForUser({
           userId: user.id,
           hardDelete,
           deletedAt: deletedAt ?? nowNs(),
         });
+        // the server keeps the unread count on a soft bulk delete
+        if (hardDelete) channel._lowerUnreadCountForDeletedMessages(deletedMessages);
         channel.pinnedMessagesPaginator.applyMessageDeletionForUser({
           userId: user.id,
           hardDelete,
