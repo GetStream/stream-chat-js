@@ -65,11 +65,14 @@ const setup = () => {
   return { client, manager };
 };
 
-const dispatchEvent = async (client: StreamChat, event: Event) => {
-  client.dispatchEvent(event);
-
+const drainPipelines = async (client: StreamChat) => {
   const pipelines = Array.from(client.scheduledMessages.pipelines.values());
   await Promise.all(pipelines.map((pipeline) => pipeline.drain()));
+};
+
+const dispatchEvent = async (client: StreamChat, event: Event) => {
+  client.dispatchEvent(event);
+  await drainPipelines(client);
 };
 
 const itemsOf = (paginator: ScheduledMessagePaginator) => paginator.items ?? [];
@@ -531,28 +534,27 @@ describe('ScheduledMessageManager', () => {
         await vi.waitFor(() => expect(querySpy).toHaveBeenCalledTimes(2));
       });
 
-      it('does not reload the lists when connection recovery is turned off', async () => {
+      it('reloads the loaded lists when connection recovery is turned off', async () => {
         const { client, querySpy } = await setupWithLoadedLists();
-        const recovered = vi.fn();
-        client.on('connection.recovered', recovered);
         client.connectionRecovery.updateConfig({ enabled: false });
 
         reconnect(client);
-        await new Promise((resolve) => setTimeout(resolve, 0));
 
-        expect(recovered).not.toHaveBeenCalled();
-        expect(querySpy).not.toHaveBeenCalled();
+        await vi.waitFor(() => expect(querySpy).toHaveBeenCalledTimes(2));
       });
 
       it('does not reload a channel list that a channel response refreshed since', async () => {
         const { client, manager, querySpy } = await setupWithLoadedLists();
-        client.connectionRecovery.updateConfig({ enabled: false });
+        const recovered = new Promise((resolve) =>
+          client.on('connection.recovered', resolve),
+        );
+
         reconnect(client);
-
         manager.hydrateChannelState(cid, []);
-        await dispatchEvent(client, { type: 'connection.recovered' });
+        await recovered;
+        await drainPipelines(client);
 
-        await vi.waitFor(() => expect(querySpy).toHaveBeenCalledTimes(1));
+        expect(querySpy).toHaveBeenCalledTimes(1);
         expect(querySpy).toHaveBeenCalledWith(
           expect.objectContaining({ filter: { status: ACTIVE_STATUSES } }),
         );
