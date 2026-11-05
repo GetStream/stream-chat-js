@@ -351,17 +351,6 @@ These are full items in [Dead code and leftovers](#dead-code); listed here so th
 - **Evidence / scenario:** After a remount, inactive threads still show replies while their item index and message-store links are empty, so edits and reactions no longer reach those replies until the thread reloads. Duplicate ingestion into the emptied index is unverified. Untested.
 - **Suggested change:** Dispose only on release from the store, or clear `state.items` with the index so the next activation reseeds; add an unregister then register test.
 
-<a id="poll-update-type"></a>
-
-#### `poll.update` requires `id` and `name`
-
-`bug` · confidence: high · pre-release: no · polls
-
-- **Where:** `src/poll.ts:337`
-- **What:** `data: Exclude<UpdatePollRequest, 'id'>`; `Exclude` on an object type is a no-op, so `id` (overwritten by the method) is still required. Carried from v9.
-- **Evidence / scenario:** `poll.update({ name: 'x' })` fails to compile (`UpdatePollRequest.id: string`, `src/gen/models/index.ts:10850`).
-- **Suggested change:** `Omit<UpdatePollRequest, 'id'>` (widening, not breaking).
-
 <a id="thread-participants-rebuilt"></a>
 
 #### `ThreadState.participants` rows are rebuilt with fake timestamps
