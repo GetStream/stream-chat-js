@@ -19,6 +19,7 @@ import type { LiveLocationManagerConfig } from '../LiveLocationManager';
 import type { SearchControllerConfig } from '../search/SearchController';
 import type { NotificationManagerConfig } from '../notifications/types';
 import type { ReminderManagerConfig } from '../reminders/ReminderManager';
+import type { ScheduledMessageManagerConfig } from '../scheduledMessages/types';
 import type {
   AttachmentManagerConfig,
   CommandsConfig,
@@ -450,6 +451,15 @@ const REMINDER_FIELDS: Record<keyof ReminderManagerConfig, ConfigNode> = {
   },
 };
 
+const SCHEDULED_MESSAGE_MANAGER_FIELDS: Record<
+  keyof ScheduledMessageManagerConfig,
+  ConfigNode
+> = {
+  paginator: paginatorGroup(
+    "The scheduled message lists: all of the user's and each channel's. The server returns at most 100 per page.",
+  ),
+};
+
 const CONNECTION_RECOVERY_FIELDS: Record<
   keyof ConnectionRecoveryManagerConfig,
   ConfigNode
@@ -588,6 +598,11 @@ const CLIENT_FIELDS: Record<keyof ClientDeclarativeConfig, ConfigNode> = {
     fields: REMINDER_FIELDS,
     kind: 'group',
   },
+  scheduledMessages: {
+    description: 'Scheduled message lists and their paging.',
+    fields: SCHEDULED_MESSAGE_MANAGER_FIELDS,
+    kind: 'group',
+  },
   threads: {
     description: 'The thread list manager.',
     fields: THREAD_MANAGER_FIELDS,
@@ -630,6 +645,18 @@ const CHANNEL_FIELDS: Record<keyof ChannelDeclarativeConfig, ConfigNode> = {
       enabled: {
         description:
           'Offers threaded replies. The server must also allow them per channel type (`replies`), and a server "no" wins.',
+        kind: 'value',
+        type: 'boolean',
+      },
+    },
+    kind: 'group',
+  },
+  scheduledMessages: {
+    description: 'Scheduling messages to be sent later.',
+    fields: {
+      enabled: {
+        description:
+          'Offers scheduling messages. The app must also have the feature (its scheduled message limits are in the channel server config), and a server "no" wins. Without the own `schedule-message` capability scheduling stays off.',
         kind: 'value',
         type: 'boolean',
       },

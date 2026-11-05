@@ -1,4 +1,5 @@
 import type { StreamChat } from '../client';
+import type { DeclarativePaginatorConfig } from '../pagination/paginators/BasePaginator';
 import type {
   FindEventHandlerParams,
   InsertEventHandlerPayload,
@@ -89,6 +90,10 @@ export type ScheduledMessageRequestHandlers = {
   scheduleMessageRequest?: ScheduleMessageRequestFn;
   sendScheduledMessageNowRequest?: SendScheduledMessageNowRequestFn;
   updateScheduledMessageRequest?: UpdateScheduledMessageRequestFn;
+};
+
+export type ScheduledMessageManagerConfig = {
+  paginator?: DeclarativePaginatorConfig;
 };
 
 export type ScheduledMessageManagerOptions = {

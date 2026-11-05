@@ -1,24 +1,32 @@
 import type { Channel } from '../channel';
 import type { ScheduledMessageLimits } from './types';
 
-export const DEFAULT_SCHEDULED_MESSAGE_LIMITS: ScheduledMessageLimits = {
-  maxLeadTimeSeconds: 120 * 24 * 60 * 60,
-  maxPerChannel: 10,
-  maxPerUser: 100,
-  minLeadTimeSeconds: 60,
-};
+type ChannelServerConfig = Channel['serverConfig'];
 
-export const getScheduledMessageLimits = (channel: Channel): ScheduledMessageLimits => {
+const isLimit = (value: number | undefined): value is number => typeof value === 'number';
+
+export const getScheduledMessageLimitsFromServerConfig = (
+  serverConfig: ChannelServerConfig,
+): ScheduledMessageLimits | undefined => {
   const {
-    scheduled_messages_max_lead_time_seconds:
-      maxLeadTimeSeconds = DEFAULT_SCHEDULED_MESSAGE_LIMITS.maxLeadTimeSeconds,
-    scheduled_messages_max_per_channel:
-      maxPerChannel = DEFAULT_SCHEDULED_MESSAGE_LIMITS.maxPerChannel,
-    scheduled_messages_max_per_user:
-      maxPerUser = DEFAULT_SCHEDULED_MESSAGE_LIMITS.maxPerUser,
-    scheduled_messages_min_lead_time_seconds:
-      minLeadTimeSeconds = DEFAULT_SCHEDULED_MESSAGE_LIMITS.minLeadTimeSeconds,
-  } = channel.serverConfig ?? {};
+    scheduled_messages_max_lead_time_seconds: maxLeadTimeSeconds,
+    scheduled_messages_max_per_channel: maxPerChannel,
+    scheduled_messages_max_per_user: maxPerUser,
+    scheduled_messages_min_lead_time_seconds: minLeadTimeSeconds,
+  } = serverConfig ?? {};
 
-  return { maxLeadTimeSeconds, maxPerChannel, maxPerUser, minLeadTimeSeconds };
+  const hasEveryLimit =
+    isLimit(maxLeadTimeSeconds) &&
+    isLimit(maxPerChannel) &&
+    isLimit(maxPerUser) &&
+    isLimit(minLeadTimeSeconds);
+
+  if (!hasEveryLimit) return undefined;
+
+  const limits = { maxLeadTimeSeconds, maxPerChannel, maxPerUser, minLeadTimeSeconds };
+
+  return limits;
 };
+
+export const getScheduledMessageLimits = (channel: Channel) =>
+  getScheduledMessageLimitsFromServerConfig(channel.serverConfig);

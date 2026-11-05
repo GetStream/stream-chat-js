@@ -3,6 +3,7 @@ import { EntityStore } from '../entityStore/EntityStore';
 import { EventHandlerPipeline } from '../EventHandlerPipeline';
 import { ScheduledMessagePaginator } from '../pagination/paginators/ScheduledMessagePaginator';
 import { sanitizeOutgoingAttachments } from '../utils';
+import type { DeclarativePaginatorConfig } from '../pagination/paginators/BasePaginator';
 import { WithSubscriptions } from '../utils/WithSubscriptions';
 import { SCHEDULED_MESSAGE_STATUS, ScheduledMessageErrorReason } from './constants';
 import {
@@ -24,6 +25,7 @@ import type {
   DefaultScheduledMessageRequest,
   RemoveScheduledMessageEventHandlersParams,
   ScheduledMessageIdRequestParams,
+  ScheduledMessageManagerConfig,
   ScheduledMessageManagerEventHandlerContext,
   ScheduledMessageManagerEventHandlers,
   ScheduledMessageManagerEventType,
@@ -64,6 +66,7 @@ export class ScheduledMessageManager extends WithSubscriptions {
   private receivedVersion = 0;
   private receivedVersions = new Map<string, number>();
   private hydratedCids = new Set<string>();
+  private paginatorConfig: DeclarativePaginatorConfig | undefined;
   private channelPaginators = new Map<string, ScheduledMessagePaginator>();
   private paginatorUnsubscribeFunctions: Array<() => void> = [];
   private eventHandlerPipelines = new Map<
@@ -133,6 +136,7 @@ export class ScheduledMessageManager extends WithSubscriptions {
     new ScheduledMessagePaginator({
       cid,
       client: this.client,
+      paginatorOptions: { declarativeConfig: this.paginatorConfig },
       resolveLatest: this.resolveLatest,
       store: this.store,
     });
@@ -276,6 +280,14 @@ export class ScheduledMessageManager extends WithSubscriptions {
     const pipeline = this.eventHandlerPipelines.get(eventType);
 
     handlers.forEach((params) => pipeline?.remove(params));
+  };
+
+  public initializeConfig = (config?: ScheduledMessageManagerConfig) => {
+    this.paginatorConfig = config?.paginator;
+
+    this.paginators.forEach((paginator) =>
+      paginator.initializeConfig(this.paginatorConfig),
+    );
   };
 
   public reload = async () => {

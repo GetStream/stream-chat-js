@@ -16,7 +16,9 @@ export const getScheduleBlockReason = (
   composer: MessageComposer,
   commandSearchSource: CommandSearchSource,
 ): ScheduledMessageBlockReason | undefined => {
-  const { locationComposer, pollId } = composer;
+  const { channel, locationComposer, pollId } = composer;
+
+  if (!channel.scheduledMessagesEnabled) return ScheduledMessageBlockReason.Unavailable;
 
   if (getCurrentCommand(composer, commandSearchSource)) {
     return ScheduledMessageBlockReason.Command;

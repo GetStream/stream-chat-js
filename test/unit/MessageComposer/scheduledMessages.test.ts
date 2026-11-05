@@ -29,6 +29,12 @@ const cid = `${channelType}:${channelId}`;
 const scheduledAt = new Date('2030-01-01T10:00:00.000Z');
 const createdAt = msToNs(Date.UTC(2026, 9, 15));
 const giphyCommand = { name: 'giphy', args: '[text]', description: 'Post a random gif' };
+const scheduledMessageLimits = {
+  scheduled_messages_max_lead_time_seconds: 120 * 24 * 60 * 60,
+  scheduled_messages_max_per_channel: 10,
+  scheduled_messages_max_per_user: 100,
+  scheduled_messages_min_lead_time_seconds: 60,
+};
 
 const generateScheduledMessage = (
   data: Partial<ScheduledMessageResponse> = {},
@@ -115,7 +121,7 @@ const setup = ({
 };
 
 const addGiphyCommand = (channel: Channel) =>
-  stubServerConfig(channel, { commands: [giphyCommand] });
+  stubServerConfig(channel, { ...scheduledMessageLimits, commands: [giphyCommand] });
 
 const blockedWarning = (reason: ScheduledMessageBlockReason) =>
   expect.objectContaining({
@@ -513,7 +519,10 @@ describe('MessageComposer scheduled messages', () => {
       const { channel, client } = setup();
       const composer = channel.messageComposer;
       composer.updateConfig({ attachments: { pendingUploadsEnabled: true } });
-      channel.data = { ...channel.data, own_capabilities: ['upload-file'] } as never;
+      channel.data = {
+        ...channel.data,
+        own_capabilities: ['schedule-message', 'upload-file'],
+      } as never;
       const appSettings = { app: { file_upload_config: {}, image_upload_config: {} } };
       client.appSettingsPromise = Promise.resolve(appSettings as never);
       vi.spyOn(client, 'getAppSettings').mockResolvedValue(appSettings as never);

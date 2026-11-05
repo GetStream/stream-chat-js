@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  DEFAULT_SCHEDULED_MESSAGE_LIMITS,
-  getScheduledMessageLimits,
-} from '../../../src';
+import { getScheduledMessageLimits } from '../../../src';
 import { getClientWithUser } from '../test-utils/getClient';
 import { stubServerConfig } from '../test-utils/stubServerConfig';
 
@@ -31,19 +28,14 @@ describe('getScheduledMessageLimits', () => {
     });
   });
 
-  it('falls back to the default limits for missing fields', () => {
+  it('returns no limits when the server config lacks some of them', () => {
     const channel = createChannel();
     stubServerConfig(channel, { scheduled_messages_max_per_channel: 3 });
 
-    expect(getScheduledMessageLimits(channel)).toEqual({
-      ...DEFAULT_SCHEDULED_MESSAGE_LIMITS,
-      maxPerChannel: 3,
-    });
+    expect(getScheduledMessageLimits(channel)).toBeUndefined();
   });
 
-  it('uses the default limits without a server config', () => {
-    expect(getScheduledMessageLimits(createChannel())).toEqual(
-      DEFAULT_SCHEDULED_MESSAGE_LIMITS,
-    );
+  it('returns no limits without a server config', () => {
+    expect(getScheduledMessageLimits(createChannel())).toBeUndefined();
   });
 });

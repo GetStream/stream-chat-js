@@ -378,6 +378,7 @@ export class StreamChat extends ChatApi {
     this.networkConnection.initializeConfig(config?.networkConnection);
     this.wsConnection.initializeConfig(config?.wsConnection);
     this.reminders.initializeConfig(config?.reminders);
+    this.scheduledMessages.initializeConfig(config?.scheduledMessages);
     this.threads.initializeConfig(config?.threads);
     this.messageDeliveryReporter.initializeConfig(config?.messageDelivery);
     this.notifications.initializeConfig(config?.notifications);
