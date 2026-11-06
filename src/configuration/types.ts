@@ -13,6 +13,7 @@ import type { MessageComposerConfig } from '../messageComposer/configuration/typ
 import type { Channel, ChannelConfig } from '../channel';
 import type { Thread, ThreadConfig } from '../thread';
 import type { ReminderManagerConfig } from '../reminders/ReminderManager';
+import type { ScheduledMessageManagerConfig } from '../scheduledMessages/types';
 import type { NotificationManager } from '../notifications/NotificationManager';
 import type { NotificationManagerConfig } from '../notifications/types';
 import type { MessageDeliveryReporterConfig } from '../messageDelivery/MessageDeliveryReporter';
@@ -94,6 +95,8 @@ export type ChannelDeclarativeConfig = {
   replies?: Partial<ChannelConfig['replies']>;
   /** Message reminders, ANDed with the channel type's `user_message_reminders`. */
   userMessageReminders?: Partial<ChannelConfig['userMessageReminders']>;
+  /** Scheduled messages, ANDed with the app having the feature. */
+  scheduledMessages?: Partial<ChannelConfig['scheduledMessages']>;
   /** Delivery receipts, ANDed with the channel type's `delivery_events`. */
   deliveryEvents?: Partial<ChannelConfig['deliveryEvents']>;
   // `commands` is absent: the server owns the list.
@@ -153,6 +156,7 @@ export type ClientDeclarativeConfig = {
    * its elements to `number | undefined`, which `ReminderManager.updateConfig` rejects.
    */
   reminders?: Partial<ReminderManagerConfig>;
+  scheduledMessages?: ScheduledMessageManagerConfig;
 };
 
 /**

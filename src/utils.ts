@@ -107,6 +107,13 @@ export const channelHasReadEvents = (channel?: Channel) => {
   return !(Array.isArray(ownCapabilities) && !ownCapabilities.includes('read-events'));
 };
 
+export const channelCanScheduleMessages = (channel?: Channel) => {
+  const ownCapabilities = channel?.data?.own_capabilities;
+  return !(
+    Array.isArray(ownCapabilities) && !ownCapabilities.includes('schedule-message')
+  );
+};
+
 /** Whether read events are off and the channel keeps a client-local unread count. */
 export const channelTracksReadLocally = (channel?: Channel) =>
   !!channel &&

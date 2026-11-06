@@ -1051,6 +1051,8 @@ describe('MessageComposer', () => {
         draftId: null,
         showReplyInChannel: false,
         editedMessage: null,
+        editedScheduledMessage: null,
+        failedScheduledMessage: null,
       });
     });
 
@@ -1074,6 +1076,8 @@ describe('MessageComposer', () => {
           id: 'test-message-id',
           text: 'Hello world',
         }),
+        editedScheduledMessage: null,
+        failedScheduledMessage: null,
       });
     });
 
@@ -1395,6 +1399,8 @@ describe('MessageComposer', () => {
           id: 'edited-message-id',
           poll_id: 'test-poll-id',
         }),
+        editedScheduledMessage: null,
+        failedScheduledMessage: null,
       });
     });
 

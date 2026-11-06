@@ -9,7 +9,10 @@ import { MessagePaginator, PinnedMessagePaginator } from './pagination/paginator
 import { createMessageOperations, reflectReactionEvent } from './messageOperations';
 import type { MessageOperations } from './messageOperations';
 import type { OperationRequestFn } from './messageOperations/types';
+import type { ScheduledMessageRequestHandlers } from './scheduledMessages/types';
+import { getScheduledMessageLimitsFromServerConfig } from './scheduledMessages/limits';
 import {
+  channelCanScheduleMessages,
   channelHasReadEvents,
   formatMessage,
   generateChannelTempCid,
@@ -122,7 +125,7 @@ export type ChannelConfig = {
     sendMessageRequest?: OperationRequestFn<'send'>;
     retrySendMessageRequest?: OperationRequestFn<'retry'>;
     updateMessageRequest?: OperationRequestFn<'update'>;
-  };
+  } & ScheduledMessageRequestHandlers;
   /**
    * Typing indicators. Defaults to enabled. ANDed with the channel type's `typing_events`. Read by
    * {@link Channel.keystroke} and {@link Channel.stopTyping}.
@@ -146,6 +149,12 @@ export type ChannelConfig = {
    * Message reminders. Defaults to enabled. ANDed with the channel type's `user_message_reminders`.
    */
   userMessageReminders: { enabled: boolean };
+  /**
+   * Scheduled messages. Defaults to enabled. ANDed with the app's scheduled message limits in the
+   * channel's server config, which are present only when the app has the feature. Together with the
+   * own `schedule-message` capability it decides {@link Channel.scheduledMessagesEnabled}.
+   */
+  scheduledMessages: { enabled: boolean };
   /** Delivery receipts. Defaults to enabled. ANDed with the channel type's `delivery_events`. */
   deliveryEvents: { enabled: boolean };
   /**
@@ -170,6 +179,7 @@ const ownDeclarativeConfig = (
     readEvents,
     replies,
     requestHandlers,
+    scheduledMessages,
     typingEvents,
     userMessageReminders,
   } = slice;
@@ -179,6 +189,7 @@ const ownDeclarativeConfig = (
     readEvents,
     replies,
     requestHandlers,
+    scheduledMessages,
     typingEvents,
     userMessageReminders,
   } as Partial<ChannelConfig>;
@@ -189,6 +200,7 @@ export const DEFAULT_CHANNEL_CONFIG: ChannelConfig = deepFreezeConfig({
   deliveryEvents: { enabled: true },
   readEvents: { enabled: true, localUnreadCountEnabled: false },
   replies: { enabled: true },
+  scheduledMessages: { enabled: true },
   typingEvents: { enabled: true },
   userMessageReminders: { enabled: true },
 });
@@ -365,6 +377,11 @@ export class Channel extends ChannelApi {
       deliveryEvents: { enabled: channelConfig?.delivery_events },
       readEvents: { enabled: channelConfig?.read_events },
       replies: { enabled: channelConfig?.replies },
+      scheduledMessages: {
+        enabled: channelConfig
+          ? !!getScheduledMessageLimitsFromServerConfig(channelConfig)
+          : undefined,
+      },
       typingEvents: { enabled: channelConfig?.typing_events },
       userMessageReminders: { enabled: channelConfig?.user_message_reminders },
     };
@@ -454,10 +471,16 @@ export class Channel extends ChannelApi {
   override async sendMessage(...args: Parameters<ChannelApi['sendMessage']>) {
     const [request, requestOptions] = args;
 
-    return await super.sendMessage(
+    const response = await super.sendMessage(
       { ...request, message: sanitizeOutgoingAttachments(request.message) },
       requestOptions,
     );
+
+    if (response.scheduled_message) {
+      this.getClient().scheduledMessages.upsertToState(response.scheduled_message);
+    }
+
+    return response;
   }
 
   async sendReaction(...args: Parameters<ChatApi['sendReaction']>) {
@@ -1111,6 +1134,14 @@ export class Channel extends ChannelApi {
    */
   get readEventsEnabled(): boolean {
     return this.config.readEvents.enabled && channelHasReadEvents(this);
+  }
+
+  /**
+   * Whether the current user can schedule messages in this channel: {@link ChannelConfig.scheduledMessages}
+   * is on and the own `schedule-message` capability allows it.
+   */
+  get scheduledMessagesEnabled(): boolean {
+    return this.config.scheduledMessages.enabled && channelCanScheduleMessages(this);
   }
 
   /**
@@ -1862,6 +1893,7 @@ export class Channel extends ChannelApi {
       state: true,
       ...options,
     };
+    const scheduledMessagesVersion = this.getClient().scheduledMessages.version;
 
     const state = this.id
       ? await this.getOrCreate(queryPayload, requestOptions)
@@ -1880,6 +1912,11 @@ export class Channel extends ChannelApi {
     }
 
     this.getClient()._addChannelConfig(channel);
+    this.getClient().scheduledMessages.hydrateChannelState(
+      channel.cid,
+      state.scheduled_messages,
+      scheduledMessagesVersion,
+    );
 
     // The composer's server config arrives here for a channel opened via `ensure({ type, id })`. A
     // composer with registered subscriptions hears it through the store, one without is told here.
