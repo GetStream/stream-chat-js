@@ -54,7 +54,7 @@ export class ApiClient {
   async sendRequest<T>(
     method: Method,
     url: string,
-    pathParams?: Record<string, string>,
+    pathParams?: Record<string, string | number>,
     queryParams?: Record<string, unknown>,
     body?: unknown,
     requestContentType?: string,
@@ -108,7 +108,7 @@ export class ApiClient {
     return this._doRequest<T>('delete', url, null, { params }).then((r) => r.body);
   }
 
-  private resolveUrl(url: string, pathParams?: Record<string, string>): string {
+  private resolveUrl(url: string, pathParams?: Record<string, string | number>): string {
     let resolved = url;
     if (pathParams) {
       for (const [key, value] of Object.entries(pathParams)) {
