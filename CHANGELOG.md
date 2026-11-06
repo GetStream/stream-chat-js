@@ -1,3 +1,13 @@
+## [9.55.0](https://github.com/GetStream/stream-chat-js/compare/v9.54.4...v9.55.0) (2026-11-06)
+
+### Bug Fixes
+
+* add scheduled message limits and app defaults to response types ([#1976](https://github.com/GetStream/stream-chat-js/issues/1976)) ([c9349ea](https://github.com/GetStream/stream-chat-js/commit/c9349ea36a77aecfb2dc1bca5199a3f04e3148da))
+
+### Features
+
+* support conversations: keep in deleteUsers ([#1908](https://github.com/GetStream/stream-chat-js/issues/1908)) ([f798c26](https://github.com/GetStream/stream-chat-js/commit/f798c26ef502ae82c9f05a4efcf459cd393483a7)), closes [GetStream/chat#18338](https://github.com/GetStream/chat/issues/18338) [GetStream/chat#18338](https://github.com/GetStream/chat/issues/18338)
+
 ## [9.54.4](https://github.com/GetStream/stream-chat-js/compare/v9.54.3...v9.54.4) (2026-10-29)
 
 ### Bug Fixes
