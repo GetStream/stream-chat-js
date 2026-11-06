@@ -77,6 +77,7 @@ import {
 import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
 import { ReminderManager } from './reminders';
+import { mergeOwnPushPreferences } from './pushPreferences/utils';
 import type { AbstractOfflineDB } from './offline-support';
 import { FixedSizeQueueCache } from './utils/FixedSizeQueueCache';
 import { isEqual } from './utils/mergeWith/mergeWithCore';
@@ -1712,6 +1713,26 @@ export class StreamChat extends ChatApi {
     this.blockedUsers.partialNext({
       userIds: result.blocks.map(({ blocked_user_id }) => blocked_user_id),
     });
+    return result;
+  }
+
+  override async updatePushNotificationPreferences(
+    ...args: Parameters<ChatApi['updatePushNotificationPreferences']>
+  ) {
+    const [{ preferences }] = args;
+    const result = await super.updatePushNotificationPreferences(...args);
+    const { user, userId } = this;
+    if (!user || !userId) return result;
+
+    const pushPreferences = mergeOwnPushPreferences({
+      preferences,
+      previous: user.push_preferences,
+      updated: result.user_preferences?.[userId],
+      userId,
+    });
+    if (pushPreferences !== user.push_preferences) {
+      this.user = { ...user, push_preferences: pushPreferences };
+    }
     return result;
   }
 
