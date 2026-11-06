@@ -1499,6 +1499,35 @@ describe('StreamChat.queryChannels', async () => {
 		stub.restore();
 	});
 
+	it('keeps the active member count of a queried channel after a channel query that omits it', async () => {
+		const client = await getClientWithUser();
+		const channelData = { ...mockChannelQueryResponse.channel, member_count: 5 };
+		const sendRequest = sinon.stub(client.api, 'sendRequest').resolves({
+			channels: [
+				{
+					...mockChannelQueryResponse,
+					channel: { ...channelData, active_member_count: 4 },
+				},
+			],
+		});
+
+		const [channel] = await client.queryChannelsAndHydrate({
+			include_active_member_count: true,
+		});
+		sendRequest.resolves({ ...mockChannelQueryResponse, channel: channelData });
+		await channel.query();
+
+		expect(sendRequest.firstCall.args[4]).to.deep.include({
+			include_active_member_count: true,
+		});
+		expect(channel.state.getLatestValue()).to.deep.include({
+			activeMemberCount: 4,
+			memberCount: 5,
+		});
+
+		sendRequest.restore();
+	});
+
 	it('does not weld a jumped/older window into the newest page when re-hydrating a shared channel on re-query', async () => {
 		const client = await getClientWithUser();
 		const newest = [
