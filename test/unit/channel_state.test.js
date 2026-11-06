@@ -134,6 +134,100 @@ describe('ChannelState member count bridge', () => {
 	});
 });
 
+describe('ChannelState active member count', () => {
+	const setup = (data) => {
+		const client = new StreamChat();
+		const channel = new Channel(client, 'type', 'id', data);
+		return { channel, state: channel.state };
+	};
+
+	const updateChannel = (channel, eventChannel) =>
+		channel._handleChannelEvent({ channel: eventChannel, type: 'channel.updated' });
+
+	it('is undefined until a Query Channels response carries it', () => {
+		const { state } = setup({ member_count: 3 });
+
+		expect(state.getLatestValue().activeMemberCount).to.equal(undefined);
+	});
+
+	it('initializes from channel.data.active_member_count', () => {
+		const { channel, state } = setup({ active_member_count: 2, member_count: 3 });
+
+		expect(state.getLatestValue()).to.deep.include({
+			activeMemberCount: 2,
+			memberCount: 3,
+		});
+		expect(channel.data.active_member_count).to.equal(2);
+	});
+
+	it('keeps the last known count when a data update omits it', () => {
+		const { channel, state } = setup({ active_member_count: 2, member_count: 3 });
+		const watchResponseChannel = { member_count: 3, name: 'renamed' };
+
+		channel.data = watchResponseChannel;
+
+		expect(state.getLatestValue().activeMemberCount).to.equal(2);
+		expect(channel.data.active_member_count).to.equal(2);
+		expect(watchResponseChannel).to.eql({ member_count: 3, name: 'renamed' });
+	});
+
+	it('takes a new count from the server over the carried one', () => {
+		const { channel, state } = setup({ active_member_count: 2, member_count: 3 });
+
+		channel.data = { active_member_count: 3, member_count: 3 };
+
+		expect(state.getLatestValue().activeMemberCount).to.equal(3);
+	});
+
+	it('moves with member_count when members are added or removed', () => {
+		const { channel, state } = setup({ active_member_count: 8, member_count: 10 });
+
+		updateChannel(channel, { member_count: 12 });
+		expect(state.getLatestValue().activeMemberCount).to.equal(10);
+
+		updateChannel(channel, { member_count: 11 });
+		expect(state.getLatestValue().activeMemberCount).to.equal(9);
+	});
+
+	it('stays unchanged on a channel.updated event without member_count', () => {
+		const { channel, state } = setup({ active_member_count: 8, member_count: 10 });
+
+		updateChannel(channel, { name: 'renamed' });
+
+		expect(state.getLatestValue()).to.deep.include({
+			activeMemberCount: 8,
+			memberCount: 10,
+		});
+	});
+
+	it('never moves below zero', () => {
+		const { channel, state } = setup({ active_member_count: 1, member_count: 5 });
+
+		updateChannel(channel, { member_count: 2 });
+
+		expect(state.getLatestValue().activeMemberCount).to.equal(0);
+	});
+
+	it('never moves above member_count', () => {
+		const { channel, state } = setup({ active_member_count: 4 });
+
+		channel.data = { member_count: 2 };
+
+		expect(state.getLatestValue().activeMemberCount).to.equal(2);
+	});
+
+	it('keeps the count in state when channel.data is cleared', () => {
+		const { channel, state } = setup({ active_member_count: 2, member_count: 3 });
+
+		channel.data = undefined;
+
+		expect(state.getLatestValue()).to.deep.include({
+			activeMemberCount: 2,
+			memberCount: 3,
+		});
+	});
+});
+
 describe('ChannelState memberCount subscribers', () => {
 	it('does NOT re-notify memberCount subscribers on a members-only update', () => {
 		const client = new StreamChat();

@@ -78,6 +78,7 @@ export type MembersState = {
    * member change and is authoritative, while counting per member event double-counts.
    */
   memberCount: number;
+  activeMemberCount?: number;
 };
 
 export type MembershipState = {
@@ -195,6 +196,7 @@ export class ChannelState extends StateStore<ChannelStateData> {
       read: {},
       members: {},
       memberCount: 0,
+      activeMemberCount: undefined,
       membership: {} as ChannelMemberResponse,
       ownCapabilities: [],
       // written by the `Channel.data` setter, which the channel calls once its state exists

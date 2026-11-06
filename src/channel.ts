@@ -96,6 +96,12 @@ type WatchQueryInFlight = {
   waitingCount: number;
 };
 
+type CarriedActiveMemberCountParams = {
+  memberCount: number | undefined;
+  next: Partial<ChannelResponse>;
+  previous: Partial<ChannelResponse> | undefined;
+};
+
 /** Re-exported here because `src/messageOperations` is not in the root barrel. */
 export type {
   DefaultOperationRequest,
@@ -182,6 +188,34 @@ const ownDeclarativeConfig = (
     typingEvents,
     userMessageReminders,
   } as Partial<ChannelConfig>;
+};
+
+const getCarriedActiveMemberCount = ({
+  memberCount,
+  next,
+  previous,
+}: CarriedActiveMemberCountParams) => {
+  if (typeof next.active_member_count === 'number') return undefined;
+  if (typeof previous?.active_member_count !== 'number') return undefined;
+
+  const {
+    active_member_count: previousActiveMemberCount,
+    member_count: previousMemberCount,
+  } = previous;
+  const memberCountChange =
+    typeof memberCount === 'number' && typeof previousMemberCount === 'number'
+      ? memberCount - previousMemberCount
+      : 0;
+  const shiftedActiveMemberCount = Math.max(
+    0,
+    previousActiveMemberCount + memberCountChange,
+  );
+  const carriedActiveMemberCount =
+    typeof memberCount === 'number'
+      ? Math.min(shiftedActiveMemberCount, memberCount)
+      : shiftedActiveMemberCount;
+
+  return carriedActiveMemberCount;
 };
 
 export const DEFAULT_CHANNEL_CONFIG: ChannelConfig = deepFreezeConfig({
@@ -1185,11 +1219,13 @@ export class Channel extends ChannelApi {
   }
 
   /**
-   * Reads `state.data`. Assigning publishes `data`, `memberCount` and `ownCapabilities` in one update.
-   * If the object omits `member_count` or `own_capabilities`, the last known values are carried onto
-   * a copy (the assigned object is not changed). Editing `channel.data.x` in place does not reach
-   * the state. `ownCapabilities` keeps its array while the capabilities stay the same (in any
-   * order), so a subscriber to it is notified only when they change.
+   * Reads `state.data`. Assigning publishes `data`, `memberCount`, `activeMemberCount` and
+   * `ownCapabilities` in one update. If the object omits `member_count`, `active_member_count` or
+   * `own_capabilities`, the last known values are carried onto a copy (the assigned object is not
+   * changed). A carried `active_member_count` moves with `member_count`, since only Query Channels
+   * returns it. Editing `channel.data.x` in place does not reach the state. `ownCapabilities` keeps
+   * its array while the capabilities stay the same (in any order), so a subscriber to it is notified
+   * only when they change.
    */
   get data(): Partial<ChannelResponse> | undefined {
     return this.state.getLatestValue().data;
@@ -1197,6 +1233,7 @@ export class Channel extends ChannelApi {
 
   set data(next: Partial<ChannelResponse> | undefined) {
     const {
+      activeMemberCount: previousActiveMemberCount,
       data: previous,
       memberCount: previousMemberCount,
       ownCapabilities: previousOwnCapabilities,
@@ -1205,6 +1242,13 @@ export class Channel extends ChannelApi {
       typeof next?.member_count !== 'number' && typeof previous?.member_count === 'number'
         ? previous.member_count
         : undefined;
+    const carriedActiveMemberCount = next
+      ? getCarriedActiveMemberCount({
+          memberCount: next.member_count ?? carriedMemberCount,
+          next,
+          previous,
+        })
+      : undefined;
     // `own_capabilities` stays undefined until known, so "not loaded" isn't read as "none"
     const carriedCapabilities =
       !Array.isArray(next?.own_capabilities) && Array.isArray(previous?.own_capabilities)
@@ -1212,20 +1256,28 @@ export class Channel extends ChannelApi {
         : undefined;
 
     const data =
-      next && (carriedMemberCount !== undefined || carriedCapabilities)
+      next &&
+      (carriedMemberCount !== undefined ||
+        carriedActiveMemberCount !== undefined ||
+        carriedCapabilities)
         ? {
             ...next,
             ...(carriedMemberCount !== undefined && { member_count: carriedMemberCount }),
+            ...(carriedActiveMemberCount !== undefined && {
+              active_member_count: carriedActiveMemberCount,
+            }),
             ...(carriedCapabilities && { own_capabilities: carriedCapabilities }),
           }
         : next;
 
     const memberCount = data?.member_count ?? carriedMemberCount;
+    const activeMemberCount = data ? data.active_member_count : previousActiveMemberCount;
     const ownCapabilities = data?.own_capabilities ?? carriedCapabilities ?? [];
     const toKey = (capabilities: readonly string[]) => [...capabilities].sort().join();
     const haveSameOwnCapabilities =
       toKey(previousOwnCapabilities) === toKey(ownCapabilities);
     this.state.partialNext({
+      activeMemberCount,
       data,
       memberCount: memberCount ?? previousMemberCount,
       ownCapabilities: haveSameOwnCapabilities
