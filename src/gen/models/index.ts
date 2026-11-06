@@ -2699,6 +2699,10 @@ export interface ConfigResponse {
   updated_at: TimestampNS;
   supported_video_call_harm_types: Array<string>;
   /**
+   * The version of this configuration moderation currently runs
+   */
+  published_version?: number;
+  /**
    * Configurable image moderation label definitions for dashboard rendering
    */
   ai_image_label_definitions?: Array<AIImageLabelDefinition>;
@@ -2724,6 +2728,25 @@ export interface ConfigResponse {
   llm_config?: LLMConfig;
   velocity_filter_config?: VelocityFilterConfig;
   video_call_rule_config?: VideoCallRuleConfig;
+}
+
+export interface ConfigVersionResponse {
+  /**
+   * When this version was saved
+   */
+  created_at: TimestampNS;
+  /**
+   * ID of the user who saved this version, empty when saved without a user
+   */
+  created_by: string;
+  /**
+   * Whether this is the version moderation currently runs
+   */
+  published: boolean;
+  /**
+   * Sequential version number, per key and team
+   */
+  version: number;
 }
 
 export interface ConnectUserDetailsRequest {
@@ -4140,6 +4163,12 @@ export interface GetConfigResponse {
   config?: ConfigResponse;
 }
 
+export interface GetConfigVersionResponse {
+  duration: string;
+  version: ConfigVersionResponse;
+  config?: ConfigResponse;
+}
+
 export interface GetDraftResponse {
   /**
    * Duration of the request in milliseconds
@@ -4575,6 +4604,18 @@ export interface ListBlockListResponse {
   duration: string;
   blocklists: Array<BlockListResponse>;
   next_cursor?: string;
+}
+
+export interface ListConfigVersionsResponse {
+  duration: string;
+  /**
+   * Retained versions of this configuration, newest first, including the published one
+   */
+  versions: Array<ConfigVersionResponse>;
+  /**
+   * The version moderation currently runs
+   */
+  published_version?: number;
 }
 
 export interface ListDevicesResponse {
@@ -7163,6 +7204,18 @@ export interface PrivacySettingsResponse {
   typing_indicators?: TypingIndicatorsResponse;
 }
 
+export interface PublishConfigVersionRequest {
+  /**
+   * Team associated with the configuration
+   */
+  team?: string;
+}
+
+export interface PublishConfigVersionResponse {
+  duration: string;
+  config?: ConfigResponse;
+}
+
 export type PushLevel = 'all' | 'all_mentions' | 'mentions' | 'direct_mentions' | 'none';
 
 export interface PushPreferenceInput {
@@ -9664,6 +9717,52 @@ export interface RuleBuilderRule {
   action?: RuleBuilderAction;
 }
 
+export interface SaveConfigVersionRequest {
+  /**
+   * Latest version the edit was based on, 0 for a policy without versions. The save is rejected when a newer version exists
+   */
+  base_version: number;
+  /**
+   * Unique identifier for the moderation configuration
+   */
+  key: string;
+  /**
+   * Whether moderation should be performed asynchronously
+   */
+  async?: boolean;
+  /**
+   * Team associated with the configuration
+   */
+  team?: string;
+  ai_audio_config?: AIAudioConfigRequest;
+  ai_image_config?: AIImageConfig;
+  ai_text_config?: AITextConfig;
+  ai_video_config?: AIVideoConfigRequest;
+  automod_platform_circumvention_config?: AutomodPlatformCircumventionConfig;
+  automod_semantic_filters_config?: AutomodSemanticFiltersConfig;
+  automod_toxicity_config?: AutomodToxicityConfig;
+  aws_rekognition_config?: AIImageConfig;
+  block_list_config?: BlockListConfig;
+  bodyguard_config?: AITextConfig;
+  engine?: ModerationEngineConfigRequest;
+  flood_config?: FloodConfig;
+  google_vision_config?: GoogleVisionConfig;
+  intent_config?: IntentConfigRequest;
+  llm_config?: LLMConfig;
+  rule_builder_config?: RuleBuilderConfig;
+  velocity_filter_config?: VelocityFilterConfig;
+  video_call_rule_config?: VideoCallRuleConfig;
+}
+
+export interface SaveConfigVersionResponse {
+  duration: string;
+  version: ConfigVersionResponse;
+  /**
+   * The version moderation currently runs
+   */
+  published_version?: number;
+}
+
 export interface ScheduledMessageChannelResponse {
   /**
    * Channel CID (<type>:<id>)
@@ -11841,6 +11940,10 @@ export interface UserBannedEvent {
    * The type of event: "user.banned" in this case
    */
   type: string;
+  /**
+   * Whether the ban also applies to channels created later by the same creator. Without a channel, check user.banned to tell a global ban from a future-channels-only ban
+   */
+  ban_from_future_channels?: boolean;
   /**
    * The ID of the channel where the target user was banned
    */
