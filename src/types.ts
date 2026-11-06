@@ -419,6 +419,7 @@ export type ChannelAPIResponse = {
   watcher_count?: number;
   watchers?: UserResponse[];
   active_live_locations?: SharedLocationResponse[];
+  scheduled_messages?: ScheduledMessageResponse[];
 };
 
 export type ChannelUpdateOptions = {
@@ -1029,6 +1030,7 @@ export type SendFileAPIResponse = APIResponse & { file: string; thumb_url?: stri
 export type SendMessageAPIResponse = APIResponse & {
   message: MessageResponse;
   pending_message_metadata?: Record<string, string> | null;
+  scheduled_message?: ScheduledMessageResponse;
 };
 
 export type SyncResponse = APIResponse & {
@@ -1165,6 +1167,7 @@ export type BanUserOptions = UnBanUserOptions & {
 };
 
 export type ChannelOptions = {
+  include_scheduled_messages?: boolean;
   limit?: number;
   member_limit?: number;
   message_limit?: number;
@@ -1213,6 +1216,7 @@ export type ChannelQueryOptions = {
   created_by_id?: UserResponse['id'];
   data?: ChannelResponse;
   hide_for_creator?: boolean;
+  include_scheduled_messages?: boolean;
   members?: PaginationOptions;
   messages?: MessagePaginationOptions;
   presence?: boolean;
@@ -1774,6 +1778,7 @@ export type Event = CustomEventData & {
   reaction?: ReactionResponse;
   received_at?: string | Date;
   reminder?: ReminderResponse;
+  scheduled_message?: ScheduledMessageResponse;
   shadow?: boolean;
   team?: string;
   thread?: ThreadResponse;
@@ -2695,7 +2700,8 @@ export type ChannelConfigFields = {
 };
 
 export type ChannelConfigWithInfo = ChannelConfigFields &
-  CreatedAtUpdatedAt & {
+  CreatedAtUpdatedAt &
+  ScheduledMessagesChannelConfig & {
     commands?: CommandResponse[];
     // scheduled message limits, present only when the app has scheduled messages enabled
     scheduled_messages_max_lead_time_seconds?: number;
@@ -3096,6 +3102,7 @@ export type SendMessageOptions = {
   keep_channel_hidden?: boolean;
   pending?: boolean;
   pending_message_metadata?: Record<string, string>;
+  scheduled_at?: string | Date;
   skip_enrich_url?: boolean;
   skip_push?: boolean;
 };
@@ -3617,6 +3624,7 @@ export type APIErrorResponse = {
   StatusCode: number;
   code?: number;
   details?: ErrorResponseDetails;
+  exception_fields?: Record<string, string>;
 };
 
 export class ErrorFromResponse<T> extends Error {
@@ -4893,6 +4901,151 @@ export type QueryRemindersOptions = Pager & {
 export type QueryRemindersResponse = {
   reminders: ReminderResponse[];
   prev?: string;
+  next?: string;
+};
+
+export const ScheduledMessageStatus = {
+  Canceled: 'canceled',
+  Failed: 'failed',
+  Scheduled: 'scheduled',
+  Sending: 'sending',
+  Sent: 'sent',
+} as const;
+
+export type ScheduledMessageStatus =
+  (typeof ScheduledMessageStatus)[keyof typeof ScheduledMessageStatus];
+
+export type ActiveScheduledMessageStatus = Exclude<
+  ScheduledMessageStatus,
+  typeof ScheduledMessageStatus.Canceled | typeof ScheduledMessageStatus.Sent
+>;
+
+export const ScheduledMessageFailureReason = {
+  Banned: 'banned',
+  ChannelDeleted: 'channel_deleted',
+  ChannelFrozen: 'channel_frozen',
+  Expired: 'expired',
+  HookRejected: 'hook_rejected',
+  InternalError: 'internal_error',
+  InvalidMessage: 'invalid_message',
+  ModerationBlocked: 'moderation_blocked',
+  NoPermission: 'no_permission',
+  PendingNotSupported: 'pending_not_supported',
+  UserDeleted: 'user_deleted',
+} as const;
+
+export type ScheduledMessageFailureReason =
+  (typeof ScheduledMessageFailureReason)[keyof typeof ScheduledMessageFailureReason];
+
+export const ScheduledMessageErrorReason = {
+  AlreadySent: 'scheduled_message_already_sent',
+  Canceled: 'scheduled_message_canceled',
+  ChannelLimit: 'scheduled_limit_channel',
+  Conflict: 'scheduled_message_conflict',
+  Disabled: 'scheduled_messages_disabled',
+  IdTaken: 'scheduled_message_id_taken',
+  NotEditable: 'scheduled_message_not_editable',
+  Sending: 'scheduled_message_sending',
+  TooFar: 'scheduled_at_too_far',
+  TooSoon: 'scheduled_at_too_soon',
+  UserLimit: 'scheduled_limit_user',
+} as const;
+
+export type ScheduledMessageErrorReason =
+  (typeof ScheduledMessageErrorReason)[keyof typeof ScheduledMessageErrorReason];
+
+export const ScheduledMessageEventType = {
+  Created: 'scheduled_message.created',
+  Deleted: 'scheduled_message.deleted',
+  Failed: 'scheduled_message.failed',
+  Sent: 'scheduled_message.sent',
+  Updated: 'scheduled_message.updated',
+} as const;
+
+export type ScheduledMessageEventType =
+  (typeof ScheduledMessageEventType)[keyof typeof ScheduledMessageEventType];
+
+export type ScheduledMessagesChannelConfig = {
+  scheduled_messages_max_lead_time_seconds?: number;
+  scheduled_messages_max_per_channel?: number;
+  scheduled_messages_max_per_user?: number;
+  scheduled_messages_min_lead_time_seconds?: number;
+};
+
+export type ScheduledMessageLocation = {
+  created_by_device_id: string;
+  end_at?: string;
+  latitude?: number;
+  longitude?: number;
+};
+
+export type ScheduledMessageContent = CustomMessageData & {
+  text: string;
+  attachments?: Attachment[];
+  html?: string;
+  mentioned_channel?: boolean;
+  mentioned_group_ids?: string[];
+  mentioned_here?: boolean;
+  mentioned_roles?: string[];
+  mentioned_users?: string[];
+  mml?: string;
+  parent_id?: string;
+  pin_expires?: string;
+  pinned?: boolean;
+  poll_id?: string;
+  quoted_message_id?: string;
+  restricted_visibility?: string[];
+  shared_location?: ScheduledMessageLocation;
+  show_in_channel?: boolean;
+  silent?: boolean;
+  type?: MessageLabel;
+};
+
+export type ScheduledMessageChannelResponse = {
+  cid: string;
+  id: string;
+  type: string;
+  image?: string;
+  name?: string;
+};
+
+export type ScheduledMessageResponse = {
+  id: string;
+  cid: string;
+  created_at: string;
+  message: ScheduledMessageContent;
+  scheduled_at: string;
+  status: ScheduledMessageStatus;
+  updated_at: string;
+  user: UserResponse;
+  channel?: ScheduledMessageChannelResponse;
+  failure_reason?: ScheduledMessageFailureReason;
+};
+
+export type ScheduledMessageAPIResponse = APIResponse & {
+  scheduled_message: ScheduledMessageResponse;
+};
+
+export type UpdateScheduledMessageOptions = {
+  message?: Message;
+  scheduled_at?: string | Date;
+};
+
+export type ScheduledMessageFilters = {
+  cid?: string;
+  status?: ActiveScheduledMessageStatus[];
+};
+
+export type ScheduledMessageSort = { scheduled_at: 1 };
+
+export type QueryScheduledMessagesOptions = Omit<Pager, 'prev'> & {
+  filter?: ScheduledMessageFilters;
+  sort?: ScheduledMessageSort | ScheduledMessageSort[];
+  user_id?: string;
+};
+
+export type QueryScheduledMessagesResponse = APIResponse & {
+  scheduled_messages: ScheduledMessageResponse[];
   next?: string;
 };
 

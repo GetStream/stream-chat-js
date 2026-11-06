@@ -204,6 +204,8 @@ import type {
   QueryReactionsOptions,
   QueryRemindersOptions,
   QueryRemindersResponse,
+  QueryScheduledMessagesOptions,
+  QueryScheduledMessagesResponse,
   QuerySegmentsOptions,
   QuerySegmentTargetsFilter,
   QueryTeamUsageStatsOptions,
@@ -225,6 +227,7 @@ import type {
   RequestOptions,
   ReviewFlagReportOptions,
   ReviewFlagReportResponse,
+  ScheduledMessageAPIResponse,
   SdkIdentifier,
   SearchAPIResponse,
   SearchMessageSortBase,
@@ -266,6 +269,7 @@ import type {
   UpdatePollOptionAPIResponse,
   UpdatePredefinedFilterOptions,
   UpdateReminderOptions,
+  UpdateScheduledMessageOptions,
   UpdateSegmentData,
   UpdateUserGroupOptions,
   UpdateUserGroupResponse,
@@ -5242,6 +5246,35 @@ export class StreamChat {
       sort: sort && normalizeQuerySort(sort),
       ...rest,
     });
+  }
+
+  async updateScheduledMessage(id: string, options: UpdateScheduledMessageOptions) {
+    return await this.patch<ScheduledMessageAPIResponse>(
+      `${this.baseURL}/scheduled_messages/${encodeURIComponent(id)}`,
+      options,
+    );
+  }
+
+  async deleteScheduledMessage(id: string) {
+    return await this.delete<ScheduledMessageAPIResponse>(
+      `${this.baseURL}/scheduled_messages/${encodeURIComponent(id)}`,
+    );
+  }
+
+  async sendScheduledMessageNow(id: string) {
+    return await this.post<ScheduledMessageAPIResponse>(
+      `${this.baseURL}/scheduled_messages/${encodeURIComponent(id)}/send_now`,
+    );
+  }
+
+  async queryScheduledMessages({ sort, ...rest }: QueryScheduledMessagesOptions = {}) {
+    return await this.post<QueryScheduledMessagesResponse>(
+      `${this.baseURL}/scheduled_messages/query`,
+      {
+        ...rest,
+        sort: sort && normalizeQuerySort(sort),
+      },
+    );
   }
 
   /**
