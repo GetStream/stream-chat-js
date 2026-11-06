@@ -294,6 +294,7 @@ import { ChannelManager } from './channel_manager';
 import { MessageDeliveryReporter } from './messageDelivery';
 import { NotificationManager } from './notifications';
 import { ReminderManager } from './reminders';
+import { mergeOwnPushPreferences } from './pushPreferences/utils';
 import { StateStore } from './store';
 import type { MessageComposer } from './messageComposer';
 import type { AbstractOfflineDB } from './offline-support';
@@ -2542,10 +2543,24 @@ export class StreamChat {
    * @return {<UpsertPushPreferencesResponse>}
    */
   async setPushPreferences(preferences: PushPreference[]) {
-    return await this.post<UpsertPushPreferencesResponse>(
+    const result = await this.post<UpsertPushPreferencesResponse>(
       this.baseURL + '/push_preferences',
       { preferences },
     );
+    const { user, userID } = this;
+    if (!user || !userID) return result;
+
+    const previous = 'push_preferences' in user ? user.push_preferences : undefined;
+    const pushPreferences = mergeOwnPushPreferences({
+      preferences,
+      previous,
+      updated: result.user_preferences?.[userID],
+      userId: userID,
+    });
+    if (pushPreferences !== previous) {
+      this.user = { ...user, push_preferences: pushPreferences };
+    }
+    return result;
   }
 
   /**
