@@ -1,3 +1,13 @@
+## [10.0.0-rc.35](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.34...v10.0.0-rc.35) (2026-11-06)
+
+### Bug Fixes
+
+* accept poll.update data without id ([#1997](https://github.com/GetStream/stream-chat-js/issues/1997)) ([c5863a9](https://github.com/GetStream/stream-chat-js/commit/c5863a9d2ccd44cd6994270ef8d5c3bc4637d21a))
+
+### Features
+
+* update to latest API spec ([#2005](https://github.com/GetStream/stream-chat-js/issues/2005)) ([5668f20](https://github.com/GetStream/stream-chat-js/commit/5668f208d156a69c1508136e668ef84777f5a459))
+
 ## [10.0.0-rc.34](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.33...v10.0.0-rc.34) (2026-11-05)
 
 ### Bug Fixes
