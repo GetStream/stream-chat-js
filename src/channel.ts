@@ -6,7 +6,11 @@ import { MessageComposer } from './messageComposer';
 import { MessageReceiptsTracker } from './messageDelivery';
 import type { ReadStoreReconcileMeta } from './messageDelivery';
 import { MessagePaginator, PinnedMessagePaginator } from './pagination/paginators';
-import { createMessageOperations, reflectReactionEvent } from './messageOperations';
+import {
+  createMessageOperations,
+  reflectMessageMarkEvent,
+  reflectReactionEvent,
+} from './messageOperations';
 import type { MessageOperations } from './messageOperations';
 import type { OperationRequestFn } from './messageOperations/types';
 import {
@@ -462,6 +466,18 @@ export class Channel extends ChannelApi {
 
   async sendReaction(...args: Parameters<ChatApi['sendReaction']>) {
     return await this.getClient().sendReaction(...args);
+  }
+
+  /**
+   * Marks a message for the current user, for instance `played` when the user played a voice note.
+   * A mark is written once: a repeat returns `created: false` and nothing else happens, and the
+   * message author's own mark is a no-op. The server sends `message.mark_added` to the author and
+   * to the marker once per written mark (CHA-6554).
+   *
+   * @param args - `({ id }, { type })`: the message ID and the mark type, for instance `'played'`.
+   */
+  async sendMessageMark(...args: Parameters<ChatApi['createMessageMark']>) {
+    return await this.getClient().createMessageMark(...args);
   }
 
   async deleteReaction(...args: Parameters<ChatApi['deleteReaction']>) {
@@ -2668,6 +2684,11 @@ export class Channel extends ChannelApi {
           channel.data = newChannelData;
         }
         break;
+      case 'message.mark_added':
+        if (event.mark) {
+          reflectMessageMarkEvent(this.getClient(), event.mark);
+        }
+        break;
       case 'reaction.new':
       case 'reaction.updated':
       case 'reaction.deleted':
@@ -2866,6 +2887,13 @@ export class Channel extends ChannelApi {
     const message = this.messagePaginator.getItem(event.message.id);
     if (message) {
       event.message.own_reactions = message.own_reactions;
+      // Marks are derived per viewer and never sent on events that replace the message (CHA-6554).
+      if (event.message.mark_groups === undefined && message.mark_groups !== undefined) {
+        event.message.mark_groups = message.mark_groups;
+      }
+      if (event.message.own_marks === undefined && message.own_marks !== undefined) {
+        event.message.own_marks = message.own_marks;
+      }
     }
   }
 

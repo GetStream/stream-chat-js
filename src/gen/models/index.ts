@@ -1248,6 +1248,7 @@ export interface ChannelConfigWithInfo {
   scheduled_messages_min_lead_time_seconds?: number;
   allowed_flag_reasons?: Array<string>;
   blocklists?: Array<BlockListOptions>;
+  mark_types?: Array<string>;
   /**
    * Sets thresholds for AI moderation
    */
@@ -1843,6 +1844,7 @@ export const ChannelOwnCapability = {
   SEND_CUSTOM_EVENTS: 'send-custom-events',
   SEND_LINKS: 'send-links',
   SEND_MESSAGE: 'send-message',
+  SEND_MESSAGE_MARK: 'send-message-mark',
   SEND_POLL: 'send-poll',
   SEND_REACTION: 'send-reaction',
   SEND_REPLY: 'send-reply',
@@ -2903,6 +2905,25 @@ export interface CreateGuestResponse {
    * User response object
    */
   user: UserResponse;
+}
+
+export interface CreateMessageMarkRequest {
+  /**
+   * The mark type. Only played is available: the acting user played the message's audio attachment
+   */
+  type: string;
+}
+
+export interface CreateMessageMarkResponse {
+  /**
+   * Whether this request wrote the mark. False on a repeat, on the author's own mark, and when the message is not one the user can mark
+   */
+  created: boolean;
+  duration: string;
+  /**
+   * A mark one user put on one message, for example played on a voice note. A mark is written once and never removed by users.
+   */
+  mark: MessageMarkResponse;
 }
 
 export interface CreatePollOptionRequest {
@@ -4660,6 +4681,17 @@ export interface MarkDeliveredResponse {
   duration: string;
 }
 
+export interface MarkGroupResponse {
+  /**
+   * Number of users who marked the message with this type
+   */
+  count: number;
+  /**
+   * Every user who marked the message with this type, newest first
+   */
+  latest_by: Array<MessageMarkerResponse>;
+}
+
 export interface MarkReadRequest {
   /**
    * ID of the message that is considered last read by client
@@ -5068,6 +5100,70 @@ export interface MessageFlagResponse {
    * User response object
    */
   user?: UserResponse;
+}
+
+export interface MessageMarkAddedEvent {
+  /**
+   * Date/time of creation
+   */
+  created_at: TimestampNS;
+  /**
+   * The marked message
+   */
+  message_id: string;
+  custom: Record<string, any>;
+  /**
+   * A mark one user put on one message, for example played on a voice note. A mark is written once and never removed by users.
+   */
+  mark: MessageMarkResponse;
+  /**
+   * The type of event: "message.mark_added" in this case
+   */
+  type: string;
+  /**
+   * The ID of the channel holding the marked message
+   */
+  channel_id?: string;
+  /**
+   * The type of the channel holding the marked message
+   */
+  channel_type?: string;
+  /**
+   * The CID of the channel holding the marked message
+   */
+  cid?: string;
+  received_at?: TimestampNS;
+  user?: UserResponseCommonFields;
+}
+
+export interface MessageMarkResponse {
+  /**
+   * When the mark was written
+   */
+  created_at: TimestampNS;
+  /**
+   * The marked message
+   */
+  message_id: string;
+  /**
+   * The mark type, for example played
+   */
+  type: string;
+  /**
+   * The user who marked the message
+   */
+  user_id: string;
+}
+
+export interface MessageMarkerResponse {
+  /**
+   * When the mark was written
+   */
+  created_at: TimestampNS;
+  /**
+   * The user who marked the message
+   */
+  user_id: string;
 }
 
 export interface MessageModerationResult {
@@ -5488,6 +5584,10 @@ export interface MessageResponse {
    */
   mentioned_roles?: Array<string>;
   /**
+   * The viewer's own marks on this message, for example played. Omitted when marks are off for the channel type
+   */
+  own_marks?: Array<OwnMarkResponse>;
+  /**
    * List of users who participate in thread
    */
   thread_participants?: Array<UserResponse>;
@@ -5500,6 +5600,10 @@ export interface MessageResponse {
    * Contains image moderation information
    */
   image_labels?: Record<string, Array<string>>;
+  /**
+   * On the viewer's own messages: who marked them, per mark type (for example played). Omitted when marks are off for the channel type
+   */
+  mark_groups?: Record<string, MarkGroupResponse>;
   member?: ChannelMemberPartialResponse;
   /**
    * Channel member data for the users mentioned in the message, keyed by user id. Only present when the app has member custom on mentioned users enabled, and only for the first two mentioned users of each message
@@ -5752,6 +5856,10 @@ export interface MessageWithChannelResponse {
    */
   mentioned_roles?: Array<string>;
   /**
+   * The viewer's own marks on this message, for example played. Omitted when marks are off for the channel type
+   */
+  own_marks?: Array<OwnMarkResponse>;
+  /**
    * List of users who participate in thread
    */
   thread_participants?: Array<UserResponse>;
@@ -5764,6 +5872,10 @@ export interface MessageWithChannelResponse {
    * Contains image moderation information
    */
   image_labels?: Record<string, Array<string>>;
+  /**
+   * On the viewer's own messages: who marked them, per mark type (for example played). Omitted when marks are off for the channel type
+   */
+  mark_groups?: Record<string, MarkGroupResponse>;
   member?: ChannelMemberPartialResponse;
   /**
    * Channel member data for the users mentioned in the message, keyed by user id. Only present when the app has member custom on mentioned users enabled, and only for the first two mentioned users of each message
@@ -6830,6 +6942,17 @@ export interface OCRRule {
 
 export interface OnlyUserID {
   id: string;
+}
+
+export interface OwnMarkResponse {
+  /**
+   * When the mark was written
+   */
+  created_at: TimestampNS;
+  /**
+   * The mark type, for example played
+   */
+  type: string;
 }
 
 export interface OwnUserResponse {
@@ -10425,6 +10548,7 @@ export interface SearchResultMessage {
   mentioned_group_ids?: Array<string>;
   mentioned_groups?: Array<UserGroupResponse>;
   mentioned_roles?: Array<string>;
+  own_marks?: Array<OwnMarkResponse>;
   thread_participants?: Array<UserResponse>;
   /**
    * Represents channel in chat
@@ -10433,6 +10557,7 @@ export interface SearchResultMessage {
   draft?: DraftResponse;
   i18n?: Record<string, string>;
   image_labels?: Record<string, Array<string>>;
+  mark_groups?: Record<string, MarkGroupResponse>;
   member?: ChannelMemberPartialResponse;
   mentioned_channel_members?: Record<string, ChannelMemberPartialResponse>;
   moderation?: ModerationV2Response;
@@ -12650,6 +12775,7 @@ export type WSClientEvent =
   | ({ type: 'member.updated' } & MemberUpdatedEvent)
   | ({ type: 'message.deleted' } & MessageDeletedEvent)
   | ({ type: 'message.delivered' } & MessageDeliveredEvent)
+  | ({ type: 'message.mark_added' } & MessageMarkAddedEvent)
   | ({ type: 'message.new' } & MessageNewEvent)
   | ({ type: 'message.pending' } & PendingMessageEvent)
   | ({ type: 'message.read' } & MessageReadEvent)
@@ -12744,6 +12870,7 @@ export type WSEvent =
   | ({ type: 'member.updated' } & MemberUpdatedEvent)
   | ({ type: 'message.deleted' } & MessageDeletedEvent)
   | ({ type: 'message.delivered' } & MessageDeliveredEvent)
+  | ({ type: 'message.mark_added' } & MessageMarkAddedEvent)
   | ({ type: 'message.new' } & MessageNewEvent)
   | ({ type: 'message.pending' } & PendingMessageEvent)
   | ({ type: 'message.read' } & MessageReadEvent)
