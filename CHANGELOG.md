@@ -1,3 +1,285 @@
+## [10.0.0](https://github.com/GetStream/stream-chat-js/compare/v9.55.0...v10.0.0) (2026-11-06)
+
+### ⚠ BREAKING CHANGES
+
+* release v10 from master as latest (#2004)
+* `LocalAttachmentMetadata` requires only `id`. `file` and `uploadState` are
+optional, so code that reads them from a `LocalAttachment` must handle `undefined`. A `file` must
+come with its `uploadState`: `localMetadata: { id, file }` no longer compiles, and an attachment
+in that shape from untyped code is no longer sent. An attachment with neither field (a custom type
+or `giphy`) is sent as it is, takes no upload slot, and counts as content in `hasSendableData`.
+* CustomCommandData is no longer exported. Delete its augmentations and imports. A leftover augmentation still compiles and has no effect, so search for the name rather than relying on tsc. An app that wants a closed set of command names declares its own union. See ai-docs/v10-breaking-changes.md#custom-data-augmentation.
+* the client no longer dispatches capabilities.changed and
+the name is no longer an EventType. Subscribe to channel.state instead:
+channel.state.subscribeWithSelector(({ ownCapabilities }) => ({ ownCapabilities }), fn).
+See ai-docs/v10-breaking-changes.md#capabilities-changed-removed.
+* AttachmentManager.uploadAttachment() is removed. Retry a failed upload, or upload an attachment you built yourself such as a voice recording, with `attachmentManager.uploadFile(attachment)`. It keeps the attachment's id, fields and position, and runs the pre- and post-upload middleware, which uploadAttachment() skipped. uploadFile() does not check `isUploadEnabled`, so check it first to skip the upload as uploadAttachment() did. uploadFile() always resolves to an attachment: where a result was checked for `undefined`, check `result.localMetadata.uploadState` instead. See ai-docs/v10-breaking-changes.md#upload-attachment-removed.
+* the message composer installs the command middlewares by default: createActiveCommandGuardMiddleware and createCommandStringExtractionMiddleware in the text composer chain, createCommandInjectionMiddleware in the composition chain and createDraftCommandInjectionMiddleware in the draft composition chain. Typing `/giphy cats` activates giphy and leaves `cats` in the text, and a command picked with `textComposer.setCommand()` is sent with its name. Delete your own installs of these middlewares. A UI without a command chip removes all four by id: `stream-io/text-composer/active-command-guard` and `stream-io/text-composer/command-string-extraction` from `textComposer.middlewareExecutor`, `stream-io/message-composer-middleware/command-string-injection` from `compositionMiddlewareExecutor` and `stream-io/message-composer-middleware/draft-command-string-injection` from `draftCompositionMiddlewareExecutor`. See ai-docs/v10-breaking-changes.md#composer-command-middlewares-default.
+* Channel.watch() resolves with the channel instance to use (the channel, or the instance that superseded it) instead of the server response.
+- watch() sends no query for a channel that is already watched and loaded (watchStatus Watching, initialized, and messagePaginator.hasResults) when it passes no options or the same options as the last successful watch() during the current watch; other options send a query. It no longer refreshes a watched channel: use channel.reload(), and load other messages through channel.messagePaginator (jumpToMessage(), toTail(), toHead()).
+- A watch() while another with the same options is in flight joins it instead of sending a request.
+- Aborting requestOptions.signal ends only that caller's wait; the request is cancelled once every caller waiting for it has aborted.
+- Channel.ensureWatched() is removed (v10 release candidates only); call watch().
+```
+
+## Changelog
+
+- `Channel.watch()` resolves with the channel and sends no query for a
+channel already watched and loaded, unless it asks for options the
+current watch was not sent with. `Channel.ensureWatched()` is removed.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+* remove messageSetToAddToIfDoesNotExist and let the message paginator place every page (#1926)
+* open api hot fixes (#1927)
+* `StreamChatOptions` and `client.options` are removed.
+`new StreamChat(key, config)` and `StreamChat.getInstance(key, config)` take
+the configuration tree (`DeepPartial<InstanceConfigTree>`) as their second
+argument; the `config` wrapper is dropped.
+Option moves:
+- `allowServerSideConnect`, `axiosRequestConfig`, `baseURL`, `browser`,
+  `persistUserOnConnectionFailure` -> `client.<same name>`
+- `notifications` -> `client.notificationManager`
+- top-level axios fields (`timeout`, `httpsAgent`, ...) ->
+  `client.axiosRequestConfig.<key>`
+Example: `new StreamChat(key, { client: { allowServerSideConnect: true } })`.
+`client.persistUserOnConnectionFailure` is no longer a field (use
+`client.config.setConfig('client', { persistUserOnConnectionFailure })`);
+`client.browser` and `client.node` are read-only getters.
+`baseURL`, `axiosRequestConfig` and `notificationManager` are read at
+construction, and the tree copies `axiosRequestConfig` instead of keeping
+your object. See v9-to-v10-migration-guide-client-construction.md.
+* client.activeChannels is removed; use client.channelManager.get(cid) and client.channelManager.values().
+* client.hydrateActiveChannels() is renamed to client.hydrateChannels().
+* client.getChannelById() and client.getChannelByMembers() are removed; use client.channel() or client.channelManager.ensure({ type, id?, data? }).
+* thread.deactivate() is removed; thread.activate() returns the function that ends the activation.
+* channel._disconnect() is renamed to channel.disconnect().
+* channel.disconnected is removed; read the read-only channel.pendingDisposal instead, which only channel.disconnect() sets.
+* when a channel created from members gets a cid another stored instance already holds, the stored instance stays, as in v9, and the new one is marked channel.supersededBy; if the new one is open and the stored one isn't, its unsent composition moves to the stored one, so UIs holding the new instance should switch to channel.supersededBy.
+* channel.initialized is set by query() and create() too, not only by watch().
+* channel search results are not watched; watch a result when it is opened.
+* MessageSearchSource no longer watches the channels it fetches for its results; watch the channel when a result is opened, e.g. with jumpToMessage(id, { watchChannel: true }).
+* adopt TS generator changes (#1896)
+* reenable WS fallback (#1889)
+* thread paginator and manager revamp (#1888)
+* **MessageDeliveryReporter:** The `isLocalUnreadCountEnabled` client option is
+removed. Use `channel.readEvents.localUnreadCountEnabled` in the
+configuration service instead (see above).
+* brand server-sent timestamps as TimestampNS and ship the Date guard (#1884)
+* `connection.changed` is removed. Connectivity is published as two state stores
+and nothing else: `client.networkConnection.state` for the device and `client.wsConnection.state`
+for this client's socket. The event was silent on `closeConnection()` and two error paths, and
+held a drop for five seconds; the stores are written on every transition and publish immediately.
+* `client.wsConnection` is now a `WSConnection` wrapper rather than the
+`StableWSConnection` itself, and is never null. The live socket is `client.wsConnection.connection`,
+replaced on every connect; read `isHealthy`, `isConnecting`, `connect()` and `disconnect()` from the
+wrapper. `StableWSConnection` is constructed with `{ wsConnection }` instead of `{ client }`.
+* `client.defaultWSTimeout` is removed, along with the `WebSocketImpl` and
+`wsUrlParams` client options. They move to the socket's configuration as `connectTimeoutMs`,
+`webSocketImpl` and `urlParams`, set with `client.config.set({ client: { wsConnection: { … } } })`.
+Unlike the fields and options they replace, these survive a reconnect.
+* `ThreadManagerState.lastConnectionDropAt` is removed. Read
+`client.wsConnection.state.lastUnhealthyAt`, which is written on every status transition,
+including the `disconnect()` path the old event was silent about.
+* requests that watch a channel or subscribe to presence now wait for a WebSocket
+connection id instead of silently returning unwatched data. The gate is in `ApiClient._doRequest`,
+so it covers every endpoint carrying `watch` or `presence`, plus `stopWatchingChannel` and
+`longPoll`. With no socket open and none being established the request rejects with "No connection
+id is available"; an explicit `watch: false` is still honoured, and a caller's `AbortSignal`
+abandons the wait. Test fixtures that fake a connected user without a live socket will now throw.
+* a UI that renders a "connection lost" banner must hold the drop itself. The
+socket's store publishes drops the moment they happen, where the old event delayed them by five
+seconds. `client.wsConnection.config.offlineNotificationDisplayDelayMs` (5s) is the shared value to
+wait for; nothing in this package acts on it.
+* `connection.recovered` is no longer dispatched when the socket drops while a
+recovery is running, because every reload in it can have failed. Work keyed off that event will
+correctly stop running for recoveries that recovered nothing.
+* openapi related clean up (#1870)
+* **SearchController:** remove InternalSearchControllerState (#1866)
+* remove response date transform (#1849)
+* `client.instanceConfigurationService` is replaced by `client.config`,
+and the exported class `InstanceConfigurationService` is renamed to
+`InstanceConfigurationRegistry`.
+* `client.setInstanceConfigurationFunction()` is removed. Register
+setup functions with `client.config.setSetupFunction(key, fn)`.
+`client.setMessageComposerSetupFunction()` is unchanged.
+* the per-class setup types are replaced by generic ones keyed by
+instance. Removed: `ChannelSetupFunction`, `ChannelSetupState`,
+`ChannelTearDownFunction`, `MessageComposerSetupFunction`, `MessageComposerSetupState`,
+`MessageComposerTearDownFunction`, `StreamChatSetupFunction`, `StreamChatSetupState`,
+`StreamChatTearDownFunction`, `ThreadSetupFunction`, `ThreadSetupState`,
+`ThreadTearDownFunction`, `SetInstanceConfigurationFunctions`,
+`SetInstanceConfigurationServiceStates` and `SetupFnOf`. Use `InstanceSetupFunction`,
+`InstanceSetupState`, `InstanceSetupTearDownFunction` and `InstanceSetupKey`.
+* `ChannelInstanceConfig` is renamed to `ChannelConfig` and
+`ThreadInstanceConfig` to `ThreadConfig`.
+* `Channel.getConfig()` is removed. Read the server's channel-type
+configuration from `channel.serverConfig`, or the resolved configuration from
+`channel.config`.
+* `client.configs` is renamed to `client.channelServerConfigs` and
+`client.configsStore` to `client.channelServerConfigsStore`. Keys are still cids, so
+lookups translate directly. Prefer `channel.serverConfig`.
+* `channel.config.commands` is renamed to
+`channel.config.availableCommands`. The server owns the list, so it is read-only and
+absent from the declarative configuration tree.
+* `applyCommandValidatorOverride` is no longer exported. Command
+validation is configured through the composer's configuration.
+* `MessageComposerConfig` gains a required `polls`;
+`AttachmentManagerConfig` gains required `enabled` and `customCdn`;
+`LocationComposerConfig` gains a required `minShareDurationMs`. A config object
+built literally must supply them.
+* `linkPreviews.enabled` now defaults to `true`, where it defaulted to
+`false`. It is ANDed with the channel type's `url_enrichment`, so `true` means "no
+opinion, let the server decide"; the old default double-gated the feature and kept it
+off even where the server had enabled it.
+* server flags gate the features they describe, ANDed with the
+registered value rather than the client value winning: `typingEvents` with
+`typing_events`, `readEvents` with `read_events`, `attachments` with `uploads`,
+`polls` with `polls`, `location` with `shared_locations`, and `linkPreviews` with
+`url_enrichment`. Code that set a flag to `true` and assumed it took effect may now
+find the feature off.
+* setters no longer discard a write when the server is masking the
+field. Previously the setter compared against the effective value, so the write was
+dropped and the earlier request was honoured once the server relented. Affects
+`linkPreviewsManager.enabled`, `textComposer.enabled`, `textComposer.maxLengthOnEdit`,
+`textComposer.maxLengthOnSend` and `attachmentManager.maxNumberOfFilesPerMessage`.
+* remove hand-written types and API wrappers (#1836)
+* **i18n:** `Streami18n.init()` now rejects when i18next fails to
+initialize, where it previously logged and resolved. Callers that ignore
+the returned promise will see an unhandled rejection. The instance
+remains usable in its degraded English form either way.
+`Streami18n.brand` is removed; nothing in either UI SDK read it, and a
+custom integration that recognized instances through it should compare
+against its own marker or accept the instance it was handed.
+* **i18n:** share the translation runtime as stream-chat/i18n (#1830)
+* `ChannelManager` keeps its name but is a different class 
+table
+
+Co-authored-by: Ivan Sekovanikj <31964049+isekovanic@users.noreply.github.com>
+* paginator-based message storage replaces
+channel.state.messages and channel.state.last_message_at. The message
+list, thread replies and pinned messages are now owned by
+channel.messagePaginator, thread.messagePaginator and
+channel.pinnedMessagesPaginator. OpenAPI-generated clients replace the
+hand-written request/response types. See
+docs/breaking-changes-v14-v15.md for the full migration guide.
+
+### Bug Fixes
+
+* accept poll.update data without id ([#1997](https://github.com/GetStream/stream-chat-js/issues/1997)) ([c5863a9](https://github.com/GetStream/stream-chat-js/commit/c5863a9d2ccd44cd6994270ef8d5c3bc4637d21a))
+* add docs snippets; fix open api issues ([#1913](https://github.com/GetStream/stream-chat-js/issues/1913)) ([53505e7](https://github.com/GetStream/stream-chat-js/commit/53505e7229f6c42ee39de875a0014f817a2f93eb))
+* add messages received after truncate to state ([#1950](https://github.com/GetStream/stream-chat-js/issues/1950)) ([b178379](https://github.com/GetStream/stream-chat-js/commit/b1783797eb771701acfc5b96670633a8ae7da286))
+* address code issues found while reviewing v10 source comments ([#1922](https://github.com/GetStream/stream-chat-js/issues/1922)) ([2fc319e](https://github.com/GetStream/stream-chat-js/commit/2fc319ed87556d1980f9971df569d6e29a4f35ce))
+* adjust paginator offset when items are removed ([#1842](https://github.com/GetStream/stream-chat-js/issues/1842)) ([61b5a1f](https://github.com/GetStream/stream-chat-js/commit/61b5a1f7b8378a6c0d5d7986b3663f9784d0756f))
+* apply thread reloads and queries to the registered thread ([#1929](https://github.com/GetStream/stream-chat-js/issues/1929)) ([acb33c4](https://github.com/GetStream/stream-chat-js/commit/acb33c4909829bbbb7f9ba5810ae8d3514decf80)), closes [#1913](https://github.com/GetStream/stream-chat-js/issues/1913)
+* avoid types from NodeJS namespace ([#1947](https://github.com/GetStream/stream-chat-js/issues/1947)) ([68fb042](https://github.com/GetStream/stream-chat-js/commit/68fb042586b0039827a552edc270d0ae557c2fc3))
+* bring back reaction apis to channel ([#1906](https://github.com/GetStream/stream-chat-js/issues/1906)) ([d419fe3](https://github.com/GetStream/stream-chat-js/commit/d419fe38a28819c03e3d42d4c5a24f4bca9b146e)), closes [#1897](https://github.com/GetStream/stream-chat-js/issues/1897) [#1897](https://github.com/GetStream/stream-chat-js/issues/1897)
+* channel list reconciliation ([#1942](https://github.com/GetStream/stream-chat-js/issues/1942)) ([f7f9ec8](https://github.com/GetStream/stream-chat-js/commit/f7f9ec8b8b39a82bd141ea2675b894ce22d46800))
+* channel paginator merging bugs ([#1894](https://github.com/GetStream/stream-chat-js/issues/1894)) ([dbbbd75](https://github.com/GetStream/stream-chat-js/commit/dbbbd750f1073b77b2c9de10657e0eb3462c1832)), closes [#1865](https://github.com/GetStream/stream-chat-js/issues/1865)
+* consolidate master and v10 ([#1957](https://github.com/GetStream/stream-chat-js/issues/1957)) ([802a956](https://github.com/GetStream/stream-chat-js/commit/802a956f40231ba0ea44794f8b9778c82aca252a))
+* count hidden messages on each side of a jump page ([#1940](https://github.com/GetStream/stream-chat-js/issues/1940)) ([487ac3d](https://github.com/GetStream/stream-chat-js/commit/487ac3d8ffef20d03807b524e94913496b5940c3))
+* **deps:** bump [@stream-io](https://github.com/stream-io) toolkit packages to the .mjs/.cjs builds ([#1971](https://github.com/GetStream/stream-chat-js/issues/1971)) ([aa97cf4](https://github.com/GetStream/stream-chat-js/commit/aa97cf44110609057a9fa96eba7eccb4f85cb399)), closes [GetStream/js-toolkit#58](https://github.com/GetStream/js-toolkit/issues/58)
+* dispatch connection.recovered on reconnect when recovery is disabled ([#1994](https://github.com/GetStream/stream-chat-js/issues/1994)) ([13bb533](https://github.com/GetStream/stream-chat-js/commit/13bb533744f47f58efbe15c042cee4943d612609))
+* docs fixes ([#1949](https://github.com/GetStream/stream-chat-js/issues/1949)) ([4c3e46d](https://github.com/GetStream/stream-chat-js/commit/4c3e46dd3287eac544e172ac7a2fda60c60d2daa))
+* drop capabilities.changed; channel.state ownCapabilities is the change signal ([#1992](https://github.com/GetStream/stream-chat-js/issues/1992)) ([6da7713](https://github.com/GetStream/stream-chat-js/commit/6da77137f97c39cd34c2efc2261f496f487f3b58))
+* drop server-side remnants, add WS interface ([#1819](https://github.com/GetStream/stream-chat-js/issues/1819)) ([39c0c53](https://github.com/GetStream/stream-chat-js/commit/39c0c53ac7ab48a1b0956b46fc674615a9e4f9b5))
+* ensure API errors parsing works even with multiple axios copies ([#1909](https://github.com/GetStream/stream-chat-js/issues/1909)) ([e0cfba9](https://github.com/GetStream/stream-chat-js/commit/e0cfba9caa35a7355085966e3bb7bb79457c2aa8))
+* existing messages retry guards ([#1982](https://github.com/GetStream/stream-chat-js/issues/1982)) ([c7c971f](https://github.com/GetStream/stream-chat-js/commit/c7c971fd6d4c2403ed77d6e2a3bde1e8ab9b3c85))
+* handle tokenProvider rejection during reconnect token refresh ([#1963](https://github.com/GetStream/stream-chat-js/issues/1963)) ([e22d218](https://github.com/GetStream/stream-chat-js/commit/e22d21843b4ae1650de9cd686f135ea47faf6e8c))
+* handle user.updated in threads ([#1979](https://github.com/GetStream/stream-chat-js/issues/1979)) ([9064ffc](https://github.com/GetStream/stream-chat-js/commit/9064ffc87f8a7886c0bcdc6bcc8c714c191f2814))
+* **i18n:** reject from init() and drop the Streami18n brand static ([#1839](https://github.com/GetStream/stream-chat-js/issues/1839)) ([67bb1c7](https://github.com/GetStream/stream-chat-js/commit/67bb1c74b3a8054109220f6c050746f60da983a0))
+* install the command middlewares in the composer by default ([#1985](https://github.com/GetStream/stream-chat-js/issues/1985)) ([1dc25e2](https://github.com/GetStream/stream-chat-js/commit/1dc25e21dde50c06aff38e3ffb6ee5f1f1a7199d))
+* issues found by the RN e2e tests ([#1996](https://github.com/GetStream/stream-chat-js/issues/1996)) ([f5d1a2d](https://github.com/GetStream/stream-chat-js/commit/f5d1a2d6c1d10a5791d36a9035cd6d538794ecd0))
+* jump to thread reply bug ([#1948](https://github.com/GetStream/stream-chat-js/issues/1948)) ([5ec1b07](https://github.com/GetStream/stream-chat-js/commit/5ec1b0757bf1891effb53984d64d8939e01af40e))
+* let an edit clear all custom fields ([#1983](https://github.com/GetStream/stream-chat-js/issues/1983)) ([9437b09](https://github.com/GetStream/stream-chat-js/commit/9437b093d1702afaf0a14161ec4855b81c0a9cf4))
+* narrow channel.state.typing to typing.start events ([#1960](https://github.com/GetStream/stream-chat-js/issues/1960)) ([acb2345](https://github.com/GetStream/stream-chat-js/commit/acb23450db193181e75d7f331abdc1cb73778a51)), closes [#1920](https://github.com/GetStream/stream-chat-js/issues/1920)
+* notify channel state subscribers on watcher, ban and member removal events ([#1977](https://github.com/GetStream/stream-chat-js/issues/1977)) ([3a7be78](https://github.com/GetStream/stream-chat-js/commit/3a7be785220f58fce6265b2bf81f93018bb87299))
+* odd edge cases for channel list recovery ([#1966](https://github.com/GetStream/stream-chat-js/issues/1966)) ([dbc2468](https://github.com/GetStream/stream-chat-js/commit/dbc2468db567d92c2ae45516681454939e0aebd1))
+* offline db hydration race conditions ([#1865](https://github.com/GetStream/stream-chat-js/issues/1865)) ([a4587e1](https://github.com/GetStream/stream-chat-js/commit/a4587e10c9a51eb684881d1eb8ba2ce01a9e73d0))
+* open api hot fixes ([#1927](https://github.com/GetStream/stream-chat-js/issues/1927)) ([4fb4b52](https://github.com/GetStream/stream-chat-js/commit/4fb4b52662d5c03c28ee07ae94aac2edb9b5ea19))
+* optimistic updates for translated messages ([#1975](https://github.com/GetStream/stream-chat-js/issues/1975)) ([91fc290](https://github.com/GetStream/stream-chat-js/commit/91fc290e593f344ebaae58747c6039954ac210d7))
+* **pagination:** count a page set with setItems as loaded, even when empty ([#1995](https://github.com/GetStream/stream-chat-js/issues/1995)) ([bfff3c8](https://github.com/GetStream/stream-chat-js/commit/bfff3c851c18f094e221aba0108cdc274bc471f6))
+* **pagination:** keep loaded items when filterQueryResults empties a later page ([#1986](https://github.com/GetStream/stream-chat-js/issues/1986)) ([78a32c3](https://github.com/GetStream/stream-chat-js/commit/78a32c3d1240fcccf708d90dc76dc74efa54d299))
+* **paginator:** correct windows filled by hydration rather than by a query ([#1860](https://github.com/GetStream/stream-chat-js/issues/1860)) ([93b6fa0](https://github.com/GetStream/stream-chat-js/commit/93b6fa0d8148b1acff234c857a5a84268cfbfd4e))
+* **paginator:** do not issue the first-page query twice ([#1858](https://github.com/GetStream/stream-chat-js/issues/1858)) ([6462cef](https://github.com/GetStream/stream-chat-js/commit/6462cefea294d53a282a66bd08142345fa5279b3))
+* pass full request options to hydration query ([#1959](https://github.com/GetStream/stream-chat-js/issues/1959)) ([489774b](https://github.com/GetStream/stream-chat-js/commit/489774ba7f3342dcfc8c5072bd496d59a4c8faf9))
+* pending task folding ([#1873](https://github.com/GetStream/stream-chat-js/issues/1873)) ([028f6e8](https://github.com/GetStream/stream-chat-js/commit/028f6e834345be7d6fcd95501dee4c450a2112e7))
+* **poll:** keep translations from poll.updated in the poll state ([#1937](https://github.com/GetStream/stream-chat-js/issues/1937)) ([e47b75a](https://github.com/GetStream/stream-chat-js/commit/e47b75a0fca4baea926265708033dbc7ebe24749)), closes [#1878](https://github.com/GetStream/stream-chat-js/issues/1878)
+* post-merge/OAPI-reconciliation adjustments ([#1812](https://github.com/GetStream/stream-chat-js/issues/1812)) ([5073c67](https://github.com/GetStream/stream-chat-js/commit/5073c676fb8c53bb2cb0fdd54e51f99beb7e6b95))
+* reconnect past connection timeout ([#1874](https://github.com/GetStream/stream-chat-js/issues/1874)) ([2004a83](https://github.com/GetStream/stream-chat-js/commit/2004a831b7785efb2ae093a21188a02abd21a199)), closes [#1760](https://github.com/GetStream/stream-chat-js/issues/1760)
+* regenerate api layer (fix generated filter types) ([#1827](https://github.com/GetStream/stream-chat-js/issues/1827)) ([e540d88](https://github.com/GetStream/stream-chat-js/commit/e540d883c764dcecd7e767702a85bd23dc5b69d2))
+* remove CustomCommandData ([#1989](https://github.com/GetStream/stream-chat-js/issues/1989)) ([f737d61](https://github.com/GetStream/stream-chat-js/commit/f737d61993d87d45e730b6887389d648af3bed18))
+* respect predefined filters from db ([#1869](https://github.com/GetStream/stream-chat-js/issues/1869)) ([cbc7707](https://github.com/GetStream/stream-chat-js/commit/cbc77072170329deb4f9ce22314db6a8743d9b75))
+* restore composer custom data from drafts and edits, keep custom on edit ([#1978](https://github.com/GetStream/stream-chat-js/issues/1978)) ([51ddcad](https://github.com/GetStream/stream-chat-js/commit/51ddcad8149729145a992ab86341859e9f5f8a49))
+* **search:** match message text by word prefix in MessageSearchSource ([#1987](https://github.com/GetStream/stream-chat-js/issues/1987)) ([ef58ef5](https://github.com/GetStream/stream-chat-js/commit/ef58ef56fdd63c76077431c360fa13e5d42502cd))
+* send the read request regardless of read receipt privacy settings in v10 ([#1855](https://github.com/GetStream/stream-chat-js/issues/1855)) ([3b24387](https://github.com/GetStream/stream-chat-js/commit/3b2438711e92d9861814b815f91e6bcfd3fdade2))
+* set thread cursor when initied from setItems ([#1898](https://github.com/GetStream/stream-chat-js/issues/1898)) ([63bef43](https://github.com/GetStream/stream-chat-js/commit/63bef437cb37d7b036d554f79a1e4b00e4826480))
+* signal api ([#1828](https://github.com/GetStream/stream-chat-js/issues/1828)) ([9032b1a](https://github.com/GetStream/stream-chat-js/commit/9032b1a6d1408f96053b6cd0bcff92bdea0828b3))
+* stability and perf fixes ([#1910](https://github.com/GetStream/stream-chat-js/issues/1910)) ([080af2c](https://github.com/GetStream/stream-chat-js/commit/080af2c3e0f3abbf883291dfcb9c5c69cdb842ce))
+* unread snapshot count, pinned replies, joined and invite filters, read events check ([#1981](https://github.com/GetStream/stream-chat-js/issues/1981)) ([1247d10](https://github.com/GetStream/stream-chat-js/commit/1247d1035879baa02225b06a71d29f0c5a4206b8))
+* v10 in depth review hotfixes ([#1920](https://github.com/GetStream/stream-chat-js/issues/1920)) ([98a298d](https://github.com/GetStream/stream-chat-js/commit/98a298dc0d4222d733b1bb5d88141c811218e57d))
+* v10 regressions found in side-by-side QA ([#1965](https://github.com/GetStream/stream-chat-js/issues/1965)) ([b87d598](https://github.com/GetStream/stream-chat-js/commit/b87d5984a91627dd10c979a900f5cc81816777f7))
+
+### Features
+
+* add instance configuration service ([#1831](https://github.com/GetStream/stream-chat-js/issues/1831)) ([434966c](https://github.com/GetStream/stream-chat-js/commit/434966c266d357f2889c30ce8d98deee42dd50f4))
+* add message/channel paginator stack with thread minimal-init and state stores ([#1795](https://github.com/GetStream/stream-chat-js/issues/1795)) ([62f0507](https://github.com/GetStream/stream-chat-js/commit/62f050786dc153b89920d59aacecaf5f051fbaed))
+* adopt TS generator changes ([#1896](https://github.com/GetStream/stream-chat-js/issues/1896)) ([82af6de](https://github.com/GetStream/stream-chat-js/commit/82af6de1842c25bfb9049229f88fff9c58c7fefb))
+* brand server-sent timestamps as TimestampNS and ship the Date guard ([#1884](https://github.com/GetStream/stream-chat-js/issues/1884)) ([e51198a](https://github.com/GetStream/stream-chat-js/commit/e51198aa89322564d49246ed3ff763b6d19fe136)), closes [GetStream/chat#17356](https://github.com/GetStream/chat/issues/17356) [GetStream/chat#17460](https://github.com/GetStream/chat/issues/17460) [#17356](https://github.com/GetStream/stream-chat-js/issues/17356) [GetStream/stream-chat-react#3297](https://github.com/GetStream/stream-chat-react/issues/3297) [GetStream/stream-chat-react-native#3822](https://github.com/GetStream/stream-chat-react-native/issues/3822) [GetStream/chat#17425](https://github.com/GetStream/chat/issues/17425)
+* channel state migration ([#1834](https://github.com/GetStream/stream-chat-js/issues/1834)) ([9876add](https://github.com/GetStream/stream-chat-js/commit/9876add7e2a66bba5d5287545c56f1c36ccc555d))
+* connection recovery ([#1841](https://github.com/GetStream/stream-chat-js/issues/1841)) ([8ec9a9d](https://github.com/GetStream/stream-chat-js/commit/8ec9a9d36592e1fa9ff1841e5337b1ce955e15c5))
+* destructive reconciliation ([#1822](https://github.com/GetStream/stream-chat-js/issues/1822)) ([3c46fbf](https://github.com/GetStream/stream-chat-js/commit/3c46fbfc3a840bfd73ccad9dd2f22a200d015d10))
+* establish network connection observer services ([#1859](https://github.com/GetStream/stream-chat-js/issues/1859)) ([4c46949](https://github.com/GetStream/stream-chat-js/commit/4c4694964c244c6f16efa937b766f198685b3ce8))
+* generalize entity store in V10 ([#1814](https://github.com/GetStream/stream-chat-js/issues/1814)) ([d066ba0](https://github.com/GetStream/stream-chat-js/commit/d066ba0db126b1fe13f949f1d9e697a93d1b2248))
+* **i18n:** share the translation runtime as stream-chat/i18n ([#1830](https://github.com/GetStream/stream-chat-js/issues/1830)) ([40cf062](https://github.com/GetStream/stream-chat-js/commit/40cf0629cbe033a8d8c9615fd886cb7d20dd29bc)), closes [GetStream/stream-chat-react#3271](https://github.com/GetStream/stream-chat-react/issues/3271) [GetStream/stream-chat-react-native#3777](https://github.com/GetStream/stream-chat-react-native/issues/3777)
+* integrate OpenAPI generated clients ([#1760](https://github.com/GetStream/stream-chat-js/issues/1760)) ([0776bc4](https://github.com/GetStream/stream-chat-js/commit/0776bc460598a91afb91d4d04d3281a562073f13))
+* let AttachmentManager.uploadFile retry an existing attachment ([#1991](https://github.com/GetStream/stream-chat-js/issues/1991)) ([cf8b1fa](https://github.com/GetStream/stream-chat-js/commit/cf8b1fa94330901c1ab15aac5564565c95252723))
+* let integrators send a poll with the message by removing the poll-only middleware ([#1970](https://github.com/GetStream/stream-chat-js/issues/1970)) ([b515849](https://github.com/GetStream/stream-chat-js/commit/b51584960c204be4f051678d5845ba0a2436c6f4)), closes [GetStream/stream-chat-react#3365](https://github.com/GetStream/stream-chat-react/issues/3365)
+* message pruning ([696f56f](https://github.com/GetStream/stream-chat-js/commit/696f56fc1dd87515061a35f0204577c3e7ce9784))
+* message pruning ([#1875](https://github.com/GetStream/stream-chat-js/issues/1875)) ([d4d2c6c](https://github.com/GetStream/stream-chat-js/commit/d4d2c6cc0ab6a82681c83cc91b20069bd5a12406))
+* **MessageComposer:** add send and update message API ([#1881](https://github.com/GetStream/stream-chat-js/issues/1881)) ([95b2502](https://github.com/GetStream/stream-chat-js/commit/95b25025c36354eb136afb8688d17e7b404afcb0))
+* **MessageComposer:** reference the composer on upload notifications ([#1871](https://github.com/GetStream/stream-chat-js/issues/1871)) ([d520fc1](https://github.com/GetStream/stream-chat-js/commit/d520fc1e14849bddb00703d10262f0b3ac22a0a0))
+* **messageDelivery:** report receipt state from the furthest cursor ([#1883](https://github.com/GetStream/stream-chat-js/issues/1883)) ([79f3ac1](https://github.com/GetStream/stream-chat-js/commit/79f3ac14880a615617471a75c757713f0fbc610b))
+* **MessageDeliveryReporter:** mark channel read locally when local read count tracking are enabled ([#1886](https://github.com/GetStream/stream-chat-js/issues/1886)) ([439a018](https://github.com/GetStream/stream-chat-js/commit/439a018d1ef11f9b6ca2231269573d6d333060a2))
+* migrate ChannelPaginatorsOrchestrator to ChannelManager ([#1813](https://github.com/GetStream/stream-chat-js/issues/1813)) ([c694930](https://github.com/GetStream/stream-chat-js/commit/c6949300aba166b24eff7fe83339a1644abeeb04))
+* move to WS API v2 ([#1833](https://github.com/GetStream/stream-chat-js/issues/1833)) ([d530f43](https://github.com/GetStream/stream-chat-js/commit/d530f438954213d3dcb2a00bc9c6c81e0f7bb3e8))
+* **NotificationManager:** add ensureTimeout for callers that cannot know if notification was already triggered ([#1872](https://github.com/GetStream/stream-chat-js/issues/1872)) ([e5d06aa](https://github.com/GetStream/stream-chat-js/commit/e5d06aa598b34d18f9714025d71849418742c1ab))
+* openapi related clean up ([#1870](https://github.com/GetStream/stream-chat-js/issues/1870)) ([b3fa906](https://github.com/GetStream/stream-chat-js/commit/b3fa90610bb0fe949bc13ab9e7b10fc71fb23d66))
+* optimistic reactions ([#1808](https://github.com/GetStream/stream-chat-js/issues/1808)) ([54740f1](https://github.com/GetStream/stream-chat-js/commit/54740f18f47f94559f5dd87c1877619820fcecf9))
+* poll optimistic votes v10 port ([#1904](https://github.com/GetStream/stream-chat-js/issues/1904)) ([143446b](https://github.com/GetStream/stream-chat-js/commit/143446bf57b66bdda85d3b1ef68a01bac6348c6e))
+* port search improvements ([#1829](https://github.com/GetStream/stream-chat-js/issues/1829)) ([7276299](https://github.com/GetStream/stream-chat-js/commit/7276299b5aad632ed44317aa78a38a91f81b9e5f)), closes [#1823](https://github.com/GetStream/stream-chat-js/issues/1823)
+* reenable WS fallback ([#1889](https://github.com/GetStream/stream-chat-js/issues/1889)) ([45841cc](https://github.com/GetStream/stream-chat-js/commit/45841cc6c4417bd2592b8c81ccac01f021cb7443))
+* regenerate from latest api spec; docs sync ([#1969](https://github.com/GetStream/stream-chat-js/issues/1969)) ([ae1e86a](https://github.com/GetStream/stream-chat-js/commit/ae1e86a0b64075c7dda70977fa6eac765b78f7d5))
+* regenerate from latest open api spec ([#1821](https://github.com/GetStream/stream-chat-js/issues/1821)) ([22344ca](https://github.com/GetStream/stream-chat-js/commit/22344ca2304258e31ac805fe7651ce7db91a8294))
+* regenerate open api spec + improve tooling ([#1824](https://github.com/GetStream/stream-chat-js/issues/1824)) ([a3198e7](https://github.com/GetStream/stream-chat-js/commit/a3198e7059b20d666ac6bc56900762e0d41a6f68))
+* release v10 from master as latest ([#2004](https://github.com/GetStream/stream-chat-js/issues/2004)) ([40ead99](https://github.com/GetStream/stream-chat-js/commit/40ead99aa38917823e2a48af67aa3f750cf8ed65)), closes [#2003](https://github.com/GetStream/stream-chat-js/issues/2003) [#1476](https://github.com/GetStream/stream-chat-js/issues/1476) [#1938](https://github.com/GetStream/stream-chat-js/issues/1938) [#1937](https://github.com/GetStream/stream-chat-js/issues/1937) [#1962](https://github.com/GetStream/stream-chat-js/issues/1962) [#1963](https://github.com/GetStream/stream-chat-js/issues/1963) [#1944](https://github.com/GetStream/stream-chat-js/issues/1944) [#1952](https://github.com/GetStream/stream-chat-js/issues/1952) [#1953](https://github.com/GetStream/stream-chat-js/issues/1953) [#1954](https://github.com/GetStream/stream-chat-js/issues/1954) [#1957](https://github.com/GetStream/stream-chat-js/issues/1957) [#1976](https://github.com/GetStream/stream-chat-js/issues/1976) [#1908](https://github.com/GetStream/stream-chat-js/issues/1908) [#2003](https://github.com/GetStream/stream-chat-js/issues/2003)
+* remaining optimistic updates ([#1843](https://github.com/GetStream/stream-chat-js/issues/1843)) ([808b2c8](https://github.com/GetStream/stream-chat-js/commit/808b2c8740d8ade7ab97e4d7d91247029a2d0919))
+* remove hand-written types and API wrappers ([#1836](https://github.com/GetStream/stream-chat-js/issues/1836)) ([dc49a78](https://github.com/GetStream/stream-chat-js/commit/dc49a78d9cff9ddec4bcc97a178c230fba97cdad))
+* remove handwritten upload methods; align method names ([#1832](https://github.com/GetStream/stream-chat-js/issues/1832)) ([1a6bdb8](https://github.com/GetStream/stream-chat-js/commit/1a6bdb875aa20d657a5c5c71dc6f0b822d28f6c8))
+* remove messageSetToAddToIfDoesNotExist and let the message paginator place every page ([#1926](https://github.com/GetStream/stream-chat-js/issues/1926)) ([2b7960d](https://github.com/GetStream/stream-chat-js/commit/2b7960db6700137a7d36370fa406f3bbc7e132c5))
+* remove response date transform ([#1849](https://github.com/GetStream/stream-chat-js/issues/1849)) ([ef5dcc6](https://github.com/GetStream/stream-chat-js/commit/ef5dcc6175c26bf89ab423e0bf1caab1de3473bd))
+* replace StreamChat.activeChannels with entity item index for loaded channels ([#1901](https://github.com/GetStream/stream-chat-js/issues/1901)) ([ec9178a](https://github.com/GetStream/stream-chat-js/commit/ec9178a958418b3cef5bb0aed22bfb73a43318bf))
+* replace StreamChatOptions with the configuration tree ([#1911](https://github.com/GetStream/stream-chat-js/issues/1911)) ([f05b861](https://github.com/GetStream/stream-chat-js/commit/f05b8613dea45f599c5c63bbfaeb6a77492332cf))
+* send and count attachments with nothing to upload ([#1993](https://github.com/GetStream/stream-chat-js/issues/1993)) ([b2dfb8a](https://github.com/GetStream/stream-chat-js/commit/b2dfb8aacd1e17b5015291f55944485920d87360)), closes [ai-docs/v10-breaking-changes.md#non-upload-attachments](https://github.com/ai-docs/v10-breaking-changes.md/issues/non-upload-attachments)
+* settle pending attachment uploads ([#1880](https://github.com/GetStream/stream-chat-js/issues/1880)) ([59f5869](https://github.com/GetStream/stream-chat-js/commit/59f5869f7011ec6800666e443d521da21bae0983))
+* thread paginator and manager revamp ([#1888](https://github.com/GetStream/stream-chat-js/issues/1888)) ([d1562aa](https://github.com/GetStream/stream-chat-js/commit/d1562aa61d45402af715edd11ee42aa97e484456))
+* update to latest api spec ([461eb24](https://github.com/GetStream/stream-chat-js/commit/461eb24363e365407f37bd45c16739287ff72b64))
+* update to latest API spec ([#2005](https://github.com/GetStream/stream-chat-js/issues/2005)) ([5668f20](https://github.com/GetStream/stream-chat-js/commit/5668f208d156a69c1508136e668ef84777f5a459))
+* v10 ([cd3141e](https://github.com/GetStream/stream-chat-js/commit/cd3141efe47b49cf83d3d58725bb8ed3b4f88f08))
+
+### Refactors
+
+* call the paginator intervals intervals, not windows ([#1939](https://github.com/GetStream/stream-chat-js/issues/1939)) ([69aa18a](https://github.com/GetStream/stream-chat-js/commit/69aa18af74554e1e36f7660c871521a0cbc792f0))
+* **channel:** remove no-op overrides, dead branch and redundant id guards ([#1936](https://github.com/GetStream/stream-chat-js/issues/1936)) ([050953e](https://github.com/GetStream/stream-chat-js/commit/050953e0873a41f8c2667302fe2739c724b18932)), closes [#1870](https://github.com/GetStream/stream-chat-js/issues/1870)
+* **i18n:** move the translation runtime to @stream-io/i18n ([#1861](https://github.com/GetStream/stream-chat-js/issues/1861)) ([45f45bd](https://github.com/GetStream/stream-chat-js/commit/45f45bd579df7391eb9cbec14deccd695c204cd6))
+* make Channel.watch() watch a channel only when it is not watched and loaded ([#1943](https://github.com/GetStream/stream-chat-js/issues/1943)) ([3c363cb](https://github.com/GetStream/stream-chat-js/commit/3c363cbd84d2f33a2916f0f52b72f32d1428aac1))
+* **SearchController:** remove InternalSearchControllerState ([#1866](https://github.com/GetStream/stream-chat-js/issues/1866)) ([fc64f7f](https://github.com/GetStream/stream-chat-js/commit/fc64f7fba9f0956840decfe69f3588bbb58d1eda))
+* simplify optimistic updates ([#1897](https://github.com/GetStream/stream-chat-js/issues/1897)) ([8b84f02](https://github.com/GetStream/stream-chat-js/commit/8b84f026bcaf271c632b2ff3974e1809ae7718b7)), closes [#1882](https://github.com/GetStream/stream-chat-js/issues/1882)
+* unify message operation apis ([#1882](https://github.com/GetStream/stream-chat-js/issues/1882)) ([2ed1c75](https://github.com/GetStream/stream-chat-js/commit/2ed1c75a1b15c55322d57226af60cc95fd724715))
+
+### Performance Improvements
+
+* store publish amplification ([#1876](https://github.com/GetStream/stream-chat-js/issues/1876)) ([d93ee7d](https://github.com/GetStream/stream-chat-js/commit/d93ee7de18cf32da690798804ba46ec59a5fdceb))
+
 ## [10.0.0-rc.35](https://github.com/GetStream/stream-chat-js/compare/v10.0.0-rc.34...v10.0.0-rc.35) (2026-11-06)
 
 ### Bug Fixes
