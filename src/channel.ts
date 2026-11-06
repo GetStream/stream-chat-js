@@ -13,6 +13,7 @@ import {
   normalizeQuerySort,
   sanitizeOutgoingAttachments,
 } from './utils';
+import { withCarriedActiveMemberCount } from './utils/activeMemberCount';
 import type { StreamChat } from './client';
 import { DEFAULT_QUERY_CHANNEL_MESSAGE_LIST_PAGE_SIZE } from './constants';
 import type {
@@ -677,7 +678,7 @@ export class Channel {
       ]
         .sort()
         .join();
-    this.data = data.channel;
+    this.data = withCarriedActiveMemberCount({ next: data.channel, previous: this.data });
     // If the capabiltities are changed, we trigger the `capabilities.changed` event.
     if (areCapabilitiesChanged) {
       this.getClient().dispatchEvent({
@@ -702,7 +703,7 @@ export class Channel {
         cooldown: coolDownInterval,
       },
     );
-    this.data = data.channel;
+    this.data = withCarriedActiveMemberCount({ next: data.channel, previous: this.data });
     return data;
   }
 
@@ -718,7 +719,7 @@ export class Channel {
         cooldown: 0,
       },
     );
-    this.data = data.channel;
+    this.data = withCarriedActiveMemberCount({ next: data.channel, previous: this.data });
     return data;
   }
 
@@ -939,7 +940,7 @@ export class Channel {
       this._channelURL(),
       payload,
     );
-    this.data = data.channel;
+    this.data = withCarriedActiveMemberCount({ next: data.channel, previous: this.data });
     return data;
   }
 
@@ -1339,7 +1340,10 @@ export class Channel {
     const combined = { ...defaultOptions, ...options };
     const state = await this.query(combined, 'latest');
     this.initialized = true;
-    this.data = state.channel;
+    this.data = withCarriedActiveMemberCount({
+      next: state.channel,
+      previous: this.data,
+    });
 
     this._client.logger(
       'info',
@@ -1671,7 +1675,10 @@ export class Channel {
       ]
         .sort()
         .join();
-    this.data = state.channel;
+    this.data = withCarriedActiveMemberCount({
+      next: state.channel,
+      previous: this.data,
+    });
     this.offlineMode = false;
     this.cooldownTimer.refresh();
 
@@ -2296,7 +2303,10 @@ export class Channel {
             own_capabilities:
               event.channel?.own_capabilities ?? channel.data?.own_capabilities,
           };
-          channel.data = newChannelData;
+          channel.data = withCarriedActiveMemberCount({
+            next: newChannelData,
+            previous: channel.data,
+          });
           this.cooldownTimer.refresh();
         }
         break;
