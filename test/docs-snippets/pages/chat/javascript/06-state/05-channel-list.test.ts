@@ -216,16 +216,19 @@ describe(DOCS, () => {
   });
 
   it('re-queries registered lists after a reconnect', async () => {
-    const toTailSpy = vi.spyOn(paginator, 'toTail');
+    const recoverSpy = vi.spyOn(paginator, 'recoverLoadedItems');
+    const querySpy = vi.spyOn(client, 'queryChannelsAndHydrate');
     try {
       await client.closeConnection();
       await client.openConnection();
       await retry(() => {
-        expect(toTailSpy).toHaveBeenCalled();
+        expect(recoverSpy).toHaveBeenCalled();
+        expect(querySpy).toHaveBeenCalled();
         return Promise.resolve();
       });
     } finally {
-      toTailSpy.mockRestore();
+      recoverSpy.mockRestore();
+      querySpy.mockRestore();
     }
   });
 

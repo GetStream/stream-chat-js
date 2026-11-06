@@ -194,6 +194,18 @@ describe('_default/05-features/05-presence_format.md', () => {
     });
     // jack is online while john reads the channel
     extraClients.push(await getClientSideClient({ id: jackId }));
+    // jack connected and disconnected in an earlier test: the channel's member data reports
+    // the new connection a few seconds after it opens. Polled as john (the server-side
+    // response catches up sooner) with the raw query, which loads no channel state.
+    await retry(async () => {
+      const { channels } = await client.queryChannels({
+        filter_conditions: { cid: `messaging:${presenceChannelId}` },
+        state: true,
+        watch: false,
+      });
+      const jack = channels[0]?.members.find((m) => m.user_id === jackId);
+      expect(jack?.user?.online).toBe(true);
+    });
 
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     try {
